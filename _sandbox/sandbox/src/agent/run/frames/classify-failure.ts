@@ -49,6 +49,8 @@ const REFUSING_CODES: ReadonlySet<string> = new Set(["rate_limit", "claude-token
 export interface FailureContext {
     readonly turn: RoutedTurn;
     readonly turnId: string;
+    // The detached run carrying the turn, whose id the transcript's rows carry; absent for a turn with no run.
+    readonly run?: string | undefined;
     readonly provider: AgentProvider;
     // The model the request resolved to, which is what a refusal is filed against.
     readonly model: string | undefined;
@@ -181,6 +183,7 @@ const logOf = (event: ErrorFrame, context: FailureContext): FailurePlan["log"] =
         message: failed ? "turn failed" : "turn refused",
         fields: {
             turnId: context.turnId,
+            ...opt("run", context.run),
             provider: context.provider,
             harness: context.turn.harness,
             ...opt("code", event.code),

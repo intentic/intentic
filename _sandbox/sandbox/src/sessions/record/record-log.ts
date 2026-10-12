@@ -8,6 +8,12 @@ import { syncParents, writeAll, writeDurable } from "./record-io.js";
 // frame naming its length, its row count and its checksum. zstd readers skip those, so `zstdcat` and `zstdgrep` read a
 // record as the JSONL it holds; this module reads them to find any row without decompressing the frames before it.
 // Appends only ever add to the end, and a crash can tear only the last frame, which the next change cuts away.
+//
+// Node's own `zlib.zstdDecompressSync` decodes one frame per call and stops there, without an error: on a whole record
+// it answers the first frame, which is the empty skippable prefix, so it returns 0 bytes. That is the price of a log a
+// settled turn appends to in place (one frame cannot grow), so it stays: read a record with `zstdcat`, or in-process
+// with `logText` below, which walks the frames (each a 20-byte prefix: magic 0x184D2A5E, 12, then the data frame's
+// length, its row count and its CRC-32, all little-endian u32s; then that many bytes of one zstd frame).
 
 // The skippable frame's magic, little-endian as zstd lays it out; any of 0x184D2A50..5F is one, this one is ours.
 const SKIPPABLE_MAGIC = 0x18_4d_2a_5e;
@@ -174,6 +180,23 @@ export const readFrame = async (path: string, frame: Frame): Promise<string[]> =
     } finally {
         await handle.close();
     }
+};
+
+// A whole log's JSONL, decoded in memory frame by frame: what `zstdcat` prints, for a reader with only Node's zlib, whose
+// one-shot decoder stops after the first frame. Stops at the first bytes that are not a whole frame, a torn tail.
+export const logText = (bytes: Buffer): string => {
+    const parts: string[] = [];
+    let at = 0;
+    while (at + PREFIX_BYTES <= bytes.length && bytes.readUInt32LE(at) === SKIPPABLE_MAGIC && bytes.readUInt32LE(at + 4) === META_BYTES) {
+        const length = bytes.readUInt32LE(at + 8);
+        const data = bytes.subarray(at + PREFIX_BYTES, at + PREFIX_BYTES + length);
+        if (data.length < length || crc32(data) !== bytes.readUInt32LE(at + 16)) {
+            break;
+        }
+        parts.push(zstdDecompressSync(data).toString("utf8"));
+        at += PREFIX_BYTES + length;
+    }
+    return parts.join("");
 };
 
 // The frame holding row `at`, and where in it: the last frame whose first row is at or before it.

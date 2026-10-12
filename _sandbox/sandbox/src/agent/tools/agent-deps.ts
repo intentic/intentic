@@ -2,6 +2,7 @@ import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-
 import { posix } from "node:path";
 import type { DependencyIssue } from "../../workspace/deps/reconcile-deps.js";
 import { agentCommand, commandWords, toolResultText } from "../providers/agent-installs.js";
+import { outputNoticeMatcher } from "./agent-output-notices.js";
 
 // Speaks only when a command actually fails on a package name, naming that package rather than a standing paragraph
 // read on every turn. Verifies against the tree first: unless the package is genuinely declared and genuinely missing,
@@ -176,6 +177,8 @@ export const depsNoticeHooks = (
                     },
                 ],
             },
+            // Stale dist and a GitHub token placeholder sent past the gateway, read off the same output (agent-output-notices.ts).
+            outputNoticeMatcher(),
         ],
     };
 };

@@ -14,7 +14,7 @@ import {
     hostOf,
     validateContributionConfig,
 } from "../contributions.js";
-import { CORE_CONNECTOR_HOOKS } from "../cli/connector-hooks.js";
+import { connectorLog, CORE_CONNECTOR_HOOKS } from "../cli/connector-hooks.js";
 import { gitAccessWired, gitHostOf } from "../cli/git-access.js";
 import { npmAuthWired } from "../cli/npm-access.js";
 import type { CapabilityContribution } from "@intentic/extension-manifest";
@@ -153,7 +153,7 @@ export const cliHandler: CapabilityHandler = {
         if (hook !== undefined && hook.silent !== true && ctx.terminalRun.visible) {
             yield { kind: "terminal", session };
         }
-        const warning = await hook?.apply(cliConfig, terminalExec(ctx.terminalRun, session, ctx.workspace.root), ctx.sshKeys);
+        const warning = await hook?.apply(cliConfig, terminalExec(ctx.terminalRun, session, ctx.workspace.root), ctx.sshKeys, connectorLog(ctx.logger));
         yield { kind: "log", message: `Connected ${provider}. The agent can use it next turn via its skill + the credential in its env.` };
         if (warning !== undefined) {
             yield { kind: "log", message: warning };
@@ -192,6 +192,7 @@ export const cliHandler: CapabilityHandler = {
             config as CliConfig,
             terminalExec(ctx.terminalRun, capabilityJobSession(id), ctx.workspace.root),
             ctx.sshKeys,
+            connectorLog(ctx.logger),
         );
         await removeLoadedSkill(ctx.files, ctx.workspace.root, id);
     },

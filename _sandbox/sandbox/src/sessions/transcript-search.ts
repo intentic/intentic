@@ -1,16 +1,24 @@
 import { sdk } from "../engines/claude-sdk.js";
-import type { MatchSnippet, TranscriptRow, Speaker } from "@intentic/sandbox-contract";
+import type { MatchSnippet, TranscriptRow, TranscriptTool, Speaker } from "@intentic/sandbox-contract";
 import { parsePromptEnvelope } from "../agent/prompt/turn-preamble.js";
 
-// Only spoken text, a side's own words, not tool calls, tool output, or protocol wrapping (preambles, attachment
-// notes), is what the fleet filter and history search match on. The durable extraction lives in search-index.ts; this
-// module holds just the write-lag overlay: prompts routed since boot, unioned into a search rather than replacing the
+// Spoken text, a side's own words, never tool output or protocol wrapping (preambles, attachment notes), is what the
+// fleet filter and history search match on. Beside it a conversation's record also yields what it DID, marked by `via`:
+// each tool call's name and target, each question card it raised, each notice, each run. Only `agents find` asks for
+// those (fleet-recall.ts): an agent hunting the conversation that ran `curl --unix-socket …front.sock` was told nobody
+// said it, because only speech was indexed. The board's filter and the history box stay speech only. This module holds
+// the extraction and the write-lag overlay: prompts routed since boot, unioned into a search rather than replacing the
 // index.
 
-// One thing said, whole, before any windowing; the same pair `MatchSnippet` carries.
+// What a line that is not speech records: a tool call (its name and target), a question card the agent raised, a notice
+// that happened to the turn, and the run a row came from, so a run id from a log line finds its conversation.
+export type LineVia = "ran" | "asked" | "notice" | "run";
+
+// One thing said or done, whole, before any windowing. `via` is absent for speech, the pair `MatchSnippet` carries.
 export interface SpokenLine {
     readonly text: string;
     readonly speaker: Speaker;
+    readonly via?: LineVia;
 }
 
 // sessionId → prompts routed into that session since boot, oldest dropped past ROUTED_PER_SESSION.
@@ -85,15 +93,61 @@ export const recordConversationPrompt = (conversationId: string, prompt: string)
     replaceLines(conversations, conversationId, held, conversationTotals);
 };
 
-// Extraction that fills the durable index (search-index.ts). A `notice` row, thinking, and tool cards are not speech;
-// only text survives.
-export const spokenLinesOf = (messages: readonly TranscriptRow[]): SpokenLine[] =>
-    messages.flatMap((message) => {
+// A deed's line is its name and the start of its target: a command or a path is recognised by its opening, and a
+// heredoc whole would make the index several times the size of everything said.
+const DEED_CHARS = 160;
+
+// Carried as the agent's, since a snippet names one of two sides; `via` is what says it was a deed, or the sandbox's.
+const deed = (text: string, via: LineVia): SpokenLine[] => {
+    const line = text.replace(/\s+/gu, " ").trim();
+    return spoken(line.length > DEED_CHARS ? `${line.slice(0, DEED_CHARS - 1)}…` : line, "agent").map((said) => ({ ...said, via }));
+};
+
+// A call's name with what it acted on, a delegation's own calls included; a call with no target (an MCP tool, a
+// subagent) is found by its name, a subagent also by its one-line ask, and an MCP call by the opening of its input.
+const toolLines = (tools: readonly TranscriptTool[]): SpokenLine[] =>
+    tools.flatMap((tool) => [
+        ...deed([tool.name, tool.target ?? tool.subagent?.description ?? tool.input ?? ""].join(" "), "ran"),
+        ...toolLines(tool.children ?? []),
+    ]);
+
+// A question card as the agent asked it, with what was picked, one line a question.
+const questionLines = (question: TranscriptRow["question"]): SpokenLine[] =>
+    (question?.questions ?? []).flatMap((asked) => {
+        const picks = question?.answers?.[asked.question] ?? [];
+        return deed(picks.length === 0 ? asked.question : `${asked.question} → ${picks.join(", ")}`, "asked");
+    });
+
+// The deeds of these rows, each line once: the same file read twenty times is one line, not twenty.
+const deedLinesOf = (messages: readonly TranscriptRow[]): SpokenLine[] => {
+    const lines = messages.flatMap((message) => [
+        ...(message.role === "notice" ? deed(message.text, "notice") : []),
+        ...questionLines(message.question),
+        ...toolLines(message.tools ?? []),
+    ]);
+    const runs = [...new Set(messages.flatMap((message) => (message.run === undefined ? [] : [message.run])))];
+    const seen = new Set<string>();
+    return [...lines, ...runs.flatMap((run) => deed(`run ${run}`, "run"))].filter((line) => {
+        const key = `${line.via ?? ""}:${line.text}`;
+        if (seen.has(key)) {
+            return false;
+        }
+        seen.add(key);
+        return true;
+    });
+};
+
+// Extraction that fills the durable index (search-index.ts): what each side said, then what the conversation did.
+// Thinking and tool output are neither.
+export const spokenLinesOf = (messages: readonly TranscriptRow[]): SpokenLine[] => [
+    ...messages.flatMap((message) => {
         if (message.role === "user") {
             return userMessageLines(message.text);
         }
         return message.role === "assistant" ? spoken(message.text, "agent") : [];
-    });
+    }),
+    ...deedLinesOf(messages),
+];
 
 // Provider-neutral input for the fleet filter: the durable transcript's lines plus prompts routed but not yet appended
 // to it.

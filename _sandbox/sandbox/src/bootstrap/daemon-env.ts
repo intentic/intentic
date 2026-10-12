@@ -33,6 +33,22 @@ export const requireAuthWhenReachable = (config: Config): void => {
     process.exit(78); // EX_CONFIG
 };
 
+// oRPC's websocket peer tells the far end when a call is abandoned (its signal aborted: a deadline, a turn stopped),
+// from inside the signal's listener. When the peer's socket closed first, the send throws there, out of anyone's reach,
+// and surfaced as an "uncaught exception" at error, stack and all, 29 times in five days. Nothing is lost: the call it
+// would cancel is already over, and the socket that closed is the peer's own business (its heartbeat, its redial).
+export const isAbandonedPeerSend = (error: unknown): error is Error =>
+    error instanceof Error && error.message === "Cannot send message, WebSocket is not open." && (error.stack ?? "").includes("@orpc/");
+
+// What reached the process's last-resort handlers: a real fault at error with its stack, the known oRPC race at debug.
+export const logEscaped = (logger: Pick<Logger, "debug" | "error">, error: unknown, message: string): void => {
+    if (isAbandonedPeerSend(error)) {
+        logger.debug({ reason: error.message }, "orpc: a call's cancel could not reach a peer whose socket had already closed");
+        return;
+    }
+    logger.error({ err: error }, message);
+};
+
 export const prepareDaemonProcess = (config: Config, traits: ProfileTraits): Logger => {
     // Before any spawn: every child carries this run's generation, by which a later boot ends what this one left
     // (system/boot/generation-sweep.ts). Fresh each boot, whatever this process inherited.
@@ -46,8 +62,8 @@ export const prepareDaemonProcess = (config: Config, traits: ProfileTraits): Log
     process.env["INTENTIC_TERMINAL_LOGS_DIR"] ??= terminalLogsDir(config.historyRoot);
     const logger = createLogger(config);
     // The daemon must stay up for /agent and /events when a best-effort boot job rejects; a bad config still crashes loudly.
-    process.on("unhandledRejection", (reason) => logger.error({ err: reason }, "unhandled rejection"));
-    process.on("uncaughtException", (err) => logger.error({ err }, "uncaught exception"));
+    process.on("unhandledRejection", (reason) => logEscaped(logger, reason, "unhandled rejection"));
+    process.on("uncaughtException", (err) => logEscaped(logger, err, "uncaught exception"));
     // Skipped with no history volume (dev, tests).
     if (config.historyRoot !== "") {
         const bootMarker = claimBootMarker(logsRoot(config.historyRoot), logger);

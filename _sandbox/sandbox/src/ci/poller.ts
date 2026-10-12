@@ -3,6 +3,7 @@ import { CI_POLL_INTERVAL_MS, isPipelineInFlight } from "@intentic/sandbox-contr
 import type { Services } from "../composition.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { ciResultOf, dispatchCiRun, rememberCiRun } from "./events.js";
+import { createCiFailureLog, vendorStatusOf } from "./ci-failure-log.js";
 import { runInFlight } from "./main-fixer.js";
 import { ciClientFor, type FetchFn } from "./providers.js";
 import { ciProjects } from "./projects.js";
@@ -15,6 +16,16 @@ import { ciProjects } from "./projects.js";
 // Deep enough per pass that a push burst between polls can't push a finished run out of the window.
 const RUNS_PER_POLL = 20;
 
+// A refused token (401) is asked again after a pause that doubles up to this, rather than every pass for hours. A new
+// token for the account ends the pause at once, since nothing about the old refusal speaks for it.
+const REFUSED_BACKOFF_MAX_MS = 30 * 60_000;
+
+interface Refusal {
+    readonly token: string;
+    readonly until: number;
+    readonly pauseMs: number;
+}
+
 export interface CiPoller {
     readonly start: () => void;
     readonly stop: () => void;
@@ -22,9 +33,17 @@ export interface CiPoller {
     readonly poll: () => Promise<void>;
 }
 
-export const createCiPoller = (services: Services, fetchFn: FetchFn = fetch, intervalMs = CI_POLL_INTERVAL_MS): CiPoller => {
+export const createCiPoller = (
+    services: Services,
+    fetchFn: FetchFn = fetch,
+    intervalMs = CI_POLL_INTERVAL_MS,
+    now: () => number = Date.now,
+): CiPoller => {
     let timer: NodeJS.Timeout | undefined;
     const serially = serialLock();
+    const failures = createCiFailureLog(services.logger, "ci: poll failed", "ci: poll works again", now);
+    // repo → the refused token and when to try it again.
+    const refusals = new Map<string, Refusal>();
 
     const pollRepo = async (project: Awaited<ReturnType<typeof ciProjects>>[number]): Promise<void> => {
         const client = ciClientFor(project.account.provider, fetchFn);
@@ -76,8 +95,23 @@ export const createCiPoller = (services: Services, fetchFn: FetchFn = fetch, int
             if (!unwired.has(project.repo)) {
                 continue;
             }
+            const refusal = refusals.get(project.repo);
+            if (refusal !== undefined && refusal.token === project.account.token && now() < refusal.until) {
+                continue;
+            }
             // Per repo: one failing vendor (revoked token, moved project) doesn't stop the rest.
-            await pollRepo(project).catch((error: unknown) => services.logger.warn({ err: error, repo: project.repo }, "ci: poll failed"));
+            try {
+                await pollRepo(project);
+                refusals.delete(project.repo);
+                failures.succeeded(project.repo);
+            } catch (error) {
+                failures.failed(project.repo, error);
+                if (vendorStatusOf(error) === 401) {
+                    const pauseMs =
+                        refusal?.token === project.account.token ? Math.min(refusal.pauseMs * 2, REFUSED_BACKOFF_MAX_MS) : intervalMs * 2;
+                    refusals.set(project.repo, { token: project.account.token, until: now() + pauseMs, pauseMs });
+                }
+            }
         }
     };
 

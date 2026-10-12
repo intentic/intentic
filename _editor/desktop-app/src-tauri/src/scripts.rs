@@ -165,15 +165,28 @@ pub(crate) fn stamp() -> String {
     format!("{year:04}{month:02}{day:02}-{hour:02}{minute:02}{second:02}")
 }
 
-/* There was no way to end one of these. */
-fn running() -> &'static Mutex<HashMap<String, u32>> {
-    static RUNNING: OnceLock<Mutex<HashMap<String, u32>>> = OnceLock::new();
+/* There was no way to end one of these. Each run is kept with its process and when it started, which is what a refusal
+that waits on it names (update.rs). */
+#[derive(Clone, Copy)]
+struct Live {
+    pid: u32,
+    started_ms: u64,
+}
+
+fn running() -> &'static Mutex<HashMap<String, Live>> {
+    static RUNNING: OnceLock<Mutex<HashMap<String, Live>>> = OnceLock::new();
     RUNNING.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
 fn remember(id: &str, pid: u32) {
     if let Ok(mut live) = running().lock() {
-        live.insert(id.to_string(), pid);
+        live.insert(
+            id.to_string(),
+            Live {
+                pid,
+                started_ms: now_ms(),
+            },
+        );
     }
 }
 
@@ -200,6 +213,34 @@ pub fn busy_except(except: &[&str]) -> bool {
         .lock()
         .map(|live| live.keys().any(|id| !except.contains(&id.as_str())))
         .unwrap_or(true)
+}
+
+/// The runs other than `except` going right now, each with how long it has run, sorted: what an update refused because
+/// of them names in the log, so whoever reads it knows what to wait for or stop. A poisoned lock names none.
+pub fn busy_runs_except(except: &[&str]) -> Vec<String> {
+    let now = now_ms();
+    let mut runs: Vec<String> = running()
+        .lock()
+        .map(|live| {
+            live.iter()
+                .filter(|(id, _)| !except.contains(&id.as_str()))
+                .map(|(id, run)| run_line(id, run.pid, now.saturating_sub(run.started_ms)))
+                .collect()
+        })
+        .unwrap_or_default();
+    runs.sort();
+    runs
+}
+
+/// One run as a refusal names it: its id, its process, and how long it has been going. Pure.
+fn run_line(id: &str, pid: u32, ran_ms: u64) -> String {
+    let seconds = ran_ms / 1000;
+    let ran = if seconds < 120 {
+        format!("{seconds} s")
+    } else {
+        format!("{} min", seconds / 60)
+    };
+    format!("{id} (pid {pid}, running for {ran})")
 }
 
 /// The ids of the runs going right now, sorted: what a Quit asks about (windows.rs `hold_quit`). A poisoned lock answers
@@ -229,7 +270,7 @@ pub fn stop(id: &str) -> Result<(), String> {
     let pid = running()
         .lock()
         .ok()
-        .and_then(|live| live.get(id).copied())
+        .and_then(|live| live.get(id).map(|run| run.pid))
         .ok_or_else(|| format!("nothing called {id} is running on this device"))?;
     match intentic_bounded::kill_tree(pid, intentic_bounded::Signal::Term) {
         Ok(status) if status.success() => Ok(()),
@@ -1914,12 +1955,27 @@ mod tests {
         assert!(!busy_except(&crate::onboarding::PREFETCH_RUNS));
         remember("pc-setup", std::process::id());
         assert!(busy_except(&crate::onboarding::PREFETCH_RUNS));
+        let named = busy_runs_except(&crate::onboarding::PREFETCH_RUNS);
+        assert_eq!(named.len(), 1, "{named:?}");
+        assert!(named[0].starts_with("pc-setup (pid "), "{named:?}");
         for id in crate::onboarding::PREFETCH_RUNS {
             forget(id);
         }
         assert!(busy_except(&crate::onboarding::PREFETCH_RUNS));
         forget("pc-setup");
         assert!(!busy());
+    }
+
+    #[test]
+    fn a_run_holding_an_update_is_named_with_how_long_it_has_run() {
+        assert_eq!(
+            run_line("pc-setup", 42, 9_500),
+            "pc-setup (pid 42, running for 9 s)"
+        );
+        assert_eq!(
+            run_line("engine-move", 7, 600_000),
+            "engine-move (pid 7, running for 10 min)"
+        );
     }
 
     #[test]

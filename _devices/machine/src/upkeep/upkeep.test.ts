@@ -5,7 +5,7 @@ import { doctorItem } from "./doctor.js";
 import { isInside, trashedAt, trashStamp } from "./trash.js";
 import { loginEntryFinding, mutagenRunDecision, runValueData } from "./login.js";
 import { MANIFEST } from "./manifest.js";
-import { expiredTrash, isShimPart, TRASH_KEEP_MS } from "./retention.js";
+import { expiredRunLogs, expiredTrash, isShimPart, RUN_LOG_KEEP_MS, RUN_LOGS_KEPT, TRASH_KEEP_MS } from "./retention.js";
 import { legacyAutostart } from "./retired.js";
 import { shadowLine } from "./second-ic.js";
 
@@ -147,4 +147,14 @@ test("doctor says each row in the words of what is, or would be, done", () => {
     expect(doctorItem(item({ outcome: "would-fix" }))).toEqual({ tone: "warn", name: "/x", meta: "would move to the trash" });
     expect(doctorItem(item({}))).toEqual({ tone: "ok", name: "/x", meta: "moved to the trash" });
     expect(doctorItem(item({ outcome: "skipped", why: "in use" }))).toEqual({ tone: "skip", name: "/x", meta: "left: in use" });
+});
+
+test("a program's outputs are kept two weeks and the newest hundred, oldest named first, and a live run's never", () => {
+    const now = 1_800_000_000_000;
+    const entries = [
+        { name: "stale", mtimeMs: now - RUN_LOG_KEEP_MS },
+        { name: "live", mtimeMs: now - 2 * RUN_LOG_KEEP_MS },
+        ...Array.from({ length: RUN_LOGS_KEPT + 1 }, (_, index) => ({ name: `r${index}`, mtimeMs: now - index * 1000 })),
+    ];
+    expect(expiredRunLogs(entries, new Set(["live"]), now)).toEqual(["stale", `r${RUN_LOGS_KEPT}`]);
 });

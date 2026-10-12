@@ -563,7 +563,7 @@ const runFire = async (
             ...(actsAs !== undefined ? { actsAs } : {}),
         };
         // Transcript folds as it streams; opens stamped with when the turn began, not when appended, minutes later.
-        const fold = new TranscriptFold(openingRows(turn, services.workspace.root, Date.now()));
+        const fold = new TranscriptFold(openingRows(turn, services.workspace.root, Date.now()), Date.now);
         // Opened before the provider runs, like every other conversation turn (a fork's copy; nothing else opens).
         await openTurnTranscript(services, turn);
         try {

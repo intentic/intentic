@@ -2,6 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DeviceFlowLine } from "@intentic/sandbox-contract";
+import { readRestartIntent } from "./boot/restart-record.js";
 import { askedRestart, fileRestartResume } from "./restart-resume.js";
 
 // The owner's "continue them once the sandbox is back", kept on the history volume across the restart it is about and
@@ -34,6 +35,15 @@ test("nothing asked, withdrawn, or asked too long ago resumes nothing", async ()
     await marker.ask(1_000);
     await marker.take(1_000 + 121 * MINUTE);
     expect(await marker.take(1_000 + MINUTE)).toBe(false);
+});
+
+test("a restart announced through the ask's file is the intent the next boot reads", () => {
+    const root = mkdtempSync(join(tmpdir(), "restart-resume-"));
+    const resume = fileRestartResume(root);
+    resume.announce?.({ by: "owner", host: "rog", action: "restart", reason: "the owner's restart from the Devices card" });
+    expect(readRestartIntent(join(root, "logs"))).toMatchObject({ by: "owner", host: "rog", action: "restart", at: expect.any(String) });
+    // A history root that cannot be written still restarts: the announce never throws.
+    expect(() => fileRestartResume("/proc/no-such-root").announce?.({ by: "daemon", action: "stop", reason: "x" })).not.toThrow();
 });
 
 const lines = async function* (frames: readonly DeviceFlowLine[]): AsyncGenerator<DeviceFlowLine> {

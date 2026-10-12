@@ -8,7 +8,9 @@ import { rootsOf, rootsText } from "../policy.js";
 import { shellFor } from "./shell.js";
 import { listDistros, WINDOWS_SIDE, wslEnvironment } from "../../environments/wsl.js";
 import { machineId } from "../../machine-id.js";
-import { deviceFeatures, icOutOfDate } from "./ic-binary.js";
+import { deviceFeatures, icOutOfDate, icOverrides, type InstalledIc, installedIc } from "./ic-binary.js";
+import { previousExit, thisRun } from "../../resident/last-exit.js";
+import { MACHINE_VERSION } from "../../version.js";
 import { readUpkeepSummary } from "../../upkeep/reconcile.js";
 
 // What this device IS: without it an agent guesses (apt-get on Fedora, bash on Windows, paths outside its own
@@ -71,7 +73,7 @@ export const linkFacts = (stamped: Readonly<Record<string, LinkReading>> | undef
 };
 
 export const hostFacts = async (scopes: DeviceScopes): Promise<DeviceFacts> => {
-    const [os, engine, wsl, distros, stamped, features, upkeep] = await Promise.all([
+    const [os, engine, wsl, distros, stamped, features, upkeep, ic] = await Promise.all([
         osName(),
         engineFacts(),
         wslEnvironment(),
@@ -79,6 +81,7 @@ export const hostFacts = async (scopes: DeviceScopes): Promise<DeviceFacts> => {
         readLinkStates(),
         deviceFeatures(),
         readUpkeepSummary(),
+        installedIc(),
     ]);
     const links = linkFacts(stamped);
     // Read after deviceFeatures, which fetched (or failed to fetch) the current ic first.
@@ -108,6 +111,18 @@ export const hostFacts = async (scopes: DeviceScopes): Promise<DeviceFacts> => {
     if (upkeep !== undefined) {
         facts.upkeep = upkeep;
     }
+    // The same lines describe prints (agentLines), on the card the sandbox caches, so a reconnect says why it dropped.
+    const previous = previousExit();
+    if (previous !== undefined) {
+        facts.previousExit = previous;
+    }
+    if (ic !== undefined) {
+        facts.ic = { path: ic.path, version: ic.version, ...(ic.modified === undefined ? {} : { modified: ic.modified }) };
+    }
+    const overrides = icOverrides(process.env);
+    if (overrides.length > 0) {
+        facts.icOverrides = overrides;
+    }
     return facts;
 };
 
@@ -127,10 +142,25 @@ const environmentLines = (facts: DeviceFacts): string[] => {
     return [];
 };
 
+// Which ic answers here and what steers it, and this agent's own run: the lines an agent otherwise hunts for with
+// run_command (where is ic.exe, which version, is an IC_URL left over, why did the agent restart). Pure.
+export const agentLines = (
+    ic: InstalledIc | undefined,
+    overrides: readonly string[],
+    run: { readonly version: string; readonly startedAt?: string | undefined; readonly previous?: string | undefined },
+): string[] => [
+    `Agent: intentic-machine ${run.version}${run.startedAt === undefined ? "" : `, running since ${run.startedAt}`}; its own logs are read with device_logs`,
+    ...(run.previous === undefined ? [] : [`Before it: ${run.previous}`]),
+    ic === undefined
+        ? "ic: none answers here (looked in ~/.intentic/ic/bin, /usr/local/bin and PATH)"
+        : `ic: ${ic.version} at ${ic.path}${ic.modified === undefined ? "" : ` (written ${ic.modified})`}`,
+    ...(overrides.length === 0 ? [] : [`Overrides in the agent's environment: ${overrides.join(", ")}`]),
+];
+
 // The agent-facing rendering. Includes the session type on Linux (Wayland vs X11 decides clipboard, screenshot
 // and input idioms) and the machine's own name.
 export const describeText = async (scopes: DeviceScopes): Promise<string> => {
-    const facts = await hostFacts(scopes);
+    const [facts, ic] = await Promise.all([hostFacts(scopes), installedIc()]);
     const session = platform() === "linux" ? `\nGraphical session: ${process.env["XDG_SESSION_TYPE"] ?? "none detected (headless)"}` : "";
     return (
         [
@@ -142,6 +172,7 @@ export const describeText = async (scopes: DeviceScopes): Promise<string> => {
             `Folders you may read and write: ${rootsText(facts.roots)}`,
             ...environmentLines(facts),
             `Permissions: run commands ${scopes.shell}, run destructive commands ${scopes.destructive}, write files ${scopes.write}, see the screen ${scopes.screen}, use the mouse and keyboard ${scopes.control}, manage sandboxes ${scopes.sandboxes}, run programs this sandbox sends ${scopes.programs}`,
+            ...agentLines(ic, icOverrides(process.env), { version: MACHINE_VERSION, startedAt: thisRun()?.startedAt, previous: previousExit() }),
             ...(facts.icOutOfDate === undefined ? [] : [facts.icOutOfDate]),
             // All a sandbox can use, so a reshape is asked for in numbers this engine has.
             ...(facts.engine === undefined

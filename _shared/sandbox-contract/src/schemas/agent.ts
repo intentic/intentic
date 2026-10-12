@@ -559,6 +559,12 @@ export const QueueResumedSchema = z.object({
     queue: ConversationQueueSchema.optional().describe(
         "The queue the release left: what still waits once the turn took what it could. Absent from sandboxes older than the field.",
     ),
+    reason: z
+        .string()
+        .optional()
+        .describe(
+            "Why nothing went out though messages still wait, in a sentence: a spent allowance whose window is shut, a recovery the sandbox runs first, a paused queue. Absent when something went out, when they simply go after a running turn, and from sandboxes older than the field.",
+        ),
 });
 export type QueueResumed = z.infer<typeof QueueResumedSchema>;
 // Attaches to a conversation's newest run (live, or finished within retention); no cursor to resume from, the head

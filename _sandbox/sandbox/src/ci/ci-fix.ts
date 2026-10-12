@@ -1,4 +1,5 @@
 import { type AgentRunPick, ciFixConversationId, type PipelineRun } from "@intentic/sandbox-contract";
+import { errorMessage } from "@intentic/base/errors";
 import { isInfraStep } from "@intentic/constants/ci-infra-steps";
 import type { Logger } from "pino";
 import type { Services } from "../composition.js";
@@ -6,6 +7,7 @@ import type { TurnInput } from "../seams/turn-starter.js";
 import { AttemptRefused, daemonFixAttemptDeps, type FixAttemptOutcome, startFixAttempt } from "../conversations/fix/fix-attempts.js";
 import { NO_PROVIDER_CONNECTED, runRoleModel, unpinnedRunProvider } from "../agent/models/run-role-model.js";
 import { digestOf, excerptOf } from "./failure-digest.js";
+import { ciLogsRoot, keepJobLog } from "./job-logs.js";
 import type { CiProject } from "./projects.js";
 import { ciClientFor, type FailedStep, type FetchFn } from "./providers.js";
 import { TITLE_MAX } from "../seams/conversation-title.js";
@@ -60,11 +62,25 @@ export const ciFailureEvidence = async (project: CiProject, runId: number, logge
     // whether the fleet died.
     const logs = await Promise.all(failedSteps.map((failed) => client.jobLog(project, failed.id, WHOLE_LOG).catch(missing(`log of ${failed.job}`, ""))));
     const stepsOnly = failedSteps.length > 0 && failedSteps.every(({ step }) => step !== undefined && isInfraStep(step));
+    // Each whole log is kept where the agent can read it (job-logs.ts); one that cannot be written is left unnamed.
+    const kept = await Promise.all(
+        failedSteps.map((failed, index) =>
+            keepJobLog(ciLogsRoot(), { repo: project.repo, runId, jobId: failed.id, name: failed.job }, logs[index] ?? "").catch((error: unknown) => {
+                logger.warn({ reason: errorMessage(error), repo: project.repo, runId }, `ci fix: the log of ${failed.job} could not be kept for its fix agent`);
+                return undefined;
+            }),
+        ),
+    );
     return {
         failedJobs: failedSteps.map(({ job }) => job),
         logs: digestOf(
             failedSteps.map((failed, index) =>
-                excerptOf({ name: failed.job, steps: failed.steps ?? (failed.step === undefined ? [] : [failed.step]), log: logs[index] ?? "" }),
+                excerptOf({
+                    name: failed.job,
+                    steps: failed.steps ?? (failed.step === undefined ? [] : [failed.step]),
+                    log: logs[index] ?? "",
+                    logPath: kept[index],
+                }),
             ),
         ),
         infra: stepsOnly || logs.some((log) => infraLog(log.slice(-FIX_LOG_BYTES))),
@@ -96,14 +112,21 @@ export interface CiFixRequest {
     readonly preface?: string;
 }
 
+// How the forge's API is reached from here. The token variable holds a placeholder that only the credential gateway
+// swaps for the real token, so the same request sent straight to the forge answers a bare 401: three fix agents spent
+// four to six calls each on \`Bad credentials\` from api.github.com before finding the gateway's address.
+const GATEWAY_VARIABLES = { github: "GITHUB_API_URL", gitlab: "GITLAB_URL" } as const;
+const gatewayNote = (provider: keyof typeof GATEWAY_VARIABLES): string =>
+    `Send every API request to the credential gateway's address in \`$${GATEWAY_VARIABLES[provider]}_<CONNECTION>\` (\`env | grep ^${GATEWAY_VARIABLES[provider]}_\` lists them; for a connection named github: \`curl -s -H "Authorization: Bearer $GITHUB_TOKEN_GITHUB" "$GITHUB_API_URL_GITHUB/repos/<owner>/<repo>/actions/runs/<id>/jobs"\`), never to the forge's own host: the token variable holds a placeholder the gateway swaps for the real token, and sent anywhere else it answers 401 Bad credentials.`;
+
 const promptOf = (request: CiFixRequest, where: string): string =>
     [
         ...(request.preface === undefined ? [] : [request.preface]),
         `The CI pipeline for the workspace repo "${request.project.repo}" failed ${where}. Investigate and fix it.`,
         ...(request.evidence.failedJobs.length > 0 ? [`Failed jobs: ${request.evidence.failedJobs.join(", ")}.`] : []),
-        `What failed is below, read out of the failed jobs' logs: every error once, with every job that printed it (one cause often fails several jobs), then each failed step's last lines. Read it first; it is usually enough to name each cause. Fix every cause in it, not only the first.`,
+        `What failed is below, read out of the failed jobs' logs: how failed tasks ended (an exit code that is a signal's, a heap that ran out, a memory ceiling's kill, a timeout), every error once with every job that printed it (one cause often fails several jobs), then each failed step's last lines with the passing tests left out. Read it first; it is usually enough to name each cause. Fix every cause in it, not only the first. Each job's whole log is kept on this machine at the path its \`whole log:\` line names: search that file (\`rg -n 'heap|Killed|exit code|\\(fail\\)' <path>\`) before re-running anything to find out why a task failed.`,
         `REPRODUCE LOCALLY ONLY IF THIS SANDBOX CAN, AND ONLY WHAT FAILED. Re-run the failing job's own step for the package it names (that package's tests or typecheck, the failing test files alone), never the whole repository's suite: this sandbox is shared with other conversations, and a repository-wide run takes the memory they need. Jobs that need Docker, a fresh CI image, a desktop runner, a GPU, Windows or Xcode DO NOT: this sandbox has none of them, and an hour spent standing one up is an hour that ends in a guess anyway.`,
-        `For a job you cannot run here: make the change from the logs, then verify it in the place the constraints exist by dispatching the workflow on your own branch and reading the run it starts. NO \`gh\` OR \`glab\` IS INSTALLED IN THIS SANDBOX — the ${request.project.account.provider} REST API is how you reach the run, and the \`${request.project.account.provider}\` skill carries the connected token and the curl form for it. The same API serves a failed job's full log, which is worth fetching when what is below cuts off the cause. Say plainly in your summary if you could not verify it and what would.`,
+        `For a job you cannot run here: make the change from the logs, then verify it in the place the constraints exist by dispatching the workflow on your own branch and reading the run it starts. NO \`gh\` OR \`glab\` IS INSTALLED IN THIS SANDBOX — the ${request.project.account.provider} REST API is how you reach the run, and the \`${request.project.account.provider}\` skill carries the connected token and the curl form for it. ${gatewayNote(request.project.account.provider)} Say plainly in your summary if you could not verify it and what would.`,
         `You are in an isolated worktree: commit your fix and it goes through review.`,
         ...(request.evidence.logs !== "" ? [`--- what failed ---\n${request.evidence.logs}`] : []),
     ].join("\n\n");

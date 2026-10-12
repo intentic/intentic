@@ -12,7 +12,9 @@ import type { SpokenLine } from "./transcript-search.js";
 
 // Yielded between sources so a long backfill hums in the background instead of stalling the loop.
 const YIELD_MS = 1;
-// Logging cadence for an active backfill; a no-op pass (every pass after the first) stays silent.
+// How long a pass runs before it says how far it got, and then how often. A pass is short whenever little is behind,
+// which is every pass but a first one or a rebuild: each re-reads the one or two records a running turn just grew, and
+// logged both a start and an end line at info for it, 578 and 577 of them in one daemon.log. Those now go to debug.
 const LOG_MS = 30_000;
 
 export interface BackfillSource {
@@ -27,6 +29,9 @@ export interface BackfillRequest {
     readonly sources: readonly BackfillSource[];
     // True for sessions, whose unlisted entries are outside the window; false for conversations, pruned elsewhere.
     readonly prune: boolean;
+    // Told after every source how many of them the pass has been through, so a search answered mid-pass can say how
+    // much of the index it read.
+    readonly progress?: (done: number, of: number) => void;
 }
 
 export interface BackfillOutcome {
@@ -66,14 +71,17 @@ export const backfillSearchIndex = async (
             }
             await index.put(source.key, request.kind, version, await source.lines());
             indexed += 1;
-            // Logs only once real work has happened, then at a human cadence, so quiet reading doesn't look silent.
-            if (Date.now() - announcedAt > LOG_MS) {
-                announcedAt = Date.now();
-                logger.info({ kind: request.kind, indexed, of: request.sources.length }, "search index: backfilling");
+            // Only a pass long enough to be waited on says how far it got, then at a human cadence.
+            const now = Date.now();
+            if (now - started > LOG_MS && now - announcedAt > LOG_MS) {
+                announcedAt = now;
+                logger.info({ kind: request.kind, indexed, skipped, of: request.sources.length }, "search index: backfilling");
             }
         } catch (error) {
             failed += 1;
             logger.warn({ err: error, kind: request.kind, key: source.key }, "search index: source not indexed");
+        } finally {
+            request.progress?.(indexed + skipped + failed, request.sources.length);
         }
         await delay(YIELD_MS);
     }
@@ -88,9 +96,13 @@ export const backfillSearchIndex = async (
         }
     }
 
-    // The closing line fires only for a pass that announced itself, so a steady-state no-op stays quiet.
+    // At info only for a pass that announced itself; a short one that changed something is a debug line, and a no-op
+    // pass says nothing at all.
+    const outcome = { kind: request.kind, indexed, skipped, forgotten, failed, ms: Date.now() - started };
     if (announcedAt > 0) {
-        logger.info({ kind: request.kind, indexed, skipped, forgotten, failed, ms: Date.now() - started }, "search index: backfill complete");
+        logger.info(outcome, "search index: backfill complete");
+    } else if (indexed + forgotten + failed > 0) {
+        logger.debug(outcome, "search index: backfill complete");
     }
     return { indexed, skipped, forgotten, failed };
 };

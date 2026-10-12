@@ -1202,6 +1202,16 @@ pub fn busy() -> bool {
     WORKING.lock().map(|held| !held.is_empty()).unwrap_or(true)
 }
 
+/// The folders such a run is under way for, sorted: what an update it holds back names in the log.
+pub fn working() -> Vec<PathBuf> {
+    let mut folders: Vec<PathBuf> = WORKING
+        .lock()
+        .map(|held| held.iter().cloned().collect())
+        .unwrap_or_default();
+    folders.sort();
+    folders
+}
+
 /// A folder's claim on its one changing run at a time, given back however the run ends.
 struct Working(PathBuf);
 

@@ -5,7 +5,7 @@ import type { Logger } from "pino";
 // Per-op timing the stall detector can't give: not just that the loop stalled, but what it was doing.
 // - slow spans warn once each to logs/perf.jsonl, tagged with load; never to daemon.log
 // - every span also logs at debug, so raising logLevel turns this into a full trace
-// - a periodic summary ranks ops by total time, not worst case, and prints to daemon.log
+// - a periodic summary ranks ops by total time, not worst case, and goes to perf.jsonl at info beside the slow spans
 // In-memory and bounded: one row and one retained sample per op.
 
 // Default slow threshold for ops with no entry in SLOW_MS; low, since this daemon runs local git for one user.
@@ -29,6 +29,9 @@ const SLOW_MS: Readonly<Record<string, number>> = {
     "git.discover": 400,
     // One HTTP request end to end, as the browser experiences it.
     "http.request": 1_000,
+    // One MCP call of a turn (`/mcp/<mount>`), as long as the tool it runs: a device's command or a page load takes
+    // seconds by design (a week's median was 9 s on a device), so only one past a minute is worth a line.
+    "mcp.call": 60_000,
     // A conversation's rebase onto main; replaying a real branch costs seconds, so only a stall is worth a line.
     "agent.sync": 2_000,
     // One land end to end (rebase, preflight, patch); a monorepo's takes seconds. Past this, the classify step is where
@@ -54,7 +57,8 @@ const SLOW_MS: Readonly<Record<string, number>> = {
 };
 
 // Interval for the ranked summary to print while anything is being measured. Counts are cumulative, so a longer cadence
-// costs resolution, not data, and each ~2.5 KB table is spent from daemon.log's byte cap (logs/log-files.ts).
+// costs resolution, not data. Each table is ~2 KB and names the conversations of its worst spans: in daemon.log it was a
+// third of the bytes and matched every grep for a conversation id, so it is written with the slow spans instead.
 export const SUMMARY_MS = 10 * 60_000;
 
 // Ranked rows shown before wait siblings are added back (see summaryRows); keeps it to one screen.
@@ -109,11 +113,15 @@ const load1 = (now: number): number => {
 // Two decimals below 10ms, whole numbers above: both a sub-ms read and a multi-second scan stay readable.
 const round = (ms: number): number => (ms < 10 ? Math.round(ms * 100) / 100 : Math.round(ms));
 
-// Separate destination for slow-span lines (createPerfLogger, logs/perf.jsonl); undefined falls back to `logger` rather
-// than dropping them.
+// Separate destination for slow-span lines and the summary (createPerfLogger, logs/perf.jsonl); undefined falls back to
+// `logger` rather than dropping them.
 export const createPerfTracker = (logger: Logger, slowLogger: Logger | undefined = undefined): PerfTracker => {
     const slowSink = slowLogger ?? logger;
     const stats = new Map<string, PerfStat>();
+    // When counting began: every summary's totals run from here, which its `since` field says.
+    const since = new Date().toISOString();
+    // Each op's count at the previous summary, so a row can say how much of its total is new since then.
+    const countAtLastSummary = new Map<string, number>();
     // Anything measured since the last summary; an idle daemon must not print a table of zeroes every minute.
     let dirty = false;
 
@@ -172,13 +180,15 @@ export const createPerfTracker = (logger: Logger, slowLogger: Logger | undefined
             return;
         }
         dirty = false;
-        logger.info(
+        const rows = summaryRows();
+        slowSink.info(
             {
                 // Ranked and capped, plus each cut row's wait half (see summaryRows); undefined fields are dropped by
-                // JSON.
-                perfSummary: summaryRows().map((stat) => ({
+                // JSON. Totals run from `since`; `recent` is how many of the row's spans landed since the last summary.
+                perfSummary: rows.map((stat) => ({
                     op: stat.op,
                     count: stat.count,
+                    recent: stat.count - (countAtLastSummary.get(stat.op) ?? 0),
                     totalMs: Math.round(stat.totalMs),
                     meanMs: round(stat.totalMs / stat.count),
                     maxMs: Math.round(stat.maxMs),
@@ -186,10 +196,14 @@ export const createPerfTracker = (logger: Logger, slowLogger: Logger | undefined
                     failed: stat.failed > 0 ? stat.failed : undefined,
                     worst: stat.slowest,
                 })),
-                windowMs: SUMMARY_MS,
+                since,
+                everyMs: SUMMARY_MS,
             },
-            "perf summary: ranked by TOTAL time, which is what a bottleneck actually is",
+            "perf summary: ranked by TOTAL time since the daemon started, which is what a bottleneck actually is",
         );
+        for (const stat of stats.values()) {
+            countAtLastSummary.set(stat.op, stat.count);
+        }
         // Counts are cumulative for the daemon's life; a rolling reset would hide an op that is only slow once an hour.
     }, SUMMARY_MS);
     // Measurement must never be what keeps the daemon alive.

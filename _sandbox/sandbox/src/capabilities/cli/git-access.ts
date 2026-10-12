@@ -1,5 +1,6 @@
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import type { CliConfig } from "@intentic/sandbox-contract";
+import { createHash } from "node:crypto";
 import { access, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { directExec, type ExecInTerminal } from "../../terminal/terminal-run.js";
@@ -50,7 +51,33 @@ export interface GitAccessDeps {
     readonly keyAuthenticates: (host: GitHost, keyPath: string) => Promise<boolean>;
     // The account's own name and commit address, for a sandbox with no git identity; absent where nothing asks.
     readonly accountIdentity?: (host: GitHost) => Promise<GitIdentity | undefined>;
+    // What the account API says of the token right now (its HTTP status, and the scopes GitHub publishes for a classic
+    // token): asked once per boot restore, the one path that otherwise never calls the account. Absent in tests.
+    readonly tokenStatus?: (host: GitHost) => Promise<TokenStatus>;
+    // Where each credential change is written (the audit trail below); absent writes nothing.
+    readonly log?: GitAccessLog;
 }
+
+export interface TokenStatus {
+    readonly status: number;
+    readonly scopes?: string | undefined;
+}
+
+// Three investigations into a failing GitHub push found nothing in the logs: the token, the SSH key and the remote
+// routing all change here without a word. One line per change, never a credential: a token is named by a short hash of
+// itself (equal hashes, same token), a key by its SSH fingerprint, and a remote rewrite by its schemes.
+export type GitAccessLog = (fields: Record<string, unknown>, message: string, level?: "info" | "warn") => void;
+
+const quiet: GitAccessLog = () => undefined;
+
+/** A token's short name in logs: equal values, equal names; never reversible to the token. */
+export const tokenFingerprint = (token: string): string => `sha256:${createHash("sha256").update(token).digest("hex").slice(0, 12)}`;
+
+/** A public key line's fingerprint, as `ssh-keygen -lf` prints it (SHA256 of the key blob, unpadded base64). */
+export const keyFingerprint = (publicLine: string): string | undefined => {
+    const blob = publicLine.trim().split(/\s+/u)[1];
+    return blob === undefined ? undefined : `SHA256:${createHash("sha256").update(Buffer.from(blob, "base64")).digest("base64").replace(/=+$/u, "")}`;
+};
 
 export interface GitIdentity {
     readonly name: string;
@@ -72,12 +99,33 @@ const readCredentials = async (): Promise<string> => (await readFile(credentials
 
 // Upserts the https credential line for this host (rewrites any prior line, e.g. a rotated token); a plain fs write
 // (0600), never a visible command.
-const ensureHttpsCredential = async (host: GitHost, exec: ExecInTerminal): Promise<void> => {
+const ensureHttpsCredential = async (host: GitHost, exec: ExecInTerminal, log: GitAccessLog = quiet): Promise<void> => {
     await exec("git", ["config", "--global", "credential.helper", "store"]);
     const line = `https://${host.httpsUser}:${encodeURIComponent(host.token)}@${host.host}`;
     const current = await readCredentials();
     const kept = current.split("\n").filter((entry) => entry.trim() !== "" && !entry.endsWith(`@${host.host}`));
     await writeFile(credentialsPath(), `${[...kept, line].join("\n")}\n`, { mode: 0o600 });
+    const previous = storedToken(current, host);
+    if (previous !== host.token) {
+        log(
+            { host: host.host, token: tokenFingerprint(host.token), ...(previous === undefined ? {} : { previous: tokenFingerprint(previous) }) },
+            previous === undefined ? `git access: ${host.host} https token stored` : `git access: ${host.host} https token replaced`,
+        );
+    }
+};
+
+// The token an existing line for this host carries, to tell a rotated token from the same one written again.
+const storedToken = (credentials: string, host: GitHost): string | undefined => {
+    const entry = credentials.split("\n").find((candidate) => candidate.endsWith(`@${host.host}`));
+    const secret = entry === undefined ? undefined : /^https:\/\/[^:]*:(.*)@[^@]*$/u.exec(entry)?.[1];
+    if (secret === undefined) {
+        return undefined;
+    }
+    try {
+        return decodeURIComponent(secret);
+    } catch {
+        return secret;
+    }
 };
 
 const removeHttpsCredential = async (host: GitHost): Promise<void> => {
@@ -108,14 +156,34 @@ interface KeyPair {
     readonly rewritten: boolean;
 }
 
-const ensureKeyPair = async (host: GitHost, keys: SshKeyStore): Promise<KeyPair> => {
+// Every change ensureKeyPair makes, as a line: a new key, an older build's key adopted, a public file rewritten to the key
+// the store holds. Kept apart from it so the key logic reads as before.
+const logKeyPair = (host: GitHost, pair: KeyPair, how: "generated" | "adopted" | "rewritten" | "kept", log: GitAccessLog): void => {
+    if (how === "kept") {
+        return;
+    }
+    log(
+        { host: host.host, key: keyFingerprint(pair.publicLine), path: hostPublicKeyPath(host.host), how },
+        how === "generated"
+            ? `git access: ${host.host} ssh key generated`
+            : how === "adopted"
+              ? `git access: ${host.host} ssh key adopted from an older build's file`
+              : `git access: ${host.host} public key file rewritten to the held key`,
+    );
+};
+
+const ensureKeyPair = async (host: GitHost, keys: SshKeyStore, log: GitAccessLog = quiet): Promise<KeyPair> => {
     // A key an older build left beside the alias is the one on the account: adopted, never replaced by a new one.
-    const held = (await keys.get(host.host)) ?? ((await adoptLegacySshKey(host.host, keys)) ? await keys.get(host.host) : undefined);
+    const stored = await keys.get(host.host);
+    const adopted = stored === undefined && (await adoptLegacySshKey(host.host, keys));
+    const held = stored ?? (adopted ? await keys.get(host.host) : undefined);
     if (held === undefined) {
-        const pair = generateSshKey(KEY_TITLE);
-        await keys.put(host.host, pair.privateKey);
-        await writeHostPublicKey(host.host, pair.publicKey);
-        return { publicLine: pair.publicKey, rewritten: true };
+        const generated = generateSshKey(KEY_TITLE);
+        await keys.put(host.host, generated.privateKey);
+        await writeHostPublicKey(host.host, generated.publicKey);
+        const pair = { publicLine: generated.publicKey, rewritten: true };
+        logKeyPair(host, pair, "generated", log);
+        return pair;
     }
     const publicLine = publicLineOf(held);
     if (publicLine === undefined) {
@@ -124,10 +192,14 @@ const ensureKeyPair = async (host: GitHost, keys: SshKeyStore): Promise<KeyPair>
     // allow(silent-catch): an unreadable public half is rewritten from the private key held in the store, just below.
     const written = (await readFile(hostPublicKeyPath(host.host), "utf8").catch(() => "")).trim();
     if (keyOfLine(written) === keyOfLine(publicLine)) {
-        return { publicLine, rewritten: false };
+        const pair = { publicLine, rewritten: false };
+        logKeyPair(host, pair, adopted ? "adopted" : "kept", log);
+        return pair;
     }
     await writeHostPublicKey(host.host, publicLine);
-    return { publicLine, rewritten: true };
+    const pair = { publicLine, rewritten: true };
+    logKeyPair(host, pair, adopted ? "adopted" : "rewritten", log);
+    return pair;
 };
 
 const sshRegistrationWarning = (host: GitHost, publicKey: string, err: unknown): string => {
@@ -232,11 +304,20 @@ const accountIdentityReal = async (host: GitHost): Promise<GitIdentity | undefin
     return { name: text(user["name"]) ?? login, email: email ?? noreply };
 };
 
+// GitHub answers a classic token's scopes on every API call (X-OAuth-Scopes); a fine-grained token and GitLab publish none.
+const tokenStatusReal = async (host: GitHost): Promise<TokenStatus> => {
+    const headers = host.provider === "github" ? githubHeaders(host.token) : { "PRIVATE-TOKEN": host.token };
+    const response = await fetch(`${host.apiBase}/user`, { headers, signal: AbortSignal.timeout(15_000) });
+    await response.body?.cancel();
+    return { status: response.status, scopes: response.headers.get("x-oauth-scopes") ?? undefined };
+};
+
 const realDeps: GitAccessDeps = {
     uploadKey: uploadKeyReal,
     deleteKey: deleteKeyReal,
     keyAuthenticates: keyAuthenticatesReal,
     accountIdentity: accountIdentityReal,
+    tokenStatus: tokenStatusReal,
 };
 
 // What the sandbox's own git config says for one key, undefined when it says nothing (`--get` exits 1 then).
@@ -281,18 +362,23 @@ const httpsRewriteEnabled = async (host: GitHost): Promise<boolean> =>
 
 // Routes ssh-form remotes over https, the fallback when a key can't be registered; --replace-all seeds one value, --add
 // appends the second, so a re-apply stays at two entries.
-const enableHttpsRewrite = async (host: GitHost, exec: ExecInTerminal): Promise<void> => {
+const enableHttpsRewrite = async (host: GitHost, exec: ExecInTerminal, log: GitAccessLog = quiet): Promise<void> => {
+    const already = await httpsRewriteEnabled(host);
     await exec("git", ["config", "--global", "--replace-all", rewriteKey(host), `git@${host.host}:`]);
     await exec("git", ["config", "--global", "--add", rewriteKey(host), `ssh://git@${host.host}/`]);
+    if (!already) {
+        log({ host: host.host, from: [`git@${host.host}:`, `ssh://git@${host.host}/`], to: `https://${host.host}/` }, `git access: ${host.host} ssh-form remotes now routed over https`);
+    }
 };
 
 // Drops the rewrite (native ssh registered, or teardown); probes first, since --unset-all exits 5 when absent.
 // The probe is invisible; only a removal that has something to remove shows up as a command.
-const disableHttpsRewrite = async (host: GitHost, exec: ExecInTerminal): Promise<void> => {
+const disableHttpsRewrite = async (host: GitHost, exec: ExecInTerminal, log: GitAccessLog = quiet): Promise<void> => {
     if (!(await httpsRewriteEnabled(host))) {
         return;
     }
     await exec("git", ["config", "--global", "--unset-all", rewriteKey(host)]);
+    log({ host: host.host, from: `https://${host.host}/`, to: `git@${host.host}:` }, `git access: ${host.host} https routing of ssh-form remotes dropped, native ssh in use`);
 };
 
 // Returns undefined when native ssh is wired, or a warning when the key can't be registered and remotes route over
@@ -304,25 +390,59 @@ export const setupGitAccess = async (
     keys: SshKeyStore,
     deps: GitAccessDeps = realDeps,
 ): Promise<string | undefined> => {
-    await ensureHttpsCredential(host, exec);
+    const log = deps.log ?? quiet;
+    await ensureHttpsCredential(host, exec, log);
     await ensureGitIdentity(host, exec, deps);
-    const { publicLine: publicKey } = await ensureKeyPair(host, keys);
+    const { publicLine: publicKey } = await ensureKeyPair(host, keys, log);
     const refusal = await deps.uploadKey(host, publicKey, KEY_TITLE).then(
         () => undefined,
         (err: unknown) => err,
     );
+    const key = keyFingerprint(publicKey);
     // A refused upload doesn't settle it: asks ssh directly, since a hand-added key may work despite the refusal.
     // The daemon's own ssh reads the store's file directly: it is root, and this probe is no turn's.
     if (refusal !== undefined && !(await deps.keyAuthenticates(host, keys.pathOf(host.host)))) {
+        log(
+            { host: host.host, key, reason: errorMessage(refusal), authenticates: false },
+            `git access: ${host.host} refused the ssh key and ssh does not let it in; remotes go over https`,
+            "warn",
+        );
         // Genuinely absent: drops any stale alias (keeps the keypair for later), routes remotes over https instead.
         await rm(hostConfPath(host.host), { force: true });
-        await enableHttpsRewrite(host, exec);
+        await enableHttpsRewrite(host, exec, log);
         return sshRegistrationWarning(host, publicKey, refusal);
     }
+    log(
+        { host: host.host, key, ...(refusal === undefined ? { uploaded: true } : { uploaded: false, reason: errorMessage(refusal), authenticates: true }) },
+        refusal === undefined
+            ? `git access: ${host.host} ssh key registered on the account (or already there)`
+            : `git access: ${host.host} refused the key upload, but ssh lets the key in; native ssh in use`,
+    );
     // On the account: wires the ssh alias and drops any https rewrite left by an earlier failed apply.
     await writeSshHost(host.host, { host: host.host, user: "git", port: 22, identityFile: hostPublicKeyPath(host.host) });
-    await disableHttpsRewrite(host, exec);
+    await disableHttpsRewrite(host, exec, log);
     return undefined;
+};
+
+// Asked once per boot restore, after the work, so a dead token is on file before the first push fails. Never fatal:
+// an offline host or a slow API leaves only a line.
+const checkToken = async (host: GitHost, deps: GitAccessDeps, path: string): Promise<void> => {
+    const log = deps.log ?? quiet;
+    if (deps.tokenStatus === undefined) {
+        log({ host: host.host, path }, `git access: ${host.host} restored at boot (${path})`);
+        return;
+    }
+    try {
+        const { status, scopes } = await deps.tokenStatus(host);
+        const valid = status >= 200 && status < 300;
+        log(
+            { host: host.host, path, token: tokenFingerprint(host.token), status, ...(scopes === undefined ? {} : { scopes }) },
+            valid ? `git access: ${host.host} restored at boot (${path}), token accepted` : `git access: ${host.host} restored at boot (${path}), but the account API refused the token (${status})`,
+            valid ? "info" : "warn",
+        );
+    } catch (error) {
+        log({ host: host.host, path, token: tokenFingerprint(host.token), reason: errorMessage(error) }, `git access: ${host.host} restored at boot (${path}), token not checked`);
+    }
 };
 
 // Boot half of setupGitAccess: re-derives what HOME lost (credential helper, https line, alias or rewrite).
@@ -336,22 +456,29 @@ export const restoreGitAccess = async (
     keys: SshKeyStore,
     deps: GitAccessDeps = realDeps,
 ): Promise<string | undefined> => {
+    const log = deps.log ?? quiet;
     if (!(await keys.has(host.host))) {
-        return setupGitAccess(host, exec, keys, deps);
+        const warning = await setupGitAccess(host, exec, keys, deps);
+        await checkToken(host, deps, "full setup: no key held");
+        return warning;
     }
-    await ensureHttpsCredential(host, exec);
+    await ensureHttpsCredential(host, exec, log);
     // A recreated container lost its global git config, the identity with it.
     await ensureGitIdentity(host, exec, deps);
     // Alias next to the key means the key is on the account: written only after a successful upload.
     if (await fileExists(hostConfPath(host.host))) {
-        if ((await ensureKeyPair(host, keys)).rewritten) {
+        if ((await ensureKeyPair(host, keys, log)).rewritten) {
             // Registering the same key again is the provider's no-op (422 / 400), so this cannot pile up account keys.
-            return setupGitAccess(host, exec, keys, deps);
+            const warning = await setupGitAccess(host, exec, keys, deps);
+            await checkToken(host, deps, "full setup: public key file was stale");
+            return warning;
         }
         await writeSshHost(host.host, { host: host.host, user: "git", port: 22, identityFile: hostPublicKeyPath(host.host) });
+        await checkToken(host, deps, "ssh alias restored");
         return undefined;
     }
-    await enableHttpsRewrite(host, exec);
+    await enableHttpsRewrite(host, exec, log);
+    await checkToken(host, deps, "https routing restored");
     return undefined;
 };
 
@@ -383,20 +510,24 @@ export const teardownGitAccess = async (host: GitHost, exec: ExecInTerminal, key
     await keys.remove(host.host);
     await disableHttpsRewrite(host, exec);
     await removeHttpsCredential(host);
+    deps.log?.({ host: host.host, token: tokenFingerprint(host.token) }, `git access: ${host.host} torn down (account key deleted where the token allowed, local key and https token removed)`);
 };
+
+// The real account calls with the caller's audit trail attached, where it passed one.
+const withLog = (log: GitAccessLog | undefined): GitAccessDeps => (log === undefined ? realDeps : { ...realDeps, log });
 
 export const gitAccessHook: ConnectorHook = {
     // "on" sets up ssh+https; an explicit off (or a switched-off connection) tears down, so re-apply is idempotent both
     // ways.
-    apply: async (config, exec, keys) => {
+    apply: async (config, exec, keys, log) => {
         const host = gitHostOf(config);
         if (config["git"] === "on") {
-            return setupGitAccess(host, exec, keys);
+            return setupGitAccess(host, exec, keys, withLog(log));
         }
-        await teardownGitAccess(host, exec, keys);
+        await teardownGitAccess(host, exec, keys, withLog(log));
         return undefined;
     },
-    remove: (config, exec, keys) => teardownGitAccess(gitHostOf(config), exec, keys),
+    remove: (config, exec, keys, log) => teardownGitAccess(gitHostOf(config), exec, keys, withLog(log)),
     // Nothing to restore with git access off: the connector is then just env + skill, both already on /work.
-    restore: async (config, exec, keys) => (config["git"] === "on" ? restoreGitAccess(gitHostOf(config), exec, keys) : undefined),
+    restore: async (config, exec, keys, log) => (config["git"] === "on" ? restoreGitAccess(gitHostOf(config), exec, keys, withLog(log)) : undefined),
 };

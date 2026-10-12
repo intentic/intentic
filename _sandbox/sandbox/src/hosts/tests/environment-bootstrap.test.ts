@@ -40,7 +40,10 @@ const services = (
     // What each short code was minted to stand for, in mint order; the code is its index.
     const codes: unknown[] = [];
     const logged: object[] = [];
+    // The level each line was written at, beside it; the lines themselves stay in `logged`.
+    const levels: string[] = [];
     return {
+        levels,
         ran,
         minted,
         codes,
@@ -73,7 +76,15 @@ const services = (
                     return { result: { content: [{ type: "text", text: answer.text }], isError: answer.refused } };
                 },
             },
-            logger: { info: (data: object) => void logged.push(data), warn: (data: object) => void logged.push(data) },
+            logger: Object.fromEntries(
+                ["debug", "info", "warn"].map((level) => [
+                    level,
+                    (data: object) => {
+                        levels.push(level);
+                        logged.push(data);
+                    },
+                ]),
+            ),
         } as unknown as Services,
     };
 };
@@ -141,6 +152,8 @@ test("mints nothing and runs nothing for an environment already connected", asyn
 
     expect(world.minted).toEqual([]);
     expect(world.ran).toEqual([]);
+    // Nothing happened, so nothing is said above a trace: this line was a third of the info a day used to hold.
+    expect(world.levels).toEqual(["debug"]);
 });
 
 // A laptop reconnects whenever it wakes. A distro that cannot take an agent must cost one attempt, not one per wake.

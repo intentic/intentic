@@ -629,6 +629,11 @@ clock.
   lasting ledger of its own repairs.
 - **The log** (`~/.intentic/machine/machine.log`, like every round): what ic is doing as it does it, and each
   sandbox's verdict when it changes (a standing `healthy` or `needs-you` is said once per stretch; `fixed` always).
+  A restart of one sandbox is said whole: ic's finding ("Restarting the sandbox, because Daemon health: …"), what made
+  the keeper run ic (its sweep, or this agent's link down since when), its side of the computer and the failed check
+  ids. The same goes into the container as `/history/logs/restart-intent.json` (`{at, by: "keeper", host, side, action,
+  reason, checks}`, read by the daemon at boot) through a `docker exec` of at most three seconds that the restart never
+  waits on; ic may write its own over it.
 - **Where.** Every environment runs its own keeper, since `ic sandbox fix` knows only the sandboxes its own ic keeps
   records of; a WSL distro's shares the Windows side's Docker Desktop. Each keeper sweeps only while its environment
   keeps a sandbox of its own: one the listing names without `keptElsewhere`, or one its ic still has a record of that
@@ -703,6 +708,8 @@ login entries once and then stood in for every later cleanup too (2026-10-05).
   - `~/.intentic/machine/trash` entries older than 30 days, by the stamp in their name (a moved folder keeps its old
     times), deleted; a name with no stamp is left and reported;
   - `audit.jsonl` set aside at 8 MB;
+  - what programs started with `app_start` printed (`runs/<sandbox>/.logs`), after 14 days or past the newest 100 per
+    sandbox, never a run `apps.json` still holds as running;
   - the install command's half downloads in `bin/` (`*.part`, `*.part-<release>`) older than a day, never while an
     upgrade runs;
   - a second `ic` found first on PATH (a root install's `/usr/local/bin/ic`), reported with both versions, since only
@@ -730,6 +737,29 @@ laptop's sleep found the last ping minutes old and killed a healthy agent). That
 launcher passes to the logon task, and the Windows side restarts a distro's agent that stopped. The Worker is made from
 source text, so the compiled binary needs no second file; both it and the SIGKILL were checked under
 `bun build --compile`. Like any crash, a stall counts toward a new release's trial ([`agent-trial.ts`](src/agent-trial.ts)).
+The stall is read on the monotonic clock, and the wall clock running ten seconds or more ahead of it between two checks
+(Linux's monotonic clock stops while the machine sleeps, so only the wall clock shows the time away) is a sleep too:
+either kind is logged as `watchdog: the agent was paused for N s (suspected sleep/resume, …)` and never counted, and a
+real stall within ten minutes of one says how long after it came (2026-10-11).
+
+### Why the agent before ended
+
+Every way out of the agent writes `~/.intentic/machine/last-exit.json` ([`last-exit.ts`](src/resident/last-exit.ts)):
+its own exits (a signal, a takeover, nothing to serve, an uncaught error), the watchdog's kill from its Worker, and
+whoever stops it from outside (`run --stop`, a restart, an update) before the signal, since Windows runs none of the
+agent's handlers then. The record is keyed by pid and only an open one is closed, so the stopper's reason is not
+overwritten by the signal that carries it out. The next agent says it in `machine.log` at start and in `describe`; a
+record left open is told apart by the machine's boot time against the last-alive stamp the agent writes each tick.
+
+### The agent's own logs
+
+`machine.log` is checked every ten minutes and, at 8 MB, copied to `machine.log.1` and cut in place
+([`log-roll.ts`](src/resident/log-roll.ts)): the supervisor holds it open for appending, so a rename would leave its
+lines going to the `.1` (or fail on Windows). The `device_logs` tool ([`tools/logs.ts`](src/device/tools/logs.ts))
+lists `machine.log`(`.1`), `machine-update.log`, `audit.jsonl`(`.1`) and ic's per-run logs (`$INTENTIC_LOG_DIR`, else
+`~/.intentic/logs`, newest first), and tails one by name, never by path: the last MB, with `grep`, `lines`, and for
+the audit `tool` and `failedOnly`. It is gated like `sandbox_logs`. `describe` names the `ic` that answers (path,
+version, file time) and the `IC_*`/`INTENTIC_*` variables in the agent's environment, secrets by length only.
 
 ## Key files
 

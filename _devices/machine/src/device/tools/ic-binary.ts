@@ -48,17 +48,43 @@ export const icVersionFrom = (stdout: string): string | undefined => /^ic (\d+\.
 export const icNeedsFetch = (installed: string | undefined, agent: string): boolean =>
     agent !== DEV_VERSION && (installed === undefined || isNewer(agent, installed));
 
-const installedVersion = async (): Promise<string | undefined> => {
+// The ic this agent runs: the first candidate that answers `--version`, where it is, what it says, and (for a file this
+// agent can stat, not a PATH lookup) when it was written. `describe` names it, since an ic put down by a stale setup
+// script (2026-10-07: a leftover IC_URL) otherwise took a dozen calls to find.
+export interface InstalledIc {
+    readonly path: string;
+    readonly version: string;
+    readonly modified?: string;
+}
+
+export const installedIc = async (): Promise<InstalledIc | undefined> => {
     for (const candidate of icCandidates(process.platform, homeDir())) {
         // allow(silent-catch): a candidate that is missing or will not say its version is not the installed ic, and the next is tried
         // oxlint-disable-next-line eslint/no-await-in-loop -- candidates are tried in order; the first that answers wins
         const answer = await exec(candidate, ["--version"], { timeout: 30_000, windowsHide: true }).catch(() => undefined);
         if (answer !== undefined) {
-            return icVersionFrom(answer.stdout) ?? DEV_VERSION;
+            // allow(silent-catch): a bare name found on PATH is not a file this agent can stat; its time is simply not said
+            // oxlint-disable-next-line eslint/no-await-in-loop -- the one candidate that answered
+            const info = await stat(candidate).catch(() => undefined);
+            const found: { path: string; version: string; modified?: string } = { path: candidate, version: icVersionFrom(answer.stdout) ?? DEV_VERSION };
+            if (info !== undefined) {
+                found.modified = info.mtime.toISOString();
+            }
+            return found;
         }
     }
     return undefined;
 };
+
+const installedVersion = async (): Promise<string | undefined> => (await installedIc())?.version;
+
+// The environment variables that steer ic or this agent (IC_URL, INTENTIC_LOG_DIR, …), as `describe` shows them: a value
+// whose name says it is a secret is shown by its length only. Pure.
+export const icOverrides = (env: NodeJS.ProcessEnv): string[] =>
+    Object.entries(env)
+        .filter((entry): entry is [string, string] => /^(?:IC|INTENTIC)_/.test(entry[0]) && entry[1] !== undefined)
+        .map(([name, value]) => (/TOKEN|SECRET|KEY|PASSWORD|AUTH|COOKIE/i.test(name) ? `${name}=<${value.length} characters>` : `${name}=${value}`))
+        .toSorted();
 
 // What a failed fetch leaves behind: one sentence naming the ic that stays, the one wanted and why it did not arrive.
 // The newer verbs (logs, the contract's shape) are missing from the ic that stays, so the features this device reports

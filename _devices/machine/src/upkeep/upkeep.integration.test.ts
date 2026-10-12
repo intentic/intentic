@@ -187,6 +187,37 @@ test("a half download the install command left a day ago is deleted; today's, an
     expect(readdirSync(bin).toSorted()).toEqual(["intentic-machine", "intentic-machine.part-1.326.0"]);
 });
 
+// app_start's outputs: two weeks, the newest hundred, and never a run apps.json still holds as running.
+test("a program's output past two weeks is deleted, a running one's is kept whatever its age, and a torn record prunes nothing", async () => {
+    const { context } = home();
+    const sandbox = join(context.base, "runs", "sandbox-1");
+    const logs = join(sandbox, ".logs");
+    write(join(logs, "old.log"));
+    write(join(logs, "running.log"));
+    write(join(logs, "isolated", "output.log"));
+    write(join(logs, "fresh.log"));
+    const old = (NOW - 20 * DAY) / 1000;
+    for (const name of ["old.log", "running.log", "isolated"]) {
+        utimesSync(join(logs, name), old, old);
+    }
+    utimesSync(join(logs, "fresh.log"), NOW / 1000, NOW / 1000);
+    writeFileSync(
+        join(sandbox, "apps.json"),
+        JSON.stringify([
+            { id: "a", log: join(logs, "running.log") },
+            { id: "b", log: join(logs, "old.log"), endedAt: "2026-09-10T00:00:00.000Z" },
+            { id: "c", log: join(logs, "isolated", "output.log") },
+        ]),
+    );
+    await reconcile([entry(RETENTION_ENTRIES, "app-run-logs")], context, { fix: true });
+    expect(readdirSync(logs).toSorted()).toEqual(["fresh.log", "isolated", "running.log"]);
+
+    writeFileSync(join(sandbox, "apps.json"), "[{torn");
+    utimesSync(join(logs, "fresh.log"), old, old);
+    await reconcile([entry(RETENTION_ENTRIES, "app-run-logs")], context, { fix: true });
+    expect(readdirSync(logs).toSorted()).toEqual(["fresh.log", "isolated", "running.log"]);
+});
+
 /* Markers, one per entry: an entry a later release adds runs on a machine that holds every older marker. */
 
 const counting = (id: string, finds: () => readonly { what: string; fail?: boolean }[]): UpkeepEntry & { readonly acted: string[] } => {

@@ -1,4 +1,5 @@
 import { Worker } from "node:worker_threads";
+import type { ExitRecord } from "./last-exit.js";
 
 /* THE AGENT'S OWN HANG WATCHDOG (2026-10-05). Every supervisor of this agent (the logon task through the launcher's
    `--wait`, a systemd user unit, a LaunchAgent, the Windows side for a distro) restarts it when it EXITS, and none can
@@ -24,7 +25,8 @@ export const WATCHDOG_PING_MS = 5_000;
 export const WATCHDOG_STALL_MS = 3 * 60_000;
 
 // The seconds the loop has been stuck, when it has been stuck for at least `limitMs`; undefined while it answers. Pure:
-// the same arithmetic the Worker runs below, asserted here without a thread.
+// the same arithmetic the Worker runs below, asserted here without a thread. Read on the MONOTONIC clock: a wall clock
+// stepped forward (a time sync, a WSL guest catching up after the host slept) moves no time a loop could have been stuck.
 export const stalledFor = (lastPing: number, now: number, limitMs: number): number | undefined =>
     now - lastPing >= limitMs ? Math.round((now - lastPing) / 1000) : undefined;
 
@@ -37,35 +39,87 @@ export const stalledFor = (lastPing: number, now: number, limitMs: number): numb
 export const pausedAcross = (previousCheck: number, now: number, checkMs: number, limitMs: number): boolean =>
     now - previousCheck >= Math.min(Math.max(checkMs * 3, 3000), limitMs / 2);
 
-// The line the Worker writes before it ends the process, with the timestamp every other line of the log carries.
-export const stallLine = (seconds: number, at: Date): string =>
-    `[${at.toISOString()}] event loop stalled for ${seconds} s; exiting so the supervisor restarts the agent\n`;
+/* SLEEP IS NOT A STALL (2026-10-11). The pause above is read on the monotonic clock, which on Windows keeps counting
+   through a sleep and on Linux does not: there a suspended machine wakes with its checks on time and its wall clock
+   hours ahead. The two clocks drifting apart between two checks is that sleep (or a clock set forward), which is said
+   in the log, so a restart minutes later can be read against it, and is never counted toward a stall. Pure and
+   self-contained like the rest. */
+export const wallJump = (previousCheck: number, now: number, previousWall: number, wall: number): number => wall - previousWall - (now - previousCheck);
+
+// How far the wall clock must run ahead of the monotonic one between two checks to count: well past any slew a time
+// daemon makes, short enough that a laptop lid closed for a minute is seen.
+export const WALL_JUMP_MS = 10_000;
+
+// How long after a sleep a real stall still names it: the minutes a machine spends waking (Docker, WSL, the network).
+export const AFTER_SLEEP_MS = 10 * 60_000;
+
+// The line a sleep or a clock jump leaves. `seconds` is how long the agent was away, as far as either clock can say.
+export const sleepLine = (seconds: number, at: Date): string =>
+    `[${at.toISOString()}] watchdog: the agent was paused for ${seconds} s (suspected sleep/resume, or the clock was set forward); not a stall, the count starts again\n`;
+
+// The line the Worker writes before it ends the process, with the timestamp every other line of the log carries, and how
+// long after a suspected sleep it came when one was seen in the last minutes.
+export const stallLine = (seconds: number, at: Date, sinceSleepSeconds?: number): string =>
+    `[${at.toISOString()}] event loop stalled for ${seconds} s${sinceSleepSeconds === undefined ? "" : ` (${sinceSleepSeconds} s after a suspected sleep/resume)`}; exiting so the supervisor restarts the agent\n`;
 
 // The Worker's whole program, as source text: a compiled binary has no second file to load, and nothing here may depend
 // on the main thread, which is the thing that is stuck. It writes straight to fd 2 (where every supervisor sends the
-// agent's log): a Worker's process.stderr is relayed through the main thread, which would never pass it on.
+// agent's log): a Worker's process.stderr is relayed through the main thread, which would never pass it on. Before the
+// kill it closes the agent's exit record (last-exit.ts) itself, once the main thread has handed it the record to close:
+// nothing on the main thread runs again to say why it went.
 const WORKER_SOURCE = `
 const { parentPort, workerData } = require("node:worker_threads");
-const { writeSync } = require("node:fs");
+const { writeSync, writeFileSync } = require("node:fs");
 const stalledFor = ${stalledFor.toString()};
 const stallLine = ${stallLine.toString()};
+const sleepLine = ${sleepLine.toString()};
 const pausedAcross = ${pausedAcross.toString()};
-let last = Date.now();
+const wallJump = ${wallJump.toString()};
+const say = (line) => { try { writeSync(2, line); } catch { /* allow(silent-catch): a log that will not take the line must not keep a hung agent alive */ } };
+let last = performance.now();
 let checked = last;
-parentPort.on("message", () => { last = Date.now(); });
+let checkedWall = Date.now();
+let sleptAt;
+let record;
+parentPort.on("message", (message) => {
+    last = performance.now();
+    if (typeof message === "object" && message !== null) record = message;
+});
 setInterval(() => {
-    const now = Date.now();
-    if (pausedAcross(checked, now, workerData.checkMs, workerData.limitMs)) last = now;
+    const now = performance.now();
+    const wall = Date.now();
+    const jump = wallJump(checked, now, checkedWall, wall);
+    if (pausedAcross(checked, now, workerData.checkMs, workerData.limitMs) || jump >= workerData.jumpMs) {
+        last = now;
+        sleptAt = now;
+        say(sleepLine(Math.round(Math.max(wall - checkedWall, now - checked) / 1000), new Date()));
+    }
     checked = now;
+    checkedWall = wall;
     const seconds = stalledFor(last, now, workerData.limitMs);
     if (seconds === undefined) return;
-    try { writeSync(2, stallLine(seconds, new Date())); } catch { /* allow(silent-catch): a log that will not take the line must not keep a hung agent alive */ }
+    const sinceSleep = sleptAt !== undefined && now - sleptAt <= workerData.afterSleepMs ? Math.round((now - sleptAt) / 1000) : undefined;
+    const line = stallLine(seconds, new Date(), sinceSleep);
+    say(line);
+    if (record !== undefined) {
+        try {
+            writeFileSync(record.path, JSON.stringify({ ...record.base, reason: "watchdog", at: new Date().toISOString(), detail: line.slice(line.indexOf("]") + 2).trim() }) + "\\n");
+        } catch { /* allow(silent-catch): an unwritten record must not keep a hung agent alive; the line above says it */ }
+    }
     process.kill(process.pid, "SIGKILL");
 }, workerData.checkMs);
 `;
 
+// The exit record the watchdog closes when it kills the agent: where it is, and what it said while the agent ran.
+export interface WatchdogRecord {
+    readonly path: string;
+    readonly base: ExitRecord;
+}
+
 export interface Watchdog {
     readonly stop: () => void;
+    // Hand the Worker this run's exit record, once the agent holds its environment and has started one.
+    readonly record: (record: WatchdogRecord) => void;
 }
 
 // Started once by the resident agent, before anything else that could block. Neither the Worker nor the ping keeps the
@@ -73,8 +127,12 @@ export interface Watchdog {
 export const startWatchdog = ({
     pingMs = WATCHDOG_PING_MS,
     limitMs = WATCHDOG_STALL_MS,
-}: { readonly pingMs?: number; readonly limitMs?: number } = {}): Watchdog => {
-    const worker = new Worker(WORKER_SOURCE, { eval: true, workerData: { limitMs, checkMs: Math.min(pingMs, limitMs) } });
+    jumpMs = WALL_JUMP_MS,
+}: { readonly pingMs?: number; readonly limitMs?: number; readonly jumpMs?: number } = {}): Watchdog => {
+    const worker = new Worker(WORKER_SOURCE, {
+        eval: true,
+        workerData: { limitMs, checkMs: Math.min(pingMs, limitMs), jumpMs, afterSleepMs: AFTER_SLEEP_MS },
+    });
     worker.unref();
     // oxlint-disable-next-line unicorn/require-post-message-target-origin -- a Worker's postMessage, which takes no origin
     const ping = setInterval(() => worker.postMessage(0), pingMs);
@@ -84,5 +142,7 @@ export const startWatchdog = ({
             clearInterval(ping);
             void worker.terminate();
         },
+        // oxlint-disable-next-line unicorn/require-post-message-target-origin -- a Worker's postMessage, which takes no origin
+        record: (record) => worker.postMessage(record),
     };
 };

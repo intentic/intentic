@@ -99,9 +99,11 @@ first job that fails and ends once a later run of every workflow that failed on 
 `ci.yml` waits on another's success, so one run reports everything wrong with a commit, and the sandbox hands a run's
 failed jobs over together: when the run finishes, or 45 minutes after its first failure if it is still going (what fails
 after that follows at its end). The agent, `ci-fix-<repo>-<runId>`, starts with the first failed run's digest
-(`_sandbox/sandbox/src/ci/failure-digest.ts`: every error once, with every job that printed it, then each failed step's
-last lines), and each later run's failures go to the same conversation as one message. It gets at most three turns the
-sandbox starts per streak. Once they are spent, or it finished without changing anything, failed or was stopped, the
+(`_sandbox/sandbox/src/ci/failure-digest.ts`: each failed job with a `whole log:` path to its full log under
+`/tmp/intentic-ci-logs`, a "How failed tasks ended" section for signals, heap and memory ceilings and timeouts, every
+error once with every job that printed it, then each failed step's last lines without the passing tests), and each
+later run's failures go to the same conversation as one message. It gets at most three turns the sandbox starts per
+streak. Once they are spent, or it finished without changing anything, failed or was stopped, the
 failure waits for the owner. A failure in the runners rather than the code never reaches it, and a run whose every
 failure is the fleet's is re-run once. With the Agent tab's Repair switch (`autoRepair`) off, main's failure is only
 reported. `docs/architecture/sandbox.md` has the rest.

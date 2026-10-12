@@ -15,6 +15,7 @@ import { createExtensionApi, deactivateAllExtensions, deactivateExtension, type 
 import { builtinModules } from "./builtins";
 import { codeRevisionOf } from "../features/extensions/codeRevision";
 import { LOCAL_EXTENSIONS, localFace } from "../app/environments/local";
+import { type ReportFields, reportClient } from "../app/clientDiagnostics";
 
 // Loads and activates installed extensions from GET /extensions (compiled-in first-party, daemon-baked, and
 // git-installed alike): owner's switch, then engines check, then code.
@@ -35,7 +36,24 @@ export interface ExtensionHostStatus {
     // doesn't list (still activated, but unswitchable).
     readonly state: "active" | "agent-only" | "disabled" | "incompatible" | "missing" | "unlisted" | "error";
     readonly detail?: string | undefined;
+    // Which code ran, for a report from the extension's views to name: the revision the list gave (codeRevisionOf),
+    // and whether it came compiled into this app or as a bundle fetched from the daemon. Absent where nothing ran.
+    readonly revision?: string | undefined;
+    readonly bundle?: "compiled-in" | "daemon" | undefined;
 }
+
+// An extension whose code did not run, said to the daemon's client log: the Extensions tab shows it only to whoever
+// opens it, and a view that then never draws (a skeleton forever) otherwise left no record anywhere.
+const reportLoadFailure = (status: ExtensionHostStatus, listSource: string): void => {
+    const fields: ReportFields = { extensionId: status.extensionId, handle: status.id, state: status.state, listSource };
+    if (status.revision !== undefined) {
+        fields[`revision`] = status.revision;
+    }
+    if (status.bundle !== undefined) {
+        fields[`bundle`] = status.bundle;
+    }
+    reportClient(`extension.loadError`, `${status.extensionId} ${status.state}: ${status.detail ?? `no detail`}`, { level: `warn`, fields });
+};
 
 // allow(module-state): the extension host's load record, retired with the activations on a switch and on a relocale (retireExtensions)
 export const extensionStatuses = shallowRef<readonly ExtensionHostStatus[]>([]);
@@ -129,19 +147,21 @@ const loadOne = async (summary: ExtensionSummary, host: HostBindings, startedIn:
     const compiled = builtinModules.get(extensionId);
     if (compiled === undefined && summary.manifest.entry === undefined) {
         // No module and nothing to fetch: fine if daemon-only; a UI manifest means image and app differ in version.
-        return hasUi(summary.manifest)
-            ? {
-                  ...status,
-                  state: `missing`,
-                  detail: t(`extension-host.loader.declaresUiAppBuild`),
-              }
-            : { ...status, state: `agent-only` };
+        if (!hasUi(summary.manifest)) {
+            return { ...status, state: `agent-only` };
+        }
+        const missing: ExtensionHostStatus = { ...status, state: `missing`, detail: t(`extension-host.loader.declaresUiAppBuild`) };
+        reportLoadFailure(missing, summary.source);
+        return missing;
     }
+    const ran = { ...status, revision: codeRevisionOf(summary), bundle: compiled === undefined ? (`daemon` as const) : (`compiled-in` as const) };
     try {
         await runActivate(summary, host, compiled ?? (await importBundle(summary)), startedIn);
-        return { ...status, state: `active` };
+        return { ...ran, state: `active` };
     } catch (error) {
-        return { ...status, state: `error`, detail: messageOr(error, String(error)) };
+        const failed: ExtensionHostStatus = { ...ran, state: `error`, detail: messageOr(error, String(error)) };
+        reportLoadFailure(failed, summary.source);
+        return failed;
     }
 };
 
@@ -154,11 +174,14 @@ const loadUnlisted = async (listed: ReadonlySet<string>, host: HostBindings, det
             .filter(([extensionId]) => !listed.has(extensionId) && (localFace() === undefined || LOCAL_EXTENSIONS.has(extensionId)))
             .map(async ([extensionId, module]): Promise<ExtensionHostStatus> => {
                 const summary: ExtensionSummary = { id: extensionId, manifest: module.manifest, commit: `builtin`, source: `builtin`, enabled: true };
+                const ran = { id: extensionId, extensionId, revision: `builtin`, bundle: `compiled-in` as const };
                 try {
                     await runActivate(summary, host, module, startedIn);
-                    return { id: extensionId, extensionId, state: `unlisted`, detail };
+                    return { ...ran, state: `unlisted`, detail };
                 } catch (error) {
-                    return { id: extensionId, extensionId, state: `error`, detail: messageOr(error, String(error)) };
+                    const failed: ExtensionHostStatus = { ...ran, state: `error`, detail: messageOr(error, String(error)) };
+                    reportLoadFailure(failed, `unlisted`);
+                    return failed;
                 }
             }),
     );
@@ -190,6 +213,10 @@ const loadPass = async (host: HostBindings): Promise<void> => {
     // Bail if the sandbox switched mid-fetch; activating this list would restore tiles the switch just cleared.
     if (startedIn !== scope) {
         return;
+    }
+    if (listFailure !== undefined) {
+        // Only what is compiled in runs from here; an installed extension's views will not appear this load.
+        reportClient(`extension.listFailed`, listFailure, { level: `warn` });
     }
     const listed = new Set(summaries.map((summary) => extensionIdOf(summary.manifest)));
     const [listedStatuses, unlistedStatuses] = await Promise.all([

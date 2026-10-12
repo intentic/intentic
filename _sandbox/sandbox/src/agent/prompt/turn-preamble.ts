@@ -16,6 +16,7 @@ import { WORKSPACE_MAP_NOTE_HEADER } from "@intentic/agent-context/workspace-map
 import { MEMORY_NOTE_HEADER, MEMORY_NOTE_TITLE } from "./workspace-memory.js";
 import { SKILL_CATALOG_NOTE_HEADER, SKILL_CATALOG_NOTE_TITLE } from "../../store/loaded-skills.js";
 import { CONTEXT_NOTE_HEADER, CONTEXT_NOTE_TITLE } from "../context/context-note.js";
+import { CHECKPOINT_NOTE_HEADER, CHECKPOINT_NOTE_TITLE } from "../checkpoints/checkpoint-worktree.js";
 import { basename } from "node:path";
 import { parseRuntimeHistory, RUNTIME_HISTORY_HEADER, type RuntimeHistoryMessage } from "../providers/runtime-history.js";
 import { opt } from "../../opt.js";
@@ -107,6 +108,8 @@ export const INJECTED: readonly { readonly header: string; readonly title: strin
     { header: LITERAL_SLASH_NOTE_HEADER, title: "How to read this message" },
     { header: WORKTREE_NOTE_HEADER, title: "Where this turn's files live" },
     { header: REPO_SYNC_NOTE_HEADER, title: "Repos synced with their remotes" },
+    // Says where a checkpoint commit put the agent's uncommitted work, so a clean `git status` doesn't read as lost work.
+    { header: CHECKPOINT_NOTE_HEADER, title: CHECKPOINT_NOTE_TITLE },
     // Keep the parser's title aligned with the typed note.
     { header: LANDING_CHECKS_NOTE_HEADER, title: LANDING_CHECKS_NOTE_TITLE },
     // Never sent any more; still parsed out of the prompts records already hold, so they read as notes, not as typing.

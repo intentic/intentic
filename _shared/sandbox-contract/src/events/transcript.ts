@@ -135,6 +135,18 @@ export const TranscriptToolSchema: z.ZodType<TranscriptTool> = z.lazy(() =>
         subagent: TranscriptSubagentSchema.optional().describe(
             "The helper this call started, as the daemon's registry sees it: what it is, how it is going, what it has spent. What a card can say about a backgrounded child whose result is minutes away.",
         ),
+        input: z
+            .string()
+            .optional()
+            .describe(
+                "What the call was given, as JSON text cut to a few kilobytes, on a call whose input names no one-line target: an MCP tool's arguments, a delegation's prompt. Read afterwards to learn what was asked when the card alone cannot say.",
+            ),
+        startedAt: z.number().optional().describe("When the call was seen, in milliseconds. Absent on calls recorded before cards were stamped."),
+        endedAt: z
+            .number()
+            .optional()
+            .describe("When its result arrived, in milliseconds; absent while it runs, and on a call whose result never came."),
+        exitCode: z.number().int().optional().describe("A command's exit code, where the runtime reports one as a number rather than in its output."),
     }),
 );
 // The subagent a call started, on that call's card whichever mechanism started it (transcript-fold.ts places it).
@@ -177,6 +189,10 @@ export interface TranscriptTool {
     nested?: number | undefined;
     thinking?: string | undefined;
     subagent?: TranscriptSubagent | undefined;
+    input?: string | undefined;
+    startedAt?: number | undefined;
+    endedAt?: number | undefined;
+    exitCode?: number | undefined;
 }
 
 // Every ending that wakes a conversation off a condition watch; composing and parsing the wake is watch-wake.ts.
@@ -261,12 +277,17 @@ export const TranscriptRowSchema = z.object({
         .describe(
             "The run that produced this row. Present on everything a turn produced, absent on rows written outside one. A client draws a run's rows over whatever it already holds for that run, which is what this identifies; content cannot, because the last row of a live run keeps growing.",
         ),
-    // The turn's send time (user rows only), not settlement; the only row-moment the daemon actually knows.
+    // The turn's send time (user rows only), not settlement; the agent's rows carry `openedAt` instead.
     sentAt: z
         .number()
         .optional()
+        .describe("When it was sent, in milliseconds. On the user's rows only; the agent's own rows and notices carry `openedAt`."),
+    // Stamped by the daemon as it folds the frame that opens the row, since the frames themselves carry no clock.
+    openedAt: z
+        .number()
+        .optional()
         .describe(
-            "When it was sent, in milliseconds. On the user's rows only, because that is the only moment actually known: a turn's own frames arrive with no clock, so stamping the agent's rows could only ever mean the whole turn's start or end.",
+            "When an assistant bubble or a notice opened, in milliseconds, as the daemon folded the frame that started it. Absent on user rows, which carry `sentAt`, and on rows recorded before rows were stamped.",
         ),
     // A position moves under a rewind and a message's words can repeat, so this is the one name a message keeps.
     messageId: z

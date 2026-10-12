@@ -76,6 +76,13 @@ export const DeviceFactsSchema = z.object({
     // The agent's last upkeep pass in this environment (DeviceUpkeepSchema): whether a release brought this machine to
     // the current shape, read rather than assumed. Absent before the first pass, and from an agent older than the field.
     upkeep: DeviceUpkeepSchema.optional(),
+    // How the agent before this one ended, as one sentence (watchdog kill, crash, update, reboot), so a device that
+    // dropped off says why once it is back. Absent on a first start, and from an agent older than the field.
+    previousExit: z.string().optional(),
+    // Which ic answers on this machine and what steers it: an old ic.exe installed from a leftover IC_URL looked like
+    // a daemon bug for an afternoon. Override values are the agent's own redaction (secret-looking ones by length).
+    ic: z.object({ path: z.string(), version: z.string(), modified: z.string().optional() }).optional(),
+    icOverrides: z.array(z.string()).optional(),
 });
 export type DeviceFacts = z.infer<typeof DeviceFactsSchema>;
 

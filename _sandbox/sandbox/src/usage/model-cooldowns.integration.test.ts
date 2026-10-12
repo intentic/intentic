@@ -63,3 +63,19 @@ test("clearing a model nothing benched writes nothing", async () => {
     await store.clear("codex", "gpt-6-astra");
     expect(existsSync(path)).toBe(false);
 });
+
+// A cooldown recorded and never cleared reads, from outside, as a model that vanished: both ends are logged.
+test("logs a model benched and reopened, and stays quiet on a clear with nothing stored", async () => {
+    const path = join(mkdtempSync(join(tmpdir(), "model-cooldowns-")), "history", "model-cooldowns.json");
+    const lines: { fields: Record<string, unknown>; message: string }[] = [];
+    const store = fileModelCooldownStore(path, { log: (fields, message) => lines.push({ fields, message }) });
+    await store.clear("codex", "gpt-5.6-sol");
+    await store.record("codex", "gpt-5.6-sol", { until: Date.now() + 300_000, message: COOLING });
+    await store.clear("codex", "gpt-5.6-sol");
+    expect(lines.map((line) => line.message.replace(/until \S+/u, "until <at>"))).toEqual([
+        "model cooldown: codex gpt-5.6-sol benched until <at>",
+        "model cooldown: codex gpt-5.6-sol reopened, a turn on it served",
+    ]);
+    expect(lines[0]?.fields).toMatchObject({ provider: "codex", model: "gpt-5.6-sol", reason: COOLING });
+    expect(lines[1]?.fields["earlyByMs"]).toBeGreaterThan(0);
+});

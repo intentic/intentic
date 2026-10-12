@@ -23,10 +23,14 @@ export const UsageTurnSchema = z.object({
         .optional()
         .describe("The model that was asked for, when one was named. Differs from `model` when something resolved it."),
     harness: z.string().describe("Which agentic loop it ran on."),
-    // cancelled: the user pressed Stop, not a failure.
+    // cancelled: stopped before it finished, not a failure: the user pressed Stop, or a daemon restart cut it (then
+    // `errorCode` is `interrupted` and `errorMessage` says what became of it).
     // error: the provider or request killed the turn.
     // Absent means the row predates recording, not that the turn succeeded.
-    outcome: z.enum(["ok", "error", "cancelled"]).optional().describe("How it ended: finished, failed, or was stopped by the user."),
+    outcome: z
+        .enum(["ok", "error", "cancelled"])
+        .optional()
+        .describe("How it ended: finished, failed, or stopped before it finished (by the user, or by a restart, whose errorCode is `interrupted`)."),
     // The failing frame's code (e.g. rate_limit, provider-outage); absent even on error means unclassified.
     errorCode: z.string().optional().describe("The failure's code, when it had one."),
     // The failing frame's own sentence, capped at ERROR_MESSAGE_CHARS.
@@ -38,6 +42,11 @@ export const UsageTurnSchema = z.object({
         .describe(
             "Which conversation it belonged to, so spending can be traced to a card. Absent only for an internal one-off with no conversation at all.",
         ),
+    // The ids a turn is followed by elsewhere: its turn id (activity log, failure lines), the run its transcript rows are
+    // stamped with, and the provider session it ran in. Absent on rows written before they were recorded.
+    turnId: z.string().optional().describe("The turn's id in the activity log and the daemon's log lines."),
+    run: z.string().optional().describe("The run whose id the turn's transcript rows carry."),
+    sessionId: z.string().optional().describe("The provider session the turn ran in."),
     // The provider's own count for the request, since one exchange can be several; 1 when unreported.
     turns: z
         .number()

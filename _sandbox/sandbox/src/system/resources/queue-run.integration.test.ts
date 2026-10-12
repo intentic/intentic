@@ -236,6 +236,50 @@ test("says in the pane that it is waiting, then that it started", async () => {
     holder.kill("SIGKILL");
 });
 
+test("names who holds the pool while it waits, says so again as the wait goes on, and keeps the pool's state on file", async () => {
+    const queue = await dir();
+    const held = join(queue, "held");
+    const holder = spawn("bash", [QUEUE_RUN, "--pool", "p", "--limit", "1", "--", "bash", "-c", `echo held > ${held}; sleep 5`], {
+        env: { ...process.env, INTENTIC_QUEUE_DIR: queue, INTENTIC_TURN_OWNER: "holding-conversation", INTENTIC_HEAVY_HELD: "bun-test" },
+    });
+    for (let tries = 0; tries < RENDEZVOUS_SECONDS / POLL_SECONDS && !(await readdir(queue)).includes("held"); tries += 1) {
+        await new Promise((resolve) => setTimeout(resolve, POLL_SECONDS * 1000));
+    }
+    const state = join(queue, "p", "state.json");
+    // The waiting command prints the pool's state as it saw it while it waited, which is what a diagnostics read gets.
+    const second = await new Promise<Run>((resolve) => {
+        const child = spawn("bash", [QUEUE_RUN, "--pool", "p", "--limit", "1", "--wait", "30", "--label", "second", "--", "bash", "-c", "echo ran"], {
+            env: { ...process.env, INTENTIC_QUEUE_DIR: queue, INTENTIC_QUEUE_POLL: "1", INTENTIC_QUEUE_SAY_EVERY: "1", INTENTIC_TURN_OWNER: "waiting-conversation" },
+        });
+        let stderr = "";
+        let seen = "";
+        child.stderr.on("data", (chunk: Buffer) => {
+            stderr += chunk.toString();
+            if (seen === "" && stderr.includes("holders and waiters:")) {
+                void readFile(state, "utf8").then((text) => (seen = text));
+            }
+        });
+        let stdout = "";
+        child.stdout.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
+        child.on("close", (code) => resolve({ code, stdout: `${stdout}${seen}`, stderr }));
+    });
+    expect(second.stderr).toMatch(/slot\.1: pid \d+, running \d+s by rule bun-test for conversation holding-conversation: .*sleep 5/);
+    expect(second.stderr).toContain(`(holders and waiters: ${state})`);
+    expect(second.stderr).toMatch(/still waiting after \ds for pool "p"/);
+    const [ran, json] = second.stdout.split("\n");
+    expect(ran).toBe("ran");
+    expect(JSON.parse(json ?? "")).toMatchObject({
+        pool: "p",
+        limit: 1,
+        holders: [{ slot: "slot.1", conversation: "holding-conversation", rule: "bun-test" }],
+        waiters: [{ label: "second", conversation: "waiting-conversation" }],
+    });
+    // Once it runs it waits no more: its own entry is gone, and the state on file no longer lists it.
+    expect((await readdir(join(queue, "p"))).filter((name) => name.startsWith("wait."))).toEqual([]);
+    expect(JSON.parse(await readFile(state, "utf8"))).toMatchObject({ waiters: [] });
+    holder.kill("SIGKILL");
+});
+
 // None of these malformed inputs should come from the daemon; every one must still run the command.
 test.each([
     ["a bad limit", ["--pool", "p", "--limit", "not-a-number"]],

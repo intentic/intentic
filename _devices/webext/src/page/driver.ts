@@ -1,7 +1,6 @@
 // oxlint-disable unicorn/consistent-function-scoping -- the rule is exactly wrong for this file: every helper
 // Each helper is nested inside the function that uses it, since executeScript serializes and re-parses that
 // function inside the page, where nothing else in this module exists.
-import { sleep } from "@intentic/base/async";
 import type { PageElement } from "@intentic/browser/page";
 
 // Runs inside the tab via chrome.scripting.executeScript, in the isolated world: same DOM as the page, separate JS
@@ -314,7 +313,11 @@ export const scrollPage = (direction: string, amount: number): { ok: boolean; me
 
 // Polls for text rather than using MutationObserver, since the condition would be re-derived on every mutation
 // anyway. Deadline is passed in by the caller, which owns the tool-call timeout.
+// The pause between looks is spelled out here rather than imported: an imported `sleep` is a name of this module, and
+// the page has no such name, so the first look that missed threw there and the tool read the empty answer as a crash
+// ("Cannot read properties of null").
 export const waitForText = async (needle: string, gone: boolean, deadlineMs: number): Promise<{ ok: boolean; message: string }> => {
+    const pause = async (ms: number): Promise<void> => await new Promise((resolve) => setTimeout(resolve, ms));
     const started = Date.now();
     const present = (): boolean => (document.body.innerText ?? document.body.textContent ?? "").includes(needle);
     for (;;) {
@@ -329,7 +332,7 @@ export const waitForText = async (needle: string, gone: boolean, deadlineMs: num
                     : `"${needle}" never appeared (waited ${Math.round(deadlineMs / 1000)}s).`,
             };
         }
-        await sleep(200);
+        await pause(200);
     }
 };
 

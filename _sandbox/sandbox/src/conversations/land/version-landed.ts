@@ -4,7 +4,7 @@ import type { Services } from "../../composition.js";
 import { AgentDomainRefusedError } from "../../workload/agent-execution.js";
 import { commitOnly } from "../../git/changes/changes-index.js";
 import { committableSubject, commitSubjectFlaw, markSubjectBreaking } from "../../git/ops/commit-message.js";
-import { AGENT_GIT_AUTHOR } from "../../git-identity.js";
+import { AGENT_GIT_AUTHOR, withConversationTrailer } from "../../git-identity.js";
 import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
 import { standing } from "../../rules/rules.js";
 import { reposOf } from "../registry/agents-store.js";
@@ -79,10 +79,16 @@ const commitClaim = async (services: Services, id: string): Promise<string[]> =>
     if (subject !== written) {
         services.logger.warn({ agent: id, refused: written, subject }, "landed: its subject could not head a commit, committed under one built from the change");
     }
-    const message = landedCommitMessage({
-        ...(landed ?? { ...opt("testNote", trailers.testNote), ...opt("allows", trailers.allows === undefined ? undefined : [...trailers.allows]) }),
-        subject,
-    });
+    // Trailed with the conversation like its branch commits: this commit is one conversation's land, and every land has
+    // the same author, so the trailer is the only way `git log` on main says which conversation it came from. It joins
+    // the Test-Note/Allow paragraph rather than following it, and passes commitlint as an ordinary footer.
+    const message = withConversationTrailer(
+        landedCommitMessage({
+            ...(landed ?? { ...opt("testNote", trailers.testNote), ...opt("allows", trailers.allows === undefined ? undefined : [...trailers.allows]) }),
+            subject,
+        }),
+        id,
+    );
     const committed: string[] = [];
     for (const claim of claims) {
         const did = await services.agentWorktrees.withRepoLock(claim.repo, () => commitOnly(claim.dir, claim.paths, message, AGENT_GIT_AUTHOR));

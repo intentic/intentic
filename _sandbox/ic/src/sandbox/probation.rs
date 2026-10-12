@@ -478,6 +478,10 @@ pub fn watch_one(slug: &str) -> Result<Report> {
     let Some(swap) = record.swap.clone() else {
         // A swap an ic from before the record's swap keys left parked with no replacement.
         if !live && has_parked {
+            let _why = crate::sandbox::intent::Reason::hold(
+                "an update was interrupted before the new version started, so the version it left is put back.",
+                &[],
+            );
             unpark(&container, &parked);
             return Ok(Report::new(
                 slug,
@@ -684,8 +688,19 @@ fn write_swap(slug: &str, record: &ChannelRecord, swap: Swap) -> Result<()> {
 }
 
 /// Put a parked container back under its name and start it. The replacement, if any, is removed first, and the turns
-/// it was running are picked up by the version put back (resume.rs).
+/// it was running are picked up by the version put back (resume.rs). The sandbox is told why first, through whichever
+/// of the two still exists (they share its volume).
 fn unpark(container: &str, parked: &str) {
+    let holder = if docker::container_exists(container) {
+        container
+    } else {
+        parked
+    };
+    crate::sandbox::intent::leave(
+        holder,
+        crate::sandbox::intent::Action::Swap,
+        "the probation watch put back the version an update left.",
+    );
     crate::sandbox::resume::ask(container);
     docker::quiet(&["rm", "-f", container]);
     docker::quiet(&["rename", parked, container]);
@@ -711,6 +726,16 @@ fn undo(slug: &str, record: &ChannelRecord, swap: &Swap, kind: Kind, reason: &st
     }
     let before = record::read_before(slug).ok().flatten();
     let mut down = None;
+    let _why = crate::sandbox::intent::Reason::hold(
+        format!(
+            "the probation watch went back from {} to {}: {reason}",
+            swap.to.as_deref().unwrap_or("the new version"),
+            swap.from
+                .as_deref()
+                .unwrap_or("the version the update left")
+        ),
+        &[],
+    );
     if docker::container_exists(&parked) {
         unpark(&container, &parked);
         let restored = ChannelRecord {

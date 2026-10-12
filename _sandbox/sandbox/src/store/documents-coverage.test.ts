@@ -93,7 +93,8 @@ const RAW_JSON_WRITERS = [
     "sessions/session-store.ts",
     // Written synchronously as a failed boot exits, where no store's write queue can be waited on.
     "system/boot/boot-failure.ts",
-    // The exit marker, written synchronously from the exit hook for the next boot to read.
+    // The exit marker, written synchronously from the exit hook for the next boot to read, and beside it the restart
+    // intent a stop announces and the boot's restarts.jsonl record, written as synchronously.
     "system/boot/boot-marker.ts",
 ];
 

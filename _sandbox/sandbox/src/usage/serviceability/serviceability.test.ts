@@ -1,6 +1,7 @@
 import { type AccountUsage, type OauthAccount, preferredAccount, type ProviderRefusal, type TranslatorAccounts, type UsageWindow } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
+import { recordingLogger } from "../../harness/route-fakes.testing.js";
 import type { SeatRefusal } from "../../runtimes/claude/claude-seats.js";
 import { serviceabilities, serviceability, type ServiceabilityDeps, withAccountStates, withRoutedStates } from "./serviceability.js";
 
@@ -141,4 +142,11 @@ test("the lists publish the same verdict on the rows they already assembled", as
     // A routed refusal names no credential, so it covers them all until one reads with room after it.
     const routed = await withRoutedStates(services, { codex: [{ name: "a", label: "a", usage: { ...reading(window({ utilization: 20 })), measuredAt: 500 } }], grok: [], kimi: [], gemini: [] });
     expect(routed.codex[0]?.state).toEqual({ kind: "spent" });
+});
+
+test("a caller that passes the logger gets a line when an account's verdict changes", async () => {
+    const { lines, logger } = recordingLogger();
+    const accounts = [account("weekly", { label: "rkrohmorath" })];
+    await serviceabilities({ ...deps({ accounts, usage: { weekly: reading(window({ kind: "seven_day", utilization: 100 })) } }), logger }, "claude");
+    expect(lines).toMatchObject([{ message: "accounts: claude account rkrohmorath unseen → spent", account: "weekly", window: "seven_day", utilization: 100 }]);
 });

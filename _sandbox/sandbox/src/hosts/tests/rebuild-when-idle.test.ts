@@ -21,6 +21,9 @@ const restartResume: RestartResume = {
         asks.push("withdraw");
     },
     take: async () => false,
+    announce: (intent) => {
+        asks.push(`announce ${intent.by} ${intent.action}`);
+    },
 };
 
 const make = (slug: () => string | undefined = () => "work"): RebuildWhenIdle => {
@@ -65,7 +68,7 @@ test("waits while an agent is mid-turn, naming it, and rebuilds by itself once n
     expect(relayed).toEqual([{ host: "rog", flow: { op: "rebuild", slug: "work", hash: "approved" } }]);
     // The turn that started while it built is cut at the restart, so the next boot is asked to resume it; the stream
     // dying at the cutover never lets this process withdraw that.
-    expect(asks).toEqual(["ask"]);
+    expect(asks).toEqual(["announce daemon rebuild", "ask"]);
     expect(rebuild.state()?.phase).toBe("rebuilding");
 });
 
@@ -128,7 +131,7 @@ test("a device that refuses leaves nothing asked of the next boot and says why u
     const rebuild = make();
     await rebuild.ask({ host: "rog", hash: "approved" });
     await tick();
-    expect(asks).toEqual(["ask", "withdraw"]);
+    expect(asks).toEqual(["announce daemon rebuild", "ask", "withdraw"]);
     expect(rebuild.state()).toEqual({
         host: "rog",
         hash: "approved",
@@ -146,7 +149,7 @@ test("a device with nothing to do answers in words and the ask simply ends", asy
     const rebuild = make();
     await rebuild.ask({ host: "rog", hash: "approved" });
     await tick();
-    expect(asks).toEqual(["ask", "withdraw"]);
+    expect(asks).toEqual(["announce daemon rebuild", "ask", "withdraw"]);
     expect(rebuild.state()).toBeUndefined();
 });
 

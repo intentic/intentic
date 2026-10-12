@@ -4,6 +4,8 @@ interface ImportMetaEnv {
     // Stamped by vite.shared's define, one fresh value per build. Absent under bun test (which shares only the
     // aliases, not the define), where buildId() falls back to a constant.
     readonly BUILD_ID?: string;
+    // The short commit the build was made from, by the same define; null where git could not say, absent under bun test.
+    readonly BUILD_COMMIT?: string | null;
     // Stamped by vite.shared's devSource, on a dev server only: which checkout it serves and who started it.
     readonly DEV_SOURCE?: {
         readonly root: string;

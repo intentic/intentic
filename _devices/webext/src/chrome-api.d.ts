@@ -78,7 +78,8 @@ declare namespace chrome {
             allFrames?: boolean;
         }
         interface InjectionResult<T> {
-            result?: T;
+            // `null` when the function threw in the page or its frame went away before a returned promise settled.
+            result?: T | null;
             frameId: number;
         }
 /* The one call that reaches into a page. */

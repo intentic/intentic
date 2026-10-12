@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { ceilingBytes, DEFAULT_CEILING_BYTES, heldBytes, largestProcess, overCeiling, processTree, watchMemory } from "./memory-ceiling.mjs";
+import { ceilingBytes, DEFAULT_CEILING_BYTES, formatSize, heldBytes, largestProcess, overCeiling, processTree, watchMemory } from "./memory-ceiling.mjs";
 
 const MIB = 1024 ** 2;
 
@@ -55,6 +55,11 @@ test("a watch that never meets its ceiling still answers how close the tree came
     const proc = fakeProc({ 10: [1, 40 * 1024, 0], 11: [10, 2500 * 1024, 0] });
     const stop = watchMemory({ pid: 10 }, { ceiling: 6000 * MIB, intervalMs: 5, procRoot: proc, onExceed: () => assert.fail("not past it") });
     await new Promise((resolve) => setTimeout(resolve, 40));
-    assert.deepEqual(stop(), { pid: 11, held: 2500 * MIB });
+    assert.deepEqual(stop(), { pid: 11, held: 2500 * MIB, total: 2540 * MIB });
     assert.equal(watchMemory({ pid: 10 }, { ceiling: 0, procRoot: proc })(), undefined);
+});
+
+test("a size under a GiB is said in MiB, so a light suite's peak never reads as nothing", () => {
+    assert.equal(formatSize(37 * MIB), "37 MiB");
+    assert.equal(formatSize(5.1 * 1024 * MIB), "5.1 GiB");
 });

@@ -35,7 +35,7 @@ import { sealConfigSecrets } from "./seams/sealed-env.js";
 import { type BootAttempt, clearBootFailure, failBoot } from "./system/boot/boot-failure.js";
 import { bootFacts } from "./system/boot/boot-history.js";
 import { claimContainer } from "./system/boot/container-owner.js";
-import { tearDown } from "./system/boot/daemon-stop.js";
+import { announceStop, type StopCause, tearDown } from "./system/boot/daemon-stop.js";
 import { type BootFault, bootFault, CRASH_AFTER_READY_MS } from "./system/boot/fault.js";
 import { finishPrewarm } from "./system/boot/prewarm.js";
 import { listenHost, profileTraits, requireLocalContract } from "./system/boot/profile.js";
@@ -68,7 +68,7 @@ interface Ready {
     readonly runnerEnv: RunnerModeEnv | undefined;
     readonly prewarm: boolean;
     // The one deliberate stop, registered on SIGTERM and SIGINT as soon as there is anything to tear down.
-    readonly stop: (exitCode?: number) => void;
+    readonly stop: (exitCode?: number, cause?: StopCause) => void;
 }
 
 // Everything up to and including the gate opening. Throws whatever stops the boot short of it.
@@ -102,9 +102,10 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
     // Once, however many signals arrive: a second SIGTERM while the first teardown runs changes nothing. Keeps going
     // past a stop that throws or hangs and names it; the exit happens whatever the teardown did.
     let stopping: Promise<void> | undefined;
-    const stop = (exitCode = 0): void => {
+    const stop = (exitCode = 0, cause?: StopCause): void => {
         stopping ??= (async () => {
-            logger.info("shutting down intentic sandbox daemon…");
+            // Says why (the signal, who asked, or what the daemon stops for), and notes it for the exit marker.
+            announceStop(logger, config.historyRoot === "" ? undefined : logsRoot(config.historyRoot), exitCode, cause);
             const unstopped = await tearDown(shutdown);
             if (unstopped !== undefined) {
                 logger.error({ detail: unstopped }, "shutdown: one or more subsystems did not stop cleanly");
@@ -116,8 +117,8 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
     // netd closing its socket, idle-stop) would otherwise take Node's default exit, tearing nothing down and leaving
     // the marker unstamped, so the next boot would report a kill nobody made.
     // Wrapped: a signal listener is called with the signal's name, which is no exit code.
-    process.on("SIGTERM", () => stop());
-    process.on("SIGINT", () => stop());
+    process.on("SIGTERM", () => stop(0, { signal: "SIGTERM" }));
+    process.on("SIGINT", () => stop(0, { signal: "SIGINT" }));
     // Stall detector: logs the lag and the machine's pressure numbers when the event loop freezes.
     const loopWatchdog = startLoopWatchdog(logger);
     shutdown.push(() => loopWatchdog.stop());
@@ -296,7 +297,7 @@ const pastGate = async ({ phase, runnerEnv, prewarm, stop }: Ready, fault: BootF
             answers: (port) => answers("http", port),
         })
             .catch((error: unknown) => logger.error({ err: error }, "prewarm: could not finish; the claimed boot prepares whatever is missing"))
-            .finally(() => stop());
+            .finally(() => stop(0, { action: "stop", reason: "prewarm finished preparing this volume" }));
     }
 };
 

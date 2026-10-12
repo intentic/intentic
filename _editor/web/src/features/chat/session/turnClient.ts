@@ -816,6 +816,11 @@ export class TurnClient {
         }
         // The queue the press left, ahead of a roster frame a busy sandbox may deliver long after the turn it started.
         host.queue.value = newerQueue(host.queue.value, released.queue);
+        // A press the sandbox held (a spent allowance, a paused queue) otherwise changes nothing on screen and reads as
+        // broken: its reason goes on the error line, which the next press clears.
+        if (released.reason !== undefined) {
+            host.error.value = released.reason;
+        }
         if (released.run !== undefined) {
             this.ranOn(settings);
             await this.reattach();

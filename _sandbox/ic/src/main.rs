@@ -650,6 +650,15 @@ impl FixSource {
     }
 }
 
+/// Run `go` as the machine agent's unattended round when `keeper` says it is one: every restart intent it leaves on a
+/// sandbox then names the keeper rather than a person's ic (intent.rs).
+fn keeper_if<T>(keeper: bool, go: impl FnOnce() -> T) -> T {
+    if keeper {
+        sandbox::intent::by_keeper();
+    }
+    go()
+}
+
 /// A two-state flag spelled out (`--privileged on`), because a bare `--privileged` could only ever ADD: the
 /// same verb has to be able to withdraw the ask, and `--no-privileged` is a spelling nobody guesses.
 #[derive(Clone, Copy, PartialEq, Debug, ValueEnum)]
@@ -827,7 +836,13 @@ fn main() {
                     preflight(skip_preflight),
                 )
             }),
-            SandboxCommand::Watch { slug, json } => sandbox::probation::run(slug, json),
+            SandboxCommand::Watch { slug, json } => {
+                // The machine agent's watch sweep asks for JSON with no terminal (intent.rs names who went back).
+                if json && !tty::have_tty() {
+                    sandbox::intent::by_keeper();
+                }
+                sandbox::probation::run(slug, json)
+            }
             SandboxCommand::Versions { slug, json } => sandbox::versions::run(slug, json),
             SandboxCommand::Backup { slug, auto, json } => sandbox::backup::run(slug, auto, json),
             SandboxCommand::Backups { slug, json } => sandbox::backup::list(slug, json),
@@ -925,11 +940,13 @@ fn main() {
                 idle,
                 json,
                 source,
-            } => sandbox::sleep::run(sandbox::sleep::Args {
-                slug,
-                idle,
-                json,
-                source: source.source(),
+            } => keeper_if(source == FixSource::Agent, || {
+                sandbox::sleep::run(sandbox::sleep::Args {
+                    slug,
+                    idle,
+                    json,
+                    source: source.source(),
+                })
             }),
             SandboxCommand::Wakes { json, source } => {
                 sandbox::sleep::wakes(sandbox::sleep::WakesArgs {
@@ -953,12 +970,14 @@ fn main() {
                 accept,
                 json,
                 source,
-            } => sandbox::fix::run(sandbox::fix::Args {
-                slug,
-                code,
-                mode: sandbox::fix::Mode::Fix { auto, yes, accept },
-                json,
-                source: source.source(),
+            } => keeper_if(auto || source == FixSource::Agent, || {
+                sandbox::fix::run(sandbox::fix::Args {
+                    slug,
+                    code,
+                    mode: sandbox::fix::Mode::Fix { auto, yes, accept },
+                    json,
+                    source: source.source(),
+                })
             }),
             SandboxCommand::List { json: false } => sandbox::list(),
             SandboxCommand::List { json: true } => sandbox::listing::list_json(),

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { errorMessage } from "@intentic/base/errors";
 import type { AgentEvent, AgentReply } from "@intentic/sandbox-contract";
 import type { Caller } from "../../auth/auth.js";
 import type { ConversationActors } from "./conversation-actors.js";
@@ -16,15 +17,15 @@ export type MayAnswer = (caller: Caller | undefined) => string | undefined;
 
 interface Parked {
     readonly settle: Waiter;
-    // Settles it with its abort stand-in, as if its turn had died.
-    readonly abort: () => void;
+    // Settles it with its abort stand-in, as if its turn had died; `reason` is for the log line only.
+    readonly abort: (reason?: string) => void;
     readonly mayAnswer: MayAnswer | undefined;
 }
 
 // Held by the conversation it was raised on, which a dismissal must be able to name, and aborted when a dispose takes
 // it. One raised on none (the runtime's own plan and permission cards) waits in the conversationless bucket, which no
 // dispose reaches: its waiter's own signal, the turn's, is what bounds it.
-const PARKED: Holding<Parked> = { name: "parked cards", dropped: (parked) => parked.abort() };
+const PARKED: Holding<Parked> = { name: "parked cards", dropped: (parked) => parked.abort("its conversation let its cards go") };
 
 export interface RequestOptions {
     readonly mayAnswer?: MayAnswer;
@@ -48,6 +49,31 @@ export interface StandingYes {
 }
 
 const everythingFor = (requestId: string): AgentReply => ({ kind: "permission", requestId, decision: "everything" });
+
+// Whether a card ever reached a person, and what came of it, was in no log: a stuck turn could not say if its card had
+// been drawn, answered elsewhere, or cancelled when the turn ended. One compact line per step of a card's life: raised,
+// answered (by whom, with which decision), cancelled (why), and a reply refused for being from the wrong person. The
+// card's words and a question's answers stay out: the transcript holds those.
+export type CardLog = (fields: Record<string, unknown>, message: string) => void;
+
+// The reply's verdict fields only, never its free text (a question's answers, a feedback note).
+const VERDICT_FIELDS = ["decision", "approve", "approved", "cancelled", "helped", "accepted", "connected", "paid"] as const;
+const verdictOf = (reply: AgentReply): Record<string, unknown> =>
+    Object.fromEntries(
+        VERDICT_FIELDS.flatMap((field) => {
+            const value = (reply as unknown as Record<string, unknown>)[field];
+            return typeof value === "boolean" || typeof value === "string" ? [[field, value]] : [];
+        }),
+    );
+
+// Why a card's own signal fired: its deadline, or the caller (the turn, the tool call) stopping.
+const abortReason = (signal: AbortSignal): string => {
+    const reason: unknown = signal.reason;
+    if (reason instanceof DOMException && reason.name === "TimeoutError") {
+        return "its deadline passed unanswered";
+    }
+    return reason === undefined ? "its caller stopped waiting" : `its caller stopped waiting: ${errorMessage(reason)}`;
+};
 
 // Bundled together since only this module can tell a real answer from the abort stand-in; re-deriving that from a
 // caller's own abort signal would race the settle it describes.
@@ -117,20 +143,27 @@ export const parkedCards = (
     conversations: Pick<ConversationActors, "holdings">,
     standing?: StandingYes,
     settled?: (requestId: string, conversationId: string | undefined) => void,
+    log: CardLog = () => undefined,
 ): ParkedCards => {
     // Every parked card a standing yes may answer, by id, with the conversation it may answer it for.
     const answerable = new Map<string, string>();
-    const restore = <K extends AgentReply["kind"]>(
+    const park = <K extends AgentReply["kind"]>(
+        restored: boolean,
         id: string,
         kind: K,
         onAbort: Extract<AgentReply, { kind: K }>,
         conversationId?: string,
         options?: RequestOptions,
     ): ParkedCard<K> => {
+        const owner = conversationId ?? options?.standingFor;
+        const about = { ...(owner === undefined ? {} : { conversationId: owner }), requestId: id, kind };
         const wait = (signal: AbortSignal): Promise<Settled<K>> =>
             new Promise((resolve) => {
                 const parked = conversations.holdings(PARKED);
                 let done = false;
+                const raisedAt = Date.now();
+                // Set by an abort just before it settles, so the line says why nobody answered.
+                let cancelled: string | undefined;
                 const settle = (reply: AgentReply, fromUser: boolean, caller: Caller | undefined): void => {
                     if (done) {
                         return;
@@ -142,6 +175,15 @@ export const parkedCards = (
                     // A reply for the wrong card can only be a client bug: the waiter's kind is what its caller is
                     // typed against.
                     const answered = fromUser && reply.kind === kind;
+                    const waitedMs = Date.now() - raisedAt;
+                    if (answered) {
+                        log(
+                            { ...about, ...verdictOf(reply), by: caller?.email ?? "unattributed", waitedMs },
+                            `card: ${kind} answered`,
+                        );
+                    } else {
+                        log({ ...about, reason: cancelled ?? (fromUser ? `a reply of kind ${reply.kind} answered it` : "settled unanswered"), waitedMs }, `card: ${kind} cancelled`);
+                    }
                     const settledReply = answered ? (reply as Extract<AgentReply, { kind: K }>) : onAbort;
                     // The abort stand-in wasn't chosen by anyone, so it carries no reply on the resolution frame.
                     resolve({
@@ -152,13 +194,18 @@ export const parkedCards = (
                         ...(answered && caller !== undefined ? { caller } : {}),
                     });
                 };
-                const abort = (): void => settle(onAbort, false, undefined);
+                const abort = (reason?: string): void => {
+                    cancelled ??= reason;
+                    settle(onAbort, false, undefined);
+                };
                 parked.hold(conversationId, id, { settle, abort, mayAnswer: options?.mayAnswer });
+                log({ ...about, ...(restored ? { restored: true } : {}), ...(options?.alwaysAsks === true ? { alwaysAsks: true } : {}) }, `card: ${kind} raised`);
+                const onAbortSignal = (): void => abort(abortReason(signal));
                 if (signal.aborted) {
-                    abort();
+                    onAbortSignal();
                     return;
                 }
-                signal.addEventListener("abort", abort, { once: true });
+                signal.addEventListener("abort", onAbortSignal, { once: true });
                 const standingId = standingConversation(kind, conversationId, options);
                 if (standingId === undefined || standing === undefined) {
                     return;
@@ -173,8 +220,8 @@ export const parkedCards = (
         return { id, wait };
     };
     return {
-        create: (kind, onAbort, conversationId, options) => restore(randomUUID(), kind, onAbort, conversationId, options),
-        restore,
+        create: (kind, onAbort, conversationId, options) => park(false, randomUUID(), kind, onAbort, conversationId, options),
+        restore: (id, kind, onAbort, conversationId, options) => park(true, id, kind, onAbort, conversationId, options),
         resolve: (reply, caller) => {
             const parked = conversations.holdings(PARKED).get(reply.requestId);
             if (parked === undefined) {
@@ -183,6 +230,7 @@ export const parkedCards = (
             // Consulted before settling, so a refusal costs the card nothing.
             const refused = parked.mayAnswer?.(caller);
             if (refused !== undefined) {
+                log({ requestId: reply.requestId, kind: reply.kind, ...(caller?.email === undefined ? {} : { by: caller.email }), reason: refused }, "card: reply refused, the card stays parked");
                 return { refused };
             }
             if (reply.kind !== "permission" || reply.decision !== "everything") {

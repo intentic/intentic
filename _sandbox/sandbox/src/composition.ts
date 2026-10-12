@@ -487,7 +487,7 @@ const createDaemonMembers = (
         boot,
         announcer: createAnnouncer(config, logger),
         reach: createReachReporter(config, logger, () => boot),
-        browserRouters: createBrowserRouters(() => ({ capabilities, workspace })),
+        browserRouters: createBrowserRouters(() => ({ capabilities, workspace, logger })),
         desktopServers: desktopServersOf,
         probeAcpAgent,
         turnMounts: createTurnMounts({ baseUrl: () => `http://127.0.0.1:${config.sandbox.port}${TURN_MOUNT_BASE}` }),

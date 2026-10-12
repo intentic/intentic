@@ -23,15 +23,25 @@ const event = (over: Record<string, unknown> = {}) => ({
     ...over,
 });
 
-const routes = (clientLogger: Logger | undefined) =>
-    createLogsRoutes({ config: { historyRoot: mkdtempSync(join(tmpdir(), "logs-routes-")) } as never, clientLogger });
+type Budget = NonNullable<Parameters<typeof createLogsRoutes>[1]>["budget"];
+
+const routes = (clientLogger: Logger | undefined, budget?: Budget) =>
+    createLogsRoutes(
+        { config: { historyRoot: mkdtempSync(join(tmpdir(), "logs-routes-")) } as never, clientLogger },
+        budget !== undefined ? { budget } : {},
+    );
+
+type Reporter = (events: readonly Record<string, unknown>[], page?: Record<string, unknown>) => Promise<{ recorded: number }>;
 
 // Invokes the handler oRPC's `.handler()` returns, the actual call target, so the contract's own validation stays in
-// the loop.
-const report = async (clientLogger: Logger | undefined, events: readonly Record<string, unknown>[]): Promise<{ recorded: number }> => {
-    const procedure = routes(clientLogger).report as unknown as { "~orpc": { handler: (options: { input: unknown }) => unknown } };
-    return (await procedure["~orpc"].handler({ input: { events } })) as { recorded: number };
+// the loop. One router per reporter, so a budget carries across its calls as it does across a page's batches.
+const reporter = (clientLogger: Logger | undefined, budget?: Budget): Reporter => {
+    const procedure = routes(clientLogger, budget).report as unknown as { "~orpc": { handler: (options: { input: unknown }) => unknown } };
+    return async (events, page) => (await procedure["~orpc"].handler({ input: { events, page } })) as { recorded: number };
 };
+
+const report = (clientLogger: Logger | undefined, events: readonly Record<string, unknown>[]): Promise<{ recorded: number }> =>
+    reporter(clientLogger)(events);
 
 test("a browser report is written at its own level and marked as the browser's word", async () => {
     const sink = capturing();
@@ -78,6 +88,43 @@ test("a batch is written whole, in the order the browser saw it", async () => {
         recorded: 3,
     });
     expect(sink.lines.map((line) => line["message"])).toEqual(["first", "second", "third"]);
+});
+
+test("the page stamp rides on every line, so a reader filtering one line at a time can still tell two tabs apart", async () => {
+    const sink = capturing();
+    const page = { pageId: "p-1", tabId: "t-1", replay: "ph-session", served: "dev /work/intentic@main" };
+    await reporter(sink.logger)([event({ message: "first" }), event({ message: "second" })], page);
+
+    expect(sink.lines.map((line) => line["page"])).toEqual([page, page]);
+});
+
+test("a page over its per-minute budget is cut off, and the next batch that gets through says how many were refused", async () => {
+    const sink = capturing();
+    let now = 0;
+    const send = reporter(sink.logger, { perKeyPerWindow: 3, allPerWindow: 100, windowMs: 60_000, now: () => now });
+    const page = { pageId: "looping" };
+
+    expect(await send([event(), event(), event(), event(), event()], page)).toEqual({ recorded: 3 });
+    expect(await send([event()], page)).toEqual({ recorded: 0 });
+    // Another tab is not charged for the looping one.
+    expect(await send([event()], { pageId: "quiet" })).toEqual({ recorded: 1 });
+    expect(sink.lines).toHaveLength(4);
+
+    now = 60_000;
+    expect(await send([event({ message: "after" })], page)).toEqual({ recorded: 1 });
+    const notice = sink.lines.at(-2) ?? {};
+    expect(notice).toMatchObject({ client: true, event: "client.throttled", level: 40, page, report: { refused: 3 } });
+    expect(sink.lines.at(-1)?.["message"]).toBe("after");
+});
+
+test("pages that mint a new id per batch still share one ceiling", async () => {
+    const sink = capturing();
+    const send = reporter(sink.logger, { perKeyPerWindow: 10, allPerWindow: 4, windowMs: 60_000, now: () => 0 });
+    let total = 0;
+    for (let index = 0; index < 5; index++) {
+        total += (await send([event(), event()], { pageId: `minted-${index}` })).recorded;
+    }
+    expect(total).toBe(4);
 });
 
 test("with nowhere to write, nothing is recorded and the answer says so", async () => {

@@ -6,6 +6,7 @@ import { logsRoot } from "../logs/log-files.js";
 import { WORK_SIGNAL_PATH, workSignalBody } from "../workload/work-signal.js";
 import { bootFailureDocument } from "./boot/boot-failure.js";
 import { type ExitMarker, MARKER_FILE } from "./boot/boot-marker.js";
+import { RESTART_INTENT_FILE, type RestartIntent } from "./boot/restart-record.js";
 import { restartResumeDocument } from "./restart-resume.js";
 import { updateOutcomeDocument, updatePreparingDocument } from "./updates/staged-update.js";
 
@@ -41,6 +42,20 @@ const files = {
     daemonExit: {
         path: join(logsRoot(HISTORY_ROOT), MARKER_FILE),
         example: { pid: 41, startTimeTicks: 1_208_311, state: "running", startedAt: AT } satisfies ExitMarker,
+    },
+    // Whoever is about to stop or restart the sandbox (ic, the device keeper, the desktop app, the daemon) writes it
+    // first, and the next boot files it with how the previous run ended (restart-record.ts).
+    restartIntent: {
+        path: join(logsRoot(HISTORY_ROOT), RESTART_INTENT_FILE),
+        example: {
+            at: new Date(AT).toISOString(),
+            by: "keeper",
+            host: "rog",
+            side: "wsl",
+            action: "restart",
+            reason: "the sandbox's /health stopped answering",
+            checks: ["health"],
+        } satisfies RestartIntent,
     },
     // How much a restart would cut, which ic asks before a restart it would make unasked.
     workSignal: {

@@ -15,7 +15,7 @@ test("a broken promise is reported, attributed, and never thrown", async () => {
     const broken = await registry.run("sweep");
 
     expect(broken).toHaveLength(1);
-    expect(broken[0]).toMatchObject({ owner: "platform", check: "claim", moment: "sweep", message: "claim names pid 42", broken: false });
+    expect(broken[0]).toMatchObject({ owner: "platform", check: "claim", moment: "sweep", message: "claim names pid 42", checkFailed: false });
     expect(registry.violations()).toHaveLength(1);
 });
 
@@ -29,9 +29,9 @@ test("a check that throws on its own account is recorded as broken, not as evide
 
     const [violation] = await registry.run("sweep");
 
-    // The distinction is the whole point: `broken` says the check failed to run, so nothing was learned about
+    // The distinction is the whole point: `checkFailed` says the check failed to run, so nothing was learned about
     // the subject. Reading it as a violation of the promise is how a diagnostic starts lying.
-    expect(violation).toMatchObject({ owner: "agent", broken: true });
+    expect(violation).toMatchObject({ owner: "agent", checkFailed: true });
     expect(violation?.message).toContain("undefined");
 });
 
@@ -46,7 +46,7 @@ test("a check that never settles is bounded rather than holding the pass open", 
         await realYield();
         await advanceTimersByTimeAsync(6_000);
 
-        expect((await pass)[0]).toMatchObject({ owner: "agents", broken: true });
+        expect((await pass)[0]).toMatchObject({ owner: "agents", checkFailed: true });
     } finally {
         jest.useRealTimers();
     }
@@ -89,7 +89,7 @@ test("a check that hangs through stall after stall still expires", async () => {
             await advanceTimersByTimeAsync(5_000);
         }
 
-        expect((await pass)[0]).toMatchObject({ owner: "agents", broken: true });
+        expect((await pass)[0]).toMatchObject({ owner: "agents", checkFailed: true });
     } finally {
         jest.useRealTimers();
     }
@@ -166,7 +166,7 @@ test("a pass that throws loses only itself: the next pass still runs", async () 
     const [violation] = await registry.run("sweep");
 
     expect(runs).toBe(2);
-    expect(violation).toMatchObject({ owner: "platform", check: "claim", message: "claim names pid 42", broken: false });
+    expect(violation).toMatchObject({ owner: "platform", check: "claim", message: "claim names pid 42", checkFailed: false });
 });
 
 test("wiring mistakes are loud, because nothing is running yet when they are made", () => {
@@ -203,8 +203,8 @@ test("the violation list is bounded: it is a live signal, not a ledger", async (
 // A sweep runs every five minutes; a violation nobody has fixed yet is the same fact each time, and logging it each time
 // filled the log and pushed every other violation out of the bounded list.
 test("a violation standing unchanged is recorded once, and again once it has cleared and come back", async () => {
-    const lines: { msg: string }[] = [];
-    const registry = createInvariantRegistry(pino({ level: "info" }, { write: (line: string) => lines.push(JSON.parse(line) as { msg: string }) }));
+    const lines: { msg: string; level: number; checkFailed?: boolean }[] = [];
+    const registry = createInvariantRegistry(pino({ level: "info" }, { write: (line: string) => lines.push(JSON.parse(line) as { msg: string; level: number; checkFailed?: boolean }) }));
     let state: "broken" | "worse" | "fine" = "broken";
     registry.register("peers", [
         check("cards", ({ fail }) => {
@@ -229,9 +229,11 @@ test("a violation standing unchanged is recorded once, and again once it has cle
         "2 enrollments held by no card",
     ]);
     expect(lines.map((line) => line.msg)).toEqual([
-        "invariant broken: 2 enrollments held by no card",
-        "invariant broken: 3 enrollments held by no card",
+        "invariant violated: 2 enrollments held by no card",
+        "invariant violated: 3 enrollments held by no card",
         "invariant holds again",
-        "invariant broken: 2 enrollments held by no card",
+        "invariant violated: 2 enrollments held by no card",
     ]);
+    // A reported violation says so in its fields too: warn, and the check itself ran.
+    expect(lines[0]).toMatchObject({ level: 40, checkFailed: false });
 });

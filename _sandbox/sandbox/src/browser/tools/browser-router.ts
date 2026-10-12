@@ -5,6 +5,7 @@ import { dirname } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import type { RpcMessage } from "../../agent/tools/turn-mounts.js";
 import { networkCallOf, networkCallRefusal, redactNetworkAnswer } from "./network-redaction.js";
+import { SCREENSHOT_VERB } from "../cast/browser-artifacts.js";
 
 // One MCP server standing in for every browser a turn may drive, hosted in this daemon and reached over HTTP, so a
 // session costs no router process of its own. Each tool takes an `account`, resolved through the turn's manifest to an
@@ -41,12 +42,24 @@ export interface RouterManifest {
     // Laid over the prepared environment when a backend spawns: the turn's workload stamp, so the process scan
     // attributes the browser to its conversation.
     readonly backendEnv: Readonly<Record<string, string>>;
+    // The conversation whose turn holds this router, written beside every screenshot it takes (screenshot-provenance.ts).
+    readonly conversationId?: string | undefined;
+}
+
+// One screenshot a backend answered for, handed to RouterDeps.screenshotTaken.
+export interface RoutedScreenshot {
+    readonly owner: string;
+    readonly conversationId?: string | undefined;
+    readonly params: Record<string, unknown> | undefined;
+    readonly answer: RpcMessage;
 }
 
 export interface RouterDeps {
     readonly toolSchemas: () => Promise<readonly McpToolSchema[]>;
     // Brings one owner up: display, exit, fingerprint and config are all daemon state (browser-tools.ts).
     readonly prepare: (owner: string, port: number) => Promise<Prepared>;
+    // Told of each screenshot once its backend answered, never awaited: what writes the shot's provenance beside it.
+    readonly screenshotTaken?: (shot: RoutedScreenshot) => void;
 }
 
 const PROTOCOL_VERSION = "2025-06-18";
@@ -430,6 +443,9 @@ export const createBrowserRouter = (manifest: RouterManifest, deps: RouterDeps):
                     `no WebMCP tool "${webmcp.name}" on this page as of its last snapshot. Take a snapshot: it lists the page's ` +
                         `tools under "webmcp tools", and lists none when the page registers none or this browser has no WebMCP.`,
                 );
+            }
+            if (webmcp === undefined && message.params?.["name"] === SCREENSHOT_VERB && answer.error === undefined) {
+                deps.screenshotTaken?.({ owner, conversationId: manifest.conversationId, params: message.params, answer });
             }
             return { ...(network === undefined ? answer : redactNetworkAnswer(network, answer)), id: message.id ?? null };
         } finally {

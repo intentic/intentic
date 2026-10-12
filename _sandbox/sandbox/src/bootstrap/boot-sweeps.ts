@@ -1,3 +1,5 @@
+import { errnoCode, errorMessage } from "@intentic/base/errors";
+import type { Logger } from "pino";
 import { sweepAgedAgents } from "../conversations/registry/archive.js";
 import { archiveVanishedWorktrees } from "../conversations/registry/vanished-worktrees.js";
 import { capabilityCtx } from "../capabilities/capability.js";
@@ -6,6 +8,7 @@ import { LOCAL_MODEL_IDLE_MS, LOCAL_MODEL_IDLE_SWEEP_MS } from "../endpoints/loc
 import { stopCursorRuntimes } from "../runtimes/cursor/cursor-host.js";
 import { QUARANTINE_MS, quarantineRoot } from "../store/conversation-units.js";
 import { logsRoot, pruneLogFiles } from "../logs/log-files.js";
+import { createRepeatGate } from "../logs/repeat-gate.js";
 import { panelKeyOf } from "@intentic/sandbox-contract/session-names";
 import { type ReapPolicy, reapFinishedSessions } from "../terminal/terminal-session.js";
 import { pinTmuxServer, reportTmuxServerNamespace } from "../terminal/tmux-server.js";
@@ -103,6 +106,31 @@ const startRootSweeps = (phase: BootPhase): void => {
     shutdown.push(() => clearInterval(logsSweep));
 };
 
+// The idle sweep runs every minute, so a failure it keeps meeting wrote its stack every minute. A process that left
+// between the scan and the read (ESRCH) is what the sweep is there to notice, not a failure, and anything else is
+// written when what it fails with changes, then hourly, and once more when a pass goes through.
+export const idleSweepLog = (logger: Pick<Logger, "debug" | "info" | "warn">, now?: () => number) => {
+    const gate = createRepeatGate(now === undefined ? {} : { now });
+    return {
+        failed: (error: unknown): void => {
+            if (errnoCode(error) === "ESRCH") {
+                logger.debug({ reason: errorMessage(error) }, "localmodel idle sweep: a server left mid-sweep");
+                return;
+            }
+            const verdict = gate.check("sweep", errnoCode(error) ?? errorMessage(error));
+            if (verdict.log) {
+                logger.warn({ err: error, ...(verdict.repeated > 0 ? { repeated: verdict.repeated } : {}) }, "localmodel idle sweep failed");
+            }
+        },
+        succeeded: (): void => {
+            const outage = gate.clear("sweep");
+            if (outage !== undefined) {
+                logger.info({ after: outage.state, repeated: outage.repeated }, "localmodel idle sweep works again");
+            }
+        },
+    };
+};
+
 const startContainerSweeps = (phase: BootPhase): void => {
     const { role, services, shutdown } = phase;
     if (!role.container) {
@@ -116,10 +144,9 @@ const startContainerSweeps = (phase: BootPhase): void => {
     void services.reaper.sweep();
     // Armed whatever this boot started: a model server adopted from a previous daemon idles the same way.
     const modelCtx = capabilityCtx(services);
+    const sweepLog = idleSweepLog(services.logger);
     const unloadIdle = setInterval(() => {
-        void unloadIdleLocalModels(modelCtx, LOCAL_MODEL_IDLE_MS).catch((error: unknown) => {
-            services.logger.warn({ err: error }, "localmodel idle sweep failed");
-        });
+        void unloadIdleLocalModels(modelCtx, LOCAL_MODEL_IDLE_MS).then(sweepLog.succeeded, sweepLog.failed);
     }, LOCAL_MODEL_IDLE_SWEEP_MS);
     // Must neither keep the daemon alive nor keep it from stopping.
     unloadIdle.unref();

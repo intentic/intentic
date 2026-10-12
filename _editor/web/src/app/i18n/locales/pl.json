@@ -2481,7 +2481,7 @@
             "resumed": {
                 "auth": "Logowanie do Claude odnowione, ta tura wróciła tam, gdzie przerwała.",
                 "outage": "Dostawca modelu znów działa, ta tura wróciła tam, gdzie przerwała.",
-                "restart": "Sandbox znów działa, ta tura wróciła tam, gdzie przerwała.",
+                "restart": "Sandbox znów działa; polecenia w tle i serwery deweloperskie uruchomione w tej turze zostały zatrzymane; ta tura wróciła tam, gdzie przerwała.",
                 "stopped": "Wysłano ponownie po tym, jak tura urwała się w połowie; wraca tam, gdzie przerwała.",
                 "limit": "Wysłano ponownie po tym, jak limit skończył się w trakcie tury; wraca tam, gdzie przerwała.",
                 "switched": "Wysłano ponownie na innym koncie po tym, jak limit skończył się w trakcie tury, w nowej sesji.",

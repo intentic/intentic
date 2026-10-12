@@ -37,7 +37,14 @@ export interface ModelRefusalStore {
 // by tomorrow. Forgotten on read, not pruned on write, like provider-refusals.
 const FORGET_AFTER_MS = 24 * 60 * 60_000;
 
-export const fileModelRefusalStore = (path: string): ModelRefusalStore => {
+// A refusal here takes a model off the picker for a day, which from outside reads as a model that vanished; each one
+// recorded writes a line through `log`, so the disappearance has a cause on file.
+export interface ModelRefusalStoreOptions {
+    readonly log?: (fields: Record<string, unknown>, message: string) => void;
+}
+
+export const fileModelRefusalStore = (path: string, options: ModelRefusalStoreOptions = {}): ModelRefusalStore => {
+    const log = options.log ?? (() => undefined);
     const file = jsonFile<Record<string, StoredModelRefusal>>(path, {
         parse: (raw) => StoredRefusalsSchema.safeParse(raw).data,
         fallback: () => ({}),
@@ -55,7 +62,17 @@ export const fileModelRefusalStore = (path: string): ModelRefusalStore => {
             );
         },
         record: async (provider, model, refusal) => {
-            await file.update((current) => ({ ...current, [keyOf(provider, model)]: refusal }));
+            let known = false;
+            await file.update((current) => {
+                const previous = current[keyOf(provider, model)];
+                known = previous !== undefined && previous.at > refusal.at - FORGET_AFTER_MS;
+                return { ...current, [keyOf(provider, model)]: refusal };
+            });
+            // A model refused again is the same fact restated; only its first refusal (or one after the last aged out)
+            // changes what the picker shows.
+            if (!known) {
+                log({ provider, model, reason: refusal.message }, `model refusal: ${provider} ${model} refused for this sandbox's credentials, hidden from the picker for a day`);
+            }
         },
     };
 };

@@ -401,12 +401,13 @@ fn elsewhere_report(side: &Side) -> serde_json::Value {
 }
 
 /// One sandbox's final `--json` line: its report, and beside it (never inside, which is the platform's shape) what this
-/// side adopted and the repairs ic has made to it (ledger.rs). Pure.
+/// side adopted, the repairs ic has made to it (ledger.rs) and, for doctor, how it last went down. Pure.
 fn answer_line(
     slug: &str,
     report: &serde_json::Value,
     adopted: Option<&side::Adoption>,
     ledger: &crate::sandbox::ledger::Ledger,
+    last_down: Option<serde_json::Value>,
 ) -> String {
     let mut line = serde_json::json!({ "slug": slug, "report": report });
     if let Some(adoption) = adopted {
@@ -415,7 +416,39 @@ fn answer_line(
     if !ledger.entries.is_empty() {
         line["repairs"] = ledger.json();
     }
+    if let Some(last_down) = last_down {
+        line["lastDown"] = last_down;
+    }
     line.to_string()
+}
+
+/// How a sandbox last went down, for doctor's `--json` reader: what docker says of the container's last exit (its code,
+/// whether the kernel killed it for memory, when it stopped and started, how often docker restarted it) and the last
+/// restart intent ic left on its volume (intent.rs), which says who stopped it on purpose and why. An exit with no
+/// intent newer than it is a crash or a stop from outside ic. None when there is nothing to say. Pure.
+fn last_down(
+    container: &chain::Container,
+    intent: Option<serde_json::Value>,
+) -> Option<serde_json::Value> {
+    let mut said = serde_json::Map::new();
+    if let chain::Container::Present(state) = container {
+        let at = |ms: Option<u64>| ms.map(crate::util::iso_utc);
+        said.insert(
+            "container".into(),
+            serde_json::json!({
+                "status": state.status,
+                "exitCode": state.exit_code,
+                "oomKilled": state.oom,
+                "restarts": state.restarts,
+                "startedAt": at(state.started_ms),
+                "finishedAt": at(state.finished_ms),
+            }),
+        );
+    }
+    if let Some(intent) = intent {
+        said.insert("restartIntent".into(), intent);
+    }
+    (!said.is_empty()).then_some(serde_json::Value::Object(said))
 }
 
 /// What a repair is doing, and the finding that made it: an unasked restart that cuts every running turn has to say
@@ -438,6 +471,17 @@ fn doing_because(repair: &Repair, check: Option<&Check>) -> String {
     let mut cut: String = said.chars().take(DOING_MAX - 1).collect();
     cut.push('…');
     cut
+}
+
+/// Which ic made a repair, as its narration line says it: the side of this machine it runs on, and whether it was the
+/// machine agent's unattended round. Two sides of one PC can drive the same engine, and a restart in the machine agent's
+/// log has to say which of them made it. Pure.
+fn actor(here: &Side, auto: bool) -> String {
+    format!(
+        "by ic on {}{}",
+        here.name(),
+        if auto { ", unattended" } else { "" }
+    )
 }
 
 /// The platform's limit on `doing` (@intentic/api-contract's HostReportInputSchema).
@@ -494,6 +538,15 @@ impl Engine {
         if self.auto && snapshot.host.engine.up() {
             for sandbox in &snapshot.sandboxes {
                 if self.sides.get(&sandbox.slug) == Some(&Unattended::Ours) {
+                    if let Some((other, at)) = side::rival_keeper(&sandbox.slug) {
+                        ui::warn(&format!(
+                            "{}: ic on {} also keeps this sandbox (its keeper last said so at {}), and so does this side, ic on {}: both may repair and restart it. Recreating it from the side that should keep it settles which one does.",
+                            sandbox.slug,
+                            other.name(),
+                            crate::util::utc_minute(at),
+                            side::here().name()
+                        ));
+                    }
                     side::beat(&sandbox.slug);
                 }
             }
@@ -555,14 +608,28 @@ impl Engine {
     ) -> bool {
         self.attempted = true;
         let doing = doing_because(repair, snapshot.check(scope, id));
+        let actor = actor(&side::here(), self.auto);
         ui::note(&format!(
-            "{doing}{}…",
+            "{doing} ({}{actor})…",
             scope
                 .as_ref()
-                .map(|slug| format!(" ({slug})"))
+                .map(|slug| format!("{slug}; "))
                 .unwrap_or_default()
         ));
         self.post(snapshot, Stage::Fixing, Some(&doing), Some((scope, id)));
+        // Every sandbox this takes down is told why before it goes (intent.rs): the one repaired, or, for a repair that
+        // restarts the engine, every one this run sees on it.
+        let said = format!("{doing} ({actor}).");
+        let _why = crate::sandbox::intent::Reason::hold(said.as_str(), &[id]);
+        if repair.restarts_engine() && snapshot.host.engine.up() {
+            for sandbox in &snapshot.sandboxes {
+                crate::sandbox::intent::leave(
+                    &crate::sandbox::container_of(&sandbox.slug),
+                    crate::sandbox::intent::Action::Restart,
+                    &said,
+                );
+            }
+        }
         let result = repair::apply(repair, scope.as_deref(), &snapshot.host, !self.auto);
         self.tried.insert((scope.clone(), repair.clone()));
         match result {
@@ -885,11 +952,19 @@ impl Engine {
                 self.upkeep.as_ref(),
             );
             if self.json {
+                // Doctor is asked what happened; its reader gets the last exit and the last intent, a fix's does not
+                // pay the extra docker read on every keeper round.
+                let down = self.doctor.then(|| {
+                    let intent = crate::sandbox::inside::holder(&sandbox.slug)
+                        .and_then(|holder| crate::sandbox::intent::last(&holder));
+                    last_down(&sandbox.facts.container, intent)
+                });
                 report::emit(&answer_line(
                     &sandbox.slug,
                     &body,
                     self.adoption_of(&sandbox.slug),
                     &sandbox.facts.ledger,
+                    down.flatten(),
                 ));
             }
             if let (false, Some(target)) = (self.doctor, self.targets.get(&sandbox.slug)) {
@@ -1302,6 +1377,7 @@ mod tests {
             &report,
             None,
             &crate::sandbox::ledger::Ledger::default(),
+            None,
         ))
         .expect("JSON");
         assert_eq!(plain, serde_json::json!({ "slug": "s", "report": report }));
@@ -1311,11 +1387,44 @@ mod tests {
         };
         let ledger = crate::sandbox::ledger::Ledger::default().noted("restart", 9, true);
         let full: serde_json::Value =
-            serde_json::from_str(&answer_line("s", &report, Some(&adoption), &ledger))
+            serde_json::from_str(&answer_line("s", &report, Some(&adoption), &ledger, None))
                 .expect("JSON");
         assert_eq!(full["adopted"]["from"], "windows");
         assert_eq!(full["repairs"]["restart"]["count"], 1);
         assert_eq!(full["report"], report, "the platform's report is untouched");
+    }
+
+    #[test]
+    fn doctor_says_how_the_sandbox_last_went_down_and_why() {
+        let state = chain::Inspected::parse(
+            "exited|false|3|true|137|2026-10-05T22:00:00Z|8589934592|unless-stopped|2026-10-05T22:45:30Z",
+        )
+        .expect("parsed");
+        let intent = serde_json::json!({ "by": "keeper", "action": "restart", "reason": "Restarting the sandbox" });
+        let down = last_down(&chain::Container::Present(state), Some(intent.clone()))
+            .expect("something to say");
+        assert_eq!(
+            down["container"],
+            serde_json::json!({
+                "status": "exited",
+                "exitCode": 137,
+                "oomKilled": true,
+                "restarts": 3,
+                "startedAt": "2026-10-05T22:00:00.000Z",
+                "finishedAt": "2026-10-05T22:45:30.000Z",
+            })
+        );
+        assert_eq!(down["restartIntent"], intent);
+        assert_eq!(last_down(&chain::Container::Unknown, None), None);
+        let line: serde_json::Value = serde_json::from_str(&answer_line(
+            "s",
+            &serde_json::json!({}),
+            None,
+            &crate::sandbox::ledger::Ledger::default(),
+            Some(down),
+        ))
+        .expect("JSON");
+        assert_eq!(line["lastDown"]["container"]["exitCode"], 137);
     }
 
     #[test]
@@ -1343,6 +1452,20 @@ mod tests {
         let said = doing_because(&Repair::Restart, Some(&long));
         assert_eq!(said.chars().count(), DOING_MAX);
         assert!(said.ends_with('…'));
+    }
+
+    #[test]
+    fn a_repair_says_which_side_of_the_machine_made_it_and_whether_anyone_asked() {
+        assert_eq!(
+            actor(&Side::new("linux", Some("archlinux")), true),
+            "by ic on WSL (archlinux), unattended"
+        );
+        assert_eq!(
+            actor(&Side::new("windows", Some("windows")), false),
+            "by ic on Windows"
+        );
+        assert!(Repair::ShutdownWsl.restarts_engine());
+        assert!(!Repair::Restart.restarts_engine() && !Repair::StartDesktop.restarts_engine());
     }
 
     #[test]

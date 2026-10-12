@@ -107,6 +107,16 @@ pub fn utc_minute(ms: u64) -> String {
     format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02} UTC")
 }
 
+/// An epoch-milliseconds moment as ISO-8601 in UTC ("2026-10-05T22:45:07.123Z"): what a program reads, in the files
+/// ic leaves for the sandbox and at the head of each line of its own logs. Pure.
+pub fn iso_utc(ms: u64) -> String {
+    let (year, month, day, hour, minute, second) = civil(ms / 1000);
+    format!(
+        "{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}.{:03}Z",
+        ms % 1000
+    )
+}
+
 /// Epoch seconds as (year, month, day, hour, minute, second), UTC. Pure.
 fn civil(secs: u64) -> (i64, i64, i64, u64, u64, u64) {
     let days = (secs / 86_400) as i64;
@@ -204,6 +214,8 @@ mod tests {
         // 2026-10-05T22:45:30Z
         assert_eq!(utc_minute(1_791_240_330_000), "2026-10-05 22:45 UTC");
         assert_eq!(utc_minute(951_782_400_000), "2000-02-29 00:00 UTC");
+        assert_eq!(iso_utc(1_791_240_330_007), "2026-10-05T22:45:30.007Z");
+        assert_eq!(iso_utc(0), "1970-01-01T00:00:00.000Z");
     }
 
     #[test]

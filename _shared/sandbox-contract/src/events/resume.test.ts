@@ -1,4 +1,4 @@
-import { RESUME_NOTES, resumeDisclosure, resumeNoticeRow, withResumeNote, withoutResumeNote } from "./resume.js";
+import { RESUME_NOTES, resumeDisclosure, resumeNoteWith, resumeNoticeRow, withResumeNote, withoutResumeNote } from "./resume.js";
 
 // Wrapping then unwrapping a resume note must return the exact original prompt; a mismatch leaks machine narration into
 // the user's own words on screen.
@@ -69,9 +69,21 @@ test("a re-run's notice row names its reason beside its words", () => {
     const disclosure = resumeDisclosure(withResumeNote("ship the parser", RESUME_NOTES.restart));
     expect(disclosure?.kind === "notice" ? resumeNoticeRow(disclosure) : undefined).toEqual({
         role: "notice",
-        text: "The sandbox came back, this turn picked up where it left off.",
+        text: "The sandbox came back; background commands and dev servers this turn started have ended; this turn picked up where it left off.",
         noticeCode: { code: "resumed", params: { reason: "restart" } },
     });
+});
+
+// A restart's re-run also says what the restart cost it; the note stays the prefix, so a prompt from before the tail
+// existed and one carrying it read as the same re-run, and the person's words come back out whole.
+test("a note's tail goes with the note, and a prompt stored without one still reads the same", () => {
+    const note = resumeNoteWith(RESUME_NOTES.restart, "The whole container restarted.\n\n/tmp was emptied.");
+    expect(note).toBe(`${RESUME_NOTES.restart} The whole container restarted.\n/tmp was emptied.`);
+    expect(resumeNoteWith(RESUME_NOTES.restart, undefined)).toBe(RESUME_NOTES.restart);
+    const prompt = withResumeNote("ship the parser\n\nand the lexer", note);
+    expect(withoutResumeNote(prompt)).toBe("ship the parser\n\nand the lexer");
+    expect(resumeDisclosure(prompt)).toEqual(resumeDisclosure(withResumeNote("ship the parser", RESUME_NOTES.restart)));
+    expect(withoutResumeNote(withResumeNote("ship the parser", RESUME_NOTES.restart))).toBe("ship the parser");
 });
 
 // A Continue on a turn the sandbox kept nothing of sends the note alone: no words of the person's to strip back out, and

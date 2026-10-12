@@ -1,5 +1,5 @@
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
-import { type HeldSlot, oldestPerSlot, slotFromFdTarget, summarisePools } from "./queue-slots.js";
+import { type HeldSlot, oldestPerSlot, parseWaiter, type QueueWaiter, slotFromFdTarget, summarisePools } from "./queue-slots.js";
 
 /* The pure half: reading a slot out of a descriptor's target, and folding a pipeline's shared descriptors into one
    row per slot. The live half (a real flock, a real fd 9) is queue-slots.integration.test.ts. */
@@ -55,14 +55,14 @@ test("a pool reports its oldest holder, which is the number a stuck command show
         ["quiet", 1],
     ]);
     const summary = summarisePools(counts, [holder("heavy", "slot.1", 1, 30), holder("heavy", "slot.2", 2, 1_800)]);
-    expect(summary["heavy"]).toEqual({
+    expect(summary["heavy"]).toMatchObject({
         slots: 2,
         held: 2,
         longestHoldSeconds: 1_800,
         longestHolder: { pid: 2, command: "bash -c pnpm test 2", cwd: `${WORKSPACE_ROOT}/intentic` },
     });
     // A pool with slots and nothing in them still reports, so "no rows" cannot be read as "not measured".
-    expect(summary["quiet"]).toEqual({ slots: 1, held: 0, longestHoldSeconds: 0 });
+    expect(summary["quiet"]).toEqual({ slots: 1, held: 0, longestHoldSeconds: 0, waiting: 0, longestWaitSeconds: 0 });
 });
 
 // A thirty-minute hold that names no command cannot be acted on; the oldest holder is the one named.
@@ -75,5 +75,65 @@ test("a pool names the command holding its longest-held slot, and where it runs"
 
 test("a holder whose process could not be read is still named by its pid", () => {
     const summary = summarisePools(new Map([["heavy", 1]]), [{ ...holder("heavy", "slot.1", 9, 60), command: undefined, cwd: undefined }]);
-    expect(summary["heavy"]).toEqual({ slots: 1, held: 1, longestHoldSeconds: 60, longestHolder: { pid: 9, command: undefined, cwd: undefined } });
+    expect(summary["heavy"]).toMatchObject({
+        slots: 1,
+        held: 1,
+        longestHoldSeconds: 60,
+        longestHolder: { pid: 9, command: undefined, cwd: undefined },
+    });
+});
+
+// Who holds and for whom: the question a waiting conversation asks, answered without a second /proc walk.
+test("a pool lists its holders oldest first, by conversation and rule, and stops at a bounded few", () => {
+    const named = (slot: string, pid: number, age: number): HeldSlot => ({
+        ...holder("heavy", slot, pid, age),
+        conversation: `c-${pid}`,
+        rule: "bun-test",
+    });
+    const held = [named("slot.1", 1, 10), named("slot.2", 2, 500), named("slot.3", 3, 40), named("slot.4", 4, 30), named("slot.5", 5, 20)];
+    const summary = summarisePools(new Map([["heavy", 5]]), held);
+    expect(summary["heavy"]?.holders?.map((row) => row.pid)).toEqual([2, 3, 4, 5]);
+    expect(summary["heavy"]?.holders?.[0]).toEqual({
+        slot: "slot.2",
+        pid: 2,
+        holdSeconds: 500,
+        conversation: "c-2",
+        rule: "bun-test",
+        command: "bash -c pnpm test 2",
+    });
+});
+
+const waiter = (pid: number, waitSeconds: number): QueueWaiter => ({
+    pid,
+    label: "bun-test",
+    conversation: `w-${pid}`,
+    waitSeconds,
+    command: "bun test",
+});
+
+test("a pool counts its waiters and reports the longest wait first", () => {
+    const waiters = new Map([["heavy", [waiter(11, 5), waiter(12, 240), waiter(13, 60)]]]);
+    const summary = summarisePools(new Map([["heavy", 2]]), [holder("heavy", "slot.1", 1, 300)], waiters);
+    expect(summary["heavy"]).toMatchObject({ waiting: 3, longestWaitSeconds: 240 });
+    expect(summary["heavy"]?.waiters?.map((row) => row.pid)).toEqual([12, 13, 11]);
+});
+
+test("a waiter is read from what queue-run writes, and its wait counted from `since`", () => {
+    const written = { pid: 42, label: "bun-test", conversation: "c-7", since: 1_000, command: "bun test src" };
+    expect(parseWaiter(written, 1_090)).toEqual({ pid: 42, label: "bun-test", conversation: "c-7", waitSeconds: 90, command: "bun test src" });
+    // An empty conversation is a hand call, not a conversation named "".
+    expect(parseWaiter({ ...written, conversation: "" }, 1_000)?.conversation).toBeUndefined();
+    // A clock that went backwards is no negative wait.
+    expect(parseWaiter(written, 900)?.waitSeconds).toBe(0);
+});
+
+test.each([
+    ["no pid", { since: 1 }],
+    ["no since", { pid: 4 }],
+    ["a pid that is not a number", { pid: "4", since: 1 }],
+    ["pid 0", { pid: 0, since: 1 }],
+    ["not an object", "wait"],
+    ["nothing", undefined],
+])("a waiter entry with %s is dropped", (_name, entry) => {
+    expect(parseWaiter(entry, 10)).toBeUndefined();
 });

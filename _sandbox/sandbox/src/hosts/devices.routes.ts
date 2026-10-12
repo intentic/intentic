@@ -2,6 +2,7 @@ import { type DeviceFlowLine, type DeviceSandboxFlowInput, type DeviceSandboxOp,
 import { sandboxSlugOf } from "@intentic/sandbox-run";
 import { implement } from "@orpc/server";
 import { askedRestart, fileRestartResume } from "../system/restart-resume.js";
+import type { RestartAction } from "../system/boot/restart-record.js";
 import { requireMaintainer } from "../auth/owner-gates.js";
 import type { OrpcContext } from "../app-env.js";
 import type { Services } from "../composition.js";
@@ -11,6 +12,14 @@ import { devices, manageDeviceSandbox, runDeviceAgentFlow } from "./device-repor
 
 // The ops that end by restarting the container they name, so a `resumeTurns` ask is about their restart.
 const RESTARTING: ReadonlySet<DeviceSandboxOp> = new Set(["restart", "update", "rebuild", "rollback"]);
+// The ops that stop or restart the container they name, as the restart intent spells them (boot/restart-record.ts).
+const STOPPING_ACTION: ReadonlyMap<DeviceSandboxOp, RestartAction> = new Map([
+    ["stop", "stop"],
+    ["restart", "restart"],
+    ["update", "update"],
+    ["rebuild", "rebuild"],
+    ["rollback", "swap"],
+]);
 
 /* The `system.*Device*` procedures, implemented where the devices themselves live rather than in system/system.routes.ts. */
 export const createDeviceSystemRoutes = (services: Services) => {
@@ -44,8 +53,13 @@ export const createDeviceSystemRoutes = (services: Services) => {
             await requireMaintainer(services, context.headers, "only a sandbox maintainer can act on connected devices");
             // The owner restarting THIS sandbox and asking for the turns it cuts back: kept for the next boot, which
             // resumes them (restart-resume.ts).
-            const restartsThis = RESTARTING.has(input.op) && input.slug === sandboxSlugOf(services.config.sandbox.name);
+            const thisSandbox = input.slug === sandboxSlugOf(services.config.sandbox.name);
+            const restartsThis = RESTARTING.has(input.op) && thisSandbox;
             const resume = fileRestartResume(services.config.historyRoot);
+            const action = STOPPING_ACTION.get(input.op);
+            if (thisSandbox && action !== undefined) {
+                resume.announce?.({ by: "owner", host: input.id, action, reason: `the owner's ${input.op} from the Devices card` });
+            }
             if (restartsThis && input.resumeTurns !== true) {
                 // An ask left standing by an earlier restart whose refusal nobody stayed to relay is not this one's.
                 await resume.withdraw();

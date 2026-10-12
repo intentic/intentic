@@ -1,6 +1,7 @@
 import { nextOneTimeWakeAt } from "../automations/scheduler.js";
 import type { ReachPosture } from "../system/listeners/reach-posture.js";
 import { DEFAULT_PROBES, startIdleStop } from "../system/idle-stop.js";
+import { fileRestartResume } from "../system/restart-resume.js";
 import type { BootPhase } from "./boot-phase.js";
 import { workingNow } from "./working-now.js";
 import { nextBookedSendAt } from "../agent/run/turn/turn-resume.js";
@@ -31,6 +32,15 @@ export const startPlatformPresence = ({ config, logger, role, services, shutdown
                     ...DEFAULT_PROBES,
                     working: () => workingNow(services, "idle-stop").length,
                     nextOneTimeWakeAt: () => nextPromisedWakeAt(services),
+                },
+                // Named as the initiator before the SIGTERM main.ts answers, so the stop and the next boot say why.
+                () => {
+                    fileRestartResume(config.historyRoot).announce?.({
+                        by: "daemon",
+                        action: "stop",
+                        reason: `idle-stop: nobody connected and nothing running for ${String(config.idleStopMinutes)} minutes`,
+                    });
+                    process.kill(process.pid, "SIGTERM");
                 },
             ),
         );

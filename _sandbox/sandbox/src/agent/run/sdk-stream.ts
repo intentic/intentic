@@ -24,6 +24,7 @@ import { probeRoutedEndpoint, type RoutedEndpoint } from "../providers/routed-re
 import type { TurnAllowance } from "../providers/harness-credentials.js";
 import { opt } from "../../opt.js";
 import { type CacheCreationBuckets, ttlFromCacheCreation } from "./turn/prompt-cache.js";
+import { noteRetryCause } from "./turn/turn-pulse.js";
 import { promptFingerprint } from "./prompt-fingerprint.js";
 import { noteSubagentSpawn, noteSubagentTask, type SubagentTaskMessage, type SubagentTurn } from "../subagents/subagents.js";
 import { noteJobNotice, noteJobShell, noteModelRequest } from "../tools/jobs/background-jobs.js";
@@ -32,7 +33,7 @@ import { PageDrafts } from "../pages/page-draft.js";
 import { PAGE_TOOL_NAMES } from "../pages/page-names.js";
 import type { ChecklistSeed } from "./task-store.js";
 import { displayNameOf, toolCategoryOf, toolTarget } from "@intentic/agent-context/tool-calls";
-import { type CalledTool, editDiffContent, mayShowPicture, resultContent, toolLocations } from "../tools/tool-calls.js";
+import { type CalledTool, editDiffContent, mayShowPicture, resultContent, toolInput, toolLocations } from "../tools/tool-calls.js";
 
 // What a turn needs from the SDK: the message stream and the session's slash-command list. `supportedCommands` is
 // optional since a fake stream used in tests has none.
@@ -620,6 +621,8 @@ class TurnFold {
             category: toolCategoryOf(block.name),
             status: "in_progress",
             ...opt("target", toolTarget(block.input)),
+            // An MCP or Agent call has no target; its input is what the record would otherwise lose.
+            ...opt("input", toolInput(block.input, toolTarget(block.input))),
             ...opt("locations", toolLocations(block.input, this.args.cwd)),
             ...(diff !== undefined ? { content: [diff] } : {}),
             ...opt("parentToolUseId", parent),
@@ -704,6 +707,8 @@ class TurnFold {
             );
             return true;
         }
+        // The vendor's own word for it rides the turn's retry line (turn-pulse.ts): a status-less retry says nothing else.
+        noteRetryCause(this.args.subagents?.conversationId, message.no_response === undefined ? message.error : `${message.error}: no response headers`);
         // The two ways a retry stops: an outright model refusal, or a storm long enough to hand off
         // (endRetrying).
         const terminal = await this.endRetrying(message.attempt, message.error_status ?? undefined);

@@ -41,12 +41,14 @@ import { applyTrim, trimFrame, type TurnTrimState } from "../prompt/window/conte
 import { promptDisclosure } from "../prompt/prompt-disclosure.js";
 import type { TurnBriefing } from "../prompt/turn-briefing.js";
 import type { RoutedTurn, TurnInput } from "../../seams/turn-starter.js";
-import type { LiveRun } from "../../conversations/actor/conversation-holdings.js";
+import { type LiveRun, liveRunOf } from "../../conversations/actor/conversation-holdings.js";
 import { opt } from "../../opt.js";
 import { type ActiveTurn, SteeringQueue } from "../checkpoints/agent-steering.js";
+import { takeCheckpointNote } from "../checkpoints/checkpoint-worktree.js";
 import { recordProviderFailure } from "../providers/provider-health.js";
 import { breakPolicyFor, type HeldTurn, stopResumeAt } from "./turn/turn-resume.js";
 import { keepableOf, noteKeepable } from "./turn/cache-keepwarm.js";
+import { beginPulse, endPulse, pulseFrame } from "./turn/turn-pulse.js";
 import { dispatchRemoteTurn } from "../../runners/runner-dispatch.js";
 import { editorContextNote } from "./turn/turn-interactions.js";
 import { withRuntimeHistory } from "../providers/runtime-history.js";
@@ -721,16 +723,21 @@ const sentNotes = (
 type PlannedTurn = Extract<TurnPlan, { readonly ok: true }>;
 
 // The request as the runtime gets it. The repo-sync advisory goes first among its notes, as the first thing a turn
-// should know; the hand-off's measured state goes last, beside the envelope and the words it describes; and the wire
-// prompt is composed from the list the window let through, which is the list the preamble discloses.
+// should know, and the checkpoint note right after it, since both say what changed in the checkout before the turn; the
+// hand-off's measured state goes last, beside the envelope and the words it describes; and the wire prompt is composed
+// from the list the window let through, which is the list the preamble discloses.
 const wireOf = (
     plan: PlannedTurn,
     advisory: string | undefined,
+    checkpoint: TurnNote | undefined,
     handoffNotes: readonly TurnNote[],
 ): { readonly request: AgentRequest; readonly notes: TurnNote[]; readonly trim: ContextTrim | undefined } => {
     const planned = plan.request.spec;
-    const spec: TurnSpec =
-        advisory === undefined ? planned : { ...planned, notes: [{ title: REPO_SYNC_NOTE_TITLE, text: advisory }, ...(planned.notes ?? [])] };
+    const leading: TurnNote[] = [
+        ...(advisory === undefined ? [] : [{ title: REPO_SYNC_NOTE_TITLE, text: advisory }]),
+        ...(checkpoint === undefined ? [] : [checkpoint]),
+    ];
+    const spec: TurnSpec = leading.length === 0 ? planned : { ...planned, notes: [...leading, ...(planned.notes ?? [])] };
     const { notes, trim } = sentNotes([...(spec.notes ?? []), ...handoffNotes], plan.briefing, plan.contextTrim);
     return { request: { ...plan.request, spec: { ...spec, prompt: composeWirePrompt(notes, spec.prompt) } }, notes, trim };
 };
@@ -806,7 +813,9 @@ async function* prepareTurn(
     // Fast-forwards repos with a remote before the agent reads them; pulled files count as user-authored.
     const advisory = ready.repoSync === undefined ? undefined : syncAdvisory(await ready.repoSync);
     clock.mark("repoSync");
-    const wire = wireOf(plan, advisory, ready.handoffNotes);
+    // Taken here, after placement anchored the turn: the capture that anchor just made is told in this very prompt.
+    const checkpoint = input.conversationId === undefined ? undefined : takeCheckpointNote(input.conversationId);
+    const wire = wireOf(plan, advisory, checkpoint, ready.handoffNotes);
     yield* preambleDisclosure(wire.notes, wire.trim);
     recordSystemPrompt(services, input, wire.request);
     // An isolated turn takes no history capture: history covers only the main tree, which it never touches.
@@ -847,6 +856,8 @@ const keptWarmOf = (services: Pick<Services, "conversations">, conversationId: s
 interface TurnState {
     readonly input: RoutedTurn;
     readonly turnId: string;
+    // The detached run carrying this turn, whose id its transcript rows carry: the join between the two id spaces.
+    readonly run: string | undefined;
     readonly provider: NonNullable<AgentTurn["agent"]>;
     // The account serving this turn; undefined for a container-env credential or an untracked translator subscription.
     readonly account: string | undefined;
@@ -868,6 +879,7 @@ const classified = async (services: Services, event: ErrorFrame, turn: TurnState
         {
             turn: input,
             turnId: turn.turnId,
+            run: turn.run,
             provider,
             model: turn.request.spec.model,
             account: turn.account,
@@ -892,6 +904,40 @@ const classified = async (services: Services, event: ErrorFrame, turn: TurnState
     const frame = { ...failure.frame, message: readableProviderText(failure.frame.message) };
     // The account that actually served (or was refused for) the turn rides on its frame, so no window guesses it.
     return turn.account === undefined || frame.account !== undefined ? frame : { ...frame, account: turn.account };
+};
+
+// The line joining a turn's two ids (its run, which the transcript carries, and the turn id the activity log and the
+// failure lines carry), said as its runtime starts, with how long the run took to get here: worktree, preflight, plan.
+const announceRuntime = (services: Services, turn: TurnState, run: LiveRun | undefined, startedAt: number): void => {
+    const { input } = turn;
+    const model = turn.request.spec.model;
+    if (input.conversationId !== undefined) {
+        beginPulse({
+            conversationId: input.conversationId,
+            turnId: turn.turnId,
+            ...opt("run", run?.id),
+            provider: turn.provider,
+            harness: input.harness,
+            ...opt("model", model),
+            ...opt("account", turn.account),
+            startedAt,
+        });
+    }
+    services.logger.info(
+        {
+            ...opt("conversationId", input.conversationId),
+            turnId: turn.turnId,
+            ...opt("run", run?.id),
+            provider: turn.provider,
+            harness: input.harness,
+            ...opt("model", model),
+            ...opt("account", turn.account),
+            ...opt("sessionId", input.sessionId),
+            ...opt("resume", input.resume),
+            ...opt("setupMs", run === undefined ? undefined : Math.max(0, startedAt - run.startedAt)),
+        },
+        "turn running: its runtime started",
+    );
 };
 
 // Account refresh waits for this runtime's gap. Execution ownership lives in the outer preparation scope, not here:
@@ -943,14 +989,27 @@ async function* runPreparedTurn(
     const attribution = { ...opt("account", account), ...opt("actor", input.actor) };
     // This turn's identity in the activity log, minted here so its events join as one row.
     const turnId = randomUUID();
+    const run = input.conversationId === undefined ? undefined : liveRunOf(services.conversations, input.conversationId);
     // Tees every frame past the activity sniffer: outbound provider calls are only visible here.
     const sniffer = createOutboundSniffer(services, turnId);
     const record = turnActivity(services, { input, provider, turnId, attribution, sessionId: () => frames.readings().sessionId });
-    const state: TurnState = { input, turnId, provider, account, attribution, request, remint: remintFor(input, account, request), frames, carriedOff };
+    const state: TurnState = {
+        input,
+        turnId,
+        run: run?.id,
+        provider,
+        account,
+        attribution,
+        request,
+        remint: remintFor(input, account, request),
+        frames,
+        carriedOff,
+    };
     const aborted = (): boolean => signal?.aborted === true;
     const silent = (): string | undefined => silentEnding(silenceOf(frames, { conversationId: input.conversationId, aborted: aborted() }));
     record({ type: "turn.started", content: input.prompt.slice(0, 2_000) });
     const startedAt = Date.now();
+    announceRuntime(services, state, run, startedAt);
     const release = holdTurn(account);
     // The prefix this turn's requests were built from, as the CLI announced it; what a cache refresh must match.
     let fingerprint: PromptFingerprint | undefined;
@@ -963,6 +1022,7 @@ async function* runPreparedTurn(
             ),
         );
         for await (const raw of withSilentEnding(withDocuments(services, input, { worktree, effectiveCwd }, runtime), silent)) {
+            pulseFrame(services.logger, input.conversationId, raw);
             if (abortSuppresses(raw, aborted())) {
                 continue;
             }
@@ -979,6 +1039,7 @@ async function* runPreparedTurn(
         }
     } finally {
         release();
+        endPulse(input.conversationId, turnId);
         const spawned = input.conversationId !== undefined && isSpawnedChild(services.conversations, input.conversationId);
         if (input.conversationId !== undefined) {
             noteKeepable(services, input.conversationId, keepableOf(services, { input, request, account, sessionId: frames.readings().sessionId, fingerprint, spawned }));

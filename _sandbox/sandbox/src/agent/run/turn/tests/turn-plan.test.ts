@@ -15,6 +15,7 @@ import { composeWirePrompt } from "../../../prompt/turn-preamble.js";
 import type { TurnContext } from "../../../providers/adapter.js";
 import { experimentArm } from "@intentic/agent-context/experiments";
 import { ruleCommandIn } from "../../harness/harness-hooks.js";
+import { RECORD_READ_ROOTS } from "../../../../execution/js-runtime.js";
 import { planTurn } from "../turn-plan.js";
 import { base, budgetOn, codexServices, context, harnessServices, memoryReading, ROOT, servicesWith, turn, wire } from "../turn-plan.testing.js";
 import * as harnessCredentialsOriginal from "../../../providers/harness-credentials.js";
@@ -697,7 +698,8 @@ test("a Claude turn carries the JS backend's plan, the turn tree, spawn beside i
 
     expect((plan as { request: AgentRequest }).request.tools.jsExecution).toMatchObject({
         cwd: ROOT,
-        readRoots: [ROOT, tmpdir()],
+        // An unfenced card with a shell also reads the daemon's records (js-runtime.ts), never writes them.
+        readRoots: [ROOT, tmpdir(), ...RECORD_READ_ROOTS],
         writeRoots: [ROOT],
         allowSpawn: true,
     });

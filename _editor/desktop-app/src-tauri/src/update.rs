@@ -470,12 +470,35 @@ pub fn refusal(app: &AppHandle) -> Option<&'static str> {
         return Some("Intentic is already installing an update.");
     }
     if crate::scripts::busy_except(&crate::onboarding::PREFETCH_RUNS) || crate::project::busy() {
+        // The screen says it plainly; the log says what, so whoever reads it knows which run to wait for or stop.
+        let folders: Vec<String> = crate::project::working()
+            .iter()
+            .map(|folder| format!("a project change in {}", folder.display()))
+            .collect();
+        eprintln!(
+            "intentic: update held back by: {}",
+            held_by(
+                &crate::scripts::busy_runs_except(&crate::onboarding::PREFETCH_RUNS),
+                &folders
+            )
+        );
         return Some("Something is running on this device. Intentic will update once it finishes.");
     }
     if crate::windows::unsaved_windows() > 0 {
         return Some(UNSAVED);
     }
     None
+}
+
+/// What holds an update back, as the log names it: each run, then each folder a project change is under way for. Pure.
+fn held_by(runs: &[String], folders: &[String]) -> String {
+    let all: Vec<&str> = runs.iter().chain(folders).map(String::as_str).collect();
+    if all.is_empty() {
+        // A poisoned lock answers busy and names nothing.
+        "a run this app could not name (its record of runs is unreadable)".to_string()
+    } else {
+        all.join(", ")
+    }
 }
 
 /* APPLYING IT — the swap, and the only part of this that the user can feel. */
@@ -641,6 +664,17 @@ pub fn install_on_exit(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_held_update_names_what_holds_it() {
+        let runs = vec!["pc-setup (pid 42, running for 9 s)".to_string()];
+        let folders = vec!["a project change in /home/me/app".to_string()];
+        assert_eq!(
+            held_by(&runs, &folders),
+            "pc-setup (pid 42, running for 9 s), a project change in /home/me/app"
+        );
+        assert!(held_by(&[], &[]).contains("could not name"));
+    }
 
     /* WHAT EACH STATE OFFERS. */
     #[test]

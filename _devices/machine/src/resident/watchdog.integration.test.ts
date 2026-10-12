@@ -1,4 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 /* The watchdog end to end, in a process of its own: a loop that hangs is killed from the Worker, after one line on
@@ -21,6 +23,29 @@ test("a loop stuck past the limit is killed, after saying so", () => {
     expect(result.signal).toBe("SIGKILL");
     expect(result.stdout).not.toContain("survived");
     expect(result.stderr).toMatch(/event loop stalled for \d+ s; exiting so the supervisor restarts the agent/);
+});
+
+// The agent's exit record is closed by the Worker itself, since the main thread never runs again to say why it went.
+test("a loop killed for a stall leaves the reason in the exit record it was handed", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "watchdog-record-")), "last-exit.json");
+    const result = spawnSync(
+        process.execPath,
+        [
+            "-e",
+            `
+import { startWatchdog } from ${JSON.stringify(join(import.meta.dir, "watchdog.ts"))};
+const dog = startWatchdog({ pingMs: 50, limitMs: 500 });
+dog.record({ path: ${JSON.stringify(path)}, base: { pid: process.pid, version: "1.2.3", startedAt: "2026-10-11T08:00:00.000Z" } });
+setTimeout(() => { const end = Date.now() + 10_000; while (Date.now() < end) {} }, 100);
+`,
+        ],
+        { encoding: "utf8", timeout: 20_000 },
+    );
+    expect(result.signal).toBe("SIGKILL");
+    // SAFETY: the Worker writes the record as JSON with these fields; toMatchObject below checks them.
+    const record = JSON.parse(readFileSync(path, "utf8")) as { reason: string; version: string; detail: string };
+    expect(record).toMatchObject({ reason: "watchdog", version: "1.2.3" });
+    expect(record.detail).toMatch(/^event loop stalled for \d+ s; exiting/);
 });
 
 test("a loop that keeps answering is left running, and the watchdog does not keep the process alive", () => {

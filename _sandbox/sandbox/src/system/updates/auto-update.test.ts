@@ -139,6 +139,9 @@ describe("createAutoUpdater", () => {
             asks.push("withdraw");
         },
         take: async () => false,
+        announce: (intent) => {
+            asks.push(`announce ${intent.by} ${intent.action}`);
+        },
     };
 
     const make = (): AutoUpdater => {
@@ -220,7 +223,7 @@ describe("createAutoUpdater", () => {
 
         await waitFor(() => expect(relayed).toEqual([{ host: "rog", flow: { op: "update", slug: "work" } }]), { timeout: 3_000, interval: 10 });
         // The stream dying at the cutover never lets this process withdraw the ask: the next boot resumes what it cut.
-        await waitFor(() => expect(asks).toEqual(["ask"]), { interval: 5 });
+        await waitFor(() => expect(asks).toEqual(["announce daemon update", "ask"]), { interval: 5 });
         expect((await auto.state()).phase).toBe("updating");
         expect(policy.applied?.to).toBe("1.5.0");
     });
@@ -281,7 +284,7 @@ describe("createAutoUpdater", () => {
         expect(state.phase).toBe("waiting");
         // No update of ours is coming, so the next boot must not claim one, nor resume turns for it.
         expect(policy.applied).toBeUndefined();
-        expect(asks).toEqual(["ask", "withdraw"]);
+        expect(asks).toEqual(["announce daemon update", "ask", "withdraw"]);
     });
 
     test("an unconnected machine is waited for, and named", async () => {

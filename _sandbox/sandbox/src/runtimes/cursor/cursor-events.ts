@@ -2,7 +2,7 @@ import type { InteractionUpdate, NestedTaskUpdate, TodoItem as CursorTodo, ToolC
 import type { AgentEvent, TodoItem, ToolCallContent } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { displayNameOf, toolTarget } from "@intentic/agent-context/tool-calls";
-import { diffContent, toolLocations, workspacePath } from "../../agent/tools/tool-calls.js";
+import { diffContent, toolInput, toolLocations, workspacePath } from "../../agent/tools/tool-calls.js";
 import { toolCallOpened, type TurnCapture, usageTotals, type VendorEventMapper } from "../decorators/vendor-events.js";
 import { opt } from "../../opt.js";
 import { unshieldedCommand } from "./cursor-hook-script.js";
@@ -41,9 +41,15 @@ const nameOf = (call: ToolCall): string => {
     return CURSOR_TOOL_NAMES[call.type] ?? displayNameOf(call.type);
 };
 
+// An MCP call's own arguments, which Cursor nests one level down beside the server and tool names.
+const mcpArgsOf = (call: ToolCall): unknown => (call.type === "mcp" ? (call.args as { args?: unknown } | undefined)?.args : undefined);
+
 // Cursor's own argument spellings: the shared toolTarget gets file tools right by luck (path) but misses glob's
 // targetDirectory. Kept here rather than widening the shared helper, which shouldn't accumulate every vendor's names.
 const targetOf = (call: ToolCall, cwd: string): string | undefined => {
+    if (call.type === "mcp") {
+        return toolTarget(mcpArgsOf(call));
+    }
     const args = call.args as Record<string, unknown>;
     // A command the privacy shield wrapped is shown as the command the model asked for (cursor-hook-script.ts).
     if (call.type === "shell" && typeof args["command"] === "string") {
@@ -70,56 +76,161 @@ const startedContent = (call: ToolCall, cwd: string): ToolCallContent[] | undefi
 };
 
 const text = (value: unknown): string | undefined => (typeof value === "string" && value !== "" ? value : undefined);
-
-// What a finished call shows, most specific first:
-// - edit: the vendor's own unified diff
-// - shell: stdout and stderr, joined like a terminal
-// - everything else: summarized text, using the vendor's own failure message, not a generic one
-const completedContent = (call: ToolCall): ToolCallContent[] | undefined => {
-    const result = call.result as Record<string, unknown> | undefined;
-    if (result === undefined) {
-        return undefined;
-    }
-    if (result["status"] === "error") {
-        const message = text(result["message"]) ?? "The tool call failed.";
-        return [{ type: "text", text: message }];
-    }
-    // Arrives pre-rendered as a unified diff, sent as text; reconstructing before/after risks a mismatch with disk.
-    if (call.type === "edit") {
-        const diff = text(result["diffString"]);
-        return diff === undefined ? undefined : [{ type: "text", text: diff }];
-    }
-    if (call.type === "shell") {
-        const streams = [text(result["stdout"]), text(result["stderr"])].filter((part): part is string => part !== undefined);
-        return streams.length === 0 ? undefined : [{ type: "text", text: streams.join("\n") }];
-    }
-    if (call.type === "read") {
-        const content = text(result["content"]);
-        return content === undefined ? undefined : [{ type: "text", text: content }];
-    }
-    if (call.type === "grep" || call.type === "glob" || call.type === "ls" || call.type === "semSearch") {
-        const output = text(result["output"]);
-        return output === undefined ? undefined : [{ type: "text", text: output }];
-    }
-    return undefined;
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+const lines = (parts: readonly (string | undefined)[]): string | undefined => {
+    const kept = parts.filter((part): part is string => part !== undefined && part !== "");
+    return kept.length === 0 ? undefined : kept.join("\n");
 };
 
-// A call's card as it opens; `parent` is the task call whose subagent made it.
-const openedCard = (callId: string, call: ToolCall, cwd: string, parent?: string): AgentEvent =>
-    toolCallOpened({
+// A finished call's result as the SDK hands it (its tool-call-types): `{ status: "success", value }` or
+// `{ status: "error", error: { message } }`, read tolerantly since the shapes are the vendor's.
+interface CallResult {
+    readonly failed: boolean;
+    readonly value: Record<string, unknown>;
+    readonly message: string | undefined;
+}
+const resultOf = (call: ToolCall): CallResult | undefined => {
+    const result = call.result as unknown;
+    if (!isRecord(result)) {
+        return undefined;
+    }
+    const error = isRecord(result["error"]) ? result["error"] : {};
+    return { failed: result["status"] === "error", value: isRecord(result["value"]) ? result["value"] : {}, message: text(error["message"]) };
+};
+
+// Grep's matches, one line each the way ripgrep prints them, per workspace root and for the active editor alike.
+const grepText = (value: Record<string, unknown>): string | undefined => {
+    const found = (entry: unknown): (string | undefined)[] => {
+        if (!isRecord(entry) || !isRecord(entry["output"])) {
+            return [];
+        }
+        const output = entry["output"];
+        const each = (key: string): Record<string, unknown>[] => (Array.isArray(output[key]) ? output[key].filter(isRecord) : []);
+        switch (entry["type"]) {
+            case "content":
+                return each("matches").map((match) => {
+                    const at = typeof match["lineNumber"] === "number" ? `:${String(match["lineNumber"])}` : "";
+                    return `${text(match["file"]) ?? ""}${at}:${typeof match["line"] === "string" ? match["line"] : ""}`;
+                });
+            case "files":
+                return Array.isArray(output["files"]) ? output["files"].map(text) : [];
+            case "count":
+                return each("counts").map((count) => `${text(count["file"]) ?? ""}:${String(count["count"] ?? 0)}`);
+            default:
+                return [];
+        }
+    };
+    const roots = isRecord(value["workspaceResults"]) ? Object.values(value["workspaceResults"]) : [];
+    return lines([...roots, value["activeEditorResult"]].flatMap(found));
+};
+
+// An ls tree as the paths it holds, directories with a trailing slash, the way a listing reads.
+const lsText = (node: unknown): string | undefined => {
+    const walk = (dir: unknown): string[] => {
+        if (!isRecord(dir) || typeof dir["absPath"] !== "string") {
+            return [];
+        }
+        const path = dir["absPath"];
+        const files = Array.isArray(dir["childrenFiles"]) ? dir["childrenFiles"].filter(isRecord).map((file) => `${path}/${String(file["name"])}`) : [];
+        const dirs = Array.isArray(dir["childrenDirs"]) ? dir["childrenDirs"].flatMap(walk) : [];
+        return [`${path}/`, ...files, ...dirs];
+    };
+    return lines(walk(node));
+};
+
+// What a finished call shows, most specific first:
+// - a failure: the vendor's own message, not a generic one
+// - edit: the vendor's own unified diff
+// - shell: stdout and stderr, joined like a terminal
+// - read, search, listing and MCP calls: what they returned, as text
+const completedText = (call: ToolCall, result: CallResult): string | undefined => {
+    if (result.failed) {
+        return result.message ?? "The tool call failed.";
+    }
+    const value = result.value;
+    switch (call.type) {
+        // Arrives pre-rendered as a unified diff, sent as text; reconstructing before/after risks a mismatch with disk.
+        case "edit":
+            return text(value["diffString"]);
+        case "shell":
+            return lines([text(value["stdout"]), text(value["stderr"])]);
+        case "read":
+            return text(value["content"]);
+        case "grep":
+            return grepText(value);
+        case "glob":
+            return Array.isArray(value["files"]) ? lines(value["files"].map(text)) : undefined;
+        case "ls":
+            return lsText(value["directoryTreeRoot"]);
+        case "semSearch":
+            return text(value["results"]);
+        case "mcp":
+            return Array.isArray(value["content"])
+                ? lines(value["content"].filter(isRecord).map((part) => (isRecord(part["text"]) ? text(part["text"]["text"]) : undefined)))
+                : undefined;
+        default:
+            return undefined;
+    }
+};
+
+// A call's card as it opens; `parent` is the task call whose subagent made it. A call with no one-line target keeps its
+// input (an MCP call's own arguments, a task's prompt).
+const openedCard = (callId: string, call: ToolCall, cwd: string, parent?: string): AgentEvent => {
+    const target = targetOf(call, cwd);
+    return toolCallOpened({
         id: callId,
         name: nameOf(call),
-        target: targetOf(call, cwd),
+        target,
         locations: toolLocations(call.args, cwd),
         content: startedContent(call, cwd),
+        input: toolInput(call.type === "mcp" ? mcpArgsOf(call) : call.args, target),
         parentToolUseId: parent,
     });
+};
 
-// A finished call's card: failed on the vendor's own error status, with what it produced.
-const ResultStatusSchema = z.object({ status: z.string().optional().catch(undefined) }).catch({});
+// A finished call's card: failed on the vendor's own error status, with what it produced and, for a command, how it
+// exited.
 const closedCard = (callId: string, call: ToolCall): AgentEvent => {
-    const failed = ResultStatusSchema.parse(call.result).status === "error";
-    return { kind: "tool_call_update", id: callId, status: failed ? "failed" : "completed", ...opt("content", completedContent(call)) };
+    const result = resultOf(call);
+    const said = result === undefined ? undefined : completedText(call, result);
+    const exitCode = call.type === "shell" && result !== undefined && Number.isInteger(result.value["exitCode"]) ? (result.value["exitCode"] as number) : undefined;
+    return {
+        kind: "tool_call_update",
+        id: callId,
+        status: result?.failed === true ? "failed" : "completed",
+        ...opt("content", said === undefined ? undefined : [{ type: "text" as const, text: said }]),
+        ...opt("exitCode", exitCode),
+    };
+};
+
+// Which calls have a card, so each is drawn once and closed once: a completion that overtakes its own start draws the
+// call already finished (the completed call carries its arguments too), and the start arriving after it is dropped.
+interface CardLedger {
+    readonly opened: (callId: string, call: ToolCall, parent?: string) => AgentEvent[];
+    readonly closed: (callId: string, call: ToolCall, parent?: string) => AgentEvent[];
+    readonly isOpen: (callId: string) => boolean;
+}
+const cardLedger = (cwd: string): CardLedger => {
+    const open = new Set<string>();
+    const done = new Set<string>();
+    return {
+        opened: (callId, call, parent) => {
+            if (open.has(callId) || done.has(callId)) {
+                return [];
+            }
+            open.add(callId);
+            return [openedCard(callId, call, cwd, parent)];
+        },
+        closed: (callId, call, parent) => {
+            if (done.has(callId)) {
+                return [];
+            }
+            const opening = open.delete(callId) ? [] : [openedCard(callId, call, cwd, parent)];
+            done.add(callId);
+            return [...opening, closedCard(callId, call)];
+        },
+        isOpen: (callId) => open.has(callId),
+    };
 };
 
 // Cursor's own subagents (its `task` tool): the call's card carries the subagent it starts; the subagent's own steps,
@@ -159,7 +270,7 @@ export interface CursorSubagents {
     readonly settled: () => AgentEvent[];
 }
 
-export const cursorSubagents = (cwd: string): CursorSubagents => {
+export const cursorSubagents = (cards: CardLedger): CursorSubagents => {
     // Each subagent this run's task calls started and has not seen end, with its calls so far and whether it went on in
     // the background.
     const open = new Map<string, { calls: number; background: boolean }>();
@@ -170,14 +281,14 @@ export const cursorSubagents = (cwd: string): CursorSubagents => {
         if (task === undefined || update.toolCall.type === "updateTodos") {
             return [];
         }
-        if (update.type === "tool-call-completed") {
-            return [closedCard(update.callId, update.toolCall)];
+        // A call first heard of by its completion is still one of the subagent's calls.
+        const counted = update.type === "tool-call-started" || !cards.isOpen(update.callId);
+        const frames = update.type === "tool-call-completed" ? cards.closed(update.callId, update.toolCall, callId) : cards.opened(update.callId, update.toolCall, callId);
+        if (!counted || frames.length === 0) {
+            return frames;
         }
         task.calls += 1;
-        return [
-            openedCard(update.callId, update.toolCall, cwd, callId),
-            { kind: "subagent_update", id: callId, toolUses: task.calls, lastTool: nameOf(update.toolCall) },
-        ];
+        return [...frames, { kind: "subagent_update", id: callId, toolUses: task.calls, lastTool: nameOf(update.toolCall) }];
     };
 
     return {
@@ -255,7 +366,8 @@ export const createCursorEventMapper = (
     let liveShell: { id: string; output: string } | undefined;
     const totals = usageTotals();
     const capture: TurnCapture = {};
-    const subagents = cursorSubagents(cwd);
+    const cards = cardLedger(cwd);
+    const subagents = cursorSubagents(cards);
 
     const map = (update: InteractionUpdate): AgentEvent[] => {
         switch (update.type) {
@@ -278,10 +390,14 @@ export const createCursorEventMapper = (
                     const args = call.args as { todos?: readonly CursorTodo[] };
                     return args.todos === undefined ? [] : [{ kind: "todos", items: toTodos(args.todos) }];
                 }
+                const opened = cards.opened(update.callId, call);
+                if (opened.length === 0) {
+                    return [];
+                }
                 if (call.type === "shell") {
                     liveShell = { id: update.callId, output: "" };
                 }
-                return [openedCard(update.callId, call, cwd), ...subagents.started(update.callId, call)];
+                return [...opened, ...subagents.started(update.callId, call)];
             }
             case "tool-call-completed": {
                 const call = update.toolCall;
@@ -292,7 +408,7 @@ export const createCursorEventMapper = (
                 if (liveShell?.id === update.callId) {
                     liveShell = undefined;
                 }
-                return [closedCard(update.callId, call), ...subagents.completed(update.callId, call)];
+                return [...cards.closed(update.callId, call), ...subagents.completed(update.callId, call)];
             }
             // A subagent's own steps, nested on the task call that started it.
             case "tool-call-delta":

@@ -1,4 +1,4 @@
-import { digestOf, excerptOf, type FailedJobLog, type JobExcerpt } from "./failure-digest.js";
+import { digestOf, excerptOf, type FailedJobLog, type JobExcerpt, normalizeErrorLine } from "./failure-digest.js";
 
 // What a fix agent is handed for a failed run is read out of logs it never sees whole, so each shape a failure takes in
 // this repository's jobs is pinned here: the step that failed and nothing around it, each error once with every job
@@ -174,6 +174,7 @@ test("however long the logs, the digest stays within its budget and every job ke
     const loud = (name: string): JobExcerpt => ({
         name,
         steps: ["Run pnpm turbo run build test"],
+        ends: [],
         errors: Array.from({ length: 40 }, (_, index) => `${name}: src/file${index}.ts(1,1): error TS2322: ${"x".repeat(200)}`),
         tail: Array.from({ length: 400 }, (_, index) => `${name} line ${index}`).join("\n"),
     });
@@ -181,9 +182,93 @@ test("however long the logs, the digest stays within its budget and every job ke
     const digest = digestOf(excerpts, 12_000);
     expect(digest.length).toBeLessThanOrEqual(12_000);
     for (const { name } of excerpts) {
-        expect(digest).toContain(`--- ${name}: the failed steps' last lines ---\n…\n`);
+        expect(digest).toContain(`--- ${name}: the failed steps' last lines, passing tests left out ---\n…\n`);
         expect(digest).toContain(`${name} line 399`);
     }
     expect(digest).toMatch(/… and \d+ more, in the jobs' logs/);
     expect(digestOf([])).toBe("");
+});
+
+// Run 37498216889, cut down: the web package's typecheck ran out of V8 heap in one step, and the next step's test run
+// printed thousands of passing lines and the OCR suite's kill at the memory ceiling.
+const outOfHeap = [
+    "##[group]@intentic/web:typecheck",
+    "$ vue-tsc --noEmit -p tsconfig.app.json",
+    "<--- Last few GCs --->",
+    "[2211:0x6a4e000]   190112 ms: Mark-Compact 4079.3 (4101.0) -> 4079.3 (4101.0) MB, pooled: 4 MB, 704.98 / 0.00 ms  (average mu = 0.219, current mu = 0.280) allocation failure; scavenge might not succeed",
+    "FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory",
+    "----- Native stack trace -----",
+    " 1: 0x931db0  [node]",
+    "Aborted",
+    "[ELIFECYCLE] Command failed with exit code 134.",
+    "##[endgroup]",
+    "##[error]command (/__w/intentic/intentic/_editor/web) /usr/local/share/pnpm/bin/pnpm run typecheck exited (134)",
+    "",
+    " Tasks:    41 successful, 42 total",
+    "Failed:    @intentic/web#typecheck",
+];
+const ocrKilled = [
+    "@intentic/ocr:test",
+    "##[group]src/ocr.integration.test.ts:",
+    "(pass) reads an invoice [10.00ms]",
+    ...Array.from({ length: 300 }, (_, index) => `(pass) a passing test ${index} named after error TS2307: Cannot find module 'vue' [0.10ms]`),
+    "##[endgroup]",
+    "",
+    "##[group]src/empty-after-passes.test.ts:",
+    "(pass) passes [1.00ms]",
+    "##[endgroup]",
+    "",
+    "suites: bun process 4242 held 6.1 GiB, past the 6.0 GiB a test process may hold, so the run was killed. A suite is keeping memory it never releases: the file it ran is among the last ones named above. TEST_MEMORY_CEILING_MB moves the ceiling (0 turns it off).",
+    "suites: the largest bun process of this run peaked at 5.7 GiB of the 6.0 GiB ceiling",
+    "suites: the largest bun process of this run peaked at 0.1 GiB of the 6.0 GiB ceiling",
+    "[ELIFECYCLE] Test failed. See above for more details.",
+    "Failed:    @intentic/ocr#test",
+];
+
+test("how a task ended is said first: a heap that ran out, an exit code that is a signal's, a memory ceiling's kill", () => {
+    const excerpt = excerptOf({
+        ...job(
+            "verify-core / verify",
+            githubLog(...step("pnpm turbo run typecheck $FILTERS", outOfHeap, 1), ...step("pnpm turbo run build test $FILTERS", ocrKilled, 1)),
+            ["Run pnpm turbo run typecheck $FILTERS", "Run pnpm turbo run build test $FILTERS"],
+        ),
+        logPath: "/history/ci-logs/intentic/37498216889/1-verify-core-verify.log",
+    });
+    expect(excerpt.ends).toEqual([
+        "@intentic/web: FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory",
+        "@intentic/web: exit code 134 (SIGABRT: how V8 aborts when a heap runs out)",
+        "_editor/web: `pnpm run typecheck` exited 134 (SIGABRT: how V8 aborts when a heap runs out)",
+        `@intentic/ocr: ${normalizeErrorLine(ocrKilled.find((line) => line.includes("so the run was killed")) ?? "")}`,
+        "@intentic/ocr: suites: the largest bun process of this run peaked at 5.7 GiB of the 6.0 GiB ceiling",
+    ]);
+    expect(excerpt.errors).toEqual(["turbo: failed @intentic/web#typecheck", "turbo: failed @intentic/ocr#test"]);
+    // Both steps keep their own last lines, and nothing that passed is among them.
+    expect(excerpt.tail).toContain("JavaScript heap out of memory");
+    expect(excerpt.tail).toContain("so the run was killed");
+    expect(excerpt.tail).not.toContain("(pass)");
+    expect(excerpt.tail).not.toContain("empty-after-passes");
+    expect(excerpt.tail).not.toContain("\n\n\n");
+
+    const digest = digestOf([excerpt]);
+    expect(digest).toContain("\n  whole log: /history/ci-logs/intentic/37498216889/1-verify-core-verify.log");
+    expect(digest.indexOf("How failed tasks ended")).toBeLessThan(digest.indexOf("Errors, each once"));
+    expect(digest).toContain("- [verify-core / verify] @intentic/web: exit code 134 (SIGABRT: how V8 aborts when a heap runs out)");
+    expect(digest).not.toContain("Cannot find module 'vue'");
+});
+
+test("a run far from its ceiling, and an exit code that is no signal's, are no ending worth saying", () => {
+    const excerpt = excerptOf(
+        job(
+            "verify-site / verify",
+            githubLog(
+                ...step(
+                    "pnpm turbo run test",
+                    ["@intentic/web:test", "suites: the largest bun process of this run peaked at 2.0 GiB of the 6.0 GiB ceiling", "[ELIFECYCLE] Command failed with exit code 1."],
+                    1,
+                ),
+            ),
+        ),
+    );
+    expect(excerpt.ends).toEqual([]);
+    expect(digestOf([excerpt])).not.toContain("How failed tasks ended");
 });

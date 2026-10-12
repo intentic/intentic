@@ -1,6 +1,6 @@
 import "@intentic/testing/dom";
 import { renderPage, toPageState } from "@intentic/browser/page";
-import { clickRef, collectPage, describeRef, fillRef, readPageText, selectRef } from "./driver.js";
+import { clickRef, collectPage, describeRef, fillRef, readPageText, selectRef, waitForText } from "./driver.js";
 
 // Tests the page walk against real DOM via jsdom, which is enough for the judgements that matter (what's clickable,
 // what to call it, sensitivity) but cannot lay out elements or run a page's own JavaScript.
@@ -99,4 +99,18 @@ test("reading a page prefers its main content to its chrome", () => {
     const page = readPageText();
     expect(page.text).toContain("42");
     expect(page.text).not.toContain("About");
+});
+
+// executeScript sends the function's source and re-parses it in the page, where no name of this module exists. Re-parsed
+// the same way here: an imported helper inside it would throw on the first look that missed, which Chrome hands back as
+// a null result (the "Cannot read properties of null (reading 'message')" wait_for kept failing with).
+test("wait_for's injected function still works with nothing of its module around it, as it runs in the page", async () => {
+    // oxlint-disable-next-line typescript/no-implied-eval -- re-parsing the source is exactly what Chrome does with it
+    const alone = new Function(`return (${waitForText.toString()})`)() as typeof waitForText;
+    document.body.innerHTML = `<p>loading</p>`;
+    setTimeout(() => {
+        document.body.innerHTML = `<p>Saved</p>`;
+    }, 300);
+    expect(await alone("Saved", false, 5_000)).toEqual({ ok: true, message: `"Saved" appeared` });
+    expect((await alone("never", false, 250)).ok).toBe(false);
 });

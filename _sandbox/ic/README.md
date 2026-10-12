@@ -35,7 +35,12 @@ flowchart LR
   moves the data to a trash that `restore` brings back and `purge` empties early. Before any restart or recreate of a
   running sandbox ic writes the daemon's resume ask (`/history/restart-resume.json`, `{"askedAt": <ms>}` on the
   container's clock, `resume.rs`), so the agent turns it cuts run again after it; `--no-resume` on `update`, `rollback`,
-  `rebuild`, `dev`, `reshape`, `shape`, `start` and `restart` leaves them for a person (2026-10-05). `remove` takes the
+  `rebuild`, `dev`, `reshape`, `shape`, `start` and `restart` leaves them for a person (2026-10-05). Before it stops,
+  restarts or recreates a sandbox (a power verb, a swap, a sleep, a connect `--replace`, the probation going back, a
+  fix's repair, a repair that restarts the engine) ic also says why on its volume, within three seconds and never at the
+  act's expense: `/history/logs/restart-intent.json` (`intent.rs`: `at` as ISO-8601 UTC, `by` `ic` or `keeper`, `host`,
+  `side` `windows|wsl|linux|mac`, `action`, `reason` with the failed check and its finding, `checks`). `ic sandbox doctor
+  --json` puts the last one beside the container's last exit (code, OOM kill, times) as `lastDown`. `remove` takes the
   sandbox's lock, sends the platform its removal notice a few times within 20 seconds, and retires its folder-sync
   pairings through `intentic-machine sync forget <slug>` when the agent is installed; it no longer deletes
   `~/.intentic/machine`, which holds restore points and the audit log (2026-10-05). A purge keeps the trash entry until

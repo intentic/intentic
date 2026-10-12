@@ -1073,3 +1073,64 @@ describe(`the code beside a notice's words`, () => {
         expect(sandboxNoticeOf({ noticeCode: { code: `landConflict`, params: { files: `three` } } })).toBeUndefined();
     });
 });
+
+// A runtime's frames carry no clock; the live fold stamps what it folds, so a stored record can say when each call ran
+// and how long it took. A fold without a clock (a replay, these tests above) stamps nothing.
+describe("TranscriptFold with a clock", () => {
+    const ticking = (): (() => number) => {
+        let now = SENT_AT;
+        return () => (now += 1000);
+    };
+
+    it("stamps each card's start and the arrival of its result, and each assistant and notice row's opening", () => {
+        const fold = new TranscriptFold(openingOf("run"), ticking());
+        for (const event of [
+            { kind: "delta", text: "running" },
+            { kind: "tool_call", id: "t1", name: "Bash", category: "execute", status: "in_progress", target: "pnpm test" },
+            { kind: "tool_call_update", id: "t1", content: [{ type: "text", text: "partial" }] },
+            { kind: "tool_call_update", id: "t1", status: "failed", content: [{ type: "text", text: "1 failed" }], exitCode: 1 },
+            // Re-sending a final status does not move when the result arrived.
+            { kind: "tool_call_update", id: "t1", status: "failed" },
+            { kind: "compact", trigger: "auto" },
+        ] satisfies AgentEvent[]) {
+            fold.apply(event);
+        }
+        const [user, assistant, notice] = fold.rows;
+        expect(user).toEqual(userRow("run", SENT_AT, []));
+        expect(assistant?.openedAt).toBe(SENT_AT + 1000);
+        expect(assistant?.tools).toEqual([
+            {
+                id: "t1",
+                name: "Bash",
+                category: "execute",
+                status: "failed",
+                target: "pnpm test",
+                content: [{ type: "text", text: "1 failed" }],
+                startedAt: SENT_AT + 2000,
+                endedAt: SENT_AT + 3000,
+                exitCode: 1,
+            },
+        ]);
+        expect(notice).toMatchObject({ role: "notice", openedAt: SENT_AT + 4000 });
+        // Every stamp survives the schema a stored record is read back through.
+        expect(fold.rows.map((row) => TranscriptRowSchema.parse(row))).toEqual(fold.rows);
+    });
+
+    it("dates a call that arrives already finished to the moment it was seen, and a nested call like any other", () => {
+        const fold = new TranscriptFold(openingOf("look"), ticking());
+        fold.apply({ kind: "tool_call", id: "a1", name: "Agent", category: "other", status: "in_progress", input: '{"prompt":"look"}' });
+        const [patch] = fold.apply({ kind: "tool_call", id: "r1", name: "Read", category: "read", status: "completed", parentToolUseId: "a1" });
+        expect(patch).toMatchObject({ op: "tool", tool: { id: "r1", startedAt: SENT_AT + 3000, endedAt: SENT_AT + 3000 }, parent: "a1" });
+        expect(fold.rows[1]?.tools?.[0]).toMatchObject({ input: '{"prompt":"look"}', startedAt: SENT_AT + 2000 });
+    });
+
+    it("keeps a daemon-written row's own moment, and never stamps a user's row", () => {
+        const fold = new TranscriptFold(openingOf("go"), ticking());
+        fold.note({ role: "notice", text: "kept", openedAt: 7 });
+        fold.apply({ kind: "steer", text: "and this", sentAt: SENT_AT + 5 });
+        expect(fold.rows.slice(1)).toEqual([
+            { role: "notice", text: "kept", openedAt: 7 },
+            { role: "user", text: "and this", sentAt: SENT_AT + 5 },
+        ]);
+    });
+});

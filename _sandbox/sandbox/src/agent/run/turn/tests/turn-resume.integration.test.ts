@@ -14,6 +14,7 @@ import {
     type TranscriptRow,
     NATIVE_PROVIDERS,
     withResumeNote,
+    withoutResumeNote,
 } from "@intentic/sandbox-contract";
 import { waitFor, SETTLES } from "@intentic/testing/bun";
 import { sqliteAgentsStore } from "../../../../conversations/registry/agents-store.js";
@@ -147,7 +148,7 @@ test("a started turn records its settled transcript, whatever provider ran it", 
     // a window redrawing from here has to recognise its rows when the head arrives.
     expect(await record.read("tr-record")).toEqual([
         { role: "user", text: "ship it", sentAt: expect.any(Number), messageId: "m-ship", run: started.id },
-        { role: "assistant", text: "shipped", run: started.id },
+        { role: "assistant", text: "shipped", openedAt: expect.any(Number), run: started.id },
     ]);
 });
 
@@ -782,6 +783,20 @@ test("an interrupted chat turn is re-run under the restart note, on the session 
     expect(inputs[0]?.sessionId).toBe("s-partial");
 });
 
+// The re-run used to learn only that the sandbox restarted, and went looking for dev servers and /tmp files the restart
+// had taken: it is now told what the restart cost it, after the note every reader recognises.
+test("a cut turn's re-run is told what the restart cost it, and its words still come back out whole", async () => {
+    const services = await journalServices(mkdtempSync(join(tmpdir(), "restart-")));
+    await services.turnJournal.recordTurn(journalled("rs-cost", { sessionId: "s-partial" }));
+    const prompts: string[] = [];
+    const cost = "The whole container restarted, so every process in it ended. /tmp was emptied, so anything written there is gone.";
+    await resumeInterruptedTurns(drivenBy(services, fakeWake(prompts)), BOOT_AT, false, false, cost);
+
+    await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
+    expect(prompts[0]).toBe(`${RESUME_NOTES.restart} ${cost}\n\nfinish the report`);
+    expect(withoutResumeNote(prompts[0] ?? "")).toBe("finish the report");
+});
+
 // The cut turn never settled, so nothing recorded the user's message; the re-run's notice stands in for a bubble that
 // only exists if the boot writes it first.
 test("a resumed restart keeps the user's message on the record, under the re-run's notice and with no second bubble", async () => {
@@ -795,7 +810,7 @@ test("a resumed restart keeps the user's message on the record, under the re-run
     const rows = await fileTranscriptRecord(root).read("rs-kept");
     expect(rows.map(({ role, text }) => ({ role, text }))).toEqual([
         { role: "user", text: "finish the report" },
-        { role: "notice", text: "The sandbox came back, this turn picked up where it left off." },
+        { role: "notice", text: "The sandbox came back; background commands and dev servers this turn started have ended; this turn picked up where it left off." },
         { role: "assistant", text: "report done" },
     ]);
     expect(rows[0]).toMatchObject({ sentAt: 10_000, messageId: "m-report" });
@@ -925,6 +940,80 @@ test("a restart storm's boot resumes nothing, ask or setting, and leaves each cu
     expect((await fileTranscriptRecord(root).read("rs-storm")).at(-1)).toMatchObject({ role: "notice", noticeCode: { code: "restartInterrupted" } });
 });
 
+// What a boot pass said and filed: every log line it wrote, and every ledger row it appended.
+const witnessed = (base: Services): { services: Services; lines: { fields: Record<string, unknown>; message: string }[]; rows: unknown[] } => {
+    const lines: { fields: Record<string, unknown>; message: string }[] = [];
+    const rows: unknown[] = [];
+    const say = (fields: Record<string, unknown>, message: string): void => void lines.push({ fields, message });
+    const services = unstubbed<Services>("services", {
+        ...base,
+        logger: unstubbed<Services["logger"]>("logger", { info: say as never, warn: say as never, error: say as never, debug: () => {} }),
+        usage: unstubbed<Services["usage"]>("usage", {
+            turns: async () => [],
+            record: async (row) => void rows.push(row),
+        }),
+    });
+    return { services, lines, rows };
+};
+
+// A turn a restart cut never settled, so nothing wrote its ledger row, and the one line it got named its conversation
+// alone (2026-10-11): the boot pass now says which run it was, which run it became and where it runs, and files the row.
+test("a cut turn's re-run is one line naming the run it was, the run it became and where it runs, and one ledger row", async () => {
+    const { services, lines, rows } = witnessed(await journalServices(mkdtempSync(join(tmpdir(), "restart-"))));
+    await services.turnJournal.recordTurn(journalled("rs-line", { sessionId: "s-partial", run: { id: "run-cut" } }));
+    await resumeInterruptedTurns(drivenBy(services, fakeWake([])), BOOT_AT);
+
+    const fired = lines.find((line) => line.message.startsWith("restart auto-resume fired"));
+    const rerun = String(fired?.fields["run"]);
+    expect(fired?.fields).toMatchObject({
+        conversationId: "rs-line",
+        previousRun: "run-cut",
+        run: expect.any(String),
+        sessionId: "s-partial",
+        provider: "claude",
+        harness: "native",
+        why: "autoResumeOnRestart",
+        headroom: "not known spent",
+    });
+    expect(rerun).not.toBe("run-cut");
+    await waitFor(() => expect(rows).toHaveLength(1), SETTLES);
+    expect(rows[0]).toMatchObject({
+        provider: "claude",
+        outcome: "cancelled",
+        errorCode: "interrupted",
+        errorMessage: `cut by a daemon restart; re-run as run ${rerun}`,
+        conversationId: "rs-line",
+        run: "run-cut",
+        sessionId: "s-partial",
+        turns: 0,
+        costUsd: 0,
+    });
+    // The re-run's own lines: accepted under its new run as the sandbox's auto-resume, and ended.
+    await waitFor(() => expect(lines.map((line) => line.message)).toContain("turn ended"), SETTLES);
+    expect(lines.find((line) => line.message === "turn accepted")?.fields).toMatchObject({ run: rerun, startedBy: "auto-resume" });
+    expect(lines.find((line) => line.message === "turn ended")?.fields).toMatchObject({ run: rerun, outcome: "ok" });
+});
+
+test("a cut turn left on the record says why on its line, and its ledger row says so too", async () => {
+    const { services, lines, rows } = witnessed(await journalServices(mkdtempSync(join(tmpdir(), "restart-")), false));
+    await services.turnJournal.recordTurn(journalled("rs-left", { run: { id: "run-left" } }));
+    await resumeInterruptedTurns(drivenBy(services, fakeWake([])), BOOT_AT);
+
+    expect(lines.find((line) => line.message.startsWith("interrupted turn not resumed"))?.fields).toMatchObject({
+        conversationId: "rs-left",
+        previousRun: "run-left",
+        why: "autoResumeOnRestart is off",
+    });
+    await waitFor(() => expect(rows).toHaveLength(1), SETTLES);
+    expect(rows[0]).toMatchObject({
+        outcome: "cancelled",
+        errorCode: "interrupted",
+        errorMessage: "cut by a daemon restart; not resumed: autoResumeOnRestart is off",
+        run: "run-left",
+        durationMs: BOOT_AT - 10_000,
+    });
+});
+
 // The transcript record is appended per settled turn, so an interrupted turn recorded nothing; boot reads the session's
 // streamed tail before consuming its journal entry, the last moment it can.
 test("an interrupted turn is recorded from the work it did, not from its prompt alone", async () => {
@@ -999,7 +1088,7 @@ test("a re-run cut by a second restart records its notice, not its repeated prom
     await resumeInterruptedTurns(drivenBy(services, fakeWake([])), BOOT_AT);
 
     expect((await fileTranscriptRecord(root).read("rs-again")).map(({ role, text }) => ({ role, text }))).toEqual([
-        { role: "notice", text: "The sandbox came back, this turn picked up where it left off." },
+        { role: "notice", text: "The sandbox came back; background commands and dev servers this turn started have ended; this turn picked up where it left off." },
         { role: "assistant", text: "chapter three" },
         { role: "notice", text: "The sandbox restarted before this turn finished. Continue picks it up from the saved worktree." },
     ]);
@@ -1327,6 +1416,29 @@ test("a carried run's card that nothing raises again is frozen as nobody's decis
     expect(rows[2]?.question).toMatchObject({ requestId: "r-up", status: "pending" });
     expect(services.conversations.abort("pk-stale")).toBe(true);
     await settle(services, "pk-stale");
+});
+
+// The rehydrate line once read as a success at the very moment a parked run came back as a new one; it now says which.
+test("a parked run's line says whether it came back under its own run id or a new one", async () => {
+    const parked = await parkedServices(mkdtempSync(join(tmpdir(), "parked-")));
+    const { services, lines } = witnessed(parked.services);
+    const drawn: TranscriptRow[] = [{ role: "user", text: "finish the report", sentAt: 10_000, messageId: "m-report", run: "run-own" }];
+    await services.turnJournal.recordTurn(parkedEntry("pk-own", [questionRequest("r-own")], { run: { id: "run-own", rows: drawn } }));
+    await services.turnJournal.recordTurn(parkedEntry("pk-new", [questionRequest("r-new")]));
+    await resumeInterruptedTurns(drivenBy(services, fakeWake([])), BOOT_AT);
+    await cardsUp(parked.observed, "question");
+
+    const own = lines.find((line) => line.fields["conversationId"] === "pk-own" && line.message.startsWith("parked turn"));
+    expect(own?.message).toMatch(/under its own run id/);
+    expect(own?.fields).toMatchObject({ run: "run-own", previousRun: "run-own", rows: 1, requests: 1, sessionId: "s-parked" });
+    await waitFor(() => expect(lines.some((line) => line.fields["conversationId"] === "pk-new" && line.message.startsWith("parked turn"))).toBe(true), SETTLES);
+    const fresh = lines.find((line) => line.fields["conversationId"] === "pk-new" && line.message.startsWith("parked turn"));
+    expect(fresh?.message).toMatch(/under a new run id/);
+    expect(fresh?.fields["previousRun"]).toBeUndefined();
+    for (const id of ["pk-own", "pk-new"]) {
+        services.conversations.abort(id);
+        await settle(services, id);
+    }
 });
 
 // An entry an older build journalled carries no run: it opens on its prompt again, still at the hour it was sent.
@@ -2347,6 +2459,19 @@ describe("the sandbox's words to a conversation stranded behind a spent allowanc
         expect(services.conversations.queued("lim-wake-shut").items.map((item) => item.turn.prompt)).toEqual([PROMPT]);
         expect(heldTurn(services, "lim-wake-shut")).toMatchObject({ reason: "limit", sessionId: "s-work", input: { prompt: "ship the parser" } });
         clearPendingResume(services, "lim-wake-shut");
+    });
+
+    // A Send now that let nothing go used to answer nothing at all, which the window drew as a press that did nothing.
+    it("say why a press while the window is shut let nothing go", async () => {
+        const { services, turns, driven, say } = stranded("lim-wake-press");
+        await say("sandbox");
+
+        const released = await driven.turns.release({ conversationId: "lim-wake-press" });
+
+        expect(released.run).toBeUndefined();
+        expect(released.reason).toContain("limit until");
+        expect(turns).toEqual([]);
+        clearPendingResume(services, "lim-wake-press");
     });
 
     it("go by themselves once the window reopens, even where the answer to the limit is to wait", async () => {

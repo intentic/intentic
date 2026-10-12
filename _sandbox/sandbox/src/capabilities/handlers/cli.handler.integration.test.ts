@@ -20,7 +20,7 @@ import type { CredentialDelivery } from "../broker/broker-policy.js";
 import { brokerSessionsFrom } from "../broker/broker-session.js";
 import { contributedSkill, contributionRegistry } from "../contributions.js";
 import { restoreConnectorHooks } from "../cli/connector-hooks.js";
-import { type GitAccessDeps, gitAccessWired, gitHostOf, restoreGitAccess, setupGitAccess, teardownGitAccess } from "../cli/git-access.js";
+import { type GitAccessDeps, gitAccessWired, gitHostOf, restoreGitAccess, setupGitAccess, teardownGitAccess, tokenFingerprint } from "../cli/git-access.js";
 import { stripNpmAuth, upsertNpmAuth } from "../cli/npm-access.js";
 import { fileSshKeyStore, type SshKeyStore } from "../ssh-key-store.js";
 import { linkSshHosts } from "../ssh-hosts.js";
@@ -735,4 +735,66 @@ test("npm: the totp seed reaches neither the echo nor the agent env", async () =
     const brokered = await cliEnvOf(hostFor([npm]), delivered("gateway"));
     expect(brokered["NPM_TOKEN_NPM"]).toBe(GATEWAY_PLACEHOLDER);
     expect(JSON.stringify(brokered)).not.toContain("npm-tok-1");
+});
+
+// Three investigations into a failing GitHub push found nothing in the logs. Each credential change is a line naming the
+// token by a short hash, the key by its fingerprint, the remote routing by its schemes, and never the secret itself.
+test("git access logs the token, the key, the upload and the boot restore's token check, never a credential", async () => {
+    const history = mkdtempSync(join(tmpdir(), "git-cap-history-"));
+    gitHome();
+    await linkSshHosts(history);
+    const keys = keyStore();
+    const lines: { fields: Record<string, unknown>; message: string; level: string }[] = [];
+    const log: GitAccessDeps["log"] = (fields, message, level = "info") => void lines.push({ fields, message, level });
+    const deps: GitAccessDeps = { uploadKey: async () => {}, deleteKey: async () => {}, keyAuthenticates: async () => false, log };
+    const host = gitHostOf({ provider: "github", token: "gh-tok-one", git: "on" });
+    await setupGitAccess(host, directExec, keys, deps);
+    const fingerprint = execFileSync("ssh-keygen", ["-lf", hostPub(process.env["HOME"]!, "github.com")], { encoding: "utf8" }).split(" ")[1];
+    expect(lines.map((line) => line.message)).toEqual([
+        "git access: github.com https token stored",
+        "git access: github.com ssh key generated",
+        "git access: github.com ssh key registered on the account (or already there)",
+    ]);
+    expect(lines[1]?.fields).toMatchObject({ key: fingerprint, how: "generated" });
+    expect(lines[0]?.fields["token"]).toBe(tokenFingerprint("gh-tok-one"));
+    expect(JSON.stringify(lines)).not.toContain("gh-tok-one");
+
+    // The same token again is no change; a rotated one is, and the boot restore checks it with the account.
+    lines.length = 0;
+    gitHome();
+    await linkSshHosts(history);
+    const rotated = gitHostOf({ provider: "github", token: "gh-tok-two", git: "on" });
+    await restoreGitAccess(rotated, directExec, keys, { ...deps, tokenStatus: async () => ({ status: 401 }) });
+    expect(lines.map((line) => line.message)).toEqual([
+        "git access: github.com https token stored",
+        "git access: github.com restored at boot (ssh alias restored), but the account API refused the token (401)",
+    ]);
+    expect(lines[1]).toMatchObject({ level: "warn", fields: { path: "ssh alias restored", status: 401, token: tokenFingerprint("gh-tok-two") } });
+    lines.length = 0;
+    await restoreGitAccess(rotated, directExec, keys, deps);
+    await setupGitAccess(host, directExec, keys, deps);
+    expect(lines.map((line) => line.message)).toEqual([
+        "git access: github.com restored at boot (ssh alias restored)",
+        "git access: github.com https token replaced",
+        "git access: github.com ssh key registered on the account (or already there)",
+    ]);
+    expect(lines[1]?.fields).toMatchObject({ token: tokenFingerprint("gh-tok-one"), previous: tokenFingerprint("gh-tok-two") });
+});
+
+test("git access logs the remote routing moving to https when the key is refused", async () => {
+    gitHome();
+    const lines: string[] = [];
+    const deps: GitAccessDeps = {
+        uploadKey: async () => {
+            throw new Error("GitHub SSH key upload failed (403): Resource not accessible by personal access token");
+        },
+        deleteKey: async () => {},
+        keyAuthenticates: async () => false,
+        log: (_fields, message) => void lines.push(message),
+    };
+    await setupGitAccess(gitHostOf({ provider: "github", token: "gh-tok", git: "on" }), directExec, keyStore(), deps);
+    expect(lines.slice(2)).toEqual([
+        "git access: github.com refused the ssh key and ssh does not let it in; remotes go over https",
+        "git access: github.com ssh-form remotes now routed over https",
+    ]);
 });

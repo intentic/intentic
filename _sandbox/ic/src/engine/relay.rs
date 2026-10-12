@@ -79,19 +79,14 @@ pub fn leaf(distro: &str) -> String {
     engine_pipe::leaf(distro, &user)
 }
 
+/// The relay's log, beside every other log of ic's (~/.intentic/logs) rather than in the relay folder, which the
+/// engine's removal deletes: a relay that misbehaved during a move is read after the engine has gone.
+fn log_path() -> PathBuf {
+    crate::logfile::log_dir().join("pipe-relay.log")
+}
+
 fn log(line: &str) {
-    let Some(dir) = relay_dir() else { return };
-    let path = dir.join("relay.log");
-    if std::fs::metadata(&path).is_ok_and(|meta| meta.len() > 1 << 20) {
-        let _ = std::fs::rename(&path, dir.join("relay.log.1"));
-    }
-    if let Ok(mut file) = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&path)
-    {
-        let _ = writeln!(file, "{} {line}", crate::sandbox::now_ms());
-    }
+    crate::logfile::append_rotating(&log_path(), line, 1 << 20);
 }
 
 /* ------------------------------------------------------------------------------------------------------------------ */
@@ -121,7 +116,7 @@ pub fn ensure(record: &mut EngineRecord) -> Result<(), String> {
         if !engine_pipe::present(&path) {
             return Err(format!(
                 "the relay did not open {path} (see {})",
-                dir.join("relay.log").display()
+                log_path().display()
             ));
         }
     }

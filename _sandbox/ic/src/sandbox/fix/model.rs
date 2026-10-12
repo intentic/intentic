@@ -164,6 +164,18 @@ impl Repair {
         }
     }
 
+    /// Whether this repair takes the container engine down and up again, and every sandbox on it with it: what each
+    /// of them is told before it happens (intent.rs).
+    pub fn restarts_engine(&self) -> bool {
+        matches!(
+            self,
+            Repair::RestartDesktop
+                | Repair::ShutdownWsl
+                | Repair::ReapplyIntegration
+                | Repair::RestartIntenticEngine
+        )
+    }
+
     /// Whether this repair is the machine's rather than one sandbox's.
     pub fn host(&self) -> bool {
         !matches!(

@@ -1,7 +1,7 @@
 import { tmpdir } from "node:os";
 import { type Persona, PersonaPowersSchema } from "@intentic/sandbox-contract";
 import { turnPersona } from "../personas/personas.js";
-import { jsExecutionPlanOf, nodeArgs } from "./js-runtime.js";
+import { jsExecutionPlanOf, nodeArgs, RECORD_READ_ROOTS } from "./js-runtime.js";
 
 /* The PURE half of the backend: the plan a card yields (every powers combination is a table row) and the argv a plan means. */
 
@@ -15,12 +15,12 @@ const personaWith = (powers: Record<string, unknown>, extra: Partial<Persona> = 
 const TREE = { root: "/work", cwd: "/work/app" };
 const ENV = { GITHUB_TOKEN_GITHUB: "t" };
 
-test("a full-powers card gets the whole turn tree, writable, spawn allowed, and tmp readable", () => {
+test("a full-powers card gets the whole turn tree, writable, spawn allowed, and tmp and the daemon's records readable", () => {
     const plan = jsExecutionPlanOf(personaWith({}), TREE, ENV);
     expect(plan).toEqual({
         cwd: "/work/app",
         env: ENV,
-        readRoots: ["/work", tmpdir()],
+        readRoots: ["/work", tmpdir(), ...RECORD_READ_ROOTS],
         writeRoots: ["/work"],
         allowSpawn: true,
     });
@@ -35,7 +35,7 @@ test("the code shelf off means no plan at all: absence, not refusal", () => {
 
 test("the files answer scopes the filesystem: read loses writes, none loses the filesystem entirely", () => {
     const read = jsExecutionPlanOf(personaWith({ files: "read" }), TREE, ENV);
-    expect(read?.readRoots).toEqual(["/work", tmpdir()]);
+    expect(read?.readRoots).toEqual(["/work", tmpdir(), ...RECORD_READ_ROOTS]);
     expect(read?.writeRoots).toEqual([]);
     const none = jsExecutionPlanOf(personaWith({ files: "none" }), TREE, ENV);
     expect(none?.readRoots).toEqual([]);
@@ -44,6 +44,16 @@ test("the files answer scopes the filesystem: read loses writes, none loses the 
 
 test("no shell means no spawning: code-without-bash cannot become bash", () => {
     expect(jsExecutionPlanOf(personaWith({ shell: false }), TREE, ENV)?.allowSpawn).toBe(false);
+});
+
+// The records are readable by a shell already; a card without one, or fenced to folders, gains no reach through code.
+test("the daemon's records are read-only, and only for an unfenced card that has a shell", () => {
+    expect(RECORD_READ_ROOTS.some((root) => root.endsWith("/agent-auth") || root.endsWith("/translator"))).toBe(false);
+    const full = jsExecutionPlanOf(personaWith({}), TREE, ENV);
+    expect(full?.writeRoots.some((root) => RECORD_READ_ROOTS.includes(root))).toBe(false);
+    expect(jsExecutionPlanOf(personaWith({ shell: false }), TREE, ENV)?.readRoots).toEqual(["/work", tmpdir()]);
+    const fenced = jsExecutionPlanOf(personaWith({}, { workspace: { folders: ["app"] } }), TREE, ENV);
+    expect(fenced?.readRoots).toEqual(["/work/app", tmpdir()]);
 });
 
 test("the card's folders become the roots, resolved against the turn root, escapers dropped", () => {

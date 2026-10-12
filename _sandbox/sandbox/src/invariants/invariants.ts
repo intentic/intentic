@@ -44,8 +44,9 @@ export interface InvariantViolation {
     readonly moment: InvariantMoment;
     readonly message: string;
     readonly at: number;
-    // True when the check itself threw or timed out, not a reported violation; not evidence about the subject.
-    readonly broken: boolean;
+    // True when the check itself threw or timed out rather than calling `fail`: nothing was learned about the subject.
+    // Named for what it says, since a field called `broken` read `false` on every line that reported a broken promise.
+    readonly checkFailed: boolean;
 }
 
 export interface InvariantRegistry {
@@ -111,7 +112,7 @@ export const createInvariantRegistry = (logger: Logger): InvariantRegistry => {
 
     const record = (violation: InvariantViolation): void => {
         const key = `${violation.owner}\u0000${violation.check}`;
-        const signature = `${violation.broken}\u0000${violation.message}`;
+        const signature = `${violation.checkFailed}\u0000${violation.message}`;
         if (standing.get(key) === signature) {
             return;
         }
@@ -120,9 +121,12 @@ export const createInvariantRegistry = (logger: Logger): InvariantRegistry => {
         if (seen.length > MAX_VIOLATIONS) {
             seen.splice(0, seen.length - MAX_VIOLATIONS);
         }
-        logger.error(
-            { owner: violation.owner, check: violation.check, moment: violation.moment, broken: violation.broken },
-            violation.broken ? `invariant check failed to run: ${violation.message}` : `invariant broken: ${violation.message}`,
+        // Warn, not error: a violation is drift the daemon goes on working around (each owner's own handling), and a
+        // check that could not run says nothing about its subject. Written once per change of what it reports, and
+        // once per boot for one still standing, since each daemon states what it found.
+        logger.warn(
+            { owner: violation.owner, check: violation.check, moment: violation.moment, checkFailed: violation.checkFailed },
+            violation.checkFailed ? `invariant check failed to run: ${violation.message}` : `invariant violated: ${violation.message}`,
         );
     };
 
@@ -140,14 +144,13 @@ export const createInvariantRegistry = (logger: Logger): InvariantRegistry => {
             await deadline(check.run({ moment, fail }), CHECK_TIMEOUT_MS);
             return undefined;
         } catch (error) {
-            const broken = !(error instanceof InvariantError);
             return {
                 owner,
                 check: check.name,
                 moment,
                 message: errorMessage(error),
                 at: Date.now(),
-                broken,
+                checkFailed: !(error instanceof InvariantError),
             };
         }
     };

@@ -3,7 +3,7 @@ import { pathExists } from "@intentic/base/fs";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { headSha } from "../../git/changes/changes.js";
 import { rebaseOnto, rebaseSince } from "../../git/changes/changes-commits.js";
-import { AGENT_GIT_AUTHOR } from "../../git-identity.js";
+import { AGENT_GIT_AUTHOR, withConversationTrailer } from "../../git-identity.js";
 import { presenceOf } from "./agent-changes.js";
 import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
 import type { Upstream } from "./land-target.js";
@@ -139,7 +139,7 @@ const syncOne = async (
     const commits = Number((await git(worktree, ["rev-list", "--count", `${tip}..${head}`])).stdout.trim());
     const behind = { repo, onto: head, commits, moved, overlap };
     // Commits the dirty remainder first; `git rebase` refuses to start on a dirty tree.
-    await commitWorktreeRemainder(repo, worktree, `Agent: ${title ?? id}`, worktrees.mainDir("root"), git);
+    await commitWorktreeRemainder(repo, worktree, withConversationTrailer(`Agent: ${title ?? id}`, id), worktrees.mainDir("root"), git);
     if ((await rebaseOnto(worktree, head, AGENT_GIT_AUTHOR, git)).ok) {
         return behind;
     }
@@ -169,7 +169,8 @@ const syncOntoParent = async (
     if (!(await worktrees.attached(id, repo))) {
         return undefined; // Standing on a branch of its own: see `standsElsewhere`.
     }
-    await commitWorktreeRemainder(repo, upstream, `Agent: before ${title ?? id} caught up`, worktrees.mainDir("root"), git);
+    // The remainder is the parent's own work on the parent's branch, so the trailer names the parent, not the child.
+    await commitWorktreeRemainder(repo, upstream, withConversationTrailer(`Agent: before ${title ?? id} caught up`, parent), worktrees.mainDir("root"), git);
     const head = await headSha(upstream, git);
     if (head === undefined) {
         return undefined;
@@ -183,7 +184,7 @@ const syncOntoParent = async (
     const commits = Number((await git(worktree, ["rev-list", "--count", `${tip}..${head}`])).stdout.trim());
     const behind = { repo, onto: head, commits, moved, overlap: moved.filter((path) => mine.has(path)) };
     const since = landedTip !== undefined && (await contains(worktree, "HEAD", landedTip, git)) ? landedTip : base;
-    await commitWorktreeRemainder(repo, worktree, `Agent: ${title ?? id}`, worktrees.mainDir("root"), git);
+    await commitWorktreeRemainder(repo, worktree, withConversationTrailer(`Agent: ${title ?? id}`, id), worktrees.mainDir("root"), git);
     return (await rebaseSince(worktree, head, since, AGENT_GIT_AUTHOR, git)).ok ? behind : { ...behind, blocked: true };
 };
 

@@ -17,6 +17,7 @@ import { z } from "zod";
 import { audit } from "./audit.js";
 import { assertScope, ScopeError } from "./policy.js";
 import { describeText } from "./tools/describe.js";
+import { DEFAULT_LOG_LINES as DEFAULT_DEVICE_LOG_LINES, deviceLogs, MAX_LOG_LINES as MAX_DEVICE_LOG_LINES } from "./tools/logs.js";
 import { editTextFile, listDirectory, readTextFile, trashFile, writeTextFile } from "./tools/files.js";
 import { focusWindow, listWindows, openTarget, readClipboard, writeClipboard } from "./tools/apps.js";
 import { clickElement, fillElement, listTabs, openPage, pressKey, readPage, selectTab, snapshotPage } from "./tools/browser.js";
@@ -683,6 +684,25 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
                 .describe(`How many trailing lines to answer with. Default ${DEFAULT_LOG_LINES}, maximum ${MAX_LOG_LINES}.`),
         }),
         run: async ({ slug, lines }, scopes) => textResult(await sandboxLogs(slug, lines, scopes)),
+    }),
+    tool({
+        name: "device_logs",
+        description:
+            "This device's own records, read by name: with no name, the list of them with size and time (this agent's machine.log and machine.log.1, machine-update.log, audit.jsonl of every tool call, and ic's per-run logs under ~/.intentic/logs, newest first); with a name, its tail. The place to look for why the agent restarted (the watchdog, an update, a sleep), what the keeper did to a sandbox, or why an ic connect, recreate or update failed, instead of guessing paths with run_command or read_file. Read-only. Requires 'Run commands' or 'Manage sandboxes on this device'.",
+        effect: "read",
+        input: z.object({
+            name: required.optional().describe('A name from the list, e.g. "machine.log", "audit.jsonl" or "ic/recreate-dev-20261011-0912.log". Omit for the list.'),
+            lines: z
+                .int()
+                .positive()
+                .max(MAX_DEVICE_LOG_LINES)
+                .default(DEFAULT_DEVICE_LOG_LINES)
+                .describe(`How many lines from the end. Default ${DEFAULT_DEVICE_LOG_LINES}, maximum ${MAX_DEVICE_LOG_LINES}; only the file's last MB is read.`),
+            grep: required.optional().describe("Only lines matching this regular expression (case-insensitive)."),
+            tool: required.optional().describe("audit.jsonl only: the calls of this one tool."),
+            failedOnly: z.boolean().optional().describe("audit.jsonl only: the calls that failed or were refused."),
+        }),
+        run: async ({ name, lines, grep, tool: only, failedOnly }, scopes) => textResult(await deviceLogs(name, { lines, grep, tool: only, failedOnly }, scopes)),
     }),
     tool({
         name: "diagnose_sandbox",

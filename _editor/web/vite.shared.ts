@@ -15,6 +15,20 @@ import { sourceAliases } from "./source-aliases.ts";
 // vite.config.ts, so the demo importing it doesn't also pull in the dev-server's certificate reads.
 // One fresh value per build; used for cache invalidation and build.json's staleness check, computed once only.
 export const BUILD_ID = String(Date.now());
+// The commit the build was made from, so a client report names the code the page ran and not only when it was built.
+// Null where git cannot say (a build from an exported tree, no git on PATH); the report then goes without it.
+export const BUILD_COMMIT = ((): string | null => {
+    try {
+        const sha = execFileSync(`git`, [`rev-parse`, `--short`, `HEAD`], {
+            cwd: import.meta.dirname,
+            encoding: `utf8`,
+            stdio: [`ignore`, `pipe`, `ignore`],
+        }).trim();
+        return sha === `` ? null : sha;
+    } catch {
+        return null;
+    }
+})();
 
 const DEV_STYLES = `virtual:intentic-dev-styles`;
 const RESOLVED_DEV_STYLES = `\0${DEV_STYLES}`;
@@ -133,7 +147,7 @@ export const shared = {
     // ES workers, since the code highlighter's worker (ui/src/markdown/highlightWorker.ts) loads each grammar as its
     // own chunk on first use, which an IIFE worker cannot split.
     worker: { format: `es` as const },
-    define: { "import.meta.env.BUILD_ID": JSON.stringify(BUILD_ID) },
+    define: { "import.meta.env.BUILD_ID": JSON.stringify(BUILD_ID), "import.meta.env.BUILD_COMMIT": JSON.stringify(BUILD_COMMIT) },
     resolve: {
         // Source-first workspace aliases shared with bun.setup.ts; see source-aliases.ts.
         alias: sourceAliases(),

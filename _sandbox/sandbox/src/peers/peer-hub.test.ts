@@ -1,5 +1,5 @@
 import { waitFor, advanceTimersByTimeAsync } from "@intentic/testing/bun";
-import { createPeerHub, type PeerClient } from "./peer-hub.js";
+import { createPeerHub, peerFailureFields, type PeerClient } from "./peer-hub.js";
 
 /* What is left of a hub once oRPC owns the wire: the roster, liveness, and what to do when a peer goes. */
 
@@ -321,4 +321,46 @@ test("a peer that never comes leaves its waiter told no at the deadline", async 
     } finally {
         jest.useRealTimers();
     }
+});
+
+// A peer that never answers for its tools redials after every dropped heartbeat; each connect used to write a timeout,
+// stack and DOMException code table included.
+test("a peer that times out listing its tools on every connect is logged once, in words", async () => {
+    const warned: Record<string, unknown>[] = [];
+    const live = createPeerHub<Client, { version: string }, Facts, Scopes>(spec, { warn: (data) => void warned.push(data as Record<string, unknown>) });
+    for (let connect = 0; connect < 3; connect += 1) {
+        const peer = fakePeer();
+        peer.client.mcp.mockImplementation(async () => {
+            throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
+        });
+        live.attach("laptop", peer.connection);
+    }
+    await waitFor(() => expect(warned).toHaveLength(1));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(warned).toEqual([{ reason: "no answer within 10000ms", id: "laptop" }]);
+});
+
+test("only a failure that is not a deadline keeps its stack", () => {
+    expect(peerFailureFields(new DOMException("aborted", "TimeoutError"), 30_000)).toEqual({ reason: "no answer within 30000ms" });
+    const boom = new Error("Cannot send message, WebSocket is not open.");
+    expect(peerFailureFields(boom, 30_000)).toEqual({ err: boom });
+});
+
+test("connects and drops are logged with why and for how long, and a changed previous exit once", () => {
+    const said: { message: string; data: Record<string, unknown> }[] = [];
+    const record = (data: object, message: string): void => void said.push({ message, data: data as Record<string, unknown> });
+    const live = createPeerHub<Client, { version: string }, Facts & { previousExit?: string }, Scopes>(spec, { warn: record, info: record });
+    const peer = fakePeer();
+    const detach = live.attach("laptop", peer.connection);
+    live.observe("laptop", { os: "Ubuntu 24.04", previousExit: "the watchdog stopped it" });
+    live.observe("laptop", { os: "Ubuntu 24.04", previousExit: "the watchdog stopped it" });
+    detach();
+    expect(said.map((line) => line.message)).toEqual([
+        "hosts: peer connected",
+        "hosts: peer's agent restarted since it was last here",
+        "hosts: peer disconnected (connection closed)",
+    ]);
+    expect(said[2]?.data).toMatchObject({ id: "laptop", reason: "connection closed", upForMs: expect.any(Number) });
+    live.attach("laptop", fakePeer().connection);
+    expect(said[3]?.data).toMatchObject({ id: "laptop", awayForMs: expect.any(Number) });
 });

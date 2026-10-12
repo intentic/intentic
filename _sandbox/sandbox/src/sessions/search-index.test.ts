@@ -1,6 +1,7 @@
 import { IN_MEMORY } from "@intentic/base/sqlite";
+import type { TranscriptRow } from "@intentic/sandbox-contract";
 import { openSearchIndex } from "./search-index.js";
-import type { SpokenLine } from "./transcript-search.js";
+import { type SpokenLine, spokenLinesOf } from "./transcript-search.js";
 
 const said = (...lines: [string, "user" | "agent"][]): SpokenLine[] => lines.map(([text, speaker]) => ({ text, speaker }));
 
@@ -174,4 +175,59 @@ test("a search sent during a long put answers before the put finishes", async ()
     expect(order).toEqual(["search", "put"]);
     expect((await index.search("bulk line 4999", "conversation", false)).has("c1")).toBe(true);
     expect(index.metrics()).toEqual({ conversations: 2, sessions: 0, lines: 5_001 });
+});
+
+// A record yields what the conversation did beside what it said; only a search that asks for deeds sees them, so the
+// board's filter and the history box still match speech alone.
+test("deeds are found only when asked for, each saying what kind of line it was", async () => {
+    const index = fresh();
+    const rows: TranscriptRow[] = [
+        { role: "user", text: "why does the daemon die", run: "run-1" },
+        {
+            role: "assistant",
+            text: "Looking at the socket.",
+            run: "run-1",
+            tools: [
+                { id: "t1", name: "Bash", category: "execute", status: "completed", target: "curl --unix-socket /run/intentic/front.sock http://x/" },
+                { id: "t2", name: "mcp__omen__manage_sandbox", category: "other", status: "completed" },
+                {
+                    id: "t3",
+                    name: "Agent",
+                    category: "other",
+                    status: "completed",
+                    subagent: { kind: "subagent", status: "completed", description: "Map the land queue" },
+                    children: [{ id: "t4", name: "Read", category: "read", status: "completed", target: "/work/queue-run.ts" }],
+                },
+            ],
+            question: {
+                requestId: "q1",
+                status: "answered",
+                questions: [{ question: "Restart the daemon now?", header: "Restart", multiSelect: false, options: [] }],
+                answers: { "Restart the daemon now?": ["Later"] },
+            },
+        },
+        { role: "notice", text: "The sandbox came back, this turn picked up where it left off.", run: "run-1" },
+    ];
+    await index.put("c1", "conversation", "1", spokenLinesOf(rows));
+
+    expect((await index.search("front.sock", "conversation", false)).size).toBe(0);
+    const found = async (needle: string) => (await index.search(needle, "conversation", false, true)).get("c1");
+    expect(await found("front.sock")).toEqual({ text: "Bash curl --unix-socket /run/intentic/front.sock http://x/", speaker: "agent", via: "ran" });
+    expect(await found("manage_sandbox")).toMatchObject({ via: "ran" });
+    expect(await found("land queue")).toMatchObject({ text: "Agent Map the land queue", via: "ran" });
+    expect(await found("queue-run.ts")).toMatchObject({ via: "ran" });
+    expect(await found("restart the daemon")).toEqual({ text: "Restart the daemon now? → Later", speaker: "agent", via: "asked" });
+    expect(await found("picked up where")).toMatchObject({ via: "notice" });
+    expect(await found("run-1")).toEqual({ text: "run run-1", speaker: "agent", via: "run" });
+    // What was said still wins over what was done when both match.
+    expect(await found("socket")).toEqual({ text: "Looking at the socket.", speaker: "agent" });
+});
+
+// A command is found by its opening; a heredoc kept whole would make deeds several times the size of everything said.
+test("a deed's line is cut to its opening and kept once however often it was done", () => {
+    const tool = { id: "t", name: "Bash", category: "execute" as const, status: "completed" as const, target: `cat <<'EOF'\n${"x".repeat(400)}\nEOF` };
+    const lines = spokenLinesOf([{ role: "assistant", text: "", tools: [tool, { ...tool, id: "t2" }] }]);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]?.text.length).toBe(160);
+    expect(lines[0]?.text.startsWith("Bash cat <<'EOF' xxx")).toBe(true);
 });

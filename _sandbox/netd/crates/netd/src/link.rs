@@ -244,13 +244,16 @@ impl Link {
     // A connection takes the link only once its first frame decodes: replacing the writer at accept would hang up on
     // the live Node for whatever dialed the socket, and Node stops the box when its link closes unasked.
     async fn connection(&'static self, connection: u64, stream: UnixStream) {
+        // Who dialed, for every line about this connection: a stray `curl --unix-socket` once ended the box with no
+        // word of which process it was.
+        let peer_pid = stream.peer_cred().ok().and_then(|cred| cred.pid());
         let (reader, mut writer) = stream.into_split();
         let mut reader = BufReader::new(reader);
         let first = match first_message(&mut reader).await {
             Ok(Some(first)) => first,
             Ok(None) => return,
             Err(stray) => {
-                tracing::warn!(why = %stray.why, "refused a connection to the control socket that is not the daemon's; the daemon's link stands");
+                tracing::warn!(why = %stray.why, connection, peer_pid, "refused a connection to the control socket that is not the daemon's; the daemon's link stands");
                 if stray.spoke_http {
                     let _ = writer.write_all(not_http_response().as_bytes()).await;
                     let _ = writer.shutdown().await;
@@ -286,7 +289,7 @@ impl Link {
         });
         let (stop, mut stopped) = watch::channel(false);
         let Some(held_back) = self
-            .take_link(connection, first, &sender, &stop, &mut frames)
+            .take_link(connection, peer_pid, first, &sender, &stop, &mut frames)
             .await
         else {
             reading.abort();
@@ -296,12 +299,15 @@ impl Link {
         for message in held_back {
             self.receive(connection, message);
         }
+        // Why this connection's link ended, said once below when it still held the link.
+        let mut why = "the daemon closed its end";
         loop {
             let bytes = tokio::select! {
                 frame = frames.recv() => match frame {
                     Some(Ok(bytes)) => bytes,
                     Some(Err(error)) => {
-                        tracing::warn!(%error, "the control socket closed on an unreadable frame");
+                        tracing::warn!(%error, connection, peer_pid, "the control socket closed on an unreadable frame");
+                        why = "an unreadable frame";
                         break;
                     }
                     None => break,
@@ -316,7 +322,8 @@ impl Link {
                 Ok(message) => self.receive(connection, message),
                 Err(error) => {
                     let Some(id) = unreadable_reply(&bytes) else {
-                        tracing::warn!(%error, "the control socket closed on a frame from the daemon that does not decode");
+                        tracing::warn!(%error, connection, peer_pid, "the control socket closed on a frame from the daemon that does not decode");
+                        why = "a frame from the daemon that does not decode";
                         break;
                     };
                     tracing::debug!(%error, id, "the daemon's reply is unreadable; its question counts as refused");
@@ -325,7 +332,9 @@ impl Link {
             }
         }
         reading.abort();
-        self.lost(connection);
+        if self.lost(connection) {
+            tracing::info!(connection, peer_pid, why, "the daemon's control link ended");
+        }
     }
 
     // Takes the link for `connection`, answering what it sent before taking it, in order; none when it is refused. Free
@@ -335,6 +344,7 @@ impl Link {
     async fn take_link(
         &self,
         connection: u64,
+        peer_pid: Option<i32>,
         first: FromNode,
         writer: &mpsc::UnboundedSender<Vec<u8>>,
         stop: &watch::Sender<bool>,
@@ -350,12 +360,13 @@ impl Link {
             let live = *holding.borrow_and_update();
             match decide(live, named) {
                 Decision::Take => {
-                    self.take(connection, writer.clone(), stop.clone());
+                    self.take(connection, peer_pid, writer.clone(), stop.clone());
                     return Some(held_back);
                 }
                 Decision::Refuse(live) => {
                     tracing::warn!(
                         connection,
+                        peer_pid,
                         live = ?live,
                         named = ?named.flatten(),
                         "refused a second daemon on the control socket: the daemon holding it said hello, and this one names no newer start; the live link stands"
@@ -367,6 +378,7 @@ impl Link {
             if held_back.len() == 1 {
                 tracing::info!(
                     connection,
+                    peer_pid,
                     "a new connection to the control socket waits for its hello: a daemon that said hello holds the link"
                 );
             }
@@ -392,6 +404,7 @@ impl Link {
     fn take(
         &self,
         connection: u64,
+        peer_pid: Option<i32>,
         writer: mpsc::UnboundedSender<Vec<u8>>,
         stop: watch::Sender<bool>,
     ) {
@@ -406,6 +419,14 @@ impl Link {
                 stop,
             });
         if let Some(previous) = previous {
+            // The daemon on the old connection sees its link close unasked and stops, so say who replaced it.
+            tracing::info!(
+                connection,
+                peer_pid,
+                replaced = previous.connection,
+                said = ?previous.said,
+                "a new connection took the control socket's link; the previous connection is hung up"
+            );
             previous.stop.send_replace(true);
         }
         self.state.send_replace(None);
@@ -422,7 +443,8 @@ impl Link {
     }
 
     // Only the current connection's end means Node is gone; an older one closing after its replacement means nothing.
-    fn lost(&self, connection: u64) {
+    // True when it was the current one.
+    fn lost(&self, connection: u64) -> bool {
         let mut current = self.current.lock().expect("the link is never poisoned");
         if current
             .as_ref()
@@ -433,7 +455,9 @@ impl Link {
             self.state.send_replace(None);
             self.holding.send_replace(None);
             self.fail_pending("the daemon went away before answering");
+            return true;
         }
+        false
     }
 
     fn fail_pending(&self, why: &'static str) {

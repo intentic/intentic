@@ -57,7 +57,7 @@ test("errors defaults to warn and worse, newest first", async () => {
     });
 
     const text = await call(deps, "errors", {});
-    expect(text).toContain("2 lines");
+    expect(text).toContain("2 warn-or-worse lines in daemon.log");
     expect(text).toContain("newest first");
     expect(text.indexOf("turn failed")).toBeLessThan(text.indexOf("heartbeat"));
     expect(text).not.toContain("probe finished");
@@ -75,9 +75,69 @@ test("errors narrows by window and by substring", async () => {
     expect(await call(deps, "errors", { contains: "wise-condor" })).toContain("recent");
 });
 
-test("an empty window says so plainly, so nobody reads it as a crash", async () => {
+// "No lines in that window." alone was read as "nothing happened" when the window had rotated away.
+test("an empty answer says what it searched and how far back the file reaches", async () => {
     const deps = await setup({ "daemon.log": [JSON.stringify({ time: at(500), level: "error", message: "old" })] });
-    expect(await call(deps, "errors", { sinceMinutes: 5 })).toMatch(/^No lines/);
+    const text = await call(deps, "errors", { sinceMinutes: 5 });
+    expect(text).toMatch(/^No warn-or-worse lines in daemon\.log between /);
+    expect(text).toContain(`${at(5)} and ${at(0)}`);
+    expect(text).toContain("back past the window's start");
+
+    const before = await call(deps, "errors", { sinceMinutes: 900 });
+    expect(before).toContain(`holds lines from ${at(500)}`);
+    expect(before).toContain("rotated away");
+});
+
+// A DOMException serializes Node's whole code table, and a stack runs to dozens of lines; neither says what went wrong.
+test("errors leave out stacks and error internals unless asked, and keep what the error says", async () => {
+    const err = {
+        type: "DOMException",
+        message: "The operation was aborted due to timeout",
+        stack: "TimeoutError: The operation was aborted\n    at new DOMException (node:internal)",
+        name: "TimeoutError",
+        code: 23,
+        INDEX_SIZE_ERR: 1,
+        DATA_CLONE_ERR: 25,
+    };
+    const deps = await setup({ "daemon.log": [JSON.stringify({ time: at(1), level: "warn", err, message: "hosts: heartbeat failed" })] });
+
+    const text = await call(deps, "errors", {});
+    expect(text).toContain("The operation was aborted due to timeout");
+    expect(text).toContain(`"code":23`);
+    expect(text).not.toContain("INDEX_SIZE_ERR");
+    expect(text).not.toContain("node:internal");
+    expect(await call(deps, "errors", { stacks: true })).toContain("node:internal");
+});
+
+test("more matches than the limit are grouped by message, so one loop cannot hide the line that matters", async () => {
+    const deps = await setup({
+        "daemon.log": [
+            ...Array.from({ length: 30 }, (_, index) => JSON.stringify({ time: at(40 - index), level: "warn", message: `hosts: refused a socket from peer ${index}` })),
+            JSON.stringify({ time: at(5), level: "error", message: "turn failed", code: "rate_limit" }),
+        ],
+    });
+
+    const text = await call(deps, "errors", { limit: 5 });
+    expect(text).toContain("31 warn-or-worse lines in daemon.log");
+    expect(text).toContain("as 2 kinds of message");
+    expect(text).toContain(`30× first ${at(40)} last ${at(11)}`);
+    expect(text).toContain("rate_limit");
+    // Asked for every line, it gives them, and still names what repeats.
+    const raw = await call(deps, "errors", { limit: 5, group: false });
+    expect(raw).toContain("newest 5 below");
+    expect(raw).toContain('Most repeated: 30× "hosts: refused a socket from peer <n>"');
+});
+
+test("an answer is capped in size and says how much it left out", async () => {
+    const deps = await setup({
+        "daemon.log": Array.from({ length: 200 }, (_, index) =>
+            JSON.stringify({ time: at(1), level: "error", message: `distinct ${"abcdefghij"[index % 10]} ${index}`, detail: "d".repeat(399) }),
+        ),
+    });
+
+    const text = await call(deps, "errors", { limit: 200, group: false });
+    expect(text.length).toBeLessThanOrEqual(31_000);
+    expect(text).toMatch(/… \d+ more not shown: answers are capped at 30 KB/);
 });
 
 test("slow reads its own file and can be narrowed to one operation", async () => {
@@ -91,6 +151,24 @@ test("slow reads its own file and can be narrowed to one operation", async () =>
     const all = await call(deps, "slow", {});
     expect(all).toContain("19.2");
     expect(await call(deps, "slow", { op: "git." })).not.toContain("http.request");
+});
+
+test("many slow spans come back as one row per operation with percentiles and the worst of each", async () => {
+    const deps = await setup({
+        "perf.jsonl": [
+            ...Array.from({ length: 50 }, (_, index) =>
+                JSON.stringify({ time: at(30 - index / 10), level: "warn", perf: "git.run", ms: 100 + index, git: "status", load1: 2, message: "slow git.run" }),
+            ),
+            JSON.stringify({ time: at(1), level: "warn", perf: "git.run.wait", ms: 9_000, git: "status", load1: 30, message: "slow git.run.wait" }),
+        ],
+    });
+
+    const text = await call(deps, "slow", { limit: 10 });
+    expect(text).toContain("51 slow spans in perf.jsonl");
+    expect(text).toContain("git.run: 50×, p50 124 ms, p95 147 ms, max 149 ms");
+    expect(text).toContain("git.run.wait: 1×");
+    // An exact op is that op alone.
+    expect(await call(deps, "slow", { op: "git.run", groupBy: "none", limit: 100 })).not.toContain("git.run.wait");
 });
 
 test("turns reports what ran and what failed, and names the asked-for model only when it differs", async () => {
@@ -206,6 +284,25 @@ test("a misspelled metric path is diagnosed rather than answered with an empty s
     const text = await call(deps, "resources", { field: "daemon.memory.rssByttes" });
     expect(text).toContain("daemon.memory.rssByttes");
     expect(text).toContain("1 samples");
+    expect(text).toContain("`daemon.memory` exists; under it the keys are: rssBytes");
+});
+
+test("a metric path naming a list answers with its newest value", async () => {
+    const deps = await setup({
+        "resource-metrics.jsonl": [JSON.stringify({ at: at(1), processes: { top: [{ name: "node", role: "toolchain", rssBytes: 7 }] } })],
+    });
+
+    const text = await call(deps, "resources", { field: "processes.top" });
+    expect(text).toContain("`processes.top` is a list");
+    expect(text).toContain(`"role":"toolchain"`);
+});
+
+// The series file survives restarts, so "the series starts when the daemon does" was false; the file's own reach is said.
+test("a metric window before the series begins says where it begins", async () => {
+    const deps = await setup({ "resource-metrics.jsonl": [JSON.stringify({ at: at(10), daemon: { memory: { rssBytes: 5 } } })] });
+
+    expect(await call(deps, "resources", { field: "daemon.memory.rssBytes", sinceMinutes: 5 })).toContain("No samples between");
+    expect(await call(deps, "resources", { field: "daemon.memory.rssBytes", sinceMinutes: 600 })).toContain(`holds lines from ${at(10)}`);
 });
 
 // Fixture seeds both daemon.log and client.jsonl to prove the browser source reads only client.jsonl.
@@ -233,7 +330,7 @@ test("the browser source reads the client file and names itself as such", async 
     });
 
     const text = await call(deps, "errors", { source: "browser" });
-    expect(text).toContain("2 browser reports");
+    expect(text).toContain("2 warn-or-worse browser reports in client.jsonl");
     expect(text).toContain("/agents");
     expect(text).not.toContain("turn failed");
     expect(await call(deps, "errors", {})).toContain("turn failed");
@@ -251,5 +348,98 @@ test("a self-heal wipe is findable by name, which is the report that used to be 
 
 test("no browser reports yet reads as quiet, not as an error", async () => {
     // client.jsonl only exists once a browser has reported something.
-    expect(await call(await setup({}), "errors", { source: "browser" })).toMatch(/^No browser reports/);
+    const text = await call(await setup({}), "errors", { source: "browser" });
+    expect(text).toMatch(/^No warn-or-worse browser reports in client\.jsonl/);
+    expect(text).toContain("client.jsonl does not exist yet.");
+});
+
+// A restart's cut turn is recorded as cancelled with the code `interrupted`; rows from before the ids were kept still read.
+test("turns shows a turn's ids when the ledger has them and can isolate interrupted turns", async () => {
+    const deps = await setup({}, [
+        turn({ outcome: "ok", conversationId: "older" }),
+        turn({ outcome: "cancelled", errorCode: "interrupted", conversationId: "cut", turnId: "t-123", run: "r-2", sessionId: "s-9" }),
+    ]);
+
+    const all = await call(deps, "turns", {});
+    expect(all).toContain("1 interrupted");
+    expect(all).toContain(`"turnId":"t-123","run":"r-2","sessionId":"s-9"`);
+    const cut = await call(deps, "turns", { only: "interrupted" });
+    expect(cut).toContain("cut");
+    expect(cut).not.toContain("older");
+});
+
+test("restarts reads the restart log newest first and says why each run ended, whatever fields it lacks", async () => {
+    const deps = await setup({
+        "restarts.jsonl": [
+            // A row from before `ended` was written, and with a malformed field: still one boot.
+            JSON.stringify({ at: at(300), boot: { pid: 50, version: 7 }, previous: { graceful: false } }),
+            JSON.stringify({
+                at: at(60),
+                boot: { pid: 55, version: "1.2.3", commit: "abcdef1234567890" },
+                previous: {
+                    ended: "stopped",
+                    graceful: true,
+                    signal: "SIGTERM",
+                    uptimeSeconds: 14_400,
+                    intent: { at: at(61), by: "keeper", host: "rog", action: "restart", reason: "health probe failed", checks: ["health"] },
+                },
+            }),
+            JSON.stringify({ at: at(30), boot: { pid: 60, version: "1.2.3" } }),
+        ],
+    });
+
+    const text = await call(deps, "restarts", {});
+    expect(text).toContain("3 daemon boots");
+    expect(text.indexOf("pid 55")).toBeLessThan(text.indexOf("pid 50"));
+    expect(text).toContain("booted pid 55 (1.2.3 abcdef123456); the run before stopped gracefully on SIGTERM after 4h 0m; keeper on rog asked to restart: health probe failed [failed checks: health]");
+    expect(text).toContain("booted pid 50; the run before was killed without warning");
+    expect(text).toContain("booted pid 60 (1.2.3); nothing recorded about the run before.");
+    expect(await call(deps, "restarts", { sinceMinutes: 120 })).toContain("2 daemon boots");
+});
+
+test("restarts falls back to bare boot times on a daemon that keeps no restart log", async () => {
+    const deps = await setup({
+        // Uptime starts over between these two samples: a boot 2 minutes before the second.
+        "resource-metrics.jsonl": [
+            JSON.stringify({ at: at(200), uptimeSeconds: 6_000 }),
+            JSON.stringify({ at: at(100), uptimeSeconds: 120 }),
+        ],
+    });
+    await writeFile(join(deps.historyRoot, "boot-history.json"), JSON.stringify({ boots: [NOW - 102 * 60_000 + 30_000] }));
+
+    const text = await call(deps, "restarts", {});
+    expect(text).toContain("keeps no restart log yet");
+    // The boot both records name is one boot; the older run's own start comes from its uptime.
+    expect(text).toContain("2 daemon boots");
+    expect(text).toContain(new Date(NOW - 200 * 60_000 - 6_000_000).toISOString());
+});
+
+test("timeline puts one conversation's log lines, activity and turns in time order, and skips lines that only list it", async () => {
+    const deps = await setup(
+        {
+            "daemon.log": [
+                JSON.stringify({ time: at(30), level: "info", ctx: { conversationId: "wise-fern" }, message: "turn: accepted" }),
+                JSON.stringify({ time: at(20), level: "info", message: "perf summary", worst: [{ conversation: "wise-fern" }] }),
+                JSON.stringify({ time: at(10), level: "warn", conversationId: "wise-fern", message: "turn: interrupted by a restart" }),
+                JSON.stringify({ time: at(9), level: "warn", conversationId: "other", message: "elsewhere" }),
+            ],
+        },
+        [turn({ at: NOW - 15 * 60_000, outcome: "error", errorCode: "rate_limit", conversationId: "wise-fern" })],
+    );
+    await writeFile(
+        join(deps.historyRoot, "activity.jsonl"),
+        `${[
+            JSON.stringify({ id: "1", at: NOW - 25 * 60_000, direction: "system", type: "turn.started", turnId: "abcdef123456", conversationId: "wise-fern", content: "fix\nthe bug" }),
+            JSON.stringify({ id: "2", at: NOW - 5 * 60_000, direction: "system", type: "turn.started", conversationId: "other", content: "x" }),
+        ].join("\n")}\n`,
+    );
+
+    const text = await call(deps, "timeline", { conversationId: "wise-fern" });
+    expect(text).toContain("4 events (2 daemon.log lines, 1 activity entries, 1 turns, 0 daemon boots)");
+    const order = ["turn: accepted", "turn.started turn abcdef12: fix the bug", "turn ended error", "interrupted by a restart"].map((part) => text.indexOf(part));
+    expect(order.every((index) => index > 0)).toBe(true);
+    expect(order).toEqual(order.toSorted((a, b) => a - b));
+    expect(text).not.toContain("perf summary");
+    expect(text).not.toContain("elsewhere");
+    expect(await call(deps, "timeline", { conversationId: "nobody" })).toMatch(/^Nothing names nobody/);
 });

@@ -52,6 +52,7 @@ the ones you need). Then:
 | \`mcp__\${id}__reshape_sandbox\` | Set one's share of this machine (memory cap in GiB, CPU cap in cores) or its privileges (privileged, GPU passthrough), with \`when\`: \`now\` restarts it onto the same image, about a minute; \`nextRestart\` saves it for its next restart through ic (start, restart, update) without restarting it. \`forget\` drops what is saved. Same permission as \`manage_sandbox\`. Ask before changing a privilege. |
 | \`mcp__\${id}__remove_sandbox\` | Delete one, with its files and its history. Irreversible. Same permission as \`manage_sandbox\`, so nothing but you stands between the ask and the deletion: ask before calling it, every time. |
 | \`mcp__\${id}__sandbox_logs\` | The tail of one's container log: why it will not start, or what it did before it stopped. |
+| \`mcp__\${id}__device_logs\` | This device's own records by name: machine.log (watchdog, keeper, restarts), machine-update.log, audit.jsonl of every tool call, ic's per-run logs; no name lists them. Use it instead of hunting paths with \`run_command\`. |
 
 ## Rules that are not negotiable
 

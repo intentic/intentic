@@ -10,6 +10,7 @@ import {
     type TranslatorAccounts,
 } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
+import { accountStateLogFor } from "./state-log.js";
 
 // "Can this account serve a turn?", answered in one place. The rule itself is the contract's (`serviceState` in
 // models/plan-pools.ts); this module feeds it every fact the daemon holds: revoke marks and seat refusals, the plan-limit
@@ -17,7 +18,9 @@ import type { Services } from "../../composition.js";
 // account's own last limit refusal), and the translator's bench. The unnamed-turn pick, the limit move and keep-warm's
 // reserve read nothing else, and the account lists publish the same verdict as `state`.
 
-export type ServiceabilityDeps = Pick<Services, "accountUsage" | "claudeSeats" | "claudeStore" | "cliProxy" | "providerRefusals">;
+// `logger`, where given, records each change of an account's verdict (state-log.ts); the daemon's callers pass the whole
+// services, which carry it.
+export type ServiceabilityDeps = Pick<Services, "accountUsage" | "claudeSeats" | "claudeStore" | "cliProxy" | "providerRefusals"> & Partial<Pick<Services, "logger">>;
 
 const routed = (provider: AgentProvider): provider is keyof TranslatorAccounts => (KeyedProviderSchema.options as readonly string[]).includes(provider);
 
@@ -50,6 +53,9 @@ export const serviceabilities = async (
 ): Promise<readonly { readonly id: string; readonly state: AccountState }[]> => {
     const [facts, refusals] = await Promise.all([accountFactsOf(deps, provider), deps.providerRefusals.onFile()]);
     const states = serviceStates(facts, refusals[provider], model);
+    if (deps.logger !== undefined) {
+        accountStateLogFor(deps.logger).note(provider, facts, states, refusals[provider], model);
+    }
     return facts.map((entry) => ({ id: entry.account, state: states.get(entry.account) ?? { kind: "unknown" } }));
 };
 
@@ -61,17 +67,33 @@ export const serviceability = async (deps: ServiceabilityDeps, provider: AgentPr
 // shown beside it. Model-less: the account's tightest gating pool.
 
 /** A provider's own account rows, each with its `state`. */
-export const withAccountStates = async (deps: Pick<Services, "providerRefusals">, provider: AgentProvider, accounts: readonly OauthAccount[]): Promise<OauthAccount[]> => {
-    const states = serviceStates(accounts.map(nativeFacts), (await deps.providerRefusals.onFile())[provider]);
+export const withAccountStates = async (
+    deps: Pick<Services, "providerRefusals"> & Partial<Pick<Services, "logger">>,
+    provider: AgentProvider,
+    accounts: readonly OauthAccount[],
+): Promise<OauthAccount[]> => {
+    const facts = accounts.map(nativeFacts);
+    const refusals = (await deps.providerRefusals.onFile())[provider];
+    const states = serviceStates(facts, refusals);
+    if (deps.logger !== undefined) {
+        accountStateLogFor(deps.logger).note(provider, facts, states, refusals);
+    }
     return accounts.map((account) => ({ ...account, ...stateOf(states, account.id) }));
 };
 
 /** Every routed provider's credentials, each with its `state`. */
-export const withRoutedStates = async (deps: Pick<Services, "providerRefusals">, accounts: TranslatorAccounts): Promise<TranslatorAccounts> => {
+export const withRoutedStates = async (
+    deps: Pick<Services, "providerRefusals"> & Partial<Pick<Services, "logger">>,
+    accounts: TranslatorAccounts,
+): Promise<TranslatorAccounts> => {
     const refusals = await deps.providerRefusals.onFile();
     return Object.fromEntries(
         Object.entries(accounts).map(([provider, rows]) => {
-            const states = serviceStates(rows.map(routedFacts), refusals[provider]);
+            const facts = rows.map(routedFacts);
+            const states = serviceStates(facts, refusals[provider]);
+            if (deps.logger !== undefined) {
+                accountStateLogFor(deps.logger).note(provider, facts, states, refusals[provider]);
+            }
             return [provider, rows.map((row) => ({ ...row, ...stateOf(states, row.name) }))];
         }),
     ) as TranslatorAccounts;

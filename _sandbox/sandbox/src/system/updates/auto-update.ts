@@ -263,6 +263,7 @@ export const createAutoUpdater = (deps: AutoUpdateDeps): AutoUpdater => {
         const at = now();
         await deps.policy.applied({ at, ...opt("to", target) });
         deps.logger.info({ host, version: target }, "auto-update: nothing here would feel the restart, the machine updates this sandbox now");
+        deps.restartResume.announce?.({ by: "daemon", host, action: "update", reason: `update when quiet, to ${target ?? "the newest version"}: nothing here would feel the restart` });
         let answered = false;
         let words: string | undefined;
         try {

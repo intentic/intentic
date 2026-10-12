@@ -80,6 +80,7 @@ test("tools/list is the machine's whole surface, and there is no delete", async 
         "reshape_sandbox",
         "remove_sandbox",
         "sandbox_logs",
+        "device_logs",
         "diagnose_sandbox",
     ]);
     expect(names).not.toContain("delete_file");
@@ -221,6 +222,7 @@ test("every tool says what a call can do to the device", async () => {
         "app_logs",
         "list_sandboxes",
         "sandbox_logs",
+        "device_logs",
         "diagnose_sandbox",
     ]);
     expect(tools.filter((entry) => entry.annotations.destructiveHint).map((entry) => entry.name)).toEqual([

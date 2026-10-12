@@ -175,6 +175,9 @@ test("a clean turn streams every frame once, stamps the ones that name an accoun
             harness: "native",
             outcome: "ok",
             conversationId: "frames-clean",
+            // The ledger row joins the turn's activity and its session.
+            turnId: writes.activity[0]?.turnId,
+            sessionId: "s-clean",
             turns: 2,
             inputTokens: 150,
             outputTokens: 30,
@@ -335,6 +338,8 @@ test("a spent allowance naming its reset is held whole, filed as a limit, and re
             errorCode: "rate_limit",
             errorMessage: "Claude usage limit reached.",
             conversationId: "frames-limit",
+            turnId: writes.activity[0]?.turnId,
+            sessionId: "s-limit",
             turns: 0,
             inputTokens: 0,
             outputTokens: 0,

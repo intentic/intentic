@@ -20,6 +20,7 @@ import { RoleModelUnsetError } from "../../seams/role-model-unset.js";
 import { runSealedRequest } from "../run/sealed/sealed-request.js";
 import { opt } from "../../opt.js";
 import { AgentDomainRefusedError, assertAgentExecutionContext, type AgentExecutionContext } from "../../workload/agent-execution.js";
+import { createRepeatGate } from "../../logs/repeat-gate.js";
 
 // Resolves what a role's chain actually runs on (connected accounts, catalogs, the walk itself); the contract
 // (model-pins.ts) decides the order, this file supplies the facts and executes it. Every ask names its own role and
@@ -131,6 +132,21 @@ const cooling = (choice: ModelChoice, now: number): Memo | undefined => {
     const held = refusals.get(modelPinKey(choice));
     return held !== undefined && held.until > now ? held : undefined;
 };
+
+// A role whose whole chain failed (a commit subject, a title, a judge's verdict) handed the error to whoever asked and
+// logged nothing, so a commit box that kept failing on Composer had no line to explain it. The walk's outcome is logged
+// here, for every role at once: a warn when nothing answered, with each rung's refusal; an info when an answer came only
+// after rungs refused. Gated per role, so a job retried every minute on a dead chain writes one line an hour plus a count.
+const roleOutcomes = createRepeatGate();
+
+// One rung as the outcome line names it; a reason is the provider's sentence, clipped so a pasted body cannot flood it.
+const REASON_CHARS = 300;
+const stepOf = (attempt: RoleModelAttempt): Record<string, unknown> => ({
+    provider: attempt.choice.provider,
+    model: attempt.choice.model,
+    status: attempt.status,
+    ...(attempt.reason === undefined ? {} : { reason: attempt.reason.slice(0, REASON_CHARS) }),
+});
 
 // What each rung of the chain will accept, resolved once before the walk rather than per ask: the walk runs twice when
 // a memo skipped everything, and two reads could disagree across a catalog refresh between them. A native provider
@@ -306,7 +322,7 @@ export const askRoleModel = async <T>(
                 if (!(error instanceof UnusableAnswerError)) {
                     remember(key, refusalText(error), Date.now());
                 }
-                services.logger.debug({ err: error, model: choice.model }, "role model: refused, trying the next in the chain");
+                services.logger.debug({ err: error, role, model: choice.model }, "role model: refused, trying the next in the chain");
                 skipped.push({ choice, reason: refusalText(error) });
                 settle({ choice, status: `refused`, at: from, ms: spent(), reason: refusalText(error) });
             }
@@ -314,16 +330,44 @@ export const askRoleModel = async <T>(
         return { asked };
     };
 
+    const context = options.conversationId === undefined ? {} : { conversationId: options.conversationId };
+    const answered = (answer: RoleModelAnswer<T>): RoleModelAnswer<T> => {
+        const outage = roleOutcomes.clear(`${role}:failed`);
+        const refused = attempts.filter((attempt) => attempt.status === `refused`);
+        if (outage !== undefined) {
+            services.logger.info(
+                { role, ...context, provider: answer.choice.provider, model: answer.choice.model, repeated: outage.repeated },
+                `role model: ${role} answered again, on ${answer.choice.model}`,
+            );
+        } else if (refused.length > 0) {
+            const verdict = roleOutcomes.check(`${role}:fallback`, attempts.map((attempt) => `${modelPinKey(attempt.choice)}=${attempt.status}`).join(` `));
+            if (verdict.log) {
+                services.logger.info(
+                    { role, ...context, provider: answer.choice.provider, model: answer.choice.model, steps: attempts.map(stepOf), repeated: verdict.repeated },
+                    `role model: ${role} answered on ${answer.choice.model} after ${refused.length} ${refused.length === 1 ? `model` : `models`} refused`,
+                );
+            }
+        }
+        return answer;
+    };
+
     const walked = await walk(true);
     if (walked.answer !== undefined) {
-        return walked.answer;
+        return answered(walked.answer);
     }
     // Memo or quota may skip a rung, never be why nothing is asked at all: a stale one retries the whole chain.
     if (!walked.asked) {
         const everything = await walk(false);
         if (everything.answer !== undefined) {
-            return everything.answer;
+            return answered(everything.answer);
         }
+    }
+    const verdict = roleOutcomes.check(`${role}:failed`, attempts.map((attempt) => `${modelPinKey(attempt.choice)}: ${attempt.reason ?? attempt.status}`).join(`; `));
+    if (verdict.log) {
+        services.logger.warn(
+            { role, ...context, steps: attempts.map(stepOf), repeated: verdict.repeated },
+            `role model: ${role} failed on every model in its chain`,
+        );
     }
     throw new Error(skipped.map((refusal) => `${refusal.choice.model}: ${refusal.reason}`).join(`; `));
 };

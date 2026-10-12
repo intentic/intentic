@@ -14,6 +14,7 @@ import type { Services } from "../../composition.js";
 import { enrolledFleet, type SyncEnrollmentRow } from "../../peers/desktop-sync.js";
 import { devices, manageDeviceSandbox, mergeDevices, type PullResult, runDeviceAgentFlow, sandboxesFromTool, unreadFromTool } from "../device-reports.js";
 import { HOST_CARD_RULE } from "../host-peer.js";
+import { recordingLogger } from "../../harness/route-fakes.testing.js";
 
 // The push half, recorded rather than fed to a live /events feed: subscribing for real would start the runtime
 // sampler (tmux, procfs) for a fact this file states in one line.
@@ -357,6 +358,9 @@ interface FakeCall {
 
 const answer = (text: string, isError = false): unknown => ({ result: { content: [{ text }], isError } });
 
+// What the readings said about themselves, across tests: the gate is the module's, so a test reads its own device's lines.
+const readLog = recordingLogger();
+
 // Both doors of one machine, every call recorded: `report` on its connection, `list_sandboxes` on its MCP door.
 const fakeServices = (id: string, respond: (call: FakeCall) => Promise<unknown>): { services: Services; calls: FakeCall[] } => {
     const calls: FakeCall[] = [];
@@ -366,6 +370,7 @@ const fakeServices = (id: string, respond: (call: FakeCall) => Promise<unknown>)
     };
     const services = {
         config: { historyRoot: NO_HISTORY },
+        logger: readLog.logger,
         // The real reader over a history root that holds nothing, which is the empty fleet these cases assume.
         syncFleet: () => enrolledFleet(NO_HISTORY),
         perf: { track: async <T>(_op: string, _fields: unknown, run: () => Promise<T>): Promise<T> => await run() },
@@ -578,6 +583,30 @@ test("gives every environment of one machine its own door, read through its own 
 test("a machine that refuses to answer at all reads as offline", async () => {
     const { services } = fakeServices("dead-pc", () => Promise.reject(new Error("socket is gone")));
     expect((await devices(services))[0]).toMatchObject({ hostId: "dead-pc", gap: "offline" });
+});
+
+// Every failed reading became `offline` and said why to nobody. One line per change of a device's gap and reason, the
+// repeats only counted, and one line when it answers again.
+test("logs why a device read as offline once, not on every refresh, and once when it answers again", async () => {
+    jest.useFakeTimers();
+    let up = false;
+    const { services } = fakeServices("flaky-pc", async (call) => {
+        if (!up) {
+            throw new Error("socket is gone");
+        }
+        return call.tool === "report" ? report("flaky") : answer("[]");
+    });
+    const own = (): Record<string, unknown>[] => readLog.lines.filter((line) => line["device"] === "flaky-pc");
+    await devices(services);
+    jest.setSystemTime(Date.now() + 31_000);
+    await devices(services);
+    await waitFor(() => expect(own()).toHaveLength(1));
+    expect(own()[0]).toMatchObject({ message: "device reads: flaky-pc read as offline (socket is gone)", gap: "offline", reason: "socket is gone" });
+    up = true;
+    jest.setSystemTime(Date.now() + 31_000);
+    await devices(services);
+    await waitFor(() => expect(own()).toHaveLength(2));
+    expect(own()[1]).toMatchObject({ message: "device reads: flaky-pc answering again", repeated: 1 });
 });
 
 // The card setup writes for a new sandbox: "Manage sandboxes on this device" on, "Run commands" off. Its containers

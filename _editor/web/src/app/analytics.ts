@@ -127,6 +127,16 @@ const linkInstall = (posthog: PostHog, userId: string): void => {
     posthog.alias(installId);
 };
 
+// PostHog's session id, the key its replay is found by, from the SDK itself: undefined where analytics is off or until
+// the SDK has loaded at the page's first idle moment. Never throws, since an error report asks it.
+export const replaySessionId = (): string | undefined => {
+    try {
+        return client?.get_session_id();
+    } catch {
+        return undefined;
+    }
+};
+
 // Funnel milestone events from call sites. No-op until `initAnalytics` has run (no key in dev); otherwise
 // uninitialized `posthog.capture` logs a console error per call.
 export const track = (event: string, properties?: Milestone): void => {

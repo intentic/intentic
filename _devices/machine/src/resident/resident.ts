@@ -7,7 +7,7 @@ import { autostart, claimPidFile, holdPidFile, type Log, type PidRecord, release
 import type { PeerLink } from "@intentic/sandbox-contract/peer-dial";
 import { beginTrial, type Trial } from "../agent-trial.js";
 import { MACHINE_AUTOSTART } from "../autostart/autostart.js";
-import { baseDir, runPidPath } from "../config.js";
+import { baseDir, runLogPath, runPidPath } from "../config.js";
 import { startAutoBackup } from "../device/sandbox-rounds/auto-backup.js";
 import { startAutoPrepare } from "../device/sandbox-rounds/auto-prepare.js";
 import { type HostLink, LINK_STAMP_MS, type LinkReading, linkStatePath, readLinks, stampLinkStates } from "../device/config.js";
@@ -29,7 +29,9 @@ import { mirrorHeartbeatPath, readState } from "../sync/config.js";
 import { runMirrorWatch } from "../sync/mirror.js";
 import { startUpkeep } from "../upkeep/reconcile.js";
 import { MACHINE_VERSION } from "../version.js";
-import { startWatchdog } from "./watchdog.js";
+import { beginExitRecord, lastExitPath, reasonForCode, recordExit, recordUnexpectedExits, stampAlive, thisRun } from "./last-exit.js";
+import { startLogRoll } from "./log-roll.js";
+import { startWatchdog, type Watchdog } from "./watchdog.js";
 import { WINDOWS_SIDE } from "../environments/wsl.js";
 
 // This environment's one resident process; it re-reads what it serves every tick, so only a new binary or `run` restarts it.
@@ -260,7 +262,7 @@ const runtimeOf = (supervised: boolean, trial: Trial, kept: KeptCheck, lease: Pi
     const later = supervised ? SUPERVISED_ROUND_DELAY_MS : 0;
     // The device's own upkeep runs everywhere too: each environment holds its own leftovers and stores (upkeep/).
     const upkeep = startUpkeep(log, lease.supervisor);
-    const rounds = [watch, keeper, startAutoPrepare(log, { delayMs: later }), startAutoBackup(log, { delayMs: later }), upkeep];
+    const rounds = [watch, keeper, startAutoPrepare(log, { delayMs: later }), startAutoBackup(log, { delayMs: later }), upkeep, startLogRoll(runLogPath, log)];
     const autoUpgrade = supervised ? undefined : startAutoUpgrade(log);
     const unproven = trial.prove(log);
     const finish = async (code: number): Promise<never> => {
@@ -277,6 +279,8 @@ const runtimeOf = (supervised: boolean, trial: Trial, kept: KeptCheck, lease: Pi
         await stopRunningCommands();
         await trial.clean();
         await release();
+        const { reason, detail } = reasonForCode(code);
+        recordExit(reason, detail);
         process.exit(code);
     };
     for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"] as const) {
@@ -312,6 +316,7 @@ const tick = async (runtime: Runtime, lease: PidRecord, log: Log): Promise<void>
         }
     }
     await stampLinks(runtime.connections);
+    await stampAlive();
 };
 
 // Claims the environment and settles its supervisor; undefined when another agent holds it or nothing is left to serve.
@@ -346,6 +351,25 @@ const begin = async (
     return { served, lease, kept };
 };
 
+// This run's exit record, begun once the environment is this agent's (another agent's record is never touched): what the
+// agent before it left is said first, and the watchdog is handed the record it closes if it ever has to kill this one.
+const beginRecord = async (watchdog: Watchdog, log: Log): Promise<void> => {
+    try {
+        const before = await beginExitRecord(process.pid, MACHINE_VERSION);
+        if (before !== undefined) {
+            log(before);
+        }
+    } catch (error) {
+        log(`could not start this run's exit record (${errorMessage(error)}); the next agent will not know why this one ended.`);
+        return;
+    }
+    recordUnexpectedExits();
+    const run = thisRun();
+    if (run !== undefined) {
+        watchdog.record({ path: lastExitPath, base: run });
+    }
+};
+
 const serving = (served: Served): string =>
     [
         plural(served.links.length, "linked sandbox"),
@@ -357,7 +381,7 @@ const serving = (served: Served): string =>
 export const runForeground = async (log: Log): Promise<void> => {
     // First of all: an agent whose loop hangs anywhere from here on is killed and restarted by its supervisor, which only
     // ever waits for an exit (watchdog.ts).
-    startWatchdog();
+    const watchdog = startWatchdog();
     // Read once and cleared, so no process this one starts (a shell, an upgrade) inherits a role that was never its own.
     const supervised = supervisedByWindows();
     delete process.env[SUPERVISOR_ENV];
@@ -374,6 +398,7 @@ export const runForeground = async (log: Log): Promise<void> => {
         await trial.clean();
         return;
     }
+    await beginRecord(watchdog, log);
     const runtime = runtimeOf(supervised, trial, started.kept, started.lease, log);
     log(`serving ${serving(started.served)}`);
     for (;;) {

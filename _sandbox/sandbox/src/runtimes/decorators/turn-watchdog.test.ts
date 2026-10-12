@@ -69,7 +69,15 @@ test("an expiry names the deadline that passed, so a timed-out turn says whether
     jest.setSystemTime(START + 1_795_000);
     long.touch();
     jest.setSystemTime(START + 1_800_000);
-    expect(long.expiry()).toBe("the turn reached its 30m 0s cap (the last event came 5s ago)");
+    expect(long.expiry()).toBe("the turn reached its 30m 0s cap while still active (the last event came 5s ago)");
+
+    // A turn that had also gone quiet before its cap says so in its own words, not as a still-active one.
+    jest.setSystemTime(START);
+    const quiet = turnWatchdog({ inactivityMs: 120_000, maxTurnMs: 1_800_000 });
+    jest.setSystemTime(START + 1_710_000);
+    quiet.touch();
+    jest.setSystemTime(START + 1_800_000);
+    expect(quiet.expiry()).toBe("the turn reached its 30m 0s cap after 1m 30s with nothing from the loop");
 
     jest.setSystemTime(START);
     const aborted = turnWatchdog({ inactivityMs: 120_000, maxTurnMs: 1_800_000 });

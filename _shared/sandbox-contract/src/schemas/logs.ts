@@ -52,10 +52,35 @@ export const ClientDiagnosticSchema = z.object({
         .describe("Whatever else was worth keeping."),
 });
 export type ClientDiagnostic = z.infer<typeof ClientDiagnosticSchema>;
+// Which page a batch came from, said once per batch rather than on every event. Without it two tabs' reports read as
+// one stream, and an agent spent dozens of calls learning a page was the owner's own dev server rather than the build
+// it had just changed.
+export const ClientPageSchema = z.object({
+    pageId: z.string().min(1).max(64).describe("This page load's own id: every report from one load shares it, and a reload gets a new one."),
+    tabId: z.string().max(64).optional().describe("The browser tab's id, which a reload of the same tab keeps."),
+    userAgent: z.string().max(300).optional().describe("The browser's own description of itself."),
+    viewport: z.string().max(40).optional().describe("The window's size in CSS pixels and its pixel ratio, e.g. 390x844@3."),
+    // The join key into PostHog's session replay: absent where analytics is off (dev, self-hosted) or not loaded yet.
+    replay: z.string().max(100).optional().describe("The PostHog session id, whose replay shows what the person did."),
+    origin: z.string().max(200).optional().describe("The address the page was loaded from."),
+    served: z
+        .string()
+        .max(300)
+        .optional()
+        .describe("How the page was served: `dev` (a Vite dev server, with the checkout, branch and who started it), `desktop` (the installed app, with its version), `local` (a window on a folder) or `hosted`."),
+    commit: z
+        .string()
+        .max(40)
+        .optional()
+        .describe("The short commit the page's build was made from (a dev server's: the one it started on). Absent where the build could not read it."),
+});
+export type ClientPage = z.infer<typeof ClientPageSchema>;
 // Capped batch: the client already coalesces and drops its own side, and an unbounded array here is a way to fill a
 // disk with one request.
 export const ClientDiagnosticsReportSchema = z.object({
     events: z.array(ClientDiagnosticSchema).min(1).max(50).describe("What the browser has to report, oldest first."),
+    // Optional: a page from before it sends none.
+    page: ClientPageSchema.optional().describe("Which page load sent the batch."),
 });
 export type ClientDiagnosticsReport = z.infer<typeof ClientDiagnosticsReportSchema>;
 export const ClientDiagnosticsAcceptedSchema = z.object({

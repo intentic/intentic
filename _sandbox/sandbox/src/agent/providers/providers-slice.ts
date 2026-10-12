@@ -122,12 +122,15 @@ export const createProvidersSlice = ({ historyRoot, conversations, whole, ...bui
             syncing = undefined;
         });
     };
+    // The refusal and cooldown stores decide what a picker skips; each change they make is logged, through the finished
+    // services' logger, resolved when a line is written since this slice is built before it is handed back.
+    const log = (fields: Record<string, unknown>, message: string): void => whole().logger.info(fields, message);
     return {
         ...built,
         usage: fileUsageStore(join(historyRoot, usageLedgerDocument.path)),
-        providerRefusals: fileProviderRefusalStore(join(historyRoot, providerRefusalsDocument.path)),
-        modelRefusals: fileModelRefusalStore(join(historyRoot, modelRefusalsDocument.path)),
-        modelCooldowns: fileModelCooldownStore(join(historyRoot, modelCooldownsDocument.path)),
+        providerRefusals: fileProviderRefusalStore(join(historyRoot, providerRefusalsDocument.path), { log }),
+        modelRefusals: fileModelRefusalStore(join(historyRoot, modelRefusalsDocument.path), { log }),
+        modelCooldowns: fileModelCooldownStore(join(historyRoot, modelCooldownsDocument.path), { log }),
         providerCatalogs: providerCatalogsOf(built.providerModules, whole),
         providerReadiness: () => providerReadiness(whole()),
         judgeCommand: (execution, input, signal) => judgeCommand(whole(), execution, input, signal),

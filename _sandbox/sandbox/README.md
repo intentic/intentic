@@ -293,6 +293,14 @@ flowchart LR
   cut turns interrupted. A parked turn whose cards cannot come back is given up after three boots.
   `/run/intentic/work.json` adds `bootedAt`, `previousBootAt`, `bootsInWindow`, `restartStorm` and `lastRestartAt`
   beside `liveTurns` and `at`, so the host's keeper sees the storm too.
+- Every restart says why (2026-10-11). Whoever is about to stop or restart the sandbox (the owner's Devices card,
+  update-when-quiet, a rebuild, idle-stop, `ic`, the device keeper, the desktop app) first writes
+  `/history/logs/restart-intent.json` (`{at, by, host?, side?, action, reason, checks?}`, `system/boot/restart-record.ts`).
+  The stop logs its signal, that initiator, uptime and build, and stamps them on `daemon-exit.json`. The next boot logs
+  one `daemon <build> starting; previous run ended: …` line (stopped, exited, crashed, killed or unknown, whether the
+  container restarted and whether `/tmp` was emptied), appends it to `/history/logs/restarts.jsonl` (newest 500) and
+  spends the intent. `/health` carries `build` (version, source commit from `build-info.json` or `INTENTIC_COMMIT`, and
+  build time; `system/boot/build-info.ts`).
 - A turn parked on a person comes back after a restart as the same run (2026-10-06): while a card is up, the turn
   journal's `run` column holds the run's id and the rows it has drawn (`agent/run/turn/turn-journal.ts`), and the boot
   carries that run on with its own id, start time and rows, raising each card again on the row it already had

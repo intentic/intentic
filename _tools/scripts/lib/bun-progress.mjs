@@ -24,6 +24,13 @@ import { processTree } from "./memory-ceiling.mjs";
 const FILE_HEADING = /^(?:##\[group\])?(\S+\.(?:test|spec)\.[cm]?[jt]sx?):\s*$/u;
 const FAILED_TEST = /^\(fail\) /u;
 const SUMMARY = /^Ran \d+ tests? across \d+ files?\./u;
+// What fails a run without a `(fail)` line of its own: an error thrown outside any test (bun counts it as a failure and
+// prints it under this heading), and a hook bun cannot name, which it reports as a test called `(unnamed)`.
+const BETWEEN_TESTS = /^# Unhandled error between tests/u;
+const ERROR_LINE = /^error: (.+)$/u;
+const AT_LINE = /^\s+at (?:.*\()?(.+?:\d+:\d+)\)?$/u;
+const UNNAMED_FAIL = /^\(fail\) \(unnamed\)/u;
+const HOOK_TIMED_OUT = /hook timed out/u;
 // eslint-disable-next-line no-control-regex -- bun colours its output on a terminal; the escapes are not part of a line
 const ANSI = /\u001b\[[0-9;]*m/gu;
 
@@ -44,6 +51,14 @@ export const createProgress = (expected, now = Date.now()) => ({
     failures: 0,
     summary: false,
     lastOutputAt: now,
+    // The file bun last named, which the lines below it belong to.
+    file: undefined,
+    // Errors thrown between tests: the file, the message and the place bun gave.
+    between: [],
+    // Files whose `(unnamed)` failure was a hook timing out.
+    unnamedHooks: [],
+    // What the line before said: inside a between-tests report, or right after an `(unnamed)` failure.
+    reading: undefined,
 });
 
 // One line of bun's output, in order.
@@ -51,12 +66,27 @@ export const observe = (progress, rawLine, now = Date.now()) => {
     progress.lastOutputAt = now;
     const line = rawLine.replace(ANSI, "").trimEnd();
     const heading = FILE_HEADING.exec(line);
+    const reading = progress.reading;
+    progress.reading = undefined;
     if (heading) {
         progress.seen.add(normal(heading[1]));
+        progress.file = normal(heading[1]);
     } else if (FAILED_TEST.test(line)) {
         progress.failures += 1;
+        progress.reading = UNNAMED_FAIL.test(line) ? "unnamed" : undefined;
     } else if (SUMMARY.test(line)) {
         progress.summary = true;
+    } else if (BETWEEN_TESTS.test(line)) {
+        progress.between.push({ file: progress.file, error: undefined, at: undefined });
+        progress.reading = "between";
+    } else if (reading === "unnamed" && HOOK_TIMED_OUT.test(line) && progress.file !== undefined) {
+        progress.unnamedHooks.push(progress.file);
+    } else if (reading === "between") {
+        // The report runs on until the error and its place are read: its code frame comes first.
+        const report = progress.between.at(-1);
+        report.error ??= ERROR_LINE.exec(line)?.[1];
+        report.at ??= report.error === undefined ? undefined : AT_LINE.exec(line)?.[1];
+        progress.reading = report.at === undefined ? "between" : undefined;
     }
 };
 
@@ -123,7 +153,8 @@ const lines = (stream, sink, onLine) => {
 
 // Passes a spawned bun's piped stdout and stderr through unchanged and watches them (above). When it decides, it says
 // why on stderr, kills the whole tree, and remembers the status; `stop()` ends the watch and answers with that decision,
-// or undefined when bun exited on its own.
+// or undefined when bun exited on its own. `stop.progress` is what was read, for explaining a run that failed with no
+// failing test (explainExit).
 export const watchProgress = (
     child,
     {
@@ -136,6 +167,8 @@ export const watchProgress = (
         log = (text) => process.stderr.write(text),
         out = process.stdout,
         err = process.stderr,
+        // false only reads the output, for a run whose stalls nobody ends (off CI): what it read still explains a failure.
+        judge = true,
     },
 ) => {
     const progress = createProgress(expected);
@@ -144,6 +177,9 @@ export const watchProgress = (
     lines(child.stderr, err, onLine);
     let decided;
     let lastTicks;
+    if (!judge) {
+        return Object.assign(() => undefined, { progress });
+    }
     const timer = setInterval(() => {
         if (child.pid === undefined) {
             return;
@@ -170,8 +206,74 @@ export const watchProgress = (
         }
     }, checkMs);
     timer.unref();
-    return () => {
+    const stop = () => {
         clearInterval(timer);
         return decided;
     };
+    return Object.assign(stop, { progress });
+};
+
+const SIGNAL_CAUSES = {
+    SIGKILL: "the memory ceiling, the kernel's OOM killer or a stop from outside",
+    SIGABRT: "an abort, which is how V8 ends a process whose heap ran out",
+    SIGSEGV: "a crash",
+    SIGTERM: "a stop from outside",
+};
+
+// The beforeAll/afterAll hooks of a test file, as `file:line`: bun calls a timed-out hook it cannot place `(unnamed)`
+// and names no line, and these are the hooks that can fail that way.
+export const hookLines = (file, read = (path) => readFileSync(path, "utf8")) => {
+    let text;
+    try {
+        text = read(file);
+    } catch {
+        // allow(silent-catch): a file moved since bun named it has no lines to name
+        return [];
+    }
+    return text.split("\n").flatMap((line, index) => (/\b(?:beforeAll|afterAll)\s*\(/u.test(line) ? [`${file}:${String(index + 1)}`] : []));
+};
+
+// The `(unnamed)` failures that were hooks timing out, each with the hooks of its file that can fail that way.
+const hookNotes = (progress, hooks) =>
+    [...new Set(progress?.unnamedHooks ?? [])].map((file) => {
+        const found = hooks(file);
+        const named = found.length === 0 ? "" : `: ${found.join(", ")}`;
+        return `suites: the "(unnamed)" failure in ${file} is one of its beforeAll/afterAll hooks timing out, which bun names no line for${named}`;
+    });
+
+// The first error bun reported outside any test, as the sentence for it.
+const betweenNote = (code, between) => {
+    const [first] = between;
+    const where = [first.file, first.at].filter((part) => part !== undefined).join(" at ");
+    const count = `${String(between.length)} error${between.length === 1 ? "" : "s"}`;
+    return `suites: bun exited ${String(code)} without a failing test: ${count} thrown outside any test, the first${where === "" ? "" : ` in ${where}`}: ${first.error ?? "(no message)"}`;
+};
+
+// Why bun failed a run that reported no failing test, or undefined when one did (or nothing failed).
+const exitReason = ({ code, signal, progress }) => {
+    if (signal !== null) {
+        return `suites: bun was ended by ${signal} (${SIGNAL_CAUSES[signal] ?? "a signal"}), so the run fails without a failing test`;
+    }
+    const between = progress?.between ?? [];
+    if (between.length > 0) {
+        return betweenNote(code, between);
+    }
+    if (progress !== undefined && !progress.summary) {
+        const last = progress.file === undefined ? "" : `; the last file it named is ${progress.file}`;
+        return `suites: bun exited ${String(code)} without a failing test and before its summary, so it crashed or was ended${last}`;
+    }
+    return code >= 128 || progress !== undefined ? `suites: bun exited ${String(code)} without a failing test; the reason is in its own output above` : undefined;
+};
+
+// Why a run failed when its output names no failing test, in lines for stderr, and the hooks behind any `(unnamed)`
+// failure. `progress` is what the output said (undefined where it was not read: a terminal keeps bun's colours), `signal`
+// and `code` how bun exited, `killed` whether the memory ceiling ended it, which said so itself.
+export const explainExit = ({ code, signal, progress, killed = false }, hooks = hookLines) => {
+    const notes = hookNotes(progress, hooks);
+    const passed = code === 0 && signal === null;
+    if (killed || passed || (progress?.failures ?? 0) > 0) {
+        return notes;
+    }
+    const reason = exitReason({ code, signal, progress });
+    return reason === undefined ? notes : [...notes, reason];
 };

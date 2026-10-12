@@ -10,6 +10,7 @@ import type { OrpcContext } from "../app-env.js";
 import { AttemptRefused } from "../conversations/fix/fix-attempts.js";
 import { ciFailureEvidence, runOf, startCiFix } from "./ci-fix.js";
 import { fixPressed, mainFailures, streakFixerFor } from "./main-fixer.js";
+import { createCiFailureLog } from "./ci-failure-log.js";
 import { ciClientFor, type FetchFn } from "./providers.js";
 import { ciProjects, type CiProject } from "./projects.js";
 
@@ -30,6 +31,8 @@ const upstream = async <T>(action: Promise<T>): Promise<T> => {
 
 export const createCiRoutes = (services: Services, fetchFn: FetchFn = fetch) => {
     const i = implement(ciContract).$context<OrpcContext>();
+    // Every open Pipelines board re-lists on a stale cache, so a dead token used to write this line on each read.
+    const backfill = createCiFailureLog(services.logger, "ci: runs backfill failed", "ci: runs backfill works again");
     const resolve = async (repo: string): Promise<CiProject> => {
         const project = (await ciProjects(services)).find((candidate) => candidate.repo === repo);
         if (project === undefined) {
@@ -64,10 +67,16 @@ export const createCiRoutes = (services: Services, fetchFn: FetchFn = fetch) => 
                 projects.map((project) =>
                     ciClientFor(project.account.provider, fetchFn)
                         .listRuns(project, RUNS_PER_PROJECT)
-                        .catch((error: unknown) => {
-                            services.logger.warn({ err: error, repo: project.repo }, "ci: runs backfill failed");
-                            return [];
-                        }),
+                        .then(
+                            (runs) => {
+                                backfill.succeeded(project.repo);
+                                return runs;
+                            },
+                            (error: unknown) => {
+                                backfill.failed(project.repo, error);
+                                return [];
+                            },
+                        ),
                 ),
             );
             return { repos, runs: services.ciRuns.replace(listed.flat()), failures };

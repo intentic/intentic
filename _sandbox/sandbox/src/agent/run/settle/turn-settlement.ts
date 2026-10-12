@@ -59,6 +59,10 @@ export interface SettlementPlan {
 // How the turn ended, as far as settling it goes.
 export interface TurnEnd {
     readonly input: RoutedTurn;
+    // The turn's id in the activity log and the failure lines, and the run whose id its transcript rows carry: the
+    // ledger row names both, so a turn can be followed from either side. Absent where a caller had none.
+    readonly turnId?: string | undefined;
+    readonly run?: string | undefined;
     readonly provider: AgentProvider;
     readonly attribution: Attribution;
     // The request the runtime was handed: its resolved model.
@@ -175,6 +179,9 @@ const usageOf = (end: TurnEnd, outcome: TurnOutcome, now: number): UsageRow => {
         outcome,
         ...failureOf(failure),
         ...opt("conversationId", input.conversationId),
+        ...opt("turnId", end.turnId),
+        ...opt("run", end.run),
+        ...opt("sessionId", end.frames.readings().sessionId),
         ...costOf(usage),
         // The provider's own figure where it gave one; a failed or stopped turn seldom sends the frame that carries it,
         // and a zero would read as a turn that took no time, so the daemon's own clock stands in.

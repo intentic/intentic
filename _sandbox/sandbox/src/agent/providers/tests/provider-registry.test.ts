@@ -1,6 +1,7 @@
 import { compareUnrankedModelIds, MINTED_PROVIDERS, type Model } from "@intentic/sandbox-contract";
 import { seedModelsOf } from "../../../runtimes/minted/minted-provider.js";
-import { servedModels } from "../provider-registry.js";
+import { recordingLogger } from "../../../harness/route-fakes.testing.js";
+import { createCatalogChangeLog, servedModels } from "../provider-registry.js";
 
 // catalogOf/refusing build a fake catalog and a refused-model set, for servedModels: the catalog view after removing
 // models the plan refuses.
@@ -59,4 +60,19 @@ test("every minted provider seeds a non-empty floor whose head survives the cata
             expect(model.label.trim(), `${provider} seeds a model with no label`).not.toBe("");
         }
     }
+});
+
+// A model leaving the picker left no trace; each change of the served ids is one line naming what came and went.
+test("the catalog change log writes the starting list, then only what was added or removed", () => {
+    const { lines, logger } = recordingLogger();
+    const changes = createCatalogChangeLog();
+    const models = (...ids: string[]): Model[] => ids.map((id) => ({ id, label: id }));
+    changes.note(logger, "gemini", models("gemini-3-pro", "gemini-3-flash"));
+    changes.note(logger, "gemini", models("gemini-3-flash", "gemini-3-pro"));
+    changes.note(logger, "gemini", models("gemini-3-flash", "gemini-3.5-pro"));
+    expect(lines.map((line) => line["message"])).toEqual([
+        "model catalog: gemini serves 2 models",
+        "model catalog: gemini added gemini-3.5-pro; removed gemini-3-pro",
+    ]);
+    expect(lines[1]).toMatchObject({ provider: "gemini", added: ["gemini-3.5-pro"], removed: ["gemini-3-pro"], count: 2 });
 });

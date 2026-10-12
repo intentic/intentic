@@ -1,8 +1,11 @@
 import { join } from "node:path";
 import type { DeviceFlowLine } from "@intentic/sandbox-contract";
 import { z } from "zod";
+import { logsRoot } from "../logs/log-files.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDocument } from "../store/open-document.js";
+import { writeRestartIntent } from "./boot/boot-marker.js";
+import type { RestartIntent } from "./boot/restart-record.js";
 
 // A RESTART THE OWNER STARTED AND ASKED TO PICK UP AFTER. With autoResumeOnRestart off, a turn a restart cuts is recorded
 // as interrupted and waits for a message, and after a rebuild the owner started with four agents mid-turn they sat
@@ -29,6 +32,9 @@ export interface RestartResume {
     readonly take: (now: number) => Promise<boolean>;
     // When the standing ask was made, without spending it; undefined when none stands. Optional for a stand-in.
     readonly askedAt?: () => Promise<number | undefined>;
+    // Names who is about to restart this sandbox and why (boot/restart-record.ts), for the next boot's account of the
+    // stop; best-effort, the restart goes ahead either way. Optional for a stand-in.
+    readonly announce?: (intent: Omit<RestartIntent, "at">) => void;
 }
 
 // Opened wherever it is needed: every handle on the path shares its write queue. A restart asked for WITHOUT picking up
@@ -45,6 +51,13 @@ export const fileRestartResume = (historyRoot: string): RestartResume => {
         },
         withdraw,
         askedAt: async () => (await file.read()).askedAt,
+        announce: (intent) => {
+            try {
+                writeRestartIntent(logsRoot(historyRoot), intent);
+            } catch {
+                // allow(silent-catch): the restart goes ahead either way; only the next boot's account of who asked is poorer
+            }
+        },
         take: async (now) => {
             const { askedAt } = await file.read();
             if (askedAt === undefined) {

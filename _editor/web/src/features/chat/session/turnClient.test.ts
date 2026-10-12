@@ -682,6 +682,21 @@ describe(`saying something`, () => {
         expect(queueResume.mock.calls.map(([input]) => input.ids)).toEqual([[`m-held`]]);
     });
 
+    // A Send now the sandbox held used to change nothing on screen; the reason it answers with is said.
+    it(`says why a press let nothing go, and clears it on the next press`, async () => {
+        const { client, host } = clientOf();
+        host.queue.value = WAITING;
+        const reason = `the queue is still paused (stopped)`;
+        queueResume.mockImplementation(async () => ({ reason }));
+
+        await client.resume();
+        expect(host.error.value).toBe(reason);
+
+        queueResume.mockImplementation(async () => ({}));
+        await client.resume();
+        expect(host.error.value).toBeNull();
+    });
+
     it(`sends a nudge behind a waiting nudge nowhere, and anything else as ever`, async () => {
         const { client, host } = parked();
         host.queue.value = { items: [{ id: `m-go`, text: `Continue`, voice: `person`, queuedAt: 1_000, revision: 1 }], revision: 1 };

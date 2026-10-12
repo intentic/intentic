@@ -19,6 +19,7 @@ import { linkStatePath } from "../device/config.js";
 import { CUTOVER_HOLDS_MS, readSwapRecords, swapsUnderway } from "../device/sandbox-rounds/swap-records.js";
 import { attachToWindows, WINDOWS_SUPERVISOR } from "../environments/machine.js";
 import { mirrorHeartbeatPath } from "../sync/config.js";
+import { recordStopFor } from "./last-exit.js";
 
 // Every start goes through whoever restarts this environment's agent; a bare detached spawn only where nothing does.
 
@@ -54,12 +55,22 @@ const waitForResident = async (reask?: () => Promise<unknown>): Promise<PidRecor
     return held;
 };
 
+// Why a stop from outside ends the agent, said in its exit record before the signal (last-exit.ts): the next agent and
+// `describe` read it from there.
+export interface StopWhy {
+    readonly reason: "stopped" | "restart" | "update";
+    readonly detail: string;
+}
+
+const STOPPED_BY_HAND: StopWhy = { reason: "stopped", detail: "by `intentic-machine run --stop`" };
+
 // Signalled AND gone; the stamps go with it only while no replacement has claimed the pidfile in the meantime.
-export const stopResident = async (): Promise<number | undefined> => {
+export const stopResident = async (why: StopWhy = STOPPED_BY_HAND): Promise<number | undefined> => {
     const held = await readResident();
     if (held === undefined) {
         return undefined;
     }
+    recordStopFor(held.pid, why.reason, why.detail);
     await stopProcess(held.pid, STOP_TIMEOUT_MS);
     // A stop asked for is no crash, whether or not the agent got to say so (agent-trial.ts).
     await recordStopped(held.pid);
@@ -131,15 +142,15 @@ export const waitOutSwaps = async (log: Log): Promise<void> => {
     );
 };
 
-export const restartResident = async (log: Log): Promise<void> => {
+export const restartResident = async (log: Log, why: StopWhy = { reason: "restart", detail: "by `intentic-machine run`" }): Promise<void> => {
     await waitOutSwaps(log);
-    await stopResident();
+    await stopResident(why);
     await startResident(log);
 };
 
 // Stops the agent and takes its login entry away. A distro the Windows side supervises is let go by its own exit 0.
 export const retireResident = async (log: Log): Promise<void> => {
-    await stopResident();
+    await stopResident({ reason: "stopped", detail: "retired: uninstalled, or nothing left to serve here" });
     await machineAutostart(log).unregister();
 };
 

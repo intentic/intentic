@@ -26,7 +26,7 @@ const fakeServices = (root: string): Services =>
         events: createDomainEvents(() => {}),
         agentWorktrees: unstubbed<Services["agentWorktrees"]>("agentWorktrees", { conversationDir: () => root }),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { append: async () => {} }),
-        logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
+        logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {}, info: () => {} }),
     });
 
 // Turn that ends immediately, recording the prompt it was given; `events` lets a test add usage or an error.

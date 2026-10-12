@@ -41,6 +41,13 @@ jest.mock(`../../client/sandbox/sandboxClient`, () => ({
     sandboxError: (response: Response) => new Error(String(response.status)),
 }));
 
+// What the loader tells the daemon's client log about an extension whose code did not run.
+const reported: { event: string; message: string; fields?: Record<string, unknown> }[] = [];
+jest.mock(`../../app/clientDiagnostics`, () => ({
+    reportClient: (event: string, message: string, options: { fields?: Record<string, unknown> } = {}) =>
+        reported.push({ event, message, fields: options.fields }),
+}));
+
 const { extensionsLoaded, extensionStatuses, loadExtensions, retireExtensions } = await import("../loader");
 
 const manifest = (name: string, settings = false): ExtensionManifest =>
@@ -69,6 +76,30 @@ beforeEach(() => {
     retireExtensions();
     state.activated.length = 0;
     state.deactivatedAll = 0;
+    reported.length = 0;
+});
+
+test(`an extension whose activate() throws is recorded with the code it ran, and reported beyond the Extensions tab`, async () => {
+    const broken = compiled(`broken`);
+    state.builtins.set(`intentic.broken`, {
+        manifest: broken.manifest,
+        activate: () => {
+            throw new Error(`no such panel`);
+        },
+    });
+    state.list = () => Promise.resolve({ extensions: [broken], invalid: [], pending: [] });
+
+    await loadExtensions(bindings);
+
+    expect(extensionStatuses.value).toEqual([
+        expect.objectContaining({ id: `broken`, state: `error`, detail: `no such panel`, revision: `abc`, bundle: `compiled-in` }),
+    ]);
+    expect(reported).toEqual([
+        expect.objectContaining({
+            event: `extension.loadError`,
+            fields: expect.objectContaining({ extensionId: `intentic.broken`, state: `error`, revision: `abc`, bundle: `compiled-in`, listSource: `builtin` }),
+        }),
+    ]);
 });
 
 test(`an ordinary pass activates what the sandbox lists and reports it as final`, async () => {

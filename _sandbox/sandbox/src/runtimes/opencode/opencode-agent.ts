@@ -228,7 +228,9 @@ async function* consumeTurn({
         const item = await queue.next(clock, followUpUntil);
         if (item === EXPIRED) {
             await interruptSession();
-            throw new Error(`${label} turn timed out waiting for OpenCode: ${clock.expiry()}.`);
+            // Named by the loop that actually ran it: Gemini and Grok turns run on OpenCode whatever loop the
+            // conversation's card names.
+            throw new Error(`${label} turn on the OpenCode loop timed out: ${clock.expiry()}.`);
         }
         if (item === SETTLED) {
             return;

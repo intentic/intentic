@@ -3,15 +3,16 @@ import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { immediateTransaction, IN_MEMORY, openSqlite } from "@intentic/base/sqlite";
 import type { MatchSnippet, Speaker } from "@intentic/sandbox-contract";
-import type { SearchIndexMetrics, SearchKind } from "./search-index.js";
-import type { SpokenLine } from "./transcript-search.js";
+import type { FoundLine, SearchIndexMetrics, SearchKind } from "./search-index.js";
+import type { LineVia, SpokenLine } from "./transcript-search.js";
 
 // The phrase index's SQLite connection and its SQL, synchronous by nature, so it runs only inside the index's worker
 // thread (search-index-worker.ts). A pure cache: a schema bump deletes and rebuilds it from the records. Trigram
 // tokenizer for substring matching; a JS-folded column covers full Unicode where sqlite's own folding is ASCII-only.
 
 // Bump on any change to the tables or how lines are extracted/folded; a mismatch deletes the file and rebuilds.
-const SCHEMA_VERSION = "1";
+// 2: deeds (tool calls, question cards, notices, runs) beside speech, in the `via` column.
+const SCHEMA_VERSION = "2";
 
 const DDL = `
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -23,11 +24,13 @@ CREATE TABLE IF NOT EXISTS source (
     lines INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS source_kind ON source(kind);
-/* The spoken lines. The folded column is the only tokenized one, everything else is carried for the answer. */
+/* The lines said and done. The folded column is the only tokenized one, everything else is carried for the answer;
+   via is empty for speech and names the deed otherwise. */
 CREATE VIRTUAL TABLE IF NOT EXISTS said USING fts5(
     key UNINDEXED,
     kind UNINDEXED,
     speaker UNINDEXED,
+    via UNINDEXED,
     text UNINDEXED,
     fold,
     tokenize='trigram'
@@ -47,8 +50,9 @@ export interface SearchStore {
     // Appends a settled turn's lines and bumps its source, as one transaction.
     readonly extend: (key: string, kind: SearchKind, version: string, lines: readonly SpokenLine[]) => void;
     readonly versions: (kind: SearchKind) => Map<string, string>;
-    // Oldest user line wins, else oldest agent's, one row per source; folds `needle` to match the ingest fold.
-    readonly search: (needle: string, kind: SearchKind, caseSensitive: boolean) => Map<string, MatchSnippet>;
+    // One row per source: the oldest user line, else the agent's, else (with `deeds`) a question card, a tool call, a
+    // notice or a run, in that order; folds `needle` to match the ingest fold.
+    readonly search: (needle: string, kind: SearchKind, caseSensitive: boolean, deeds?: boolean) => Map<string, FoundLine>;
     readonly metrics: () => SearchIndexMetrics;
     readonly close: () => void;
 }
@@ -71,18 +75,32 @@ const likePattern = (folded: string): string => `%${folded}%`;
 // A typed `%` or `_` only widens the LIKE; this literal re-check narrows it back, empty (always true) when none is typed.
 const literalNeedle = (folded: string): string => (/[%_]/u.test(folded) ? folded : "");
 
-// Oldest user line per source, else oldest agent's, via a partition ordered by speaker then rowid. Binds: kind,
-// likePattern, literalNeedle, then the raw needle when case-sensitive or "" when not, since `instr(x, '')` is always 1.
+// Oldest user line per source, else oldest agent's, else a deed by the rank below, via a partition ordered by that rank
+// then rowid. Binds: kind, likePattern, literalNeedle, then the raw needle when case-sensitive or "" when not, since
+// `instr(x, '')` is always 1, then 1 to admit deeds or 0 for speech only.
 export const SEARCH_SQL = `
-    SELECT key, speaker, text FROM (
-        SELECT key, speaker, text,
-            row_number() OVER (PARTITION BY key ORDER BY CASE speaker WHEN 'user' THEN 0 ELSE 1 END, rowid) AS rn
+    SELECT key, speaker, via, text FROM (
+        SELECT key, speaker, via, text,
+            row_number() OVER (
+                PARTITION BY key
+                ORDER BY CASE
+                    WHEN via = '' AND speaker = 'user' THEN 0
+                    WHEN via = '' THEN 1
+                    WHEN via = 'asked' THEN 2
+                    WHEN via = 'ran' THEN 3
+                    WHEN via = 'notice' THEN 4
+                    ELSE 5
+                END, rowid
+            ) AS rn
         FROM said
-        WHERE kind = ? AND fold LIKE ? AND instr(fold, ?) > 0 AND instr(text, ?) > 0
+        WHERE kind = ? AND fold LIKE ? AND instr(fold, ?) > 0 AND instr(text, ?) > 0 AND (? OR via = '')
     ) WHERE rn = 1
 `;
 
 const isSpeaker = (value: unknown): value is Speaker => value === "user" || value === "agent";
+
+const VIAS: ReadonlySet<string> = new Set<LineVia>(["ran", "asked", "notice", "run"]);
+const isVia = (value: unknown): value is LineVia => typeof value === "string" && VIAS.has(value);
 
 // `IN_MEMORY` for a store with the same schema and SQL as a real one, so tests exercise the real query.
 export const openSearchStore = (dir: string): SearchStore => {
@@ -109,7 +127,7 @@ export const openSearchStore = (dir: string): SearchStore => {
     db.exec(DDL);
     db.prepare("INSERT INTO meta(key, value) VALUES('schema', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(SCHEMA_VERSION);
 
-    const insertLine = db.prepare("INSERT INTO said(key, kind, speaker, text, fold) VALUES(?, ?, ?, ?, ?)");
+    const insertLine = db.prepare("INSERT INTO said(key, kind, speaker, via, text, fold) VALUES(?, ?, ?, ?, ?, ?)");
     const deleteLines = db.prepare("DELETE FROM said WHERE key = ?");
     const deleteSource = db.prepare("DELETE FROM source WHERE key = ?");
     const upsertSource = db.prepare(`
@@ -126,7 +144,7 @@ export const openSearchStore = (dir: string): SearchStore => {
 
     const insert = (key: string, kind: SearchKind, lines: readonly SpokenLine[]): void => {
         for (const line of lines) {
-            insertLine.run(key, kind, line.speaker, line.text, line.text.toLowerCase());
+            insertLine.run(key, kind, line.speaker, line.via ?? "", line.text, line.text.toLowerCase());
         }
     };
 
@@ -147,14 +165,15 @@ export const openSearchStore = (dir: string): SearchStore => {
             const rows = listVersions.all(kind) as { key: string; version: string }[];
             return new Map(rows.map((row) => [row.key, row.version]));
         },
-        search: (needle, kind, caseSensitive) => {
+        search: (needle, kind, caseSensitive, deeds = false) => {
             const folded = needle.toLowerCase();
-            const rows = query.all(kind, likePattern(folded), literalNeedle(folded), caseSensitive ? needle : "") as {
+            const rows = query.all(kind, likePattern(folded), literalNeedle(folded), caseSensitive ? needle : "", deeds ? 1 : 0) as {
                 key: string;
                 speaker: string;
+                via: string;
                 text: string;
             }[];
-            const found = new Map<string, MatchSnippet>();
+            const found = new Map<string, FoundLine>();
             for (const row of rows) {
                 if (!isSpeaker(row.speaker)) {
                     continue;
@@ -162,7 +181,8 @@ export const openSearchStore = (dir: string): SearchStore => {
                 // Recomputed here, not from sqlite's instr, since that answers in bytes and a slice needs UTF-16 code
                 // units.
                 const at = (caseSensitive ? row.text : row.text.toLowerCase()).indexOf(caseSensitive ? needle : folded);
-                found.set(row.key, { text: windowed(row.text, at === -1 ? 0 : at, needle.length), speaker: row.speaker });
+                const snippet: MatchSnippet = { text: windowed(row.text, at === -1 ? 0 : at, needle.length), speaker: row.speaker };
+                found.set(row.key, isVia(row.via) ? { ...snippet, via: row.via } : snippet);
             }
             return found;
         },

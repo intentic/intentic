@@ -1147,12 +1147,12 @@ test("a stalled turn is interrupted, and reported against the backend the user a
     const silence = "nothing arrived for 2m 0s, past the 2m 0s silence limit, 2m 0s into the turn.";
 
     expect(await stalled(undefined)).toEqual({
-        message: `Grok turn timed out waiting for OpenCode: ${silence}`,
+        message: `Grok turn on the OpenCode loop timed out: ${silence}`,
         interrupts: [{ sessionID: "s1" }],
         released: 1,
     });
     expect(await stalled(OPENCODE_GEMINI_PROVIDER)).toEqual({
-        message: `Google turn timed out waiting for OpenCode: ${silence}`,
+        message: `Google turn on the OpenCode loop timed out: ${silence}`,
         interrupts: [{ sessionID: "s1" }],
         released: 1,
     });
@@ -1174,7 +1174,7 @@ test("every event of the session family keeps the watchdog fed, a subagent's inc
     fake.emit(textDelta("stranger", "Busy elsewhere."));
     await advanceTimersByTimeAsync(100);
 
-    expect(await failure).toBe("Grok turn timed out waiting for OpenCode: nothing arrived for 1s, past the 1s silence limit, 3s into the turn.");
+    expect(await failure).toBe("Grok turn on the OpenCode loop timed out: nothing arrived for 1s, past the 1s silence limit, 3s into the turn.");
     expect(seen).toEqual([session("s1", true), ...reply, ...working]);
 });
 
@@ -1267,7 +1267,7 @@ test("a retry's announced next attempt pushes the inactivity deadline past it", 
     expect(ended).toBe(false);
     await advanceTimersByTimeAsync(1);
     // The deadline moved; the sentence still names the configured silence limit it was measured against.
-    expect(await failure).toBe("Grok turn timed out waiting for OpenCode: nothing arrived for 6s, past the 1s silence limit, 6s into the turn.");
+    expect(await failure).toBe("Grok turn on the OpenCode loop timed out: nothing arrived for 6s, past the 1s silence limit, 6s into the turn.");
 });
 
 // The detached permission watcher answers asks, but the card it raises is this turn's: it goes out on the turn's own
@@ -1310,7 +1310,7 @@ test("a card the turn's judge raises goes out in order, and the turn waits on it
     // Answered, the turn is back on the clock: silence from here is a stall again.
     const stalled = failureOf(turn.next());
     await advanceTimersByTimeAsync(1_000);
-    expect(await stalled).toBe("Grok turn timed out waiting for OpenCode: nothing arrived for 1s, past the 1s silence limit, 11s into the turn.");
+    expect(await stalled).toBe("Grok turn on the OpenCode loop timed out: nothing arrived for 1s, past the 1s silence limit, 11s into the turn.");
 });
 
 // ---------------------------------------------------------------------------------------------------------------------

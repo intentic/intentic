@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import type { HttpBindings } from "@hono/node-server";
 import { CONNECT_TOKEN_HEADER, REQUEST_ID_HEADER, type RouteMeta, sandboxRouteFor } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
@@ -7,6 +9,7 @@ import { type Context, Hono } from "hono";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
 import { compressResponses } from "./http/compress-responses.js";
+import { watchResponseLength } from "./http/response-length.js";
 import { bearerFrom, ForbiddenError, OWNER_UNREADABLE, OwnerUnreadableError, PasskeyRequiredError } from "./auth/auth.js";
 import { allowedOriginsOf, originAllowedBy } from "./auth/browser-origins.js";
 import { createPasskeyRoutes } from "./auth/passkeys/passkeys.routes.js";
@@ -82,6 +85,7 @@ import { createGateRoute } from "./workflows/gate.routes.js";
 import { createWorkspaceBytesRoutes } from "./workspace/files/workspace-bytes.routes.js";
 import { reachPosture } from "./system/listeners/reach-posture.js";
 import { profileTraits } from "./system/boot/profile.js";
+import { buildInfo } from "./system/boot/build-info.js";
 import { rawRouteServer } from "./http/raw-route-server.js";
 import { logContext } from "./logger.js";
 import { stateStatus } from "./store/evolution/state-convergence.js";
@@ -146,21 +150,34 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // and oRPC validation.
     // Streams are exempt since they're long-lived by design; timing them would log every healthy connection as the
     // slowest request.
+    // Also where a request gets its id: the browser's own when it sent one, so a report matches a log line by id, and
+    // one made here otherwise (the CLI, an extension, curl), so every line of one request still shares a key. Either
+    // way it is echoed on the answer, which is how a caller that sent none learns what to grep for.
     app.use("*", async (c, next) => {
+        const path = c.req.path;
+        // Every answer, streams included: a body shorter than its declared length hangs the browser behind a 200.
+        // SAFETY: the daemon is served by @hono/node-server (netd-door.ts), whose binding this is; absent under `app.request`.
+        const outgoing = (c.env as Partial<HttpBindings> | undefined)?.outgoing;
+        watchResponseLength(outgoing, c.req.method, (mismatch) =>
+            services.logger.warn({ method: c.req.method, path, ...mismatch }, "http: an answer's body did not match the length it declared"),
+        );
         if (policyOf(c).stream === true) {
             return next();
         }
         const from = process.hrtime.bigint();
-        // The browser's own id for this call, echoed onto the served line so a report matches a log line by id.
-        const requestId = c.req.header(REQUEST_ID_HEADER);
+        const requestId = c.req.header(REQUEST_ID_HEADER) ?? randomUUID();
         // Git the request runs is counted under its route (gitRunCallers); a span inside it names a narrower caller.
-        const serve = (): Promise<void> => withGitCaller(gitCallerOfRequest(c.req.method, c.req.path), next);
-        await (requestId === undefined ? serve() : logContext.run({ requestId }, serve));
-        services.perf.record("http.request", Number(process.hrtime.bigint() - from) / 1e6, {
+        await logContext.run({ requestId }, () => withGitCaller(gitCallerOfRequest(c.req.method, path), next));
+        c.header(REQUEST_ID_HEADER, requestId);
+        // A turn's MCP call (`/mcp/<mount>`, agent/tools/turn-mounts.routes.ts) lasts as long as the tool it runs: a
+        // device's command, a browser's page load, seconds to minutes by design. Under http.request those topped every
+        // ranking and buried the reads a person waits on, so they are their own op with their own budget.
+        const mount = /^\/mcp\/([^/]+)/u.exec(path)?.[1];
+        services.perf.record(mount === undefined ? "http.request" : "mcp.call", Number(process.hrtime.bigint() - from) / 1e6, {
             method: c.req.method,
-            path: c.req.path,
+            path,
             status: c.res.status,
-            ...(requestId !== undefined ? { requestId } : {}),
+            requestId,
         });
     });
 
@@ -294,6 +311,8 @@ export const createApp = (services: Services): Hono<AppEnv> => {
                 grant: services.config.sandbox.grant,
                 frontDoor: profileTraits(services.config).extraListeners,
             }).by,
+            // Which build answers (version, source commit, build time), so "is the fix live?" is one read.
+            build: buildInfo(),
         }),
     );
 

@@ -5,7 +5,7 @@ import type { ToolCallContent } from "@intentic/sandbox-contract";
 import { stateRelPath } from "../../state-paths.js";
 
 // Directory every artifact belongs in, outside every repo, so it never reaches the Changes panel or a commit.
-const BROWSER_OUTPUT_REL = stateRelPath(".intentic/records/artifacts/browser/");
+export const BROWSER_OUTPUT_REL = stateRelPath(".intentic/records/artifacts/browser/");
 
 export const browserOutputDir = (root: string): string => join(root, BROWSER_OUTPUT_REL);
 

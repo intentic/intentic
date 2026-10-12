@@ -1,4 +1,6 @@
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { HISTORY_ROOT } from "@intentic/constants";
 import type { TurnPlacement } from "../conversations/worktrees/isolation.js";
 import { namespaceTargetOf, nsenterArgv } from "../workload/namespace-entry.js";
 import { inWorktree } from "../workload/worktree-paths.js";
@@ -25,6 +27,12 @@ export interface JsExecutionPlan {
     readonly allowSpawn: boolean;
 }
 
+// The daemon's own records, read-only: the diagnostics tools and the sandbox's notes point agents at these files (its
+// logs, every conversation's transcript), and a script told to read one was refused. Granted only to a turn whose shell
+// can read them anyway, so no card gains a reach it did not have. Never the rest of the history root, which holds the
+// provider credentials (agent-auth/) and the translator's keys (translator/).
+export const RECORD_READ_ROOTS: readonly string[] = [join(HISTORY_ROOT, "logs"), join(HISTORY_ROOT, "conversations")];
+
 // Undefined when this turn has no JS backend: absence, not mounted-and-refused. Folders resolve like the file-tool
 // fence, an escaping one dropped; tmpdir is readable whenever anything is, writable only with full file power.
 export const jsExecutionPlanOf = (
@@ -46,7 +54,7 @@ export const jsExecutionPlanOf = (
     return {
         cwd: tree.cwd,
         env,
-        readRoots: powers.files === "none" ? [] : [...roots, tmpdir()],
+        readRoots: powers.files === "none" ? [] : [...roots, tmpdir(), ...(powers.shell && persona.fence === undefined ? RECORD_READ_ROOTS : [])],
         writeRoots: powers.files === "write" ? roots : [],
         allowSpawn: powers.shell,
     };

@@ -44,11 +44,18 @@ LOOK UP — reach for these instead of searching /history by hand
                                        ended, its branch and worktree, its per-repo delta and whether that
                                        landed, and where its record is. The HANDLE is anything that names
                                        it — the id (\`fair-sage-ey2r\`), the branch (\`agent/fair-sage-ey2r\`),
-                                       an id prefix, its runtime session id, or words from its title
+                                       an id prefix, words from its title, its runtime session id or the
+                                       first 8 hex of it, a terminal named for it (\`agent-126a7bc4-%551\`),
+                                       a session it ran in earlier, a run or turn id, or the id of an
+                                       in-process subagent one of its turns started (\`a8afce09da420285a\`)
           [--transcript] [--last <n>] [--grep <text>]
-                                       add the record itself: the last <n> messages (default 20), or only
-                                       the ones carrying a phrase
-          [--no-diff] [--json]         skip the per-repo git counts, or answer as JSON
+                                       add the record itself: the last <n> messages (default 20), each with
+                                       the tools it called, or only the ones carrying a phrase in what they
+                                       said or ran (case-insensitive; -i is accepted and changes nothing)
+          [--message <n>]              one message whole, by the number --transcript prints: its full text,
+                                       each tool call's target or input, exit code and the head of its output
+          [--no-diff] [--json]         skip the per-repo git counts, or answer as JSON; with --transcript,
+                                       the rows exactly as stored
           [--stored]                   what the daemon keeps for it instead, raw JSON: its row in every table of
                                        the conversations database, and the files in its directory
   agents ls [--all] [--limit <n>] [--repo <name>] [--owner <who>] [--json]
@@ -56,7 +63,9 @@ LOOK UP — reach for these instead of searching /history by hand
                                        --repo narrows to conversations spanning one repo; --owner to the
                                        ones a member answers for (any part of their address)
   agents find '<text>' [--all] [--limit <n>] [--owner <who>] [--json]
-                                       which conversations said this, with the line that proves it
+                                       which conversations said or did this, with the line that proves it,
+                                       marked by kind: user (asked by its user), said, ran (a tool call's
+                                       name and target), asked (a question card), notice, run
 
 SAY SOMETHING TO ANOTHER CONVERSATION
   agents message <handle> '<text>'     what a person does by typing into that conversation's chat: the words
@@ -101,6 +110,8 @@ SPAWN AND SUPERVISE
                                        in-process alike, each marked which (an in-process one lives in the turn
                                        that started it, so send/answer/cancel cannot reach it). Not \`ls\`, which
                                        is every conversation in the workspace
+
+Every verb takes -h/--help. A handle or text that starts with "-" goes after "--".
 
 A spawned subagent runs as its own conversation in an isolated copy of the repos cut from your conversation's current
 work, on the named provider's connected account (claude, codex, grok, kimi, gemini, cursor — e.g. --provider cursor
@@ -161,28 +172,56 @@ const refusalOf = (text) => {
 
 // Flags then one positional, in any order: `--provider cursor 'do X'` and `'do X' --provider cursor` both
 // parse, because an agent writes commands by meaning, not by grammar memory. `booleans` are the flags that
-// stand alone (`--json`, `--all`); everything else consumes the argument after it. Per-verb rather than
-// global, because `--json` is a switch on a lookup and carries the answer object on `agents answer`.
-const parseFlags = (argv, known, booleans = []) => {
+// stand alone (`--json`, `--all`); everything else consumes the argument after it, or takes it after `=`.
+// Per-verb rather than global, because `--json` is a switch on a lookup and carries the answer object on
+// `agents answer`. `-h`/`--help` prints the usage and succeeds on every verb. A single-dash word is a flag
+// too, never part of the handle: `show x --grep -i docker` once looked up a conversation called `x docker`.
+// `shorts` maps the single-dash spellings a verb knows to a long flag, or to null for one that changes
+// nothing (grep is already case-insensitive, so `-i` is accepted rather than refused); `--` ends the flags.
+// Only the lookups pass `shorts`: a message or a task is free text, and one that starts with "-" is still text.
+const parseFlags = (argv, known, booleans = [], shorts = undefined) => {
     const flags = {};
     const positional = [];
     for (let i = 0; i < argv.length; i += 1) {
         const arg = argv[i];
+        if (arg === "--") {
+            positional.push(...argv.slice(i + 1));
+            break;
+        }
+        if (arg === "--help" || arg === "-h") {
+            process.stdout.write(`${USAGE}\n`);
+            process.exit(0);
+        }
         if (arg.startsWith("--")) {
-            const name = arg.slice(2);
+            const [name, inline] = arg.slice(2).split(/=(.*)/su);
             if (!known.includes(name)) {
-                return die(`agents: unknown flag --${name}\n\n${USAGE}`);
+                return die(`agents: unknown flag --${name} (agents --help lists them)`);
             }
             if (booleans.includes(name)) {
                 flags[name] = true;
                 continue;
             }
-            const value = argv[i + 1];
+            // `--grep -i docker` means grep for docker, case-insensitively: a short flag the verb knows is taken as
+            // that flag even where a value was due, and the value is the word after it.
+            while (inline === undefined && shorts !== undefined && argv[i + 1] in shorts) {
+                i += 1;
+                if (shorts[argv[i]] !== null) {
+                    flags[shorts[argv[i]]] = true;
+                }
+            }
+            const value = inline ?? argv[i + 1];
             if (value === undefined) {
                 return die(`agents: --${name} needs a value`);
             }
             flags[name] = value;
-            i += 1;
+            i += inline === undefined ? 1 : 0;
+        } else if (shorts !== undefined && arg.length > 1 && arg.startsWith("-")) {
+            if (!(arg in shorts)) {
+                return die(`agents: unknown flag ${arg} (agents --help lists them; put a handle or text that starts with "-" after "--")`);
+            }
+            if (shorts[arg] !== null) {
+                flags[shorts[arg]] = true;
+            }
         } else {
             positional.push(arg);
         }
@@ -211,13 +250,16 @@ const compact = (value) => {
 const modelOf = (agent) =>
     agent.model === undefined ? agent.provider : agent.model.startsWith(agent.provider) ? agent.model : `${agent.provider}/${agent.model}`;
 
-const ago = (ms) => {
-    const seconds = Math.max(0, Date.now() - ms) / 1000;
+// A length of time in the one unit that reads best; `ago` and `until` are it measured back and forward from now.
+const duration = (ms) => {
+    const seconds = Math.max(0, ms) / 1000;
     if (seconds < 90) return `${Math.round(seconds)}s`;
     if (seconds < 5400) return `${Math.round(seconds / 60)}m`;
     if (seconds < 172_800) return `${Math.round(seconds / 3600)}h`;
     return `${Math.round(seconds / 86_400)}d`;
 };
+const ago = (ms) => duration(Date.now() - ms);
+
 
 const stamp = (ms) => new Date(ms).toISOString().slice(0, 16).replace("T", " ");
 
@@ -272,13 +314,15 @@ const writeRoster = (agents) => {
     for (const agent of agents) {
         process.stdout.write(`${rosterLine(agent)}\n`);
         if (agent.snippet !== undefined) {
-            process.stdout.write(`${" ".repeat(23)}${agent.snippet.speaker === "user" ? "asked" : "said"}: ${agent.snippet.text}\n`);
+            // Which kind of line matched: words its user typed, words it said, or something it did (snippet.via).
+            const kind = agent.snippet.via ?? (agent.snippet.speaker === "user" ? "user" : "said");
+            process.stdout.write(`${" ".repeat(23)}${kind}: ${agent.snippet.text}\n`);
         }
     }
 };
 
 const ls = async (argv) => {
-    const { flags } = parseFlags(argv, ["all", "limit", "repo", "owner", "json"], ["all", "json"]);
+    const { flags } = parseFlags(argv, ["all", "limit", "repo", "owner", "json"], ["all", "json"], {});
     const answer = await read(`/fleet?${query({ all: flags.all, limit: flags.limit, repo: flags.repo, owner: flags.owner })}`);
     if (flags.json === true) {
         process.stdout.write(`${JSON.stringify(answer, undefined, 2)}\n`);
@@ -292,7 +336,7 @@ const ls = async (argv) => {
 };
 
 const find = async (argv) => {
-    const { flags, positional } = parseFlags(argv, ["all", "limit", "repo", "owner", "json"], ["all", "json"]);
+    const { flags, positional } = parseFlags(argv, ["all", "limit", "repo", "owner", "json"], ["all", "json"], { "-i": null });
     const text = positional.join(" ").trim();
     if (text === "") {
         return die(`agents: find needs something to look for\n\n${USAGE}`);
@@ -301,14 +345,19 @@ const find = async (argv) => {
     if (flags.json === true) {
         process.stdout.write(`${JSON.stringify(answer, undefined, 2)}\n`);
     } else if (answer.agents.length === 0) {
-        process.stdout.write(`Nothing said "${text}"${flags.all === true ? "" : " (--all searches the archive too)"}.\n`);
+        process.stdout.write(`Nothing said or ran "${text}"${flags.all === true ? "" : " (--all searches the archive too)"}.\n`);
     } else {
         writeRoster(answer.agents);
         process.stdout.write("more: agents show <id>\n");
     }
     /* An empty result may be incomplete while the phrase index is still building. */
     if (answer.indexing === true) {
-        process.stderr.write("The phrase index is still building; this answer can still grow.\n");
+        const coverage = answer.coverage;
+        const read =
+            coverage === undefined || coverage.of === 0
+                ? ""
+                : ` (${coverage.done} of ${coverage.of} conversations checked, ${Math.floor((coverage.done / coverage.of) * 100)}%)`;
+        process.stderr.write(`The phrase index is still building${read}; this answer can still grow.\n`);
     }
     process.exitCode = answer.agents.length > 0 ? 0 : 1;
 };
@@ -365,13 +414,77 @@ const reachLines = (reach) => {
     return lines;
 };
 
+// What it spent, honestly: a zero nobody measured is not printed as one (FleetUsage, fleet-recall.ts).
+const spendOf = (agent) => {
+    if (agent.usage === "unrecorded") {
+        return "usage not recorded";
+    }
+    const tokens = `${compact(agent.inputTokens)} uncached in / ${compact(agent.outputTokens)} out`;
+    return agent.usage === "unpriced" ? `${tokens} · cost not reported by its provider` : `${tokens} · $${(agent.costUsd ?? 0).toFixed(2)}`;
+};
+
+const at = (ms) => `${stamp(ms).slice(11)} (${ago(ms)} ago)`;
+const until = (ms) => `${stamp(ms).slice(11)} (in ${duration(ms - Date.now())})`;
+
+// The "now" block: the turn in flight and whatever holds the conversation between turns (FleetNow, fleet-now.ts).
+const nowLines = (now) => {
+    if (now === undefined) {
+        return [];
+    }
+    const lines = [];
+    const { turn } = now;
+    if (turn !== undefined) {
+        const head = [
+            turn.startedAt === undefined ? "turn running" : `turn running since ${at(turn.startedAt)}`,
+            turn.by === undefined ? undefined : `started by ${turn.by}`,
+            turn.lastEventAt === undefined ? undefined : `last event ${ago(turn.lastEventAt)} ago`,
+            turn.stopping === true ? "stopping" : undefined,
+        ].filter(Boolean);
+        lines.push(head.join(" · "));
+        if (turn.doing !== undefined) {
+            lines.push(`  doing: ${turn.doing}${turn.checklist === undefined ? "" : ` · checklist ${turn.checklist.done}/${turn.checklist.total}`}`);
+        }
+        if (turn.waitingOn !== undefined) {
+            lines.push(`  parked on a ${turn.waitingOn.join(", ")} card, waiting for a person`);
+        }
+        if (turn.run !== undefined) {
+            lines.push(`  run ${turn.run}`);
+        }
+    }
+    if (now.resuming === true) {
+        lines.push("resuming: the sandbox is re-running what killed its last turn");
+    }
+    if (now.landing === true) {
+        lines.push("landing: its work is being carried into the workspace right now");
+    }
+    if (now.awaitingWake === true) {
+        lines.push("waits for a wake, so it runs again by itself; the daemon holds its land until then");
+    }
+    for (const watch of now.watches ?? []) {
+        lines.push(`  watch ${watch.id}: ${watch.note} · gives up ${until(watch.deadlineAt)}`);
+    }
+    for (const job of now.jobs ?? []) {
+        const fate = job.handed === true ? "left running for the person" : job.watch !== undefined ? `its exit wakes it (watch ${job.watch})` : "running";
+        const prompt = job.promptSince === undefined ? "" : ` · blocked at a prompt for ${ago(job.promptSince)}, nothing will answer it`;
+        lines.push(`  job ${job.id}: ${job.label} · started ${at(job.startedAt)} · ${fate}${prompt}`);
+    }
+    if (now.queued !== undefined) {
+        const why = now.queued.paused === undefined ? "" : ` · held (${now.queued.paused}${now.queued.until === undefined ? "" : ` until ${until(now.queued.until)}`})`;
+        lines.push(`${now.queued.count} queued ${plural(now.queued.count, "message", "messages")} for its next turn${why}`);
+    }
+    if (now.limit !== undefined) {
+        const when = now.limit.resetsAt === undefined ? "" : ` · allowance reopens ${until(now.limit.resetsAt * 1000)}`;
+        const move = now.limit.moving === undefined ? "" : ` · moving to account ${now.limit.moving}`;
+        lines.push(`held behind a spent allowance: ${now.limit.scheduled ? "booked to go again by itself" : "waits for a press"}${when}${move}`);
+    }
+    return lines;
+};
+
 const writeRecall = (agent) => {
     const failure = agent.failureCode === undefined ? agent.status : `${agent.status} (${agent.failureCode})`;
     process.stdout.write(`${agent.id} · "${agent.title ?? "(untitled)"}" · ${agent.running ? "working" : failure}\n`);
     const settings = [modelOf(agent), agent.effort, agent.harness].filter(Boolean);
-    process.stdout.write(
-        `  ${settings.join(" ")} · ${agent.turns ?? 0} turns · ${agent.toolUses ?? 0} tool uses · ${compact(agent.inputTokens)} in / ${compact(agent.outputTokens)} out · $${(agent.costUsd ?? 0).toFixed(2)}\n`,
-    );
+    process.stdout.write(`  ${settings.join(" ")} · ${agent.turns ?? 0} turns · ${agent.toolUses ?? 0} tool uses · ${spendOf(agent)}\n`);
     process.stdout.write(`  active ${stamp(agent.createdAt)} → ${stamp(agent.updatedAt)} (${ago(agent.updatedAt)} ago)${agent.archived ? " · archived" : ""}\n`);
     /* Who answers for it and who asked for it, when either is known; a wake nobody claimed has neither line. */
     const provenance = [
@@ -406,6 +519,9 @@ const writeRecall = (agent) => {
         process.stdout.write(`  ${index === 0 ? "reach:" : "      "} ${line}\n`);
     }
     process.stdout.write(`  record ${agent.record} (zstdcat) · ${agent.digest.messages} messages${agent.sessionId === undefined ? "" : ` · session ${agent.sessionId}`}\n`);
+    for (const [index, line] of nowLines(agent.now).entries()) {
+        process.stdout.write(`${index === 0 ? "now:\n" : ""}  ${line}\n`);
+    }
     for (const [index, asked] of agent.digest.asked.entries()) {
         process.stdout.write(`${index === 0 ? "asked:\n" : ""}  ${index + 1}. ${asked}\n`);
     }
@@ -413,49 +529,125 @@ const writeRecall = (agent) => {
         process.stdout.write(`last said:\n  ${agent.digest.lastSaid}\n`);
     }
     if (agent.digest.lastNotice !== undefined) {
-        process.stdout.write(`last notice:\n  ${agent.digest.lastNotice}\n`);
+        // Dated by the turn it came in, so a refusal from five turns ago does not read as the present.
+        const age = [
+            agent.digest.lastNoticeSentAt === undefined ? undefined : `in the turn sent ${stamp(agent.digest.lastNoticeSentAt)} (${ago(agent.digest.lastNoticeSentAt)} ago)`,
+            agent.digest.sinceLastNotice > 0 ? `${agent.digest.sinceLastNotice} ${plural(agent.digest.sinceLastNotice, "message", "messages")} since` : undefined,
+        ].filter(Boolean);
+        process.stdout.write(`last notice${age.length === 0 ? "" : ` (${age.join(", ")})`}:\n  ${agent.digest.lastNotice}\n`);
     }
 };
 
+const TOOL_LINE_CHARS = 200;
+
 const writeTranscript = (agent, transcript) => {
-    process.stdout.write(`transcript: ${transcript.messages.length} of ${transcript.total} messages\n`);
+    process.stdout.write(`transcript: ${transcript.messages.length} of ${transcript.total} messages (#n is what --message takes)\n`);
     for (const message of transcript.messages) {
         const who = message.role === "user" ? "user" : message.role === "assistant" ? agent.id : "note";
-        process.stdout.write(`  [${message.at}] ${who}: ${message.text}\n`);
+        const when = message.sentAt === undefined ? "" : ` ${stamp(message.sentAt)}`;
+        process.stdout.write(`  #${message.at}${when} ${who}: ${message.text}\n`);
+        for (const asked of message.asked ?? []) {
+            process.stdout.write(`      asked: ${asked}\n`);
+        }
+        // One line for its tools, cut to fit: the whole of each is `--message <n>`.
+        const tools = message.tools ?? [];
+        if (tools.length > 0) {
+            const more = message.moreTools === undefined ? "" : ` · +${message.moreTools} more`;
+            const line = `ran: ${tools.join(" · ")}`;
+            process.stdout.write(`      ${line.length > TOOL_LINE_CHARS ? `${line.slice(0, TOOL_LINE_CHARS - 1)}…` : line}${more}\n`);
+        }
+    }
+};
+
+// One message whole (FleetMessageDetail, fleet-transcript.ts).
+const writeMessage = (agent, message) => {
+    const who = message.role === "user" ? "user" : message.role === "assistant" ? agent.id : "note";
+    const facts = [message.sentAt === undefined ? undefined : `sent ${stamp(message.sentAt)}`, message.run === undefined ? undefined : `run ${message.run}`].filter(Boolean);
+    process.stdout.write(`message #${message.at} · ${who}${facts.length === 0 ? "" : ` · ${facts.join(" · ")}`}\n`);
+    for (const note of message.notes ?? []) {
+        process.stdout.write(`  note: ${note}\n`);
+    }
+    if (message.text !== "") {
+        process.stdout.write(`${message.text}\n`);
+        if (message.textChars > message.text.length) {
+            process.stdout.write(`(${message.textChars - message.text.length} more characters; agents show ${agent.id} --transcript --json for the row as stored)\n`);
+        }
+    }
+    for (const asked of message.asked ?? []) {
+        process.stdout.write(`asked: ${asked.question}${asked.answers === undefined ? "" : ` → ${asked.answers.join(", ")}`}\n`);
+    }
+    for (const [index, call] of message.calls.entries()) {
+        const ended = [call.status, call.exitCode === undefined ? undefined : `exit ${call.exitCode}`, call.ms === undefined ? undefined : `${(call.ms / 1000).toFixed(1)}s`].filter(Boolean);
+        process.stdout.write(`call ${index + 1}: ${call.name} · ${ended.join(" · ")}\n`);
+        if (call.target !== undefined) {
+            process.stdout.write(`  target: ${call.target}\n`);
+        }
+        if (call.input !== undefined) {
+            process.stdout.write(`  input: ${call.input}\n`);
+        }
+        if (call.subagent !== undefined) {
+            process.stdout.write(`  subagent ${call.subagent.status}${call.subagent.description === undefined ? "" : `: ${call.subagent.description}`}\n`);
+            if (call.subagent.summary !== undefined) {
+                process.stdout.write(`  report: ${call.subagent.summary}\n`);
+            }
+        }
+        for (const child of call.calls ?? []) {
+            process.stdout.write(`  ↳ ${child}\n`);
+        }
+        if (call.output !== undefined) {
+            const more = call.outputChars > call.output.length ? ` (first ${call.output.length} of ${call.outputChars} characters)` : "";
+            process.stdout.write(`  output${more}:\n${call.output.replace(/^/gmu, "    ")}\n`);
+        }
     }
 };
 
 const show = async (argv) => {
-    const { flags, positional } = parseFlags(argv, ["transcript", "last", "grep", "no-diff", "json", "stored"], ["transcript", "no-diff", "json", "stored"]);
+    const { flags, positional } = parseFlags(
+        argv,
+        ["transcript", "last", "grep", "message", "no-diff", "json", "stored"],
+        ["transcript", "no-diff", "json", "stored"],
+        { "-i": null },
+    );
     const handle = positional.join(" ").trim();
     if (handle === "") {
         return die(`agents: show needs a conversation to look up\n\n${USAGE}`);
     }
+    if (flags.message !== undefined && !/^\d+$/u.test(flags.message)) {
+        return die("agents: --message takes a message's number, as --transcript prints it after #");
+    }
     // `--last`/`--grep` are what a transcript is for, so asking for either IS asking for one: a caller that
     // spelled the narrowing and forgot the switch meant the record, not the capsule again.
-    const wantsTranscript = flags.transcript === true || flags.last !== undefined || flags.grep !== undefined;
+    const wantsTranscript = flags.message === undefined && (flags.transcript === true || flags.last !== undefined || flags.grep !== undefined);
     const answer = await read(
         `/fleet/${encodeURIComponent(handle)}?${query({
-            diff: flags["no-diff"] === true ? "0" : undefined,
+            diff: flags["no-diff"] === true || flags.message !== undefined ? "0" : undefined,
             transcript: wantsTranscript,
+            raw: wantsTranscript && flags.json === true,
             last: flags.last,
             grep: flags.grep,
+            message: flags.message,
             stored: flags.stored === true,
         })}`,
     );
     // What the daemon keeps, raw: a diagnosis reads the rows themselves, so they are never summarized.
     if (flags.stored === true) {
-        process.stdout.write(`${JSON.stringify(answer.stored, undefined, 2)}
-`);
+        process.stdout.write(`${JSON.stringify(answer.stored, undefined, 2)}\n`);
         return;
     }
     if (flags.json === true) {
         process.stdout.write(`${JSON.stringify(answer, undefined, 2)}\n`);
         return;
     }
+    if (answer.via !== undefined) {
+        process.stdout.write(`(${handle}: ${answer.via})\n`);
+    }
+    if (answer.detail !== undefined) {
+        writeMessage(answer.agent, answer.detail);
+        return;
+    }
     writeRecall(answer.agent);
     if (answer.transcript === undefined) {
-        process.stdout.write(`more: agents show ${answer.agent.id} --transcript [--last <n>] [--grep <text>]\n`);
+        process.stdout.write(`more: agents show ${answer.agent.id} --transcript [--last <n>] [--grep <text>] · --message <n>\n`);
         return;
     }
     writeTranscript(answer.agent, answer.transcript);
@@ -665,8 +857,21 @@ const list = async () => {
     }
 };
 
+// `agents show x | head` closes the pipe early; that is the reader being done, not a failure worth a stack.
+process.stdout.on("error", (error) => {
+    if (error.code === "EPIPE") {
+        process.exit(0);
+    }
+    throw error;
+});
+
 const [command, ...rest] = process.argv.slice(2);
 const main = async () => {
+    // Before any verb runs, so `agents list --help` is the usage and not the list.
+    if (rest.includes("--help") || rest.includes("-h")) {
+        process.stdout.write(`${USAGE}\n`);
+        return;
+    }
     if (command === "show") return show(rest);
     if (command === "ls") return ls(rest);
     if (command === "find") return find(rest);
@@ -680,7 +885,7 @@ const main = async () => {
     if (command === "merge") return mergeChild(rest);
     if (command === "list") return list();
     process.stdout.write(`${USAGE}\n`);
-    if (command !== undefined && command !== "--help" && command !== "help") {
+    if (command !== undefined && command !== "--help" && command !== "-h" && command !== "help") {
         process.exit(1);
     }
 };

@@ -142,6 +142,8 @@ export const createConversationsSlice = ({ historyRoot, workspace, logger, perf,
                         cardSettled(requestId, conversationId);
                     }
                 },
+                // Each card raised, answered and cancelled, so whether one ever reached a person is on file.
+                (fields, message) => logger.info(fields, message),
             ),
             agentWorktrees,
             turnJournal: sqliteTurnJournal(conversationsDb),

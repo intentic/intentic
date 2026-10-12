@@ -1,4 +1,5 @@
 import { setTimeout as delay } from "node:timers/promises";
+import { errorMessage } from "@intentic/base/errors";
 import {
     type Device,
     type DeviceAgentFlow,
@@ -26,6 +27,7 @@ import { approvedPath } from "../environment/environment.js";
 import type { SyncEnrollmentRow } from "../peers/desktop-sync.js";
 import { emitDefinitionToml, settingsDefinition } from "../definition/definition.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
+import { createRepeatGate } from "../logs/repeat-gate.js";
 import { type HostClient, hostConnections, hostSummaries } from "./host-peer.js";
 import { hostIdFrom, setupHostCard } from "./host-seed.js";
 
@@ -199,6 +201,27 @@ const pull = async (services: Services, id: string): Promise<PullResult> => {
 
 const gapOf = (result: PullResult): DeviceGap | undefined => ("gap" in result ? result.gap : undefined);
 
+// Every failed reading turned into `offline` (or another gap) and said why to nobody: a device shown asleep that was in
+// fact refusing, timing out or unreachable could not be told apart afterwards. One line per change of a device's gap
+// and its reason, the repeats folded into a count, and one line when it answers again.
+const readings = createRepeatGate();
+
+const noteReading = (services: Pick<Services, "logger">, id: string, result: PullResult, thrown: string | undefined): void => {
+    const gap = gapOf(result);
+    if (gap === undefined) {
+        const outage = readings.clear(id);
+        if (outage !== undefined) {
+            services.logger.info({ device: id, was: outage.state, repeated: outage.repeated }, `device reads: ${id} answering again`);
+        }
+        return;
+    }
+    const reason = thrown ?? (gap === "offline" ? "no connection to it" : gap === "scope-off" ? `its "Run commands" switch is off` : "its agent did not answer the report call");
+    const verdict = readings.check(id, `${gap}: ${reason}`);
+    if (verdict.log) {
+        services.logger.info({ device: id, gap, reason, repeated: verdict.repeated }, `device reads: ${id} read as ${gap} (${reason})`);
+    }
+};
+
 // A landing worth waking watchers for: the machine's first reading, a change in whether it answers at all, or a fresh
 // reading replacing one already old enough to read as quiet. A routine refresh of a healthy device announces nothing,
 // so an open Devices tab is not refetched every TTL for news it already has.
@@ -209,13 +232,18 @@ const worthAnnouncing = (before: { at: number; result: PullResult | undefined },
 // against the reading's age.
 const refresh = (services: Services, id: string, entry: PullEntry): Promise<PullResult> => {
     const had = { at: entry.at, result: entry.result };
+    let thrown: string | undefined;
     const inflight = services.perf
         .track("devices.pull", { id }, () => pull(services, id))
         // Never rejects (an abandoned caller leaves nothing unhandled); a deadline miss reads as offline.
-        .catch((): PullResult => ({ gap: "offline" }))
+        .catch((error: Error): PullResult => {
+            thrown = error instanceof DOMException && error.name === "TimeoutError" ? `no answer within ${PULL_TIMEOUT_MS / 1000} s` : errorMessage(error);
+            return { gap: "offline" };
+        })
         .then((result) => {
             entry.at = Date.now();
             entry.result = result;
+            noteReading(services, id, result, thrown);
             if (entry.inflight === inflight) {
                 entry.inflight = undefined;
             }

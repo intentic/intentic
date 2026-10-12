@@ -227,10 +227,20 @@ fn consider(slug: &str, idle_ms: u64, source: Source) -> (bool, String) {
     let now = now_ms();
     match sleep_verdict(signal, now, idle_ms) {
         Verdict::Awake(why) => (false, why.to_string()),
-        Verdict::Sleep => match put_to_sleep(slug, source) {
-            Ok(()) => (true, quiet_for(signal, now)),
-            Err(fail) => (false, format!("could not stop it: {}", fail.0)),
-        },
+        Verdict::Sleep => {
+            let quiet = quiet_for(signal, now);
+            let _why = crate::sandbox::intent::Reason::hold(
+                format!(
+                    "put to sleep: no agent turn was running and it was {quiet}, past the {} limit; the next wake starts it again.",
+                    crate::util::plural((idle_ms / 60_000) as usize, "minute")
+                ),
+                &[],
+            );
+            match put_to_sleep(slug, source) {
+                Ok(()) => (true, quiet),
+                Err(fail) => (false, format!("could not stop it: {}", fail.0)),
+            }
+        }
     }
 }
 

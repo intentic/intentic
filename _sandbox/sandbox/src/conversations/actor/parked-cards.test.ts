@@ -275,3 +275,22 @@ test("a card the standing yes answers is heard too, under the conversation that 
     expect((await wait(new AbortController().signal)).reply).toMatchObject({ decision: "everything" });
     expect(heard).toEqual([[id, "c-1"]]);
 });
+
+// Whether a card ever reached a person could not be established from the logs. Each step of its life is one line, and
+// none carries the card's words or an answer's text.
+test("logs a card raised, answered with its verdict and by whom, and another cancelled with why", async () => {
+    const lines: { fields: Record<string, unknown>; message: string }[] = [];
+    const logged = parkedCards(memoryFleet().conversations, undefined, undefined, (fields, message) => void lines.push({ fields, message }));
+    const permission = logged.create("permission", { kind: "permission", requestId: "", decision: "deny" }, "c-1");
+    const allowed = permission.wait(new AbortController().signal);
+    logged.resolve({ kind: "permission", requestId: permission.id, decision: "once" }, OWNER_CALLER);
+    await allowed;
+    const question = logged.create("question", onAbort, "c-1");
+    await question.wait(AbortSignal.timeout(0));
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    expect(lines.map((line) => line.message)).toEqual(["card: permission raised", "card: permission answered", "card: question raised", "card: question cancelled"]);
+    expect(lines[0]?.fields).toEqual({ conversationId: "c-1", requestId: permission.id, kind: "permission" });
+    expect(lines[1]?.fields).toMatchObject({ conversationId: "c-1", decision: "once", by: OWNER_CALLER.email });
+    expect(lines[3]?.fields).toMatchObject({ requestId: question.id, reason: "its deadline passed unanswered" });
+});

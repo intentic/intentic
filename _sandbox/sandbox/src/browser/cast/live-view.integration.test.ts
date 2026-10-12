@@ -298,7 +298,11 @@ test(
             await older.goto("data:text/html,<title>older</title><body style='background:%23fdd'>older</body>");
             const newer = await context.newPage();
             await newer.goto("data:text/html,<title>newer</title><body style='background:%23ddf'>newer</body>");
-            const view = await startLiveView(context, DISPLAY_KEY, sink, () => undefined, { endpoint });
+            const logged: { fields: Record<string, unknown>; message: string }[] = [];
+            const log = (fields: Record<string, unknown>, message: string): void => {
+                logged.push({ fields, message });
+            };
+            const view = await startLiveView(context, DISPLAY_KEY, sink, () => undefined, { endpoint, log });
             try {
                 // The newest tab is the one Chromium shows, and so the one the view starts on.
                 await settle(() => readies(wire).length > 0 && view.page() === newer);
@@ -331,6 +335,11 @@ test(
             } finally {
                 await view.stop();
             }
+            // Every switch was logged with its cause: the pick, and the window's own moves after it.
+            const reasons = logged.filter((line) => line.message === "live view: following another tab").map((line) => line.fields["reason"]);
+            expect(reasons).toContain("picked");
+            expect(reasons.slice(reasons.indexOf("picked") + 1)).toEqual(["front", "front"]);
+            expect(logged.at(-1)).toMatchObject({ message: "live view: stopped", fields: { tabSwitches: reasons.length } });
         } finally {
             await context.close().catch(() => undefined);
             rmSync(profile, { recursive: true, force: true });

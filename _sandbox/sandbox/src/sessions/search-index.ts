@@ -1,6 +1,6 @@
 import type { MatchSnippet } from "@intentic/sandbox-contract";
 import { siblingModule, workerCalls } from "@intentic/base/worker-calls";
-import type { SpokenLine } from "./transcript-search.js";
+import type { LineVia, SpokenLine } from "./transcript-search.js";
 
 // What was said, indexed durably and written forward as turns settle, so a search reads only this, never the
 // transcripts. The SQLite work runs on a worker thread (search-store.ts, search-index-worker.ts): a cold-cache query
@@ -9,6 +9,11 @@ import type { SpokenLine } from "./transcript-search.js";
 // A conversation (fleet board) or a runtime session (history list); kept apart so neither route pays for the other's
 // rows.
 export type SearchKind = "conversation" | "session";
+
+// A search's evidence for one source: the matched line windowed around the hit, and for a deed what kind it was.
+export interface FoundLine extends MatchSnippet {
+    readonly via?: LineVia;
+}
 
 export interface SearchIndexMetrics {
     readonly conversations: number;
@@ -25,8 +30,9 @@ export interface SearchIndex {
     readonly versions: (kind: SearchKind) => Promise<Map<string, string>>;
     // Drop a source entirely: a purged conversation, a session whose file is gone.
     readonly forget: (key: string) => Promise<void>;
-    // Oldest user line wins, else oldest agent's, one row per source; folds `needle` to match the ingest fold.
-    readonly search: (needle: string, kind: SearchKind, caseSensitive: boolean) => Promise<Map<string, MatchSnippet>>;
+    // Oldest user line wins, else oldest agent's, one row per source; folds `needle` to match the ingest fold. `deeds`
+    // admits what the conversation did (tool calls, question cards, notices, runs) after what was said; off, speech only.
+    readonly search: (needle: string, kind: SearchKind, caseSensitive: boolean, deeds?: boolean) => Promise<Map<string, FoundLine>>;
     // The counts the worker reported with its last write, so the resource sampler reads them without a round trip.
     readonly metrics: () => SearchIndexMetrics;
     readonly close: () => Promise<void>;
@@ -37,7 +43,7 @@ export type SearchAsk =
     | { readonly op: "put" | "extend"; readonly key: string; readonly kind: SearchKind; readonly version: string; readonly lines: readonly SpokenLine[] }
     | { readonly op: "forget"; readonly key: string }
     | { readonly op: "versions"; readonly kind: SearchKind }
-    | { readonly op: "search"; readonly needle: string; readonly kind: SearchKind; readonly caseSensitive: boolean }
+    | { readonly op: "search"; readonly needle: string; readonly kind: SearchKind; readonly caseSensitive: boolean; readonly deeds: boolean }
     | { readonly op: "close" };
 
 export const openSearchIndex = (dir: string): SearchIndex => {
@@ -51,7 +57,7 @@ export const openSearchIndex = (dir: string): SearchIndex => {
         extend: (key, kind, version, lines) => calls.call({ op: "extend", key, kind, version, lines }),
         versions: (kind) => calls.call({ op: "versions", kind }),
         forget: (key) => calls.call({ op: "forget", key }),
-        search: (needle, kind, caseSensitive) => calls.call({ op: "search", needle, kind, caseSensitive }),
+        search: (needle, kind, caseSensitive, deeds = false) => calls.call({ op: "search", needle, kind, caseSensitive, deeds }),
         metrics: () => latest,
         close: async () => {
             await calls.call({ op: "close" });

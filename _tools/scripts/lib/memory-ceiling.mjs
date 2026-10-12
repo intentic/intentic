@@ -95,24 +95,28 @@ export const largestProcess = (root, procRoot = "/proc") => {
 
 // Watches a spawned child's tree every `intervalMs`; the first process past the ceiling gets the whole tree killed and
 // `onExceed` called once with it. Returns the stop function, which answers with the most any one process of the tree
-// was seen holding (undefined when nothing was sampled): how close a run came is the measurement the ceiling is sized
-// from, and a run that passes says nothing of it otherwise.
+// was seen holding, and the most the whole tree held at one look (`total`), or undefined when nothing was sampled: how
+// close a run came is the measurement the ceiling is sized from, and a run that passes says nothing of it otherwise. The
+// ceiling is per process, so a fan-out of four workers at 3 GiB each is 3 GiB against it and 12 GiB of the machine.
 export const watchMemory = (child, { ceiling = ceilingBytes(), intervalMs = 2_000, onExceed, procRoot = "/proc" } = {}) => {
     if (ceiling === 0 || child.pid === undefined) {
         return () => undefined;
     }
     let peak;
     const timer = setInterval(() => {
-        const largest = largestProcess(child.pid, procRoot);
-        if (largest !== undefined && largest.held > (peak?.held ?? 0)) {
-            peak = largest;
+        const tree = processTree(child.pid, procRoot);
+        const held = tree.map((pid) => ({ pid, held: heldBytes(pid, procRoot) }));
+        const largest = held.reduce((most, entry) => (entry.held > (most?.held ?? 0) ? entry : most), undefined);
+        const total = held.reduce((sum, entry) => sum + entry.held, 0);
+        if (largest !== undefined) {
+            peak = largest.held > (peak?.held ?? 0) ? { ...largest, total: Math.max(total, peak?.total ?? 0) } : { ...peak, total: Math.max(total, peak.total) };
         }
-        const found = overCeiling(child.pid, ceiling, procRoot);
+        const found = held.find((entry) => entry.held > ceiling);
         if (found === undefined) {
             return;
         }
         clearInterval(timer);
-        for (const pid of processTree(child.pid, procRoot).toReversed()) {
+        for (const pid of tree.toReversed()) {
             try {
                 process.kill(pid, "SIGKILL");
             } catch {
@@ -129,6 +133,10 @@ export const watchMemory = (child, { ceiling = ceilingBytes(), intervalMs = 2_00
 };
 
 export const formatGiB = (bytes) => `${(bytes / GIB).toFixed(1)} GiB`;
+
+// A size as a reader takes it: in GiB from one GiB up, in MiB below, where a light suite's 37 MiB printed as "0.0 GiB"
+// and read as a broken measurement.
+export const formatSize = (bytes) => (bytes >= GIB ? formatGiB(bytes) : `${Math.round(bytes / 1024 ** 2)} MiB`);
 
 // `node memory-ceiling.mjs -- <command> [args…]`: runs the command under the ceiling, for a caller that runs bun itself
 // rather than through `suites` (flakes.mjs re-running failures alone) and waits on it synchronously.

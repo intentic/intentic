@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RpcMessage } from "../../agent/tools/turn-mounts.js";
-import { type BrowserRouter, createBrowserRouter, createSchemaCache, type Prepared } from "./browser-router.js";
+import { type BrowserRouter, createBrowserRouter, createSchemaCache, type Prepared, type RoutedScreenshot } from "./browser-router.js";
 
 // The router's contract, driven in-process against real child processes:
 // 1. handshake and tools/list are answered with no backend and no prepare; every listed tool gains an injected
@@ -16,6 +16,7 @@ import { type BrowserRouter, createBrowserRouter, createSchemaCache, type Prepar
 // 7. a network tool's answer comes back with the credentials a site issued redacted, and its debugging facts intact.
 // 8. the fixed browser_webmcp_call is listed beside the probed tools and reaches the page tool the backend names
 //    webmcp_<name>, which no cached tool list could have carried.
+// 9. a screenshot's answer is handed on with its owner, conversation and request, so its provenance can be written.
 // The backend is a canary standing in for @playwright/mcp; it writes a marker file on spawn and echoes call arguments
 // back.
 
@@ -102,6 +103,8 @@ interface Harness {
     readonly prepares: string[];
     // Owners the stand-in prepare refuses instead of handing back a spec.
     readonly refusals: Map<string, string>;
+    // Screenshots the router reported, in order.
+    readonly screenshots: RoutedScreenshot[];
 }
 
 const cleanups: (() => Promise<void>)[] = [];
@@ -123,6 +126,7 @@ const startRouter = async (soleOwner?: string): Promise<Harness> => {
     const schemaCachePath = join(dir, "tools.json");
     const prepares: string[] = [];
     const refusals = new Map<string, string>();
+    const screenshots: RoutedScreenshot[] = [];
     const schemas = createSchemaCache();
     const router = createBrowserRouter(
         {
@@ -130,6 +134,7 @@ const startRouter = async (soleOwner?: string): Promise<Harness> => {
             accounts: soleOwner === undefined ? { "identity-1": "identity-1", "born-acct": "identity-1", standalone: "standalone" } : {},
             owners: Object.fromEntries(Object.keys(markers).map((owner, index) => [owner, { port: 41_000 + index }])),
             backendEnv: {},
+            conversationId: "conversation-1",
             ...(soleOwner === undefined ? {} : { soleOwner }),
         },
         {
@@ -141,13 +146,14 @@ const startRouter = async (soleOwner?: string): Promise<Harness> => {
                     ? { command: process.execPath, args: [canaryPath, markers[owner] as string], env: { ...process.env } as Record<string, string> }
                     : { refusal };
             },
+            screenshotTaken: (shot) => screenshots.push(shot),
         },
     );
     cleanups.push(async () => {
         router.close();
         await rm(dir, { recursive: true, force: true });
     });
-    return { dir, markers, schemaCachePath, router, prepares, refusals };
+    return { dir, markers, schemaCachePath, router, prepares, refusals, screenshots };
 };
 
 const rpc = async (router: BrowserRouter, message: RpcMessage): Promise<Record<string, unknown>> =>
@@ -217,6 +223,22 @@ test("a call routes by account to the owner's backend with the parameter strippe
     });
     expect((other["result"] as ToolResult).content[0]?.text).toContain(harness.markers["standalone"] as string);
     expect(await exists(harness.markers["standalone"] as string)).toBe(true);
+});
+
+test("a screenshot is reported with its owner, conversation and request; any other call is not", async () => {
+    const harness = await startRouter();
+    await handshake(harness);
+    await rpc(harness.router, { jsonrpc: "2.0", id: 30, method: "tools/call", params: { name: "browser_probe", arguments: { account: "standalone" } } });
+    const meta = { "claudecode/toolUseId": "toolu_1" };
+    await rpc(harness.router, {
+        jsonrpc: "2.0",
+        id: 31,
+        method: "tools/call",
+        params: { name: "browser_take_screenshot", arguments: { account: "born-acct" }, _meta: meta },
+    });
+    expect(harness.screenshots).toHaveLength(1);
+    expect(harness.screenshots[0]).toMatchObject({ owner: "identity-1", conversationId: "conversation-1", params: { _meta: meta } });
+    expect(JSON.stringify(harness.screenshots[0]?.answer.result)).toContain("echo:");
 });
 
 test("an account outside the manifest is refused with the granted set named, and no backend pays for it", async () => {

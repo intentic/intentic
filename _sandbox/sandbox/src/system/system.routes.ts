@@ -494,7 +494,14 @@ export const createSystemRoutes = (services: Services) => {
         // browser installed, no display) rather than leaving the view waiting on a window that will never come.
         openBrowser: i.openBrowser.handler(async ({ input }) => {
             try {
-                return await openOwnBrowser({ root: services.workspace.root, warn: (fields, message) => services.logger.warn(fields, message) }, input.url);
+                return await openOwnBrowser(
+                    {
+                        root: services.workspace.root,
+                        warn: (fields, message) => services.logger.warn(fields, message),
+                        info: (fields, message) => services.logger.info(fields, message),
+                    },
+                    input.url,
+                );
             } catch (error) {
                 services.logger.warn({ err: error }, "own browser: could not open");
                 throw new ORPCError("SERVICE_UNAVAILABLE", { message: `Couldn't open your browser: ${errorMessage(error)}` });

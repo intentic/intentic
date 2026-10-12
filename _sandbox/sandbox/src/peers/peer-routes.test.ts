@@ -9,7 +9,7 @@ import { createTurnMountRoute, type MountEndpoints } from "../agent/tools/turn-m
 import type { Services } from "../composition.js";
 import type { PeerDoor } from "./peer.js";
 import type { PeerHub } from "./peer-hub.js";
-import { admitPeer, createPeerRoutes, greetPeer } from "./peer-routes.js";
+import { admitPeer, createPeerRoutes, createRefusalLog, greetPeer } from "./peer-routes.js";
 import { type Presented, webextEnrollmentsDocument, webextPairConsumedDocument } from "./enrollment.js";
 import type { PeerStore } from "./peer-store.js";
 import { redeemCodes } from "./redeem-codes.js";
@@ -64,7 +64,7 @@ const routeFor = (
         whenOnline: overrides.whenOnline ?? (async () => false),
     } as unknown as Hub;
     const store = { enrolled: async () => overrides.enrolled ?? true } as unknown as PeerStore<Record<never, never>>;
-    const routes = createPeerRoutes({ logger: { warn: () => {} } } as unknown as Services, door, {
+    const routes = createPeerRoutes({ logger: { warn: () => {}, info: () => {} } } as unknown as Services, door, {
         store,
         hub,
         summaries: async () => [],
@@ -289,7 +289,39 @@ test("an enrollment no card holds is refused, and invited back rather than unpai
     expect(await admission(enrolled("ghost"), [laptopCard])).toEqual({
         refusal: `no capability card grants this device anything right now`,
         retry: true,
+        id: "ghost",
+        card: "ghost",
     });
+});
+
+// The ghost above redials every 30 seconds; its refusal used to be one anonymous warn line per knock.
+test("a peer refused on every redial is one line naming it, then the count, then one line when it is let in", () => {
+    const lines: { level: string; data: Record<string, unknown>; message: string }[] = [];
+    const logger = {
+        warn: (data: Record<string, unknown>, message: string) => void lines.push({ level: "warn", data, message }),
+        info: (data: Record<string, unknown>, message: string) => void lines.push({ level: "info", data, message }),
+    };
+    const clock = { at: 0 };
+    const log = createRefusalLog(logger as never, "hosts", () => clock.at);
+    const ghost = { refusal: "no capability card grants this device anything right now", retry: true, id: "ghost", card: "ghost" };
+    for (let knock = 0; knock <= 120; knock += 1) {
+        log.refused(ghost, "presented-token");
+        clock.at += 30_000;
+    }
+    log.refused({ refusal: "unauthorized", retry: false }, "another-token");
+    log.admitted("ghost");
+    expect(lines.map((line) => [line.level, line.message])).toEqual([
+        ["warn", "hosts: refused a socket"],
+        ["warn", "hosts: refused a socket"],
+        ["warn", "hosts: refused a socket"],
+        ["info", "hosts: admitted a peer it had been refusing"],
+    ]);
+    expect(lines[0]?.data).toMatchObject({ id: "ghost", card: "ghost", retry: true });
+    // An hour of knocks every 30 seconds folds into one count.
+    expect(lines[1]?.data).toMatchObject({ id: "ghost", repeated: 119 });
+    // A token nothing holds is told apart by its fingerprint, never the token itself.
+    expect(lines[2]?.data["token"]).toMatch(/^[0-9a-f]{8}$/);
+    expect(lines[3]?.data).toMatchObject({ id: "ghost", repeated: 0 });
 });
 
 // The enroll door over an enrollment manifest this build cannot read: the doors' 503, never a 401 that sends the peer
@@ -439,4 +471,31 @@ test("the device door's pairing answers a short code that redeems for its token"
 
 test("a door without codes answers its pairing unchanged", async () => {
     expect(await pairWith(undefined).pair()).toEqual({ token: "pair-token", expiresIn: 600 });
+});
+
+// The transport's own words ("[AsyncIdQueue] Queue[17] was closed…", "The operation timed out.") reached agents
+// verbatim, who read them as a broken tool and retried commands that may have run. Each is said as what happened.
+test("a call the peer dropped or never answered is said as that, and may still have run", async () => {
+    const dropped = routeFor({
+        mcp: async () => {
+            throw new Error("[AsyncIdQueue] Queue[17] was closed or aborted while waiting for pulling.");
+        },
+    });
+    const droppedAnswer = (await (await post(dropped, { jsonrpc: "2.0", id: 5, method: "tools/call", params: { name: "run_command" } })).json()) as {
+        error: { message: string };
+    };
+    expect(droppedAnswer.error.message).toBe(
+        `"laptop" dropped its connection while the run_command call was running (the device went to sleep, lost its network, or its agent restarted). It may or may not have finished there: check before running it again.`,
+    );
+    const slow = routeFor({
+        mcp: async () => {
+            throw new DOMException("The operation timed out.", "TimeoutError");
+        },
+    });
+    const slowAnswer = (await (await post(slow, { jsonrpc: "2.0", id: 6, method: "tools/call", params: { name: "run_command" } })).json()) as {
+        error: { message: string };
+    };
+    expect(slowAnswer.error.message).toBe(
+        `"laptop" did not answer the run_command call within 60 s, so the bridge stopped waiting. It may still be running on that device: check its result before running it again.`,
+    );
 });

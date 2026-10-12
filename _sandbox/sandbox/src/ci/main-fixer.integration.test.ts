@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,6 +12,7 @@ import type { Services } from "../composition.js";
 import type { PersistedAgent } from "../conversations/registry/agents-store.js";
 import type { Said, Steer, TurnInput } from "../seams/turn-starter.js";
 import { fileCiStore } from "./ci-store.js";
+import { ciLogsRoot, jobLogPath } from "./job-logs.js";
 import {
     type FailedJob,
     fixerSettled,
@@ -244,6 +245,12 @@ test("a run's failed jobs are parked while it goes on, and its finish starts one
     expect(started[0]!.prompt).toContain(`run 41 failed 2 jobs: "verify-core", "lint", on main of "web"`);
     expect(started[0]!.prompt).toContain("so this is the whole list of what it found wrong");
     expect(started[0]!.prompt).toContain("- [verify-core, lint] FAIL src/a.test.ts > adds");
+    // Each whole log is kept on this machine and named, so a cause the digest cut off costs the agent no download, and
+    // the API is named by the gateway address the placeholder token works through.
+    const kept = jobLogPath(ciLogsRoot(), "web", 41, 410, "verify-core");
+    expect(started[0]!.prompt).toContain(`whole log: ${kept}`);
+    expect(readFileSync(kept, "utf8")).toBe("FAIL src/a.test.ts > adds");
+    expect(started[0]!.prompt).toContain("$GITHUB_API_URL_<CONNECTION>");
     expect(started[0]!.errand).toBe("ci-fix");
     expect(told).toEqual(["ci.repair_started"]);
     expect(await failure()).toMatchObject({ count: 1, turns: 1, heard: ["41/410", "41/411"] });

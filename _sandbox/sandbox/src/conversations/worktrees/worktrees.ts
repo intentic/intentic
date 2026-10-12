@@ -13,6 +13,7 @@ import { textFile } from "../../store/text-file.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
 import type { WorkspacePaths } from "../../workspace/workspace.js";
 import { branchSha, dropAgentRef, parkAgentRefs, unparkAgentRef } from "../../git/agent-refs.js";
+import { withConversationTrailer } from "../../git-identity.js";
 import { claudeStoreOf, type StoreOwner } from "../../sessions/session-store.js";
 import { mirroredDirs, overlaysDir, PACKAGE_STORE, type TurnIsolation } from "./isolation.js";
 import { coneFor, fencedComposition } from "./worktree-cone.js";
@@ -631,7 +632,7 @@ export const createAgentWorktrees = (
         if (stdout === "") {
             return;
         }
-        await commitWorktreeRemainder(repo, worktree, `Agent: ${title ?? id}`, workspace.root, git);
+        await commitWorktreeRemainder(repo, worktree, withConversationTrailer(`Agent: ${title ?? id}`, id), workspace.root, git);
     };
 
     // Drops one checkout and parks its branch (retire pass 2 / a leaving repo's second half); under the repo lock,

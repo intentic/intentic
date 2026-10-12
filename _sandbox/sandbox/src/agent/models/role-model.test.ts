@@ -135,12 +135,19 @@ const fakeServices = (pinned: readonly string[], spent: readonly string[] = []):
         providerRefusals: unstubbed<Services[`providerRefusals`]>(`providerRefusals`, { clear: async () => {} }),
         // ...and reopens the model it benched, as the same first words do.
         modelCooldowns: unstubbed<Services[`modelCooldowns`]>(`modelCooldowns`, { clear: async () => {} }),
-        logger: unstubbed<Services[`logger`]>(`logger`, { debug: () => {} }),
+        logger: unstubbed<Services[`logger`]>(`logger`, {
+            debug: () => {},
+            info: (fields: object, message: string) => void logged.push({ level: `info`, fields, message }),
+            warn: (fields: object, message: string) => void logged.push({ level: `warn`, fields, message }),
+        } as unknown as Partial<Services[`logger`]>),
         // Records each rung's timing under its model name for the walk's perf trace.
         perf: unstubbed<Services[`perf`]>(`perf`, { record: (op, ms, fields, failed) => void timed.push({ op, ms, fields, failed }) }),
     });
 
 const signal = (): AbortSignal => new AbortController().signal;
+
+// Every outcome line the walk wrote, across tests: the gate is the module's own, so a test reads lines for its own role.
+const logged: { level: string; fields: object; message: string }[] = [];
 
 // One entry per model actually asked, in spend order; typed from perf's own record signature.
 type Billed = { op: string; ms: number; fields: PerfFields; failed?: boolean | undefined };
@@ -591,4 +598,35 @@ test("an unknown window is asked whatever the prompt's size", async () => {
     const answer = await askRoleModel(services, execution, ROLE, { ...DRAFT, prompt: `x`.repeat(500_000) }, signal());
 
     expect(answer.choice.model).toBe(`claude-opus-5`);
+});
+
+// A whole chain failing went back to its caller and nowhere else; the commit box failing on Composer had no line to
+// explain it. The walk logs its outcome per role, each rung's refusal included, and folds a repeat into a count.
+test("logs a role's failed chain once with every rung's refusal, a repeat as a count, and the recovery", async () => {
+    const pins = asPins([`codex:gpt-5.6`, `claude:claude-haiku-4-5`]);
+    const services = fakeServices([]);
+    const ownLines = (): typeof logged => logged.filter((line) => (line.fields as { role?: string }).role === `handoff-summary`);
+    oneShot.mockRejectedValue(new Error(`Composer is unavailable right now.`));
+    await expect(askRoleModel(services, execution, `handoff-summary`, DRAFT, signal(), { pins, conversationId: `c-1` })).rejects.toThrow();
+    // Within the gate's hour: the same failure again is a count, not a line.
+    jest.setSystemTime(new Date(clock + 60_000));
+    await expect(askRoleModel(services, execution, `handoff-summary`, DRAFT, signal(), { pins })).rejects.toThrow();
+    expect(ownLines()).toHaveLength(1);
+    expect(ownLines()[0]).toMatchObject({
+        level: `warn`,
+        message: `role model: handoff-summary failed on every model in its chain`,
+        fields: {
+            conversationId: `c-1`,
+            steps: [
+                { provider: `codex`, model: `gpt-5.6`, status: `refused`, reason: `Composer is unavailable right now.` },
+                { provider: `claude`, model: `claude-haiku-4-5`, status: `refused`, reason: `Composer is unavailable right now.` },
+            ],
+        },
+    });
+    oneShot.mockReset();
+    oneShot.mockResolvedValue(`fix: tree truncation`);
+    jest.setSystemTime(new Date(clock + 120_000));
+    await askRoleModel(services, execution, `handoff-summary`, DRAFT, signal(), { pins });
+    expect(ownLines().map((line) => line.message)).toEqual([`role model: handoff-summary failed on every model in its chain`, `role model: handoff-summary answered again, on gpt-5.6`]);
+    expect(ownLines()[1]?.fields).toMatchObject({ repeated: 1 });
 });

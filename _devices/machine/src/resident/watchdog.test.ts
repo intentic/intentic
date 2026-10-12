@@ -1,4 +1,4 @@
-import { pausedAcross, stallLine, stalledFor, WATCHDOG_PING_MS, WATCHDOG_STALL_MS } from "./watchdog.js";
+import { pausedAcross, sleepLine, stallLine, stalledFor, WALL_JUMP_MS, wallJump, WATCHDOG_PING_MS, WATCHDOG_STALL_MS } from "./watchdog.js";
 
 const NOW = 1_800_000_000_000;
 
@@ -20,6 +20,23 @@ test("the line it leaves says what happened, timestamped like every other line o
     expect(stallLine(181, new Date(NOW))).toBe(
         `[${new Date(NOW).toISOString()}] event loop stalled for 181 s; exiting so the supervisor restarts the agent\n`,
     );
+    // A real stall minutes after a sleep still kills, and says how soon after the sleep it came.
+    expect(stallLine(181, new Date(NOW), 240)).toContain("stalled for 181 s (240 s after a suspected sleep/resume); exiting");
+    expect(sleepLine(3600, new Date(NOW))).toBe(
+        `[${new Date(NOW).toISOString()}] watchdog: the agent was paused for 3600 s (suspected sleep/resume, or the clock was set forward); not a stall, the count starts again\n`,
+    );
+});
+
+// Linux's monotonic clock stops while the machine sleeps: checks come back on time, and only the wall clock says the
+// machine was away. The difference between the two clocks is that time; ordinary jitter is none of it.
+test("the wall clock running ahead of the monotonic one between two checks is a sleep; a late timer is not", () => {
+    const MONO = 1_000;
+    expect(wallJump(MONO, MONO + WATCHDOG_PING_MS, NOW, NOW + WATCHDOG_PING_MS)).toBe(0);
+    expect(wallJump(MONO, MONO + WATCHDOG_PING_MS, NOW, NOW + WATCHDOG_PING_MS + 3_600_000)).toBe(3_600_000);
+    // A timer firing late moves both clocks alike.
+    expect(wallJump(MONO, MONO + 9_000, NOW, NOW + 9_050)).toBeLessThan(WALL_JUMP_MS);
+    // A clock set back is no sleep.
+    expect(wallJump(MONO, MONO + WATCHDOG_PING_MS, NOW, NOW - 60_000)).toBeLessThan(0);
 });
 
 // A sleep holds the Worker's own checks apart too, which a hung main loop never does: that gap restarts the count.

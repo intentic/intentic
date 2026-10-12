@@ -15,6 +15,7 @@ import {
     type HandoffMode,
     type HandoffOffer,
     RETRY_LADDER_TRIES,
+    resumeNoteWith,
     retryLadderDelay,
     type TodoItem,
     type TranscriptRow,
@@ -48,6 +49,10 @@ import { versionCommitsSettled } from "../../../conversations/land/version-lande
 import { landingRepos, workLanded } from "../../../conversations/land/work-landed.js";
 import { opt } from "../../../opt.js";
 import type { VerificationStanding } from "../../verification/agent-verification.js";
+import { spentRung } from "../../models/role-model-quota.js";
+import { recordInterrupted } from "./interrupted-ledger.js";
+import { previousRun } from "../../../system/boot/boot-marker.js";
+import { restartCost } from "../../../system/boot/restart-record.js";
 
 // Re-runs a turn once its blocker clears. Two kinds live here and should not be confused: the daemon's own bookkeeping
 // (a rotated token, a restart, a session past its window), which needs nobody's permission, and the three walls the
@@ -142,6 +147,8 @@ interface RerunNote {
     readonly reason: ResumeReason;
     readonly fresh?: true;
     readonly restate?: true;
+    // What this re-run alone can tell the model, said after its note (resumeNoteWith): a restart's cost.
+    readonly tail?: string | undefined;
 }
 
 // The ways on a spent allowance's held turn can take where it is going: carrying or trimming the session needs the turn
@@ -295,16 +302,18 @@ export const sandboxBreakPolicy = async (services: Pick<Services, "sandboxSettin
 // provider filler. A note already on the prompt stays unless `restate` replaces it, and `resume` names the one it keeps.
 const resumedTurn = (
     failure: { readonly input: TurnInput & { conversationId: string }; readonly sessionId?: string | undefined },
-    { reason, fresh, restate }: RerunNote,
+    { reason, fresh, restate, tail }: RerunNote,
 ): TurnInput & { conversationId: string } => {
     // Destructured out first so `fresh` can unset it, rather than leaving the carried session in place via a spread. The
     // failed turn's own cut goes too: it named a point in the session as it stood then, and the work since is kept.
     const { sessionId: carried, resumeAt: _cut, ...rest } = failure.input;
     const sessionId = fresh === true ? undefined : (failure.sessionId ?? carried);
     const resume = restate === true ? reason : (failure.input.resume ?? reason);
+    // The tail belongs to this re-run's own note; a note the prompt already carries keeps its own words.
+    const note = resume === reason ? resumeNoteWith(RESUME_NOTES[resume], tail) : RESUME_NOTES[resume];
     return {
         ...rest,
-        prompt: withResumeNote(restate === true ? withoutResumeNote(failure.input.prompt) : failure.input.prompt, RESUME_NOTES[resume]),
+        prompt: withResumeNote(restate === true ? withoutResumeNote(failure.input.prompt) : failure.input.prompt, note),
         resume,
         ...(sessionId === undefined ? {} : { sessionId }),
     };
@@ -431,10 +440,24 @@ interface Rung {
 
 // A held turn's re-run, the sandbox's own, logged once it starts; a refusal names why it did not.
 const rerun = async (services: Services, held: HeldTurn, routing?: ResumeRouting): Promise<StartedRun | BeginRefusal> => {
-    const started = await services.turns.start(rerunOf(held, routing));
-    if (typeof started !== "string") {
-        const { conversationId } = held.input;
-        services.logger.info({ conversationId, reason: held.reason, ...opt("account", routing?.account) }, "held turn re-run fired");
+    const turn = rerunOf(held, routing);
+    const started = await services.turns.start(turn);
+    const { conversationId } = held.input;
+    const { agent, harness } = withRuntimeDefaults(turn);
+    const said = {
+        conversationId,
+        reason: held.reason,
+        ...opt("previousRun", held.run),
+        provider: agent,
+        harness,
+        ...opt("model", turn.model),
+        ...opt("account", turn.account),
+        ...opt("sessionId", turn.sessionId),
+    };
+    if (typeof started === "string") {
+        services.logger.info({ ...said, refusal: started }, "held turn re-run not started: the conversation refused it");
+    } else {
+        services.logger.info({ ...said, run: started.id }, "held turn re-run fired");
     }
     return started;
 };
@@ -962,7 +985,25 @@ const rehydrateParkedTurn = async (services: Services, entry: JournalledTurn): P
         // A live turn already owns the conversation, superseding the park as a hand retry would; or nobody reopened it.
         return run;
     }
-    services.logger.info({ conversationId, requests: requests.length }, "parked turn rehydrated, its requests are back where they were");
+    const { agent, harness } = withRuntimeDefaults(entry.turn);
+    const carried = entry.run?.id === run.id;
+    services.logger.info(
+        {
+            conversationId,
+            run: run.id,
+            ...opt("previousRun", entry.run?.id),
+            rows: entry.run?.rows?.length ?? 0,
+            requests: requests.length,
+            ...opt("sessionId", sessionId),
+            provider: agent,
+            harness,
+            ...opt("model", entry.turn.model),
+            startedAt: entry.startedAt,
+        },
+        carried
+            ? "parked turn carried on after the restart under its own run id: its rows were kept and its cards raised again, nothing runs until they are answered"
+            : "parked turn re-opened after the restart under a new run id: its journal entry held no run, so it opens on its prompt again with its cards raised",
+    );
     // Detached: the handoff waits out the whole run, and a request may sit unanswered for days without blocking boot.
     void (async () => {
         // On the record first: the answer's turn writes its own rows, and they belong under the work they answer.
@@ -1036,8 +1077,9 @@ const settleParked = async (services: Services, entry: JournalledTurn, reason: s
         // given up either way.
         .catch(() => false);
     await consumeEntry(services, entry);
+    recordInterrupted(services, entry, `its cards could not be put back (${reason}), given up`, Date.now());
     services.logger.warn(
-        { conversationId, reason, attempts: entry.attempts, recorded },
+        { conversationId, reason, attempts: entry.attempts, recorded, ...opt("previousRun", entry.run?.id) },
         "parked turn given up: its cards could not be put back after every try, so it stands on the record as interrupted",
     );
 };
@@ -1048,8 +1090,15 @@ const settleParked = async (services: Services, entry: JournalledTurn, reason: s
 // this boot follows was one the owner started and asked to pick up after (restart-resume.ts), which resumes the turns
 // it cut as autoResumeOnRestart would, this once. `restartStorm`: this boot is one of a restart storm
 // (system/boot/boot-history.ts), which resumes nothing, ask or setting, and leaves every cut turn interrupted on the
-// record (2026-10-05).
-export const resumeInterruptedTurns = async (services: Services, now: number = Date.now(), ownerAsked = false, restartStorm = false): Promise<void> => {
+// record (2026-10-05). `cost`: what the restart cost the turns it cut (restart-record.ts), told to each one it re-runs,
+// so it knows whether its background commands still run and /tmp still holds what it wrote; read off this boot's marker.
+export const resumeInterruptedTurns = async (
+    services: Services,
+    now: number = Date.now(),
+    ownerAsked = false,
+    restartStorm = false,
+    cost: string | undefined = restartCostNow(),
+): Promise<void> => {
     const listed = await services.turnJournal.list().catch((error: unknown): JournalEntry[] => {
         services.logger.warn({ err: error }, "turn journal: unreadable at boot, no interrupted turn is resumed");
         return [];
@@ -1081,8 +1130,10 @@ export const resumeInterruptedTurns = async (services: Services, now: number = D
                 continue;
             }
             await consumeEntry(services, entry);
+            const why = notResumedWhy({ spent, stale, autoResumeOnRestart, restartStorm });
+            recordInterrupted(services, entry, `not resumed: ${why}`, now);
             services.logger.info(
-                { entry: entry.kind, spent, stale, autoResumeOnRestart, restartStorm },
+                { ...cutTurnFields(services, entry), why, spent, stale, autoResumeOnRestart, restartStorm },
                 "interrupted turn not resumed: the interruption stands on the record",
             );
             continue;
@@ -1099,13 +1150,75 @@ export const resumeInterruptedTurns = async (services: Services, now: number = D
         }
         // The attempt is spent on disk before the turn restarts; this write has to survive the death it guards against.
         await spendAttempt(services, entry);
-        const { conversationId } = entry.turn;
-        if (typeof (await services.turns.start(restartTurnOf(entry), { attempts: entry.attempts + 1 })) !== "string") {
-            services.logger.info({ conversationId }, "restart auto-resume fired");
-        }
+        await restartCutTurn(services, entry, { why: ownerAsked ? "the owner asked this restart to pick up after" : "autoResumeOnRestart", cost }, now);
     }
 };
 
+// Why a cut turn stays on the record rather than running again, in the words its line and its ledger row carry.
+const notResumedWhy = (bars: { spent: boolean; stale: boolean; autoResumeOnRestart: boolean; restartStorm: boolean }): string => {
+    if (bars.restartStorm) {
+        return "this boot is one of a restart storm";
+    }
+    if (!bars.autoResumeOnRestart) {
+        return "autoResumeOnRestart is off";
+    }
+    return bars.spent ? "its one re-run is already spent" : "it is older than a re-run is wanted";
+};
+
+// What every line about a journalled turn a restart cut says of it: which conversation, the run it was, the session it
+// ran in, and where it ran.
+const cutTurnFields = (services: Services, entry: JournalledTurn): Record<string, unknown> => {
+    const { agent, harness, account, model, conversationId } = withRuntimeDefaults(entry.turn);
+    return {
+        conversationId,
+        ...opt("previousRun", entry.run?.id),
+        ...opt("sessionId", entry.sessionId ?? entry.turn.sessionId),
+        provider: agent,
+        harness,
+        ...opt("model", model),
+        ...opt("account", account ?? services.agents.entry(conversationId)?.profile.account),
+        attempts: entry.attempts + 1,
+    };
+};
+
+/* A CUT TURN RUNS AGAIN ON WHAT ITS ACCOUNT HAS LEFT, AND THE LINE SAYS WHAT THAT IS. A restart once re-ran a turn on a
+   Codex allowance spent on every account, and its loop retried the refusals for 2h42m with nothing in the log between
+   "restart auto-resume fired" and the refusal (2026-10-11). The fleet's reading is asked first and rides the line, a
+   warning when it says the allowance is spent. The turn still starts: it is the runtime's refusal that holds a turn for
+   its reset and tells its card why (classify-failure.ts), where a hold taken here would hold it unseen, on a reading
+   that may be older than the allowance's reset. */
+const restartCutTurn = async (
+    services: Services,
+    entry: JournalledTurn,
+    { why, cost }: { readonly why: string; readonly cost: string | undefined },
+    now: number,
+): Promise<void> => {
+    const turn = restartTurnOf(entry, cost);
+    const fields = cutTurnFields(services, entry);
+    const { agent, model } = withRuntimeDefaults(turn);
+    const spent = await spentRung(services, { provider: agent, model: model ?? "" }, now);
+    const headroom = spent === undefined ? { headroom: "not known spent" } : { headroom: "spent", spent: spent.reason, ...opt("reopensAt", spent.reopensAt) };
+    const started = await services.turns.start(turn, { attempts: entry.attempts + 1 });
+    if (typeof started === "string") {
+        recordInterrupted(services, entry, `its re-run was refused (${started})`, now);
+        services.logger.info({ ...fields, why, ...headroom, refusal: started }, "restart auto-resume not started: the conversation refused the re-run");
+        return;
+    }
+    recordInterrupted(services, entry, `re-run as run ${started.id}`, now);
+    const line = { ...fields, run: started.id, why, ...headroom };
+    if (spent === undefined) {
+        services.logger.info(line, "restart auto-resume fired: the turn the restart cut runs again under a new run id");
+        return;
+    }
+    services.logger.warn(line, "restart auto-resume fired onto an allowance the fleet reads as spent: expect the provider to refuse it");
+};
+
 // Uses resumedTurn's own rules for the prompt and session; the journal just renames the fields a failure record uses.
-const restartTurnOf = (entry: JournalledTurn): TurnInput & { conversationId: string } =>
-    resumedTurn({ input: entry.turn, sessionId: entry.sessionId }, { reason: "restart" });
+const restartTurnOf = (entry: JournalledTurn, cost: string | undefined): TurnInput & { conversationId: string } =>
+    resumedTurn({ input: entry.turn, sessionId: entry.sessionId }, { reason: "restart", tail: cost });
+
+// What the restart this boot follows cost, once the boot marker has said how the previous run ended; undefined before.
+const restartCostNow = (): string | undefined => {
+    const run = previousRun();
+    return run === undefined ? undefined : restartCost(run);
+};

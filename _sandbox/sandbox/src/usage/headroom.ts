@@ -89,6 +89,8 @@ export const FRESH_MS = 60_000;
 const IDLE_MS = 15 * 60_000;
 // Bounds parallel reads so a refresh across dozens of accounts doesn't self-inflict a rate limit.
 const CONCURRENCY = 4;
+// How often one account's one reason for an unread reading may be written while it stands.
+const FAILURE_LOG_EVERY_MS = 60 * 60_000;
 
 const deadline = (ms: number): Promise<void> =>
     new Promise((resolve) => {
@@ -149,16 +151,39 @@ export const createHeadroomService = (deps: {
     // its own list of the ways a number can stop moving, which is the list that went stale each time a provider found a
     // new way to say no. Logged and announced when the reason changes, not on every retry.
     const failedReasons = new Map<string, string>();
-    const readFailed = async (target: HeadroomTarget, reason: string): Promise<void> => {
-        const marked = await deps.store.markUnread(target.key, { since: Date.now(), reason });
+    // When each account's each reason was last written, keyed `${account}\n${reason}`. One account flapping between two
+    // refusals (an organisation refusing OAuth, then the rate limit that answer earns) changed reason on every retry and
+    // wrote both for days; each reason is written once an hour per account, and again after a read succeeds.
+    const loggedAt = new Map<string, number>();
+    const succeeded = (account: string): void => {
+        failedReasons.delete(account);
+        for (const key of loggedAt.keys()) {
+            if (key.startsWith(`${account}\n`)) {
+                loggedAt.delete(key);
+            }
+        }
+    };
+    const readFailed = async (target: HeadroomTarget, reason: string, parkedUntil?: number): Promise<void> => {
+        const now = Date.now();
+        const marked = await deps.store.markUnread(target.key, { since: now, reason });
         if (failedReasons.get(target.key) === reason) {
             return;
         }
         failedReasons.set(target.key, reason);
-        deps.logger.warn(
-            { account: target.key, provider: target.provider, reason, lastReadAt: marked === undefined ? undefined : new Date(marked.measuredAt).toISOString() },
-            "headroom: this account's plan limits could not be re-read, its last reading stands until a read succeeds",
-        );
+        const logKey = `${target.key}\n${reason}`;
+        if (now - (loggedAt.get(logKey) ?? Number.NEGATIVE_INFINITY) >= FAILURE_LOG_EVERY_MS) {
+            loggedAt.set(logKey, now);
+            deps.logger.warn(
+                {
+                    account: target.key,
+                    provider: target.provider,
+                    reason,
+                    ...(parkedUntil === undefined ? {} : { heldOffUntil: new Date(parkedUntil).toISOString() }),
+                    lastReadAt: marked === undefined ? undefined : new Date(marked.measuredAt).toISOString(),
+                },
+                "headroom: this account's plan limits could not be re-read, its last reading stands until a read succeeds",
+            );
+        }
         if (marked !== undefined) {
             announce(target.provider, target.key, marked);
         }
@@ -172,24 +197,21 @@ export const createHeadroomService = (deps: {
                 if (reading.retryAfterMs !== undefined) {
                     const until = Date.now() + reading.retryAfterMs;
                     await parkUntil(target.provider, target.key, until);
-                    // Said out loud: a reading that silently stops moving is the one failure nobody can see from a screen.
-                    deps.logger.warn(
-                        { account: target.key, provider: target.provider, until: new Date(until).toISOString() },
-                        "headroom: the provider is rate-limiting this account, holding reads off until then",
-                    );
-                    await readFailed(target, reading.failure ?? "the provider is rate-limiting reads");
+                    // Said out loud, on the failed read's own line with when reads resume: a reading that silently stops
+                    // moving is the one failure nobody can see from a screen.
+                    await readFailed(target, reading.failure ?? "the provider is rate-limiting reads", until);
                     return;
                 }
                 // A failed read leaves the last snapshot standing; an empty list alone would misread as "no limits". Only a
                 // read that says it found nothing retires one, and only when there was one to retire — announcing an
                 // absence nobody was shown would redraw every open window each sweep.
                 if (reading.windows.length > 0) {
-                    failedReasons.delete(target.key);
+                    succeeded(target.key);
                     await record(target.provider, target.key, { windows: [...reading.windows], measuredAt: Date.now() });
                     return;
                 }
                 if (reading.empty === true) {
-                    failedReasons.delete(target.key);
+                    succeeded(target.key);
                     // `read()` has already dropped windows that have reset, so a key still present is a reading someone was
                     // actually shown — the only case worth announcing an absence for.
                     if ((await deps.store.read())[target.key] !== undefined) {
@@ -274,7 +296,7 @@ export const createHeadroomService = (deps: {
         record,
         clear: async (provider, account) => {
             attemptedAt.delete(account);
-            failedReasons.delete(account);
+            succeeded(account);
             blockedUntil.delete(account);
             await Promise.all([deps.store.clear(account), deps.parks.clear(account)]);
             announce(provider, account, undefined);

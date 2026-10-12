@@ -539,6 +539,13 @@ test("a coded failure with a remedy of its own is logged as a failure and goes o
     });
 });
 
+// The run id is what the transcript's rows carry, the turn id what the activity log does: the line names both.
+test("a failure's line names the run carrying the turn beside its turn id", async () => {
+    const coded: ErrorFrame = { kind: "error", code: "context-window-too-small", message: "too small" };
+    const plan = await classifyFailure(coded, context({ run: "run-7" }), answering());
+    expect(plan.log.fields).toMatchObject({ turnId: "t-1", run: "run-7" });
+});
+
 test("the log keeps a failure's sentence to its first stretch", async () => {
     const long: ErrorFrame = { kind: "error", message: "x".repeat(ERROR_MESSAGE_CHARS + 50) };
     expect((await classifyFailure(long, context({ turn: { agent: "claude", harness: "native", prompt: "p" } }), answering())).log.fields["reason"]).toBe("x".repeat(ERROR_MESSAGE_CHARS));

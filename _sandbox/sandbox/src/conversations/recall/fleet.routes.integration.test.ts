@@ -8,7 +8,8 @@ import { runAgentTurn } from "../../harness/route-turns.testing.js";
 import { testConfig } from "../../testing.js";
 import { transcriptFile } from "../../sessions/transcript-record.js";
 import { conversationUnit } from "../../store/conversation-units.js";
-import type { FleetMessage, FleetRecall, FleetRow } from "./fleet-recall.js";
+import type { FleetRecall, FleetRow } from "./fleet-recall.js";
+import type { FleetMessage, FleetMessageDetail } from "./fleet-transcript.js";
 
 // Pins the fleet routes over HTTP with the agent token: two GETs that cannot change anything, any handle spelling
 // resolving in one call, ambiguous ones named not picked — and the one write, `message`, which puts an attributed
@@ -19,7 +20,9 @@ interface FleetAnswer {
     readonly agents?: readonly FleetRow[];
     readonly indexing?: boolean;
     readonly agent?: FleetRecall;
-    readonly transcript?: { readonly total: number; readonly messages: readonly FleetMessage[] };
+    readonly transcript?: { readonly total: number; readonly messages?: readonly FleetMessage[]; readonly rows?: readonly { readonly at: number }[] };
+    readonly detail?: FleetMessageDetail;
+    readonly coverage?: { readonly done: number; readonly of: number };
     readonly stored?: {
         readonly rows: Readonly<Record<string, readonly Readonly<Record<string, unknown>>[]>>;
         readonly unit: { readonly dir: string; readonly files: readonly { readonly path: string; readonly bytes: number }[]; readonly total: number };
@@ -51,7 +54,20 @@ const fleetApp = (): Hono<AppEnv> =>
                     id === "sess-pipeline"
                         ? [
                               { role: "user" as const, text: "fix the   last-commit pipeline autoopen" },
-                              { role: "assistant" as const, text: "ciStreaks.ts was picking the wrong run" },
+                              {
+                                  role: "assistant" as const,
+                                  text: "ciStreaks.ts was picking the wrong run",
+                                  tools: [
+                                      {
+                                          id: "t1",
+                                          name: "Bash",
+                                          category: "execute" as const,
+                                          status: "completed" as const,
+                                          target: "curl --unix-socket /run/intentic/front.sock http://x/runs",
+                                          content: [{ type: "text" as const, text: "[]" }],
+                                      },
+                                  ],
+                              },
                               { role: "notice" as const, text: "Claude usage limit reached." },
                           ]
                         : [{ role: "user" as const, text: "check the npm publish workflow" }],
@@ -184,12 +200,12 @@ test("the record itself is one flag away, bounded by last and narrowed by grep",
     await twoConversations(app);
     const whole = await fleet(app, "/fleet/fair-sage-ey2r?diff=0&transcript=1");
     expect(whole.body.transcript?.total).toBe(3);
-    expect(whole.body.transcript?.messages.map((message) => message.role)).toEqual(["user", "assistant", "notice"]);
+    expect(whole.body.transcript?.messages?.map((message) => message.role)).toEqual(["user", "assistant", "notice"]);
     const tail = await fleet(app, "/fleet/fair-sage-ey2r?diff=0&transcript=1&last=1");
-    expect(tail.body.transcript?.messages.map((message) => message.text)).toEqual(["Claude usage limit reached."]);
+    expect(tail.body.transcript?.messages?.map((message) => message.text)).toEqual(["Claude usage limit reached."]);
     const grepped = await fleet(app, "/fleet/fair-sage-ey2r?diff=0&transcript=1&grep=ciStreaks");
     expect(grepped.body.transcript?.total).toBe(1);
-    expect(grepped.body.transcript?.messages[0]).toMatchObject({ role: "assistant", at: 1 });
+    expect(grepped.body.transcript?.messages?.[0]).toMatchObject({ role: "assistant", at: 1 });
 });
 
 // What a person diagnosing one conversation reads in place of a file to cat: its rows as the database holds them.
@@ -235,6 +251,34 @@ test("a search answers which conversations said a phrase, with the line that pro
     expect(titled[0]?.snippet).toBeUndefined();
     // No match returns an empty list, not an error.
     expect(await rosterOf(app, "/fleet?q=nothing-said-this")).toEqual([]);
+});
+
+// What it did is findable too: the command it ran, not only the sentences it wrote, each hit saying which kind it was.
+test("a search finds a command a conversation ran, marked as something it ran", async () => {
+    const app = fleetApp();
+    await twoConversations(app);
+    expect(await rosterOf(app, "/fleet?q=front.sock")).toMatchObject([
+        { id: "fair-sage-ey2r", snippet: { text: "Bash curl --unix-socket /run/intentic/front.sock http://x/runs", speaker: "agent", via: "ran" } },
+    ]);
+});
+
+test("one message answers whole, the window answers as stored rows on asking, and a number past the end is a 404", async () => {
+    const app = fleetApp();
+    await twoConversations(app);
+    const { status, body } = await fleet(app, "/fleet/fair-sage-ey2r?message=1");
+    expect(status).toBe(200);
+    expect(body.detail).toMatchObject({
+        at: 1,
+        role: "assistant",
+        text: "ciStreaks.ts was picking the wrong run",
+        calls: [{ name: "Bash", status: "completed", target: "curl --unix-socket /run/intentic/front.sock http://x/runs", output: "[]" }],
+    });
+    const raw = await fleet(app, "/fleet/fair-sage-ey2r?diff=0&transcript=1&raw=1&last=2");
+    expect(raw.body.transcript?.rows?.map((row) => row.at)).toEqual([1, 2]);
+    expect(JSON.stringify(raw.body.transcript?.rows?.[0])).toContain('"category":"execute"');
+    const missing = await fleet(app, "/fleet/fair-sage-ey2r?message=9");
+    expect(missing.status).toBe(404);
+    expect(missing.body.message).toContain("numbered from 0");
 });
 
 test("a handle several conversations answer to is refused with the candidates, never resolved to one of them", async () => {

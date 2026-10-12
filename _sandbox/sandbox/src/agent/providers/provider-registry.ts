@@ -22,11 +22,54 @@ export const sharedProviderReads = (services: Pick<Services, "cliProxy">): Share
 // this record is itself one of its members.
 export const providerCatalogsOf = (
     modules: readonly ProviderModule<ProviderDeps>[],
-    services: () => ProviderDeps & Pick<Services, "modelCooldowns" | "modelRefusals">,
-): Record<NativeProvider, ProviderCatalog> =>
-    Object.fromEntries(
-        modules.map((module) => [module.id, { models: () => servedModels(services(), module.id, module.catalog(services())) }]),
+    services: () => ProviderDeps & Pick<Services, "modelCooldowns" | "modelRefusals"> & Partial<Pick<Services, "logger">>,
+): Record<NativeProvider, ProviderCatalog> => {
+    const changes = createCatalogChangeLog();
+    return Object.fromEntries(
+        modules.map((module) => [
+            module.id,
+            {
+                models: async () => {
+                    const served = await servedModels(services(), module.id, module.catalog(services()));
+                    const logger = services().logger;
+                    if (logger !== undefined) {
+                        changes.note(logger, module.id, served.models);
+                    }
+                    return served;
+                },
+            },
+        ]),
     ) as Record<NativeProvider, ProviderCatalog>;
+};
+
+// A model leaving the picker (its grace window over, the plan refusing it, a fallback to the seed list) used to leave
+// no trace: a chat pinned to it moved to the default and nobody could say when the row went. One line per provider per
+// change of the ids served, naming what came and went; the first answer after boot is logged as the starting list.
+// Cooldown marks are not a change: a cooling row stays served.
+export const createCatalogChangeLog = (): { readonly note: (logger: Pick<Logger, "info">, provider: string, models: readonly Model[]) => void } => {
+    const last = new Map<string, ReadonlySet<string>>();
+    return {
+        note: (logger, provider, models) => {
+            const ids = new Set(models.map((model) => model.id));
+            const previous = last.get(provider);
+            if (previous === undefined) {
+                last.set(provider, ids);
+                logger.info({ provider, models: [...ids] }, `model catalog: ${provider} serves ${ids.size} models`);
+                return;
+            }
+            const added = [...ids].filter((id) => !previous.has(id));
+            const removed = [...previous].filter((id) => !ids.has(id));
+            if (added.length === 0 && removed.length === 0) {
+                return;
+            }
+            last.set(provider, ids);
+            logger.info(
+                { provider, ...(added.length === 0 ? {} : { added }), ...(removed.length === 0 ? {} : { removed }), count: ids.size },
+                `model catalog: ${provider} ${[added.length === 0 ? "" : `added ${added.join(", ")}`, removed.length === 0 ? "" : `removed ${removed.join(", ")}`].filter(Boolean).join("; ")}`,
+            );
+        },
+    };
+};
 
 // Catalog minus models this sandbox's credentials can't run; a refusal (agent.routes.ts) removes a row until it's no
 // longer refused. Never empties the list or leaves the default on a refused row.

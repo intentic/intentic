@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { Writable } from "node:stream";
 import { test } from "node:test";
-import { cpuTicks, createProgress, decide, observe, unreported, watchProgress } from "./bun-progress.mjs";
+import { cpuTicks, createProgress, decide, explainExit, hookLines, observe, unreported, watchProgress } from "./bun-progress.mjs";
 
 const T0 = 1_000_000;
 const MIN = 60_000;
@@ -120,4 +120,54 @@ test("a process that exits on its own is left alone and decides nothing", async 
     const stop = watchProgress(child, { expected: ["a.test.ts"], timeoutMs: 10_000, padMs: 10_000, checkMs: 50, out: sink(), err: sink() });
     await new Promise((resolve) => child.once("exit", resolve));
     assert.equal(stop(), undefined);
+});
+
+test("an error thrown outside any test is read with its file, message and place, and explains a run with no failing test", () => {
+    const progress = fed(
+        ["toplevel.test.ts"],
+        [
+            "toplevel.test.ts:",
+            "",
+            "# Unhandled error between tests",
+            "-------------------------------",
+            "2 | throw new Error(\"module load boom\");",
+            "error: module load boom",
+            "      at /w/toplevel.test.ts:2:11",
+            "-------------------------------",
+            " 1 fail",
+            " 1 error",
+            "Ran 1 test across 1 file. [6.00ms]",
+        ],
+    );
+    assert.equal(progress.failures, 0);
+    assert.deepEqual(explainExit({ code: 1, signal: null, progress }), [
+        "suites: bun exited 1 without a failing test: 1 error thrown outside any test, the first in toplevel.test.ts at /w/toplevel.test.ts:2:11: module load boom",
+    ]);
+});
+
+test("a signal, a crash before the summary, and a failing test each explain themselves, and the ceiling's kill is already said", () => {
+    assert.deepEqual(explainExit({ code: null, signal: "SIGKILL", progress: undefined }), [
+        "suites: bun was ended by SIGKILL (the memory ceiling, the kernel's OOM killer or a stop from outside), so the run fails without a failing test",
+    ]);
+    const crashed = fed(["crash.test.ts"], ["crash.test.ts:"]);
+    assert.deepEqual(explainExit({ code: 3, signal: null, progress: crashed }), [
+        "suites: bun exited 3 without a failing test and before its summary, so it crashed or was ended; the last file it named is crash.test.ts",
+    ]);
+    assert.deepEqual(explainExit({ code: 1, signal: null, progress: fed(["a.test.ts"], ["a.test.ts:", "(fail) x"]) }), []);
+    assert.deepEqual(explainExit({ code: null, signal: "SIGKILL", progress: undefined, killed: true }), []);
+    assert.deepEqual(explainExit({ code: 0, signal: null, progress: undefined }), []);
+});
+
+test("an (unnamed) failure that is a hook timing out is named with its file's beforeAll/afterAll lines", () => {
+    const progress = fed(
+        ["hooks.test.ts"],
+        ["##[group]hooks.test.ts:", "killed 1 dangling process", "(fail) (unnamed) [120004.24ms]", "  ^ a beforeEach/afterEach hook timed out for this test."],
+    );
+    assert.deepEqual(progress.unnamedHooks, ["hooks.test.ts"]);
+    const source = ["import { afterAll, beforeAll, test } from \"bun:test\";", "beforeAll(async () => {});", "test(\"x\", () => {});", "afterAll(() => {});"].join("\n");
+    assert.deepEqual(
+        explainExit({ code: 1, signal: null, progress }, (file) => hookLines(file, () => source)),
+        ['suites: the "(unnamed)" failure in hooks.test.ts is one of its beforeAll/afterAll hooks timing out, which bun names no line for: hooks.test.ts:2, hooks.test.ts:4'],
+    );
+    assert.deepEqual(hookLines("gone.test.ts", () => { throw new Error("ENOENT"); }), []);
 });

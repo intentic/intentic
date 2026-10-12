@@ -437,6 +437,11 @@ fn connect(
     crate::sandbox::ensure_network(&slug)?;
     // A replace cuts the agents' turns, which are picked up again once the sandbox is back (resume.rs).
     if replacing.is_some() {
+        crate::sandbox::intent::leave(
+            &container,
+            crate::sandbox::intent::Action::Recreate,
+            "`ic sandbox connect` set this sandbox up again from a setup code, replacing its container.",
+        );
         resume::ask(&container);
     }
 

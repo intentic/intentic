@@ -29,6 +29,20 @@
       "startedAt": 1791240330000
     }
   },
+  "restartIntent": {
+    "path": "/history/logs/restart-intent.json",
+    "example": {
+      "at": "2026-10-05T22:45:30.000Z",
+      "by": "keeper",
+      "host": "rog",
+      "side": "wsl",
+      "action": "restart",
+      "reason": "the sandbox's /health stopped answering",
+      "checks": [
+        "health"
+      ]
+    }
+  },
   "workSignal": {
     "path": "/run/intentic/work.json",
     "example": {

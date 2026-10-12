@@ -1,4 +1,4 @@
-import { checkpointWorktree, type CheckpointDeps, forkWorktreeBase } from "./checkpoint-worktree.js";
+import { checkpointNote, checkpointWorktree, type CheckpointDeps, forkWorktreeBase, takeCheckpointNote } from "./checkpoint-worktree.js";
 import type { TurnCheckpoint } from "./turn-checkpoints.js";
 
 const CONVERSATION = "conv-1";
@@ -11,7 +11,7 @@ const TITLE = "Agent: before this turn";
 
 const services = {
     agentWorktrees: { worktreeDir: (_id: string, repo: string) => `/w/${repo}`, mainDir: (repo: string) => `/main/${repo}` },
-    logger: { warn: jest.fn() },
+    logger: { warn: jest.fn(), info: jest.fn() },
 } as unknown as CheckpointDeps;
 
 // Finds the git verb the way git does: `-c key=value` pairs come before the subcommand, so the first token isn't it.
@@ -40,8 +40,16 @@ const gitFake = (options: { dirty?: readonly string[]; broken?: readonly string[
         }
         const verb = subcommandOf(args);
         calls.push(`${verb}:${repo}`);
+        const dirty = options.dirty?.includes(repo) === true;
         if (verb === "status") {
-            return { stdout: options.dirty?.includes(repo) === true ? "M file.ts\0" : "", stderr: "" };
+            return { stdout: dirty ? "M file.ts\0" : "", stderr: "" };
+        }
+        // `diff --cached --quiet` exits non-zero when the index differs from HEAD, which is what makes commitIndex commit.
+        if (verb === "diff" && args.includes("--cached") && dirty) {
+            throw new Error("exit 1");
+        }
+        if (verb === "diff-tree") {
+            return { stdout: "file.ts\0other.ts\0", stderr: "" };
         }
         if (verb === "rev-parse") {
             return { stdout: `${calls.includes(`commit:${repo}`) || calls.includes(`add:${repo}`) ? "new" : "head"}-${repo}\n`, stderr: "" };
@@ -73,6 +81,37 @@ test("a checkout holding work commits it before pinning, so the checkpoint inclu
     expect(calls).toContain("add:root");
     expect(anchored).toContainEqual({ repo: "root", base: "new-root" });
     expect(anchored).toContainEqual({ repo: "intent", base: "head-intent" });
+});
+
+// A clean `git status` after a resume read as lost work, until the prompt said where it went.
+test("a commit of the checkout's work is told once, in the next prompt, with how to see it", async () => {
+    const { git } = gitFake({ dirty: ["root"] });
+    const messages: string[] = [];
+    const recording = { ...services, logger: { warn: jest.fn(), info: jest.fn() } } as unknown as CheckpointDeps;
+    const gitRecording = async (dir: string, args: readonly string[]) => {
+        const commit = args.indexOf("-m");
+        if (commit !== -1) {
+            messages.push(args[commit + 1] ?? "");
+        }
+        return git(dir, args);
+    };
+
+    await checkpointWorktree(recording, "conv-told", REPOS, TITLE, gitRecording);
+
+    // Every agent commit has one author; the trailer is what says whose conversation made it.
+    expect(messages).toEqual([`${TITLE}\n\nConversation-Id: conv-told`]);
+    const note = takeCheckpointNote("conv-told");
+    expect(note?.title).toBe("Uncommitted work committed");
+    expect(note?.text).toContain(`root: 2 files committed as new-root "${TITLE}"`);
+    expect(note?.text).toContain("git diff new-root~1");
+    expect(takeCheckpointNote("conv-told")).toBeUndefined();
+});
+
+test("a clean checkout leaves nothing to tell", async () => {
+    const { git } = gitFake();
+    await checkpointWorktree(services, "conv-clean", REPOS, TITLE, git);
+    expect(takeCheckpointNote("conv-clean")).toBeUndefined();
+    expect(checkpointNote([])).toBeUndefined();
 });
 
 test("a repo that refuses drops out of the checkpoint without taking the others with it", async () => {

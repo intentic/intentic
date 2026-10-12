@@ -1,7 +1,7 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { homedir } from "node:os";
 import { browserOutputDir } from "../../browser/cast/browser-artifacts.js";
-import { editDiffContent, mayShowPicture, resultContent, toolLocations } from "./tool-calls.js";
+import { editDiffContent, mayShowPicture, resultContent, TOOL_INPUT_CHARS, toolInput, toolLocations } from "./tool-calls.js";
 
 const CWD = WORKSPACE_ROOT;
 const OUTPUT = browserOutputDir(WORKSPACE_ROOT);
@@ -127,4 +127,16 @@ test("a screenshot's answer keeps its words and gains the file they name", () =>
 
 test("with no remembered call (a failure, or a call that cannot show a picture) the answer is its flattened text", () => {
     expect(resultContent([IMAGE_BLOCK], CWD, OUTPUT, undefined)).toEqual([{ type: "text", text: "[image]" }]);
+});
+
+test("toolInput keeps the input of a call with no target, bounded, and nothing for one with a target", () => {
+    expect(toolInput({ description: "Map reads", prompt: "Find every read." }, undefined)).toBe('{"description":"Map reads","prompt":"Find every read."}');
+    expect(toolInput({ command: "ls" }, "ls")).toBeUndefined();
+    expect(toolInput({}, undefined)).toBeUndefined();
+    expect(toolInput(undefined, undefined)).toBeUndefined();
+    const long = toolInput({ prompt: "x".repeat(TOOL_INPUT_CHARS * 2) }, undefined);
+    expect(long?.length).toBe(TOOL_INPUT_CHARS + 1);
+    expect(long?.endsWith("…")).toBe(true);
+    // An input JSON cannot carry is no input, never a thrown turn.
+    expect(toolInput({ size: 1n }, undefined)).toBeUndefined();
 });

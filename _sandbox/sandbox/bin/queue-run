@@ -191,18 +191,118 @@ acquire() {
 
 acquire && held_run "$@"
 
-# Every slot was busy. Say so once — the pane is where the person wondering why nothing is happening is
-# looking — then poll until the deadline.
-printf '[queue-run] %s: waiting for a free slot in pool "%s" (limit %s)...\n' "$label" "$pool" "$limit" >&2
+# WHO HOLDS THE POOL, said while a command waits on it. "waiting for a free slot" alone left an agent nothing to act on:
+# whose command, from which conversation, held for how long. The kernel keeps the answer: a holder is any process with
+# fd 9 open on one of the pool's slots (a pipeline inherits it to every member; the oldest of them took it). Read off
+# /proc, as the daemon's own minute log reads it (src/system/resources/queue-slots.ts), so nothing here can go stale.
+ticks=$(getconf CLK_TCK 2>/dev/null || echo 100)
+uptime_now() { local up _; read -r up _ </proc/uptime 2>/dev/null || up=0; echo "${up%.*}"; }
+# Seconds the process has lived, which is as long as it has held what it took at its start.
+age_of() {
+    local stat rest
+    stat=$(cat "/proc/$1/stat" 2>/dev/null) || return 1
+    rest=${stat##*) }
+    set -- $rest
+    # Field 22 of stat(5), the 20th after the name: start time in clock ticks since boot.
+    echo $(($(uptime_now) - ${20:-0} / ticks))
+}
+env_of() { tr '\0' '\n' <"/proc/$1/environ" 2>/dev/null | sed -n "s/^$2=//p" | head -n 1; }
+# A string as JSON: backslashes and quotes escaped, control characters dropped.
+json_string() { printf '"%s"' "$(printf '%s' "$1" | tr -d '\000-\037' | sed 's/\\/\\\\/g; s/"/\\"/g')"; }
+# One line per held slot, its oldest holder: slot, pid, the holder's age in seconds, conversation, rule, command, split
+# by the unit separator (a tab is whitespace to `read`, and an empty field between two would vanish).
+sep=$(printf '\037')
+holders() {
+    local fd target pid age best_slot=() line
+    for fd in /proc/[0-9]*/fd/9; do
+        target=$(readlink "$fd" 2>/dev/null) || continue
+        case "$target" in "$dir"/slot.*) ;; *) continue ;; esac
+        pid=${fd#/proc/}
+        pid=${pid%%/*}
+        # A waiter opens a slot for the instant it tries its lock, and is no holder.
+        [ -e "$dir/wait.$pid" ] && continue
+        age=$(age_of "$pid") || continue
+        printf "%s$sep%s$sep%s$sep%s$sep%s$sep%s\n" "${target##*/}" "$pid" "$age" "$(env_of "$pid" INTENTIC_TURN_OWNER)" "$(env_of "$pid" INTENTIC_HEAVY_HELD)" \
+            "$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null | cut -c1-120)"
+    done | sort -t "$sep" -k1,1 -k3,3nr | awk -F "$sep" '!seen[$1]++'
+}
+minutes() { if [ "$1" -ge 60 ]; then echo "$(($1 / 60))m$(($1 % 60))s"; else echo "${1}s"; fi; }
+say_holders() {
+    local slot pid age owner rule command
+    while IFS="$sep" read -r slot pid age owner rule command; do
+        printf '[queue-run]   %s: pid %s, running %s%s%s: %s\n' "$slot" "$pid" "$(minutes "$age")" "${rule:+ by rule $rule}" "${owner:+ for conversation $owner}" "$command" >&2
+    done
+}
+
+# WHO WAITS, AND THE POOL AS A WHOLE, for a reader that is not this pane (an agent's `cat`, a diagnostics read):
+# `wait.<pid>` names each waiter while it waits, and `state.json` is the pool's holders and waiters as the latest waiter
+# saw them, rewritten when one starts waiting, every SAY_EVERY seconds, and when it stops. Both written whole under a
+# temporary name and renamed over the old, never opened by their own name: the directory is shared with fenced turns
+# (see above), and a rename replaces a planted link instead of writing through it.
+waiting_since=$(date +%s)
+owner_here=${INTENTIC_TURN_OWNER:-}
+put() {
+    local tmp
+    tmp=$(mktemp "$dir/.tmp.XXXXXX" 2>/dev/null) || return 0
+    printf '%s\n' "$2" >"$tmp" && mv -f "$tmp" "$dir/$1" 2>/dev/null || rm -f "$tmp"
+}
+write_state() {
+    local holders_json="" waiters_json="" slot pid age owner rule command file entry
+    while IFS="$sep" read -r slot pid age owner rule command; do
+        [ -n "$slot" ] || continue
+        holders_json="$holders_json${holders_json:+,}{\"slot\":$(json_string "$slot"),\"pid\":$pid,\"holderAgeSeconds\":$age,\"conversation\":$(json_string "$owner"),\"rule\":$(json_string "$rule"),\"command\":$(json_string "$command")}"
+    done < <(holders)
+    for file in "$dir"/wait.*; do
+        [ -f "$file" ] && [ ! -L "$file" ] || continue
+        pid=${file##*.}
+        if [ "$pid" != "$$" ] && ! kill -0 "$pid" 2>/dev/null; then
+            rm -f "$file"
+            continue
+        fi
+        [ "$pid" = "$$" ] && [ "${1:-}" = leaving ] && continue
+        entry=$(head -c 2000 "$file" 2>/dev/null)
+        waiters_json="$waiters_json${waiters_json:+,}$entry"
+    done
+    put state.json "{\"pool\":$(json_string "$pool"),\"limit\":$limit,\"updatedAt\":$(date +%s),\"holders\":[$holders_json],\"waiters\":[$waiters_json]}"
+}
+stop_waiting() {
+    rm -f "$dir/wait.$$"
+    write_state leaving
+}
+
+# Every slot was busy. Say so, with who holds them — the pane is where the person wondering why nothing is happening is
+# looking — and again every SAY_EVERY seconds, so a log redirected to a file shows the wait going on rather than staying
+# empty for the minutes it lasts. Then poll until the deadline.
+say_every=$(number "${INTENTIC_QUEUE_SAY_EVERY:-30}" 30)
+[ "$say_every" -lt 1 ] && say_every=30
+put "wait.$$" "{\"pid\":$$,\"label\":$(json_string "$label"),\"conversation\":$(json_string "$owner_here"),\"since\":$waiting_since,\"command\":$(json_string "$(printf '%s ' "$@" | cut -c1-120)")}"
+trap 'rm -f "$dir/wait.$$"' EXIT
+trap 'stop_waiting; exit 130' INT
+trap 'stop_waiting; exit 143' TERM
+write_state
+printf '[queue-run] %s: waiting for a free slot in pool "%s" (limit %s), held by:\n' "$label" "$pool" "$limit" >&2
+holders | say_holders
+printf '[queue-run]   (holders and waiters: %s)\n' "$dir/state.json" >&2
 waited=0
+said_at=0
 while [ "$waited" -lt "$wait_seconds" ]; do
     sleep "$poll_seconds"
     waited=$((waited + poll_seconds))
     if acquire; then
+        trap - EXIT INT TERM
+        stop_waiting
         printf '[queue-run] %s: slot free after %ss — starting.\n' "$label" "$waited" >&2
         held_run "$@"
     fi
+    if [ $((waited - said_at)) -ge "$say_every" ]; then
+        said_at=$waited
+        write_state
+        printf '[queue-run] %s: still waiting after %s for pool "%s" (limit %s), held by:\n' "$label" "$(minutes "$waited")" "$pool" "$limit" >&2
+        holders | say_holders
+    fi
 done
+trap - EXIT INT TERM
+stop_waiting
 
 # Deadline reached. `skip` exits 75 (EX_TEMPFAIL) having run nothing, so the caller records a check that was not
 # made rather than one that failed; it is for a command whose overlap with the holder is the incident and whose

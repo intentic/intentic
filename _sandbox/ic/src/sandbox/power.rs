@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use crate::docker;
 use crate::record;
+use crate::sandbox::intent::{self, Action};
 use crate::sandbox::recreate::{self, Preflight};
 use crate::sandbox::{
     container_of, desired, ledger, lock, mirror, parked_of, probation, resolve_slug, resume,
@@ -147,6 +148,12 @@ pub fn run_by(power: Power, slug: Option<String>, by: By) -> Result<()> {
     }
 
     ui::act(&format!("{} {slug}", power.acting()));
+    // Why it goes down, told to the sandbox before it does (intent.rs).
+    match power {
+        Power::Restart => intent::leave(&container, Action::Restart, &asked(power, by)),
+        Power::Stop => intent::leave(&container, Action::Stop, &asked(power, by)),
+        Power::Start => false,
+    };
     // The turns a restart cuts are picked up again by the daemon's next boot (resume.rs).
     if power == Power::Restart && resume::ask(&container) {
         ui::note(&format!(
@@ -173,6 +180,17 @@ pub fn run_by(power: Power, slug: Option<String>, by: By) -> Result<()> {
     ui::done(&verdict(&slug, power, sidecar.is_some()));
     ui::later(&afterwards(&slug, power));
     Ok(())
+}
+
+/// What a power change says of itself in the sandbox's restart intent when its caller gave no reason of its own. Pure.
+fn asked(power: Power, by: By) -> String {
+    match by {
+        By::Person => format!(
+            "`ic sandbox {}` was run on this device (a terminal, the desktop app, or a button relayed by the machine agent).",
+            power.verb()
+        ),
+        By::Keeper => format!("the keeper's repair chose to {} it.", power.verb()),
+    }
 }
 
 /// The report key rides on the env a verb can read now, for a later `ic sandbox fix` that cannot.
@@ -217,6 +235,11 @@ pub(crate) fn sleep(slug: &str) -> Result<bool> {
     let sidecar = docker::container_exists(&tunnel).then_some(tunnel.as_str());
     // Noted while it still runs, so the moment is the container's own clock (inside.rs).
     ledger::note(slug, ledger::SLEEP, false);
+    intent::leave(
+        &container,
+        Action::Stop,
+        "put to sleep: nothing was working in it and it had been quiet past the idle limit; the next wake starts it again.",
+    );
     power_all(Power::Stop, &container, sidecar)?;
     rest(slug, Rest::Asleep);
     Ok(sidecar.is_some())

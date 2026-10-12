@@ -2,7 +2,7 @@ import { errorMessage } from "@intentic/base/errors";
 import type { BrowserContext, CDPSession, Page } from "playwright";
 import { type Display, displayOf } from "./display.js";
 import { type Device, EmulateMessageSchema, PHONE_BOX, type Phone, phoneFor, putPhoneOn, takePhoneOff } from "./emulation.js";
-import { frontTab } from "./front-tab.js";
+import { frontTab, knownTargetId } from "./front-tab.js";
 import { regionsEqual, type Region, type Screen } from "./region.js";
 import {
     applySelect,
@@ -21,6 +21,7 @@ import { createStillTaker } from "./stills.js";
 import { videoWindow } from "./video-window.js";
 import { encodeVideo, grabStill, startVideocast, type Videocast, type VideoFrame } from "./videocast.js";
 import { startXInput, type XInput } from "./xinput.js";
+import { sanitizeUrl } from "../tools/network-redaction.js";
 
 // One live browser over one socket; the choice of video vs frames is made once here, not per route. Video grabs the
 // page's viewport off its X display (region.ts): cheaper than frames and showing everything Chromium draws there, a
@@ -137,7 +138,13 @@ const selectFocusedIn = async (page: Page): Promise<boolean> => {
     return false;
 };
 
-const startVideoView = (context: BrowserContext, display: Display, sink: Sink, onError: (reason: string) => void, endpoint: string | undefined): LiveView => {
+// Why the picture moved to another tab: the window brought it in front (an agent switching tabs, a popup), the view
+// opened or was handed it, the owner picked it, or the one shown closed and the newest still open replaced it.
+type FollowReason = "front" | "opened" | "picked" | "newTab" | "replaced";
+
+const startVideoView = (context: BrowserContext, display: Display, sink: Sink, onError: (reason: string) => void, options: LiveViewOptions): LiveView => {
+    const { endpoint } = options;
+    const log = options.log ?? ((): void => undefined);
     const input: XInput = startXInput(display);
     const screen: Screen = { width: display.width, height: display.height };
     let paused = false;
@@ -150,6 +157,9 @@ const startVideoView = (context: BrowserContext, display: Display, sink: Sink, o
     // Frames are being dropped until a keyframe finds the socket drained; see BACKLOG_LIMIT.
     let dropping = false;
     let selectFocused = false;
+    // What the picture cost and lost over this socket, said once when it stops: a viewer whose link is slower than the
+    // picture shows as frames dropped, a page that settles as stills sent.
+    const counts = { framesSent: 0, framesDropped: 0, stillsSent: 0, tabSwitches: 0 };
     const reportCursor = cursorReporter((cursor) => sink.send(JSON.stringify({ type: "cursor", cursor })));
 
     const stills = createStillTaker({
@@ -163,7 +173,10 @@ const startVideoView = (context: BrowserContext, display: Display, sink: Sink, o
             }
             return (await grabStill(display, at, STILL_QUALITY))?.toString("base64");
         },
-        send: (bytes) => sink.send(encodeFrame({ bytes, format: "webp" })),
+        send: (bytes) => {
+            counts.stillsSent += 1;
+            sink.send(encodeFrame({ bytes, format: "webp" }));
+        },
     });
 
     // Every frame is judged for motion, then either sent or dropped: a socket holding more than a second of video is
@@ -173,13 +186,16 @@ const startVideoView = (context: BrowserContext, display: Display, sink: Sink, o
         const backlog = sink.backlog?.() ?? 0;
         if (dropping) {
             if (!frame.key || backlog > BACKLOG_LIMIT) {
+                counts.framesDropped += 1;
                 return;
             }
             dropping = false;
         } else if (backlog > BACKLOG_LIMIT) {
             dropping = true;
+            counts.framesDropped += 1;
             return;
         }
+        counts.framesSent += 1;
         sink.send(encodeVideo(frame, quiet));
     };
 
@@ -229,10 +245,17 @@ const startVideoView = (context: BrowserContext, display: Display, sink: Sink, o
     // The window's size and the phone, if the owner asked for one.
     const sizing = videoWindow({ screen, shown: () => (current === undefined || session === undefined ? undefined : { page: current, session }), refit });
 
-    const attach = async (page: Page): Promise<void> => {
+    const attach = async (page: Page, reason: FollowReason): Promise<void> => {
         if (stopped || current === page) {
             return;
         }
+        // Each switch said with its cause, since a picture jumping between tabs is otherwise only seen, never recorded:
+        // the one time it was chased, every tab claimed to be visible (front-tab.ts).
+        counts.tabSwitches += 1;
+        log(
+            { reason, target: knownTargetId(page), url: sanitizeUrl(page.url()), from: current === undefined || current.isClosed() ? undefined : sanitizeUrl(current.url()) },
+            "live view: following another tab",
+        );
         current = page;
         selectFocused = false;
         const previous = session;
@@ -263,13 +286,14 @@ const startVideoView = (context: BrowserContext, display: Display, sink: Sink, o
     // by the newest still open.
     const followFront = async (): Promise<void> => {
         const before = current;
-        const front = (await frontTab(context, endpoint)) ?? (before === undefined || before.isClosed() ? context.pages().at(-1) : undefined);
+        const fronted = await frontTab(context, endpoint);
+        const front = fronted ?? (before === undefined || before.isClosed() ? context.pages().at(-1) : undefined);
         // A page attached while this was asking (a tab just opened, a tab the owner picked) is newer than the answer,
         // which was read before it; the next tick asks again.
         if (front === undefined || stopped || current !== before) {
             return;
         }
-        await attach(front);
+        await attach(front, fronted === undefined ? "replaced" : "front");
     };
 
     const watchClose = (page: Page): void => {
@@ -283,7 +307,7 @@ const startVideoView = (context: BrowserContext, display: Display, sink: Sink, o
     // A page Chromium just opened is the one in front, tab and popup alike.
     const follow = (page: Page): void => {
         watchClose(page);
-        void attach(page);
+        void attach(page, "opened");
     };
     context.on("page", follow);
     for (const page of context.pages()) {
@@ -358,7 +382,7 @@ const startVideoView = (context: BrowserContext, display: Display, sink: Sink, o
         bind: async (page) => {
             // The owner picked a tab: brought in front for real, since the picture is the display and shows only that.
             await page.bringToFront().catch(() => undefined);
-            await attach(page);
+            await attach(page, "picked");
         },
         setPaused: async (next) => {
             if (paused === next) {
@@ -390,7 +414,7 @@ const startVideoView = (context: BrowserContext, display: Display, sink: Sink, o
             } else if (message.type === "newTab") {
                 const page = await openTab(context, message.url);
                 if (page !== undefined) {
-                    await attach(page);
+                    await attach(page, "newTab");
                 }
             } else if (isSteer(message)) {
                 steer(current, message);
@@ -401,6 +425,7 @@ const startVideoView = (context: BrowserContext, display: Display, sink: Sink, o
         chooseOption: async () => {},
         stop: async () => {
             stopped = true;
+            log(counts, "live view: stopped");
             clearInterval(ticker);
             context.off("page", follow);
             cast?.stop();
@@ -565,6 +590,9 @@ export interface LiveViewOptions {
     // The browser's DevTools HTTP endpoint (http://127.0.0.1:<port>): how the video path knows which tab the display
     // shows (front-tab.ts). Without it the picture follows only what the view itself opens, binds and loses.
     readonly endpoint?: string | undefined;
+    // Debug lines from the video path: each tab the picture follows and why, and what it sent and dropped when it
+    // stops. Absent logs nothing.
+    readonly log?: ((fields: Record<string, unknown>, message: string) => void) | undefined;
 }
 
 // Shows `context` on `sink`, the best way its browser allows. `key` names the display it was allocated under; this only
@@ -577,5 +605,5 @@ export const startLiveView = async (
     options: LiveViewOptions = {},
 ): Promise<LiveView> => {
     const display = displayOf(key);
-    return display === undefined ? startFramesView(context, sink, onError) : startVideoView(context, display, sink, onError, options.endpoint);
+    return display === undefined ? startFramesView(context, sink, onError) : startVideoView(context, display, sink, onError, options);
 };

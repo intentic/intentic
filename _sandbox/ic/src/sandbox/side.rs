@@ -258,6 +258,28 @@ pub fn beat(slug: &str) -> Option<u64> {
     )
 }
 
+/// Another side that says, freshly, that it keeps this sandbox too: the heartbeat on the volume is not this side's and
+/// was written within the limit. Two keepers each restarting one sandbox (both sides of a PC on a container neither
+/// side's stamp settles) is what this names, so the log says so instead of two machine agents each restarting it in
+/// silence. Pure.
+pub fn rival(read: &Read, here: &Side, now: u64) -> Option<(Side, u64)> {
+    let Read::Found(value) = read else {
+        return None;
+    };
+    let (side, at) = beat_of(value)?;
+    (!side.same(here) && now.saturating_sub(at) <= SILENT_AFTER_MS).then_some((side, at))
+}
+
+/// The same, asked of the sandbox's volume, for the keeper about to say that it keeps it.
+pub fn rival_keeper(slug: &str) -> Option<(Side, u64)> {
+    let holder = inside::holder(slug)?;
+    let read = inside::read(&holder, KEEPER_FILE);
+    let Read::Found(_) = &read else {
+        return None;
+    };
+    rival(&read, &here(), inside::now_for(&holder))
+}
+
 /// What the keeper's heartbeat says about it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Heard {
@@ -592,5 +614,35 @@ mod tests {
             .sentence()
             .contains("(Windows) has never said it does"));
         assert_eq!(never.json()["silentSince"], Value::Null);
+    }
+
+    #[test]
+    fn another_side_that_freshly_says_it_keeps_the_sandbox_is_named_as_a_rival() {
+        let now = 10 * SILENT_AFTER_MS;
+        let found = |wire: &str, at: u64| {
+            let mut beat = beat_body(&side(wire), None);
+            beat["at"] = serde_json::json!(at);
+            Read::Found(beat)
+        };
+        let windows = side("windows");
+        assert_eq!(
+            rival(&found("linux/archlinux", now - 60_000), &windows, now),
+            Some((side("linux/archlinux"), now - 60_000))
+        );
+        assert_eq!(
+            rival(&found("windows", now - 60_000), &windows, now),
+            None,
+            "its own heartbeat is no rival"
+        );
+        assert_eq!(
+            rival(
+                &found("linux/archlinux", now - SILENT_AFTER_MS - 1),
+                &windows,
+                now
+            ),
+            None,
+            "a silent one is adopted, not a rival"
+        );
+        assert_eq!(rival(&Read::Missing, &windows, now), None);
     }
 }

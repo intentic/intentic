@@ -592,6 +592,21 @@ describe("the conversation's queue", () => {
         gates[1]?.();
     });
 
+    // Words waiting behind a running turn are not held: the missing `run` already says they go after it.
+    it("gives no reason when a resume's words simply go after the running turn", async () => {
+        const { gates, services: turns } = unsteerableTurns();
+        const client = clientFor(createApp(turns));
+        await startedRun(client, { prompt: "draft the release notes", conversationId: "conv-why", agent: "grok" });
+        await waitFor(() => expect(gates).toHaveLength(1), SETTLES);
+        await client.agent.run({ prompt: "and the changelog", conversationId: "conv-why", agent: "grok", messageId: "m-next" });
+        const behind = await client.agent.queueResume({ conversationId: "conv-why" });
+        expect(behind.run).toBeUndefined();
+        expect(behind.reason).toBeUndefined();
+        gates[0]?.();
+        await waitFor(() => expect(gates).toHaveLength(2), SETTLES);
+        gates[1]?.();
+    });
+
     // A Stop is the person saying the agent must not carry on by itself: whatever waited stays until somebody lets it go.
     it("is held for everyone by a stop, and a resume lets it go as the next turn", async () => {
         const { gates, prompts, services: turns } = unsteerableTurns();

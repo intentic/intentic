@@ -35,6 +35,13 @@ export const createBrowserProfileRoute = (services: Services) =>
         let unregisterAccess: (() => void) | undefined;
         // True for login mode (finishing marks the account connected); false for browse (finishing just closes).
         let signingIn = true;
+        // Settled once onOpen is done, whichever way it went. Hono hands frames over without waiting for onOpen, and the
+        // client sends its box, its device and its first keystrokes while the window is still launching: those wait for
+        // the view here rather than finding none and being dropped without a word.
+        let attachedNow: () => void = () => undefined;
+        const attached = new Promise<void>((resolve) => {
+            attachedNow = resolve;
+        });
 
         const cleanup = async (): Promise<void> => {
             if (closed) {
@@ -89,152 +96,163 @@ export const createBrowserProfileRoute = (services: Services) =>
             return false;
         };
 
+        // Redeems the ticket and starts the window: onOpen's whole body, apart so onOpen can settle `attached` on every way
+        // out of it.
+        const open = async (ws: Socket): Promise<void> => {
+            const url = new URL(c.req.url);
+            try {
+                // Signing in adds a credential: requires the operating tier.
+                const caller = redeemTicket(services, url.searchParams, "maintainer");
+                if (caller !== undefined) {
+                    unregisterAccess = services.auth?.connections.register(caller, () => ws.close(1008, "authorization revoked"));
+                }
+            } catch (err) {
+                services.logger.warn({ err }, "browser-profile ticket rejected");
+                ws.close(1008, "unauthorized");
+                return;
+            }
+            // Valid only if the manifest has a browser/identity entry with this id; an unlisted id has no profile
+            // to open.
+            const requested = url.searchParams.get("capability") ?? "";
+            const capability = await services.capabilities.get(requested);
+            if (capability === undefined || (capability.kind !== "browser" && capability.kind !== "identity")) {
+                ws.close(1008, "invalid capability");
+                return;
+            }
+            let urls: { loginUrl: string; homeUrl: string };
+            if (capability.kind === "browser") {
+                // Requires an enabled extension declaring this platform; same registry the browser handler resolves
+                // against.
+                const contribution = (await contributionRegistry(services)).get(contributionKey("browser", capability.config.platform));
+                if (contribution === undefined || contribution.spec.kind !== "browser") {
+                    ws.close(1008, "invalid platform");
+                    return;
+                }
+                // A missing pair means a rotted install: the entry's add would otherwise have failed.
+                const resolved = browserUrls(contribution.spec, capability.config);
+                if (resolved === undefined) {
+                    ws.close(1008, "this connection has no page to open: re-add it");
+                    return;
+                }
+                urls = resolved;
+            } else {
+                // An identity's site is its own email provider; login and browse both start at its landing page.
+                const login = identityLoginUrl(capability.config);
+                urls = { loginUrl: login, homeUrl: login };
+            }
+            signingIn = url.searchParams.get("mode") !== "browse";
+            // loginUrl and homeUrl can differ: sites like YouTube sign in on a different domain than their home
+            // page.
+            const startUrl = signingIn ? urls.loginUrl : urls.homeUrl;
+            const profile = profileOwner(capability);
+            if (!acquireProfileLock(profile)) {
+                ws.close(1008, "this browser is already open in another window");
+                return;
+            }
+            account = requested;
+            owner = profile;
+            // Refuses to open if the bound exit can't be resolved, rather than logging in from the sandbox's own
+            // address.
+            const bound = await resolveProfileExit(await services.capabilities.list(), profile).catch((error: unknown) => ({
+                refusal: `its exit could not be resolved (${errorMessage(error)})`,
+            }));
+            if (bound !== undefined && "refusal" in bound) {
+                ws.send(JSON.stringify({ type: "error", message: bound.refusal }));
+                await cleanup();
+                ws.close(1011, "exit unavailable");
+                return;
+            }
+            const boundExit = bound?.exit;
+            let playwright: typeof import("playwright");
+            try {
+                playwright = await import("playwright");
+            } catch {
+                ws.send(JSON.stringify({ type: "error", message: "browser not installed, rebuild the sandbox (Environment card) first" }));
+                await cleanup();
+                ws.close(1011, "browser missing");
+                return;
+            }
+            try {
+                // Headed, not headless: anti-bot WAFs block it, and the display is the owner's picture, so it's
+                // exclusive.
+                const display = await ensureDisplay(profile);
+                // Same seed as the agent's browser fingerprint: a device change mid-session triggers a logout or
+                // captcha.
+                const fingerprint = await browserFingerprint(services.workspace.root, profile, boundExit?.place);
+                // Started plainly and attached afterwards (owner-browser.ts): a Playwright-launched window is
+                // refused by sign-in risk checks that the same browser, started this way, passes.
+                owned = await launchOwnerBrowser(playwright, {
+                    executablePath: playwright.chromium.executablePath(),
+                    userDataDir: await launchSessionDir(services.workspace.root, profile),
+                    display: display.name,
+                    // From the fingerprint's place: a bound profile claims its exit's country, unbound claims the
+                    // sandbox's. Must match the proxy: an IP in Berlin under a New York clock is worse than no exit.
+                    fingerprint,
+                    proxy: boundExit?.proxy,
+                    // The corner region.ts keeps every window in (no window manager on Xvfb); the page fills the
+                    // window, so picture coordinates map directly to XTEST clicks on the display.
+                    windowArgs: chromiumWindowArgs(display),
+                    log: (fields, message) => services.logger.info({ capability: requested, mode: signingIn ? "login" : "browse", ...fields }, message),
+                });
+                const ctx = owned.context;
+                // Patches residual server tells (SwiftShader GPU, host core count) before first navigation.
+                await ctx.addInitScript(stealthInit(fingerprint));
+                // Ensures a page exists before the screencast starts; it then follows later pages and popups on its
+                // own.
+                // The tab Chromium opened on about:blank; a profile may also restore older tabs behind it.
+                const page = ctx.pages().find((candidate) => candidate.url() === "about:blank") ?? (await ctx.newPage());
+                // Security key armed before first navigation; an identity's accounts share one key, as they share
+                // cookies.
+                const storePath = passkeyPath(services.workspace.root, profile);
+                const arm = (target: Page): void => {
+                    void armPasskeys(ctx, target, storePath, (err: unknown) =>
+                        services.logger.error({ err, store: storePath }, "browser-profile: a passkey could not be saved"),
+                    ).catch((err: unknown) => services.logger.warn({ err }, "browser-profile: passkey arm failed"));
+                    // A sign-in popup (an OAuth window) goes over the page it came from, where the owner looks.
+                    void placeWindow(ctx, target).catch(() => undefined);
+                };
+                ctx.on("page", arm);
+                arm(page);
+                // Told to the owner, not just the log: a picture that stops without a word is a window that looks
+                // alive and answers nothing, since this route has no frames path to fall back to.
+                const sink = {
+                    send: (data: string | Uint8Array<ArrayBuffer>) => ws.send(data),
+                    backlog: () => (ws.raw as { bufferedAmount?: number } | undefined)?.bufferedAmount ?? 0,
+                };
+                view = await startLiveView(
+                    ctx,
+                    profile,
+                    sink,
+                    (reason) => {
+                        services.logger.warn({ reason }, "browser-profile stream failed");
+                        if (!closed) {
+                            ws.send(JSON.stringify({ type: "error", message: `The browser's picture stopped: ${reason}` }));
+                        }
+                    },
+                    { endpoint: owned.endpoint, log: (fields, message) => services.logger.debug({ capability: requested, ...fields }, message) },
+                );
+                // Doesn't fail on a slow page; the owner can interact once it paints.
+                await page.goto(startUrl, { waitUntil: "domcontentloaded" }).catch((err: unknown) => {
+                    services.logger.warn({ err }, "browser-profile initial nav");
+                });
+            } catch (err) {
+                services.logger.warn({ err }, "browser-profile launch failed");
+                ws.send(JSON.stringify({ type: "error", message: err instanceof Error ? err.message : "failed to start the browser" }));
+                await cleanup();
+                ws.close(1011, "launch failed");
+            }
+        };
+
         return {
             onOpen: async (_event, ws) => {
-                const url = new URL(c.req.url);
                 try {
-                    // Signing in adds a credential: requires the operating tier.
-                    const caller = redeemTicket(services, url.searchParams, "maintainer");
-                    if (caller !== undefined) {
-                        unregisterAccess = services.auth?.connections.register(caller, () => ws.close(1008, "authorization revoked"));
-                    }
-                } catch (err) {
-                    services.logger.warn({ err }, "browser-profile ticket rejected");
-                    ws.close(1008, "unauthorized");
-                    return;
-                }
-                // Valid only if the manifest has a browser/identity entry with this id; an unlisted id has no profile
-                // to open.
-                const requested = url.searchParams.get("capability") ?? "";
-                const capability = await services.capabilities.get(requested);
-                if (capability === undefined || (capability.kind !== "browser" && capability.kind !== "identity")) {
-                    ws.close(1008, "invalid capability");
-                    return;
-                }
-                let urls: { loginUrl: string; homeUrl: string };
-                if (capability.kind === "browser") {
-                    // Requires an enabled extension declaring this platform; same registry the browser handler resolves
-                    // against.
-                    const contribution = (await contributionRegistry(services)).get(contributionKey("browser", capability.config.platform));
-                    if (contribution === undefined || contribution.spec.kind !== "browser") {
-                        ws.close(1008, "invalid platform");
-                        return;
-                    }
-                    // A missing pair means a rotted install: the entry's add would otherwise have failed.
-                    const resolved = browserUrls(contribution.spec, capability.config);
-                    if (resolved === undefined) {
-                        ws.close(1008, "this connection has no page to open: re-add it");
-                        return;
-                    }
-                    urls = resolved;
-                } else {
-                    // An identity's site is its own email provider; login and browse both start at its landing page.
-                    const login = identityLoginUrl(capability.config);
-                    urls = { loginUrl: login, homeUrl: login };
-                }
-                signingIn = url.searchParams.get("mode") !== "browse";
-                // loginUrl and homeUrl can differ: sites like YouTube sign in on a different domain than their home
-                // page.
-                const startUrl = signingIn ? urls.loginUrl : urls.homeUrl;
-                const profile = profileOwner(capability);
-                if (!acquireProfileLock(profile)) {
-                    ws.close(1008, "this browser is already open in another window");
-                    return;
-                }
-                account = requested;
-                owner = profile;
-                // Refuses to open if the bound exit can't be resolved, rather than logging in from the sandbox's own
-                // address.
-                const bound = await resolveProfileExit(await services.capabilities.list(), profile).catch((error: unknown) => ({
-                    refusal: `its exit could not be resolved (${errorMessage(error)})`,
-                }));
-                if (bound !== undefined && "refusal" in bound) {
-                    ws.send(JSON.stringify({ type: "error", message: bound.refusal }));
-                    await cleanup();
-                    ws.close(1011, "exit unavailable");
-                    return;
-                }
-                const boundExit = bound?.exit;
-                let playwright: typeof import("playwright");
-                try {
-                    playwright = await import("playwright");
-                } catch {
-                    ws.send(JSON.stringify({ type: "error", message: "browser not installed, rebuild the sandbox (Environment card) first" }));
-                    await cleanup();
-                    ws.close(1011, "browser missing");
-                    return;
-                }
-                try {
-                    // Headed, not headless: anti-bot WAFs block it, and the display is the owner's picture, so it's
-                    // exclusive.
-                    const display = await ensureDisplay(profile);
-                    // Same seed as the agent's browser fingerprint: a device change mid-session triggers a logout or
-                    // captcha.
-                    const fingerprint = await browserFingerprint(services.workspace.root, profile, boundExit?.place);
-                    // Started plainly and attached afterwards (owner-browser.ts): a Playwright-launched window is
-                    // refused by sign-in risk checks that the same browser, started this way, passes.
-                    owned = await launchOwnerBrowser(playwright, {
-                        executablePath: playwright.chromium.executablePath(),
-                        userDataDir: await launchSessionDir(services.workspace.root, profile),
-                        display: display.name,
-                        // From the fingerprint's place: a bound profile claims its exit's country, unbound claims the
-                        // sandbox's. Must match the proxy: an IP in Berlin under a New York clock is worse than no exit.
-                        fingerprint,
-                        proxy: boundExit?.proxy,
-                        // The corner region.ts keeps every window in (no window manager on Xvfb); the page fills the
-                        // window, so picture coordinates map directly to XTEST clicks on the display.
-                        windowArgs: chromiumWindowArgs(display),
-                    });
-                    const ctx = owned.context;
-                    // Patches residual server tells (SwiftShader GPU, host core count) before first navigation.
-                    await ctx.addInitScript(stealthInit(fingerprint));
-                    // Ensures a page exists before the screencast starts; it then follows later pages and popups on its
-                    // own.
-                    // The tab Chromium opened on about:blank; a profile may also restore older tabs behind it.
-                    const page = ctx.pages().find((candidate) => candidate.url() === "about:blank") ?? (await ctx.newPage());
-                    // Security key armed before first navigation; an identity's accounts share one key, as they share
-                    // cookies.
-                    const storePath = passkeyPath(services.workspace.root, profile);
-                    const arm = (target: Page): void => {
-                        void armPasskeys(ctx, target, storePath, (err: unknown) =>
-                            services.logger.error({ err, store: storePath }, "browser-profile: a passkey could not be saved"),
-                        ).catch((err: unknown) => services.logger.warn({ err }, "browser-profile: passkey arm failed"));
-                        // A sign-in popup (an OAuth window) goes over the page it came from, where the owner looks.
-                        void placeWindow(ctx, target).catch(() => undefined);
-                    };
-                    ctx.on("page", arm);
-                    arm(page);
-                    // Told to the owner, not just the log: a picture that stops without a word is a window that looks
-                    // alive and answers nothing, since this route has no frames path to fall back to.
-                    const sink = {
-                        send: (data: string | Uint8Array<ArrayBuffer>) => ws.send(data),
-                        backlog: () => (ws.raw as { bufferedAmount?: number } | undefined)?.bufferedAmount ?? 0,
-                    };
-                    view = await startLiveView(
-                        ctx,
-                        profile,
-                        sink,
-                        (reason) => {
-                            services.logger.warn({ reason }, "browser-profile stream failed");
-                            if (!closed) {
-                                ws.send(JSON.stringify({ type: "error", message: `The browser's picture stopped: ${reason}` }));
-                            }
-                        },
-                        { endpoint: owned.endpoint },
-                    );
-                    // Doesn't fail on a slow page; the owner can interact once it paints.
-                    await page.goto(startUrl, { waitUntil: "domcontentloaded" }).catch((err: unknown) => {
-                        services.logger.warn({ err }, "browser-profile initial nav");
-                    });
-                } catch (err) {
-                    services.logger.warn({ err }, "browser-profile launch failed");
-                    ws.send(JSON.stringify({ type: "error", message: err instanceof Error ? err.message : "failed to start the browser" }));
-                    await cleanup();
-                    ws.close(1011, "launch failed");
+                    await open(ws);
+                } finally {
+                    attachedNow();
                 }
             },
             onMessage: async (event, ws) => {
-                if (view === undefined || closed) {
+                if (closed) {
                     return;
                 }
                 let message: ScreencastClientMessage;
@@ -243,9 +261,17 @@ export const createBrowserProfileRoute = (services: Services) =>
                 } catch {
                     return;
                 }
+                // A ping is answered before the window is up, so a slow launch isn't read as a dead socket; the rest
+                // waits for the view (browser-view.ts has the same wait).
+                if (message.type !== "ping") {
+                    await attached;
+                    if (view === undefined || closed) {
+                        return;
+                    }
+                }
                 // Window-level messages first; anything unclaimed is pointer/keystroke input for live-view to route.
                 if (!(await handleWindow(message, ws))) {
-                    await view.input(message);
+                    await view?.input(message);
                 }
             },
             onClose: () => {

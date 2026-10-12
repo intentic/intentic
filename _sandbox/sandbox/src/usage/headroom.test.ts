@@ -354,3 +354,27 @@ test("a rate-limit park is marked on the snapshot too, so no screen has to learn
         jest.useRealTimers();
     }
 });
+
+// An organisation refusing OAuth, then the rate limit that answer earns: the reason changed on every retry, so both
+// lines were written for days.
+test("an account flapping between two refusals writes each one once an hour, and again after a read succeeds", async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(NOW);
+    try {
+        const lines: { reason?: string; message: string }[] = [];
+        const logger = pino({ level: "info", messageKey: "message" }, { write: (line: string) => lines.push(JSON.parse(line)) });
+        const { store } = memoryStore({ a: { windows: [...WINDOWS.windows], measuredAt: 0 } });
+        // Ten minutes apart: a refusal, the other, the first again, the other again, a reading, the first once more.
+        const refused = (failure: string): HeadroomReading => ({ windows: [], failure });
+        const answers = [refused("OAuth is not allowed"), refused("rate-limited"), refused("OAuth is not allowed"), refused("rate-limited"), WINDOWS];
+        const { source: claude } = source([{ key: "a", provider: "claude", answer: async () => answers.shift() ?? refused("OAuth is not allowed") }]);
+        const service = createHeadroomService({ store, parks: memoryUsageParkStore(), sources: [claude], logger });
+        for (let pass = 0; pass < 6; pass += 1) {
+            jest.setSystemTime(NOW + pass * 10 * 60_000);
+            await service.refresh({ maxAgeMs: 0 });
+        }
+        expect(lines.map((line) => line.reason)).toEqual(["OAuth is not allowed", "rate-limited", "OAuth is not allowed"]);
+    } finally {
+        jest.useRealTimers();
+    }
+});

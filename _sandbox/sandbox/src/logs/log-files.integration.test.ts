@@ -108,3 +108,74 @@ test("past its own cap the series is truncated to a tail that still holds most o
     await pruneLogFiles(root);
     expect((await stat(join(root, "resource-metrics.jsonl"))).size).toBe(30_000_000);
 });
+
+/* A CUT LOG KEEPS WHAT IT DROPPED, because cutting daemon.log from 5MB to 1MB swung its reach between five days and one. */
+test("a rotated log keeps the lines its cut dropped as one older segment, and the next cut replaces it", async () => {
+    const root = await tempRoot();
+    const line = (index: number): string => `${String(index).padStart(9, "0")} ${"x".repeat(89)}\n`;
+    // Six megabytes of hundred-byte lines.
+    await writeFile(join(root, "daemon.log"), Array.from({ length: 60_000 }, (_, index) => line(index)).join(""));
+    await pruneLogFiles(root);
+
+    const live = await readFile(join(root, "daemon.log"), "utf8");
+    const older = await readFile(join(root, "daemon.log.1"), "utf8");
+    expect(live).toBe(Array.from({ length: 10_000 }, (_, index) => line(50_000 + index)).join(""));
+    // The newest four megabytes before the cut, ending exactly where the live file begins.
+    expect(older).toBe(Array.from({ length: 40_000 }, (_, index) => line(10_000 + index)).join(""));
+
+    await writeFile(join(root, "daemon.log"), Array.from({ length: 60_000 }, (_, index) => line(100_000 + index)).join(""));
+    await pruneLogFiles(root);
+    expect((await readFile(join(root, "daemon.log.1"), "utf8")).startsWith(line(110_000))).toBe(true);
+});
+
+test("a log that is not one the diagnostics read is cut without a segment", async () => {
+    const root = await tempRoot();
+    await writeFile(join(root, "other.log"), Buffer.alloc(5_000_001, 120));
+    await pruneLogFiles(root);
+    await expect(stat(join(root, "other.log.1"))).rejects.toThrow();
+});
+
+/* TERMINAL CAPTURES ARE COUNTED ON THEIR OWN, because hundreds an hour pushed out the CPU profile a boot had just named. */
+test("a churning terminals directory never evicts the files beside it", async () => {
+    const root = await tempRoot();
+    await mkdir(join(root, "terminals"), { recursive: true });
+    await mkdir(join(root, "services"), { recursive: true });
+    await writeFile(join(root, "boot-2026-10-11.cpuprofile"), "{}");
+    await writeFile(join(root, "services", "web.log"), "s");
+    await utimes(join(root, "boot-2026-10-11.cpuprofile"), new Date(Date.now() - 3_600_000), new Date(Date.now() - 3_600_000));
+    await utimes(join(root, "services", "web.log"), new Date(Date.now() - 3_600_000), new Date(Date.now() - 3_600_000));
+    await Promise.all(Array.from({ length: 250 }, (_, index) => writeFile(join(root, "terminals", `agent-${index}-%1.log`), "t")));
+    await pruneLogFiles(root);
+
+    expect(await readFile(join(root, "boot-2026-10-11.cpuprofile"), "utf8")).toBe("{}");
+    expect(await readFile(join(root, "services", "web.log"), "utf8")).toBe("s");
+    expect((await listLogFiles(join(root, "terminals"))).length).toBe(200);
+});
+
+// Cutting a profile or a report to its tail leaves a file nothing can parse.
+test("a file that is one JSON document is kept whole past the line cap", async () => {
+    const root = await tempRoot();
+    await writeFile(join(root, "boot-2026-10-11.cpuprofile"), Buffer.alloc(6_000_000, 120));
+    await writeFile(join(root, "report.20261011.json"), Buffer.alloc(6_000_000, 120));
+    await pruneLogFiles(root);
+    expect((await stat(join(root, "boot-2026-10-11.cpuprofile"))).size).toBe(6_000_000);
+    expect((await stat(join(root, "report.20261011.json"))).size).toBe(6_000_000);
+});
+
+// The exit marker and the restart record are read at the next boot and by `ic`, however long the sandbox sat stopped.
+test("the restart record's files are never evicted or cut", async () => {
+    const root = await tempRoot();
+    const old = new Date(Date.now() - 60 * 24 * 3_600_000);
+    for (const name of ["daemon-exit.json", "restart-intent.json"]) {
+        await writeFile(join(root, name), "{}");
+        await utimes(join(root, name), old, old);
+    }
+    await writeFile(join(root, "restarts.jsonl"), Buffer.alloc(6_000_000, 120));
+    await utimes(join(root, "restarts.jsonl"), old, old);
+    await Promise.all(Array.from({ length: 120 }, (_, index) => writeFile(join(root, `other-${index}.log`), "o")));
+    await pruneLogFiles(root);
+
+    expect(await readFile(join(root, "daemon-exit.json"), "utf8")).toBe("{}");
+    expect(await readFile(join(root, "restart-intent.json"), "utf8")).toBe("{}");
+    expect((await stat(join(root, "restarts.jsonl"))).size).toBe(6_000_000);
+});

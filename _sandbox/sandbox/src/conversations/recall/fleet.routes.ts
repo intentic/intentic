@@ -4,7 +4,9 @@ import type { Services } from "../../composition.js";
 import type { AppEnv } from "../../app-env.js";
 import { soleLiveConversation } from "../actor/conversation-holdings.js";
 import { messageConversation } from "./fleet-message.js";
-import { candidateOf, fleetMessages, fleetRecall, fleetRoster, fleetSearch, resolveHandle, type RosterOptions } from "./fleet-recall.js";
+import { resolveFleetHandle } from "./fleet-handles.js";
+import { candidateOf, fleetRecall, fleetRoster, fleetSearch, present, type RosterOptions } from "./fleet-recall.js";
+import { fleetMessageDetail, fleetMessages, fleetRows } from "./fleet-transcript.js";
 
 // The shell door onto the daemon's fleet knowledge (registry, record, worktree composition, phrase index), joined into
 // one answer. Its own namespace, not `/agents`: the board's router can land, discard and rename, so what lives here
@@ -32,6 +34,15 @@ const numberQuery = (c: Context<AppEnv>, name: string, max: number): number | un
     }
     const value = Number.parseInt(raw, 10);
     return Number.isFinite(value) && value > 0 ? Math.min(value, max) : undefined;
+};
+
+// A message's position in the record, counted from 0 as the transcript's `at` prints it.
+const positionQuery = (c: Context<AppEnv>, name: string): number | undefined => {
+    const raw = c.req.query(name);
+    if (raw === undefined || !/^\d+$/u.test(raw)) {
+        return undefined;
+    }
+    return Number.parseInt(raw, 10);
 };
 
 // On for any value but an explicit off (`0`, `false`, `no`); generous, since these are typed by hand from a shell.
@@ -71,14 +82,20 @@ export const createFleetRoutes = (services: Services) => ({
         const query = c.req.query("q")?.trim();
         const options = rosterOptionsOf(c);
         const agents = query === undefined || query === "" ? fleetRoster(services, options) : await fleetSearch(services, query, options);
-        // `indexing` marks a backfill still running, so an empty result may still grow rather than mean nothing exists.
-        return c.json({ agents, ...(query === undefined || query === "" ? {} : { indexing: services.saidIndex.indexing() }) });
+        // `indexing` marks a backfill still running, so an empty result may still grow rather than mean nothing exists;
+        // `coverage` says how far through the conversations that pass has got.
+        if (query === undefined || query === "") {
+            return c.json({ agents });
+        }
+        const coverage = services.saidIndex.coverage?.();
+        return c.json({ agents, indexing: services.saidIndex.indexing(), ...present({ coverage }) });
     },
-    /** GET /fleet/:handle: one conversation, whole; `?transcript=1` adds the record, bounded by `last` and `grep`;
+    /** GET /fleet/:handle: one conversation, whole; `?transcript=1` adds the record, bounded by `last` and `grep`
+     *  (`&raw=1` as stored rows rather than lines); `?message=<n>` adds that one message whole, as `detail`;
      *  `?stored=1` adds what the daemon keeps for it, raw: its row in every table and the files in its directory. */
     show: async (c: Context<AppEnv>): Promise<Response> => {
         const handle = c.req.param("handle") ?? "";
-        const resolved = resolveHandle(services, handle);
+        const resolved = await resolveFleetHandle(services, handle);
         if (resolved.kind === "ambiguous") {
             // Named, never picked: 409 because the request is answerable, just not unique.
             return c.json(
@@ -93,20 +110,27 @@ export const createFleetRoutes = (services: Services) => ({
         if (resolved.kind === "unknown") {
             return c.json({ ok: false, message: `No conversation answers to \`${handle}\`. Search for one with \`agents find "<text>"\`.` }, 404);
         }
-        const recall = await fleetRecall(services, resolved.entry, services.config.historyRoot, (flagQuery(c, "diff") === false ? { diff: false } : {}));
+        const recall = await fleetRecall(services, resolved.entry, services.config.historyRoot, flagQuery(c, "diff") === false ? { diff: false } : {});
+        // How a handle that is none of its own names led here (a retired session, a subagent), said once with the answer.
+        const answer = { agent: recall, ...present({ via: resolved.via }) };
         if (flagQuery(c, "stored") === true) {
-            return c.json({ agent: recall, stored: await storedState(services, resolved.entry.id) });
+            return c.json({ ...answer, stored: await storedState(services, resolved.entry.id) });
+        }
+        const at = positionQuery(c, "message");
+        if (at !== undefined) {
+            const message = await fleetMessageDetail(services, resolved.entry, at);
+            return message === undefined
+                ? c.json({ ok: false, message: `${recall.id} has ${recall.digest.messages} messages, numbered from 0; there is no message ${at}.` }, 404)
+                : c.json({ ...answer, detail: message });
         }
         if (flagQuery(c, "transcript") !== true) {
-            return c.json({ agent: recall });
+            return c.json(answer);
         }
         const last = numberQuery(c, "last", MAX_LIMIT);
         const grep = c.req.query("grep");
-        const transcript = await fleetMessages(services, resolved.entry, {
-            ...(last === undefined ? {} : { last }),
-            ...(grep === undefined || grep === "" ? {} : { grep }),
-        });
-        return c.json({ agent: recall, transcript });
+        const window = { ...(last === undefined ? {} : { last }), ...(grep === undefined || grep === "" ? {} : { grep }) };
+        const transcript = flagQuery(c, "raw") === true ? await fleetRows(services, resolved.entry, window) : await fleetMessages(services, resolved.entry, window);
+        return c.json({ ...answer, transcript });
     },
     /** POST /fleet/message: say something to another conversation — steered into its live turn, or opening one. */
     message: async (c: Context<AppEnv>): Promise<Response> => {

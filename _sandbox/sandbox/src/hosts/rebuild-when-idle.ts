@@ -64,6 +64,7 @@ export const createRebuildWhenIdle = (deps: RebuildWhenIdleDeps): RebuildWhenIdl
         stopPolling();
         held = { ...request, phase: "rebuilding" };
         deps.logger.info({ host: request.host, hash: request.hash }, "rebuild when idle: nothing is in flight, the device rebuilds this sandbox now");
+        deps.restartResume.announce?.({ by: "daemon", host: request.host, action: "rebuild", reason: "environment rebuild the owner asked for, started once nothing was in flight" });
         const current = (): boolean => held?.phase === "rebuilding" && held.requestedAt === request.requestedAt;
         let answered = false;
         let failure: string | undefined;

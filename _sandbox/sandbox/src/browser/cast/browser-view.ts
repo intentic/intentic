@@ -7,6 +7,7 @@ import {
     browserSessionEndpoint,
     browserSessionPage,
 } from "../sessions/browser-sessions.js";
+import { OWN_BROWSER_SESSION } from "../sessions/own-browser.js";
 import { startLiveView, type LiveView } from "./live-view.js";
 import type { ScreencastClientMessage } from "./screencast.js";
 import type { Services } from "../../composition.js";
@@ -34,6 +35,12 @@ export const createBrowserViewRoute = (services: Services) =>
             attachedNow = resolve;
         });
 
+        const openedAt = Date.now();
+        // Debug lines naming the session, and whether it is the person's own window or an agent's: which picture a
+        // viewer was on is otherwise in no log when one looks wrong.
+        const debug = (fields: Record<string, unknown>, message: string): void =>
+            services.logger.debug({ session, window: session === OWN_BROWSER_SESSION ? "own" : "agent", ...fields }, message);
+
         const cleanup = async (): Promise<void> => {
             if (closed) {
                 return;
@@ -42,6 +49,9 @@ export const createBrowserViewRoute = (services: Services) =>
             unregisterAccess?.();
             unregisterAccess = undefined;
             await view?.stop();
+            if (view !== undefined) {
+                debug({ openMs: Date.now() - openedAt }, "browser-view: closed");
+            }
             view = undefined;
         };
 
@@ -54,6 +64,7 @@ export const createBrowserViewRoute = (services: Services) =>
                 ws.send(JSON.stringify({ type: "gone", pageId }));
                 return;
             }
+            debug({ pageId }, "browser-view: tab picked");
             await view?.bind(page);
         };
 
@@ -149,15 +160,17 @@ export const createBrowserViewRoute = (services: Services) =>
             }
             try {
                 // Display key decides video vs frames; a headless session has none, so frames answers instead.
+                const display = browserSessionDisplayKey(session);
                 view = await startLiveView(
                     context,
-                    browserSessionDisplayKey(session) ?? "",
+                    display ?? "",
                     sinkOf(ws),
                     (reason) => {
                         services.logger.warn({ reason }, "browser-view stream failed");
                     },
-                    { endpoint: browserSessionEndpoint(session) },
+                    { endpoint: browserSessionEndpoint(session), log: debug },
                 );
+                debug({ display }, "browser-view: opened");
             } catch (err) {
                 services.logger.warn({ err }, "browser-view attach failed");
                 ws.send(JSON.stringify({ type: "error", message: "Couldn't attach to that browser." }));

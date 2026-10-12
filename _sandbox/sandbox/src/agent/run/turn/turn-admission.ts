@@ -145,6 +145,35 @@ const goesFirst = (services: Services, conversationId: string): boolean => {
 const heldBehindLimit = (services: Services, conversationId: string, voices: readonly QueuedItem["voice"][]): boolean =>
     voices.every((voice) => voice !== "person") && windowShut(services.conversations.state(conversationId)?.resume.held, Date.now());
 
+// The one reason that is not a hold: the words go out after the running turn, which the answer's missing `run` says.
+const AFTER_RUNNING_TURN = "a turn is running and takes no words now: they go after it";
+
+// Why a release let nothing out though words still wait, in the words its line says it with; undefined when nothing
+// holds them back that the queue can name. A "Send now" that did nothing used to leave no line at all (2026-10-11).
+const releaseHeldBy = (services: Services, conversationId: string): string | undefined => {
+    const queue = services.conversations.queued(conversationId);
+    const waiting = waitingOf(queue);
+    if (waiting.length === 0) {
+        return undefined;
+    }
+    const held = services.conversations.state(conversationId)?.resume.held;
+    if (heldBehindLimit(services, conversationId, waiting.map((item) => item.voice)) && held?.reopensAt !== undefined) {
+        const provider = withRuntimeDefaults(held.input).agent;
+        return `behind the ${provider} limit until ${new Date(held.reopensAt * 1000).toISOString()}: words nobody at the composer typed wait for it to reopen`;
+    }
+    if (goesFirst(services, conversationId)) {
+        return "a recovery or a rewind the sandbox runs by itself goes first";
+    }
+    const paused = holdOf(queue);
+    if (paused !== undefined) {
+        return `the queue is still paused (${paused})`;
+    }
+    if (liveRunOf(services.conversations, conversationId) !== undefined || services.conversations.state(conversationId)?.phase.kind === "running") {
+        return AFTER_RUNNING_TURN;
+    }
+    return undefined;
+};
+
 // How far ahead a scheduled send may be booked. A time somebody chose is an appointment, and a month holds every one
 // worth keeping (a spent allowance reopens within a week); past it a booking is a slip, a year typed for a day.
 const LONGEST_BOOKING_MS = 31 * 24 * 60 * 60 * 1000;
@@ -591,10 +620,18 @@ export const createAdmission = (
         // The hold let go, with the bookings of the messages named (every one's when none are), and what can go goes.
         release: ({ conversationId, routing, ids }) =>
             inTurn(conversationId, async () => {
-                services().conversations.send(conversationId, { kind: "queue-released", ...opt("routing", routing), ...opt("ids", ids) });
+                const daemon = services();
+                daemon.conversations.send(conversationId, { kind: "queue-released", ...opt("routing", routing), ...opt("ids", ids) });
                 const delivered = await deliver(conversationId);
                 kept(conversationId, delivered);
-                return opt("run", [...delivered.values()].find((receipt) => receipt.delivered === "started")?.run);
+                const run = [...delivered.values()].find((receipt) => receipt.delivered === "started")?.run;
+                const why = run === undefined ? releaseHeldBy(daemon, conversationId) : undefined;
+                if (why !== undefined) {
+                    const waiting = waitingOf(daemon.conversations.queued(conversationId)).length;
+                    daemon.logger.info({ conversationId, waiting, delivered: delivered.size, why }, `resume held: ${why}`);
+                }
+                // Said back to the press too, which otherwise answers a held queue with nothing and reads as broken.
+                return { ...opt("run", run), ...opt("reason", why === AFTER_RUNNING_TURN ? undefined : why) };
             }),
         // What waits, booked anew (only the messages named, when any are): held by whatever held it before or by nothing
         // (messages behind a running turn), it now waits for this. Nothing left to wait for lets it go now, as a release

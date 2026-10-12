@@ -4,7 +4,9 @@ import type { Config } from "../env.config.js";
 import { statePath } from "../state-paths.js";
 import { applyWorkload } from "../workload/workload-class.js";
 
-// A full embeddings rebuild is slow; logged at a human cadence so the load has a name while it runs.
+// A full embeddings rebuild is slow; logged at a human cadence so the load has a name while it runs. A backlog that
+// clears before its first interval (a save's few dozen chunks, done in seconds) is a trace: those pairs were five
+// hundred info lines in five days that named no load anyone felt.
 const BACKLOG_LOG_MS = 30_000;
 // 2.5 GiB: under the child's inherited 3 GiB heap cap, so a runaway is replaced before V8 makes it a fatal error.
 const IQ_MEMORY_CEILING_BYTES = 2.5 * 1024 * 1024 * 1024;
@@ -19,8 +21,9 @@ export const createCodeSearchEngine = (
     workspaceRoot: string,
     logger: Logger,
 ): ReturnType<typeof createEngineClient> => {
-    let backlogLoggedAt = 0;
-    let backlogActive = false;
+    // The backlog being worked through now: when it started or was last written, what it started with, and whether
+    // it has written an info line, which is what earns it a "complete" line.
+    let backlog: { loggedAt: number; startedAt: number; startedWith: number; told: boolean } | undefined;
     // The engine runs in a child process, most of this daemon's RSS; a dead child only loses its own searches.
     const iq = createEngineClient({
         root: workspaceRoot,
@@ -30,20 +33,26 @@ export const createCodeSearchEngine = (
         // An index pass failing after warm() has no caller to reject; without this it silently stops tracking disk.
         onIndexError: (error) => logger.warn({ err: error }, "iq index pass failed, search results may be stale"),
         onIndexProgress: (remaining) => {
+            const now = Date.now();
             if (remaining === 0) {
-                if (backlogActive) {
-                    backlogActive = false;
-                    logger.info("iq index embeddings complete: semantic search at full coverage");
+                if (backlog !== undefined) {
+                    const done = { startedWith: backlog.startedWith, durationMs: now - backlog.startedAt };
+                    logger[backlog.told ? "info" : "debug"](done, "iq index embeddings complete: semantic search at full coverage");
+                    backlog = undefined;
                 }
                 return;
             }
-            const now = Date.now();
-            if (backlogActive && now - backlogLoggedAt < BACKLOG_LOG_MS) {
+            if (backlog === undefined) {
+                backlog = { loggedAt: now, startedAt: now, startedWith: remaining, told: false };
+                logger.debug({ remaining }, "iq index building embeddings: semantic search fills in as it goes");
                 return;
             }
-            backlogActive = true;
-            backlogLoggedAt = now;
-            logger.info({ remaining }, "iq index building embeddings: semantic search fills in as it goes");
+            if (now - backlog.loggedAt < BACKLOG_LOG_MS) {
+                return;
+            }
+            backlog.loggedAt = now;
+            backlog.told = true;
+            logger.info({ remaining, startedWith: backlog.startedWith }, "iq index building embeddings: semantic search fills in as it goes");
         },
         // The query worker owns the semantic scan and cross-encoder; losing it narrows a search to keyword matching.
         onQueryError: (error) => logger.warn({ err: error }, "iq query worker failed, search fell back to keyword matching"),

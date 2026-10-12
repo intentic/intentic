@@ -95,6 +95,8 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
         target: z.string().optional(),
         locations: z.array(ToolCallLocationSchema).optional(),
         content: z.array(ToolCallContentSchema).optional(),
+        // The call's input as bounded JSON text, for a call with no one-line `target` (TranscriptTool.input).
+        input: z.string().optional(),
         parentToolUseId: z.string().optional(),
     }),
     // A later state of a call, correlated by `id`. Status and/or fresh content/locations REPLACE the prior value
@@ -105,6 +107,8 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
         status: ToolCallStatusSchema.optional(),
         content: z.array(ToolCallContentSchema).optional(),
         locations: z.array(ToolCallLocationSchema).optional(),
+        // A command's exit code, from a runtime that reports it as a number (TranscriptTool.exitCode).
+        exitCode: z.number().int().optional(),
     }),
     // The agent started running Bash in its live `agent-<id>` tmux session; one per turn, reused across all of a turn's
     // commands including subagents'.

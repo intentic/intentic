@@ -12,7 +12,7 @@ use serde_json::Value;
 use super::fix::chain;
 use super::outcome::{self, Kind, Outcome};
 use super::preparing::{self, Phase};
-use super::{inside, probation, resume};
+use super::{inside, intent, probation, resume};
 
 const HOST_FILES: &str = include_str!("../../../sandbox/golden/host-files.json");
 const UPDATE_OUTCOME: &str =
@@ -37,6 +37,52 @@ fn every_path_ic_reads_or_writes_is_the_one_the_daemon_uses() {
     assert_eq!(files["bootFailure"]["path"], probation::BOOT_FAILURE_FILE);
     assert_eq!(files["daemonExit"]["path"], probation::DAEMON_EXIT_FILE);
     assert_eq!(files["workSignal"]["path"], chain::WORK_SIGNAL);
+}
+
+/// The restart intent (intent.rs), held to the daemon's definition once the daemon's golden file names it: the daemon
+/// side that reads it lands beside this, and until its entry is in the golden file there is nothing to hold ic to.
+#[test]
+fn the_restart_intent_ic_writes_is_the_daemons_example() {
+    let files = json(HOST_FILES);
+    let Some(entry) = files.get("restartIntent") else {
+        return;
+    };
+    assert_eq!(entry["path"], intent::FILE);
+    let Some(example) = entry.get("example") else {
+        return;
+    };
+    let text = |field: &str| example[field].as_str().expect("a string field");
+    let checks: Vec<String> = example["checks"]
+        .as_array()
+        .map(|checks| {
+            checks
+                .iter()
+                .filter_map(|check| check.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
+    let action = [
+        intent::Action::Restart,
+        intent::Action::Stop,
+        intent::Action::Update,
+        intent::Action::Swap,
+        intent::Action::Reshape,
+        intent::Action::Recreate,
+        intent::Action::Rebuild,
+    ]
+    .into_iter()
+    .find(|action| action.wire() == text("action"))
+    .expect("an action ic writes");
+    let body = intent::body(
+        action,
+        text("reason"),
+        &checks,
+        text("by"),
+        text("host"),
+        text("side"),
+    );
+    let at = crate::sandbox::fix::clock::rfc3339_ms(text("at")).expect("an ISO moment");
+    assert_eq!(&json(&inside::stamp(&body.to_string(), at)), example);
 }
 
 #[test]

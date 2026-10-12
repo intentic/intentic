@@ -1,9 +1,9 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { packageRoot } from "@intentic/constants/node";
-import { heldSlots, queueSnapshot } from "./queue-slots.js";
+import { heldSlots, poolQueueFiles, queueSnapshot } from "./queue-slots.js";
 
 /* The half the unit tests cannot reach: a real flock taken by bin/queue-run, found through st_dev and the inode.
    A wrong base or a wrong device split parses perfectly and matches nothing, so only a live lock proves the chain. */
@@ -71,7 +71,7 @@ test("pools are summarised separately, and a slot file outlives the hold that cr
         const summary = await queueSnapshot(queue);
         expect(summary["busy"]).toMatchObject({ held: 1 });
         // The file remains once written; only the lock went. A pool that reads 0 held is measured, not missing.
-        expect(summary["quiet"]).toEqual({ slots: 1, held: 0, longestHoldSeconds: 0 });
+        expect(summary["quiet"]).toEqual({ slots: 1, held: 0, longestHoldSeconds: 0, waiting: 0, longestWaitSeconds: 0 });
     } finally {
         first.kill("SIGKILL");
     }
@@ -80,4 +80,77 @@ test("pools are summarised separately, and a slot file outlives the hold that cr
 test("a queue directory that was never used is not an error", async () => {
     expect(await heldSlots(join(await dir(), "never-ran"))).toEqual([]);
     expect(await queueSnapshot(join(await dir(), "never-ran"))).toEqual({});
+});
+
+// The question the summary exists for: a command is waiting, so who holds the pool, for whom, and who else waits.
+test("a held pool names its holder's conversation and rule, and counts the command waiting behind it", async () => {
+    const queue = await dir();
+    const marker = join(queue, "held-p");
+    const holder = spawn("bash", [QUEUE_RUN, "--pool", "p", "--limit", "1", "--", "bash", "-c", `echo held > ${marker}; sleep 30`], {
+        env: { ...process.env, INTENTIC_QUEUE_DIR: queue, INTENTIC_TURN_OWNER: "holding-conversation", INTENTIC_HEAVY_HELD: "bun-test" },
+    });
+    const waiter = (): ChildProcess =>
+        spawn("bash", [QUEUE_RUN, "--pool", "p", "--limit", "1", "--wait", "30", "--label", "second", "--", "true"], {
+            env: { ...process.env, INTENTIC_QUEUE_DIR: queue, INTENTIC_QUEUE_POLL: "1", INTENTIC_TURN_OWNER: "waiting-conversation" },
+        });
+    let second: ChildProcess | undefined;
+    try {
+        const until = async (ready: () => Promise<boolean>, what: string): Promise<void> => {
+            const deadline = Date.now() + RENDEZVOUS_MS;
+            while (!(await ready())) {
+                if (Date.now() > deadline) {
+                    throw new Error(`${what} never happened, so nothing below is testing what it says`);
+                }
+                await new Promise((resolve) => setTimeout(resolve, POLL_MS));
+            }
+        };
+        await until(async () => (await readdir(queue)).includes("held-p"), "the holder taking its slot");
+        second = waiter();
+        await until(async () => (await readdir(join(queue, "p"))).some((name) => name.startsWith("wait.")), "the second command queueing");
+        const summary = (await queueSnapshot(queue))["p"];
+        expect(summary).toMatchObject({ slots: 1, held: 1, waiting: 1 });
+        expect(summary?.holders).toEqual([
+            expect.objectContaining({ slot: "slot.1", pid: holder.pid, conversation: "holding-conversation", rule: "bun-test" }),
+        ]);
+        expect(summary?.waiters).toEqual([expect.objectContaining({ pid: second.pid, label: "second", conversation: "waiting-conversation" })]);
+        expect(summary?.longestWaitSeconds).toBeGreaterThanOrEqual(0);
+    } finally {
+        holder.kill("SIGKILL");
+        second?.kill("SIGKILL");
+    }
+});
+
+// A waiter killed with SIGKILL leaves its file behind, and state.json is only as fresh as its last writer.
+test("a waiter whose process is gone is not counted, whichever file still names it", async () => {
+    const pool = join(await dir(), "p");
+    await mkdir(pool, { recursive: true });
+    // Past any pid_max, so certainly not a live process.
+    const gone = 2 ** 23;
+    const since = Math.floor(Date.now() / 1000) - 60;
+    await writeFile(join(pool, `wait.${gone}`), JSON.stringify({ pid: gone, label: "dead", conversation: "c", since, command: "x" }));
+    await writeFile(
+        join(pool, `wait.${process.pid}`),
+        JSON.stringify({ pid: process.pid, label: "live", conversation: "c-live", since, command: "bun test" }),
+    );
+    await writeFile(
+        join(pool, "state.json"),
+        JSON.stringify({
+            pool: "p",
+            limit: 1,
+            holders: [{ slot: "slot.1", pid: 77, conversation: "c-h", rule: "tsc" }],
+            waiters: [{ pid: gone + 1, since }],
+        }),
+    );
+    const read = await poolQueueFiles(pool, since + 60);
+    expect(read.waiters).toEqual([{ pid: process.pid, label: "live", conversation: "c-live", waitSeconds: 60, command: "bun test" }]);
+    expect(read.holders.get(77)).toEqual({ conversation: "c-h", rule: "tsc" });
+});
+
+test("a missing, half-written or garbage state file reads as nothing waiting", async () => {
+    const pool = join(await dir(), "p");
+    expect(await poolQueueFiles(pool)).toEqual({ waiters: [], holders: new Map() });
+    await mkdir(pool, { recursive: true });
+    await writeFile(join(pool, "state.json"), '{"pool":"p","holders":[{"pid":');
+    await writeFile(join(pool, `wait.${process.pid}`), "not json");
+    expect(await poolQueueFiles(pool)).toEqual({ waiters: [], holders: new Map() });
 });

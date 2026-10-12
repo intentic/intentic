@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { upgradeWebSocket } from "@hono/node-server";
 import { errorMessage } from "@intentic/base/errors";
 import { PEER_TRY_AGAIN, PEER_UNAUTHORIZED } from "@intentic/sandbox-contract/peer-dial";
@@ -12,6 +13,8 @@ import { ownerDenied, unavailableIfUnreadable } from "../auth/owner-gates.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
 import type { rawRouteServer } from "../http/raw-route-server.js";
+import { createRepeatGate } from "../logs/repeat-gate.js";
+import { callFailure } from "./call-failure.js";
 import type { PeerDoor, PeerKind } from "./peer.js";
 import type { PeerClient, PeerHub } from "./peer-hub.js";
 import type { PeerStore } from "./peer-store.js";
@@ -72,8 +75,10 @@ const scopesOf = async <Scopes>(services: Services, kind: PeerKind, id: string):
 // Admitted, or refused with whether the peer should come back. `retry: false` is the expensive answer — it closes the
 // socket 1008, which ends the far end's dial loop for good and costs someone a walk to that machine — so it is
 // reserved for the one refusal that is genuinely about the credential.
+// A refusal names the enrollment and card when the token resolved to one, so its log line says which machine it was.
 export type PeerAdmission<Scopes> =
-    { readonly id: string; readonly scopes: Scopes | undefined } | { readonly refusal: string; readonly retry: boolean };
+    | { readonly id: string; readonly scopes: Scopes | undefined }
+    | { readonly refusal: string; readonly retry: boolean; readonly id?: string; readonly card?: string };
 
 // Who is at the socket and what still grants them anything: the enrollment says which peer, the card says whether the
 // owner is still lending it a machine. Only a store this daemon could READ and that holds no such token is final; a
@@ -100,7 +105,36 @@ export const admitPeer = async <Scopes>(
     // The grant is the CARD's, which a connection may be finer than: every environment of one machine is admitted on
     // the one set of switches its owner ticked for that machine. The record says which card; nothing re-parses the id.
     const scopes = await scopesOf<Scopes>(services, door.scopesKind, card);
-    return scopes === undefined ? { refusal: `no capability card grants this ${door.noun} anything right now`, retry: true } : { id, scopes };
+    return scopes === undefined ? { refusal: `no capability card grants this ${door.noun} anything right now`, retry: true, id, card } : { id, scopes };
+};
+
+// Enough of a token's hash to tell two knockers apart in a log, and nothing a reader could present.
+const tokenFingerprint = (token: string): string => createHash("sha256").update(token).digest("hex").slice(0, 8);
+
+// A refused peer redials every 30 seconds, so one enrollment with no card wrote its door's refusal 1,444 times in five
+// days without saying which machine it was. Each peer's refusal is written when it changes, then hourly with the count
+// it folded, and once more when that peer is let in.
+export const createRefusalLog = (logger: Pick<Services["logger"], "warn" | "info">, slug: string, now?: () => number) => {
+    const gate = createRepeatGate(now === undefined ? {} : { now });
+    return {
+        refused: (admission: { readonly refusal: string; readonly retry: boolean; readonly id?: string; readonly card?: string }, token: string): void => {
+            // A token no enrollment holds names no machine; its fingerprint still tells one knocker from another.
+            const fingerprint = tokenFingerprint(token);
+            const verdict = gate.check(admission.id ?? `token:${fingerprint}`, admission.refusal);
+            if (!verdict.log) {
+                return;
+            }
+            const who = admission.id === undefined ? { token: fingerprint } : { id: admission.id, card: admission.card };
+            const repeated = verdict.repeated > 0 ? { repeated: verdict.repeated } : {};
+            logger.warn({ ...who, reason: admission.refusal, retry: admission.retry, ...repeated }, `${slug}: refused a socket`);
+        },
+        admitted: (id: string): void => {
+            const outage = gate.clear(id);
+            if (outage !== undefined) {
+                logger.info({ id, after: outage.state, repeated: outage.repeated }, `${slug}: admitted a peer it had been refusing`);
+            }
+        },
+    };
 };
 
 // Tells a just-attached peer its grant, then asks what it is. Never rejects: nothing awaits a socket handler's promise,
@@ -168,7 +202,10 @@ const forwarded = async (
     sealAnswer: ((id: string, tool: string, answer: unknown) => unknown) | undefined,
     id: string,
     request: RpcMessage,
+    // The failure as the agent reads it (call-failure.ts): the transport's own words say nothing about the command.
+    failed: (error: Error, tool: string | undefined) => string,
 ): Promise<RpcMessage> => {
+    const tool = typeof request.params?.["name"] === "string" ? request.params["name"] : undefined;
     try {
         const answer = (await hub.mcp(id, request)) as RpcMessage;
         if (request.method === "tools/list") {
@@ -180,11 +217,11 @@ const forwarded = async (
             return listed === undefined ? answer : { ...answer, result };
         }
         if (request.method === "tools/call" && sealAnswer !== undefined) {
-            return sealAnswer(id, typeof request.params?.["name"] === "string" ? request.params["name"] : "", answer) as RpcMessage;
+            return sealAnswer(id, tool ?? "", answer) as RpcMessage;
         }
         return answer;
     } catch (error) {
-        return { jsonrpc: "2.0", id: request.id ?? null, error: { code: -32000, message: errorMessage(error) } };
+        return { jsonrpc: "2.0", id: request.id ?? null, error: { code: -32000, message: failed(error instanceof Error ? error : new Error(errorMessage(error)), tool) } };
     }
 };
 
@@ -201,6 +238,7 @@ export const createPeerRoutes = <
     deps: PeerRouteDeps<Client, Announced, Facts, Scopes, z.infer<z.ZodObject<Shape>>>,
 ) => {
     const { store, hub } = deps;
+    const refusals = createRefusalLog(services.logger, door.slug);
 
     // Peer's socket, exempt from the bearer middleware like other upgrades; authorized by the enrollment token in the
     // hello frame, which resolves which peer this is. The daemon never trusts a peer's own identity claim.
@@ -240,11 +278,12 @@ export const createPeerRoutes = <
                 }
                 const admitted = await admitPeer<Scopes>(services, door, store, hello.data.token);
                 if ("refusal" in admitted) {
-                    services.logger.warn({ reason: admitted.refusal, retry: admitted.retry }, `${door.slug}: refused a socket`);
+                    refusals.refused(admitted, hello.data.token);
                     ws.close(admitted.retry ? PEER_TRY_AGAIN : PEER_UNAUTHORIZED, admitted.refusal);
                     return;
                 }
                 const { id, scopes } = admitted;
+                refusals.admitted(id);
                 clearTimeout(deadline);
                 // `.raw` is the real `ws` socket with the surface oRPC's link needs; WSContext is only a send/close
                 // façade.
@@ -311,7 +350,14 @@ export const createPeerRoutes = <
                 await hub.whenOnline(id, deps.wake.waitMs);
             }
         }
-        return await forwarded(hub, deps.sealAnswer, id, message);
+        return await forwarded(hub, deps.sealAnswer, id, message, (error, tool) => {
+            const failure = callFailure(door.noun, id, tool, error, door.hub.callTimeoutMs);
+            // The raw words stay in the log, where a transport bug is still diagnosable; the agent reads the sentence.
+            if (failure.kind !== "other") {
+                services.logger.info({ id, tool, kind: failure.kind, reason: errorMessage(error) }, `${door.slug}: a forwarded call failed in transit (${failure.kind})`);
+            }
+            return failure.text;
+        });
     };
 
     return {

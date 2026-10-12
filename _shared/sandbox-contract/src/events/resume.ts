@@ -48,15 +48,34 @@ export const RESUME_NOTES = {
 export const withResumeNote = (prompt: string, note: string): string =>
     Object.values(RESUME_NOTES).some((known) => prompt.startsWith(known)) ? prompt : `${note}\n\n${prompt}`;
 
+/**
+ * A note with what this one re-run alone can say added in its own paragraph's tail: what the restart cost the turn (its
+ * background commands, /tmp, why it happened). The note itself stays the prefix every reader recognises, so a prompt
+ * stored before tails existed, and one with a tail, both read as the same re-run. A tail holds no blank line: the first
+ * one ends the note.
+ */
+export const resumeNoteWith = (note: string, tail: string | undefined): string => {
+    const said = tail?.replaceAll(/\n\s*\n/g, "\n").trim();
+    return said === undefined || said === "" ? note : `${note} ${said}`;
+};
+
 // The user's own words inside a resumed prompt, note and explanation stripped. Returns the prompt unchanged when it
-// isn't a resume, so any attach head can pass through it. A note standing alone (`continued`) leaves no words.
+// isn't a resume, so any attach head can pass through it. A note standing alone (`continued`) leaves no words, and a
+// note's tail (resumeNoteWith) goes with it, up to the blank line that ends it.
 export const withoutResumeNote = (prompt: string): string => {
     const note = Object.values(RESUME_NOTES).find((known) => prompt.startsWith(known));
     if (note === undefined) {
         return prompt;
     }
     const rest = prompt.slice(note.length);
-    return rest.startsWith("\n\n") ? rest.slice(2) : rest;
+    if (rest.startsWith("\n\n")) {
+        return rest.slice(2);
+    }
+    if (!rest.startsWith(" ")) {
+        return rest;
+    }
+    const end = rest.indexOf("\n\n");
+    return end === -1 ? "" : rest.slice(end + 2);
 };
 
 export type ResumeReason = keyof typeof RESUME_NOTES;
@@ -73,7 +92,11 @@ const notice = (reason: ResumeNoticeReason, text: string): ResumeDisclosure => (
 const RESUME_DISCLOSURES: Record<ResumeReason, ResumeDisclosure> = {
     auth: notice("auth", "Claude sign-in renewed, this turn picked up where it left off."),
     outage: notice("outage", "The model provider came back, this turn picked up where it left off."),
-    restart: notice("restart", "The sandbox came back, this turn picked up where it left off."),
+    // Says what a restart costs a turn, since the turn re-runs as if nothing changed and finds its servers gone.
+    restart: notice(
+        "restart",
+        "The sandbox came back; background commands and dev servers this turn started have ended; this turn picked up where it left off.",
+    ),
     stopped: notice("stopped", "Sent again after the turn stopped short, picking up where it left off."),
     // None of these four auto-resumed, a person pressed Continue; `switched`/`carried` name the differing account.
     limit: notice("limit", "Sent again after the allowance ran out mid-turn, picking up where it left off."),

@@ -28,7 +28,7 @@ const fakeServices = (root: string): Services =>
         events: createDomainEvents(() => {}),
         agentWorktrees: unstubbed<Services["agentWorktrees"]>("agentWorktrees", { conversationDir: () => root }),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { append: async () => {} }),
-        logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
+        logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {}, info: () => {} }),
     });
 
 const step = (id: string, over: Partial<WorkflowStep> = {}): WorkflowStep => ({

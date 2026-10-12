@@ -3,6 +3,7 @@ import { persistQueryClientRestore, persistQueryClientSave } from "@tanstack/que
 import { defaultShouldDehydrateQuery, QueryCache, QueryClient } from "@tanstack/vue-query";
 import { del, get, set } from "idb-keyval";
 import { buildId } from "../app/buildEpoch";
+import { reportClient } from "../app/clientDiagnostics";
 import { trackPerf } from "../app/perf";
 import { throttleTrailing } from "./throttleTrailing";
 import { whenIdle } from "./whenIdle";
@@ -33,7 +34,14 @@ const NAVIGATION_STALE_MS = 30_000;
 // Every read that finally failed is logged here, the one place all of them pass: a view that draws only `data` shows
 // a failure as an empty list, and without this line nothing anywhere would say it happened.
 export const queryClient = new QueryClient({
-    queryCache: new QueryCache({ onError: (error, query) => console.warn(`query ${JSON.stringify(query.queryKey)} failed`, error) }),
+    queryCache: new QueryCache({
+        onError: (error, query) => {
+            const key = JSON.stringify(query.queryKey);
+            console.warn(`query ${key} failed`, error);
+            // Also durable: a read that failed in the owner's tab is otherwise invisible to whoever investigates it.
+            reportClient("query.failed", error instanceof Error ? error.message : String(error), { fields: { key: key.slice(0, 300) } });
+        },
+    }),
     defaultOptions: { queries: { staleTime: NAVIGATION_STALE_MS } },
 });
 

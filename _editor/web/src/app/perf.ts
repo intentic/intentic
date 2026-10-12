@@ -139,6 +139,31 @@ export const stalledPaths = (atLeastMs: number, withinMs: number, now = Date.now
     return [...repeats.entries()].sort(([, a], [, b]) => b - a).map(([path]) => path);
 };
 
+/** The newest daemon call that failed, by the id it carried to the daemon. */
+export interface FailedRequest {
+    readonly requestId: string;
+    readonly path: string | undefined;
+    readonly outcome: string;
+    readonly at: number;
+}
+
+// Only calls that carried an id: an error report names it so a reader can find the daemon's own line for that call,
+// which a timestamp alone matches only by eyeballing.
+let lastFailure: FailedRequest | undefined;
+const isText = (value: PerfFields[string]): value is string => typeof value === `string`;
+const noteFailure = (fields: PerfFields, outcome: string): void => {
+    const requestId = fields[`requestId`];
+    if (!isText(requestId)) {
+        return;
+    }
+    const path = fields[`path`];
+    lastFailure = { requestId, path: isText(path) ? path : undefined, outcome, at: Date.now() };
+};
+
+/** The newest failed daemon call, if one failed within the last `withinMs`. */
+export const lastFailedRequest = (withinMs: number, now = Date.now()): FailedRequest | undefined =>
+    lastFailure !== undefined && now - lastFailure.at <= withinMs ? lastFailure : undefined;
+
 /**
  * Measures an async op; rethrows what it throws, since a failed call is still a span, and a slow failure is the
  * most interesting kind.
@@ -146,7 +171,14 @@ export const stalledPaths = (atLeastMs: number, withinMs: number, now = Date.now
 export const trackPerf = async <T>(op: string, fields: PerfFields, run: () => Promise<T>): Promise<T> => {
     const from = performance.now();
     try {
-        return await run();
+        const result = await run();
+        if (result instanceof Response && !result.ok) {
+            noteFailure(fields, `HTTP ${result.status}`);
+        }
+        return result;
+    } catch (error) {
+        noteFailure(fields, error instanceof Error ? error.name : `failed`);
+        throw error;
     } finally {
         recordPerf(op, performance.now() - from, fields);
     }
@@ -171,6 +203,7 @@ export const perfSpans = (prefix?: string): readonly PerfSpan[] => (prefix === u
 
 // Zeroes the table and the ring, before reproducing something deliberately.
 export const resetPerf = (): void => {
+    lastFailure = undefined;
     stats.clear();
     ring.length = 0;
 };

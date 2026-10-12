@@ -8,8 +8,9 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { INTEGRATION_MARKERS, INTEGRATION_NAME, STOOD_DOWN_FILE, SUITE_TIMEOUTS } from "../../constants/src/test-suites.mjs";
 import { junitFile, SOURCE_CONDITION } from "../../scripts/verify/failure-units.mjs";
-import { watchProgress } from "../../scripts/lib/bun-progress.mjs";
-import { ceilingBytes, formatGiB, processTree, watchMemory } from "../../scripts/lib/memory-ceiling.mjs";
+import { staleDist, staleDistWarning } from "../../scripts/build/dist-staleness.mjs";
+import { explainExit, watchProgress } from "../../scripts/lib/bun-progress.mjs";
+import { ceilingBytes, formatGiB, formatSize, processTree, watchMemory } from "../../scripts/lib/memory-ceiling.mjs";
 import { acquireAtLeast, poolOf, SLOT_BYTES } from "../../scripts/lib/test-memory-pool.mjs";
 import { leastSlots, maxWorkers, slotsPerWorker, standaloneWorkers, wantedWorkers, workersForSlots } from "../../scripts/verify/test-workers.mjs";
 
@@ -171,6 +172,9 @@ const filesFor = (integration) =>
 // 37694899281's verify-clocks reported every file and then held its runner for 27 minutes until the job timed out.
 // Anywhere else bun keeps the terminal, colours and all.
 const watchStalls = process.env.CI === "true" && !watch;
+// Off a terminal (an agent's command, a redirected log) bun's output is read the same way, without ending anything, so a
+// run that fails with no failing test can be said why (explainExit). A terminal keeps bun's own colours.
+const readOutput = watchStalls || (!watch && !process.stdout.isTTY);
 
 // `--isolate`: a fresh module registry per file, so a `jest.mock` one suite installs never reaches the next.
 // Every bun process of the run is held under a memory ceiling (memory-ceiling.mjs): one that passes it is a test
@@ -186,20 +190,23 @@ const run = async (extra, selection, files, timeoutMs) => {
             "bun",
             ["test", `--conditions=${SOURCE_CONDITION}`, "--isolate", "--pass-with-no-tests", ...flags, ...parallel, ...extra, ...selection],
             {
-                stdio: watchStalls ? ["inherit", "pipe", "pipe"] : "inherit",
+                stdio: readOutput ? ["inherit", "pipe", "pipe"] : "inherit",
                 env: { ...process.env, HOME: home, USERPROFILE: home, [STOOD_DOWN_FILE]: stoodDown },
             },
         );
-        const stalls = watchStalls && files !== undefined ? watchProgress(child, { expected: files, timeoutMs }) : () => undefined;
+        const stalls = readOutput ? watchProgress(child, { expected: files ?? [], timeoutMs, judge: watchStalls && files !== undefined }) : undefined;
         const ceiling = ceilingBytes();
+        let killed = false;
         const stop = watchMemory(child, {
             ceiling,
-            onExceed: ({ pid, held }) =>
+            onExceed: ({ pid, held }) => {
+                killed = true;
                 process.stderr.write(
                     `\nsuites: bun process ${pid} held ${formatGiB(held)}, past the ${formatGiB(ceiling)} a test process may hold, so the run was killed. ` +
                         `A suite is keeping memory it never releases: the file it ran is among the last ones named above. ` +
                         `TEST_MEMORY_CEILING_MB moves the ceiling (0 turns it off).\n`,
-                ),
+                );
+            },
         });
         // A stopped run stops its tests too: bun's workers sit in process groups of their own, which nothing that
         // ends this process by group would reach.
@@ -215,17 +222,30 @@ const run = async (extra, selection, files, timeoutMs) => {
         };
         process.once("SIGTERM", forward);
         process.once("SIGINT", forward);
-        const exited = await new Promise((resolve) => {
-            child.on("error", () => resolve(1));
-            child.on("exit", (code) => resolve(code ?? 1));
+        const closed = new Promise((resolve) => child.on("close", resolve));
+        const exit = await new Promise((resolve) => {
+            child.on("error", () => resolve({ code: 1, signal: null }));
+            child.on("exit", (code, signal) => resolve({ code, signal }));
         });
+        // Output piped through the watch is all read once its streams close, which follows the exit, unless a process
+        // the run left behind holds them open: then a second is all it is waited for.
+        await Promise.race([closed, new Promise((resolve) => setTimeout(resolve, 1_000).unref())]);
+        const exited = exit.code ?? (exit.signal === null ? 1 : 128);
         // A run the stall watch ended keeps the verdict it read off bun's output, not the kill's exit code.
-        const status = stalls()?.status ?? exited;
+        const decided = stalls?.();
+        const status = decided?.status ?? exited;
         const peak = stop();
         if (peak !== undefined) {
+            // The ceiling is per process; the whole tree's peak is what the machine felt, which is what a bench measures.
+            const tree = peak.total > peak.held ? ` (${formatSize(peak.total)} across all its processes at once)` : "";
             process.stderr.write(
-                `suites: the largest bun process of this run peaked at ${formatGiB(peak.held)} of the ${formatGiB(ceiling)} ceiling\n`,
+                `suites: the largest bun process of this run peaked at ${formatSize(peak.held)} of the ${formatGiB(ceiling)} ceiling${tree}\n`,
             );
+        }
+        if (decided === undefined && status !== 0) {
+            for (const line of explainExit({ code: exit.code, signal: exit.signal, progress: stalls?.progress, killed })) {
+                process.stderr.write(`${line}\n`);
+            }
         }
         process.off("SIGTERM", forward);
         process.off("SIGINT", forward);
@@ -235,6 +255,19 @@ const run = async (extra, selection, files, timeoutMs) => {
         rmSync(home, { recursive: true, force: true });
     }
 };
+
+// A dependency whose dist is older than its source fails imports here exactly as it fails a typecheck, and reads as the
+// code's fault (dist-staleness.mjs): said once, before anything runs. CI builds its dist before it tests, so only here.
+if (process.env.CI !== "true") {
+    try {
+        const warning = staleDistWarning(staleDist({ forPackage: process.cwd() }));
+        if (warning !== undefined) {
+            process.stderr.write(`suites: ${warning}\n`);
+        }
+    } catch (error) {
+        process.stderr.write(`suites: could not check for stale dist (${error instanceof Error ? error.message : String(error)})\n`);
+    }
+}
 
 if (watch) {
     // One run: a watch never exits, so the second run would never start; the larger budget keeps a slow suite alive.

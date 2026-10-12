@@ -1,5 +1,6 @@
 import { converterReadable } from "@intentic/sandbox-contract/peer-mcp-server";
 import type { Logger } from "pino";
+import { createRepeatGate } from "../logs/repeat-gate.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import type { PeerHubSpec } from "./peer.js";
 import { memoryPeerTools, type PeerToolMemory } from "./peer-tool-memory.js";
@@ -87,9 +88,17 @@ export interface PeerDoorDeps {
 // How long a peer has to answer for its tool table at connect; past that, whatever was remembered stands.
 const TOOLS_TIMEOUT_MS = 10_000;
 
+// What a log line says of a call to a peer that failed. A deadline that passed is the peer not answering, fully said in
+// words; logged as an error it carried a stack into the timer internals and DOMException's whole table of legacy codes,
+// a kilobyte a line. Anything else keeps its stack.
+export const peerFailureFields = (error: unknown, deadlineMs: number): Record<string, unknown> =>
+    error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")
+        ? { reason: `no answer within ${deadlineMs}ms` }
+        : { err: error };
+
 export const createPeerHub = <Client extends PeerClient<Facts, Scopes>, Announced, Facts, Scopes>(
     spec: PeerHubSpec,
-    logger: { warn: (data: object, message: string) => void },
+    logger: { warn: (data: object, message: string) => void; info?: (data: object, message: string) => void },
     // Where tool tables outlive this process; in-memory when a caller has no durable one (tests, the bench).
     memory: PeerToolMemory = memoryPeerTools(),
 ): PeerHub<Client, Announced, Facts, Scopes> => {
@@ -104,6 +113,9 @@ export const createPeerHub = <Client extends PeerClient<Facts, Scopes>, Announce
         }
     };
     const seen = new Map<string, { announced: Announced; facts: Facts | undefined; lastSeen: number }>();
+    // A peer that redials after every dropped heartbeat is asked for its tools on every connect; one that never answers
+    // writes that once per change of what went wrong, then hourly.
+    const unlisted = createRepeatGate();
     // One file serves every door, so a peer's tools are keyed by the door they came through as well as its own name.
     const toolKey = (id: string): string => `${spec.domain}:${id}`;
 
@@ -117,6 +129,7 @@ export const createPeerHub = <Client extends PeerClient<Facts, Scopes>, Announce
             { jsonrpc: "2.0", id: `${spec.domain}-tools`, method: "tools/list", params: {} },
             { signal: AbortSignal.timeout(TOOLS_TIMEOUT_MS) },
         )) as { readonly result?: unknown };
+        unlisted.clear(id);
         if (answer.result !== undefined) {
             // Converted here as the bridge converts a turn's own listing, so what an asleep peer publishes is byte-for
             // byte what a live one does.
@@ -127,10 +140,19 @@ export const createPeerHub = <Client extends PeerClient<Facts, Scopes>, Announce
     // Only signal for this hub's state; never call from `refresh`, or a reader path would refetch itself forever.
     const said = (): void => publishRuntimeChange(spec.domain);
 
-    const drop = (id: string, peer: LivePeer<Client, Announced, Facts>): void => {
+    // When each live peer attached, so a drop can say how long it had been up.
+    const attachedAt = new Map<string, number>();
+
+    // Connects and drops are the device's history as the daemon saw it: without them "when did omen go away, and how
+    // often does it?" had no answer short of the device's own log.
+    const drop = (id: string, peer: LivePeer<Client, Announced, Facts>, reason: string): void => {
         clearInterval(peer.heartbeat);
-        seen.set(id, { announced: peer.announced, facts: peer.facts, lastSeen: Date.now() });
+        const now = Date.now();
+        seen.set(id, { announced: peer.announced, facts: peer.facts, lastSeen: now });
         live.delete(id);
+        const since = attachedAt.get(id);
+        attachedAt.delete(id);
+        logger.info?.({ id, reason, ...(since === undefined ? {} : { upForMs: now - since }) }, `${spec.domain}: peer disconnected (${reason})`);
         said();
     };
 
@@ -152,11 +174,11 @@ export const createPeerHub = <Client extends PeerClient<Facts, Scopes>, Announce
                 // unanswered ping piling up on every beat.
                 heartbeat: setInterval(() => {
                     void connection.client.ping(undefined, { signal: AbortSignal.timeout(spec.heartbeatMs) }).catch((err: unknown) => {
-                        logger.warn({ err, id: peer.key }, `${spec.domain}: heartbeat failed, dropping the connection`);
+                        logger.warn({ ...peerFailureFields(err, spec.heartbeatMs), id: peer.key }, `${spec.domain}: heartbeat failed, dropping the connection`);
                         connection.close(1001, "no answer");
                         const current = live.get(peer.key);
                         if (current?.client === connection.client) {
-                            drop(peer.key, current);
+                            drop(peer.key, current, "heartbeat unanswered");
                         }
                     });
                 }, spec.heartbeatMs),
@@ -165,16 +187,27 @@ export const createPeerHub = <Client extends PeerClient<Facts, Scopes>, Announce
                 lastSeen: Date.now(),
             };
             live.set(id, peer);
+            const last = seen.get(id)?.lastSeen;
+            attachedAt.set(id, Date.now());
+            logger.info?.(
+                { id, ...(previous === undefined ? {} : { replaced: true }), ...(last === undefined || previous !== undefined ? {} : { awayForMs: Date.now() - last }) },
+                `${spec.domain}: peer connected`,
+            );
             said();
             // Not awaited: a socket must be usable the moment it attaches, and a peer too slow to answer keeps
             // whatever tool table it last published.
-            void learnTools(id, connection.client).catch((err: unknown) =>
-                logger.warn({ err, id }, `${spec.domain}: could not read this peer's tool list on connect`),
-            );
+            void learnTools(id, connection.client).catch((err: unknown) => {
+                const fields = peerFailureFields(err, TOOLS_TIMEOUT_MS);
+                const verdict = unlisted.check(id, typeof fields["reason"] === "string" ? fields["reason"] : String(err));
+                if (verdict.log) {
+                    const repeated = verdict.repeated > 0 ? { repeated: verdict.repeated } : {};
+                    logger.warn({ ...fields, id, ...repeated }, `${spec.domain}: could not read this peer's tool list on connect`);
+                }
+            });
             return () => {
                 const current = live.get(peer.key);
                 if (current === peer) {
-                    drop(peer.key, peer);
+                    drop(peer.key, peer, "connection closed");
                 }
             };
         },
@@ -191,6 +224,13 @@ export const createPeerHub = <Client extends PeerClient<Facts, Scopes>, Announce
             const peer = live.get(id);
             if (peer === undefined) {
                 return;
+            }
+            // A device agent says how the one before it ended (a watchdog kill, an update, a reboot) on every hello;
+            // it is news only when that changed since the last hello this daemon heard.
+            const exitOf = (value: Facts | undefined): unknown => (value as { readonly previousExit?: unknown } | undefined)?.previousExit;
+            const previousExit = exitOf(facts);
+            if (typeof previousExit === "string" && previousExit !== exitOf(peer.facts)) {
+                logger.info?.({ id, previousExit }, `${spec.domain}: peer's agent restarted since it was last here`);
             }
             peer.facts = facts;
             peer.lastSeen = Date.now();
@@ -235,7 +275,7 @@ export const createPeerHub = <Client extends PeerClient<Facts, Scopes>, Announce
                 logger.warn({ err, id }, `${spec.domain}: could not push this peer's grant, dropping the connection`);
                 peer.close(1001, "grant not delivered");
                 if (live.get(id) === peer) {
-                    drop(id, peer);
+                    drop(id, peer, "grant not delivered");
                 }
                 return false;
             }

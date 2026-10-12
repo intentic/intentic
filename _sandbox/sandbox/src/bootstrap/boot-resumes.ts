@@ -85,7 +85,8 @@ export const startBootResumes = ({ logger, role, services, shutdown }: BootPhase
     // Every agent command found sitting at a prompt is on the record as it happens (input-wait.ts), so a turn that stalled
     // on one can be read back from the log rather than pieced together from a transcript.
     onInputWaitStarted((dir, wait) => {
-        logger.warn({ dir, program: wait.program, pid: wait.pid, since: wait.since }, "agent command: waiting for input nobody in the sandbox will type");
+        // `childPid`, not `pid`: the logger's own `pid` is the daemon's, and a field of that name overwrote it.
+        logger.warn({ dir, program: wait.program, childPid: wait.pid, since: wait.since }, "agent command: waiting for input nobody in the sandbox will type");
     });
 
     // A job whose turn died before adopting it is adopted now, or its ending would reach nobody.

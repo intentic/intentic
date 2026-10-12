@@ -5,6 +5,7 @@ import { LEGACY_SPAWN_NOTE_HEADER, SPAWN_NOTE_HEADER, SPAWN_NOTE_TITLE } from ".
 import { SKILL_CATALOG_NOTE_HEADER, SKILL_CATALOG_NOTE_TITLE } from "../../store/loaded-skills.js";
 import { withRuntimeHistory } from "../providers/runtime-history.js";
 import { withAttachmentNote } from "./attachment-note.js";
+import { checkpointNote } from "../checkpoints/checkpoint-worktree.js";
 import {
     composeWirePrompt,
     INJECTED,
@@ -108,6 +109,18 @@ test("what strip removes, the split hands back: titled, whole, and in the order 
 });
 
 // Stored prompts keep the header the note had when they were sent; retitling it must not leak them back into history.
+// The checkpoint note rides the stored prompt like any other: read back, it is a titled note, not the user's words.
+test("the checkpoint note comes back off a stored prompt under its own title", () => {
+    const checkpoint = checkpointNote([{ repo: "root", sha: "abcdef0123456789", files: 2, title: "Agent: before this turn" }]);
+    if (checkpoint === undefined) {
+        throw new Error("a capture makes a note");
+    }
+    const sent = composeWirePrompt([checkpoint], "carry on");
+
+    expect(stripTurnPreamble(sent)).toBe("carry on");
+    expect(preambleNotes(sent)).toEqual([checkpoint]);
+});
+
 test("a prompt stored under the spawn note's old header still reads apart, under the title it had", () => {
     const stored = `${LEGACY_SPAWN_NOTE_HEADER}\n\nThis sandbox can start full agents on any connected provider from your shell.`;
     const sent = withTurnPreamble([stored, notice], "fix the bug");
@@ -189,7 +202,7 @@ describe("the envelope of a prompt as the daemon composes it", () => {
 
     test("without a handoff the re-run note is the envelope's own, whichever side of the preamble it sits", () => {
         const queued = withResumeNote("ship the parser", RESUME_NOTES.restart);
-        const restart = { kind: "notice", text: "The sandbox came back, this turn picked up where it left off.", reason: "restart" } as const;
+        const restart = { kind: "notice", text: "The sandbox came back; background commands and dev servers this turn started have ended; this turn picked up where it left off.", reason: "restart" } as const;
         const expected = { spoken: "ship the parser", queued, attachments: [`${WORKSPACE_ROOT}/a.png`], resume: restart };
         const sent = withAttachmentNote(queued, [`${WORKSPACE_ROOT}/a.png`]);
         expect(parsePromptEnvelope(composeWirePrompt([spawning], sent))).toEqual({ ...expected, notes: [spawning] });

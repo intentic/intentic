@@ -20,6 +20,7 @@ import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import type { CiFailure, CiFinding } from "./ci-store.js";
 import { FIX_LOG_BYTES, infraLog, startCiFix, WHOLE_LOG } from "./ci-fix.js";
 import { digestOf, excerptOf, type JobExcerpt } from "./failure-digest.js";
+import { ciLogsRoot, keepJobLog } from "./job-logs.js";
 import { isMainLine } from "./main-line.js";
 import { ciProjects, type CiProject } from "./projects.js";
 import { ciClientFor, type FailedStep, type FetchFn } from "./providers.js";
@@ -455,8 +456,9 @@ const handOverRun = (services: Services, project: CiProject, branch: string, run
         }
     });
 
-// Parks a failed job for its run's handover, and starts the run's clock when it is the run's first.
-const park = (services: Services, project: CiProject, job: FailedJob, log: string, fetchFn: FetchFn): void => {
+// Parks a failed job for its run's handover, and starts the run's clock when it is the run's first. `logPath` is where
+// its whole log was kept for the agent, when it was.
+const park = (services: Services, project: CiProject, job: FailedJob, log: string, logPath: string | undefined, fetchFn: FetchFn): void => {
     const key = batchKeyOf(project.repo, job.runId);
     const batch: Batch = batches.get(key) ?? {
         jobs: new Map(),
@@ -473,7 +475,7 @@ const park = (services: Services, project: CiProject, job: FailedJob, log: strin
     // The clock must not keep a stopping daemon alive; a restart hands the run over from the forge's own word instead.
     batch.timer.unref?.();
     const steps = job.steps ?? (job.step === undefined ? [] : [job.step]);
-    batch.jobs.set(job.jobId, { job, excerpt: excerptOf({ name: job.name, url: job.url, steps, log }) });
+    batch.jobs.set(job.jobId, { job, excerpt: excerptOf({ name: job.name, url: job.url, steps, log, logPath }) });
     batches.set(key, batch);
 };
 
@@ -525,7 +527,14 @@ export const jobFailed = async (services: Services, project: CiProject, job: Fai
             }
             return "code";
         }
-        park(services, project, job, log, fetchFn);
+        const logPath = await orElse(
+            services,
+            keepJobLog(ciLogsRoot(), { repo: project.repo, runId: job.runId, jobId: job.jobId, name: job.name }, log),
+            undefined,
+            "ci repair: the failed job's log could not be kept for its fix agent",
+            { repo: project.repo, runId: job.runId, jobId: job.jobId },
+        );
+        park(services, project, job, log, logPath, fetchFn);
         return "code";
     });
 };

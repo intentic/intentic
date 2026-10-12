@@ -59,7 +59,7 @@ test("an edit's result carries the vendor's own diff, as text", () => {
                 type: "tool-call-completed",
                 callId: "c3",
                 modelCallId: "m3",
-                toolCall: { type: "edit", args: { path: "/work/a.ts" }, result: { status: "success", diffString: "@@ -1 +1 @@\n-a\n+b\n" } },
+                toolCall: { type: "edit", args: { path: "/work/a.ts" }, result: { status: "success", value: { diffString: "@@ -1 +1 @@\n-a\n+b\n" } } },
             }),
         ),
     ).toEqual([{ kind: "tool_call_update", id: "c3", status: "completed", content: [{ type: "text", text: "@@ -1 +1 @@\n-a\n+b\n" }] }]);
@@ -71,10 +71,72 @@ test("a failed call reports the vendor's own sentence, not a generic one", () =>
             type: "tool-call-completed",
             callId: "c4",
             modelCallId: "m4",
-            toolCall: { type: "read", args: { path: "/work/gone.ts" }, result: { status: "error", message: "no such file" } },
+            toolCall: { type: "read", args: { path: "/work/gone.ts" }, result: { status: "error", error: { message: "no such file" } } },
         }),
     );
-    expect(frames).toEqual([{ kind: "tool_call_update", id: "c4", status: "failed", content: [{ type: "text", text: "no such file" }] }]);
+    // Heard of first by its completion: drawn once, already finished.
+    expect(frames).toEqual([
+        { kind: "tool_call", id: "c4", name: "Read", category: "read", status: "in_progress", target: "gone.ts", locations: [{ path: "gone.ts" }] },
+        { kind: "tool_call_update", id: "c4", status: "failed", content: [{ type: "text", text: "no such file" }] },
+    ]);
+});
+
+// The SDK's results are `{ status: "success", value }` (its tool-call-types); reading them flat kept every successful
+// call's output out of the record.
+test("a successful call keeps what it returned, and a command its exit code", () => {
+    const mapper = createCursorEventMapper(CWD);
+    const finished = (callId: string, toolCall: unknown) => {
+        mapper.map(update({ type: "tool-call-started", callId, modelCallId: callId, toolCall }));
+        return mapper.map(update({ type: "tool-call-completed", callId, modelCallId: callId, toolCall }));
+    };
+    expect(finished("s1", { type: "shell", args: { command: "false" }, result: { status: "success", value: { exitCode: 1, signal: "", stdout: "out", stderr: "err", executionTime: 3 } } })).toEqual([
+        { kind: "tool_call_update", id: "s1", status: "completed", content: [{ type: "text", text: "out\nerr" }], exitCode: 1 },
+    ]);
+    expect(finished("r1", { type: "read", args: { path: "/work/a.ts" }, result: { status: "success", value: { content: "const a = 1;", totalLines: 1, fileSize: 12 } } })).toEqual([
+        { kind: "tool_call_update", id: "r1", status: "completed", content: [{ type: "text", text: "const a = 1;" }] },
+    ]);
+    const grep = {
+        type: "grep",
+        args: { pattern: "users" },
+        result: {
+            status: "success",
+            value: {
+                workspaceResults: {
+                    "/work": { type: "content", output: { matches: [{ file: "api/a.ts", lineNumber: 3, line: "from(users)" }], totalMatches: 1 } },
+                    "/work/b": { type: "files", output: { files: ["b.ts"], count: 1 } },
+                },
+            },
+        },
+    };
+    expect(finished("g1", grep)).toEqual([{ kind: "tool_call_update", id: "g1", status: "completed", content: [{ type: "text", text: "api/a.ts:3:from(users)\nb.ts" }] }]);
+    const glob = { type: "glob", args: { globPattern: "*.ts" }, result: { status: "success", value: { files: ["a.ts", "b.ts"], totalFiles: 2, clientTruncated: false, ripgrepTruncated: false } } };
+    expect(finished("f1", glob)).toEqual([{ kind: "tool_call_update", id: "f1", status: "completed", content: [{ type: "text", text: "a.ts\nb.ts" }] }]);
+    const ls = {
+        type: "ls",
+        args: { path: "/work/src" },
+        result: { status: "success", value: { directoryTreeRoot: { absPath: "/work/src", childrenFiles: [{ name: "a.ts" }], childrenDirs: [{ absPath: "/work/src/lib", childrenFiles: [], childrenDirs: [] }] } } },
+    };
+    expect(finished("l1", ls)).toEqual([{ kind: "tool_call_update", id: "l1", status: "completed", content: [{ type: "text", text: "/work/src/\n/work/src/a.ts\n/work/src/lib/" }] }]);
+});
+
+// An MCP call's own arguments sit under `args`, beside the server and tool names; with no one-line target among them,
+// the card keeps them as its input, and the call's reply as its output.
+test("an MCP call keeps its arguments as input and its reply as output", () => {
+    const mapper = createCursorEventMapper(CWD);
+    const call = { type: "mcp", args: { providerIdentifier: "diagnostics", toolName: "errors", args: { sinceMinutes: 30 } } };
+    expect(mapper.map(update({ type: "tool-call-started", callId: "m1", modelCallId: "m1", toolCall: call }))).toEqual([
+        { kind: "tool_call", id: "m1", name: "mcp__diagnostics__errors", category: "other", status: "in_progress", input: '{"sinceMinutes":30}' },
+    ]);
+    expect(
+        mapper.map(update({ type: "tool-call-completed", callId: "m1", modelCallId: "m1", toolCall: { ...call, result: { status: "success", value: { content: [{ text: { text: "No lines." } }] } } } })),
+    ).toEqual([{ kind: "tool_call_update", id: "m1", status: "completed", content: [{ type: "text", text: "No lines." }] }]);
+});
+
+test("a start arriving after its own completion is not drawn a second time, nor reopened", () => {
+    const mapper = createCursorEventMapper(CWD);
+    const call = { type: "glob", args: { globPattern: "*.md" }, result: { status: "success", value: { files: [], totalFiles: 0, clientTruncated: false, ripgrepTruncated: false } } };
+    expect(mapper.map(update({ type: "tool-call-completed", callId: "x1", modelCallId: "x1", toolCall: call })).map((frame) => frame.kind)).toEqual(["tool_call", "tool_call_update"]);
+    expect(mapper.map(update({ type: "tool-call-started", callId: "x1", modelCallId: "x1", toolCall: call }))).toEqual([]);
 });
 
 test("live shell output accumulates, because content REPLACES rather than appends", () => {
@@ -157,7 +219,15 @@ test("a task's subagent sits on its card, its nested steps under it, its last wo
         ...mapper.map(nested({ type: "thinking-delta", text: "where are the reads" })),
         ...mapper.map(nested({ type: "tool-call-started", callId: "g1", toolCall: { type: "grep", args: { pattern: "from(users)" } } })),
         ...mapper.map(
-            nested({ type: "tool-call-completed", callId: "g1", toolCall: { type: "grep", args: { pattern: "from(users)" }, result: { output: "api/a.ts:3" } } }),
+            nested({
+                type: "tool-call-completed",
+                callId: "g1",
+                toolCall: {
+                    type: "grep",
+                    args: { pattern: "from(users)" },
+                    result: { status: "success", value: { workspaceResults: { "/work": { type: "files", output: { files: ["api/a.ts"], count: 1 } } } } },
+                },
+            }),
         ),
         ...mapper.map(nested({ type: "tool-call-started", callId: "u1", toolCall: { type: "updateTodos", args: { todos: [] } } })),
         ...mapper.map(nested({ type: "text-delta", text: "Found 7 reads." })),
@@ -171,12 +241,12 @@ test("a task's subagent sits on its card, its nested steps under it, its last wo
         ),
     ];
     expect(frames).toEqual([
-        { kind: "tool_call", id: "t1", name: "Task", category: "other", status: "in_progress" },
+        { kind: "tool_call", id: "t1", name: "Task", category: "other", status: "in_progress", input: JSON.stringify(task.args) },
         { kind: "subagent", id: "t1", subagentKind: "subagent", agentType: "explore", description: "Map the reads", model: "composer-2.5" },
         { kind: "thinking", text: "where are the reads", parentToolUseId: "t1" },
         { kind: "tool_call", id: "g1", name: "Grep", category: "search", status: "in_progress", target: "from(users)", parentToolUseId: "t1" },
         { kind: "subagent_update", id: "t1", toolUses: 1, lastTool: "Grep" },
-        { kind: "tool_call_update", id: "g1", status: "completed", content: [{ type: "text", text: "api/a.ts:3" }] },
+        { kind: "tool_call_update", id: "g1", status: "completed", content: [{ type: "text", text: "api/a.ts" }] },
         { kind: "delta", text: "Found 7 reads.", parentToolUseId: "t1" },
         { kind: "tool_call_update", id: "t1", status: "completed" },
         { kind: "subagent_update", id: "t1", status: "completed", summary: "Found 7 reads." },

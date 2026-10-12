@@ -32,6 +32,9 @@ export interface TurnWatchdog {
     readonly expiry: () => string;
 }
 
+// Within this of its last event a turn that hits its cap was still working, not silent.
+const CAP_STILL_ACTIVE_MS = 60_000;
+
 // Whole minutes and seconds, the grain a person reads a turn's timing at.
 const duration = (ms: number): string => {
     const seconds = Math.max(0, Math.round(ms / 1_000));
@@ -80,8 +83,13 @@ export const turnWatchdog = (timeouts: TurnTimeouts): TurnWatchdog => {
         expiry: () => {
             const now = Date.now();
             const silent = `the last event came ${duration(now - lastActivity)} ago`;
+            // A cap is not silence: a turn still sending events when its time ran out says so, and one that had also gone
+            // quiet says for how long, so neither reads as the other.
             if (now >= turnDeadline) {
-                return `the turn reached its ${duration(timeouts.maxTurnMs)} cap (${silent})`;
+                const quiet = now - lastActivity;
+                return quiet < CAP_STILL_ACTIVE_MS
+                    ? `the turn reached its ${duration(timeouts.maxTurnMs)} cap while still active (${silent})`
+                    : `the turn reached its ${duration(timeouts.maxTurnMs)} cap after ${duration(quiet)} with nothing from the loop`;
             }
             if (now >= inactivityDeadline) {
                 return `nothing arrived for ${duration(now - lastActivity)}, past the ${duration(timeouts.inactivityMs)} silence limit, ${duration(now - startedAt)} into the turn`;

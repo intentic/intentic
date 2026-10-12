@@ -51,7 +51,24 @@ const providerOf = (key: string): string | undefined => (key.includes(":") ? key
 // benches the credential it refused itself.
 const accountCopy = (refusal: ProviderRefusal): string | undefined => (refusal.kind === "limit" ? refusal.account : undefined);
 
-export const fileProviderRefusalStore = (path: string): ProviderRefusalStore => {
+// Every write to this file decided which account a picker skips, and none of it was logged: one account's refusal took
+// over the provider's slot from another's and the only trace was the file as it stood afterwards. Each change writes one
+// line through `log`: recorded (and whose refusal it superseded in the provider's slot), and settled (by which account's
+// turn). A settle that finds nothing to remove, the case on nearly every answered turn, writes nothing.
+export interface ProviderRefusalStoreOptions {
+    readonly log?: (fields: Record<string, unknown>, message: string) => void;
+}
+
+const described = (refusal: ProviderRefusal): Record<string, unknown> => ({
+    kind: refusal.kind,
+    at: new Date(refusal.at).toISOString(),
+    ...(refusal.account === undefined ? {} : { account: refusal.account }),
+    ...(refusal.model === undefined ? {} : { model: refusal.model }),
+    ...(refusal.resetsAt === undefined ? {} : { resetsAt: new Date(refusal.resetsAt * 1000).toISOString() }),
+});
+
+export const fileProviderRefusalStore = (path: string, options: ProviderRefusalStoreOptions = {}): ProviderRefusalStore => {
+    const log = options.log ?? (() => undefined);
     const file = jsonFile<Record<string, ProviderRefusal>>(path, {
         parse: (raw) => StoredRefusalsSchema.safeParse(raw).data,
         fallback: () => ({}),
@@ -81,15 +98,34 @@ export const fileProviderRefusalStore = (path: string): ProviderRefusalStore => 
         },
         record: async (provider, refusal) => {
             const account = accountCopy(refusal);
-            await file.update((current) => ({
-                ...current,
-                [provider]: refusal,
-                ...(account === undefined ? {} : { [accountKey(provider, account)]: refusal }),
-            }));
+            let previous: ProviderRefusal | undefined;
+            await file.update((current) => {
+                previous = current[provider];
+                return {
+                    ...current,
+                    [provider]: refusal,
+                    ...(account === undefined ? {} : { [accountKey(provider, account)]: refusal }),
+                };
+            });
+            // Another account's refusal leaving the provider's slot is the change worth naming: its own limit copy, where
+            // it has one, keeps it judged spent; any other kind it held is now off file.
+            const superseded = previous !== undefined && previous.account !== refusal.account ? previous : undefined;
+            log(
+                {
+                    provider,
+                    ...described(refusal),
+                    said: refusal.message,
+                    ...(superseded === undefined ? {} : { superseded: { ...described(superseded), keptForAccount: accountCopy(superseded) !== undefined } }),
+                },
+                `provider refusal: recorded ${provider} ${refusal.kind}${refusal.account === undefined ? "" : ` for ${refusal.account}`}${
+                    superseded === undefined ? "" : `, superseding ${superseded.account ?? "an unnamed account"}'s ${superseded.kind}`
+                }`,
+            );
             announce(provider, refusal);
         },
         clear: async (provider, account) => {
             let settled = false;
+            const removed: ProviderRefusal[] = [];
             await file.update((current) => {
                 const stored = current[provider];
                 // A refusal naming a different account belongs to someone else, and is still true.
@@ -97,8 +133,16 @@ export const fileProviderRefusalStore = (path: string): ProviderRefusalStore => 
                 // The account's own copy goes whatever the provider's last says: this account just served.
                 const own = account === undefined ? undefined : accountKey(provider, account);
                 const settles = (key: string): boolean => (settled && key === provider) || key === own;
-                return Object.keys(current).some(settles) ? Object.fromEntries(Object.entries(current).filter(([key]) => !settles(key))) : current;
+                removed.splice(0, removed.length, ...Object.entries(current).flatMap(([key, refusal]) => (settles(key) ? [refusal] : [])));
+                return removed.length > 0 ? Object.fromEntries(Object.entries(current).filter(([key]) => !settles(key))) : current;
             });
+            const cleared = removed[0];
+            if (cleared !== undefined) {
+                log(
+                    { provider, ...described(cleared), ...(account === undefined ? {} : { settledBy: account }) },
+                    `provider refusal: settled ${provider} ${cleared.kind}${cleared.account === undefined ? "" : ` for ${cleared.account}`} (${account ?? "a turn"} served)`,
+                );
+            }
             if (settled) {
                 announce(provider, undefined);
             }

@@ -125,3 +125,24 @@ test("forgets an account's own refusal after a week, as it does the provider's",
     await store.record("claude", refusal({ at: Date.now() - 8 * DAY, account: "claude-1" }));
     expect(await store.onFile()).toEqual({});
 });
+
+// Which account a picker skips changed with each write and nothing said so; another account's refusal replacing the
+// provider's slot is the change somebody later has to explain.
+test("logs each refusal recorded, whose refusal it superseded, and a settle only when one was on file", async () => {
+    const path = join(mkdtempSync(join(tmpdir(), "provider-refusals-")), "history", "provider-refusals.json");
+    const lines: { fields: Record<string, unknown>; message: string }[] = [];
+    const store = fileProviderRefusalStore(path, { log: (fields, message) => lines.push({ fields, message }) });
+    await store.record("claude", refusal({ account: "first", resetsAt: 2_000_000_000 }));
+    await store.record("claude", refusal({ account: "second" }));
+    // A turn on an account with nothing on file settles nothing, and says nothing.
+    await store.clear("claude", "third");
+    await store.clear("claude", "second");
+    expect(lines.map((line) => line.message)).toEqual([
+        "provider refusal: recorded claude limit for first",
+        "provider refusal: recorded claude limit for second, superseding first's limit",
+        "provider refusal: settled claude limit for second (second served)",
+    ]);
+    expect(lines[0]?.fields).toMatchObject({ provider: "claude", account: "first", resetsAt: "2033-05-18T03:33:20.000Z" });
+    expect(lines[1]?.fields).toMatchObject({ superseded: { account: "first", kind: "limit", keptForAccount: true } });
+    expect(lines[2]?.fields).toMatchObject({ settledBy: "second" });
+});

@@ -3,6 +3,7 @@ import { TranscriptFold } from "@intentic/sandbox-contract/transcript-fold";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../composition.js";
 import { conversationEntry } from "../testing.js";
+import { recordingLogger } from "../harness/route-fakes.testing.js";
 import { awaitingCard, notifyAwaiting } from "./awaiting-detail.js";
 import { turnAwaiting } from "./notifications.js";
 
@@ -280,5 +281,17 @@ describe("telling the devices", () => {
 
         expect(sent).toEqual([]);
         expect(insisted.map((notification) => [notification.tag, notification.body])).toEqual([["awaiting-p1", "Run this on omen?"]]);
+    });
+
+    // Whether the devices were told is half of "did the card reach anyone": each announcement says how many it reached,
+    // or why it sent nothing.
+    test("logs how many devices a card's push reached, or why it went nowhere", async () => {
+        const { lines, logger } = recordingLogger();
+        const { services } = wired("Fix the login redirect");
+        await notifyAwaiting({ ...services, logger }, { conversationId: "conv-1", kind: "terminal_help", run: undefined });
+        const nobody = { ...services, logger, pushSender: { ...services.pushSender, notifyIfAway: async () => ({ delivered: 0, failed: 0, skipped: "everyone is watching" as const }) } };
+        await notifyAwaiting(nobody, { conversationId: "conv-1", kind: "question", run: undefined });
+        expect(lines.map((line) => line["message"])).toEqual(["card push: terminal_help sent to 1 of 1 devices", "card push: question not sent, everyone is watching"]);
+        expect(lines[1]).toMatchObject({ conversationId: "conv-1", kind: "question", delivered: 0, skipped: "everyone is watching" });
     });
 });

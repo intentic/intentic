@@ -181,7 +181,7 @@ test("a send to nobody is reported as such: the test button's whole job is to ca
     const store = filePushStore(path);
     stubSends({});
 
-    expect(await createPushSender(store, silentLogger).notify(sample)).toEqual({ delivered: 0, failed: 0 });
+    expect(await createPushSender(store, silentLogger).notify(sample)).toEqual({ delivered: 0, failed: 0, skipped: "no device registered" });
 });
 
 test("one dead endpoint does not stop the others being notified", async () => {

@@ -12,6 +12,8 @@ import {
     type KeeperState,
     newKeeperState,
     readFixRun,
+    type RestartIntent,
+    restartIntent,
     runKeeperRound,
     trashedFrom,
     UNREACHABLE_AFTER_MS,
@@ -609,4 +611,54 @@ test("a sandbox that keeps breaking after each fix is looked at less and less of
     await round(NOW + 39 * MIN);
     await round(NOW + 44 * MIN);
     expect(fake.asked.length).toBe(7);
+});
+
+// (2026-10-11) "keeper work: Restarting the sandbox" named no failing check and no side of the computer, and the daemon
+// that came back could not tell the keeper's restart from a crash.
+test("a restart ic announces is logged with ic's finding, the keeper's own evidence and its side, and its intent goes into the container", async () => {
+    const { fake, lines } = setup();
+    fake.records = [SLUG];
+    fake.listing = [{ slug: SLUG, container: "intentic-0123" }];
+    fake.links = [linkView(URL, NOW - 10 * MIN)];
+    const written: [string, RestartIntent][] = [];
+    const seams = {
+        ...fake.seams,
+        side: async () => await Promise.resolve("wsl" as const),
+        writeIntent: async (container: string, intent: RestartIntent) => void written.push([container, intent]),
+    };
+    fake.answer = async (slug) =>
+        await Promise.resolve(
+            slug === undefined
+                ? fixRun([{ slug: SLUG, outcome: "healthy" }])
+                : {
+                      code: 0,
+                      output: [
+                          `intentic-fix: {"slug":"${SLUG}","stage":"fixing","doing":"Restarting the sandbox, because Daemon health: the daemon inside the container does not answer /health."}`,
+                          JSON.stringify({ slug: SLUG, report: { stage: "done", outcome: "fixed", checks: [] } }),
+                      ].join("\n"),
+                  },
+        );
+    // The last listing that answered, as a sweep leaves it: what names the sandbox's container.
+    const state = { ...linkOnly(), listed: [{ slug: SLUG, container: "intentic-0123" }] };
+    fake.clock = NOW + 30_000;
+    await runKeeperRound(state, seams, (line) => lines.push(line));
+    expect(fake.asked).toEqual([SLUG]);
+    const said = `keeper ${SLUG} (wsl side): Restarting the sandbox, because Daemon health: the daemon inside the container does not answer /health.; asked by this agent's link to it, down since ${new Date(NOW - 10 * MIN).toISOString()} (630 s) [failed: daemon, link]`;
+    expect(lines).toContain(said);
+    expect(written).toHaveLength(1);
+    expect(written[0]?.[0]).toBe("intentic-0123");
+    expect(written[0]?.[1]).toMatchObject({ by: "keeper", side: "wsl", action: "restart", checks: ["daemon", "link"] });
+});
+
+test("an intent from an older ic's bare line still says why the keeper ran, and names no check it cannot know", () => {
+    const intent = restartIntent("Restarting the sandbox", { kind: "sweep" }, "windows", "rog", NOW);
+    expect(intent).toEqual({
+        at: new Date(NOW).toISOString(),
+        by: "keeper",
+        host: "rog",
+        side: "windows",
+        action: "restart",
+        reason: "Restarting the sandbox; asked by the keeper's periodic sweep",
+        checks: [],
+    });
 });

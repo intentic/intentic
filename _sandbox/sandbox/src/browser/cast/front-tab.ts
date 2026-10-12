@@ -19,6 +19,9 @@ const ListedSchema = z.array(z.object({ id: z.string(), type: z.string() }));
 // Each page's CDP target id, read once: the key /json/list names a tab by.
 const targetIds = new WeakMap<Page, string>();
 
+// The id already read for a page, without asking Chromium: what a log line names a tab by.
+export const knownTargetId = (page: Page): string | undefined => targetIds.get(page);
+
 const targetIdOf = async (context: BrowserContext, page: Page): Promise<string | undefined> => {
     const known = targetIds.get(page);
     if (known !== undefined) {

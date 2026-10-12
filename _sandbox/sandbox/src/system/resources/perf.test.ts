@@ -73,7 +73,9 @@ test("with no perf sink the slow lines fall back to the main log rather than bei
     expect(main.lines).toMatchObject([{ level: 40, perf: "git.run", message: "slow git.run" }]);
 });
 
-test("the ranked summary stays on the main log, where an incident reader is already looking", () => {
+// In daemon.log the table was a third of the bytes, and the conversation ids in its `worst` rows matched every grep for
+// one conversation.
+test("the ranked summary goes to the perf sink beside the slow spans, never to the main log", () => {
     jest.useFakeTimers();
     const main = capturing();
     const perf = capturing();
@@ -84,16 +86,36 @@ test("the ranked summary stays on the main log, where an incident reader is alre
     tracker.stop();
     jest.useRealTimers();
 
-    const summary = main.lines.find((line) => line["perfSummary"] !== undefined);
-    expect(summary).toMatchObject({ level: 30 });
+    const summary = perf.lines.find((line) => line["perfSummary"] !== undefined);
+    expect(summary).toMatchObject({ level: 30, everyMs: SUMMARY_MS });
     expect(summary?.["perfSummary"]).toMatchObject([{ op: "git.run", count: 1, slow: 1 }]);
-    expect(perf.lines.every((line) => line["perfSummary"] === undefined)).toBe(true);
+    expect(main.lines.every((line) => line["perfSummary"] === undefined)).toBe(true);
+});
+
+// `windowMs` used to sit beside totals that ran from boot, reading as a ten-minute window it never was.
+test("the summary says its totals run from the daemon's start, and how much of each is new since the last one", () => {
+    jest.useFakeTimers();
+    const perf = capturing();
+    const tracker = createPerfTracker(capturing().logger, perf.logger);
+
+    tracker.record("git.run", 5, {});
+    tracker.record("git.run", 5, {});
+    jest.advanceTimersByTime(SUMMARY_MS);
+    tracker.record("git.run", 5, {});
+    jest.advanceTimersByTime(SUMMARY_MS);
+    tracker.stop();
+    jest.useRealTimers();
+
+    const summaries = perf.lines.filter((line) => line["perfSummary"] !== undefined);
+    expect(summaries.map((line) => line["perfSummary"])).toMatchObject([[{ count: 2, recent: 2 }], [{ count: 3, recent: 1 }]]);
+    expect(Number.isNaN(Date.parse(String(summaries[0]?.["since"])))).toBe(false);
+    expect(summaries[0]).not.toHaveProperty("windowMs");
 });
 
 test("a wait op is printed beside the work it explains, however far down the ranking it falls", () => {
     jest.useFakeTimers();
-    const main = capturing();
-    const tracker = createPerfTracker(main.logger, capturing().logger);
+    const perf = capturing();
+    const tracker = createPerfTracker(capturing().logger, perf.logger);
 
     // A wait's total is small by construction, so it can rank below the op it explains; git.lock.hold/git.lock.wait
     // test that pairing.
@@ -109,7 +131,7 @@ test("a wait op is printed beside the work it explains, however far down the ran
     tracker.stop();
     jest.useRealTimers();
 
-    const rows = main.lines.find((line) => line["perfSummary"] !== undefined)?.["perfSummary"] as { op: string }[];
+    const rows = perf.lines.find((line) => line["perfSummary"] !== undefined)?.["perfSummary"] as { op: string }[];
     const ops = rows.map((row) => row.op);
     // Both pairing spellings: `X.hold` → `X.wait`; anything else → `<itself>.wait`.
     expect(ops).toContain("git.lock.wait");

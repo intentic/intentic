@@ -21,6 +21,9 @@ const RETRY_AFTER_MS = 30 * 60_000;
 
 const attempted = new Map<string, number>();
 
+// The outcome of an environment that already holds its own enrollment: nothing was run.
+const ALREADY_CONNECTED = "already connected";
+
 /** Wipes the cooldown so the next connect tries again: the Connect button on a distro's row, and tests. */
 export const forgetBootstrap = (connection?: string): void => void (connection === undefined ? attempted.clear() : attempted.delete(connection));
 
@@ -60,7 +63,7 @@ const bootstrapOne = async (services: Services, from: string, card: string, targ
     }
     const connection = hostConnectionKey(card, target);
     if (await services.hosts.enrolled(connection)) {
-        return "already connected";
+        return ALREADY_CONNECTED;
     }
     const { token, expiresIn } = services.hosts.mintPairing(connection);
     const code = services.redeemCodes.mint({ kind: "device", pairToken: token }, expiresIn);
@@ -95,7 +98,10 @@ const bootstrapFrom = (services: Services, from: string, { card, environment }: 
         attempted.set(connection, now);
         void bootstrapOne(services, from, card, target)
             .then((outcome) => {
-                services.logger.info({ card, environment: target, outcome }, "hosts: connecting the rest of this computer");
+                // Every reconnect of a machine re-checks its environments, and nearly every check finds them already
+                // connected: nothing happened, so it is a trace, not news.
+                const level = outcome === ALREADY_CONNECTED ? "debug" : "info";
+                services.logger[level]({ card, environment: target, outcome }, "hosts: connecting the rest of this computer");
             })
             .catch((error: unknown) => {
                 services.logger.warn({ err: error, card, environment: target }, "hosts: could not connect that environment");

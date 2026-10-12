@@ -22,6 +22,8 @@ export const OWN_BROWSER_SESSION = "browser-own";
 interface OwnBrowserDeps {
     readonly root: string;
     readonly warn: (fields: Record<string, unknown>, message: string) => void;
+    // The window's launch and close lines (owner-browser.ts); absent logs them nowhere.
+    readonly info?: (fields: Record<string, unknown>, message: string) => void;
 }
 
 // One start at a time: a second tab asked for while the window is still coming up waits for it rather than racing a
@@ -45,6 +47,7 @@ const start = async (deps: OwnBrowserDeps): Promise<void> => {
             display: display.name,
             fingerprint,
             windowArgs: chromiumWindowArgs(display),
+            log: deps.info,
         });
         // Patches residual server tells before the first navigation, as on every other window a person sees.
         await owned.context.addInitScript(stealthInit(fingerprint));

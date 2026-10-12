@@ -39,7 +39,15 @@ export interface ModelCooldownStore {
     readonly clear: (provider: string, model: string) => Promise<void>;
 }
 
-export const fileModelCooldownStore = (path: string): ModelCooldownStore => {
+// A cooldown hides a model from the picker, so one recorded and never cleared reads, from outside, as a model that
+// vanished. Each change writes one line through `log`: benched (until when, in whose words) and reopened (because a turn
+// on it served, and how early that was). A clear that finds nothing, the case on nearly every turn, writes nothing.
+export interface ModelCooldownStoreOptions {
+    readonly log?: (fields: Record<string, unknown>, message: string) => void;
+}
+
+export const fileModelCooldownStore = (path: string, options: ModelCooldownStoreOptions = {}): ModelCooldownStore => {
+    const log = options.log ?? (() => undefined);
     const file = jsonFile<Record<string, StoredCooldown>>(path, {
         parse: (raw) => StoredSchema.safeParse(raw).data,
         fallback: () => ({}),
@@ -60,17 +68,28 @@ export const fileModelCooldownStore = (path: string): ModelCooldownStore => {
         },
         record: async (provider, model, cooldown) => {
             await file.update((current) => ({ ...current, [keyOf(provider, model)]: cooldown }));
+            log({ provider, model, until: new Date(cooldown.until).toISOString(), reason: cooldown.message }, `model cooldown: ${provider} ${model} benched until ${new Date(cooldown.until).toISOString()}`);
         },
         // Returns the same object when nothing is stored, so the common case (no cooldown) never writes the file.
         clear: async (provider, model) => {
+            let reopened: StoredCooldown | undefined;
             await file.update((current) => {
                 const key = keyOf(provider, model);
-                if (current[key] === undefined) {
+                reopened = current[key];
+                if (reopened === undefined) {
                     return current;
                 }
                 const { [key]: _reopened, ...rest } = current;
                 return rest;
             });
+            if (reopened !== undefined) {
+                // An entry already past its instant was over anyway; only one cut short says a turn proved it open early.
+                const early = reopened.until - Date.now();
+                log(
+                    { provider, model, until: new Date(reopened.until).toISOString(), ...(early > 0 ? { earlyByMs: early } : {}) },
+                    `model cooldown: ${provider} ${model} reopened, a turn on it served`,
+                );
+            }
         },
     };
 };

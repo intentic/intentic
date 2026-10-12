@@ -49,3 +49,15 @@ test("forgets a refusal a plan has had a day to fix", async () => {
     await store.record("kimi", "kimi-k2.7-code", { at: Date.now() - 2 * HOUR, message: REFUSED });
     expect(await store.refused("kimi")).toEqual(new Set(["kimi-k2.7-code"]));
 });
+
+test("logs a model's first refusal, not the same refusal restated", async () => {
+    const path = join(mkdtempSync(join(tmpdir(), "model-refusals-")), "history", "model-refusals.json");
+    const lines: string[] = [];
+    const store = fileModelRefusalStore(path, { log: (_fields, message) => lines.push(message) });
+    await store.record("kimi", "kimi-k2.7-code-highspeed", { at: Date.now() - 2 * 24 * HOUR, message: REFUSED });
+    await store.record("kimi", "kimi-k2.7-code-highspeed", { at: Date.now(), message: REFUSED });
+    await store.record("kimi", "kimi-k2.7-code-highspeed", { at: Date.now(), message: REFUSED });
+    // The first, then one after it had aged out; the restatement is quiet.
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toContain("kimi kimi-k2.7-code-highspeed refused");
+});

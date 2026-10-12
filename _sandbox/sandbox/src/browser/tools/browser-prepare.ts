@@ -1,4 +1,8 @@
+import { errorMessage } from "@intentic/base/errors";
 import type { Services } from "../../composition.js";
+import { browserOutputDir } from "../cast/browser-artifacts.js";
+import { toolCallIdOf, writeScreenshotProvenance } from "../cast/screenshot-provenance.js";
+import { browserAccountPage } from "../sessions/browser-sessions.js";
 import { profileOwner } from "../sessions/session-store.js";
 import { type BrowserRouterFactory, createBrowserRouter, type Prepared, type RouterDeps } from "./browser-router.js";
 import { ANONYMOUS_BROWSER_SERVER, browserToolSchemas, prepareBrowserOwner } from "./browser-tools.js";
@@ -22,7 +26,25 @@ export const prepareKnownOwner = async (services: Pick<Services, "capabilities" 
 
 // Every turn's router is made here and mounted by the turn (browser-tools.ts), which reaches it at the daemon's one MCP
 // door. Services are read lazily, since the factory is one of them.
-export const createBrowserRouters = (services: () => Pick<Services, "capabilities" | "workspace">): BrowserRouterFactory => {
-    const deps: RouterDeps = { toolSchemas: browserToolSchemas, prepare: (owner, port) => prepareKnownOwner(services(), owner, port) };
+// `logger` is optional only so a caller handing just the two stores still compiles; without it a sidecar that failed
+// is said nowhere.
+export const createBrowserRouters = (services: () => Pick<Services, "capabilities" | "workspace"> & Partial<Pick<Services, "logger">>): BrowserRouterFactory => {
+    const deps: RouterDeps = {
+        toolSchemas: browserToolSchemas,
+        prepare: (owner, port) => prepareKnownOwner(services(), owner, port),
+        // A sidecar that could not be written costs the shot nothing; the agent already has its answer.
+        screenshotTaken: (shot) => {
+            void writeScreenshotProvenance({
+                outputDir: browserOutputDir(services().workspace.root),
+                browser: shot.owner,
+                answer: shot.answer,
+                conversationId: shot.conversationId,
+                toolCallId: toolCallIdOf(shot.params),
+                page: browserAccountPage(shot.owner),
+            }).catch((error: unknown) =>
+                services().logger?.warn({ conversationId: shot.conversationId, reason: errorMessage(error) }, "browser: screenshot provenance not written"),
+            );
+        },
+    };
     return (manifest) => createBrowserRouter(manifest, deps);
 };

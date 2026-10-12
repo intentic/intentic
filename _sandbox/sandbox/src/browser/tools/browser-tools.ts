@@ -372,7 +372,7 @@ export const browserServersOf = async (
     const servers: AgentTool[] = [];
     // Not alwaysLoad: the router's schemas defer behind ToolSearch like every other MCP tool; system append names it.
     const mount = (name: string, manifest: Omit<RouterManifest, "backendEnv">): void => {
-        const router = mounts.routers({ ...manifest, backendEnv: conversationId === undefined ? {} : workloadStamp(conversationId) });
+        const router = mounts.routers({ ...manifest, backendEnv: conversationId === undefined ? {} : workloadStamp(conversationId), conversationId });
         servers.push(mounts.lease.open({ name, target: { kind: "browser", router }, timeoutMs: BROWSER_CALL_TIMEOUT_MS }));
     };
     if (anonymous) {

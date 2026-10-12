@@ -81,23 +81,23 @@ describe(`the version rule`, () => {
 describe(`settling a landing`, () => {
     test(`commits the claim under the subject drafted for it`, async () => {
         await settleLanding(servicesWith([version(`auto-version`)], `fix: cascading markers`), `c1`);
-        expect(commitOnly).toHaveBeenCalledWith(WORKSPACE_ROOT, [`a.ts`], `fix: cascading markers`);
+        expect(commitOnly).toHaveBeenCalledWith(WORKSPACE_ROOT, [`a.ts`], `fix: cascading markers\n\nConversation-Id: c1`);
     });
 
     // The report already tells the owner the draft failed; the landing must still reach history.
     test(`a failed draft still commits, under the conversation's title`, async () => {
         describeLanding.mockRejectedValue(new Error(`every model set for this job names an account this sandbox no longer has`));
         await settleLanding(servicesWith([version(`auto-version`)]), `c1`);
-        expect(commitOnly).toHaveBeenCalledWith(WORKSPACE_ROOT, [`a.ts`], `Agent: Recent commits`);
+        expect(commitOnly).toHaveBeenCalledWith(WORKSPACE_ROOT, [`a.ts`], `Agent: Recent commits\n\nConversation-Id: c1`);
     });
 
     // CI's push check reads a weakened test's declaration off the commit; a land must not drop the conversation's.
     test(`a drafted landing commits with its Test-Note trailer, and an undrafted one keeps the conversation's`, async () => {
         await settleLanding(servicesWith([version(`auto-version`)], `refactor: rows`, { testNote: `rows became a table` }), `c1`);
-        expect(commitOnly).toHaveBeenLastCalledWith(WORKSPACE_ROOT, [`a.ts`], `refactor: rows\n\nTest-Note: rows became a table`);
+        expect(commitOnly).toHaveBeenLastCalledWith(WORKSPACE_ROOT, [`a.ts`], `refactor: rows\n\nTest-Note: rows became a table\nConversation-Id: c1`);
         describeLanding.mockRejectedValue(new Error(`no model`));
         await settleLanding(servicesWith([version(`auto-version`)], undefined, { said: `Done.\nTest-Note: prose became structure` }), `c1`);
-        expect(commitOnly).toHaveBeenLastCalledWith(WORKSPACE_ROOT, [`a.ts`], `Agent: Recent commits\n\nTest-Note: prose became structure`);
+        expect(commitOnly).toHaveBeenLastCalledWith(WORKSPACE_ROOT, [`a.ts`], `Agent: Recent commits\n\nTest-Note: prose became structure\nConversation-Id: c1`);
     });
 
     // The subject 50eb6b7d6 landed under, 701 files: whatever path put it on the landing, it is not written.
@@ -109,7 +109,7 @@ describe(`settling a landing`, () => {
         expect(commitOnly).toHaveBeenCalledWith(
             WORKSPACE_ROOT,
             Object.keys(claim),
-            `chore(sandbox): update 3 files\n\nTest-Note: rows became a table`,
+            `chore(sandbox): update 3 files\n\nTest-Note: rows became a table\nConversation-Id: c1`,
         );
     });
 
@@ -119,14 +119,14 @@ describe(`settling a landing`, () => {
         expect(commitOnly).toHaveBeenCalledWith(
             WORKSPACE_ROOT,
             Object.keys(claim),
-            `chore(sandbox)!: update 3 files\n\nBreaking-Note: The wire drops rows.`,
+            `chore(sandbox)!: update 3 files\n\nBreaking-Note: The wire drops rows.\nConversation-Id: c1`,
         );
     });
 
     test(`an undrafted land whose title narrates is committed under a subject built from the change, not the title`, async () => {
         describeLanding.mockRejectedValue(new Error(`no model`));
         await settleLanding(servicesWith([version(`auto-version`)], undefined, { title: NARRATED, origins: claim }), `c1`);
-        expect(commitOnly).toHaveBeenCalledWith(WORKSPACE_ROOT, Object.keys(claim), `chore(sandbox): update 3 files`);
+        expect(commitOnly).toHaveBeenCalledWith(WORKSPACE_ROOT, Object.keys(claim), `chore(sandbox): update 3 files\n\nConversation-Id: c1`);
     });
 
     test(`without the rule the subject is still drafted for the chip, and nothing is committed`, async () => {

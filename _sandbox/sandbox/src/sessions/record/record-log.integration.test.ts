@@ -3,8 +3,7 @@ import { appendFile, mkdtemp, readFile, rm, stat, truncate, writeFile } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { zstdDecompressSync } from "node:zlib";
-import { appendLog, frameBytes, frameOfRow, jsonlOf, openLog, readFrame, repairLog, writeLog } from "./record-log.js";
+import { appendLog, frameBytes, frameOfRow, jsonlOf, logText, openLog, readFrame, repairLog, writeLog } from "./record-log.js";
 import * as recordIo from "./record-io.js";
 
 // The record's file format against a real file: frames found without decompressing the ones before, a torn last frame
@@ -16,7 +15,7 @@ const readZstd = async (path: string): Promise<string> => {
         return (await exec("zstdcat", [path])).stdout;
     } catch (error) {
         if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-            return zstdDecompressSync(await readFile(path)).toString("utf8");
+            return logText(await readFile(path));
         }
         throw error;
     }
@@ -91,6 +90,18 @@ test("zstdcat reads a log as the JSONL it holds, rewritten or appended", async (
     await appendLog(path, await openLog(path), lines(3, 1));
     const stdout = await readZstd(path);
     expect(stdout).toBe(`${lines(0, 4).join("\n")}\n`);
+});
+
+// Node's one-shot zstd decoder stops after the first frame, the empty skippable prefix, and says nothing (Bun's, which
+// runs these suites, reads on): `logText` reads every frame whichever runtime decodes.
+test("logText reads a whole log frame by frame with the runtime's own zlib", async () => {
+    const path = join(dir, "transcript.jsonl.zst");
+    let index = await appendLog(path, undefined, lines(0, 2));
+    index = await appendLog(path, index, lines(2, 1));
+    const bytes = await readFile(path);
+    expect(logText(bytes)).toBe(jsonlOf(lines(0, 3)));
+    // A torn tail ends the text at the last whole frame.
+    expect(logText(Buffer.concat([bytes, frameBytes(jsonlOf(lines(3, 1)), 1).subarray(0, 30)]))).toBe(jsonlOf(lines(0, 3)));
 });
 
 test("stray bytes after the last frame are not a frame", async () => {

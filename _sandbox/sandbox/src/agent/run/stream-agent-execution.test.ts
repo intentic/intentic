@@ -172,6 +172,7 @@ const fixture = (options: FixtureOptions = {}) => {
             list: async () => [],
         }),
         logger: unstubbed<Services["logger"]>("logger", {
+            info: () => {},
             warn: (...args: unknown[]) => void warnings.push(args),
         }),
         activity: unstubbed<Services["activity"]>("activity", {

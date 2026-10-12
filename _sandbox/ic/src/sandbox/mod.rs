@@ -7,6 +7,7 @@ pub mod fix;
 mod host_files;
 pub mod identity;
 pub mod inside;
+pub mod intent;
 pub mod labels;
 pub mod ledger;
 pub mod listing;

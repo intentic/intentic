@@ -58,7 +58,7 @@ export const sessionsSliceFake = (context: SliceFakeContext) => {
         // The real index, in memory: a fake here would mean no suite ever runs the actual query, folding or ordering.
         // `search` syncs from `transcripts.read` first, since `append` is inert.
         saidIndex: {
-            search: async (needle, kind, caseSensitive) => {
+            search: async (needle, kind, caseSensitive, deeds) => {
                 if (kind === "conversation") {
                     const services = self();
                     for (const id of services.agents.ids()) {
@@ -68,7 +68,7 @@ export const sessionsSliceFake = (context: SliceFakeContext) => {
                         }
                     }
                 }
-                return testSaid.search(needle, kind, caseSensitive);
+                return testSaid.search(needle, kind, caseSensitive, deeds);
             },
             backfill: async () => {},
             indexing: () => false,

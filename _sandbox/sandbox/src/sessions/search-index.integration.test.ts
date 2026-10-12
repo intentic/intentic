@@ -13,7 +13,7 @@ test("the search hands its LIKE to the trigram index instead of scanning every l
         await index.put("c1", "conversation", "1", [{ text: "fix the login redirect", speaker: "user" }]);
         await index.close();
         const db = new DatabaseSync(join(dir, "said.db"));
-        const plan = (db.prepare(`EXPLAIN QUERY PLAN ${SEARCH_SQL}`).all("conversation", "%login%", "", "") as { detail: string }[]).map(
+        const plan = (db.prepare(`EXPLAIN QUERY PLAN ${SEARCH_SQL}`).all("conversation", "%login%", "", "", 1) as { detail: string }[]).map(
             (row) => row.detail,
         );
         db.close();

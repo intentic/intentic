@@ -6,6 +6,7 @@ use crate::docker;
 use crate::health;
 use crate::logfile::Log;
 use crate::record::{self, ChannelRecord, Phase, Pin, Swap};
+use crate::sandbox::intent::{self, Action};
 use crate::sandbox::labels::{self, Kind as LabelKind};
 use crate::sandbox::lock::{self, Wait};
 use crate::sandbox::outcome::{self, Kind, Outcome};
@@ -941,6 +942,14 @@ fn recreate(
     mirror::push(&slug);
     // Says "this cutover is alive" every few seconds until it is settled, so a watch from anywhere leaves it alone.
     let mut heartbeat = probation::Heartbeat::start(&slug, swap.at);
+    // Why the sandbox is about to go down, told to it first (intent.rs).
+    let (action, reason) = intent_of(
+        &mode,
+        &channel,
+        left_version.as_deref(),
+        target_version.as_deref(),
+    );
+    intent::leave(&container, action, &reason);
     // The turns this cutover cuts are picked up by whichever version boots next, the new one or the old one put back.
     if resume::ask(&container) {
         ui::note(
@@ -1773,6 +1782,62 @@ pub(crate) fn restore_parked(
     }
 }
 
+/// What a recreate tells the sandbox it is about to do, and why: the verb, and the versions it moves between. Pure.
+fn intent_of(mode: &Mode, channel: &str, from: Option<&str>, to: Option<&str>) -> (Action, String) {
+    let from = from.unwrap_or("the running version");
+    let to = to.unwrap_or("the new image");
+    match mode {
+        Mode::Update { .. } => (
+            Action::Update,
+            format!("`ic sandbox update`: from {from} to {to} (channel {channel})."),
+        ),
+        Mode::Rollback { .. } => (
+            Action::Swap,
+            format!("`ic sandbox rollback`: from {from} back to {to}."),
+        ),
+        Mode::Rebuild { hash } => (
+            Action::Rebuild,
+            format!(
+                "`ic sandbox rebuild`: the approved environment {} on {to}.",
+                hash.get(..12).unwrap_or(hash)
+            ),
+        ),
+        Mode::Dev => (
+            Action::Rebuild,
+            format!("`ic sandbox dev`: rebuilt from a checkout, leaving {from}."),
+        ),
+        Mode::Reshape(ask) => {
+            let mut asked: Vec<String> = Vec::new();
+            let cap = |value: &Option<String>| match value.as_deref() {
+                Some("") => Some("default".to_string()),
+                other => other.map(str::to_string),
+            };
+            if let Some(memory) = cap(&ask.memory) {
+                asked.push(format!("memory {memory}"));
+            }
+            if let Some(cpus) = cap(&ask.cpus) {
+                asked.push(format!("cpus {cpus}"));
+            }
+            let switch = |on: bool| if on { "on" } else { "off" };
+            if let Some(on) = ask.privileged {
+                asked.push(format!("privileged {}", switch(on)));
+            }
+            if let Some(on) = ask.gpus {
+                asked.push(format!("gpus {}", switch(on)));
+            }
+            let what = if asked.is_empty() {
+                "the shape saved for its next restart".to_string()
+            } else {
+                asked.join(", ")
+            };
+            (
+                Action::Reshape,
+                format!("`ic sandbox reshape`: recreated on {from} with {what}."),
+            )
+        }
+    }
+}
+
 /// Rewind the channel record to what it said before a swap that did not happen. Best-effort: this runs on the
 /// failure path, where the one job is to leave the machine as close to "before" as it can reach.
 fn rewind_record(slug: &str, saved: &ChannelRecord) {
@@ -2562,5 +2627,52 @@ mod tests {
         assert!(dev.contains("`pnpm rebuild:sandbox abc`"), "{dev}");
         // Nothing to put back says nothing more: where it could not, the restore said so itself.
         assert_eq!(restored_line(&Restored::NotPut, true, "abc"), "");
+    }
+
+    #[test]
+    fn the_sandbox_is_told_which_verb_moves_it_and_between_which_versions() {
+        let update = Mode::Update {
+            channel: None,
+            force: false,
+        };
+        assert_eq!(
+            intent_of(&update, "stable", Some("1.315.0"), Some("1.316.0")),
+            (
+                Action::Update,
+                "`ic sandbox update`: from 1.315.0 to 1.316.0 (channel stable).".to_string()
+            )
+        );
+        let (action, said) = intent_of(
+            &Mode::Rollback { to: None },
+            "stable",
+            Some("1.316.0"),
+            None,
+        );
+        assert_eq!(action, Action::Swap);
+        assert_eq!(
+            said,
+            "`ic sandbox rollback`: from 1.316.0 back to the new image."
+        );
+        let reshape = Mode::Reshape(Ask {
+            memory: Some("12g".to_string()),
+            cpus: Some(String::new()),
+            ..Ask::default()
+        });
+        let (action, said) = intent_of(&reshape, "stable", Some("1.316.0"), Some("1.316.0"));
+        assert_eq!(action, Action::Reshape);
+        assert_eq!(
+            said,
+            "`ic sandbox reshape`: recreated on 1.316.0 with memory 12g, cpus default."
+        );
+        let (action, said) = intent_of(
+            &Mode::Rebuild {
+                hash: "0123456789abcdef".to_string(),
+            },
+            "stable",
+            None,
+            Some("1.316.0"),
+        );
+        assert_eq!(action, Action::Rebuild);
+        assert!(said.contains("0123456789ab on 1.316.0"), "{said}");
     }
 }

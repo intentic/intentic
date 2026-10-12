@@ -1,4 +1,5 @@
 import { IN_MEMORY } from "@intentic/base/sqlite";
+import { recordingLogger } from "../harness/route-fakes.testing.js";
 import { createLogger } from "../logger.js";
 import { testConfig } from "../testing.js";
 import { backfillSearchIndex, type BackfillSource } from "./search-backfill.js";
@@ -126,4 +127,46 @@ test("an aborted pass stops where it is", async () => {
 
     expect(outcome.indexed).toBe(1);
     expect((await index.search("never reached", "conversation", false)).size).toBe(0);
+});
+
+// A short pass is what every pass but a rebuild is: a running turn grew one record. It used to write a start and an end
+// line at info each time; now it says nothing at info, and the work it did is one debug line.
+test("a short pass logs one debug line for what it changed and nothing at info, and a no-op pass logs nothing", async () => {
+    const index = openSearchIndex(IN_MEMORY);
+    const recorded = recordingLogger();
+    await backfillSearchIndex(index, { kind: "conversation", prune: false, sources: [source("c1", "1", "grew")] }, recorded.logger);
+    expect(recorded.lines.map((line) => [line["level"], line["message"]])).toEqual([["debug", "search index: backfill complete"]]);
+    expect(recorded.lines[0]).toMatchObject({ kind: "conversation", indexed: 1, skipped: 0 });
+
+    recorded.lines.length = 0;
+    await backfillSearchIndex(index, { kind: "conversation", prune: false, sources: [source("c1", "1", "grew")] }, recorded.logger);
+    expect(recorded.lines).toEqual([]);
+});
+
+// What a search answered mid-pass reports as coverage: every source counts once it is through, read or skipped or failed.
+test("the pass reports how many sources it has been through after each one", async () => {
+    const index = openSearchIndex(IN_MEMORY);
+    await backfillSearchIndex(index, { kind: "conversation", prune: false, sources: [source("c1", "1", "already")] }, logger);
+    const seen: [number, number][] = [];
+    await backfillSearchIndex(
+        index,
+        {
+            kind: "conversation",
+            prune: false,
+            sources: [
+                source("c1", "1", "already"),
+                source("bad", "1", "", async () => {
+                    throw new Error("record unreadable");
+                }),
+                source("c2", "1", "new"),
+            ],
+            progress: (done, of) => seen.push([done, of]),
+        },
+        logger,
+    );
+    expect(seen).toEqual([
+        [1, 3],
+        [2, 3],
+        [3, 3],
+    ]);
 });

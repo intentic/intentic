@@ -16,6 +16,8 @@ import { sendWebPush } from "./senders/webpush.js";
 export interface PushDelivery {
     readonly delivered: number;
     readonly failed: number;
+    // Why nothing was sent, when nothing was: no device registered, or every device's person is at a screen.
+    readonly skipped?: "no device registered" | "everyone is watching" | "it never showed";
 }
 
 export interface PushSender {
@@ -65,7 +67,7 @@ export const createPushSender = (store: PushStore, logger: Logger, redact?: Push
         const [keys, registered] = await Promise.all([store.keys(), store.list()]);
         const channels = registered.filter(wanted);
         if (channels.length === 0) {
-            return NOTHING_SENT;
+            return { ...NOTHING_SENT, skipped: registered.length === 0 ? "no device registered" : "everyone is watching" };
         }
         const webPush = sendWebPush(keys);
         const relayed = channels.some((channel) => channel.kind !== "webpush") ? await forRelay(notification) : notification;
@@ -104,7 +106,7 @@ export const createPushSender = (store: PushStore, logger: Logger, redact?: Push
         withdraw: async (replacement) => {
             const reached = shown.get(replacement.tag);
             if (reached === undefined) {
-                return NOTHING_SENT;
+                return { ...NOTHING_SENT, skipped: "it never showed" };
             }
             shown.delete(replacement.tag);
             // Never persistent and never a buzz, whatever the caller built: a withdrawal that stayed would be the stale

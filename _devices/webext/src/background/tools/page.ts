@@ -28,10 +28,11 @@ const CONFIRM_TIMEOUT_MS = 120_000;
 const MAX_WAIT_SECONDS = 60;
 
 // Runs an injected function in a tab and returns its result; see page/driver.ts for the serialization rule these
-// functions follow.
+// functions follow. Chrome answers `null` rather than nothing when the function threw in the page or the frame went away
+// before its promise settled, so both read as a page that did not answer, never as a result to read fields off.
 const inject = async <Args extends unknown[], Result>(tabId: number, func: (...args: Args) => Result, args: Args): Promise<Awaited<Result>> => {
     const [frame] = await chrome.scripting.executeScript({ target: { tabId }, func, args });
-    if (frame?.result === undefined) {
+    if (frame?.result === undefined || frame.result === null) {
         throw new RefusedError(`That page did not answer. It may have navigated mid-call, or it may be a page no extension can touch.`);
     }
     return frame.result;

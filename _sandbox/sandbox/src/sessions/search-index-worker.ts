@@ -59,7 +59,7 @@ const answer = async (request: SearchRequest): Promise<SearchAnswer> => {
     try {
         switch (request.op) {
             case "search":
-                return { id: request.id, ok: true, value: store.search(request.needle, request.kind, request.caseSensitive) };
+                return { id: request.id, ok: true, value: store.search(request.needle, request.kind, request.caseSensitive, request.deeds) };
             case "versions":
                 return { id: request.id, ok: true, value: store.versions(request.kind) };
             case "put":

@@ -204,7 +204,7 @@ test.each(domainRefusals)("a senderless sandbox message is kept with its attachm
         {
             role: "notice", text: `${message} Nothing has run yet: the message above is kept here to send again once that is sorted.`,
             noticeAction: "sendAgain", sandboxHeld: true,
-            noticeCode: { code: "kept", params: { message, error: "agent-domain-refused" } }, run: run.id,
+            noticeCode: { code: "kept", params: { message, error: "agent-domain-refused" } }, openedAt: expect.any(Number), run: run.id,
         },
     ]);
     expect(append).toHaveBeenCalledTimes(1);

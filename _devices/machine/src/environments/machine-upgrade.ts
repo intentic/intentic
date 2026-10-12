@@ -75,7 +75,7 @@ export const upgradeHere = async (target: string, force: boolean, log: Log): Pro
         const running = async (): Promise<string | undefined> => (await readResident())?.build;
         const restart = async (): Promise<string | undefined> => {
             await waitOutSwaps(log);
-            await restartResident(() => undefined);
+            await restartResident(() => undefined, { reason: "update", detail: `for the update to ${target}` });
             return await running();
         };
         return await runUpgrade(realUpgradeExec(restart, running, log), target, installedBuild() ?? MACHINE_VERSION, force, log);

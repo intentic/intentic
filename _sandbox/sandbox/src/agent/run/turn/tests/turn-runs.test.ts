@@ -1,4 +1,5 @@
 import { IN_MEMORY } from "@intentic/base/sqlite";
+import type { Logger } from "pino";
 import type { AgentDomainPolicy, AgentEvent } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { waitFor } from "@intentic/testing/bun";
@@ -15,7 +16,7 @@ import { openConversationsDb } from "../../../../store/conversations-db.js";
 import { beginTurn, fleetStoreOver, memoryFleet } from "../../../../testing.js";
 import { commandsOf, resetCommands } from "../../../providers/agent-commands.js";
 import { MAX_BACKLOG_FRAMES } from "../../../../seams/frame-backlog.js";
-import { startTurnRun, type TurnRun } from "../turn-runs.js";
+import { startedByOf, startTurnRun, type TurnRun } from "../turn-runs.js";
 
 // Where every run here is filed and announced: one fleet's actors, one bus.
 const deps = { conversations: memoryFleet().conversations, events: createDomainEvents(() => {}) };
@@ -66,6 +67,8 @@ const started = (run: TurnRun | BeginRefusal): TurnRun => {
     return run;
 };
 const opening = () => [{ role: `user` as const, text: `do the thing`, sentAt: 1 }];
+// When the live fold dated an assistant or notice row, on the daemon's clock (TranscriptFold's `now`).
+const AT = expect.any(Number) as number;
 
 // Attach and drain: the head, then everything until the run finishes.
 const collect = async (
@@ -103,13 +106,13 @@ describe(`turn runs`, () => {
         });
         expect(entries).toEqual([
             { kind: `fact`, seq: 1, fact: { kind: `session`, sessionId: `s1` } },
-            { kind: `patch`, seq: 2, patch: { op: `append`, row: { role: `assistant`, text: ``, run: run.id } } },
+            { kind: `patch`, seq: 2, patch: { op: `append`, row: { role: `assistant`, text: ``, openedAt: AT, run: run.id } } },
             { kind: `patch`, seq: 3, patch: { op: `text`, index: 1, text: `a` } },
         ]);
         expect(run.done).toBe(true);
         expect(run.rows).toEqual([
             { role: `user`, text: `do the thing`, sentAt: 1, run: run.id },
-            { role: `assistant`, text: `a`, run: run.id },
+            { role: `assistant`, text: `a`, openedAt: AT, run: run.id },
         ]);
     });
 
@@ -128,7 +131,7 @@ describe(`turn runs`, () => {
         expect(head.seq).toBe(4);
         expect(head.rows).toEqual([
             { role: `user`, text: `do the thing`, sentAt: 1, run: run.id },
-            { role: `assistant`, text: `ab`, run: run.id },
+            { role: `assistant`, text: `ab`, openedAt: AT, run: run.id },
         ]);
         expect(entries).toEqual([
             { kind: `fact`, seq: 1, fact: { kind: `session`, sessionId: `s1` } },
@@ -253,6 +256,7 @@ describe(`turn runs`, () => {
         expect(turnRunOf(deps.conversations, `c-throw`)!.rows.at(-1)).toEqual({
             role: `notice`,
             text: `adapter exploded`,
+            openedAt: AT,
             run: turnRunOf(deps.conversations, `c-throw`)!.id,
         });
         expect((await collect(`c-throw`)).entries).toEqual([{ kind: `fact`, seq: 2, fact: { kind: `error`, message: `adapter exploded` } }]);
@@ -265,6 +269,7 @@ describe(`turn runs`, () => {
             role: `notice`,
             text: `Stopped.`,
             noticeCode: { code: `stopped` },
+            openedAt: AT,
             run: turnRunOf(deps.conversations, `c-abort`)!.id,
         });
         expect((await collect(`c-abort`)).entries).toEqual([]);
@@ -279,8 +284,8 @@ describe(`turn runs`, () => {
         await waitFor(() => expect(turnRunOf(deps.conversations, `c-park-stop`)!.done).toBe(true));
         const parkStop = turnRunOf(deps.conversations, `c-park-stop`)!;
         expect(parkStop.rows.slice(1)).toEqual([
-            { role: `assistant`, text: ``, question: { requestId: `q1`, questions: [], status: `cancelled` }, run: parkStop.id },
-            { role: `notice`, text: `Stopped.`, noticeCode: { code: `stopped` }, run: parkStop.id },
+            { role: `assistant`, text: ``, openedAt: AT, question: { requestId: `q1`, questions: [], status: `cancelled` }, run: parkStop.id },
+            { role: `notice`, text: `Stopped.`, noticeCode: { code: `stopped` }, openedAt: AT, run: parkStop.id },
         ]);
     });
 
@@ -301,10 +306,10 @@ describe(`turn runs`, () => {
                 patch: {
                     op: `replace`,
                     index: 1,
-                    row: { role: `assistant`, text: ``, plan: { requestId: `p1`, text: `the plan`, status: `approved` }, run: run.id },
+                    row: { role: `assistant`, text: ``, openedAt: AT, plan: { requestId: `p1`, text: `the plan`, status: `approved` }, run: run.id },
                 },
             },
-            { kind: `patch`, seq: 4, patch: { op: `append`, row: { role: `notice`, text: `Plan approved.`, run: run.id } } },
+            { kind: `patch`, seq: 4, patch: { op: `append`, row: { role: `notice`, text: `Plan approved.`, openedAt: AT, run: run.id } } },
         ]);
     });
 
@@ -363,7 +368,7 @@ describe(`turn runs`, () => {
         expect(transcript).toHaveBeenCalledWith(
             [
                 { role: `user`, text: `do the thing`, sentAt: 1, run: run.id },
-                { role: `assistant`, text: `a`, run: run.id },
+                { role: `assistant`, text: `a`, openedAt: AT, run: run.id },
                 { role: `user`, text: `and`, sentAt: 2, run: run.id },
             ],
             [2],
@@ -640,6 +645,7 @@ describe(`turn runs`, () => {
             role: "notice",
             text: `${message} Your message was not delivered: it is held for you to send again.`,
             noticeCode: { code: "undelivered", params: { message, error: "agent-domain-refused" } },
+            openedAt: AT,
             run: run.id,
         }]);
         expect(transcript).not.toHaveBeenCalled();
@@ -748,5 +754,60 @@ describe(`the settle notice`, () => {
             failure: `usage limit reached`,
             closing: `Ported all 12 tests.`,
         });
+    });
+});
+
+// Every run says when it was accepted and when it ended, one line each: a Stop pressed before a turn was acknowledged
+// once left nothing in the log to find under its conversation (2026-10-11).
+describe(`a run's lifecycle lines`, () => {
+    const logged = (): { lines: { fields: Record<string, unknown>; message: string }[]; logger: Pick<Logger, "info"> } => {
+        const lines: { fields: Record<string, unknown>; message: string }[] = [];
+        const info = (fields: Record<string, unknown>, message: string): void => void lines.push({ fields, message });
+        return { lines, logger: { info } as unknown as Pick<Logger, "info"> };
+    };
+
+    it(`says who started it as it is accepted, and how it ended with how long it took`, async () => {
+        const { lines, logger } = logged();
+        const { turnFn, push, close } = crankedTurn();
+        const run = started(
+            startTurnRun({ ...deps, logger }, turnFn, { ...turn(`c-lines`), agent: `codex`, harness: `native`, model: `gpt-x`, resume: `restart` }, { opening, attempts: 1 }),
+        );
+        expect(lines).toEqual([
+            {
+                message: `turn accepted`,
+                fields: { conversationId: `c-lines`, run: run.id, startedBy: `auto-resume`, provider: `codex`, harness: `native`, model: `gpt-x`, attempts: 1, journalled: false },
+            },
+        ]);
+        push({ kind: `error`, message: `usage limit reached` });
+        push({ kind: `done` });
+        close();
+        await run.waitUntilRecorded();
+        await waitFor(() => expect(lines.map((line) => line.message)).toContain(`turn ended`));
+        expect(lines.at(-1)?.fields).toMatchObject({ conversationId: `c-lines`, run: run.id, outcome: `failed`, failure: `usage limit reached`, durationMs: expect.any(Number) });
+    });
+
+    it(`names a stop as a stop`, async () => {
+        const { lines, logger } = logged();
+        const turnFn: TurnStarter["stream"] = async function* () {
+            yield* [];
+            const aborted = new Error(`aborted`);
+            aborted.name = `AbortError`;
+            throw aborted;
+        };
+        const run = started(startTurnRun({ ...deps, logger }, turnFn, turn(`c-stop`), { opening }));
+        await run.waitUntilRecorded();
+        await waitFor(() => expect(lines.at(-1)?.fields).toMatchObject({ run: run.id, outcome: `stopped` }));
+    });
+});
+
+describe(`who started a turn`, () => {
+    it(`reads a re-run by its kind and anything else by who is speaking`, () => {
+        expect(startedByOf({}, true)).toBe(`rehydrate`);
+        expect(startedByOf({ resume: `restart` }, false)).toBe(`auto-resume`);
+        expect(startedByOf({ resume: `limit` }, false)).toBe(`rerun:limit`);
+        expect(startedByOf({ resume: `answered` }, false)).toBe(`answer`);
+        expect(startedByOf({ speaker: { kind: `person`, email: `ada@example.com` } }, false)).toBe(`person`);
+        expect(startedByOf({ speaker: { kind: `sandbox`, source: `watch` } }, false)).toBe(`sandbox:watch`);
+        expect(startedByOf({}, false)).toBe(`sandbox`);
     });
 });

@@ -57,7 +57,12 @@ const resultWords = (tool: TranscriptTool): string =>
         .map((entry) => entry.text)
         .join("\n");
 
-const cardOf = (event: Extract<AgentEvent, { kind: "tool_call" }>): TranscriptTool => ({
+// Whether a call's status is final: the moment it turns so is when its result arrived.
+const ended = (status: TranscriptTool["status"]): boolean => status === "completed" || status === "failed";
+
+// `at` is the fold's clock reading as the call is seen, absent for a fold without one; a call that arrives already
+// finished started and ended in that same moment, as far as anyone here can tell.
+const cardOf = (event: Extract<AgentEvent, { kind: "tool_call" }>, at: number | undefined): TranscriptTool => ({
     id: event.id,
     name: event.name,
     category: event.category,
@@ -65,6 +70,8 @@ const cardOf = (event: Extract<AgentEvent, { kind: "tool_call" }>): TranscriptTo
     ...(event.target !== undefined ? { target: event.target } : {}),
     ...(event.locations !== undefined ? { locations: event.locations } : {}),
     ...(event.content !== undefined ? { content: event.content } : {}),
+    ...(event.input !== undefined ? { input: event.input } : {}),
+    ...(at !== undefined ? { startedAt: at, ...(ended(event.status) ? { endedAt: at } : {}) } : {}),
 });
 
 // Whether a just-retired prose bubble says exactly what the plan about to be drawn says, so the request can take its
@@ -340,7 +347,13 @@ export class TranscriptFold {
     // Set by `retract`: this turn was refused before it ran, and its message went back to the conversation's queue.
     private unrun = false;
 
-    constructor(opening: readonly TranscriptRow[]) {
+    // `now`, when given, stamps each card's start and end and each assistant or notice row's opening as the frame that
+    // brings it is folded: a runtime's frames carry no clock, so the live fold is the one place these moments are known.
+    // A fold replaying frames after the fact is given none, since its own clock would date them all to the replay.
+    constructor(
+        opening: readonly TranscriptRow[],
+        private readonly now?: () => number,
+    ) {
         for (const [index, row] of opening.entries()) {
             this.rows.push(row);
             // A run carried on after a restart opens on the cards it had raised, which it raises again: each is found
@@ -388,7 +401,7 @@ export class TranscriptFold {
                 return [];
             case "tool_call": {
                 const [index, opened] = this.open();
-                const tool = cardOf(event);
+                const tool = cardOf(event, this.now?.());
                 const row = this.rows[index]!;
                 row.tools = [...(row.tools ?? []), tool];
                 this.cards.set(tool.id, { tool, row: index });
@@ -400,6 +413,13 @@ export class TranscriptFold {
                 return this.patchCard(event.id, (tool) => {
                     if (event.status !== undefined) {
                         tool.status = event.status;
+                        // The first final status is when the result arrived; a later frame re-sending it is not.
+                        if (ended(event.status) && tool.endedAt === undefined && this.now !== undefined) {
+                            tool.endedAt = this.now();
+                        }
+                    }
+                    if (event.exitCode !== undefined) {
+                        tool.exitCode = event.exitCode;
                     }
                     if (event.content !== undefined) {
                         tool.content = event.content;
@@ -738,7 +758,7 @@ export class TranscriptFold {
             return [{ op: "toolThinking", index: place.row, id: parent, text: event.text }];
         }
         if (event.kind === "tool_call") {
-            const child = cardOf(event);
+            const child = cardOf(event, this.now?.());
             place.tool.children = [...(place.tool.children ?? []), child];
             this.cards.set(child.id, { tool: child, row: place.row, parent });
             this.claimById(child);
@@ -823,7 +843,7 @@ export class TranscriptFold {
         if (this.bubble !== undefined) {
             return [this.bubble, []];
         }
-        const row: TranscriptRow = { role: "assistant", text: "" };
+        const row: TranscriptRow = { role: "assistant", text: "", ...(this.now === undefined ? {} : { openedAt: this.now() }) };
         this.rows.push(row);
         this.bubble = this.rows.length - 1;
         return [this.bubble, [{ op: "append", row: structuredClone(row) }]];
@@ -845,8 +865,10 @@ export class TranscriptFold {
     }
 
     // Pushes a row that is not the open bubble; closes the bubble first so order stays: what came before, then this.
-    private pushRow(row: TranscriptRow): TranscriptPatch[] {
+    // A row other than a user's is stamped with when it landed, unless it came with its own moment.
+    private pushRow(given: TranscriptRow): TranscriptPatch[] {
         const closed = this.closeBubble();
+        const row = given.role === "user" || given.openedAt !== undefined || this.now === undefined ? given : { ...given, openedAt: this.now() };
         this.rows.push(row);
         return [...closed, { op: "append", row: structuredClone(row) }];
     }

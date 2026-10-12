@@ -76,6 +76,9 @@ export interface SessionsSlice {
         readonly backfill: (signal?: AbortSignal) => Promise<void>;
         // Whether a backfill is running, whether the answer can still grow; both search routes report it as partial.
         readonly indexing: () => boolean;
+        // How far the running pass has got through the conversations, so a partial answer can say how partial;
+        // undefined between passes and while it reads sessions.
+        readonly coverage?: () => { readonly done: number; readonly of: number } | undefined;
     };
     readonly purgeConversationState: NonNullable<AgentArchiveDeps["purgeConversationState"]>;
 }
@@ -140,22 +143,30 @@ export const createSessionsSlice = (deps: SessionsDeps): { readonly slice: Sessi
         return size === undefined ? undefined : String(size);
     };
     // Brings the index level with both stores in one pass: the roster's own list, and the session list's window.
+    let coverage: { done: number; of: number } | undefined;
     const runSaidBackfill = async (signal?: AbortSignal): Promise<void> => {
         const roster = deps.roster();
-        await backfillSearchIndex(
-            saidIndex,
-            {
-                kind: "conversation",
-                prune: false,
-                sources: roster.map((entry): BackfillSource => ({
-                    key: entry.id,
-                    version: () => recordVersion(entry.id),
-                    lines: () => spokenTranscript(transcriptDeps, entry),
-                })),
-            },
-            deps.logger,
-            signal,
-        );
+        try {
+            await backfillSearchIndex(
+                saidIndex,
+                {
+                    kind: "conversation",
+                    prune: false,
+                    sources: roster.map((entry): BackfillSource => ({
+                        key: entry.id,
+                        version: () => recordVersion(entry.id),
+                        lines: () => spokenTranscript(transcriptDeps, entry),
+                    })),
+                    progress: (done, of) => {
+                        coverage = { done, of };
+                    },
+                },
+                deps.logger,
+                signal,
+            );
+        } finally {
+            coverage = undefined;
+        }
         if (signal?.aborted === true) {
             return;
         }
@@ -254,6 +265,7 @@ export const createSessionsSlice = (deps: SessionsDeps): { readonly slice: Sessi
                 search: saidIndex.search,
                 backfill: backfillSaidIndex,
                 indexing: () => backfillingSaid,
+                coverage: () => coverage,
             },
             // The index goes with the state; a purged conversation's rows would otherwise still be findable by phrase.
             purgeConversationState: async (removed, retained) => {

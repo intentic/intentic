@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::time::{Duration, Instant};
 
 use serde_json::Value;
 
@@ -28,6 +29,10 @@ pub enum Read {
 
 /// The placeholder a written body carries where the moment of writing goes (see `write_stamped`).
 pub const NOW: &str = "__IC_NOW__";
+
+/// The same moment as ISO-8601 in UTC to the millisecond (the daemon's own `toISOString()` shape), for a file whose
+/// readers take a date rather than a number.
+pub const NOW_ISO: &str = "__IC_NOW_ISO__";
 
 /// The container that holds a sandbox's volume: the live one, else the one a swap parked.
 pub fn holder(slug: &str) -> Option<String> {
@@ -103,8 +108,30 @@ pub fn absent(said: &str) -> bool {
 /// container's clock when it runs, this machine's otherwise. Returns that moment, or None when the file could not be
 /// written. Best-effort by construction: every caller writes beside a flow whose own outcome does not depend on it.
 pub fn write_stamped(container: &str, path: &str, body: &Value) -> Option<u64> {
+    write_stamped_within(container, path, body, docker::READ_LIMIT * 2)
+}
+
+/// The same, all of it within `budget`: for a file written just before ic acts, which must never hold the act up for
+/// long however wedged the container's docker is.
+pub fn write_stamped_within(
+    container: &str,
+    path: &str,
+    body: &Value,
+    budget: Duration,
+) -> Option<u64> {
+    let deadline = Instant::now() + budget;
+    let left = || deadline.saturating_duration_since(Instant::now());
     let template = body.to_string();
-    if running(container) {
+    let is_running = docker::ask(
+        &["inspect", "--format", "{{.State.Running}}", container],
+        (budget / 2).min(docker::READ_LIMIT),
+    )
+    .said()
+    .is_some_and(|said| said.trim() == "true");
+    if left().is_zero() {
+        return None;
+    }
+    if is_running {
         let ran = docker::ask(
             &[
                 "exec",
@@ -116,30 +143,35 @@ pub fn write_stamped(container: &str, path: &str, body: &Value) -> Option<u64> {
                 path,
                 &template,
             ],
-            docker::READ_LIMIT,
+            left(),
         );
         return ran.said().and_then(|at| at.trim().parse().ok());
     }
     let at = now_ms();
-    copy_in(container, path, &stamp(&template, at)).then_some(at)
+    copy_in(container, path, &stamp(&template, at), left()).then_some(at)
 }
 
-/// The body with its placeholders replaced by `at`. Pure.
+/// The body with its placeholders replaced by `at`: the number where [`NOW`] stood, the date where [`NOW_ISO`] did.
+/// Pure.
 pub fn stamp(template: &str, at: u64) -> String {
-    template.replace(&format!("\"{NOW}\""), &at.to_string())
+    template
+        .replace(&format!("\"{NOW}\""), &at.to_string())
+        .replace(NOW_ISO, &crate::util::iso_utc(at))
 }
 
 /* Inside a running container: the clock read once, the placeholder replaced, the file made beside its final name and
 renamed over it, owned like /history itself so the daemon (whatever user it runs as) can read and replace it. */
 const WRITE_SCRIPT: &str = "f=\"$1\"; d=\"${f%/*}\"; t=\"$f.tmp.$$\"; \
 at=$(date +%s%3N 2>/dev/null); case \"$at\" in ''|*[!0-9]*) at=$(( $(date +%s) * 1000 ));; esac; \
-mkdir -p \"$d\" && printf '%s\\n' \"$2\" | sed \"s/\\\"__IC_NOW__\\\"/$at/g\" > \"$t\" && \
+iso=$(date -u -d \"@$((at / 1000))\" +%Y-%m-%dT%H:%M:%S 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%S); \
+iso=\"$iso.$(printf '%03d' $((at % 1000)))Z\"; \
+mkdir -p \"$d\" && printf '%s\\n' \"$2\" | sed -e \"s/\\\"__IC_NOW__\\\"/$at/g\" -e \"s/__IC_NOW_ISO__/$iso/g\" > \"$t\" && \
 { chown --reference=/history \"$d\" \"$t\" 2>/dev/null || true; } && chmod 644 \"$t\" && mv -f \"$t\" \"$f\" && echo \"$at\"";
 
 /// Into a stopped container, through `docker cp`: nothing reads the file until it starts. A file directly under
 /// /history is copied onto its path; a deeper one is staged in a folder of its parent's name and copied into the
 /// grandparent, which makes the parent when it is missing (how mirror.rs puts /history/.ic there).
-fn copy_in(container: &str, path: &str, text: &str) -> bool {
+fn copy_in(container: &str, path: &str, text: &str, limit: Duration) -> bool {
     let Ok(dir) = tempfile::tempdir() else {
         return false;
     };
@@ -169,10 +201,7 @@ fn copy_in(container: &str, path: &str, text: &str) -> bool {
         )
     };
     matches!(
-        docker::ask(
-            &["cp", &source.to_string_lossy(), &dest],
-            docker::READ_LIMIT
-        ),
+        docker::ask(&["cp", &source.to_string_lossy(), &dest], limit),
         Asked::Said(_)
     )
 }
@@ -202,11 +231,11 @@ mod tests {
 
     #[test]
     fn the_moment_of_writing_replaces_every_placeholder_as_a_number() {
-        let body = serde_json::json!({ "askedAt": NOW, "nested": { "at": NOW }, "kept": "NOW" });
+        let body = serde_json::json!({ "askedAt": NOW, "nested": { "at": NOW }, "kept": "NOW", "on": NOW_ISO });
         let stamped: Value = serde_json::from_str(&stamp(&body.to_string(), 42)).expect("JSON");
         assert_eq!(
             stamped,
-            serde_json::json!({ "askedAt": 42, "nested": { "at": 42 }, "kept": "NOW" })
+            serde_json::json!({ "askedAt": 42, "nested": { "at": 42 }, "kept": "NOW", "on": "1970-01-01T00:00:00.042Z" })
         );
     }
 
@@ -216,7 +245,7 @@ mod tests {
         // Run as the container would run them, in a folder of this test's own instead of /history.
         let dir = tempfile::tempdir().expect("tempdir");
         let path = dir.path().join("deep").join("keeper.json");
-        let template = serde_json::json!({ "side": "linux", "at": NOW }).to_string();
+        let template = serde_json::json!({ "side": "linux", "at": NOW, "on": NOW_ISO }).to_string();
         let out = std::process::Command::new("sh")
             .args(["-c", WRITE_SCRIPT, "sh", &path.to_string_lossy(), &template])
             .output()
@@ -228,7 +257,16 @@ mod tests {
             .expect("the moment is said back");
         let written: Value =
             serde_json::from_str(&std::fs::read_to_string(&path).expect("written")).expect("JSON");
-        assert_eq!(written, serde_json::json!({ "side": "linux", "at": at }));
+        let on = written["on"]
+            .as_str()
+            .expect("the date is a string")
+            .to_string();
+        assert_eq!(
+            written,
+            serde_json::json!({ "side": "linux", "at": at, "on": on })
+        );
+        // The date is the very moment the number is, read off the same clock reading.
+        assert_eq!(on, crate::util::iso_utc(at));
         assert!(at > 1_700_000_000_000, "milliseconds, not seconds: {at}");
         let clock = std::process::Command::new("sh")
             .args(["-c", CLOCK_SCRIPT])

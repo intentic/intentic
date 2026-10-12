@@ -9,7 +9,7 @@ import { fileCiStore } from "./ci-store.js";
 import { createCiHookReconciler, webhookUrlFor } from "./hooks.js";
 import type { FetchFn } from "./providers.js";
 
-const logger = { warn: () => {}, error: () => {} } as never;
+const logger = { info: () => {}, warn: () => {}, error: () => {} } as never;
 
 const workspaceWith = async (remote: string): Promise<string> => {
     const root = mkdtempSync(join(tmpdir(), "ci-hooks-"));

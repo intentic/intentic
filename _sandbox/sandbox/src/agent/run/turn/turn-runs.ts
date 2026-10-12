@@ -10,6 +10,7 @@ import {
     withRuntimeDefaults,
 } from "@intentic/sandbox-contract";
 import { TranscriptFold, type TurnEnding } from "@intentic/sandbox-contract/transcript-fold";
+import type { Logger } from "pino";
 import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
 import { type AttachedRun, type AttachEntry, type AttachHead, type LiveRun, RUN_RETAINED_MS, RUNS } from "../../../conversations/actor/conversation-holdings.js";
 import type { BeginRefusal } from "../../../conversations/actor/conversation-decide.js";
@@ -19,6 +20,7 @@ import type { JournalledTurn } from "./turn-journal.js";
 import { opt } from "../../../opt.js";
 import { recordCommands } from "../../providers/agent-commands.js";
 import { type FrameBacklog, frameBacklog } from "../../../seams/frame-backlog.js";
+import { turnPulseOf } from "./turn-pulse.js";
 
 // Turn execution decoupled from any client connection: POST /agent starts a run, folds the transcript frame by frame,
 // and any number of clients attach to it live. Holds rows, not frames; each run is held by its conversation's actor
@@ -133,7 +135,8 @@ export class TurnRun implements LiveRun {
         // finds it by this id and redraws it in place, where a new id would draw it a second time beneath.
         readonly id: string = crypto.randomUUID(),
     ) {
-        this.fold = new TranscriptFold(opening);
+        // The live fold, on the daemon's clock: what dates each card and bubble in the record (TranscriptFold's `now`).
+        this.fold = new TranscriptFold(opening, Date.now);
     }
 
     get done(): boolean {
@@ -330,7 +333,50 @@ export interface RunOptions {
 export interface RunDeps {
     readonly conversations: Pick<ConversationActors, "archived" | "holdings" | "send">;
     readonly events: Pick<DomainEvents, "publish">;
+    // Where the run's accepted and ended lines go; a suite with no logger writes none.
+    readonly logger?: Pick<Logger, "info">;
 }
+
+// How much of a failure's sentence the ended line keeps: the failure's own line has it whole.
+const ENDED_FAILURE_CHARS = 200;
+
+/**
+ * Who or what started a turn, as one word a log line is filtered on: a run carried on after a restart, a re-run (of a
+ * restart's cut turn, a parked card's answer, a person's Continue, a held turn), else whoever is speaking.
+ */
+export const startedByOf = (turn: Pick<TurnInput, "resume" | "speaker">, carried: boolean): string => {
+    if (carried) {
+        return "rehydrate";
+    }
+    switch (turn.resume) {
+        case undefined:
+            break;
+        case "restart":
+            return "auto-resume";
+        case "answered":
+            return "answer";
+        case "continued":
+            return "continue";
+        default:
+            return `rerun:${turn.resume}`;
+    }
+    const { speaker } = turn;
+    if (speaker === undefined) {
+        return "sandbox";
+    }
+    return speaker.kind === "sandbox" && speaker.source !== undefined ? `sandbox:${speaker.source}` : speaker.kind;
+};
+
+// How a run ended, in the word its ended line carries.
+const endingOf = (run: TurnRun, stopped: boolean, failure: string | undefined): string => {
+    if (stopped) {
+        return "stopped";
+    }
+    if (run.ranNothing) {
+        return "turned-away";
+    }
+    return failure === undefined ? "ok" : "failed";
+};
 
 // What an error frame says of a re-run of this same turn the sandbox booked for itself: when it fires, where known.
 const bookedRerun = (event: Extract<AgentEvent, { kind: "error" }>): { readonly at?: number } | undefined => {
@@ -367,6 +413,21 @@ export function startTurnRun(
     run.journalled = journalled;
     runs.hold(input.conversationId, input.conversationId, run);
     const provider = input.agent;
+    deps.logger?.info(
+        {
+            conversationId: input.conversationId,
+            run: run.id,
+            startedBy: startedByOf(input, continues !== undefined),
+            provider,
+            harness: input.harness,
+            ...opt("model", input.model === "" ? undefined : input.model),
+            ...opt("account", input.account),
+            ...opt("errand", input.errand),
+            ...(attempts > 0 ? { attempts } : {}),
+            ...(journalled ? {} : { journalled: false }),
+        },
+        "turn accepted",
+    );
     // Told to the actor in order, which writes them in order; a failed write costs the journal, never the turn. Each
     // names this run, so its clear cannot take off the record of a run started after it finished.
     const journal = (event: { readonly kind: "journalled"; readonly entry: JournalledTurn } | { readonly kind: "unjournalled" }): void => {
@@ -497,6 +558,21 @@ export function startTurnRun(
                 // Whatever the journal answered, so what waits on the record is never held for good.
                 run.recordedNow();
             }
+            const pulse = turnPulseOf(input.conversationId);
+            const ours = pulse?.run === run.id ? pulse : undefined;
+            deps.logger?.info(
+                {
+                    conversationId: input.conversationId,
+                    run: run.id,
+                    ...opt("turnId", ours?.turnId),
+                    outcome: endingOf(run, stopped, failure),
+                    durationMs: Math.max(0, Date.now() - run.startedAt),
+                    ...opt("failure", failure?.slice(0, ENDED_FAILURE_CHARS)),
+                    ...opt("rerunAt", rerun === undefined ? undefined : (rerun.at ?? "unscheduled")),
+                    ...opt("upstreamStatus", ours?.upstream?.status),
+                },
+                "turn ended",
+            );
             tell((target) => target.settled(failure === undefined ? { ok: true } : { ok: false, error: failure }));
             deps.events.publish("run.settled", {
                 conversationId: input.conversationId,

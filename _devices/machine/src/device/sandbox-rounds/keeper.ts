@@ -1,9 +1,11 @@
 import { execFile } from "node:child_process";
+import { hostname } from "node:os";
 import { promisify } from "node:util";
 import { errorMessage } from "@intentic/base/errors";
 import type { Log } from "@intentic/local-agent";
 import { z } from "zod";
 import { readMachineConfig } from "../../environments/machine.js";
+import { thisSide } from "../../environments/wsl.js";
 import { pairingSlugs } from "../../sync/swap-pause.js";
 import type { LinkReading } from "../config.js";
 import { type IcRun, lastLine, type Rounds, startRounds } from "./ic-rounds.js";
@@ -237,6 +239,8 @@ const people = (slugs: readonly string[]): string[] => slugs.filter((slug) => !s
 // that keeps it, when another does (`keptElsewhere`, absent for this side's own and from an older ic).
 export interface ListedSandbox {
     readonly slug: string;
+    // Its container's name, where the restart intent is written (restartIntent below); absent from a fake listing.
+    readonly container?: string | undefined;
     readonly keptElsewhere?: string | undefined;
     // Put to sleep for want of use (sleep.ts): its link is down on purpose, and the keeper leaves it be.
     readonly asleep?: boolean | undefined;
@@ -343,6 +347,10 @@ export interface KeeperSeams {
     // is put to sleep.
     readonly sleepMinutes?: () => Promise<number>;
     readonly sleep?: (minutes: number) => Promise<IcRun>;
+    // Which environment of this computer this keeper is (restartIntent's `side`), and how the intent reaches a container;
+    // absent, restarts are said without a side and nothing is written into the container.
+    readonly side?: () => Promise<RestartSide>;
+    readonly writeIntent?: (container: string, intent: RestartIntent) => Promise<void>;
 }
 
 interface Wait {
@@ -508,13 +516,118 @@ const noteRun = (state: KeeperState, run: IcRun, asked: string | undefined, log:
     return !unanswered && machineSettled && cleared.every(Boolean);
 };
 
+/* WHO RESTARTED THE SANDBOX, AND WHY (2026-10-11). A daemon that came back up could not tell a keeper's restart from a
+   crash, and the keeper's own line ("keeper work: Restarting the sandbox") named neither the check that failed nor which
+   side of the computer acted. ic says the finding in its progress line ("Restarting the sandbox, because Daemon health:
+   …", ic: sandbox/fix/mod.rs, doing_because); this adds what only the keeper knows (why it ran ic at all) and its side,
+   logs the line whole, and writes the same as a restart intent INTO the container before the restart lands, at
+   /history/logs/restart-intent.json, which the daemon reads at boot (schema shared with it: at, by, host, side, action,
+   reason, checks). Best-effort and bounded: the restart never waits on it, and ic, which writes one too, may overwrite
+   it with its own; the last writer wins. */
+
+export type RestartSide = "wsl" | "windows" | "linux" | "mac";
+
+export interface RestartIntent {
+    readonly at: string;
+    readonly by: "keeper";
+    readonly host: string;
+    readonly side: RestartSide;
+    readonly action: "restart";
+    readonly reason: string;
+    readonly checks: readonly string[];
+}
+
+// The ids of ic's checks by the labels its progress lines say (ic: sandbox/fix/model.rs, `label`), so the intent names
+// the check as ic's report does.
+const IC_CHECK_IDS = new Map<string, string>([
+    ["Windows prerequisites", "prerequisites"],
+    ["Docker Desktop", "docker-app"],
+    ["Docker engine", "docker"],
+    ["WSL", "wsl"],
+    ["Disk space", "disk"],
+    ["Sandbox container", "container"],
+    ["Daemon health", "daemon"],
+    ["Platform registration", "registration"],
+    ["Network", "network"],
+    ["Public URL", "tunnel"],
+    ["Machine agent", "agent"],
+]);
+
+// The keeper's own evidence: what made it run ic. `link` is this agent's link to the sandbox, down since `since`.
+export type FixTrigger = { readonly kind: "sweep" } | { readonly kind: "link"; readonly since: number | undefined };
+
+const triggerText = (trigger: FixTrigger, now: number): string =>
+    trigger.kind === "sweep"
+        ? "the keeper's periodic sweep"
+        : `this agent's link to it, down${trigger.since === undefined ? "" : ` since ${new Date(trigger.since).toISOString()} (${Math.round((now - trigger.since) / 1000)} s)`}`;
+
+// A progress line ic says before restarting one sandbox; the engine-wide restarts (Docker Desktop, WSL) are not one.
+const RESTARTING = /^Restarting the sandbox\b/;
+
+// The intent for a restart ic announced as `doing`. Pure.
+export const restartIntent = (doing: string, trigger: FixTrigger, side: RestartSide, host: string, now: number): RestartIntent => {
+    const label = /, because ([^:]+):/.exec(doing)?.[1];
+    const id = label === undefined ? undefined : IC_CHECK_IDS.get(label);
+    return {
+        at: new Date(now).toISOString(),
+        by: "keeper",
+        host,
+        side,
+        action: "restart",
+        reason: `${doing}; asked by ${triggerText(trigger, now)}`,
+        checks: [...(id === undefined ? [] : [id]), ...(trigger.kind === "link" ? ["link"] : [])],
+    };
+};
+
+// How long writing the intent may take: it races the restart it announces, and never holds it up.
+export const INTENT_DEADLINE_MS = 3_000;
+export const RESTART_INTENT_PATH = "/history/logs/restart-intent.json";
+
+const sideOf = async (): Promise<RestartSide> => {
+    const side = await thisSide();
+    return side === "native" ? (process.platform === "darwin" ? "mac" : "linux") : side;
+};
+
+// Written beside and moved into place, so the daemon never reads half a file. Resolves whatever happens.
+const writeIntentInto = async (container: string, intent: RestartIntent): Promise<void> => {
+    await new Promise<void>((resolve) => {
+        const child = execFile(
+            "docker",
+            ["exec", "-i", container, "sh", "-c", `cat > ${RESTART_INTENT_PATH}.tmp && mv -f ${RESTART_INTENT_PATH}.tmp ${RESTART_INTENT_PATH}`],
+            { timeout: INTENT_DEADLINE_MS, windowsHide: true },
+            () => resolve(),
+        );
+        // allow(silent-catch): a container mid-restart may close its stdin first; the intent is best-effort
+        child.stdin?.on("error", () => undefined);
+        child.stdin?.end(`${JSON.stringify(intent)}\n`);
+    });
+};
+
 // One run of `ic sandbox fix`, the only one in flight. The sandboxes it acts on are held for its length, so the other
 // rounds leave them alone: the ones it was pointed at, and any other ic names as it works. What ic is doing is said as
 // it happens.
-const runFix = async (state: KeeperState, seams: KeeperSeams, slug: string | undefined, touches: readonly string[], log: Log): Promise<IcRun> => {
+const runFix = async (
+    state: KeeperState,
+    seams: KeeperSeams,
+    slug: string | undefined,
+    touches: readonly string[],
+    log: Log,
+    trigger: FixTrigger = slug === undefined ? { kind: "sweep" } : { kind: "link", since: undefined },
+): Promise<IcRun> => {
     state.fixing = true;
     const releases = new Map(touches.map((touched) => [touched, seams.hold(touched)] as const));
     const doings = new Set<string>();
+    // allow(silent-catch): a side that cannot be told leaves the restart line without it and writes no intent
+    const side = await seams.side?.().catch(() => undefined);
+    const restarting = (about: string, doing: string): string => {
+        const intent = restartIntent(doing, trigger, side ?? "linux", hostname(), seams.now());
+        const container = state.listed?.find((row) => row.slug === about)?.container;
+        if (side !== undefined && container !== undefined && seams.writeIntent !== undefined) {
+            void seams.writeIntent(container, intent);
+        }
+        const checks = intent.checks.length === 0 ? "" : ` [failed: ${intent.checks.join(", ")}]`;
+        return `keeper ${about}${side === undefined ? "" : ` (${side} side)`}: ${intent.reason}${checks}`;
+    };
     const onLine = (line: string): void => {
         const progress = fixProgress(line);
         if (progress?.slug !== undefined && !releases.has(progress.slug)) {
@@ -525,7 +638,7 @@ const runFix = async (state: KeeperState, seams: KeeperSeams, slug: string | und
         const said = `keeper${about === undefined ? "" : ` ${about}`}: ${doing ?? ""}`;
         if (doing !== undefined && !doings.has(said)) {
             doings.add(said);
-            log(said);
+            log(about !== undefined && RESTARTING.test(doing) ? restarting(about, doing) : said);
         }
     };
     try {
@@ -656,7 +769,8 @@ export const runKeeperRound = async (state: KeeperState, seams: KeeperSeams, log
     const known = new Set([...records, ...(state.listed ?? []).map((row) => row.slug)]);
     const target = await dueTarget(state, seams, links, known, scope, log, seams.now());
     if (target !== undefined) {
-        const run = await runFix(state, seams, target, [target], log);
+        const since = links.find(({ url }) => pairingSlugs(url).includes(target))?.reading.outage?.since;
+        const run = await runFix(state, seams, target, [target], log, { kind: "link", since });
         noteRun(state, run, target, log, seams.now());
     }
 };
@@ -676,7 +790,7 @@ export const keeperOn = async (): Promise<boolean> => (await readMachineConfig()
 export const machineKeeperSeams = ({ links, loopback, watching }: KeeperWiring): KeeperSeams => ({
     enabled: keeperOn,
     fix: async (slug, onLine) => await runIc(keeperFixArgs(slug), onLine, {}, { deadlineMs: FIX_DEADLINE_MS }),
-    listing: async () => (await fleet()).map(({ slug, keptElsewhere, asleep }) => ({ slug, keptElsewhere, asleep })),
+    listing: async () => (await fleet()).map(({ slug, container, keptElsewhere, asleep }) => ({ slug, container, keptElsewhere, asleep })),
     records: async () => await readChannelSlugs(),
     trashed: readTrashed,
     swapping: async () => swapsUnderway(await readSwapRecords(), Date.now()),
@@ -696,6 +810,8 @@ export const machineKeeperSeams = ({ links, loopback, watching }: KeeperWiring):
     now: Date.now,
     sleepMinutes: async () => sleepMinutesOf(await readMachineConfig()),
     sleep: async (minutes) => await runIc(sleepArgs(minutes), () => undefined, {}, { deadlineMs: SLEEP_DEADLINE_MS }),
+    side: sideOf,
+    writeIntent: writeIntentInto,
 });
 
 // The keeper and its wake round, which runs whatever the switch says: a sandbox asleep when the keeper was switched off

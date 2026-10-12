@@ -6,6 +6,7 @@ import { undefinedIfMissing } from "@intentic/base/errors";
 import type { Browser, BrowserContext } from "playwright";
 import { z } from "zod";
 import type { BrowserFingerprint } from "./fingerprint.js";
+import { watchWindowFailures } from "./window-failures.js";
 import { detachedStamp } from "../../seams/workload-stamp.js";
 import { spawnAs } from "../../workload/workload-class.js";
 
@@ -38,6 +39,8 @@ export interface OwnerBrowserOptions {
     readonly proxy?: string | undefined;
     // Window placement on the display (chromiumWindowArgs).
     readonly windowArgs: readonly string[];
+    // Where the launch and close lines go (info level). Absent logs nothing.
+    readonly log?: ((fields: Record<string, unknown>, message: string) => void) | undefined;
 }
 
 export interface OwnerBrowser {
@@ -68,6 +71,21 @@ export const ownerBrowserArgs = (options: Omit<OwnerBrowserOptions, "executableP
     ...options.windowArgs,
     "about:blank",
 ];
+
+// The launch as one log line: how the window was started, with what, on which profile. The window's own failures are
+// in no log, and the one time a sign-in refused inside it was chased, learning that the site turned away a
+// Playwright-launched window (and not this one) took rebuilding the launch by hand. The proxy's address is a loopback
+// port, but it is reported only as present: the line says how the window left, not where to reach its exit.
+export const describeLaunch = (options: Omit<OwnerBrowserOptions, "executablePath" | "log">, pid: number | undefined): Record<string, unknown> => ({
+    launch: "spawn+cdp",
+    pid,
+    profile: options.userDataDir,
+    display: options.display,
+    proxy: options.proxy !== undefined,
+    locale: options.fingerprint.locale,
+    timezone: options.fingerprint.timezoneId,
+    args: ownerBrowserArgs(options).map((arg) => (arg.startsWith("--proxy-server=") ? "--proxy-server=<exit>" : arg)),
+});
 
 // Chromium on Linux takes its own locale (Intl's default) from LANGUAGE, ignoring --lang; glibc spells it de_DE.
 export const localeEnv = (locale: string): string => locale.replace("-", "_");
@@ -228,6 +246,9 @@ export const launchOwnerBrowser = async (playwright: typeof import("playwright")
         },
         stdio: "ignore",
     });
+    const log = options.log ?? ((): void => undefined);
+    const openedAt = Date.now();
+    log(describeLaunch(options, child.pid), "owner browser: launched");
     let browser: Browser | undefined;
     let endpoint: string;
     try {
@@ -243,9 +264,18 @@ export const launchOwnerBrowser = async (playwright: typeof import("playwright")
         throw new Error("the browser opened without its profile's context");
     }
     const attached = browser;
+    const failures = watchWindowFailures(context);
     let closing: Promise<void> | undefined;
+    // A window that ends without close() (a crash, the owner quitting Chromium from its own menu) says so: the route
+    // only learns of it from a picture that stops.
+    child.once("exit", (code, signal) => {
+        if (closing === undefined) {
+            log({ pid: child.pid, code, signal, openMs: Date.now() - openedAt, failures: failures.summary() }, "owner browser: exited unasked");
+        }
+    });
     const close = (): Promise<void> => {
         closing ??= (async () => {
+            failures.stop();
             // Browser.close is Chromium's own orderly shutdown, which writes cookies out; Playwright's close() on a
             // connected browser only disconnects.
             await attached
@@ -253,9 +283,11 @@ export const launchOwnerBrowser = async (playwright: typeof import("playwright")
                 .then((cdp) => cdp.send("Browser.close"))
                 // allow(silent-catch): a browser already gone has nothing left to flush
                 .catch(() => undefined);
-            if (!(await exited(child, CLOSE_TIMEOUT_MS))) {
+            const graceful = await exited(child, CLOSE_TIMEOUT_MS);
+            if (!graceful) {
                 child.kill("SIGKILL");
             }
+            log({ pid: child.pid, graceful, openMs: Date.now() - openedAt, failures: failures.summary() }, "owner browser: closed");
         })();
         return closing;
     };

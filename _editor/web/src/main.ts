@@ -18,6 +18,7 @@ import { postClientDiagnostics } from "./client/sandbox/clientReport";
 import { localFace } from "./app/environments/local";
 import { installDesktopLinks, installDesktopOpener } from "./app/environments/desktop";
 import { installPerfConsole, installPerfReporter, observeLongFrames } from "./app/perf";
+import { watchStalledQueries } from "./app/queryStalls";
 import { installRenderTrace } from "./app/renderTrace";
 import { queryClient } from "./lib/queryPersistence";
 import { installSkeletonPersistence } from "./lib/skeletonPersistence";
@@ -79,6 +80,8 @@ installPerfReporter((op, _ms, fields, requestId) =>
 );
 // A frame that held the page past what a reader feels, with the scripts that held it (perf.ts, observeLongFrames).
 observeLongFrames((fields) => reportClient(`perf.frame`, `long frame`, { level: `warn`, fields: { ...fields } }));
+// A read that never settles, which no slow span can name since a span is filed only when the call ends (queryStalls.ts).
+watchStalledQueries(queryClient);
 
 // Push taps and app launches, routed in the open page; before mount, so a launch tap is never dropped unheard.
 installNotificationTaps(router);

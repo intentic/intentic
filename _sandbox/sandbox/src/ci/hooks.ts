@@ -1,8 +1,8 @@
 import { serialLock } from "@intentic/base/async";
-import { errorMessage } from "@intentic/base/errors";
 import type { Logger } from "pino";
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
 import type { CiStore } from "./ci-store.js";
+import { createCiFailureLog, vendorStatusOf } from "./ci-failure-log.js";
 import { ciClientFor, CiRateLimited, type FetchFn } from "./providers.js";
 import { ciProjects, type CiProject } from "./projects.js";
 
@@ -45,11 +45,11 @@ const refusalOf = (error: unknown): string => {
     if (error instanceof CiRateLimited) {
         return `the connected token's API rate limit is spent until ${liftsAt(error.until)}`;
     }
-    const status = /\((\d{3})\)/.exec(errorMessage(error))?.[1];
-    if (status === "401") {
+    const status = vendorStatusOf(error);
+    if (status === 401) {
         return "the connected token was refused";
     }
-    if (status === "403" || status === "404") {
+    if (status === 403 || status === 404) {
         return "the connected token has no admin rights on it";
     }
     return status === undefined ? "the request did not go through" : `the request was refused (${status})`;
@@ -93,6 +93,9 @@ export const createCiHookReconciler = (
     let wired = new Map<string, CiProject>();
     let timer: NodeJS.Timeout | undefined;
     const serially = serialLock();
+    // A pass every ten minutes per repo: a token that cannot read or register writes its line once, then hourly.
+    const unread = createCiFailureLog(services.logger, "ci: the repository could not be read", "ci: the repository can be read again");
+    const unregistered = createCiFailureLog(services.logger, "ci: webhook registration failed", "ci: webhook registration works again");
 
     // What the forge says of the repository now, kept for the deliveries to be matched by; best-effort, since the hook
     // itself does not need it. A remote naming an old path still works through the forge's redirects, which is exactly
@@ -101,6 +104,7 @@ export const createCiHookReconciler = (
         try {
             const repository = await ciClientFor(project.account.provider, fetchFn).repository(project);
             await services.ciStore.learnForge(project.repo, project.project, repository);
+            unread.succeeded(project.repo);
             if (repository.path.toLowerCase() !== project.project.toLowerCase()) {
                 services.logger.warn(
                     { repo: project.repo, remote: project.project, path: repository.path },
@@ -108,7 +112,7 @@ export const createCiHookReconciler = (
                 );
             }
         } catch (error) {
-            services.logger.warn({ err: error, repo: project.repo }, "ci: the repository could not be read");
+            unread.failed(project.repo, error);
         }
     };
 
@@ -131,10 +135,11 @@ export const createCiHookReconciler = (
             const url = webhookUrlFor(publicUrl, project.account.provider);
             try {
                 await ciClientFor(project.account.provider, fetchFn).ensureHook(project, { url, secret });
+                unregistered.succeeded(project.repo);
             } catch (error) {
                 // The plain reason leads and the vendor's raw answer stays in the log: a JSON body in the page header
                 // read as a crash, with the one useful sentence after it.
-                services.logger.warn({ err: error, repo: project.repo }, "ci: webhook registration failed");
+                unregistered.failed(project.repo, error);
                 const limited = error instanceof CiRateLimited;
                 const warning =
                     limited && covered.has(project.repo) ? before.get(project.repo) : refused(project, refusalOf(error), limited, url, secret);

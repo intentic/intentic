@@ -160,3 +160,27 @@ export const editDiffContent = (name: string, input: unknown, cwd: string): Tool
     }
     return undefined;
 };
+
+// Ceiling on the input a card keeps, in characters: enough for a delegation's prompt or an MCP call's arguments to say
+// what was asked, without a call that carried a whole file doubling the record's size.
+export const TOOL_INPUT_CHARS = 4_000;
+
+// What a call was given, as JSON text cut at TOOL_INPUT_CHARS, for a card with no one-line `target` (an MCP tool, the
+// Agent/Task tool), which otherwise records nothing of what was asked. A call with a target keeps only that, as it
+// always has; an empty or unserializable input is no input.
+export const toolInput = (input: unknown, target: string | undefined): string | undefined => {
+    if (target !== undefined || input === undefined || input === null) {
+        return undefined;
+    }
+    let json: string | undefined;
+    try {
+        json = JSON.stringify(input);
+    } catch {
+        // allow(silent-catch): a cyclic or BigInt-bearing input is one the card cannot carry, not a failed call.
+        return undefined;
+    }
+    if (json === undefined || json === "{}" || json === "[]") {
+        return undefined;
+    }
+    return json.length > TOOL_INPUT_CHARS ? `${json.slice(0, TOOL_INPUT_CHARS)}…` : json;
+};

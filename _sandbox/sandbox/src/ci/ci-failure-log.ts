@@ -1,0 +1,62 @@
+import { errnoCode, errorMessage } from "@intentic/base/errors";
+import type { Logger } from "pino";
+import { createRepeatGate } from "../logs/repeat-gate.js";
+import { CiRateLimited } from "./providers.js";
+
+// The CI loops (the runs backfill, the poll, the webhook reconcile) call the forge for every mapped repo every few
+// minutes, so one revoked token wrote the same `401 Bad credentials` warn, stack and all, about a thousand times in five
+// days. Each loop logs through one of these: the first failure of a repo and every change of what it fails with, then
+// one line an hour while it lasts, and one line when it works again.
+
+// The forge's HTTP status, as providers.ts words a refusal: `<what> failed (401): <body tail>`.
+export const vendorStatusOf = (error: unknown): number | undefined => {
+    const status = /\((\d{3})\)/.exec(errorMessage(error))?.[1];
+    return status === undefined ? undefined : Number(status);
+};
+
+// The errno under a failed fetch (`ECONNREFUSED`, `ENOTFOUND`): undici hangs it on the error's cause.
+const networkCodeOf = (error: unknown): string | undefined =>
+    errnoCode(error) ?? (error instanceof Error ? errnoCode((error as { cause?: unknown }).cause) : undefined);
+
+// What a line says of the failure. A forge's answer or a network that did not carry the request is fully said by its
+// status or message, and its stack points into fetch; only something else (a bug in the parsing) keeps the stack.
+const failureFields = (error: unknown): Record<string, unknown> => {
+    const status = vendorStatusOf(error);
+    if (status !== undefined) {
+        return { status, reason: errorMessage(error) };
+    }
+    if (error instanceof CiRateLimited || networkCodeOf(error) !== undefined || errorMessage(error).startsWith("fetch failed")) {
+        return { reason: errorMessage(error) };
+    }
+    return { err: error };
+};
+
+// What the gate compares: the status or errno rather than the message, so a refused connection to another of the
+// forge's addresses is not news.
+const failureState = (error: unknown): string =>
+    String(vendorStatusOf(error) ?? (error instanceof CiRateLimited ? "rate-limited" : (networkCodeOf(error) ?? errorMessage(error))));
+
+export interface CiFailureLog {
+    // The call for `repo` failed with `error`.
+    readonly failed: (repo: string, error: unknown) => void;
+    // The call for `repo` went through; writes the "works again" line only after a failure this log reported.
+    readonly succeeded: (repo: string) => void;
+}
+
+export const createCiFailureLog = (logger: Logger, message: string, recovered: string, now?: () => number): CiFailureLog => {
+    const gate = createRepeatGate(now === undefined ? {} : { now });
+    return {
+        failed: (repo, error) => {
+            const verdict = gate.check(repo, failureState(error));
+            if (verdict.log) {
+                logger.warn({ repo, ...failureFields(error), ...(verdict.repeated > 0 ? { repeated: verdict.repeated } : {}) }, message);
+            }
+        },
+        succeeded: (repo) => {
+            const outage = gate.clear(repo);
+            if (outage !== undefined) {
+                logger.info({ repo, after: outage.state, repeated: outage.repeated }, recovered);
+            }
+        },
+    };
+};

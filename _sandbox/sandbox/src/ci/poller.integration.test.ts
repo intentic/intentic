@@ -98,11 +98,26 @@ const harness = async (warned: boolean, narrow: { branch?: string } = {}) => {
     };
     // The runs list, plus the failed-jobs enrichment the poller makes for a failed run.
     let listed = [run(1, "success")];
-    const fetchFn: FetchFn = (async (url: string) =>
-        String(url).includes("/jobs")
+    // A forge that refuses the token while `refusing.now` is set, and counts what it was asked.
+    const refusing = { now: false, asked: 0 };
+    const fetchFn: FetchFn = (async (url: string) => {
+        refusing.asked += 1;
+        if (refusing.now) {
+            return new Response(JSON.stringify({ message: "Bad credentials" }), { status: 401 });
+        }
+        return String(url).includes("/jobs")
             ? new Response(JSON.stringify({ jobs: [{ id: 1, name: "lint", conclusion: "failure" }] }))
-            : new Response(JSON.stringify({ workflow_runs: listed }))) as unknown as FetchFn;
-    return { services, prompts, poller: createCiPoller(drivenBy(services, wake), fetchFn), publish: (runs: typeof listed) => (listed = runs) };
+            : new Response(JSON.stringify({ workflow_runs: listed }));
+    }) as unknown as FetchFn;
+    const clock = { at: 1_000_000 };
+    return {
+        services,
+        prompts,
+        refusing,
+        clock,
+        poller: createCiPoller(drivenBy(services, wake), fetchFn, 60_000, () => clock.at),
+        publish: (runs: typeof listed) => (listed = runs),
+    };
 };
 
 test("the first pass adopts what is already there without waking anything", async () => {
@@ -183,4 +198,29 @@ test("a run is recorded as announced only after main's fix agent is done with it
     }
     expect(announcedWhenDone).toEqual([[1]]);
     expect(await services.ciStore.announcedRuns("web")).toEqual([2, 1]);
+});
+
+// A revoked token used to be asked, and logged as refused, every pass for hours.
+test("a refused token is asked again only after a pause that grows, and a new token ends the pause", async () => {
+    const { services, poller, refusing, clock } = await harness(true);
+    refusing.now = true;
+    await poller.poll();
+    expect(refusing.asked).toBe(1);
+    // Within the first pause (two intervals) the repo is skipped.
+    clock.at += 60_000;
+    await poller.poll();
+    expect(refusing.asked).toBe(1);
+    clock.at += 60_000;
+    await poller.poll();
+    expect(refusing.asked).toBe(2);
+    // The second refusal doubles the pause.
+    clock.at += 120_000;
+    await poller.poll();
+    expect(refusing.asked).toBe(2);
+    // The owner reconnects the account: the new token is asked on the very next pass.
+    await services.capabilities.upsert({ id: "github", kind: "cli", config: { provider: "github", token: "T2" } });
+    refusing.now = false;
+    await poller.poll();
+    expect(refusing.asked).toBe(3);
+    expect(await services.ciStore.announcedRuns("web")).toEqual([1]);
 });

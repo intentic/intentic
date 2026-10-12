@@ -102,7 +102,7 @@ const maskQuery = (query: string): string =>
         .join("&");
 
 // String surgery rather than `new URL().href`, which would re-encode and re-slash the parts it keeps.
-const sanitizeUrl = (url: string): string => {
+export const sanitizeUrl = (url: string): string => {
     const hash = url.indexOf("#");
     const withoutFragment = hash === -1 ? url : url.slice(0, hash);
     const question = withoutFragment.indexOf("?");
@@ -116,7 +116,7 @@ const URL_IN_TEXT = /(\b(?:https?|wss?):\/\/[^\s<>"'`]+)/i;
 
 // URLs and the text between them take different passes: maskCredentialMaterial's bare-value arm reads up to the next
 // space, so run over a sanitized `access_token=***&page=***` it would swallow every parameter after the first.
-const sanitizeText = (text: string): string =>
+export const sanitizeText = (text: string): string =>
     text
         .split(URL_IN_TEXT)
         .map((piece, index) => (index % 2 === 1 ? sanitizeUrl(piece) : maskCredentialMaterial(piece)))

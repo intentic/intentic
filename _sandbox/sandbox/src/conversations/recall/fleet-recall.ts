@@ -1,9 +1,11 @@
 import { errorMessage } from "@intentic/base/errors";
-import type { GitChange, MatchSnippet, SessionOwner, TranscriptRow, TurnReach } from "@intentic/sandbox-contract";
+import type { GitChange, SessionOwner, TranscriptRow, TurnReach } from "@intentic/sandbox-contract";
 import { readableProviderText } from "../../agent/providers/provider-error-text.js";
 import type { Services } from "../../composition.js";
 import { agentRepoChanges } from "../land/agent-changes.js";
+import type { FoundLine } from "../../sessions/search-index.js";
 import { transcriptFile } from "../../sessions/transcript-record.js";
+import { type FleetNow, fleetNow } from "./fleet-now.js";
 import { type Ending, endingStatus, isIsolated, type PersistedAgent, reposOf } from "../registry/agents-store.js";
 
 // The join behind `agents ls|show|find`: everything about one conversation in a single answer, from a handle alone.
@@ -12,15 +14,19 @@ import { type Ending, endingStatus, isIsolated, type PersistedAgent, reposOf } f
 
 export type FleetRecallDeps = Pick<Services, "agents" | "conversations" | "agentWorktrees" | "transcripts" | "saidIndex">;
 
-// Five spellings resolve to a handle, in this order, first hit wins, exact before fuzzy so an id is never shadowed by a
+// These spellings resolve to a handle, in this order, first hit wins, exact before fuzzy so an id is never shadowed by a
 // prefix:
 // - id
 // - branch (`agent/<id>`)
 // - session id
+// - unambiguous session id prefix (eight hex digits or more), or a terminal named for one (`agent-<8 hex>-%N.log`)
 // - unambiguous id prefix
 // - unambiguous title substring
+// fleet-handles.ts adds what only a record the registry does not hold can answer: retired sessions, runs, turns and
+// in-process subagents.
 export type HandleResolution =
-    | { readonly kind: "found"; readonly entry: PersistedAgent }
+    // `via` says how a handle that is none of the conversation's own names led to it.
+    | { readonly kind: "found"; readonly entry: PersistedAgent; readonly via?: string }
     // Several matches: named rather than picked silently, so a caller does not read about the wrong agent.
     | { readonly kind: "ambiguous"; readonly candidates: readonly PersistedAgent[] }
     | { readonly kind: "unknown" };
@@ -34,7 +40,7 @@ const foldOf = (text: string): string => text.toLowerCase();
 // so `Partial` will not do.
 type Present<T> = { [K in keyof T]?: Exclude<T[K], undefined> };
 
-const present = <T extends object>(fields: T): Present<T> =>
+export const present = <T extends object>(fields: T): Present<T> =>
     Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined)) as Present<T>;
 
 const allEntries = (deps: FleetRecallDeps): PersistedAgent[] =>
@@ -76,6 +82,15 @@ const narrowed = (candidates: readonly PersistedAgent[]): HandleResolution | und
     return { kind: "ambiguous", candidates: ranked.slice(0, AMBIGUITY_LIMIT) };
 };
 
+// The session prefix a handle spells, if it spells one: eight hex digits or more, as logs and the history list shorten a
+// session id, or a terminal's name, which the runtime takes from the first eight (terminals/agent-126a7bc4-%551.log).
+const SESSION_PREFIX = /^[0-9a-f]{8}(?:-[0-9a-f-]*)?$/u;
+const TERMINAL = /^agent-([0-9a-f]{8})(?:-%\d+(?:\.log)?)?$/u;
+const sessionPrefixOf = (handle: string): string | undefined => TERMINAL.exec(handle)?.[1] ?? (SESSION_PREFIX.test(handle) ? handle : undefined);
+
+const inSession = (deps: FleetRecallDeps, entry: PersistedAgent, prefix: string): boolean =>
+    entry.sessionId?.startsWith(prefix) === true || deps.conversations.sessionIdOf(entry.id)?.startsWith(prefix) === true;
+
 export const resolveHandle = (deps: FleetRecallDeps, handle: string): HandleResolution => {
     const wanted = handle.trim();
     if (wanted === "") {
@@ -86,8 +101,10 @@ export const resolveHandle = (deps: FleetRecallDeps, handle: string): HandleReso
     if (exact !== undefined) {
         return { kind: "found", entry: exact };
     }
+    const prefix = sessionPrefixOf(wanted);
     const needle = foldOf(wanted);
     return (
+        (prefix === undefined ? undefined : narrowed(entries.filter((entry) => inSession(deps, entry, prefix)))) ??
         narrowed(entries.filter((entry) => entry.id.startsWith(wanted))) ??
         narrowed(entries.filter((entry) => titled(entry, needle))) ?? { kind: "unknown" }
     );
@@ -112,11 +129,12 @@ export interface FleetRow {
     // may be absent, both for a wake nobody has claimed.
     readonly owner?: SessionOwner;
     readonly startedBy?: string;
-    // Why this row matched a search; absent on a roster read, and when the title itself was the match.
-    readonly snippet?: MatchSnippet;
+    // Why this row matched a search; absent on a roster read, and when the title itself was the match. `via` marks a
+    // line it did rather than said: a tool call, a question card, a notice, a run.
+    readonly snippet?: FoundLine;
 }
 
-const rowOf = (deps: FleetRecallDeps, entry: PersistedAgent, snippet?: MatchSnippet): FleetRow => ({
+const rowOf = (deps: FleetRecallDeps, entry: PersistedAgent, snippet?: FoundLine): FleetRow => ({
     id: entry.id,
     // Projected status when available, matching the board, so the CLI and fleet view never disagree.
     status: deps.agents.get(entry.id)?.status ?? endingStatus(entry.ending),
@@ -168,11 +186,12 @@ export const fleetRoster = (deps: FleetRecallDeps, options: RosterOptions = {}):
         .slice(0, options.limit ?? ROSTER_LIMIT)
         .map((entry) => rowOf(deps, entry));
 
-// Searches the fleet's phrase index once rather than per conversation. A title match counts too, with no snippet: the
-// title is already on the row.
+// Searches the fleet's phrase index once rather than per conversation, deeds included: what an agent hunts for is as
+// often a command or a path it ran as a sentence. A title match counts too, with no snippet: the title is already on
+// the row.
 export const fleetSearch = async (deps: FleetRecallDeps, query: string, options: RosterOptions = {}): Promise<readonly FleetRow[]> => {
     const needle = foldOf(query);
-    const said = await deps.saidIndex.search(query, "conversation", false);
+    const said = await deps.saidIndex.search(query, "conversation", false, true);
     const matched = scopedEntries(deps, options).flatMap((entry) => {
         if (titled(entry, needle)) {
             return [rowOf(deps, entry)];
@@ -238,7 +257,20 @@ export interface FleetDigest {
     readonly asked: readonly string[];
     readonly lastSaid?: string;
     readonly lastNotice?: string;
+    // When the turn the last notice came in was sent (a notice has no clock of its own), and how many messages were
+    // recorded after it: a refusal from five turns ago read as the conversation's present state otherwise.
+    readonly lastNoticeSentAt?: number;
+    readonly sinceLastNotice?: number;
 }
+
+const noticeAge = (messages: readonly TranscriptRow[]): Pick<FleetDigest, "lastNoticeSentAt" | "sinceLastNotice"> => {
+    const at = messages.findLastIndex((row) => row.role === "notice" && collapse(row.text) !== "");
+    if (at === -1) {
+        return {};
+    }
+    const sentAt = messages.slice(0, at).findLast((row) => row.sentAt !== undefined)?.sentAt;
+    return present({ lastNoticeSentAt: sentAt, sinceLastNotice: messages.length - at - 1 });
+};
 
 const digestOf = (messages: readonly TranscriptRow[]): FleetDigest => {
     const spoken = (role: TranscriptRow["role"]): string[] =>
@@ -247,8 +279,14 @@ const digestOf = (messages: readonly TranscriptRow[]): FleetDigest => {
         messages: messages.length,
         asked: spoken("user").slice(0, DIGEST_PROMPTS),
         ...present({ lastSaid: spoken("assistant").at(-1), lastNotice: spoken("notice").at(-1) }),
+        ...noticeAge(messages),
     };
 };
+
+// What its spend figures are worth. `unrecorded`: it ran turns or used tools, yet no turn of it reported a token or a
+// cent (a turn that failed, or that a restart cut, before its usage arrived; a runtime that reports none), so the zeros
+// are not a measurement and are not printed as one. `unpriced`: tokens were counted, but its provider names no price.
+export type FleetUsage = "recorded" | "unpriced" | "unrecorded";
 
 // Everything about one conversation, assembled into a single answer.
 export interface FleetRecall extends FleetRow {
@@ -259,9 +297,12 @@ export interface FleetRecall extends FleetRow {
     readonly runner?: string;
     readonly worktree?: string;
     readonly record: string;
+    // Lifetime spend with the running turn's so far, as the board shows it. Input is uncached input only: cache reads
+    // and writes are not in it, which is why a long Claude conversation shows a few hundred.
     readonly costUsd: number;
     readonly inputTokens: number;
     readonly outputTokens: number;
+    readonly usage: FleetUsage;
     readonly toolUses?: number;
     readonly subagents?: number;
     readonly createdAt: number;
@@ -272,6 +313,8 @@ export interface FleetRecall extends FleetRow {
     readonly landedSubject?: string;
     // Where its last turn put work besides its branch (AgentSummary.reach); absent when it all stayed there.
     readonly reach?: TurnReach;
+    // What is live or holding it right now; absent for a conversation at rest.
+    readonly now?: FleetNow;
     readonly repoStates: readonly FleetRepo[];
     readonly digest: FleetDigest;
 }
@@ -296,6 +339,23 @@ const failureOf = (ending: Ending): Pick<FleetRecall, "failure" | "failureCode" 
     }
 };
 
+// The entry's totals are written once per turn, at its settle; the board's summary adds the running turn's so far.
+const spendOf = (
+    deps: FleetRecallDeps,
+    entry: PersistedAgent,
+): Pick<FleetRecall, "costUsd" | "inputTokens" | "outputTokens" | "toolUses" | "usage"> => {
+    const live = deps.agents.get(entry.id);
+    const { totals } = entry;
+    const costUsd = Math.max(totals.costUsd, live?.costUsd ?? 0);
+    const inputTokens = Math.max(totals.inputTokens, live?.inputTokens ?? 0);
+    const outputTokens = Math.max(totals.outputTokens, live?.outputTokens ?? 0);
+    const toolUses = Math.max(totals.toolUses, live?.toolUses ?? 0);
+    const counted = inputTokens + outputTokens > 0;
+    const ran = totals.turns > 0 || toolUses > 0;
+    const usage: FleetUsage = costUsd > 0 ? "recorded" : counted ? "unpriced" : ran ? "unrecorded" : "recorded";
+    return { costUsd, inputTokens, outputTokens, toolUses, usage };
+};
+
 export const fleetRecall = async (
     deps: FleetRecallDeps,
     entry: PersistedAgent,
@@ -307,14 +367,12 @@ export const fleetRecall = async (
         deps.transcripts.rows(entry).catch((): TranscriptRow[] => []),
     ]);
     const { placement, totals } = entry;
+    const row = rowOf(deps, entry);
     return {
-        ...rowOf(deps, entry),
+        ...row,
         harness: entry.profile.harness,
         record: transcriptFile(historyRoot, entry.id),
-        costUsd: totals.costUsd,
-        inputTokens: totals.inputTokens,
-        outputTokens: totals.outputTokens,
-        toolUses: totals.toolUses,
+        ...spendOf(deps, entry),
         subagents: totals.subagents,
         createdAt: entry.createdAt,
         ...present({
@@ -327,42 +385,10 @@ export const fleetRecall = async (
             archivedAt: entry.archivedAt,
             landedSubject: entry.landing.message?.subject,
             reach: entry.reach,
+            now: fleetNow(deps.agents.get(entry.id), deps.conversations.state(entry.id), row.running),
         }),
         ...failureOf(entry.ending),
         repoStates: repos,
         digest: digestOf(messages),
     };
-};
-
-// The transcript itself, for what the digest did not cover: last messages first, each clamped, `grep` narrowing before
-// the limit. Excludes tool calls and thinking; the record's own path has those.
-export interface FleetMessage {
-    readonly role: TranscriptRow["role"];
-    readonly text: string;
-    readonly sentAt?: number;
-    readonly at: number;
-}
-
-const MESSAGE_CHARS = 1200;
-const MESSAGE_LIMIT = 20;
-
-export interface TranscriptOptions {
-    readonly last?: number;
-    readonly grep?: string;
-}
-
-export const fleetMessages = async (
-    deps: FleetRecallDeps,
-    entry: PersistedAgent,
-    options: TranscriptOptions = {},
-): Promise<{ readonly total: number; readonly messages: readonly FleetMessage[] }> => {
-    const rows = await deps.transcripts.rows(entry).catch((): TranscriptRow[] => []);
-    const spoken = rows.flatMap((row, at): FleetMessage[] => {
-        const text = collapse(row.text);
-        return text === "" ? [] : [{ role: row.role, text: clamp(text, MESSAGE_CHARS), at, ...present({ sentAt: row.sentAt }) }];
-    });
-    const needle = options.grep === undefined ? undefined : foldOf(options.grep);
-    const matched = needle === undefined ? spoken : spoken.filter((message) => foldOf(message.text).includes(needle));
-    const last = Math.max(1, options.last ?? MESSAGE_LIMIT);
-    return { total: matched.length, messages: matched.slice(-last) };
 };
