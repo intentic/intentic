@@ -88,9 +88,23 @@ test("an over-long opening sentence is cut back to the clause that makes the cla
     const sentence =
         `The desktop app (_apps/desktop) is a Tauri 2 shell, so its whole native half is Rust that nothing in this image can compile: ` +
         `there is no cargo, no pkg-config, and no webview headers.`;
-    expect(purposeOf(sentence)).toBe(
-        `The desktop app (_apps/desktop) is a Tauri 2 shell, so its whole native half is Rust that nothing in this image can compile.`,
-    );
+    expect(purposeOf(sentence)).toBe(`The desktop app (_apps/desktop) is a Tauri 2 shell.`);
+});
+
+test("a comma that opens a new clause is a cut too, and the longest run of clauses that fits is kept", () => {
+    expect(
+        purposeOf(
+            `The two tools that are BUNDLE INPUTS rather than compiler dependencies, and the reason a desktop session can \`cargo check\` the app perfectly and still not produce an installer.`,
+        ),
+    ).toBe(`The two tools that are BUNDLE INPUTS rather than compiler dependencies.`);
+});
+
+test("a cut never leaves only a short label that restates the row's own name", () => {
+    expect(
+        purposeOf(
+            `Postgres client: the workspace runs Postgres in the nested Docker engine (:5440) for _platform, and without psql an agent can only reach it through \`docker exec\`.`,
+        ),
+    ).toBe(`Postgres client: the workspace runs Postgres in the nested Docker engine (:5440) for _platform.`);
 });
 
 test("a long sentence with no clause break is left whole rather than butchered", () => {

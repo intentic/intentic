@@ -153,9 +153,9 @@ const expandable = (item: EnvironmentItem): boolean =>
                     </template>
                     <!-- Names, versions, and purpose share one title line. -->
                     <template #title>
-                        <!-- Names stay readable; version and purpose can take another line in a narrow pane. -->
-                        <span class="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
-                            <span class="min-w-0 break-words">{{ item.name }}</span>
+                        <!-- One line, always: the name leads, versions follow, the purpose fills whatever is left and truncates. -->
+                        <span class="flex min-w-0 items-baseline gap-x-3">
+                            <span class="min-w-0 shrink-0 truncate">{{ item.name }}</span>
                             <!-- Versions use monospace and occupy at most half the row. -->
                             <span
                                 v-if="item.tools.length > 0"
@@ -175,10 +175,12 @@ const expandable = (item: EnvironmentItem): boolean =>
                                 </span>
                             </span>
                             <!-- Hides once open: the same sentence is the paragraph's own opening line just below it. -->
+                            <!-- `contain:inline-size`: the sentence takes only the room left over and adds none to the row's own width,
+                                 so a long one truncates instead of pushing the chevron onto a line of its own. -->
                             <span
                                 v-if="item.purpose !== undefined && !open.has(item.id)"
                                 v-tooltip.bottom.overflow="item.purpose"
-                                class="hidden min-w-0 truncate text-2xs font-normal text-muted @xl:block"
+                                class="hidden min-w-0 flex-1 truncate text-2xs font-normal text-muted [contain:inline-size] @lg:block"
                             >
                                 {{ item.purpose }}
                             </span>

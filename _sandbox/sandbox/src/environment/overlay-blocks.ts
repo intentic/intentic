@@ -137,8 +137,20 @@ const firstSentenceEnd = (text: string): number => {
 };
 
 // Row's line is the opening sentence with any trailing parenthetical dropped, kept in the prose behind it.
-// Past this length a purpose reads as multiple lines; an over-long sentence keeps only its first clause.
-const PURPOSE_LIMIT = 130;
+// Past this length a purpose no longer fits a row beside its name and versions, so an over-long sentence is cut back to
+// the longest run of whole clauses that fits: at a colon, semicolon or dash, or at a comma that opens a new clause. A
+// cut needs 20 characters before it, so "Postgres client: …" never shrinks to a bare label that restates the row's name.
+const PURPOSE_LIMIT = 100;
+const CLAUSE_BREAK = /\s*[:;—]\s|,\s+(?=(?:and|so|which|because|since|but|while|where|instead of)\s)/g;
+
+const firstClauses = (line: string): string => {
+    if (line.length <= PURPOSE_LIMIT) {
+        return line;
+    }
+    const heads = [...line.matchAll(CLAUSE_BREAK)].map((match) => line.slice(0, match.index)).filter((head) => head.length >= 20);
+    const head = heads.findLast((candidate) => candidate.length < PURPOSE_LIMIT) ?? heads[0];
+    return head === undefined ? line : `${head.replace(/[.,]$/, "")}.`;
+};
 
 export const purposeOf = (prose: string): string | undefined => {
     const paragraph = prose.split("\n\n")[0]?.replace(/\n/g, " ").trim() ?? "";
@@ -150,11 +162,7 @@ export const purposeOf = (prose: string): string | undefined => {
     // Drops a trailing parenthetical unless that leaves too little to read (a bare "Bun." is worse).
     const trimmed = sentence.replace(/\s*\([^()]*\)\s*\.?$/, ".").trim();
     const line = trimmed.length >= 25 ? trimmed : sentence.trim();
-    if (line.length <= PURPOSE_LIMIT) {
-        return line;
-    }
-    const clause = /^(.{25,}?)\s*[:;—]\s/.exec(line);
-    return clause?.[1] === undefined ? line : `${clause[1]}.`;
+    return firstClauses(line);
 };
 
 // The whole explanation, verbatim, not the prose with the row's summary sliced off (purposeOf cuts a parenthetical and
