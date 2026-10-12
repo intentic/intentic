@@ -77,7 +77,7 @@ const retryLine = computed(() =>
 
 <template>
     <!-- Status line, not a message: sits at the meta tier, sharing the assistant bubble's left padding. -->
-    <div class="flex max-w-full items-center gap-2 self-start rounded-lg bg-overlay px-3 py-2 text-2xs text-muted">
+    <div class="flex max-w-full items-center gap-2 self-start rounded-xl bg-overlay px-3 py-2 text-2xs text-muted">
         <template v-if="endingMeta">
             <Icon :name="endingMeta.icon" class="shrink-0 text-2xs" :class="endingMeta.class" />
             <span class="min-w-0 truncate">{{ endingMeta.label }}</span>
