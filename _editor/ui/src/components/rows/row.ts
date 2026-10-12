@@ -105,3 +105,14 @@ export const useRowDensity = (own: () => RowDensity | undefined): ComputedRef<Ro
     const group = inject(ROW_DENSITY, undefined);
     return computed(() => own() ?? group?.value ?? `comfortable`);
 };
+
+// WHERE A ROW'S TEXT STARTS. A group on a surface of its own insets its rows by the tier's padding; a group on a dialog
+// draws no surface (dialogGround.ts), so its rows start where the dialog's own words do, and their hairlines run the
+// same width. Published by <RowGroup>; a row outside a group keeps its tier's inset.
+const ROW_FLUSH_INLINE: InjectionKey<boolean> = Symbol(`ui.row.flushInline`);
+
+/** Published by <RowGroup> when it draws no surface for its rows to be inset on. */
+export const provideRowFlushInline = (flush: boolean): void => provide(ROW_FLUSH_INLINE, flush);
+
+/** Whether this row's text starts at its container's edge rather than inside the tier's padding. */
+export const useRowFlushInline = (): boolean => inject(ROW_FLUSH_INLINE, false);

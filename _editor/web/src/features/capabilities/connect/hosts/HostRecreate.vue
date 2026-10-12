@@ -513,23 +513,25 @@ const command = (os: CommandOs): string => {
                 :confirm-label="t(`capabilities.hostRecreate.now`, { action: verb })"
                 :confirm-icon="icon"
                 :header-icon="gilded ? `sparkles` : undefined"
+                :description="confirmBody"
                 :destructive="false"
                 :gilded="gilded"
                 @cancel="confirming = false"
                 @confirm="execute"
             >
-                <p>{{ confirmBody }}</p>
-                <p v-if="interruption" class="mt-3 text-xs text-warning">{{ interruption }}</p>
-                <!-- Said before the restart, since afterwards nothing can run a cut turn again with one press. -->
-                <label v-if="offerResume" class="mt-2 flex items-center gap-2 text-xs text-content">
-                    <Checkbox v-model="resumeAfter" binary size="small" />
-                    {{ t(`capabilities.hostRecreate.continueAfter`, {}, activeAgents.length) }}
-                </label>
-                <p class="mt-3 text-xs text-muted">
-                    {{ t(`capabilities.hostRecreate.onlySandboxRestartsNothing`) }}
-                </p>
+                <div class="flex flex-col gap-3">
+                    <p v-if="interruption" class="text-xs text-warning">{{ interruption }}</p>
+                    <!-- Said before the restart, since afterwards nothing can run a cut turn again with one press. -->
+                    <label v-if="offerResume" class="flex items-center gap-2 text-xs text-content">
+                        <Checkbox v-model="resumeAfter" binary size="small" />
+                        {{ t(`capabilities.hostRecreate.continueAfter`, {}, activeAgents.length) }}
+                    </label>
+                    <p class="text-xs text-muted">
+                        {{ t(`capabilities.hostRecreate.onlySandboxRestartsNothing`) }}
+                    </p>
+                </div>
                 <template v-if="offerWait" #actions>
-                    <Button :label="t(`capabilities.hostRecreate.whenIdle`, {}, activeAgents.length)" tier="quiet" @click="waitForIdle">
+                    <Button :label="t(`capabilities.hostRecreate.whenIdle`, {}, activeAgents.length)" tier="boring" @click="waitForIdle">
                         <template #icon><Icon name="clock" /></template>
                     </Button>
                 </template>

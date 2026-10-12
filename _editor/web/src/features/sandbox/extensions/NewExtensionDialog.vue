@@ -80,14 +80,15 @@ const submit = async (): Promise<void> => {
 </script>
 
 <template>
-    <Modal v-model:open="open" size="md" :header="t(`sandbox.words.newExtension`)">
+    <Modal
+        v-model:open="open"
+        size="md"
+        :header="t(`sandbox.words.newExtension`)"
+        :description="t(`sandbox.newExtensionDialog.writesWorkingExtensionInto`)"
+    >
         <div class="flex flex-col gap-4">
-            <p class="text-2xs text-subtle">
-                {{ t(`sandbox.newExtensionDialog.writesWorkingExtensionInto`) }}
-            </p>
-
             <div class="flex items-end gap-2">
-                <label class="flex flex-col gap-1" :style="{ width: '9rem' }">
+                <label class="flex w-36 flex-col gap-1">
                     <span :class="ui.sectionLabel()">{{ t(`sandbox.newExtensionDialog.publisher`) }}</span>
                     <input v-model="publisher" :class="ui.input()" spellcheck="false" />
                 </label>

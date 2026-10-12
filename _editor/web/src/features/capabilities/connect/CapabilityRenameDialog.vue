@@ -67,14 +67,8 @@ const unchanged = computed(() => renamed.value === props.id);
             </p>
         </form>
         <template #footer>
-            <Button :label="t(`ui.action.cancel`)" size="small" tier="quiet" @click="emit(`update:visible`, false)" />
-            <Button
-                :label="t(`ui.action.rename`)"
-                size="small"
-                :loading="busy"
-                :disabled="problem !== undefined || unchanged"
-                @click="emit(`rename`, renamed)"
-            />
+            <Button :label="t(`ui.action.cancel`)" tier="quiet" @click="emit(`update:visible`, false)" />
+            <Button :label="t(`ui.action.rename`)" :loading="busy" :disabled="problem !== undefined || unchanged" @click="emit(`rename`, renamed)" />
         </template>
     </Modal>
 </template>

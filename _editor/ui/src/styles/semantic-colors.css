@@ -137,6 +137,16 @@
     --ui-shadow-2: 0 2px 4px rgb(var(--ui-shadow-tint) / 0.07), 0 12px 28px -8px rgb(var(--ui-shadow-tint) / 0.20);
     --ui-shadow-3: 0 4px 10px rgb(var(--ui-shadow-tint) / 0.08), 0 24px 56px -12px rgb(var(--ui-shadow-tint) / 0.26);
 
+/* THE DIALOG AND THE PAGE IT STOPS — dialog.css draws them, and these are what each look answers. The dialog is the
+   topmost plane, so it takes the plate's own warm paper (pure white beside it read as a sheet from another stack) and
+   the warm rule a card has, never a neutral grey one. The scrim behind it is the room's own shadow, not black: black
+   at any alpha turned the paper into grey mud, and the room's shadow tint itself (`--ui-shadow-tint`) into pink. Light
+   enough that the page stays legible as a place, since a dialog is nearly always about something on it; the blur in
+   dialog.css is what keeps that page from competing. */
+    --ui-scrim: rgb(38 30 22 / 0.34);
+    --ui-dialog-fill: var(--role-card);
+    --ui-dialog-line: var(--role-line);
+
 /* A raised paper chip, not an inverted one: a dark slab on warm paper reads as a foreign object. */
 /* A shade warmer than a card, so a tooltip raised over one still separates from it. */
     --ui-tooltip-fill: color-mix(in oklab, var(--role-card) 88%, var(--paper-tint));
@@ -200,6 +210,14 @@
     --ui-shadow-1: 0 4px 12px rgb(var(--ui-shadow-tint) / 0.28);
     --ui-shadow-2: 0 10px 30px rgb(var(--ui-shadow-tint) / 0.32);
     --ui-shadow-3: 0 18px 48px rgb(var(--ui-shadow-tint) / 0.45);
+
+/* IN THE DARK, WHAT IS NEARER IS LIGHTER — a shadow cannot be seen on near-black, so lightness is the only depth cue
+   left. The dialog sits between the card (900) and the overlay step (800): a step above every card it covers, and
+   still under the hover and selection fill its own rows reach for. Fields keep the canvas, so they read as wells cut
+   into it. The edge is the ink at an alpha, the one rim that stays a highlight on any fill. */
+    --ui-scrim: rgb(0 0 0 / 0.5);
+    --ui-dialog-fill: color-mix(in oklab, var(--color-surface-900) 55%, var(--color-surface-800));
+    --ui-dialog-line: color-mix(in oklab, var(--color-content) 11%, transparent);
 
     --ui-tooltip-fill: var(--color-surface-700);
     --ui-tooltip-content: var(--color-surface-0);

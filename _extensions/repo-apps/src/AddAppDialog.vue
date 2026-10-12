@@ -83,10 +83,9 @@ const submit = (): void => {
 </script>
 
 <template>
-    <Modal v-model:open="visible" size="md" :header="t(`addAppDialog.addApp`)" @hide="reset">
-        <div class="flex flex-col gap-3">
-            <p class="text-sm text-muted">{{ t(`addAppDialog.pickOneMoreTemplates`) }}</p>
-            <Card v-for="template in templates" :key="template.key" class="flex flex-col gap-2">
+    <Modal v-model:open="visible" size="md" :header="t(`addAppDialog.addApp`)" :description="t(`addAppDialog.pickOneMoreTemplates`)" @hide="reset">
+        <div class="divide-y divide-line-subtle">
+            <Card v-for="template in templates" :key="template.key" class="flex flex-col gap-2 py-3 first:pt-0 last:pb-0">
                 <label class="flex cursor-pointer items-start gap-3">
                     <Checkbox
                         :model-value="selected"
@@ -114,9 +113,12 @@ const submit = (): void => {
                     />
                 </div>
             </Card>
-            <Button class="self-end" :label="t(`addAppDialog.add`)" :disabled="!canAdd" @click="submit">
+        </div>
+
+        <template #footer>
+            <Button :label="t(`addAppDialog.add`)" :disabled="!canAdd" @click="submit">
                 <template #icon><Icon name="plus" /></template>
             </Button>
-        </div>
+        </template>
     </Modal>
 </template>

@@ -70,17 +70,6 @@
     }
 }
 
-/* Mobile dialogs override the desktop inline width. */
-@media (max-width: 767.98px) {
-    .p-dialog {
-        max-width: calc(100vw - 1.5rem) !important;
-        max-height: calc(100dvh - 1.5rem) !important;
-    }
-    .p-dialog-content {
-        overflow-y: auto;
-    }
-}
-
 /* Selection edges use the navigation accent; session cards soften it by width rather than colour. */
 :root {
     --color-selection-edge: var(--color-primary-500);

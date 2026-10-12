@@ -986,11 +986,22 @@ const pickedTier = ref(`collaborator`);
         </div>
 
         <Modal v-model:open="modalOpen" :size="modalSize" header="A modal">
-            <p class="text-sm text-content">
+            <template #description>
                 Size <b>{{ modalSize }}</b
-                >. Narrow the window past it and the clamp takes over: that clamp is the whole reason this component exists.
-            </p>
-            <p v-for="line in 14" :key="line" class="mt-2 text-xs text-muted">Body line {{ line }}, so the scroll cap has something to cap.</p>
+                >. Narrow the window past it and the clamp takes over; shorten it and the body scrolls under rules that appear at its edges.
+            </template>
+            <div class="flex flex-col gap-4">
+                <label class="ui-field">
+                    <span class="ui-field-label">Name</span>
+                    <input :class="ui.input(`w-full`)" placeholder="A field, cut into the dialog's ground" />
+                </label>
+                <!-- The same <RowGroup> a page draws as a card: on a dialog it is its rows and their hairlines, with no box. -->
+                <RowGroup label="A group on a dialog">
+                    <Row icon="bolt" title="No card in a card" description="The dialog is the card, so the group draws no surface of its own." />
+                    <Row icon="align-left" title="Rows line up with the words" description="Their text starts where the title and the field do." />
+                </RowGroup>
+                <p v-for="line in 10" :key="line">Body line {{ line }}, so the scroll cap has something to cap.</p>
+            </div>
             <template #footer>
                 <Button label="Cancel" tier="quiet" @click="modalOpen = false" />
                 <Button label="Save" @click="modalOpen = false" />
@@ -1000,6 +1011,8 @@ const pickedTier = ref(`collaborator`);
         <ConfirmDialog
             :open="confirmOpen"
             header="Delete these files?"
+            description="They leave the workspace and its history. This can't be undone."
+            header-icon="trash"
             confirm-label="Delete"
             confirm-icon="trash"
             :items="[`src/lib/checkout.ts`, `src/pricing/CheckoutPanel.tsx`, `tests/checkout.spec.ts`]"
@@ -1007,9 +1020,8 @@ const pickedTier = ref(`collaborator`);
             @confirm="confirmOpen = false"
         >
             <template #item="{ item }"
-                ><span class="truncate text-content">{{ item }}</span></template
+                ><span class="truncate font-mono text-xs">{{ item }}</span></template
             >
-            <p class="mt-3 text-xs text-muted">This can't be undone.</p>
         </ConfirmDialog>
 
         <!-- Same fixture the Share line above reads from, so the two views can't drift apart. -->

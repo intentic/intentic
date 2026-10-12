@@ -415,13 +415,12 @@ const assistantsIn = (area: Area): string[] => namesOf([area.id]);
         <ConfirmDialog
             :open="removing !== undefined"
             :header="t(`sandbox.sandboxAreas.deleteHeader`, { label: removing?.label ?? removing?.id })"
+            :description="t(`sandbox.sandboxAreas.deleteBody`)"
             :confirm-label="t(`sandbox.sandboxAreas.deleteArea`)"
             confirm-icon="trash"
             :loading="remove.isPending.value"
             @cancel="removing = undefined"
             @confirm="confirmRemove"
-        >
-            {{ t(`sandbox.sandboxAreas.deleteBody`) }}
-        </ConfirmDialog>
+        />
     </div>
 </template>

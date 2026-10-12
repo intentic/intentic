@@ -89,6 +89,11 @@ const EXAMPLE = `{
 
 <template>
     <Modal v-model:open="visible" size="md" :header="t(`workspace.directoryRuns.runIn`, { dir: dir ?? `` })">
+        <template v-if="entry === undefined" #description>
+            {{ t(`workspace.directoryRuns.declaresNothing`) }}
+            <span class="font-mono text-content">{{ dir }}/{{ RUN_TARGETS_FILE }}</span>
+        </template>
+
         <div class="flex flex-col gap-4">
             <template v-if="entry !== undefined">
                 <!-- Where: one choice for every target below, each computer with its state as a dot. -->
@@ -120,12 +125,12 @@ const EXAMPLE = `{
                         }}</RouterLink>
                     </p>
                 </div>
-                <p v-else class="text-sm text-muted">
+                <p v-else class="text-muted">
                     {{ t(`workspace.directoryRuns.noComputers`) }}
                     <RouterLink to="/capabilities" class="ml-1 text-link hover:underline">{{ t(`workspace.directoryRuns.connectOne`) }}</RouterLink>
                 </p>
 
-                <p v-if="entry.error !== undefined" class="text-sm text-danger">{{ entry.error }}</p>
+                <p v-if="entry.error !== undefined" class="text-danger">{{ entry.error }}</p>
 
                 <!-- What: the targets, flat on the dialog's own surface, one Run each. -->
                 <ul class="flex flex-col divide-y divide-line-subtle border-t border-line-subtle">
@@ -154,26 +159,21 @@ const EXAMPLE = `{
                         </Button>
                     </li>
                 </ul>
-                <p v-if="failure !== undefined" class="-mt-2 text-xs text-danger">{{ failure }}</p>
+                <p v-if="failure !== undefined" class="text-xs text-danger">{{ failure }}</p>
             </template>
 
-            <template v-else>
-                <p class="text-sm text-muted">
-                    {{ t(`workspace.directoryRuns.declaresNothing`) }}
-                    <span class="font-mono text-content">{{ dir }}/{{ RUN_TARGETS_FILE }}</span>
-                </p>
-                <pre class="overflow-x-auto rounded-lg bg-canvas px-3 py-2 font-mono text-2xs text-content">{{ EXAMPLE }}</pre>
-            </template>
+            <pre v-else class="overflow-x-auto rounded-lg bg-canvas px-3 py-2 font-mono text-2xs text-content">{{ EXAMPLE }}</pre>
         </div>
 
         <template #footer>
             <!-- The file is the source of truth and lives in the repository; the switches a run needs live on the cards. -->
-            <button v-if="entry !== undefined" type="button" :class="ui.textButton({ tone: `quiet` }, `mr-auto`)" :title="entry.path" @click="editFile(entry.path)">
+            <button v-if="entry !== undefined" type="button" :class="ui.textButton({ tone: `quiet` })" :title="entry.path" @click="editFile(entry.path)">
                 <Icon name="file-edit" class="text-2xs" />{{ t(`workspace.directoryRuns.editFile`, { file: fileName }) }}
             </button>
-            <RouterLink to="/capabilities" :class="ui.textButton({ tone: `quiet` }, entry === undefined ? `mr-auto` : ``)">
+            <RouterLink to="/capabilities" :class="ui.textButton({ tone: `quiet` }, `mr-auto`)">
                 {{ t(`workspace.directoryRuns.yourComputers`) }} <Icon name="arrow-right" class="text-2xs" />
             </RouterLink>
+            <Button :label="t(`ui.action.close`)" tier="quiet" @click="dir = undefined" />
         </template>
     </Modal>
 </template>

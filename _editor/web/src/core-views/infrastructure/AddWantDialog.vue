@@ -3,7 +3,7 @@ import { BrandMark, Button, ui, Modal, Notice, type NoticeModel, Picker, type Pi
 import { noticeFrom } from "@intentic/ui/async";
 import { INVENTORY_SERVICES, type InventoryServiceDescriptor } from "@intentic/capability-catalog";
 import { INVENTORY_NAME_MAX, INVENTORY_NAME_RE, inventoryIdentifier } from "@intentic/sandbox-contract";
-import { computed, ref, watch } from "vue";
+import { computed, ref, useId, watch } from "vue";
 import { useInventory } from "../../features/extensions/useInventory";
 import { useWorkspaceApps } from "../../features/extensions/useWorkspaceApps";
 import CloudflareConnect from "./CloudflareConnect.vue";
@@ -41,6 +41,8 @@ const { entries, add, refetch } = useInventory();
 type Picked = { kind: `service`; service: InventoryServiceDescriptor } | { kind: `app`; repo: string; app: string };
 
 const selected = ref<Picked | undefined>(undefined);
+// Add sits in the footer, outside the form, and submits it by id so Enter in a field still does.
+const formId = useId();
 const submitting = ref(false);
 const error = ref<NoticeModel | null>(null);
 
@@ -182,44 +184,43 @@ const submit = async (): Promise<void> => {
 </script>
 
 <template>
-    <Modal v-model:open="visible" size="md" :header="t(`ui.action.add`)" @hide="reset">
+    <!-- Step 2 is titled by what was picked: its mark, its name and what it is, where step 1 asks what to add. -->
+    <Modal
+        v-model:open="visible"
+        size="md"
+        :header="selected === undefined ? t(`ui.action.add`) : selected.kind === `service` ? selected.service.label : selected.app"
+        @hide="reset"
+    >
+        <template v-if="selected" #icon>
+            <BrandMark
+                v-if="selected.kind === `service`"
+                :size="36"
+                :name="selected.service.label"
+                :logo="selected.service.logo"
+                :icon="selected.service.icon ?? `server`"
+            />
+            <BrandMark v-else :size="36" :name="selected.app" icon="code" />
+        </template>
+        <template #description>
+            <template v-if="selected">{{
+                selected.kind === `service` ? serviceDescription(selected.service) : t(`views.addWantDialog.appMonorepo`, { repo: selected.repo })
+            }}</template>
+            <template v-else
+                >{{ t(`views.addWantDialog.pickWhatWantTo`) }}<span class="font-mono text-xs">deploy.config.ts</span
+                >{{ t(`views.addWantDialog.deployedOnNextApply`) }}</template
+            >
+        </template>
+
         <!-- STEP 2: the picked want's form. -->
-        <template v-if="selected">
-            <button type="button" :class="ui.textButton({ tone: `quiet` }, `mb-3`)" @click="selected = undefined">
-                <Icon name="arrow-left" class="text-2xs" /> {{ t(`ui.action.back`) }}
-            </button>
-
-            <div class="mb-4 flex items-center gap-3">
-                <BrandMark
-                    v-if="selected.kind === `service`"
-                    :size="36"
-                    :name="selected.service.label"
-                    :logo="selected.service.logo"
-                    :icon="selected.service.icon ?? `server`"
-                />
-                <BrandMark v-else :size="36" :name="selected.app" icon="code" />
-                <div class="min-w-0">
-                    <div class="font-medium text-content">{{ selected.kind === `service` ? selected.service.label : selected.app }}</div>
-                    <div class="text-xs text-muted">
-                        {{
-                            selected.kind === `service`
-                                ? serviceDescription(selected.service)
-                                : t(`views.addWantDialog.appMonorepo`, { repo: selected.repo })
-                        }}
-                    </div>
-                </div>
-            </div>
-
-            <div class="mb-4 border-t border-line-subtle"></div>
-
-            <Notice v-if="error" :of="error" class="mb-3" />
+        <div v-if="selected" class="flex flex-col gap-4">
+            <Notice v-if="error" :of="error" />
 
             <!-- A want needs Cloudflare and a server; both are collected inline rather than sending the user elsewhere. -->
             <CloudflareConnect v-if="cloudflareEntries.length === 0" />
             <ConnectHost v-else-if="hostOptions.length === 0">
                 <template #reason>{{ t(`views.words.whatWantNeedsServer`) }}</template>
             </ConnectHost>
-            <form v-else class="flex flex-col gap-3" @submit.prevent="submit">
+            <form v-else :id="formId" class="flex flex-col gap-3" @submit.prevent="submit">
                 <label class="ui-field">
                     <span class="ui-field-label">{{ t(`shared.name`) }}</span>
                     <input v-model="name" :placeholder="selected.kind === `service` ? selected.service.service : selected.app" :class="ui.input()" />
@@ -268,34 +269,26 @@ const submit = async (): Promise<void> => {
                         @update:model-value="(value: string | undefined) => (on = value ?? ``)"
                     />
                 </label>
-                <Button type="submit" class="self-end" :label="t(`ui.action.add`)" :disabled="!canSubmit || submitting" :loading="submitting">
-                    <template #icon><Icon name="check" /></template>
-                </Button>
             </form>
-        </template>
+        </div>
 
         <!-- STEP 1: the catalog, your apps, then the self-hosted services. -->
-        <template v-else>
-            <p class="mb-4 text-sm text-muted">
-                {{ t(`views.addWantDialog.pickWhatWantTo`) }}<span class="font-mono text-xs">deploy.config.ts</span
-                >{{ t(`views.addWantDialog.deployedOnNextApply`) }}
-            </p>
-
-            <template v-if="workspaceApps.length > 0 || appsError">
+        <div v-else class="flex flex-col gap-4">
+            <div v-if="workspaceApps.length > 0 || appsError">
                 <span :class="ui.sectionLabel('mb-2 block')">{{ t(`views.addWantDialog.apps`) }}</span>
-                <Notice v-if="appsNotice" :of="appsNotice" class="mb-3" />
-                <div class="mb-4 grid grid-cols-2 gap-3">
+                <Notice v-if="appsNotice" :of="appsNotice" class="mb-2" />
+                <!-- Choices are rows on the dialog's ground, not cards on it: the wash under the pointer is the affordance, and the
+                     grid reaches out by the rows' padding so the marks line up with the label above. -->
+                <div class="-mx-2.5 grid grid-cols-2 gap-x-1 gap-y-0.5">
                     <button
                         v-for="candidate in workspaceApps"
                         :key="`${candidate.repo}--${candidate.app}`"
                         type="button"
-                        class="ui-off flex items-start gap-3 rounded-lg bg-card shadow-sm p-3 text-left transition-colors hover:bg-overlay disabled:hover:bg-card"
+                        class="ui-off ui-row-select flex items-start gap-3 rounded-lg p-2.5 text-left"
                         :disabled="declaredApps.has(candidate.app)"
                         v-action="() => pick({ kind: `app`, ...candidate })"
                     >
-                        <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-line bg-canvas">
-                            <Icon name="code" class="text-sm text-link" />
-                        </span>
+                        <BrandMark :size="32" :name="candidate.app" icon="code" />
                         <div class="min-w-0">
                             <div class="flex items-center gap-2 font-medium text-content">
                                 {{ candidate.app }}
@@ -305,24 +298,44 @@ const submit = async (): Promise<void> => {
                         </div>
                     </button>
                 </div>
-                <span :class="ui.sectionLabel('mb-2 block')">{{ t(`views.words.selfHostedServices`) }}</span>
-            </template>
-
-            <div class="grid grid-cols-2 gap-3">
-                <button
-                    v-for="service in INVENTORY_SERVICES"
-                    :key="service.service"
-                    type="button"
-                    class="flex items-start gap-3 rounded-lg bg-card shadow-sm p-3 text-left transition-colors hover:bg-overlay"
-                    v-action="() => pick({ kind: `service`, service })"
-                >
-                    <BrandMark :size="32" :name="service.label" :logo="service.logo" :icon="service.icon ?? `server`" />
-                    <div class="min-w-0">
-                        <div class="font-medium text-content">{{ service.label }}</div>
-                        <div class="mt-0.5 text-xs text-muted">{{ serviceDescription(service) }}</div>
-                    </div>
-                </button>
             </div>
+
+            <div>
+                <span v-if="workspaceApps.length > 0 || appsError" :class="ui.sectionLabel('mb-2 block')">{{
+                    t(`views.words.selfHostedServices`)
+                }}</span>
+                <div class="-mx-2.5 grid grid-cols-2 gap-x-1 gap-y-0.5">
+                    <button
+                        v-for="service in INVENTORY_SERVICES"
+                        :key="service.service"
+                        type="button"
+                        class="ui-row-select flex items-start gap-3 rounded-lg p-2.5 text-left"
+                        v-action="() => pick({ kind: `service`, service })"
+                    >
+                        <BrandMark :size="32" :name="service.label" :logo="service.logo" :icon="service.icon ?? `server`" />
+                        <div class="min-w-0">
+                            <div class="font-medium text-content">{{ service.label }}</div>
+                            <div class="mt-0.5 text-xs text-muted">{{ serviceDescription(service) }}</div>
+                        </div>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <template v-if="selected" #footer>
+            <Button :label="t(`ui.action.back`)" tier="quiet" class="mr-auto" @click="selected = undefined">
+                <template #icon><Icon name="arrow-left" /></template>
+            </Button>
+            <Button
+                v-if="cloudflareEntries.length > 0 && hostOptions.length > 0"
+                type="submit"
+                :form="formId"
+                :label="t(`ui.action.add`)"
+                :disabled="!canSubmit || submitting"
+                :loading="submitting"
+            >
+                <template #icon><Icon name="check" /></template>
+            </Button>
         </template>
     </Modal>
 </template>

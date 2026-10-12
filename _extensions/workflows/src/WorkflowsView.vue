@@ -499,26 +499,24 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
         <ConfirmDialog
             :open="confirmRemoveId !== undefined"
             :header="t(`workflowsView.deleteWorkflow`)"
+            :description="t(`workflowsView.runHistoryStaysEvery`)"
             :confirm-label="t(`workflowsView.delete2`)"
             confirm-icon="trash"
             :loading="remove.isPending.value"
             @confirm="removeWorkflow()"
             @cancel="confirmRemoveId = undefined"
-        >
-            <p class="text-sm text-subtle">{{ t(`workflowsView.runHistoryStaysEvery`) }}</p>
-        </ConfirmDialog>
+        />
 
         <ConfirmDialog
             :open="confirmRemoveLoopId !== undefined"
             :header="t(`workflowsView.deleteLoop`)"
+            :description="t(`workflowsView.loopAlreadyRunningKeeps`)"
             :confirm-label="t(`workflowsView.delete2`)"
             confirm-icon="trash"
             :loading="removeLoop.isPending.value"
             @confirm="deleteLoop()"
             @cancel="confirmRemoveLoopId = undefined"
-        >
-            <p class="text-sm text-subtle">{{ t(`workflowsView.loopAlreadyRunningKeeps`) }}</p>
-        </ConfirmDialog>
+        />
 
         <LoopForm
             v-model="loopFormOpen"

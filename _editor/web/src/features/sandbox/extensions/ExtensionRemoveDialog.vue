@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ExtensionRemovalPlan, ExtensionSummary } from "@intentic/sandbox-contract";
-import { Button, Modal, Notice, SkeletonRows, SkeletonSnapshot, StatusBadge, toneTint, ui, vSkeletonSource } from "@intentic/ui";
+import { Button, Modal, Notice, SkeletonRows, SkeletonSnapshot, StatusBadge, ui, vSkeletonSource } from "@intentic/ui";
 import { messageOr } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { facetsOf } from "../../extensions/extensionFacets";
@@ -120,7 +120,7 @@ const processesLine = computed(() => {
                  while an image changed underneath still has to say why. -->
             <Notice v-if="plan.blocked" :of="{ tone: `warning`, title: t(`sandbox.extensionRemoveDialog.cantBeRemoved`), detail: plan.blocked }" />
 
-            <p class="text-sm text-content">
+            <p>
                 v{{ plan.version }} ·
                 {{
                     plan.source === `workspace`
@@ -141,8 +141,9 @@ const processesLine = computed(() => {
                     <p :class="ui.sectionLabel({ size: `xs`, tone: `danger` }, `mb-1.5`)">
                         {{ t(`sandbox.extensionRemoveDialog.connectionsRemoved`, { count: plan.connections.length }, plan.connections.length) }}
                     </p>
-                    <ul class="flex flex-col gap-1.5">
-                        <li v-for="connection in plan.connections" :key="connection.id" :class="toneTint(`danger`, `soft`, `rounded border p-2`)">
+                    <!-- Entries divided by hairlines on the dialog's ground; the danger is the label's, not a tinted box round each. -->
+                    <ul class="flex flex-col divide-y divide-line-subtle">
+                        <li v-for="connection in plan.connections" :key="connection.id" class="py-2 first:pt-0 last:pb-0">
                             <div class="flex flex-wrap items-baseline gap-x-2">
                                 <span class="font-mono text-xs font-medium text-content">{{ connection.id }}</span>
                                 <StatusBadge variant="neutral" :label="connection.kind" size="xs" />
@@ -205,7 +206,7 @@ const processesLine = computed(() => {
                     </ul>
                 </section>
 
-                <p v-if="credentialsLost > 0" class="text-xs text-danger">
+                <p v-if="credentialsLost > 0" class="text-danger">
                     {{ t(`sandbox.extensionRemoveDialog.credentialsLost`, { count: credentialsLost }, credentialsLost) }}
                 </p>
             </template>

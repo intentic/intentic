@@ -36,8 +36,8 @@ const slots = defineSlots<{ default?: () => unknown; actions?: () => unknown }>(
 // Read at render, not cached: neither attrs nor slots are reactive, and a conditional `#actions` comes and goes.
 const look = (): ReturnType<typeof noticeLook> => noticeLook(shown.value, size, slots.actions !== undefined, strip);
 const boxClass = (): string => look().box(attrs[`class`] as string | undefined);
-// `alert` for tones the user must act on, `status` for the one they don't (won't interrupt a screen reader); a caller's own wins.
-const role = computed(() => (attrs[`role`] as string | undefined) ?? (shown.value === `info` ? `status` : `alert`));
+// `alert` for tones the user must act on, `status` for the ones they don't (won't interrupt a screen reader); a caller's own wins.
+const role = computed(() => (attrs[`role`] as string | undefined) ?? (shown.value === `info` || shown.value === `success` ? `status` : `alert`));
 </script>
 
 <template>

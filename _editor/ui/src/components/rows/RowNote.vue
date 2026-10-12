@@ -4,7 +4,7 @@ import { computed } from "vue";
 import { FACE_SIZES } from "../brand/personaFace.js";
 import type { IconName } from "../../icons/iconSets.js";
 import Icon from "../primitives/Icon.vue";
-import { ROW_BLOCK_PAD, ROW_TIERS, ROW_TOGGLE_GAPS, ROW_TOGGLE_SIZES, ROW_TONES, type RowTone, useRowDensity } from "./row.js";
+import { ROW_BLOCK_PAD, ROW_TIERS, ROW_TOGGLE_GAPS, ROW_TOGGLE_SIZES, ROW_TONES, type RowTone, useRowDensity, useRowFlushInline } from "./row.js";
 
 const { variant = `note`, lead = `icon`, tone = `default` } = defineProps<{
     // `note`: a sentence in the group's padding. `empty`: centred "nothing here yet", with room for an empty surface.
@@ -29,6 +29,8 @@ const emit = defineEmits<{ click: [event: MouseEvent] }>();
 // Always the group's tier, with no override: a note is the surface talking about the list it's on, never
 // a size of its own.
 const tier = useRowDensity(() => undefined);
+// In a group with no surface (a dialog's), a note starts where the rows' text does.
+const flushInline = useRowFlushInline();
 
 // An empty surface is owed more vertical room than a row: the whole card is this one sentence.
 const EMPTY_PAD = { comfortable: `px-4.5 py-7`, compact: `px-4 py-6`, dense: `px-2.5 py-5` } as const;
@@ -41,12 +43,12 @@ const mark = computed(() => (lead === `face` ? FACE_SIZES.row : ROW_TIERS[tier.v
 </script>
 
 <template>
-    <div v-if="variant === `empty`" class="text-center text-muted" :class="[EMPTY_PAD[tier], TEXT[tier]]">
+    <div v-if="variant === `empty`" class="text-center text-muted" :class="[EMPTY_PAD[tier], TEXT[tier], flushInline ? `!px-0` : ``]">
         <slot>{{ label }}</slot>
     </div>
 
     <!-- `mark` for the same reason <Row> hands it out: a block at the tail of a list often previews the row it's about to add. -->
-    <div v-else-if="variant === `block`" :class="ROW_BLOCK_PAD[tier]"><slot :mark="mark" /></div>
+    <div v-else-if="variant === `block`" :class="[ROW_BLOCK_PAD[tier], flushInline ? `!px-0` : ``]"><slot :mark="mark" /></div>
 
     <!-- The pressable one; `ui-row-select` is the app's one hover-and-focus treatment for a row you can press. -->
     <button

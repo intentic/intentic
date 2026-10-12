@@ -739,6 +739,7 @@ const onPick = (event: Event): void => {
                 type="text"
                 autofocus
                 class="ui-field-box w-full"
+                :aria-label="t(`ui.action.rename`)"
                 @focus="onRenameFocus"
                 @keydown.enter="confirmRename"
             />

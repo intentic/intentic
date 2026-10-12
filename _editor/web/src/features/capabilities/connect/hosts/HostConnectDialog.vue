@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { type HostSummary, userDistrosOf } from "@intentic/sandbox-contract";
-import { Button, Modal, type NoticeModel, Notice, SegmentedControl, noticeFrom, toneTint } from "@intentic/ui";
+import { Button, Modal, type NoticeModel, Notice, SegmentedControl, noticeFrom } from "@intentic/ui";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useDevices } from "../../../sandbox/devices/useDevices";
 import { HOST_DOOR, usePeerConnect } from "../../../sandbox/devices/usePeerConnect";
@@ -150,26 +150,27 @@ onBeforeUnmount(stop);
 
 <template>
     <Modal :open="visible" size="lg" :header="t(`capabilities.words.connect`, { id })" @update:open="emit(`update:visible`, $event)">
-        <div class="flex flex-col gap-4">
-            <i18n-t keypath="capabilities.hostConnectDialog.runThisOn" tag="p" class="text-sm text-content" scope="global">
+        <template #description>
+            <i18n-t keypath="capabilities.hostConnectDialog.runThisOn" tag="span" scope="global">
                 <template #id><b>{{ id }}</b></template>
                 <template #shell>{{ shell }}</template>
             </i18n-t>
-
+        </template>
+        <div class="flex flex-col gap-4">
             <!-- Renamed stays up through the reconnect it causes: the old id goes offline for a moment, which is not a failed pairing. -->
-            <div v-if="renamedTo !== undefined" :class="toneTint(`success`, `strong`, `rounded-md border px-3 py-2 text-sm text-content`)">
+            <Notice v-if="renamedTo !== undefined" tone="success">
                 {{ t(`capabilities.hostConnectDialog.named`) }} <b>{{ renamedTo }}</b
                 >{{ t(`capabilities.hostConnectDialog.reconnectsUnderThatName`) }}
-            </div>
+            </Notice>
 
             <template v-else-if="online">
-                <div :class="toneTint(`success`, `strong`, `rounded-md border px-3 py-2 text-sm text-content`)">
+                <Notice tone="success">
                     <b>{{ id }}</b> {{ t(`capabilities.hostConnectDialog.connectedAgentWorkOn`) }}
-                </div>
+                </Notice>
                 <!-- Offered, not applied: the name is what the agent calls the machine, so the owner says which. -->
-                <div v-if="hostnameSuggestion !== undefined" class="flex flex-col gap-2 rounded-md border border-subtle px-3 py-2">
+                <div v-if="hostnameSuggestion !== undefined" class="flex flex-col gap-2">
                     <Notice v-if="renameError" :of="renameError" />
-                    <p class="text-sm text-content">
+                    <p>
                         {{ t(`capabilities.hostConnectDialog.callsItself`) }} <b class="font-mono">{{ hostnameSuggestion }}</b
                         >{{ t(`capabilities.hostConnectDialog.nameItThatToo`) }}
                     </p>
@@ -187,7 +188,7 @@ onBeforeUnmount(stop);
 
             <Notice v-else-if="error" tone="danger">{{ error }}</Notice>
 
-            <div v-else-if="minting || pairToken === undefined" class="text-sm text-muted">
+            <div v-else-if="minting || pairToken === undefined" class="text-muted">
                 {{ t(`capabilities.words.preparingOneTimeConnection`) }}
             </div>
 
@@ -214,18 +215,17 @@ onBeforeUnmount(stop);
                 </p>
             </template>
 
-            <div class="rounded-md border border-subtle px-3 py-2">
-                <p class="text-2xs text-muted">
-                    {{ t(`capabilities.words.onceConnectedAgentMay`) }} <b>{{ permissions }}</b
-                    >{{ t(`capabilities.hostConnectDialog.nothingElseThoseSwitches`) }}
-                </p>
-            </div>
+            <!-- What connecting grants, as the dialog's closing footnote: on its own ground, not boxed as a second card. -->
+            <p class="text-2xs text-muted">
+                {{ t(`capabilities.words.onceConnectedAgentMay`) }} <b>{{ permissions }}</b
+                >{{ t(`capabilities.hostConnectDialog.nothingElseThoseSwitches`) }}
+            </p>
         </div>
 
         <template #footer>
             <Button
                 :label="online || renamedTo !== undefined ? t(`ui.action.done`) : t(`ui.action.close`)"
-                size="small"
+                :tier="online || renamedTo !== undefined ? `accent` : `quiet`"
                 @click="emit(`update:visible`, false)"
             />
         </template>

@@ -82,6 +82,23 @@ flowchart LR
 - **Messages in place of content.** `Notice` is the one tinted message box (four sizes, an `#actions` slot for the
   view's own buttons). `EmptyState` is the centred block a pane or page shows instead of its content: nothing yet, a
   read that failed, a wait. Both are on the design kit page.
+- **Dialogs.** `Modal` is the one dialog, and `ConfirmDialog` and `InfoDialog` are built on it. Every dialog follows
+  one layout: a title (`header`), then a `description` under it saying what the dialog is for or what its action
+  will do, then the body, then a `#footer` of answers. The footer reads left to right: Cancel (`tier="quiet"`), any
+  second answer, and the commit last. Footer buttons take the default size. A link or a hint that isn't an answer
+  goes first in the footer, with `mr-auto`. `#icon` puts a mark before the title. A confirm puts its question in
+  `header` and the consequence in `description`, and leaves the body for the list it acts on.
+  A dialog is already a card, so nothing inside it draws another one. `Modal` tells its contents they sit on a dialog
+  (`overlays/dialogGround.ts`). A `RowGroup` there draws its rows and their hairlines with no surface, its rows start
+  where the dialog's text does, and a `Card` draws no box. Group things inside a dialog with space, a section label
+  or a rule. A status message is a `Notice` (`success` is one of its tones), and a choice is a row with a hover wash,
+  not a bordered tile.
+  `src/styles/dialog.css` draws the rest. It dims and slightly blurs the page behind the dialog, so the page stays
+  recognisable. The dialog itself is the lightest surface in dark mode and Sanctum. A rule appears at the body's top
+  or bottom edge once there is content scrolled past it. On a phone the dialog is a sheet along the bottom edge, and
+  the back gesture closes it. _2026-10-12: dialogs used to run on PrimeVue's own Aura colours. That meant pure white
+  on warm paper in light mode, the same fill as the cards behind them in dark mode, and a near-black box in Sanctum.
+  A focus ring also landed on × every time a dialog opened._
 - **Lazy chunks.** Every dynamic import in the editor goes through `loadChunk` (`@intentic/ui/chunk`). A chunk a
   redeploy removed reloads the page once onto where the reader is, and any chunk that loads re-arms that reload.
   `installChunkRecovery` catches the preload failures Vite reports for imports nobody wrapped.

@@ -1,0 +1,257 @@
+/* THE DIALOG — <Modal> (components/overlays/Modal.vue) and everything built on it. PrimeVue draws the box; theme.ts
+   hands it the app's colours, radius, shadow and margins, and this file draws the rest of its anatomy.
+
+   A dialog stops the page to ask one thing, so every part of it is ranked by what the reader needs, in order:
+   - THE SCRIM says the page is paused, not gone. It dims a little and blurs a little (semantic-colors.css,
+     `--ui-scrim-blur`): the blur takes the page's words out of competition with the dialog's, so the dim no longer has
+     to black it out, and the reader keeps their place.
+   - THE BOX is the nearest plane: lighter than anything it covers in the dark, the plate's own paper in the light.
+   - THE HEADER is the question: a title, and under it a description (`<Modal description>`) saying what the action
+     will do. Close (×) is a small quiet button at the title's first line, never a target that steals the eye.
+   - THE BODY scrolls on its own; a rule appears under the header once it has scrolled, and over the footer while there
+     is more below it, so a cut-off form never looks finished (Modal.vue sets `data-scrolled` and `data-more`).
+   - THE FOOTER holds the answers, right-aligned, the commit last; anything that is not an answer (a link, a
+     "don't ask again") goes first with `mr-auto`.
+   On a phone the box becomes a sheet on the bottom edge, where the thumb already is (`.ui-dialog-sheet`). */
+
+@layer components {
+    /* THE SCRIM. Its colour is the theme token (theme.ts `mask`); its blur fades in with it, from `@starting-style`, and
+       out as the leave class lands. */
+    .p-dialog-mask {
+        -webkit-backdrop-filter: blur(var(--ui-scrim-blur));
+        backdrop-filter: blur(var(--ui-scrim-blur));
+        transition:
+            -webkit-backdrop-filter var(--motion-base) var(--ease-smooth),
+            backdrop-filter var(--motion-base) var(--ease-smooth);
+    }
+    @starting-style {
+        .p-dialog-mask {
+            -webkit-backdrop-filter: blur(0);
+            backdrop-filter: blur(0);
+        }
+    }
+    .p-dialog-mask.p-overlay-mask-leave-active {
+        -webkit-backdrop-filter: blur(0);
+        backdrop-filter: blur(0);
+        transition-duration: var(--motion-quick);
+    }
+
+    /* THE SAME SCRIM AND BOX, BY CLASS, for the one dialog that cannot be a <Modal>: the sign-in gate, which owns its
+       centred layout and its own mounting (SignInWall.vue). Anything else uses <Modal>. */
+    .ui-scrim {
+        background-color: var(--ui-scrim);
+        -webkit-backdrop-filter: blur(var(--ui-scrim-blur));
+        backdrop-filter: blur(var(--ui-scrim-blur));
+    }
+
+    .ui-dialog-surface {
+        --ui-tile-ground: var(--ui-dialog-fill);
+        border: 1px solid var(--ui-dialog-line);
+        border-radius: var(--radius-xl);
+        background-color: var(--ui-dialog-fill);
+        box-shadow: var(--ui-shadow-3);
+        color: var(--color-content);
+        font-size: var(--text-sm);
+        line-height: var(--text-sm--line-height);
+    }
+
+    .p-dialog {
+        /* What a count chip is ringed in follows the ground it lies on, and inside a dialog that is the dialog. */
+        --ui-tile-ground: var(--ui-dialog-fill);
+        /* The box itself takes focus when nothing in it asked to (Modal.vue): it is a landing, not a control. */
+        outline: none;
+    }
+
+    /* THE DARK SCHEME'S RULES ARE MIXED ONTO THE CARD, opaque (semantic-colors.css), and on the dialog's lighter fill
+       they came out the fill's own value: a bordered list inside lost its border and every divider. Here they are mixed
+       onto the dialog instead, each the same step from it as from a card. Sanctum's rules are gold at an alpha and read
+       on any stone, so it keeps them. */
+    :root[data-mode="dark"]:not([data-skin="sanctum"]) :is(.p-dialog, .ui-dialog-surface) {
+        --color-line: color-mix(in srgb, var(--color-content) 6%, var(--ui-dialog-fill));
+        --color-line-strong: color-mix(in srgb, var(--color-content) 11%, var(--ui-dialog-fill));
+        --color-line-subtle: color-mix(in srgb, var(--color-content) 3%, var(--ui-dialog-fill));
+    }
+
+    /* THE HEADER. Top-aligned, so a title that wraps or a description under it keeps the × at the first line. */
+    .p-dialog-header {
+        align-items: flex-start;
+        border-bottom: 1px solid transparent;
+        transition: border-color var(--motion-quick) var(--ease-smooth);
+    }
+
+    .ui-dialog-heading {
+        display: flex;
+        min-width: 0;
+        flex: 1;
+        align-items: flex-start;
+        gap: calc(var(--spacing) * 3);
+    }
+
+    .ui-dialog-icon {
+        display: flex;
+        flex: none;
+    }
+
+    .ui-dialog-titles {
+        display: flex;
+        min-width: 0;
+        flex: 1;
+        flex-direction: column;
+        gap: var(--spacing);
+    }
+
+    /* Beside a 36px mark, the title's first line centres on it. */
+    .ui-dialog-icon + .ui-dialog-titles {
+        padding-block-start: 0.3125rem;
+    }
+
+    .p-dialog-title {
+        line-height: 1.4;
+        text-wrap: balance;
+        overflow-wrap: anywhere;
+    }
+
+    .ui-dialog-description {
+        font-size: var(--text-sm);
+        line-height: var(--text-sm--line-height);
+        color: var(--color-muted);
+        text-wrap: pretty;
+    }
+
+    /* A description in more than one paragraph (a confirm naming each of its effects) keeps them apart. */
+    .ui-dialog-description > :is(p, div) + :is(p, div) {
+        margin-block-start: calc(var(--spacing) * 1.5);
+    }
+
+    /* Pulled up and out so its glyph centres on the title's first line and sits on the body's right edge. */
+    .p-dialog-header-actions {
+        margin-block-start: calc(var(--spacing) * -1);
+        margin-inline-end: calc(var(--spacing) * -2);
+    }
+
+    /* Beside a mark the title sits lower, and the × centres on the mark with it. */
+    .p-dialog-header:has(.ui-dialog-icon) > .p-dialog-header-actions {
+        margin-block-start: calc(var(--spacing) * 0.5);
+    }
+
+    .p-dialog-header-actions .p-dialog-close-button {
+        width: 2rem;
+        height: 2rem;
+        border-radius: var(--radius-md);
+        color: var(--color-subtle);
+    }
+
+    .p-dialog-header-actions .p-dialog-close-button:enabled:hover {
+        color: var(--color-content);
+    }
+
+    /* THE BODY. The app's reading size, so a sentence nobody sized matches the ones that were. */
+    .p-dialog-content {
+        font-size: var(--text-sm);
+        line-height: var(--text-sm--line-height);
+    }
+
+    /* With a footer under it, the footer's own top margin is the gap. */
+    .p-dialog:has(> .p-dialog-footer) > .p-dialog-content {
+        padding-block-end: var(--spacing);
+    }
+
+    /* NOTHING INSIDE IS A SECOND CARD. The kit's own groups and cards draw no surface here (overlays/dialogGround.ts);
+       a code block keeps its recessed fill, which says "machine text", and gives up the rim that made it a box. */
+    .p-dialog .ui-code .shiki {
+        border-color: transparent;
+    }
+
+    /* A CONFIRM WITH A MARK is the alert's shape: the mark in its own column, and the question, what it does and what it
+       acts on all in the column beside it, so they read as one thing. The answers keep the full width, and a phone's sheet
+       keeps its narrow width for the words. */
+    .ui-dialog-confirm:not(.ui-dialog-sheet):has(.ui-dialog-icon) > .p-dialog-content {
+        padding-inline-start: calc(var(--ui-dialog-pad) + 2.25rem + var(--spacing) * 3);
+    }
+
+    /* A confirm whose whole question is its title and description has no body: none is drawn, rather than an empty
+       band between the words and the answers. */
+    .p-dialog-content:empty {
+        display: none;
+    }
+
+    /* THE FOOTER. */
+    .p-dialog-footer {
+        flex-wrap: wrap;
+        align-items: center;
+        border-top: 1px solid transparent;
+        transition: border-color var(--motion-quick) var(--ease-smooth);
+    }
+
+    /* THE EDGES A SCROLL SHOWS. */
+    .p-dialog[data-scrolled] > .p-dialog-header {
+        border-bottom-color: var(--ui-dialog-line);
+    }
+    .p-dialog[data-more] > .p-dialog-footer {
+        border-top-color: var(--ui-dialog-line);
+    }
+
+    /* ARRIVING. A surface arriving rises the house's few pixels (motion.css); PrimeVue's own was a 300ms zoom from 93%. */
+    .p-dialog-enter-active {
+        animation: ui-dialog-in var(--motion-base) var(--ease-smooth);
+    }
+    .p-dialog-leave-active {
+        animation: ui-dialog-out var(--motion-quick) var(--ease-smooth);
+    }
+
+    /* A PHONE. The sheet is the whole width on the bottom edge, its answers within the thumb's reach and wide enough to
+       hit; the keyboard, where it covers the page rather than shrinking it, lifts it (`--ui-sheet-lift`, Modal.vue). */
+    .p-dialog.ui-dialog-sheet {
+        --ui-dialog-pad: calc(var(--spacing) * 5);
+        width: 100% !important;
+        max-width: none !important;
+        max-height: calc(100dvh - var(--ui-sheet-lift, 0px) - max(env(safe-area-inset-top), calc(var(--spacing) * 3)) - calc(var(--spacing) * 3)) !important;
+        margin: 0 0 var(--ui-sheet-lift, 0px);
+        border-bottom-width: 0;
+        border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+        padding-block-end: env(safe-area-inset-bottom);
+    }
+    .p-dialog.ui-dialog-sheet.p-dialog-enter-active {
+        animation: ui-sheet-in var(--motion-base) var(--ease-smooth);
+    }
+    .p-dialog.ui-dialog-sheet.p-dialog-leave-active {
+        animation: ui-sheet-out var(--motion-quick) var(--ease-smooth);
+    }
+    .ui-dialog-sheet > .p-dialog-footer > .p-button {
+        flex: 1 1 auto;
+    }
+
+    /* A box a phone still shows as a box (the palette, pinned to the top for the keyboard under it): inside the screen. */
+    @media (max-width: 767.98px) {
+        .p-dialog:not(.ui-dialog-sheet) {
+            max-width: calc(100vw - 1.5rem) !important;
+            max-height: calc(100dvh - 1.5rem) !important;
+        }
+    }
+}
+
+@keyframes ui-dialog-in {
+    from {
+        opacity: 0;
+        transform: translateY(var(--motion-rise)) scale(0.98);
+    }
+}
+
+@keyframes ui-dialog-out {
+    to {
+        opacity: 0;
+        transform: scale(0.98);
+    }
+}
+
+@keyframes ui-sheet-in {
+    from {
+        transform: translateY(100%);
+    }
+}
+
+@keyframes ui-sheet-out {
+    to {
+        transform: translateY(100%);
+    }
+}

@@ -5,7 +5,7 @@
      reads as work someone did here. It goes once the reader's own first agent finishes (AgentsView) or the checklist is
      put away. -->
 <script setup lang="ts">
-import { Button, Code, DiffStat, Modal, StatusBadge, toneTint } from "@intentic/ui";
+import { Button, Code, DiffStat, Modal, StatusBadge } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import IdentityTile from "../../../capabilities/connect/IdentityTile.vue";
@@ -45,10 +45,8 @@ const startOwn = (): void => {
         <span class="text-2xs leading-snug text-subtle">{{ t(`agents.exampleCard.line`) }}</span>
     </button>
 
-    <Modal v-model:open="open" size="lg" :header="t(`agents.exampleCard.reviewTitle`)">
+    <Modal v-model:open="open" size="lg" :header="t(`agents.exampleCard.reviewTitle`)" :description="t(`agents.exampleCard.reviewIntro`)">
         <div class="flex flex-col gap-4">
-            <p class="text-xs leading-relaxed text-muted">{{ t(`agents.exampleCard.reviewIntro`) }}</p>
-
             <!-- 1. What was asked. -->
             <section class="flex flex-col gap-1.5">
                 <p class="text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`agents.exampleCard.asked`) }}</p>
@@ -74,9 +72,9 @@ const startOwn = (): void => {
             </section>
 
             <!-- 4. What landing is: the one press this whole board leads to. -->
-            <section :class="toneTint(`success`, `strong`, `flex flex-col gap-1 rounded-xl p-3`)">
-                <p class="text-xs font-semibold text-content">{{ t(`agents.exampleCard.landTitle`) }}</p>
-                <p class="text-xs leading-relaxed text-muted">{{ t(`agents.exampleCard.landLine`) }}</p>
+            <section class="flex flex-col gap-1.5">
+                <p class="text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`agents.exampleCard.landTitle`) }}</p>
+                <p class="text-xs leading-relaxed text-content">{{ t(`agents.exampleCard.landLine`) }}</p>
             </section>
         </div>
         <template #footer>

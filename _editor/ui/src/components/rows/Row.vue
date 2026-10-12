@@ -4,7 +4,7 @@ import { computed } from "vue";
 import { FACE_SIZES } from "../brand/personaFace.js";
 import type { IconName } from "../../icons/iconSets.js";
 import Icon from "../primitives/Icon.vue";
-import { ROW_TIERS as TIERS, ROW_TONES as TONES, type RowDensity, type RowTone, useRowDensity } from "./row.js";
+import { ROW_TIERS as TIERS, ROW_TONES as TONES, type RowDensity, type RowTone, useRowDensity, useRowFlushInline } from "./row.js";
 
 const {
     as = `div`,
@@ -67,6 +67,8 @@ const emit = defineEmits<{ headerClick: [event: MouseEvent] }>();
 
 // The tier in force: this row's own `density` if given, else the enclosing <RowGroup>'s.
 const tier = useRowDensity(() => density);
+// On a group with no surface of its own (a dialog's), the row keeps its height and gives up its side inset.
+const flushInline = useRowFlushInline();
 
 // The two numbers a face changes, read once so the row and its `#below` mirror cannot disagree about either.
 const mark = computed(() => (lead === `face` ? FACE_SIZES.row : TIERS[tier.value].mark));
@@ -117,6 +119,7 @@ const picked = as === `button`;
         class="group flex w-full flex-wrap items-center justify-between gap-x-4 gap-y-2 text-left"
         :class="[
             flush ? `` : pad,
+            flushInline ? `!px-0` : ``,
             // The app's one hover tint and one selected tint (styles/utilities.css). This used to carry
             // its own `hover:bg-content/5`: the same 5% by luck rather than by reference.
             interactive || selected || href !== undefined || as !== `div` ? `ui-row-select` : ``,

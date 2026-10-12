@@ -2,7 +2,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { ui } from "../../lib/ui.js";
-import { provideRowDensity, type RowDensity } from "./row.js";
+import { useDialogGround } from "../overlays/dialogGround.js";
+import { provideRowDensity, provideRowFlushInline, type RowDensity } from "./row.js";
 
 // Names the group's subject when the label alone is ambiguous; sits inline with the label since a
 // reader who misidentifies the subject has already misread every number below it.
@@ -17,7 +18,7 @@ import { provideRowDensity, type RowDensity } from "./row.js";
 // The header scrolls with its rows: a group header cannot pin, because this band carries no fill (bg-canvas
 // here reads as a dark box against the card below on the sanctum skin) and a transparent pinned band lets
 // the rows sliding under it show through its own text.
-const { density = `compact` } = defineProps<{
+const { density = `compact`, flat } = defineProps<{
     label?: string;
     count?: string | number;
     caption?: string;
@@ -30,13 +31,18 @@ const { density = `compact` } = defineProps<{
 }>();
 
 provideRowDensity(computed(() => density));
+
+// On a dialog the group is its rows and their hairlines: the dialog is already the card (dialogGround.ts).
+const onDialog = useDialogGround();
+const surfaced = computed(() => flat !== true && !onDialog);
+provideRowFlushInline(onDialog);
 </script>
 
 <template>
     <section>
         <div
             v-if="label !== undefined || $slots[`label`] || $slots[`info`] || $slots[`actions`]"
-            class="mb-2.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 px-1"
+            :class="[`mb-2.5 flex flex-wrap items-center gap-x-2.5 gap-y-1`, onDialog ? `` : `px-1`]"
         >
             <slot name="label"
                 ><span v-if="label !== undefined" :class="ui.sectionLabel()">{{ label }}</span></slot
@@ -56,7 +62,7 @@ provideRowDensity(computed(() => density));
         <div
             :class="[
                 undivided === true ? `` : `divide-y divide-line-subtle`,
-                flat === true ? `` : `overflow-hidden rounded-xl bg-card shadow-sm`,
+                surfaced ? `overflow-hidden rounded-xl bg-card shadow-sm` : ``,
                 equalRows ? `grid grid-cols-[minmax(0,1fr)] md:auto-rows-fr *:content-center` : ``,
             ]"
         >

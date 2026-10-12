@@ -455,9 +455,9 @@ const toggleDetail = (id: string): void => {
             @cancel="confirmRemoveId = undefined"
             @confirm="removeAutomation"
         >
-            <p class="text-sm text-content">
+            <template #description>
                 {{ t(`automationsView.delete`) }} <b>{{ confirmRemoveId }}</b> {{ t(`automationsView.runHistoryCantUndone`) }}
-            </p>
+            </template>
         </ConfirmDialog>
     </Page>
 </template>

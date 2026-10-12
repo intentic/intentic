@@ -2,6 +2,7 @@
 import {
     Avatar,
     Button,
+    ConfirmDialog,
     ui,
     Modal,
     Notice,
@@ -710,71 +711,81 @@ const confirmHandOver = async (): Promise<void> => {
         </ResponsiveOverlay>
 
         <!-- Mid-write land warns about the recoverable overwrite risk. -->
-        <Modal :open="pendingForceLand" size="sm" :header="words.landWhileWorking" @update:open="pendingForceLand = false">
-            <p class="text-xs text-content">{{ words.landWhileWorkingBody }}</p>
-            <p class="mt-2 text-xs text-muted">
-                {{ t(`agents.agentDetail.nothingFinalArrivesUncommitted`) }}
-            </p>
-            <template #footer>
-                <Button size="small" tier="quiet" :label="t(`ui.action.cancel`)" @click="pendingForceLand = false" />
-                <Button size="small" tone="warning" :label="words.landAnyway" :disabled="changes.actionBusy.value" @click="confirmForceLand" />
-            </template>
-        </Modal>
+        <ConfirmDialog
+            :open="pendingForceLand"
+            :header="words.landWhileWorking"
+            :description="words.landWhileWorkingBody"
+            :confirm-label="words.landAnyway"
+            :confirm-disabled="changes.actionBusy.value"
+            :destructive="false"
+            tone="warning"
+            @cancel="pendingForceLand = false"
+            @confirm="confirmForceLand"
+        >
+            <p class="text-xs text-muted">{{ t(`agents.agentDetail.nothingFinalArrivesUncommitted`) }}</p>
+        </ConfirmDialog>
 
-        <Modal :open="pendingDiscard" size="sm" :header="words.discardHeader" @update:open="pendingDiscard = false">
-            <p class="text-xs text-content">
-                {{
-                    t(
-                        `agents.agentDetail.discardBody`,
-                        { lead: words.discardBodyLead, count: changes.count.value, tail: words.discardBodyTail },
-                        changes.count.value,
-                    )
-                }}
-            </p>
-            <p v-if="changes.count.value > changes.pending.value.length" class="mt-2 text-xs text-muted">
+        <ConfirmDialog
+            :open="pendingDiscard"
+            :header="words.discardHeader"
+            :description="
+                t(
+                    `agents.agentDetail.discardBody`,
+                    { lead: words.discardBodyLead, count: changes.count.value, tail: words.discardBodyTail },
+                    changes.count.value,
+                )
+            "
+            :confirm-label="words.discard"
+            :confirm-disabled="changes.actionBusy.value"
+            @cancel="pendingDiscard = false"
+            @confirm="confirmDiscard"
+        >
+            <p v-if="changes.count.value > changes.pending.value.length" class="text-xs text-muted">
                 {{ t(`agents.agentDetail.workAlreadyLandedStays`) }}
             </p>
-            <template #footer>
-                <Button size="small" tier="quiet" :label="t(`ui.action.cancel`)" @click="pendingDiscard = false" />
-                <Button size="small" tone="danger" :label="words.discard" :disabled="changes.actionBusy.value" @click="confirmDiscard" />
-            </template>
-        </Modal>
+        </ConfirmDialog>
 
-        <Modal :open="pendingHandOver" size="sm" :header="t(`agents.agentDetail.handOverHeader`)" @update:open="pendingHandOver = false">
-            <p class="text-xs text-content">{{ t(`agents.agentDetail.handOverBody`) }}</p>
-            <!-- Whoever is connected is one press; anyone else is an address. Both write the same field, so there is one confirm. -->
-            <div v-if="presenceOthers.length > 0" class="mt-3 flex flex-col gap-1">
-                <span class="text-2xs font-medium text-muted">{{ t(`agents.agentDetail.handOverConnected`) }}</span>
-                <button
-                    v-for="member in presenceOthers"
-                    :key="member.email"
-                    type="button"
-                    class="flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors hover:bg-overlay"
-                    :class="handOverTo === member.email ? 'bg-overlay' : ''"
-                    :aria-pressed="handOverTo === member.email"
-                    @click="handOverTo = member.email"
-                >
-                    <Avatar :size="18" :name="member.name ?? member.email" :src="member.picture" :hue="identityHue(member.email)" />
-                    <span class="truncate text-content">{{ member.name ?? member.email }}</span>
-                    <span v-if="member.name !== undefined" class="truncate text-2xs text-subtle">{{ member.email }}</span>
-                </button>
+        <Modal
+            :open="pendingHandOver"
+            size="sm"
+            :header="t(`agents.agentDetail.handOverHeader`)"
+            :description="t(`agents.agentDetail.handOverBody`)"
+            @update:open="pendingHandOver = false"
+        >
+            <div class="flex flex-col gap-3">
+                <!-- Whoever is connected is one press; anyone else is an address. Both write the same field, so there is one confirm. -->
+                <div v-if="presenceOthers.length > 0" class="flex flex-col gap-1">
+                    <span class="text-2xs font-medium text-muted">{{ t(`agents.agentDetail.handOverConnected`) }}</span>
+                    <button
+                        v-for="member in presenceOthers"
+                        :key="member.email"
+                        type="button"
+                        class="flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors hover:bg-overlay"
+                        :class="handOverTo === member.email ? 'bg-overlay' : ''"
+                        :aria-pressed="handOverTo === member.email"
+                        @click="handOverTo = member.email"
+                    >
+                        <Avatar :size="18" :name="member.name ?? member.email" :src="member.picture" :hue="identityHue(member.email)" />
+                        <span class="truncate text-content">{{ member.name ?? member.email }}</span>
+                        <span v-if="member.name !== undefined" class="truncate text-2xs text-subtle">{{ member.email }}</span>
+                    </button>
+                </div>
+                <form class="flex flex-col gap-1" @submit.prevent="confirmHandOver">
+                    <label class="text-2xs font-medium text-muted" for="hand-over-address">{{ t(`agents.agentDetail.handOverAddress`) }}</label>
+                    <input
+                        id="hand-over-address"
+                        v-model="handOverTo"
+                        type="email"
+                        autocomplete="off"
+                        placeholder="teammate@example.com"
+                        :class="ui.input({ size: `sm` }, 'min-w-0')"
+                    />
+                </form>
+                <p v-if="handOverError !== undefined" class="text-xs text-danger">{{ handOverError }}</p>
             </div>
-            <form class="mt-3 flex flex-col gap-1" @submit.prevent="confirmHandOver">
-                <label class="text-2xs font-medium text-muted" for="hand-over-address">{{ t(`agents.agentDetail.handOverAddress`) }}</label>
-                <input
-                    id="hand-over-address"
-                    v-model="handOverTo"
-                    type="email"
-                    autocomplete="off"
-                    placeholder="teammate@example.com"
-                    :class="ui.input({ size: `sm` }, 'min-w-0')"
-                />
-            </form>
-            <p v-if="handOverError !== undefined" class="mt-2 text-xs text-danger">{{ handOverError }}</p>
             <template #footer>
-                <Button size="small" tier="quiet" :label="t(`ui.action.cancel`)" @click="pendingHandOver = false" />
+                <Button tier="quiet" :label="t(`ui.action.cancel`)" @click="pendingHandOver = false" />
                 <Button
-                    size="small"
                     :label="t(`agents.agentDetail.handOverConfirm`)"
                     :disabled="handOverBusy || handOverTo.trim() === ''"
                     @click="confirmHandOver"

@@ -2,7 +2,8 @@
 import type { DaemonSession } from "@intentic/sandbox-contract";
 import { Button, Notice, type NoticeModel, ui, useTheme, vAction } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
-import { computed, ref, watch } from "vue";
+import FocusTrap from "primevue/focustrap";
+import { computed, ref, useId, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useAuth } from "../../../client/auth/useAuth";
 import { useBrowserHandoff } from "../../auth/browserHandoff";
@@ -37,6 +38,10 @@ const passkeysWork = browserSupportsPasskeys();
 const stepUp = computed(() => (prompt.value?.kind === `step-up` ? prompt.value : undefined));
 const passkeyOffered = computed(() => prompt.value?.kind === `choose` && prompt.value.passkey && passkeysWork);
 const visible = computed(() => needsSignIn.value || stepUp.value !== undefined);
+// Names the dialog by whichever heading the state it is in draws.
+const titleId = useId();
+// Tab stays inside the gate while it is up, as it does in every <Modal>.
+const vFocustrap = FocusTrap;
 // Only the owner holds recovery codes; the platform's own roster says who the reader is before any session exists.
 const isOwner = computed(() => sandbox.active.value?.role === `owner`);
 
@@ -141,8 +146,15 @@ const backToSetup = async (): Promise<void> => {
 </script>
 
 <template>
-    <div v-if="visible" class="fixed inset-0 z-50 flex items-center justify-center bg-canvas/70 p-6 backdrop-blur-sm">
-        <div class="w-full max-w-sm rounded-2xl bg-card shadow-sm p-6 shadow-xl">
+    <!-- A dialog drawn by hand, because it owns a centred sign-in layout and its tests read it where it mounts: the
+         same scrim and box as every <Modal> (dialog.css), the same semantics, a trapped Tab, and Esc for "Not now"
+         wherever that is the way out (never for Back to setup, which leaves the page). -->
+    <div
+        v-if="visible"
+        class="ui-scrim fixed inset-0 z-50 flex items-center justify-center p-6"
+        @keydown.esc="working || !isOwner ? notNow() : undefined"
+    >
+        <div v-focustrap class="ui-dialog-surface w-full max-w-sm p-6" role="dialog" aria-modal="true" :aria-labelledby="titleId">
             <div class="flex flex-col items-center gap-3 text-center">
                 <span class="flex h-11 w-11 items-center justify-center rounded-xl bg-overlay text-link">
                     <Icon :name="stepUp ? `key` : waitingInBrowser ? `external-link` : `google`" class="text-lg" />
@@ -150,7 +162,7 @@ const backToSetup = async (): Promise<void> => {
 
                 <!-- STEP-UP: the proof was taken, the sandbox wants its passkey. -->
                 <template v-if="stepUp">
-                    <h2 class="text-lg font-semibold text-content">
+                    <h2 :id="titleId" class="text-lg font-semibold text-content">
                         {{ stepUp.enrolled ? t(`sandbox.signInWall.confirm`) : t(`sandbox.signInWall.addPasskeyToContinue`) }}
                     </h2>
                     <p class="text-sm text-muted">
@@ -210,7 +222,7 @@ const backToSetup = async (): Promise<void> => {
                 <!-- CHOOSE: nothing in hand yet. -->
                 <template v-else>
                     <div class="space-y-2" role="status">
-                        <h2 class="text-lg font-semibold text-content">
+                        <h2 :id="titleId" class="text-lg font-semibold text-content">
                             {{ waitingInBrowser ? t(`sandbox.signInWall.continueInBrowser`) : t(`sandbox.signInWall.signInToReach`) }}
                         </h2>
                         <p class="text-sm text-muted">

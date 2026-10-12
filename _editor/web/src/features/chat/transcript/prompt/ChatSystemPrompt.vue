@@ -128,20 +128,19 @@ const shown = (text: string, title: string): string => {
         </button>
     </div>
 
-    <Modal v-model:open="open" size="lg" :header="t(`chat.chatSystemPrompt.title`)">
-        <p class="text-xs text-muted">{{ t(`chat.chatSystemPrompt.lede`) }}</p>
+    <Modal v-model:open="open" size="lg" :header="t(`chat.chatSystemPrompt.title`)" :description="t(`chat.chatSystemPrompt.lede`)">
         <div v-if="loading" class="flex items-center gap-2 py-6 text-xs text-muted">
             <Icon name="spinner" spin />
             {{ t(`chat.chatSystemPrompt.reading`) }}
         </div>
-        <Notice v-else-if="error !== undefined" tone="danger" class="mt-3 text-2xs">{{ error }}</Notice>
-        <Notice v-else-if="missing" tone="info" class="mt-3 text-2xs">{{ t(`chat.chatSystemPrompt.nothing`) }}</Notice>
-        <template v-else-if="disclosure !== undefined">
+        <Notice v-else-if="error !== undefined" tone="danger" class="text-2xs">{{ error }}</Notice>
+        <Notice v-else-if="missing" tone="info" class="text-2xs">{{ t(`chat.chatSystemPrompt.nothing`) }}</Notice>
+        <div v-else-if="disclosure !== undefined" class="flex flex-col gap-3">
             <!-- Which turn this was, because a persona switch or an edited AGENTS.md changes it mid-conversation. -->
-            <p class="mt-1 text-2xs text-subtle">
+            <p class="text-2xs text-subtle">
                 {{ t(`chat.chatSystemPrompt.composed`, { runtime: disclosure.runtime, when: timeAgo(disclosure.at, { days: true }) }) }}
             </p>
-            <div class="mt-3 flex flex-col border-y border-line-subtle">
+            <div class="flex flex-col border-y border-line-subtle">
                 <div v-for="row in rows" :key="row.key" class="flex flex-col border-b border-line-subtle last:border-b-0">
                     <button
                         type="button"
@@ -178,9 +177,9 @@ const shown = (text: string, title: string): string => {
                     </div>
                 </div>
             </div>
-            <div class="mt-3 flex items-center justify-end gap-2">
+            <div class="flex items-center justify-end gap-2">
                 <CopyButton :text="whole" :label="t(`chat.chatSystemPrompt.copyAll`)" />
             </div>
-        </template>
+        </div>
     </Modal>
 </template>

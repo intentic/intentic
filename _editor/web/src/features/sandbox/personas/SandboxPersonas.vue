@@ -434,13 +434,12 @@ const confirmRemove = async (): Promise<void> => {
         <ConfirmDialog
             :open="removing !== undefined"
             :header="t(`sandbox.sandboxPersonas.remove`, { id: removing?.label ?? removing?.id })"
+            :description="t(`sandbox.sandboxPersonas.accountsSpeaksThroughStay`)"
             :confirm-label="t(`sandbox.sandboxPersonas.removePersona2`)"
             confirm-icon="trash"
             :loading="remove.isPending.value"
             @cancel="removing = undefined"
             @confirm="confirmRemove"
-        >
-            {{ t(`sandbox.sandboxPersonas.accountsSpeaksThroughStay`) }}
-        </ConfirmDialog>
+        />
     </div>
 </template>

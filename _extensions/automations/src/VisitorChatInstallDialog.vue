@@ -62,7 +62,7 @@ const allowOrigin = async (origin: string): Promise<void> => {
             <!-- The deliverable, first and unmissable. Everything below it is about whether it worked. -->
             <div class="ui-field">
                 <span class="ui-field-label">{{ t(`visitorChatInstallDialog.pasteIntoSiteBefore`) }} <span class="font-mono">&lt;/body&gt;</span></span>
-                <div class="flex items-start gap-2 rounded-md border border-line bg-canvas px-3 py-2">
+                <div class="flex items-start gap-2 rounded-md bg-canvas px-3 py-2">
                     <code class="min-w-0 flex-1 break-all font-mono text-2xs text-content">{{ snippet }}</code>
                     <CopyButton :text="snippet" :aria-label="t(`visitorChatInstallDialog.copyEmbedSnippet`, { id: automation.id })" />
                 </div>
@@ -84,13 +84,12 @@ const allowOrigin = async (origin: string): Promise<void> => {
                 <Notice v-if="error" :of="noticeOf(error)" />
 
                 <!-- A real state, not empty: it says what to do to change it, the only useful thing while nothing has happened yet. -->
-                <div v-else-if="installs.length === 0" class="flex items-start gap-2 rounded-md bg-overlay px-3 py-2.5 text-xs text-muted">
-                    <Icon name="clock" class="mt-0.5 shrink-0 text-2xs text-subtle" />
+                <Notice v-else-if="installs.length === 0" icon="clock">
                     <span v-if="isLoading">{{ t(`visitorChatInstallDialog.checking`) }}</span>
                     <span v-else>
                         {{ t(`visitorChatInstallDialog.noBrowserLoadedWidget`) }}
                     </span>
-                </div>
+                </Notice>
 
                 <template v-else>
                     <!-- Refused first: it is the one line here that asks for an action. -->

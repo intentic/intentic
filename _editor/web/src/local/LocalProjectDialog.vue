@@ -92,56 +92,58 @@ const open = computed({
 </script>
 
 <template>
-    <Modal v-model:open="open" size="md" :header="header" :dismissable="!attaching">
-        <!-- The picture says what the button does: this folder stays where it is, and its copy goes into a house of its
-             own, built beside it. A folder that cannot have one gets the empty site with the sign on it. -->
-        <div class="mb-4 rounded-md border border-line bg-canvas px-3 pb-2 pt-4">
+    <!-- What happens, or why it can't, is the description in each case: the folder's copy, a document, or the refusal. -->
+    <Modal
+        v-model:open="open"
+        size="md"
+        :header="header"
+        :description="refused ?? (document ? t(`local.project.document`) : t(`local.project.lede`))"
+        :dismissable="!attaching"
+    >
+        <div class="flex flex-col gap-4">
+            <!-- The picture says what the button does: this folder stays where it is, and its copy goes into a house of its
+                 own, built beside it. A folder that cannot have one gets the empty site with the sign on it. Drawn
+                 straight on the dialog: a frame round it would be a card on a card. -->
             <AgentHouse
                 :stage="refused !== undefined || document ? `plan` : `moving`"
                 :failed="refused !== undefined || document"
                 class="mx-auto h-auto max-h-36 w-full"
             />
+
+            <template v-if="refused === undefined && !document">
+                <!-- The folder, by its full path, its own name the brightest part of it; then what its first copy carries, with
+                     what stays behind a hint away. -->
+                <div class="flex flex-col gap-1.5">
+                    <div class="flex items-center gap-2 rounded-md bg-canvas px-2.5 py-2 font-mono text-xs">
+                        <Icon name="folder-open" class="shrink-0 text-subtle" aria-hidden="true" />
+                        <span class="flex min-w-0" v-tooltip.top="face?.path">
+                            <span class="truncate text-subtle">{{ parent }}</span>
+                            <span class="shrink-0 text-content">{{ folder }}</span>
+                        </span>
+                    </div>
+                    <p class="flex items-center gap-1.5 text-2xs text-muted">
+                        <span v-if="fresh !== undefined" class="tabular-nums">{{ copyWeight(fresh) }}</span>
+                        <Icon v-else-if="failure === undefined" name="spinner" spin class="text-xs" :aria-label="t(`workspace.words.working`)" />
+                        <InfoHint :label="t(`local.project.staysHere`)">
+                            <span class="block text-xs text-content">{{ t(`local.project.staysHere`) }}</span>
+                        </InfoHint>
+                    </p>
+                </div>
+
+                <Notice v-for="caution in cautions" :key="caution" tone="warning" class="text-2xs">{{ caution }}</Notice>
+
+                <p v-if="machineNote" class="text-2xs text-muted">{{ machineNote }}</p>
+            </template>
+
+            <Notice v-if="failure !== undefined" tone="danger" class="text-2xs">
+                <span class="block font-medium">{{ t(`local.project.attachFailed`) }}</span>
+                <span class="block break-words">{{ failure }}</span>
+            </Notice>
         </div>
-
-        <template v-if="refused !== undefined">
-            <p class="text-xs leading-relaxed text-content">{{ refused }}</p>
-        </template>
-        <template v-else-if="document">
-            <p class="text-xs leading-relaxed text-content">{{ t(`local.project.document`) }}</p>
-        </template>
-        <template v-else>
-            <p class="text-xs leading-relaxed text-content">{{ t(`local.project.lede`) }}</p>
-
-            <!-- The folder, by its full path, its own name the brightest part of it; then what its first copy carries, with
-                 what stays behind a hint away. -->
-            <div class="mt-3 flex items-center gap-2 rounded-md border border-line bg-canvas px-2.5 py-2 font-mono text-xs">
-                <Icon name="folder-open" class="shrink-0 text-subtle" aria-hidden="true" />
-                <span class="flex min-w-0" v-tooltip.top="face?.path">
-                    <span class="truncate text-subtle">{{ parent }}</span>
-                    <span class="shrink-0 text-content">{{ folder }}</span>
-                </span>
-            </div>
-            <p class="mt-1.5 flex items-center gap-1.5 text-2xs text-muted">
-                <span v-if="fresh !== undefined" class="tabular-nums">{{ copyWeight(fresh) }}</span>
-                <Icon v-else-if="failure === undefined" name="spinner" spin class="text-xs" :aria-label="t(`workspace.words.working`)" />
-                <InfoHint :label="t(`local.project.staysHere`)">
-                    <span class="block text-xs text-content">{{ t(`local.project.staysHere`) }}</span>
-                </InfoHint>
-            </p>
-
-            <Notice v-for="caution in cautions" :key="caution" tone="warning" class="mt-2 text-2xs">{{ caution }}</Notice>
-
-            <p v-if="machineNote" class="mt-3 text-2xs text-muted">{{ machineNote }}</p>
-        </template>
-
-        <Notice v-if="failure !== undefined" tone="danger" class="mt-3 text-2xs">
-            <span class="block font-medium">{{ t(`local.project.attachFailed`) }}</span>
-            <span class="block break-words">{{ failure }}</span>
-        </Notice>
 
         <template #footer>
             <template v-if="refused !== undefined || document">
-                <Button :label="t(`ui.action.close`)" @click="cancel" />
+                <Button :label="t(`ui.action.close`)" tier="quiet" @click="cancel" />
             </template>
             <template v-else>
                 <Button tier="quiet" :label="t(`ui.action.cancel`)" :disabled="attaching" @click="cancel" />

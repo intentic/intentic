@@ -76,10 +76,15 @@ const done = (): void => {
 </script>
 
 <template>
-    <Modal :open="visible" size="md" :header="t(`chat.chatShareDialog.shareConversation`)" @update:open="emit(`update:visible`, $event)">
+    <Modal
+        :open="visible"
+        size="md"
+        :header="t(`chat.chatShareDialog.shareConversation`)"
+        :description="result ? t(`chat.chatShareDialog.anyoneLinkReadConversation`) : undefined"
+        @update:open="emit(`update:visible`, $event)"
+    >
         <!-- After: the link, and nothing to decide. -->
         <div v-if="result" class="flex flex-col gap-3">
-            <p class="text-xs text-muted">{{ t(`chat.chatShareDialog.anyoneLinkReadConversation`) }}</p>
             <div class="flex items-center gap-2 rounded-lg border border-line bg-canvas px-3 py-2">
                 <Icon name="globe" class="shrink-0 text-subtle" />
                 <span class="min-w-0 flex-1 truncate font-mono text-xs text-muted" v-tooltip.bottom.overflow="result.url">{{
@@ -110,7 +115,9 @@ const done = (): void => {
                 <span class="ui-field-hint">{{ t(`chat.chatShareDialog.shownAtTopPage`) }}</span>
             </label>
 
-            <div class="flex flex-col gap-1.5">
+            <!-- The choices are rows on the dialog's ground, not boxed tiles: the pick is the tint, and the rows reach out by their
+                 own padding so their marks line up with the label above. -->
+            <div class="flex flex-col gap-1">
                 <span class="ui-field-label">{{ t(`chat.chatShareDialog.whatToInclude`) }}</span>
                 <button
                     v-for="option in DETAILS"
@@ -118,7 +125,7 @@ const done = (): void => {
                     type="button"
                     role="radio"
                     :aria-checked="detail === option.value"
-                    class="ui-row-select flex items-start gap-2 rounded-lg border px-2.5 py-2 text-left"
+                    class="ui-row-select -mx-2.5 flex items-start gap-2 rounded-lg px-2.5 py-2 text-left"
                     :class="{ 'ui-row-select-on': detail === option.value }"
                     @click="detail = option.value"
                 >
@@ -142,12 +149,12 @@ const done = (): void => {
         </form>
 
         <template #footer>
-            <Button v-if="result" :label="t(`ui.action.done`)" size="small" @click="done" />
+            <CopyButton v-if="result?.url" :text="result.url" :label="t(`ui.action.copyLink`)" class="mr-auto" />
+            <Button v-if="result" :label="t(`ui.action.done`)" @click="done" />
             <template v-else>
-                <Button :label="t(`ui.action.cancel`)" size="small" tier="quiet" @click="emit(`update:visible`, false)" />
-                <Button :label="t(`chat.chatShareDialog.share`)" size="small" :loading="busy" :disabled="name.trim().length === 0" @click="share" />
+                <Button :label="t(`ui.action.cancel`)" tier="quiet" @click="emit(`update:visible`, false)" />
+                <Button :label="t(`chat.chatShareDialog.share`)" :loading="busy" :disabled="name.trim().length === 0" @click="share" />
             </template>
-            <CopyButton v-if="result?.url" :text="result.url" :label="t(`ui.action.copyLink`)" />
         </template>
     </Modal>
 </template>

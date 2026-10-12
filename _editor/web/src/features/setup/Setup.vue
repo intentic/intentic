@@ -1278,6 +1278,7 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
         <ConfirmDialog
             :open="handBackAsked"
             :header="t(`setup.setup.handBackHeader`)"
+            :description="t(`setup.setup.handBackFiles`, { name: created?.name ?? `` })"
             header-icon="exclamation-triangle"
             :confirm-label="t(`setup.setup.handBackConfirm`)"
             :loading="releasingHosted"
@@ -1285,10 +1286,7 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
             @cancel="handBackAsked = false"
             @confirm="confirmHandBack"
         >
-            <div class="flex flex-col gap-3">
-                <p class="text-sm text-muted">{{ t(`setup.setup.handBackFiles`, { name: created?.name ?? `` }) }}</p>
-                <p class="text-sm text-muted">{{ t(`setup.setup.handBackKeeps`) }}</p>
-            </div>
+            <p class="text-muted">{{ t(`setup.setup.handBackKeeps`) }}</p>
         </ConfirmDialog>
     </div>
 </template>

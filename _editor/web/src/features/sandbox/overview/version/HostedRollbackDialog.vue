@@ -51,6 +51,7 @@ const confirm = async (): Promise<void> => {
     <ConfirmDialog
         :open="sandbox !== undefined"
         :header="t(`sandbox.hostedRollback.header`, { name: sandbox?.name ?? `` })"
+        :description="t(`sandbox.hostedRollback.body`)"
         :confirm-label="t(`capabilities.hostRecreate.rollBackVerb`)"
         confirm-icon="undo"
         :destructive="false"
@@ -58,7 +59,6 @@ const confirm = async (): Promise<void> => {
         @cancel="emit(`close`)"
         @confirm="confirm"
     >
-        <p>{{ t(`sandbox.hostedRollback.body`) }}</p>
-        <Notice v-if="notice" :of="notice" class="mt-3" />
+        <Notice v-if="notice" :of="notice" />
     </ConfirmDialog>
 </template>

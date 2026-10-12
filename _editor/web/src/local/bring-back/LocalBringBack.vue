@@ -140,10 +140,9 @@ const syncBothWays = (): void => {
             :header="t(`local.localBringBack.bothWaysHeader`)"
             :confirm-label="t(`local.localBringBack.bothWaysConfirm`)"
             confirm-icon="sync"
+            :description="t(`local.localBringBack.bothWaysWarning`)"
             @cancel="confirmingBoth = false"
             @confirm="syncBothWays"
-        >
-            <p class="text-xs text-muted">{{ t(`local.localBringBack.bothWaysWarning`) }}</p>
-        </ConfirmDialog>
+        />
     </section>
 </template>

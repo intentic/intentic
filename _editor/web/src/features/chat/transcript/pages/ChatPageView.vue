@@ -128,12 +128,11 @@ const confirmPublish = async (): Promise<void> => {
             header-icon="globe"
             :confirm-label="t(`chat.chatPages.publishConfirm`)"
             confirm-icon="upload"
+            :description="t(`chat.chatPages.publishWarning`, { title: page.title })"
             :destructive="false"
             :loading="actions.publishing.value"
             @cancel="confirming = false"
             @confirm="confirmPublish"
-        >
-            <p class="text-xs text-muted">{{ t(`chat.chatPages.publishWarning`, { title: page.title }) }}</p>
-        </ConfirmDialog>
+        />
     </section>
 </template>

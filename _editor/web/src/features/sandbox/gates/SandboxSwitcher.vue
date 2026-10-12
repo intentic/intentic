@@ -694,58 +694,62 @@ const confirmRemove = async (): Promise<void> => {
     <ConfirmDialog
         :open="pending !== undefined"
         :header="pending?.role === 'owner' ? t(`sandbox.sandboxSwitcher.removeAccount2`) : t(`sandbox.sandboxSwitcher.leaveSandbox`)"
+        :description="
+            pending === undefined
+                ? undefined
+                : pending.role === 'owner'
+                  ? pending.hosted !== null
+                      ? t(`sandbox.sandboxSwitcher.removeHostedMachineDestroyed`, { name: pending.name })
+                      : t(`sandbox.sandboxSwitcher.removeAccountEveryoneLoses`, { name: pending.name })
+                  : t(`sandbox.sandboxSwitcher.leaveLoseAccessSandbox`, { name: pending.name })
+        "
         :confirm-label="pending?.role === 'owner' ? t(`ui.action.remove`) : t(`ui.action.leave`)"
         confirm-icon="trash"
         :loading="deletingThere"
         @cancel="pending = undefined"
         @confirm="confirmRemove"
     >
-        <p v-if="pending" class="text-sm text-content">
-            {{
-                pending.role === "owner"
-                    ? pending.hosted !== null
-                        ? t(`sandbox.sandboxSwitcher.removeHostedMachineDestroyed`, { name: pending.name })
-                        : t(`sandbox.sandboxSwitcher.removeAccountEveryoneLoses`, { name: pending.name })
-                    : t(`sandbox.sandboxSwitcher.leaveLoseAccessSandbox`, { name: pending.name })
-            }}
-        </p>
-        <!-- What the reader set up lives in the sandbox, not the account, so it leaves with it (switcherRows.ts). -->
-        <template v-if="pending && removalTakes(pending.role).length > 0">
-            <p class="mt-2 text-sm text-content">{{ t(`sandbox.sandboxSwitcher.leavesWithIt`) }}</p>
-            <ul class="mt-1 list-disc pl-5 text-sm text-muted">
-                <li v-for="item in removalTakes(pending.role)" :key="item">{{ item }}</li>
-            </ul>
-        </template>
-        <!-- The promise the deletion actually makes, on the owner's own rows only: a member leaving takes nothing
-             with them, so there is nothing to bring back. The two lanes differ in what comes back — a hosted
-             machine keeps its disk, an own-machine sandbox comes back as a name with a new address. -->
-        <p v-if="pending?.role === 'owner'" class="mt-2 text-sm text-muted">
-            {{
-                pending.hosted !== null
-                    ? t(`sandbox.sandboxSwitcher.restorableHostedDays`, { count: RECOVERY_DAYS }, RECOVERY_DAYS)
-                    : t(`sandbox.sandboxSwitcher.restorableOwnDays`, { count: RECOVERY_DAYS }, RECOVERY_DAYS)
-            }}
-            {{ t(`sandbox.sandboxSwitcher.restoreWhere`) }}
-        </p>
-        <!-- The hosted lane is the only removal that destroys a machine; no cleanup command, since nothing else exists. -->
-        <template v-if="pending?.role === 'owner' && pending.hosted === null && cleanupCommand !== undefined">
-            <!-- The machine is one of the owner's connected devices, so this is a tick box rather than a command: the same removal the Devices tab's own button runs. -->
-            <template v-if="cleanupHost !== undefined">
-                <label class="mt-3 flex items-start gap-2 text-sm text-muted">
-                    <!-- Same plain box the extension cards use; the kit has no checkbox component, on purpose. -->
-                    <input v-model="alsoDeleteThere" type="checkbox" :disabled="deletingThere" class="mt-0.5" />
-                    <span>
-                        {{ t(`sandbox.sandboxSwitcher.alsoDelete`) }} <span class="font-medium text-content">{{ cleanupHost }}</span>
-                        {{ t(`sandbox.sandboxSwitcher.containerFilesHistoryGone`) }}
-                    </span>
-                </label>
-                <Notice v-if="thereFailed" tone="danger" class="mt-2 text-2xs">{{ thereFailed }}</Notice>
+        <!-- Only the owner's removal takes anything or promises anything back: a member leaving has just the
+             description, and no body is drawn under it. -->
+        <div v-if="pending?.role === 'owner'" class="flex flex-col gap-4">
+            <!-- What the reader set up lives in the sandbox, not the account, so it leaves with it (switcherRows.ts). -->
+            <div v-if="removalTakes(pending.role).length > 0" class="flex flex-col gap-1">
+                <p>{{ t(`sandbox.sandboxSwitcher.leavesWithIt`) }}</p>
+                <ul class="list-disc pl-5 text-muted">
+                    <li v-for="item in removalTakes(pending.role)" :key="item">{{ item }}</li>
+                </ul>
+            </div>
+            <!-- The promise the deletion actually makes, on the owner's own rows only: a member leaving takes nothing
+                 with them, so there is nothing to bring back. The two lanes differ in what comes back — a hosted
+                 machine keeps its disk, an own-machine sandbox comes back as a name with a new address. -->
+            <p class="text-muted">
+                {{
+                    pending.hosted !== null
+                        ? t(`sandbox.sandboxSwitcher.restorableHostedDays`, { count: RECOVERY_DAYS }, RECOVERY_DAYS)
+                        : t(`sandbox.sandboxSwitcher.restorableOwnDays`, { count: RECOVERY_DAYS }, RECOVERY_DAYS)
+                }}
+                {{ t(`sandbox.sandboxSwitcher.restoreWhere`) }}
+            </p>
+            <!-- The hosted lane is the only removal that destroys a machine; no cleanup command, since nothing else exists. -->
+            <template v-if="pending.hosted === null && cleanupCommand !== undefined">
+                <!-- The machine is one of the owner's connected devices, so this is a tick box rather than a command: the same removal the Devices tab's own button runs. -->
+                <div v-if="cleanupHost !== undefined" class="flex flex-col gap-2">
+                    <label class="flex items-start gap-2 text-muted">
+                        <!-- Same plain box the extension cards use; the kit has no checkbox component, on purpose. -->
+                        <input v-model="alsoDeleteThere" type="checkbox" :disabled="deletingThere" class="mt-0.5" />
+                        <span>
+                            {{ t(`sandbox.sandboxSwitcher.alsoDelete`) }} <span class="font-medium text-content">{{ cleanupHost }}</span>
+                            {{ t(`sandbox.sandboxSwitcher.containerFilesHistoryGone`) }}
+                        </span>
+                    </label>
+                    <Notice v-if="thereFailed" tone="danger" class="text-2xs">{{ thereFailed }}</Notice>
+                </div>
+                <div v-else class="flex flex-col gap-2">
+                    <p class="text-muted">{{ t(`sandbox.sandboxSwitcher.toAlsoRemoveMachine`) }}</p>
+                    <RunCommand :command="cleanupCommand" :label="t(`sandbox.sandboxSwitcher.cleanupCommand`)" />
+                </div>
             </template>
-            <template v-else>
-                <p class="mt-3 text-sm text-muted">{{ t(`sandbox.sandboxSwitcher.toAlsoRemoveMachine`) }}</p>
-                <RunCommand class="mt-2" :command="cleanupCommand" :label="t(`sandbox.sandboxSwitcher.cleanupCommand`)" />
-            </template>
-        </template>
+        </div>
     </ConfirmDialog>
 
     <HostedRollbackDialog :sandbox="rollingBack" @close="rollingBack = undefined" />

@@ -99,6 +99,11 @@
     --ui-card-padding: calc(var(--spacing) * 5);
     --ui-card-gap: calc(var(--spacing) * 4);
 
+/* THE DIALOG'S MARGIN, one figure for its header, body and footer edges (dialog.css); a phone's sheet takes less. */
+    --ui-dialog-pad: calc(var(--spacing) * 6);
+/* How far out of focus the page behind a dialog goes: enough that its words stop competing, not so far it stops being the page. */
+    --ui-scrim-blur: 2px;
+
     --ui-control-padding-x: calc(var(--spacing) * 3);
     --ui-control-padding-y: calc(var(--spacing) * 2);
     --ui-field-gap: calc(var(--spacing) * 2);

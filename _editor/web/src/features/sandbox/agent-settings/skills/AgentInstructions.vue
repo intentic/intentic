@@ -193,12 +193,11 @@ const viewPromptTip = computed((): Tip => ({
     <ConfirmDialog
         :open="replacing !== undefined"
         :header="t(`sandbox.agentInstructions.replaceYourText`)"
+        :description="t(`sandbox.agentInstructions.replaceYourTextDetail`)"
         :confirm-label="t(`sandbox.agentInstructions.replace`)"
         @cancel="replacing = undefined"
         @confirm="confirmReplace"
-    >
-        <p class="text-sm text-muted">{{ t(`sandbox.agentInstructions.replaceYourTextDetail`) }}</p>
-    </ConfirmDialog>
+    />
 
     <Modal
         :open="viewingBase !== undefined"
@@ -206,41 +205,43 @@ const viewPromptTip = computed((): Tip => ({
         :header="t(`sandbox.agentInstructions.builtInSystemPrompts`)"
         @update:open="viewingBase = undefined"
     >
-        <SegmentedControl
-            v-if="viewingBase !== undefined"
-            :model-value="viewingBase"
-            :options="VIEW_BASES"
-            :aria-label="t(`sandbox.agentInstructions.builtInPromptTo`)"
-            @update:model-value="setViewingBase"
-        />
-        <div v-if="builtinBusy" class="flex items-center gap-2 py-6 text-xs text-muted">
-            <Icon name="spinner" spin />
-            {{ t(`sandbox.agentInstructions.readingSandbox`) }}
+        <div class="flex flex-col gap-4">
+            <SegmentedControl
+                v-if="viewingBase !== undefined"
+                :model-value="viewingBase"
+                :options="VIEW_BASES"
+                :aria-label="t(`sandbox.agentInstructions.builtInPromptTo`)"
+                @update:model-value="setViewingBase"
+            />
+            <div v-if="builtinBusy" class="flex items-center gap-2 py-6 text-xs text-muted">
+                <Icon name="spinner" spin />
+                {{ t(`sandbox.agentInstructions.readingSandbox`) }}
+            </div>
+            <Notice v-else-if="builtinError !== undefined" :of="builtinError" />
+            <template v-else-if="viewingBase !== undefined && builtinPrompts[viewingBase] !== undefined">
+                <p class="text-xs text-muted">
+                    <template v-if="viewingBase === `claude`">
+                        {{ t(`sandbox.agentInstructions.claudeCodesOwnPrompt2`) }}
+                        <span class="font-mono text-content">{{ builtinPrompts[viewingBase]?.version }}</span
+                        >{{ t(`sandbox.agentInstructions.notCopyKeptBy`) }}
+                    </template>
+                    <template v-else>
+                        {{ t(`sandbox.agentInstructions.intenticsOwnPromptDefault`) }}
+                    </template>
+                    {{ t(`sandbox.agentInstructions.eitherWayAppsOwn`) }}
+                </p>
+                <!-- READ IT AS THE THING YOU WOULD BE FORKING. Two rules rather than a box: the dialog is already the
+                     frame, and they say where the passage clips without sinking it into a well. -->
+                <div class="ui-softscroll max-h-[55dvh] overflow-auto border-y border-line-subtle py-3" style="--prose-measure: 76ch">
+                    <MarkdownDocument
+                        :model-value="builtinPrompts[viewingBase]?.text ?? ``"
+                        :label="t(`sandbox.agentInstructions.builtInSystemPrompt`)"
+                    />
+                </div>
+                <div class="flex items-center justify-end gap-2">
+                    <CopyButton :text="builtinPrompts[viewingBase]?.text ?? ``" :label="t(`ui.action.copy`)" />
+                </div>
+            </template>
         </div>
-        <Notice v-else-if="builtinError !== undefined" :of="builtinError" class="mt-3" />
-        <template v-else-if="viewingBase !== undefined && builtinPrompts[viewingBase] !== undefined">
-            <p class="mt-3 text-xs text-muted">
-                <template v-if="viewingBase === `claude`">
-                    {{ t(`sandbox.agentInstructions.claudeCodesOwnPrompt2`) }}
-                    <span class="font-mono text-content">{{ builtinPrompts[viewingBase]?.version }}</span
-                    >{{ t(`sandbox.agentInstructions.notCopyKeptBy`) }}
-                </template>
-                <template v-else>
-                    {{ t(`sandbox.agentInstructions.intenticsOwnPromptDefault`) }}
-                </template>
-                {{ t(`sandbox.agentInstructions.eitherWayAppsOwn`) }}
-            </p>
-            <!-- READ IT AS THE THING YOU WOULD BE FORKING. Two rules rather than a box: the dialog is already the
-                 frame, and they say where the passage clips without sinking it into a well. -->
-            <div class="ui-softscroll mt-3 max-h-[55dvh] overflow-auto border-y border-line-subtle py-3" style="--prose-measure: 76ch">
-                <MarkdownDocument
-                    :model-value="builtinPrompts[viewingBase]?.text ?? ``"
-                    :label="t(`sandbox.agentInstructions.builtInSystemPrompt`)"
-                />
-            </div>
-            <div class="mt-3 flex items-center justify-end gap-2">
-                <CopyButton :text="builtinPrompts[viewingBase]?.text ?? ``" :label="t(`ui.action.copy`)" />
-            </div>
-        </template>
     </Modal>
 </template>

@@ -313,21 +313,23 @@ const draggedName = computed(() => (drag.dragged.value === undefined ? `` : role
     <!-- The router's second setting, opened from its own panel: a document, so it takes the dialog rather than a field
          shell inside a drawer — the same surface the system prompt is written on. -->
     <Modal :open="guidanceOpen" size="lg" :header="t(`sandbox.agentModels.howAutoChooses`)" @update:open="guidanceOpen = $event">
-        <!-- A writing surface, not a field: it opens at the height of something you would compose rather than snapping
-             shut around one line of placeholder. -->
-        <MarkdownDocument
-            v-model="guidance"
-            class="min-h-40"
-            :editable="loaded"
-            :stored="storedGuidance"
-            :saving="save.isPending.value"
-            save="explicit"
-            :label="t(`sandbox.agentModels.howAutoChooses`)"
-            :max-chars="AUTO_MODEL_GUIDANCE_MAX"
-            :placeholder="t(`sandbox.agentModels.whatYoudTellSomebody`)"
-            @save="saveGuidance"
-        />
-        <Notice v-if="refusal !== undefined" :of="refusal" class="mt-3" />
+        <div class="flex flex-col gap-4">
+            <!-- A writing surface, not a field: it opens at the height of something you would compose rather than snapping
+                 shut around one line of placeholder. -->
+            <MarkdownDocument
+                v-model="guidance"
+                class="min-h-40"
+                :editable="loaded"
+                :stored="storedGuidance"
+                :saving="save.isPending.value"
+                save="explicit"
+                :label="t(`sandbox.agentModels.howAutoChooses`)"
+                :max-chars="AUTO_MODEL_GUIDANCE_MAX"
+                :placeholder="t(`sandbox.agentModels.whatYoudTellSomebody`)"
+                @save="saveGuidance"
+            />
+            <Notice v-if="refusal !== undefined" :of="refusal" />
+        </div>
     </Modal>
 
     <!-- Mount once so the picker can place itself on open. -->

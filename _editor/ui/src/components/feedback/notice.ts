@@ -5,7 +5,7 @@ import { toneInk, toneTint } from "../../lib/tone.js";
 // Notice model behind <Notice>/<NoticeStack>: a sentence the app wrote (`title`), the raw cause below it (`detail`),
 // and at most one way out (`action`). `tone` also orders several notices on screen.
 
-export type NoticeTone = "danger" | "warning" | "info";
+export type NoticeTone = "danger" | "warning" | "info" | "success";
 
 export interface NoticeAction {
     readonly label: string;
@@ -13,7 +13,8 @@ export interface NoticeAction {
 }
 
 export interface NoticeModel {
-    // `danger` broke what the user was doing; `warning` will if ignored; `info` needs no action.
+    // `danger` broke what the user was doing; `warning` will if ignored; `info` needs no action; `success` says a step the
+    // user took came off (a machine connected, an extension installed), where a hand-tinted green box used to.
     readonly tone: NoticeTone;
     // The app's own words; a caught message goes in `detail`, not here.
     readonly title: string;
@@ -38,6 +39,7 @@ const notice = tv({
             danger: { box: [toneTint(`danger`), toneInk(`danger`)] },
             warning: { box: [toneTint(`warning`), toneInk(`warning`)] },
             info: { box: [toneTint(`info`), toneInk(`info`)] },
+            success: { box: [toneTint(`success`), toneInk(`success`)] },
         },
         size: {
             xs: { box: `gap-1 rounded px-2 py-0.5 text-2xs`, icon: `mt-0.5 text-[0.6rem]` },
@@ -71,12 +73,13 @@ export const NOTICE_ICON: Record<NoticeTone, IconName> = {
     danger: `exclamation-circle`,
     warning: `exclamation-circle`,
     info: `info-circle`,
+    success: `check-circle`,
 };
 
 export const noticeKey = (notice: NoticeModel): string => notice.key ?? notice.title;
 
 // Ranks by severity, then original order; the first of duplicate notices survives, not the last.
-const SEVERITY: readonly NoticeTone[] = [`danger`, `warning`, `info`];
+const SEVERITY: readonly NoticeTone[] = [`danger`, `warning`, `info`, `success`];
 
 export const rankNotices = (notices: readonly NoticeModel[]): readonly NoticeModel[] => {
     const seen = new Set<string>();

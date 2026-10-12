@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { githubRepoOf, isCurrentSecurityReview } from "@intentic/registry";
-import { BrandMark, Button, ui, Modal, Notice, type NoticeModel, toneTint } from "@intentic/ui";
-import { computed, ref, useId } from "vue";
+import { BrandMark, Button, ui, Modal, Notice, type NoticeModel } from "@intentic/ui";
+import { computed, ref } from "vue";
 import { checksOk, checksProblem, type DiscoverListing, type InstallOutcome, splitListingName } from "./discoverListing";
 import { useT } from "@intentic/ui/i18n";
 
@@ -25,9 +25,6 @@ const { listing, canInstall, installing, outcome } = defineProps<{
 
 const open = defineModel<boolean>({ required: true });
 const emit = defineEmits<{ install: []; audit: []; reveal: [] }>();
-
-// The brand row replaces the modal's own title, so the name it is announced by has to be pointed at this one.
-const titleId = useId();
 
 const name = computed(() => splitListingName(listing.entry.name));
 const problem = computed(() => checksProblem(listing.entry));
@@ -77,6 +74,8 @@ const notStarted = computed<NoticeModel | undefined>(() =>
 );
 // Where a listing that is here can be managed; the Installed pill is one click away, so it is offered as one.
 const revealable = computed(() => outcome !== undefined || listing.state.kind === `installed`);
+// The way on only where there is nothing to install and no read to lead with; beside either, it steps back.
+const revealLeads = computed(() => !actionable.value && !auditLeads.value);
 const actionLabel = computed(() => {
     if (!unaudited.value) {
         return listing.state.action;
@@ -87,19 +86,13 @@ const actionLabel = computed(() => {
 
 <template>
     <!-- The footer wraps so the primary action remains usable on phones. -->
-    <Modal v-model:open="open" size="md" :labelled-by="titleId">
-        <template #header>
-            <div class="flex min-w-0 items-center gap-3">
-                <BrandMark plain :size="32" :name="listing.entry.name" :art="listing.entry.art" :logo="listing.entry.logo" :icon="listing.entry.icon" />
-                <div class="min-w-0">
-                    <div :id="titleId" class="truncate font-medium text-content">{{ name.title }}</div>
-                    <div class="truncate text-2xs text-subtle">{{ listing.entry.name }}</div>
-                </div>
-            </div>
+    <Modal v-model:open="open" size="md" :header="name.title" :description="listing.entry.name">
+        <template #icon>
+            <BrandMark plain :size="36" :name="listing.entry.name" :art="listing.entry.art" :logo="listing.entry.logo" :icon="listing.entry.icon" />
         </template>
 
         <div class="flex flex-col gap-4">
-            <p v-if="listing.entry.description" class="text-sm leading-relaxed text-muted">{{ listing.entry.description }}</p>
+            <p v-if="listing.entry.description" class="leading-relaxed text-muted">{{ listing.entry.description }}</p>
 
             <!-- Plain facts only (name, cost, popularity); anything that's a safety claim is stated in full below. -->
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle">
@@ -120,17 +113,10 @@ const actionLabel = computed(() => {
             </div>
 
             <!-- The receipt replaces the state line: right after an install, "already installed" would read as a refusal. -->
-            <div
-                v-if="receipt"
-                role="status"
-                :class="toneTint(`success`, `strong`, `flex items-start gap-2 rounded-lg border px-3 py-2 text-xs text-content`)"
-            >
-                <Icon name="check-circle" class="mt-0.5 shrink-0 text-success" />
-                <span>
-                    {{ receipt }}
-                    <template v-if="outcome?.settings && !outcome.off">{{ t(`sandbox.discoverDetail.hasSettings`) }}</template>
-                </span>
-            </div>
+            <Notice v-if="receipt" tone="success" role="status">
+                {{ receipt }}
+                <template v-if="outcome?.settings && !outcome.off">{{ t(`sandbox.discoverDetail.hasSettings`) }}</template>
+            </Notice>
             <Notice v-else-if="notStarted" :of="notStarted" />
             <!-- A non-default state is said before anything else, so a reader never has to reach the button to learn it. -->
             <Notice v-else-if="listing.state.kind === `blocked`" tone="danger">
@@ -151,7 +137,8 @@ const actionLabel = computed(() => {
             </Notice>
 
             <!-- Keep the three guarantees separate and ordered by responsibility. -->
-            <div class="flex flex-col gap-2 rounded-lg border border-line bg-canvas px-3 py-2.5">
+            <!-- A section of the dialog under its label, not a box: the dialog is already the card. -->
+            <section class="flex flex-col gap-2">
                 <div :class="ui.sectionLabel()">{{ t(`sandbox.discoverDetail.whatYoudTrusting`) }}</div>
 
                 <template v-if="listing.entry.securityReview && auditCurrent">
@@ -237,7 +224,7 @@ const actionLabel = computed(() => {
                     <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-warning" />
                     <span class="text-muted">{{ problem }}</span>
                 </div>
-            </div>
+            </section>
 
             <div v-if="sourceHref" class="flex flex-wrap items-baseline gap-x-2 text-2xs">
                 <span class="text-subtle">{{ t(`sandbox.words.source`) }}</span>
@@ -270,29 +257,33 @@ const actionLabel = computed(() => {
         <template #footer>
             <!-- Done: the next place to go, and the way back to browsing. Nothing to install or audit is left to offer. -->
             <template v-if="outcome">
-                <Button :label="t(`ui.action.done`)" tier="quiet" size="small" @click="open = false" />
-                <Button :label="t(`sandbox.discoverDetail.showInInstalled`)" size="small" @click="emit(`reveal`)" />
+                <Button :label="t(`ui.action.done`)" tier="quiet" @click="open = false" />
+                <Button :label="t(`sandbox.discoverDetail.showInInstalled`)" @click="emit(`reveal`)" />
             </template>
-            <!-- Order follows what's been earned: where the code's been read, Install leads; where it hasn't, the read leads instead. -->
-            <Button
-                v-else-if="auditable"
-                :label="auditLeads ? t(`sandbox.discoverDetail.myAgentReadCode`) : t(`sandbox.discoverDetail.readCodeFirst`)"
-                :tier="auditLeads ? `accent` : `quiet`"
-                size="small"
-                @click="emit(`audit`)"
-            >
-                <template #icon><Icon name="sparkles" /></template>
-            </Button>
-            <Button v-if="!outcome && revealable" :label="t(`sandbox.discoverDetail.showInInstalled`)" size="small" @click="emit(`reveal`)" />
-            <Button
-                v-if="!outcome && actionable"
-                :label="actionLabel"
-                size="small"
-                :loading="installing"
-                :disabled="unaudited && !acknowledged"
-                :tier="auditLeads ? `boring` : `accent`"
-                @click="emit(`install`)"
-            />
+            <!-- Order follows what's been earned: where the code's been read, Install leads and the read sits quiet at the
+                 front; where it hasn't, the read leads instead, last, with Install a tier below it. -->
+            <template v-else>
+                <Button v-if="auditable && !auditLeads" :label="t(`sandbox.discoverDetail.readCodeFirst`)" tier="quiet" @click="emit(`audit`)">
+                    <template #icon><Icon name="sparkles" /></template>
+                </Button>
+                <Button
+                    v-if="revealable"
+                    :label="t(`sandbox.discoverDetail.showInInstalled`)"
+                    :tier="revealLeads ? `accent` : `quiet`"
+                    @click="emit(`reveal`)"
+                />
+                <Button
+                    v-if="actionable"
+                    :label="actionLabel"
+                    :loading="installing"
+                    :disabled="unaudited && !acknowledged"
+                    :tier="auditLeads ? `boring` : `accent`"
+                    @click="emit(`install`)"
+                />
+                <Button v-if="auditLeads" :label="t(`sandbox.discoverDetail.myAgentReadCode`)" @click="emit(`audit`)">
+                    <template #icon><Icon name="sparkles" /></template>
+                </Button>
+            </template>
         </template>
     </Modal>
 </template>

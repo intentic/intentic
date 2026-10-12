@@ -359,40 +359,41 @@ const finish = async (): Promise<void> => {
         :header="browsing ? t(`capabilities.browserProfileDialog.browser`, { label }) : t(`capabilities.browserProfileDialog.logInTo`, { label })"
         @update:open="!$event && cancel()"
     >
-        <p class="mb-3 text-xs text-muted">
+        <template #description>
             <template v-if="browsing">{{ t(`capabilities.browserProfileDialog.signedInBrowserAgent`, { label }) }}</template>
             <template v-else>
                 {{ t(`capabilities.browserProfileDialog.signInWouldNormally`) }}
                 <b>{{ t(`capabilities.browserProfileDialog.imDone`) }}</b> {{ t(`capabilities.browserProfileDialog.agentActHereSession`) }}
             </template>
-        </p>
+        </template>
 
-        <Notice v-if="shownError" :of="shownError" class="mb-3" />
-
-        <!-- The page's viewport, sized to this box: the daemon fits the browser window to it, so the picture is the page at 1:1. -->
-        <div
-            ref="surface"
-            tabindex="0"
-            class="relative mx-auto h-[calc(var(--height-panel-lg)-5rem)] w-full select-none overflow-hidden rounded-lg border border-line bg-canvas outline-none"
-            :style="{ cursor }"
-            @mousemove="onMouseMove"
-            @mousedown="onMouseDown"
-            @mouseup="onMouseUp"
-            @wheel.prevent="onWheel"
-            @keydown="onKeyDown"
-            @paste="onPaste"
-            @contextmenu.prevent
-        >
-            <!-- Video beneath, the sharp still of the settled page above it (videoSink); both the same box so a click aims the same. -->
-            <canvas v-show="painting" ref="canvasEl" class="absolute inset-0 h-full w-full object-contain" />
-            <canvas v-show="painting" ref="stillEl" class="pointer-events-none absolute inset-0 h-full w-full object-contain" />
-            <div v-if="!painting" class="absolute inset-0 flex items-center justify-center gap-2 text-xs text-muted">
-                <Icon name="spinner" spin />
-                <span>{{
-                    status === "error"
-                        ? t(`capabilities.browserProfileDialog.couldntStartBrowser`)
-                        : t(`capabilities.browserProfileDialog.startingBrowser`)
-                }}</span>
+        <div class="flex flex-col gap-4">
+            <Notice v-if="shownError" :of="shownError" />
+            <!-- The page's viewport, sized to this box: the daemon fits the browser window to it, so the picture is the page at 1:1. -->
+            <div
+                ref="surface"
+                tabindex="0"
+                class="relative mx-auto h-[calc(var(--height-panel-lg)-5rem)] w-full select-none overflow-hidden rounded-lg border border-line bg-canvas outline-none"
+                :style="{ cursor }"
+                @mousemove="onMouseMove"
+                @mousedown="onMouseDown"
+                @mouseup="onMouseUp"
+                @wheel.prevent="onWheel"
+                @keydown="onKeyDown"
+                @paste="onPaste"
+                @contextmenu.prevent
+            >
+                <!-- Video beneath, the sharp still of the settled page above it (videoSink); both the same box so a click aims the same. -->
+                <canvas v-show="painting" ref="canvasEl" class="absolute inset-0 h-full w-full object-contain" />
+                <canvas v-show="painting" ref="stillEl" class="pointer-events-none absolute inset-0 h-full w-full object-contain" />
+                <div v-if="!painting" class="absolute inset-0 flex items-center justify-center gap-2 text-xs text-muted">
+                    <Icon name="spinner" spin />
+                    <span>{{
+                        status === "error"
+                            ? t(`capabilities.browserProfileDialog.couldntStartBrowser`)
+                            : t(`capabilities.browserProfileDialog.startingBrowser`)
+                    }}</span>
+                </div>
             </div>
         </div>
 

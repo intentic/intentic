@@ -33,18 +33,40 @@ const custom = {
         // 0.2s made PrimeVue a beat slower than the app's own rows and chips. motion.css owns the figure.
         transitionDuration: `var(--motion-quick)`,
         primary: ramp(`primary`),
+        // Every modal's scrim, the dialog's and a bottom sheet's alike: each look answers `--ui-scrim` itself
+        // (semantic-colors.css, sanctum.css). The mask arrives as a keyframe that holds its last frame, which outranks
+        // any rule a skin writes for it; the token is the only way in.
+        mask: { transitionDuration: `var(--motion-base)` },
         colorScheme: {
             light: {
                 surface: ramp(`surface`),
                 primary: accent,
+                mask: { background: `var(--ui-scrim)` },
             },
             dark: {
                 surface: ramp(`surface`),
                 primary: accent,
+                mask: { background: `var(--ui-scrim)` },
             },
         },
     },
     components: {
+        // Aura drew the dialog in its own neutral greys: pure white on warm paper, the card's very value in the dark (so
+        // it never rose above the cards it covered), and 40%-grey ink in the light. Each now names the app's own role;
+        // the anatomy past what these tokens reach (the description, the edges a scroll shows, the sheet) is dialog.css.
+        dialog: {
+            root: {
+                background: `var(--ui-dialog-fill)`,
+                borderColor: `var(--ui-dialog-line)`,
+                color: `var(--color-content)`,
+                borderRadius: `var(--radius-xl)`,
+                shadow: `var(--ui-shadow-3)`,
+            },
+            header: { padding: `var(--ui-dialog-pad) var(--ui-dialog-pad) calc(var(--spacing) * 3)`, gap: `calc(var(--spacing) * 4)` },
+            title: { fontSize: `var(--text-lg)`, fontWeight: `var(--font-weight-semibold)` },
+            content: { padding: `var(--spacing) var(--ui-dialog-pad) var(--ui-dialog-pad)` },
+            footer: { padding: `calc(var(--spacing) * 4) var(--ui-dialog-pad) var(--ui-dialog-pad)`, gap: `calc(var(--spacing) * 2)` },
+        },
         button: {
             root: {
                 borderRadius: `var(--radius-md)`,

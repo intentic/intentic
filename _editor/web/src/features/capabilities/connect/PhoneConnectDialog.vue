@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { type PhoneSummary, phonePairingCode, phonePairingLink } from "@intentic/sandbox-contract";
-import { Button, Code, Modal, Notice, toneTint, useDevice } from "@intentic/ui";
+import { Button, Code, Modal, Notice, useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { renderSVG } from "uqr";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
@@ -71,31 +71,37 @@ onBeforeUnmount(stop);
 </script>
 
 <template>
-    <Modal :open="visible" size="lg" :header="t(`capabilities.words.connect`, { id })" @update:open="emit(`update:visible`, $event)">
+    <Modal
+        :open="visible"
+        size="lg"
+        :header="t(`capabilities.words.connect`, { id })"
+        :description="t(`capabilities.phoneConnectDialog.intro`)"
+        @update:open="emit(`update:visible`, $event)"
+    >
         <div class="flex flex-col gap-4">
-            <p class="text-sm text-content">{{ t(`capabilities.phoneConnectDialog.intro`) }}</p>
-
-            <div v-if="online" :class="toneTint(`success`, `strong`, `flex flex-col gap-1 rounded-md border px-3 py-2 text-sm text-content`)">
-                <span>
-                    <b>{{ id }}</b> {{ t(`capabilities.phoneConnectDialog.connected`) }}
+            <Notice v-if="online" tone="success">
+                <span class="flex flex-col gap-1">
+                    <span>
+                        <b>{{ id }}</b> {{ t(`capabilities.phoneConnectDialog.connected`) }}
+                    </span>
+                    <span v-if="wake === `ready` || phone?.wake === `ready`" class="text-xs text-muted">{{
+                        t(`capabilities.phoneConnectDialog.wakeReady`)
+                    }}</span>
+                    <span v-else-if="wake === `unavailable` || phone?.wake === `none`" class="text-xs text-muted">{{
+                        t(`capabilities.phoneConnectDialog.wakeUnavailable`)
+                    }}</span>
+                    <span v-else-if="wake === `failed`" class="text-xs text-warning">{{ t(`capabilities.phoneConnectDialog.wakeFailed`) }}</span>
                 </span>
-                <span v-if="wake === `ready` || phone?.wake === `ready`" class="text-xs text-muted">{{
-                    t(`capabilities.phoneConnectDialog.wakeReady`)
-                }}</span>
-                <span v-else-if="wake === `unavailable` || phone?.wake === `none`" class="text-xs text-muted">{{
-                    t(`capabilities.phoneConnectDialog.wakeUnavailable`)
-                }}</span>
-                <span v-else-if="wake === `failed`" class="text-xs text-warning">{{ t(`capabilities.phoneConnectDialog.wakeFailed`) }}</span>
-            </div>
+            </Notice>
 
             <Notice v-else-if="error" tone="danger">{{ error }}</Notice>
 
-            <div v-else-if="minting || link === ``" class="text-sm text-muted">
+            <div v-else-if="minting || link === ``" class="text-muted">
                 {{ t(`capabilities.words.preparingOneTimeConnection`) }}
             </div>
 
             <template v-else>
-                <a v-if="install !== ``" :href="install" target="_blank" rel="noreferrer" class="text-sm underline">{{
+                <a v-if="install !== ``" :href="install" target="_blank" rel="noreferrer" class="underline">{{
                     t(`capabilities.phoneConnectDialog.getApp`)
                 }}</a>
                 <!-- On the phone itself there is nothing to scan: the same link opens the app. -->
@@ -118,16 +124,19 @@ onBeforeUnmount(stop);
                 <Code v-if="showCode" :code="code" :wrap="true" />
             </template>
 
-            <div class="rounded-md border border-subtle px-3 py-2">
-                <p class="text-2xs text-muted">
-                    {{ t(`capabilities.words.onceConnectedAgentMay`) }} <b>{{ permissions }}</b
-                    >{{ t(`capabilities.phoneConnectDialog.onlyWhatYouAllow`) }}
-                </p>
-            </div>
+            <!-- What connecting grants, as the dialog's closing footnote: on its own ground, not boxed as a second card. -->
+            <p class="text-2xs text-muted">
+                {{ t(`capabilities.words.onceConnectedAgentMay`) }} <b>{{ permissions }}</b
+                >{{ t(`capabilities.phoneConnectDialog.onlyWhatYouAllow`) }}
+            </p>
         </div>
 
         <template #footer>
-            <Button :label="online ? t(`ui.action.done`) : t(`ui.action.close`)" size="small" @click="emit(`update:visible`, false)" />
+            <Button
+                :label="online ? t(`ui.action.done`) : t(`ui.action.close`)"
+                :tier="online ? `accent` : `quiet`"
+                @click="emit(`update:visible`, false)"
+            />
         </template>
     </Modal>
 </template>

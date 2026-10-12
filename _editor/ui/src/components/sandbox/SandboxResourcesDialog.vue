@@ -10,6 +10,7 @@ import Icon from "../primitives/Icon.vue";
 import type { DeviceSandboxResources } from "./deviceDetail.js";
 import Modal from "../overlays/Modal.vue";
 import Row from "../rows/Row.vue";
+import RowGroup from "../rows/RowGroup.vue";
 import {
     capFromField,
     cpuBounds,
@@ -134,17 +135,21 @@ const uid = useId();
 </script>
 
 <template>
-    <Modal :open="open" size="md" :header="t(`ui.sandboxResourcesDialog.resources`, { name })" @update:open="emit(`cancel`)">
+    <!-- What applying costs is the description, read before the fields; every sentence keeps the sandbox, not the computer, as its subject. -->
+    <Modal
+        :open="open"
+        size="md"
+        :header="t(`ui.sandboxResourcesDialog.resources`, { name })"
+        :description="t(`ui.sandboxResourcesDialog.applyingRestartsSandboxOnto`)"
+        @update:open="emit(`cancel`)"
+    >
         <div v-if="current !== undefined" class="flex flex-col gap-4">
-            <!-- The four rows share one bordered box (the shape <ExportBundleDialog> settled on) rather than <Row>'s own padding. -->
-            <div class="flex flex-col overflow-hidden rounded-lg border border-line divide-y divide-line-subtle">
+            <!-- The four rows are one group: on the dialog that is the rows and their hairlines, with no box of its own. -->
+            <RowGroup>
                 <!-- Memory is whole GiB; empty means the default, said by the placeholder rather than a second control. -->
                 <Row
-                    flush
-                    density="compact"
                     icon="server"
                     :title="t(`ui.sandboxResourcesDialog.memory`)"
-                    class="px-3.5 py-3"
                     :tone="problems.memory === undefined ? `default` : `warning`"
                 >
                     <template #description>{{ memoryDescription }}</template>
@@ -172,11 +177,8 @@ const uid = useId();
 
                 <!-- CPUs default to no ceiling at all (every core), the opposite kind of default from memory's. -->
                 <Row
-                    flush
-                    density="compact"
                     icon="cpu"
                     :title="t(`ui.sandboxResourcesDialog.cpus`)"
-                    class="px-3.5 py-3"
                     :tone="problems.cpus === undefined ? `default` : `warning`"
                 >
                     <template #description>{{ t(`ui.sandboxResourcesDialog.cpusWhole`, { bounds: bounds(cpus) }) }}</template>
@@ -204,11 +206,8 @@ const uid = useId();
 
                 <!-- Locked, with the reason, when the approved environment demands it: a reshape can add to what it asks but never withdraw it. -->
                 <Row
-                    flush
-                    density="compact"
                     icon="shield"
                     :title="t(`ui.sandboxResourcesDialog.privileged`)"
-                    class="px-3.5 py-3"
                     :tone="form.privileged ? `warning` : `default`"
                 >
                     <template #description>
@@ -228,7 +227,7 @@ const uid = useId();
                 </Row>
 
                 <!-- The one switch whose ask and answer can disagree: a host without the NVIDIA runtime drops the flag and the sandbox starts without it. -->
-                <Row flush density="compact" icon="bolt" :title="t(`ui.sandboxResourcesDialog.gpu`)" class="px-3.5 py-3">
+                <Row icon="bolt" :title="t(`ui.sandboxResourcesDialog.gpu`)">
                     <template #description>{{ t(`ui.sandboxResourcesDialog.passComputersNvidiaGpus`) }}</template>
                     <template #control>
                         <ToggleSwitch
@@ -245,17 +244,14 @@ const uid = useId();
                         </p>
                     </template>
                 </Row>
-            </div>
+            </RowGroup>
 
             <!-- A shape already saved and not yet in force: named, so the fields showing it are not mistaken for what runs. -->
             <p v-if="desiredSummary !== undefined" class="text-xs text-info">
                 {{ t(`ui.sandboxResourcesDialog.savedForNextRestart`, { share: desiredSummary }) }}
             </p>
 
-            <!-- What applying costs, beside the button that commits it; every sentence keeps the sandbox, not the computer, as its subject. -->
-            <p class="text-xs text-muted">
-                {{ t(`ui.sandboxResourcesDialog.applyingRestartsSandboxOnto`) }}
-            </p>
+            <!-- What saving does instead of applying, where the caller offers it. -->
             <p v-if="canSave" class="text-xs text-muted">
                 {{ t(`ui.sandboxResourcesDialog.savingKeepsItRunning`) }}
             </p>

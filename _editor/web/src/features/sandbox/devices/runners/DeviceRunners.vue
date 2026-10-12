@@ -293,12 +293,11 @@ const add = async (): Promise<void> => {
         <ConfirmDialog
             :open="confirmingRemove !== undefined"
             :header="removeHeader"
+            :description="t(`sandbox.deviceRunners.runnerComesOffWork`, { label: machine.label })"
             :confirm-label="t(`ui.action.remove`)"
             confirm-icon="trash"
             @cancel="confirmingRemove = undefined"
             @confirm="removeConfirmed"
-        >
-            <p>{{ t(`sandbox.deviceRunners.runnerComesOffWork`, { label: machine.label }) }}</p>
-        </ConfirmDialog>
+        />
     </RowGroup>
 </template>

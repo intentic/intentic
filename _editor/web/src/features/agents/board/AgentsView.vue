@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import {
     Button,
+    ConfirmDialog,
     ContextMenu,
     FloatingAction,
-    Modal,
     Notice,
     ProjectChip,
     SearchBar,
@@ -692,37 +692,39 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
             <Icon name="trash" class="text-2xs" />{{ t(`ui.action.discard`) }}
         </div>
         <!-- A drag is the easiest gesture here to trigger by accident, and dropping a conflicted card on Finished spends a turn. -->
-        <Modal :open="pendingResolve !== undefined" size="sm" :header="t(`agents.agentsView.agentResolveConflict`)" @update:open="cancelResolve">
-            <p class="text-xs text-content">
-                {{ t(`agents.agentsView.willStartTurn`, { agent: resolveTarget?.title ?? t(`agents.agentsView.thisAgent`) }) }}
-            </p>
-            <p class="mt-2 text-xs text-muted">{{ t(`agents.agentsView.nothingWrittenToWorkspace`) }}</p>
-            <template #footer>
-                <Button size="small" tier="quiet" :label="t(`ui.action.cancel`)" @click="cancelResolve" />
-                <Button size="small" :label="t(`agents.agentsView.askAgent`)" @click="confirmResolve" />
-            </template>
-        </Modal>
+        <ConfirmDialog
+            :open="pendingResolve !== undefined"
+            :header="t(`agents.agentsView.agentResolveConflict`)"
+            :description="t(`agents.agentsView.willStartTurn`, { agent: resolveTarget?.title ?? t(`agents.agentsView.thisAgent`) })"
+            :confirm-label="t(`agents.agentsView.askAgent`)"
+            :destructive="false"
+            @cancel="cancelResolve"
+            @confirm="confirmResolve"
+        >
+            <p class="text-xs text-muted">{{ t(`agents.agentsView.nothingWrittenToWorkspace`) }}</p>
+        </ConfirmDialog>
         <!-- On a phone a card's land asks first (useAgentDrag.pressLand), saying what goes where: its press sits under the thumb that scrolls the board. -->
-        <Modal :open="pendingLand !== undefined" size="sm" :header="t(`agents.agentsView.landConfirmTitle`)" @update:open="cancelLand">
-            <p class="text-xs text-content">
-                {{
-                    pendingLand?.chosen === `reland`
-                        ? t(`agents.agentsView.relandConfirmBody`, { agent: landingName })
-                        : t(`agents.agentsView.landConfirmBody`, { agent: landingName })
-                }}
-            </p>
-            <p v-if="pendingLand?.chosen === `land` && pendingLand.files !== undefined" class="mt-2 text-xs text-muted">
+        <ConfirmDialog
+            :open="pendingLand !== undefined"
+            :header="t(`agents.agentsView.landConfirmTitle`)"
+            :description="
+                pendingLand?.chosen === `reland`
+                    ? t(`agents.agentsView.relandConfirmBody`, { agent: landingName })
+                    : t(`agents.agentsView.landConfirmBody`, { agent: landingName })
+            "
+            :confirm-label="pendingLand?.chosen === `reland` ? words.landAgain : words.land"
+            :destructive="false"
+            tone="success"
+            @cancel="cancelLand"
+            @confirm="confirmLand"
+        >
+            <p v-if="pendingLand?.chosen === `land` && pendingLand.files !== undefined" class="text-xs text-muted">
                 {{ t(`agents.agentsView.landConfirmFiles`, { count: pendingLand.files }, pendingLand.files) }}
             </p>
-            <template #footer>
-                <Button size="small" tier="quiet" :label="t(`ui.action.cancel`)" @click="cancelLand" />
-                <Button size="small" tone="success" :label="pendingLand?.chosen === `reland` ? words.landAgain : words.land" @click="confirmLand" />
-            </template>
-        </Modal>
+        </ConfirmDialog>
         <!-- Archiving loses nothing, but one tap taking a whole family off the board is not something to do unasked. -->
-        <Modal
+        <ConfirmDialog
             :open="pendingFamilyArchive !== undefined"
-            size="sm"
             :header="
                 t(
                     `agents.agentsView.archiveFamily`,
@@ -730,38 +732,29 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                     pendingFamilyArchive?.children ?? 0,
                 )
             "
-            @update:open="familyArchive.cancel"
-        >
-            <p class="text-xs text-muted">{{ t(`agents.agentsView.archiveFamilyKept`) }}</p>
-            <template #footer>
-                <Button size="small" tier="quiet" :label="t(`ui.action.cancel`)" @click="familyArchive.cancel" />
-                <Button
-                    size="small"
-                    :label="
-                        t(`agents.agentsView.archiveWithSubagents`, { count: (pendingFamilyArchive?.children ?? 0) + 1 }, (pendingFamilyArchive?.children ?? 0) + 1)
-                    "
-                    @click="familyArchive.confirm"
-                />
-            </template>
-        </Modal>
+            :description="t(`agents.agentsView.archiveFamilyKept`)"
+            :confirm-label="
+                t(
+                    `agents.agentsView.archiveWithSubagents`,
+                    { count: (pendingFamilyArchive?.children ?? 0) + 1 },
+                    (pendingFamilyArchive?.children ?? 0) + 1,
+                )
+            "
+            :destructive="false"
+            @cancel="familyArchive.cancel"
+            @confirm="familyArchive.confirm"
+        />
         <!-- The one dialog guarding something unrecoverable: says what goes in the terms the archive has promised all along ("nothing is lost"). -->
-        <Modal :open="pendingPurge" size="sm" :header="t(`agents.agentsView.deleteEveryArchivedAgent`)" @update:open="pendingPurge = false">
-            <p class="text-xs text-content">
-                {{ t(`agents.agentsView.archivedWillBeDeleted`, { count: archived.length }, archived.length) }}
-            </p>
-            <p class="mt-2 text-xs text-muted">
-                {{ t(`agents.agentsView.workTheyAlreadyLanded`) }}
-            </p>
-            <template #footer>
-                <Button size="small" tier="quiet" :label="t(`ui.action.cancel`)" @click="pendingPurge = false" />
-                <Button
-                    size="small"
-                    tone="danger"
-                    :label="t(`agents.agentsView.deleteAgents`, { count: archived.length }, archived.length)"
-                    @click="confirmPurge"
-                />
-            </template>
-        </Modal>
+        <ConfirmDialog
+            :open="pendingPurge"
+            :header="t(`agents.agentsView.deleteEveryArchivedAgent`)"
+            :description="t(`agents.agentsView.archivedWillBeDeleted`, { count: archived.length }, archived.length)"
+            :confirm-label="t(`agents.agentsView.deleteAgents`, { count: archived.length }, archived.length)"
+            @cancel="pendingPurge = false"
+            @confirm="confirmPurge"
+        >
+            <p class="text-xs text-muted">{{ t(`agents.agentsView.workTheyAlreadyLanded`) }}</p>
+        </ConfirmDialog>
         <!-- A real card, so the drag reads as the card itself; `pointer-events-none` keeps the hit test on what's underneath it. -->
         <div v-if="dragging && dragged !== undefined" class="pointer-events-none fixed left-0 top-0 z-50 rotate-2" :style="ghostStyle">
             <div class="opacity-90 shadow-lg">

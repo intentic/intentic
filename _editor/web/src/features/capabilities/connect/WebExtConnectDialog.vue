@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { WEBEXT_PAIR_MESSAGE, WEBEXT_PAIRED_MESSAGE, type WebExtSummary, webextPairingCode } from "@intentic/sandbox-contract";
-import { Button, Code, Modal, Notice, toneTint } from "@intentic/ui";
+import { Button, Code, Modal, Notice } from "@intentic/ui";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { usePeerConnect, WEBEXT_DOOR } from "../../sandbox/devices/usePeerConnect";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
@@ -87,31 +87,33 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <Modal :open="visible" size="lg" :header="t(`capabilities.words.connect`, { id })" @update:open="emit(`update:visible`, $event)">
+    <Modal
+        :open="visible"
+        size="lg"
+        :header="t(`capabilities.words.connect`, { id })"
+        :description="t(`capabilities.webExtConnectDialog.installIntenticExtensionIn`)"
+        @update:open="emit(`update:visible`, $event)"
+    >
         <div class="flex flex-col gap-4">
-            <p class="text-sm text-content">
-                {{ t(`capabilities.webExtConnectDialog.installIntenticExtensionIn`) }}
-            </p>
-
-            <div v-if="online" :class="toneTint(`success`, `strong`, `rounded-md border px-3 py-2 text-sm text-content`)">
+            <Notice v-if="online" tone="success">
                 <b>{{ id }}</b> {{ t(`capabilities.webExtConnectDialog.connectedAllowOnSite`) }}
-            </div>
+            </Notice>
 
             <Notice v-else-if="error" tone="danger">{{ error }}</Notice>
 
-            <div v-else-if="minting || code === ``" class="text-sm text-muted">
+            <div v-else-if="minting || code === ``" class="text-muted">
                 {{ t(`capabilities.words.preparingOneTimeConnection`) }}
             </div>
 
             <template v-else>
                 <!-- Extension in this browser already has the code: nothing to copy, so say so instead of risking a second paste. -->
-                <div v-if="extensionHere === true" class="rounded-md border border-subtle px-3 py-2 text-sm text-content">
+                <Notice v-if="extensionHere === true" tone="info">
                     {{ t(`capabilities.webExtConnectDialog.extensionCodeOpenToolbar`) }} <b>!</b>{{ t(`capabilities.webExtConnectDialog.press`) }}
                     <b>{{ t(`ui.action.connect`) }}</b
                     >.
-                </div>
+                </Notice>
                 <template v-else>
-                    <a v-if="install !== ``" :href="install" target="_blank" rel="noreferrer" class="text-sm underline">{{
+                    <a v-if="install !== ``" :href="install" target="_blank" rel="noreferrer" class="underline">{{
                         t(`capabilities.webExtConnectDialog.installExtension`)
                     }}</a>
                     <Code :code="code" :wrap="true" />
@@ -121,16 +123,19 @@ onBeforeUnmount(() => {
                 </template>
             </template>
 
-            <div class="rounded-md border border-subtle px-3 py-2">
-                <p class="text-2xs text-muted">
-                    {{ t(`capabilities.words.onceConnectedAgentMay`) }} <b>{{ permissions }}</b
-                    >{{ t(`capabilities.webExtConnectDialog.onlyOnSitesAllow`) }}
-                </p>
-            </div>
+            <!-- What connecting grants, as the dialog's closing footnote: on its own ground, not boxed as a second card. -->
+            <p class="text-2xs text-muted">
+                {{ t(`capabilities.words.onceConnectedAgentMay`) }} <b>{{ permissions }}</b
+                >{{ t(`capabilities.webExtConnectDialog.onlyOnSitesAllow`) }}
+            </p>
         </div>
 
         <template #footer>
-            <Button :label="online ? t(`ui.action.done`) : t(`ui.action.close`)" size="small" @click="emit(`update:visible`, false)" />
+            <Button
+                :label="online ? t(`ui.action.done`) : t(`ui.action.close`)"
+                :tier="online ? `accent` : `quiet`"
+                @click="emit(`update:visible`, false)"
+            />
         </template>
     </Modal>
 </template>

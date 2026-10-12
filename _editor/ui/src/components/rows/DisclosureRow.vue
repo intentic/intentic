@@ -5,7 +5,7 @@ import { FACE_SIZES } from "../brand/personaFace.js";
 import Icon from "../primitives/Icon.vue";
 import Row from "./Row.vue";
 import type { IconName } from "../../icons/iconSets.js";
-import { ROW_DRAWER_PAD, ROW_TIERS, ROW_TOGGLE_SIZES, type RowDensity, type RowTone, useRowDensity } from "./row.js";
+import { ROW_DRAWER_PAD, ROW_TIERS, ROW_TOGGLE_SIZES, type RowDensity, type RowTone, useRowDensity, useRowFlushInline } from "./row.js";
 
 const {
     open = false,
@@ -86,6 +86,8 @@ const onPairClick = (event: MouseEvent): void => {
 // Resolved once and passed down to <Row> explicitly, so the hidden mirror below can't disagree about
 // which tier it's mirroring.
 const tier = useRowDensity(() => density);
+// A drawer in a group with no surface (a dialog's) starts where its row's text does.
+const flushInline = useRowFlushInline();
 
 // Read from <Row>'s own tier table, so the hidden mirror below stays in step with what it mirrors.
 const gap = computed(() => ROW_TIERS[tier.value].gap);
@@ -192,7 +194,7 @@ const wrapperSelect = computed(() => (disabled ? `` : `ui-row-select`));
             v-if="open && body === `drawer`"
             :id="bodyId"
             class="cursor-auto border-t border-line-subtle"
-            :class="[ROW_DRAWER_PAD[tier], $slots[`before`] ? `col-span-full` : ``]"
+            :class="[ROW_DRAWER_PAD[tier], flushInline ? `!px-0` : ``, $slots[`before`] ? `col-span-full` : ``]"
         >
             <slot name="below" />
         </div>

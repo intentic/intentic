@@ -809,13 +809,13 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                     @cancel="rejecting = undefined"
                     @confirm="rejecting && reject(rejecting)"
                 >
-                    <p v-if="rejecting" class="text-sm text-muted">
+                    <template v-if="rejecting" #description>
                         <template v-if="rejecting.status === `done`">
                             <template v-if="isPost(rejecting)">{{ t(`approvalsView.postStaysUpOn`, { rejecting: nameOf(rejecting) }) }}</template>
                             <template v-else>{{ t(`approvalsView.whatDoneStaysDone`) }}</template>
                         </template>
                         <template v-else>{{ t(`approvalsView.fileDeletedAgentWould`) }}</template>
-                    </p>
+                    </template>
                 </ConfirmDialog>
 
                 <ConfirmDialog
@@ -823,6 +823,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                     :header="t(`approvalsView.approveEverythingWaiting`)"
                     :confirm-label="t(`approvalsView.approve2`, { count: needsReview.length })"
                     confirm-icon="check"
+                    :description="t(`approvalsView.eachGoesAheadOn`)"
                     :destructive="false"
                     :items="needsReview"
                     :loading="save.isPending.value"
@@ -834,7 +835,6 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                         <span v-else :class="ACTION_MARK" class="h-5 w-5 text-xs"><Icon name="bolt" /></span>
                         <span class="truncate">{{ headline(item) }}</span>
                     </template>
-                    <p class="mt-2 text-sm text-muted">{{ t(`approvalsView.eachGoesAheadOn`) }}</p>
                 </ConfirmDialog>
             </div>
         </template>

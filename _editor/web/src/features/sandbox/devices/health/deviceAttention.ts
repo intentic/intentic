@@ -44,7 +44,8 @@ export type DeviceFix = DeviceCardFix | DeviceConnectFix | DeviceAgentFix;
 
 export interface DeviceConcern {
     readonly key: string;
-    readonly tone: NoticeTone;
+    // Never `success`: a concern is something wrong or worth knowing, and the strip draws no green.
+    readonly tone: Exclude<NoticeTone, `success`>;
     // The subject in one glyph, not the tone's own exclamation mark: what a reader sorts these by is sleep from
     // permissions from age, which the rank alone cannot tell them.
     readonly icon: IconName;
@@ -81,7 +82,7 @@ const gapHint = (gap: NonNullable<Device[`gap`]>): Tip =>
     })[gap];
 
 // An asleep laptop is a state, not a fault; the other three are something the reader can close.
-const GAP_TONE: Record<NonNullable<Device[`gap`]>, NoticeTone> = {
+const GAP_TONE: Record<NonNullable<Device[`gap`]>, DeviceConcern[`tone`]> = {
     offline: `info`,
     "scope-off": `warning`,
     unreported: `warning`,

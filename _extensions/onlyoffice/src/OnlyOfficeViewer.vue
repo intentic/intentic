@@ -425,14 +425,13 @@ const capabilitiesLink = appLink(host().href(`/capabilities`), () => host().navi
         <ConfirmDialog
             :open="confirmingRestore"
             :header="t(`onlyOfficeViewer.restoreOriginalQuestion`)"
+            :description="t(`onlyOfficeViewer.restoreOriginalBody`)"
             header-icon="history"
             :confirm-label="t(`onlyOfficeViewer.restoreOriginal`)"
             confirm-icon="undo"
             :loading="restoring"
             @cancel="confirmingRestore = false"
             @confirm="restore"
-        >
-            <p class="text-sm text-muted">{{ t(`onlyOfficeViewer.restoreOriginalBody`) }}</p>
-        </ConfirmDialog>
+        />
     </div>
 </template>

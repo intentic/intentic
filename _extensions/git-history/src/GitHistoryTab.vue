@@ -830,23 +830,23 @@ const runPending = async (): Promise<void> => {
 
         <!-- Each history action uses one focused dialog. -->
         <Modal :open="pending !== undefined" size="sm" :header="pending ? actionWords(pending.kind).header : ''" @update:open="cancelAction">
-            <template v-if="pending">
-                <p class="text-xs text-content">
-                    {{ pending.commit.subject }} <span class="font-mono text-2xs text-subtle">{{ pending.commit.short }}</span>
-                </p>
-                <p v-if="pendingBody" class="mt-1.5 text-xs text-muted">{{ pendingBody }}</p>
+            <template v-if="pending" #description>
+                {{ pending.commit.subject }} <span class="font-mono text-2xs text-subtle">{{ pending.commit.short }}</span>
+            </template>
+            <div v-if="pending" class="flex flex-col gap-3">
+                <p v-if="pendingBody">{{ pendingBody }}</p>
 
                 <input
                     v-if="ACTIONS[pending.kind].needsName"
                     v-model="nameInput"
                     type="text"
                     :placeholder="ACTIONS[pending.kind].placeholder"
-                    class="ui-field-box ui-field-sm mt-3 w-full"
+                    class="ui-field-box w-full"
                     @keydown.enter="runPending"
                     autofocus
                 />
 
-                <div v-if="pending.kind === 'reset'" class="mt-3 flex flex-col gap-1.5">
+                <div v-if="pending.kind === 'reset'" class="flex flex-col gap-1.5">
                     <SegmentedControl
                         v-model="resetMode"
                         size="xs"
@@ -867,16 +867,15 @@ const runPending = async (): Promise<void> => {
                     </p>
                 </div>
 
-                <p v-if="ACTIONS[pending.kind].danger" class="mt-3 text-2xs text-subtle">
+                <p v-if="ACTIONS[pending.kind].danger" class="text-2xs text-subtle">
                     <Icon name="shield" class="mr-0.5 text-3xs" />{{ t(`gitHistoryTab.restorePointSavedFirst2`) }}
                 </p>
-                <p v-if="actionError" class="mt-2 text-2xs text-danger">{{ actionError }}</p>
-            </template>
+                <p v-if="actionError" class="text-2xs text-danger">{{ actionError }}</p>
+            </div>
             <template #footer>
-                <Button size="small" tier="quiet" :label="t(`gitHistoryTab.cancel`)" @click="cancelAction" />
+                <Button tier="quiet" :label="t(`gitHistoryTab.cancel`)" @click="cancelAction" />
                 <Button
                     v-if="pending"
-                    size="small"
                     :tone="ACTIONS[pending.kind].danger ? `warning` : `success`"
                     :label="actionWords(pending.kind).confirm"
                     :disabled="acting || (ACTIONS[pending.kind].needsName && nameInput.trim() === '')"

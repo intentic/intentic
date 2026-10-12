@@ -324,6 +324,7 @@ const cleanedNotice = computed<NoticeModel | undefined>(() => {
         <ConfirmDialog
             :open="asking !== undefined"
             :header="t(`sandbox.sandboxStorageCard.confirmHeader`, { category: asked?.label ?? `` })"
+            :description="asked?.reason"
             header-icon="eraser"
             :confirm-label="
                 asking?.cleanableBytes === undefined
@@ -334,10 +335,7 @@ const cleanedNotice = computed<NoticeModel | undefined>(() => {
             @cancel="asking = undefined"
             @confirm="confirm"
         >
-            <div class="flex flex-col gap-2 text-xs leading-relaxed">
-                <p class="text-muted">{{ asked?.reason }}</p>
-                <p class="text-content">{{ asked?.warning }}</p>
-            </div>
+            <p>{{ asked?.warning }}</p>
         </ConfirmDialog>
     </Card>
 </template>

@@ -656,12 +656,12 @@ onMounted(progress.recover);
         @cancel="removingServer = undefined"
         @confirm="confirmRemoveServer"
     >
+        <template #description>
+            {{ t(`views.infraDeclare.forgets`) }} <b class="text-content">{{ removingServer }}</b>
+            {{ t(`views.infraDeclare.inventoryEntryStoredSsh`) }} <b>{{ t(`views.infraDeclare.everythingAlreadyDeployedKeeps`) }}</b>
+            {{ t(`views.infraDeclare.untilCleanUp`) }}
+        </template>
         <div class="flex flex-col gap-3">
-            <p class="text-sm text-muted">
-                {{ t(`views.infraDeclare.forgets`) }} <b class="text-content">{{ removingServer }}</b>
-                {{ t(`views.infraDeclare.inventoryEntryStoredSsh`) }} <b>{{ t(`views.infraDeclare.everythingAlreadyDeployedKeeps`) }}</b>
-                {{ t(`views.infraDeclare.untilCleanUp`) }}
-            </p>
             <RunCommand :command="cleanupHostCommand" :label="t(`views.infraDeclare.runOnServerRoot`)" />
             <p class="text-xs text-subtle">
                 {{ t(`views.infraDeclare.scriptListsExactlyWhat`) }} <b>{{ t(`views.infraDeclare.includingOnHostBackup`) }}</b

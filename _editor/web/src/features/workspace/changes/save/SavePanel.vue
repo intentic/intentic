@@ -395,24 +395,28 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
             </div>
         </div>
 
+        <!-- A Modal rather than a ConfirmDialog: its way out says Keep, which a fixed Cancel would lose. -->
         <Modal
             :open="actions.discardAsk.value !== undefined"
             size="sm"
             :header="t(`workspace.savePanel.changes`, { discard: words.discard })"
             @update:open="actions.dismiss()"
         >
-            <template v-if="actions.discardAsk.value">
-                <p class="break-words text-xs text-content">{{ words.discard }} {{ actions.discardAsk.value.what }}?</p>
-                <p v-if="actions.discardAsk.value.partial" class="mt-2 text-xs text-warning">
+            <!-- The question can name a long path, which wraps rather than running out of the box. -->
+            <template #description>
+                <span class="break-words">{{ words.discard }} {{ actions.discardAsk.value?.what }}?</span>
+            </template>
+            <div v-if="actions.discardAsk.value" class="flex flex-col gap-3">
+                <p v-if="actions.discardAsk.value.partial" class="text-warning">
                     {{ t(`workspace.savePanel.moreChangesHereThan`) }}
                 </p>
-                <p v-if="actions.discardAsk.value.back > 0" class="mt-2 text-xs text-muted">
+                <p v-if="actions.discardAsk.value.back > 0" class="text-muted">
                     {{ actions.discardAsk.value.partial ? t(`workspace.words.atLeast`) : `` }}
                     {{ t(`workspace.savePanel.filesGoBack`, { count: actions.discardAsk.value.back }, actions.discardAsk.value.back) }}
                 </p>
                 <!-- The one genuinely lossy half, named file by file: nothing has a copy of these. -->
-                <div v-if="actions.discardAsk.value.gone.length > 0" class="mt-2">
-                    <p class="text-xs text-danger">
+                <div v-if="actions.discardAsk.value.gone.length > 0">
+                    <p class="text-danger">
                         {{ actions.discardAsk.value.partial ? t(`workspace.words.atLeast`) : `` }}
                         {{
                             t(
@@ -430,13 +434,13 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
                         </li>
                     </ul>
                 </div>
-                <p class="mt-3 text-2xs text-subtle">
+                <p class="text-2xs text-subtle">
                     <Icon name="shield" class="mr-0.5 text-[0.6rem]" />{{ t(`workspace.savePanel.versionHowThingsNow`) }} {{ words.restorePoints }}.
                 </p>
-            </template>
+            </div>
             <template #footer>
-                <Button size="small" tier="quiet" :label="t(`workspace.savePanel.keep`)" @click="actions.dismiss()" />
-                <Button size="small" tone="danger" @click="actions.runDiscard()">{{ words.discard }}</Button>
+                <Button tier="quiet" :label="t(`workspace.savePanel.keep`)" @click="actions.dismiss()" />
+                <Button tone="danger" @click="actions.runDiscard()">{{ words.discard }}</Button>
             </template>
         </Modal>
     </div>

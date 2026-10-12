@@ -439,6 +439,7 @@ onBeforeUnmount(() => {
         <ConfirmDialog
             :open="pendingKill !== undefined"
             :header="killPrompt.header"
+            :description="killPrompt.body"
             :confirm-label="t(`terminal.terminalPanel.killAnyway`)"
             confirm-icon="trash"
             :items="killPrompt.items"
@@ -450,7 +451,6 @@ onBeforeUnmount(() => {
                 <span class="shrink-0 text-content">{{ segmentLabel(item.name) }}</span>
                 <span v-if="item.command" class="truncate font-mono text-xs text-muted">{{ item.command }}</span>
             </template>
-            <p class="mt-3 text-xs text-muted">{{ killPrompt.body }}</p>
         </ConfirmDialog>
 
         <!-- One dialog for both pickers; a leading default swatch clears the override. Rename stays inline in the strip. -->

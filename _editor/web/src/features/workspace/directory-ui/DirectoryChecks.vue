@@ -37,29 +37,30 @@ const EXAMPLE = `{
 
 <template>
     <Modal v-model:open="visible" size="md" :header="t(`workspace.directoryChecks.checksIn`, { dir: dir ?? `` })">
-        <div class="flex flex-col gap-4">
-            <template v-if="entry !== undefined">
-                <!-- The file is named once, here, so the row beneath can name the switch instead of the repository. -->
-                <i18n-t keypath="workspace.directoryChecks.declaredIn" tag="p" class="text-xs text-subtle" scope="global">
-                    <template #path><code class="ui-code">{{ entry.path }}</code></template>
-                </i18n-t>
-                <RowGroup>
-                    <RepoCheckRow
-                        :entry="entry"
-                        :title="t(`workspace.directoryChecks.runTheseChecks`)"
-                        :busy="pending === entry.repo"
-                        @switch="(on: boolean) => adopt(entry!.repo, on)"
-                    />
-                </RowGroup>
+        <template #description>
+            <!-- The file is named once, here, so the row beneath can name the switch instead of the repository. -->
+            <i18n-t v-if="entry !== undefined" keypath="workspace.directoryChecks.declaredIn" tag="span" scope="global">
+                <template #path><code class="ui-code">{{ entry.path }}</code></template>
+            </i18n-t>
+            <template v-else>
+                {{ t(`workspace.directoryChecks.repositoryDoesntDeclareAny`) }}
+                <span class="font-mono text-content">{{ dir }}/.intentic/checks.json</span>
+                {{ t(`workspace.directoryChecks.appearHereTravelRepository`) }}
             </template>
+        </template>
+
+        <div class="flex flex-col gap-4">
+            <RowGroup v-if="entry !== undefined">
+                <RepoCheckRow
+                    :entry="entry"
+                    :title="t(`workspace.directoryChecks.runTheseChecks`)"
+                    :busy="pending === entry.repo"
+                    @switch="(on: boolean) => adopt(entry!.repo, on)"
+                />
+            </RowGroup>
 
             <template v-else>
-                <p class="text-sm text-muted">
-                    {{ t(`workspace.directoryChecks.repositoryDoesntDeclareAny`) }}
-                    <span class="font-mono text-content">{{ dir }}/.intentic/checks.json</span>
-                    {{ t(`workspace.directoryChecks.appearHereTravelRepository`) }}
-                </p>
-                <pre class="overflow-x-auto rounded-lg border border-line bg-canvas px-3 py-2 font-mono text-2xs text-content">{{ EXAMPLE }}</pre>
+                <pre class="overflow-x-auto rounded-lg bg-canvas px-3 py-2 font-mono text-2xs text-content">{{ EXAMPLE }}</pre>
                 <i18n-t keypath="workspace.directoryChecks.whenIsEditOrTurn" tag="p" class="text-2xs text-subtle" scope="global">
                     <template #when><span class="font-mono">when</span></template>
                     <template #edit><span class="font-mono">edit</span></template>
@@ -73,7 +74,7 @@ const EXAMPLE = `{
             <RouterLink to="/sandbox/agent?section=finishing" :class="ui.textButton({ tone: `quiet` }, `mr-auto`)">
                 {{ t(`workspace.directoryChecks.allChecksInSandbox`) }} <Icon name="arrow-right" class="text-2xs" />
             </RouterLink>
-            <Button :label="t(`ui.action.close`)" tier="quiet" tone="accent" size="small" @click="dir = undefined" />
+            <Button :label="t(`ui.action.close`)" tier="quiet" @click="dir = undefined" />
         </template>
     </Modal>
 </template>

@@ -51,37 +51,43 @@ const tooMany = computed(() => chosen.value.size > BRING_BACK_CAP);
 </script>
 
 <template>
-    <Modal v-model:open="open" size="md" :header="t(`local.bringBackReview.header`)">
-        <p class="text-xs text-muted">{{ t(`local.bringBackReview.intro`) }}</p>
-        <label class="mt-3 flex items-center gap-2 border-b border-line pb-1.5 text-xs text-muted">
-            <Checkbox :model-value="allChosen" binary size="small" :disabled="busy" @update:model-value="chooseAll($event === true)" />
-            {{ t(`local.bringBackReview.all`, { count: changes.length }, changes.length) }}
-        </label>
-        <ul class="max-h-72 overflow-auto py-1">
-            <li v-for="change in changes" :key="change.path">
-                <label class="flex min-w-0 items-center gap-2 py-0.5">
-                    <Checkbox
-                        class="ui-checkbox-quiet"
-                        :model-value="chosen.has(change.path)"
-                        binary
-                        size="small"
-                        :disabled="busy"
-                        @update:model-value="choose(change.path, $event === true)"
-                    />
-                    <ChangeStatusMark :status="change.kind" />
-                    <!-- Cut from the left, so a deep path still ends on the file's own name. -->
-                    <span class="min-w-0 truncate font-mono text-2xs text-content" dir="rtl"
-                        ><bdi>{{ change.path }}</bdi></span
-                    >
-                    <span v-if="change.conflict === true" class="shrink-0 text-2xs text-warning">{{ t(`local.bringBackReview.conflict`) }}</span>
+    <Modal v-model:open="open" size="md" :header="t(`local.bringBackReview.header`)" :description="t(`local.bringBackReview.intro`)">
+        <!-- The list and what it says about itself: one column, the all-box ruled off above the files it ticks. -->
+        <div class="flex flex-col gap-2">
+            <div>
+                <label class="flex items-center gap-2 border-b border-line pb-1.5 text-xs text-muted">
+                    <Checkbox :model-value="allChosen" binary size="small" :disabled="busy" @update:model-value="chooseAll($event === true)" />
+                    {{ t(`local.bringBackReview.all`, { count: changes.length }, changes.length) }}
                 </label>
-            </li>
-        </ul>
-        <p v-if="truncated" class="mt-2 text-2xs text-warning">{{ t(`local.bringBackReview.truncated`) }}</p>
-        <p v-if="tooMany" class="mt-2 text-2xs text-warning">
-            {{ t(`local.bringBackReview.tooMany`, { max: formatCount(BRING_BACK_CAP) }) }}
-        </p>
-        <p v-if="error" class="mt-2 text-xs text-danger">{{ error }}</p>
+                <ul class="max-h-72 overflow-auto py-1">
+                    <li v-for="change in changes" :key="change.path">
+                        <label class="flex min-w-0 items-center gap-2 py-0.5">
+                            <Checkbox
+                                class="ui-checkbox-quiet"
+                                :model-value="chosen.has(change.path)"
+                                binary
+                                size="small"
+                                :disabled="busy"
+                                @update:model-value="choose(change.path, $event === true)"
+                            />
+                            <ChangeStatusMark :status="change.kind" />
+                            <!-- Cut from the left, so a deep path still ends on the file's own name. -->
+                            <span class="min-w-0 truncate font-mono text-2xs text-content" dir="rtl"
+                                ><bdi>{{ change.path }}</bdi></span
+                            >
+                            <span v-if="change.conflict === true" class="shrink-0 text-2xs text-warning">{{
+                                t(`local.bringBackReview.conflict`)
+                            }}</span>
+                        </label>
+                    </li>
+                </ul>
+            </div>
+            <p v-if="truncated" class="text-2xs text-warning">{{ t(`local.bringBackReview.truncated`) }}</p>
+            <p v-if="tooMany" class="text-2xs text-warning">
+                {{ t(`local.bringBackReview.tooMany`, { max: formatCount(BRING_BACK_CAP) }) }}
+            </p>
+            <p v-if="error" class="text-xs text-danger">{{ error }}</p>
+        </div>
         <template #footer>
             <Button tier="quiet" :label="t(`ui.action.cancel`)" @click="open = false" />
             <Button

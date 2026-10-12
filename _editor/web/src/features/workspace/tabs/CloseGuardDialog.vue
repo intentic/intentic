@@ -35,6 +35,7 @@ const consequence = computed(() => {
     <ConfirmDialog
         :open="props.open"
         :header="header"
+        :description="consequence"
         :confirm-label="leavesFolder ? t(`workspace.closeGuard.openAnyway`) : t(`workspace.closeGuard.closeAnyway`)"
         :confirm-icon="leavesFolder ? `folder-open` : `times`"
         :items="props.question?.paths ?? []"
@@ -45,6 +46,5 @@ const consequence = computed(() => {
             <Icon name="circle-fill" class="shrink-0 text-[0.4rem] text-warning" />
             <span class="truncate text-content">{{ item }}</span>
         </template>
-        <p class="mt-3 text-xs text-muted">{{ consequence }}</p>
     </ConfirmDialog>
 </template>

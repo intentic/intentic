@@ -174,8 +174,8 @@ const submit = (): void => {
         </div>
 
         <template #footer>
-            <button type="button" :class="ui.textButton()" @click="open = false">{{ t(`loopForm.cancel`) }}</button>
-            <Button size="small" :label="editing ? t(`loopForm.save`) : t(`loopForm.createLoop`)" :disabled="!ready" @click="submit()" />
+            <Button :label="t(`loopForm.cancel`)" tier="quiet" @click="open = false" />
+            <Button :label="editing ? t(`loopForm.save`) : t(`loopForm.createLoop`)" :disabled="!ready" @click="submit()" />
         </template>
     </Modal>
 </template>

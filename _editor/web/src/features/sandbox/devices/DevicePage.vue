@@ -676,13 +676,13 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
         <ConfirmDialog
             :open="ops.confirmingAct.value !== undefined"
             :header="ops.actPrompt.value?.header ?? ``"
+            :description="ops.actPrompt.value?.body"
             :confirm-label="ops.actPrompt.value?.label ?? t(`ui.action.continue`)"
             :destructive="false"
             @cancel="ops.confirmingAct.value = undefined"
             @confirm="ops.confirmAct()"
         >
-            <p v-if="ops.actPrompt.value?.body !== undefined">{{ ops.actPrompt.value.body }}</p>
-            <p v-if="ops.actPrompt.value?.severing === true" class="mt-3 text-xs text-warning">
+            <p v-if="ops.actPrompt.value?.severing === true" class="text-xs text-warning">
                 {{ t(`sandbox.devicePage.sandboxUsingRightNow`) }}
             </p>
         </ConfirmDialog>
@@ -700,9 +700,9 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
             @save="saveReshape"
         />
 
-        <!-- Names the rows before the consequences, and the consequences one per effect: a batch that deletes two
-             sandboxes and unpairs four has done two unlike things, and one sentence covering both would be false of
-             each. Red because half of it does not come back. -->
+        <!-- The consequences one per effect, then the rows they fall on: a batch that deletes two sandboxes and unpairs
+             four has done two unlike things, and one sentence covering both would be false of each. Red because half
+             of it does not come back. -->
         <ConfirmDialog
             :open="ops.removalPrompt.value !== undefined"
             :header="ops.removalPrompt.value?.header ?? ``"
@@ -710,15 +710,16 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
             :confirm-label="t(`ui.action.remove`)"
             confirm-icon="trash"
             :items="ops.removalPrompt.value?.names ?? []"
-            :destructive="true"
             :loading="ops.removing.value"
             @cancel="ops.confirmingRemoval.value = undefined"
             @confirm="selection.confirmRemoval()"
         >
+            <template #description>
+                <p v-for="effect in ops.removalPrompt.value?.effects ?? []" :key="effect">{{ effect }}</p>
+            </template>
             <template #item="{ item }"
                 ><span class="min-w-0 truncate font-mono text-xs text-content">{{ item }}</span></template
             >
-            <p v-for="effect in ops.removalPrompt.value?.effects ?? []" :key="effect" class="mt-3 first:mt-0">{{ effect }}</p>
             <p v-if="ops.removalPrompt.value?.severing === true" class="mt-3 text-xs text-warning">
                 {{ t(`sandbox.devicePage.sandboxUsingRightNow`) }}
             </p>
@@ -728,17 +729,18 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
         <ConfirmDialog
             :open="ops.batchPrompt.value !== undefined"
             :header="ops.batchPrompt.value?.header ?? ``"
+            :description="ops.batchPrompt.value?.body"
             header-icon="download"
             :confirm-label="ops.batchPrompt.value?.label ?? t(`ui.action.continue`)"
             confirm-icon="download"
             :items="ops.batchPrompt.value?.names ?? []"
+            :destructive="false"
             @cancel="ops.confirmingBatch.value = undefined"
             @confirm="selection.confirmBatch()"
         >
             <template #item="{ item }"
                 ><span class="min-w-0 truncate font-mono text-xs text-content">{{ item }}</span></template
             >
-            <p>{{ ops.batchPrompt.value?.body }}</p>
         </ConfirmDialog>
 
         <!-- Names what survives as carefully as what ends: the local folder is untouched. -->
@@ -748,35 +750,33 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
                 t(`sandbox.devicePage.unpairHeader`, { sandbox: ops.confirmingUnpair.value?.group.title ?? t(`sandbox.devicePage.thisSandbox`) })
             "
             :confirm-label="t(`sandbox.words.unpair`)"
-            :destructive="true"
             @cancel="ops.confirmingUnpair.value = undefined"
             @confirm="ops.confirmUnpair()"
         >
-            <p>
+            <template #description>
                 <span class="font-mono text-content">{{ ops.confirmingUnpair.value?.environment.device.label ?? machine.label }}</span>
                 {{ t(`sandbox.devicePage.stopsSyncingSandboxsFiles`) }}
-            </p>
-            <p v-if="ops.confirmingUnpair.value?.group.folder?.localDir" class="mt-2 break-all font-mono text-xs text-content">
-                {{ ops.confirmingUnpair.value.group.folder.localDir }}
-            </p>
-            <p class="mt-2">{{ t(`sandbox.devicePage.pairingAgainMeansRunning`) }}</p>
+            </template>
+            <div class="flex flex-col gap-4">
+                <p v-if="ops.confirmingUnpair.value?.group.folder?.localDir" class="break-all font-mono text-xs">
+                    {{ ops.confirmingUnpair.value.group.folder.localDir }}
+                </p>
+                <p>{{ t(`sandbox.devicePage.pairingAgainMeansRunning`) }}</p>
+            </div>
         </ConfirmDialog>
 
         <!-- Named for the machine, explicit that it's this one alone. -->
         <ConfirmDialog
             :open="ops.confirmingRevoke.value !== undefined"
             :header="t(`sandbox.devicePage.revokeSAccess2`, { label: ops.confirmingRevoke.value?.device.label ?? machine.label })"
+            :description="t(`sandbox.devicePage.deviceAloneLosesAccess`)"
             :confirm-label="t(`sandbox.words.revokeAccess`)"
             confirm-icon="times"
-            :destructive="true"
             :loading="ops.revoking.value"
             @cancel="ops.confirmingRevoke.value = undefined"
             @confirm="void ops.runRevoke()"
         >
             <p>
-                {{ t(`sandbox.devicePage.deviceAloneLosesAccess`) }}
-            </p>
-            <p class="mt-2">
                 {{ t(`sandbox.devicePage.nothingOnDeviceDeleted`) }}
             </p>
         </ConfirmDialog>

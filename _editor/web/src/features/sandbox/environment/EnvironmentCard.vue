@@ -370,12 +370,11 @@ watch(
         <ConfirmDialog
             :open="removeWords !== undefined"
             :header="removeWords?.header ?? ``"
+            :description="removeWords?.body"
             :confirm-label="t(`sandbox.environmentCard.remove`)"
             confirm-icon="trash"
             @cancel="removing = undefined"
             @confirm="remove"
-        >
-            <p>{{ removeWords?.body }}</p>
-        </ConfirmDialog>
+        />
     </RowGroup>
 </template>

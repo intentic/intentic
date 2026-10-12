@@ -201,20 +201,21 @@ const submit = async (): Promise<void> => {
 <template>
     <!-- The header asks the folder's question, not claims its contents: "Personas in X" reads as an existing list, wrong on the folder's first use. -->
     <Modal v-model:open="visible" size="md" :header="t(`workspace.directoryPersonas.whoWorksIn`, { folderName })">
-        <div class="flex flex-col gap-4">
-            <p class="text-xs text-subtle">
-                {{ t(`workspace.directoryPersonas.personaStartsHereOpens`) }} <code class="ui-code">{{ dir }}</code
-                >. Everything else about it can stay as it is.
-            </p>
+        <template #description>
+            {{ t(`workspace.directoryPersonas.personaStartsHereOpens`) }} <code class="ui-code">{{ dir }}</code
+            >. Everything else about it can stay as it is.
+        </template>
 
+        <div class="flex flex-col gap-4">
             <!-- Existing cards first, since a folder can hold several; absent entirely (not an empty box) when there are none. -->
             <div v-if="cards.length > 0" class="flex flex-col gap-1">
                 <span :class="ui.sectionLabel()">{{ t(`workspace.directoryPersonas.startingHere`) }}</span>
+                <!-- Rows on the dialog's ground, the one being edited tinted; reaching out by their padding so faces line up with the label. -->
                 <div
                     v-for="persona in cards"
                     :key="persona.id"
-                    class="flex items-center gap-2.5 rounded-lg border px-2.5 py-1.5 transition-colors"
-                    :class="editing === persona.id ? `border-link bg-link/10` : `border-line`"
+                    class="-mx-2.5 flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 transition-colors"
+                    :class="editing === persona.id ? `bg-link/10` : ``"
                 >
                     <!-- The list size: this panel is about the folder, but a face too small to read is no cheaper, just worse. -->
                     <PersonaFace :persona :size="FACE_SIZES.row" />
@@ -258,13 +259,14 @@ const submit = async (): Promise<void> => {
                         :placeholder="t(`workspace.directoryPersonas.findPersona`)"
                         :aria-label="t(`workspace.directoryPersonas.findPersona2`)"
                     />
-                    <div class="flex max-h-56 flex-col gap-1 overflow-y-auto">
+                    <!-- Pulled out by the rows' padding on the scroller itself, since it clips anything that reaches past its edge. -->
+                    <div class="-mx-2.5 flex max-h-56 flex-col gap-1 overflow-y-auto">
                         <button
                             v-for="persona in shown"
                             :key="persona.id"
                             type="button"
-                            class="flex items-center gap-2.5 rounded-lg border px-2.5 py-1.5 text-left transition-colors"
-                            :class="chosen === persona.id ? `border-link bg-link/10` : `border-line hover:border-line-strong`"
+                            class="flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left transition-colors"
+                            :class="chosen === persona.id ? `bg-link/10` : `ui-row-select`"
                             :aria-label="t(`workspace.directoryPersonas.startHere`, { id: persona.label ?? persona.id })"
                             :aria-pressed="chosen === persona.id"
                             @click="chosen = persona.id"
@@ -280,7 +282,7 @@ const submit = async (): Promise<void> => {
                             </span>
                             <Icon v-if="chosen === persona.id" name="check" class="shrink-0 text-xs text-link" />
                         </button>
-                        <p v-if="shown.length === 0" class="px-0.5 py-1 text-xs text-subtle">
+                        <p v-if="shown.length === 0" class="px-2.5 py-1 text-xs text-subtle">
                             {{ t(`workspace.directoryPersonas.noPersonaGoesBy`) }}
                         </p>
                     </div>
@@ -327,7 +329,7 @@ const submit = async (): Promise<void> => {
             <RouterLink to="/sandbox/personas" :class="ui.textButton({ tone: `quiet` }, 'mr-auto')">
                 {{ t(`workspace.directoryPersonas.fullEditor`) }} <Icon name="arrow-right" class="text-2xs" />
             </RouterLink>
-            <Button :label="t(`ui.action.cancel`)" tier="quiet" tone="accent" size="small" @click="dir = undefined" />
+            <Button :label="t(`ui.action.cancel`)" tier="quiet" @click="dir = undefined" />
             <!-- The verb follows the mode, so the button never promises "add" while the panel is actually moving a card. -->
             <Button
                 :label="
@@ -337,7 +339,6 @@ const submit = async (): Promise<void> => {
                           ? t(`workspace.directoryPersonas.startHere2`)
                           : t(`ui.action.save`)
                 "
-                size="small"
                 :loading="save.isPending.value"
                 :disabled="!valid"
                 @click="submit"

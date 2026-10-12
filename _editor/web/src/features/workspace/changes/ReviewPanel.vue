@@ -16,9 +16,9 @@ import {
     type ButtonTier,
     ChangeStatusMark,
     clipboardOf,
+    ConfirmDialog,
     ContextMenu,
     formatElapsed,
-    Modal,
     Notice,
     timeAgo,
     type Tip,
@@ -1680,25 +1680,30 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
         </div>
 
         <!-- Tracked and untracked discard outcomes are reported separately. -->
-        <Modal
+        <ConfirmDialog
             :open="pendingDiscard !== undefined"
-            size="sm"
             :header="t(`workspace.reviewPanel.discardChanges`)"
-            @update:open="pendingDiscard = undefined"
+            :confirm-label="t(`ui.action.discard`)"
+            :confirm-disabled="changes.actionBusy.value"
+            @cancel="pendingDiscard = undefined"
+            @confirm="confirmDiscard"
         >
-            <template v-if="pendingDiscard">
-                <p class="break-words text-xs text-content">{{ pendingDiscard.question }}</p>
+            <!-- The question can name a long path, which wraps rather than running out of the box. -->
+            <template #description>
+                <span class="break-words">{{ pendingDiscard?.question }}</span>
+            </template>
+            <div v-if="pendingDiscard" class="flex flex-col gap-3">
                 <!-- The counts are a floor when daemon truncation hides additional files. -->
-                <p v-if="pendingDiscard.partial" class="mt-2 text-xs text-warning">
+                <p v-if="pendingDiscard.partial" class="text-warning">
                     {{ t(`workspace.reviewPanel.moreFilesPendingHere`) }}
                 </p>
                 <!-- The verb agrees with the count (`plural`), since a lone file misreading as plural is the one line here that must be read carefully. -->
-                <p v-if="pendingDiscard.restores > 0" class="mt-2 text-xs text-muted">
+                <p v-if="pendingDiscard.restores > 0" class="text-muted">
                     {{ pendingDiscard.partial ? t(`workspace.words.atLeast`) : `` }}
                     {{ t(`workspace.reviewPanel.filesReturn`, { count: pendingDiscard.restores }, pendingDiscard.restores) }}
                 </p>
-                <div v-if="pendingDiscard.deletes.length > 0" class="mt-2">
-                    <p class="text-xs text-danger">
+                <div v-if="pendingDiscard.deletes.length > 0">
+                    <p class="text-danger">
                         {{ pendingDiscard.partial ? t(`workspace.words.atLeast`) : `` }}
                         {{ t(`workspace.reviewPanel.untrackedLeave`, { count: pendingDiscard.deletes.length }, pendingDiscard.deletes.length) }}
                     </p>
@@ -1708,15 +1713,11 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                         </li>
                     </ul>
                 </div>
-                <p class="mt-3 text-2xs text-subtle">
+                <p class="text-2xs text-subtle">
                     <Icon name="shield" class="mr-0.5 text-[0.6rem]" />{{ t(`workspace.reviewPanel.restorePointSavedFirst2`) }}
                 </p>
-            </template>
-            <template #footer>
-                <Button size="small" tier="quiet" :label="t(`ui.action.cancel`)" @click="pendingDiscard = undefined" />
-                <Button size="small" tone="danger" :label="t(`ui.action.discard`)" :disabled="changes.actionBusy.value" @click="confirmDiscard" />
-            </template>
-        </Modal>
+            </div>
+        </ConfirmDialog>
 
         <!-- The same card the chat tab strip raises for a session, mounted at body so it clears this sidebar's narrow column. -->
         <HoverCard ref="hoverCard" />

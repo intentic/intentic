@@ -761,9 +761,9 @@ onBeforeUnmount(() => {
                 @cancel="confirmRemoveId = undefined"
                 @confirm="confirmRemove"
             >
-                <p class="text-sm text-content">
+                <template #description>
                     {{ t(`ui.action.remove`) }} <b>{{ confirmRemoveId }}</b> {{ t(`capabilities.capabilities.sandboxTearsDownConfiguration`) }}
-                </p>
+                </template>
             </ConfirmDialog>
 
             <!-- Names what stops as precisely as the Devices board does: this is the same revoke, pressed from the tile. -->
@@ -772,15 +772,14 @@ onBeforeUnmount(() => {
                 :header="t(`capabilities.capabilities.disconnectHeader`, { machine: disconnecting?.title ?? t(`shared.thisMachine`) })"
                 :confirm-label="t(`ui.action.disconnect`)"
                 confirm-icon="times"
-                :destructive="true"
                 :loading="disconnectingDevice"
                 @cancel="disconnecting = undefined"
                 @confirm="void confirmDisconnectDevice()"
             >
-                <p class="text-sm text-content">
+                <template #description>
                     <span class="font-mono">{{ disconnecting?.title }}</span> {{ t(`capabilities.capabilities.losesAccessToSandbox`) }}
-                </p>
-                <p class="mt-2 text-sm text-muted">{{ t(`capabilities.capabilities.connectingAgainMeansRunning`) }}</p>
+                </template>
+                <p class="text-muted">{{ t(`capabilities.capabilities.connectingAgainMeansRunning`) }}</p>
             </ConfirmDialog>
 
             <!-- The one edit that's a migration rather than a form field; see askRename. -->
