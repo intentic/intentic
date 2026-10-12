@@ -188,7 +188,7 @@
         z-index: -1;
         border-radius: inherit;
         pointer-events: none;
-        background-color: color-mix(in oklab, var(--color-selection-edge) 22%, transparent);
+        background-color: color-mix(in oklab, var(--color-selection-edge) 15%, transparent);
         mask-image: var(--session-card-blade, linear-gradient(#0000, #0000));
         mask-size: 100% 100%;
         mask-repeat: no-repeat;
