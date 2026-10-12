@@ -115,10 +115,11 @@ export interface LocalView {
 }
 
 /* FIRST RUN (2026-10-09): what a new computer needs before agents can run on it, answered by the app (the read-only
-   `ic docker prepare --dry-run`, the download it starts at first launch, the PC's own setup) and drawn on the local
-   shell's Agents view. The PC's own setup (WSL, the container engine) needs no account: it runs on the reader's one
-   "Set up this PC". The sandbox itself is made once someone is signed in (LocalMachineState). The first task is written
-   while the PC is set up, kept on disk by the app so a restart keeps it, and sent once this computer's sandbox is ready. */
+   `ic docker prepare --dry-run`, the download it starts at first launch, the PC's own setup) and drawn by the app's
+   own This computer view (its src/device/pcSetup/PcSetupCard.vue; the local shell's Agents view until 2026-10-12). The
+   PC's own setup (WSL, the container engine) needs no account: it runs on the reader's one "Set up this PC". The sandbox
+   itself is made once someone is signed in (LocalMachineState). The first task is written while the PC is set up, kept
+   on disk by the app so a restart keeps it, and sent once this computer's sandbox is ready. */
 
 /** One line of the check of this PC: already fine, done by Intentic, the reader's to do, or impossible here. */
 export interface LocalCheckRow {
@@ -267,7 +268,7 @@ export interface LocalRepairSession {
 export interface LocalRepairContext {
     /** The sandbox the reader was trying to reach. */
     readonly slug?: string;
-    /** `recovery` (the workspace stopped answering), `setup` (a setup failed), `tray`, `link`, `agents`. */
+    /** `recovery` (the workspace stopped answering), `setup` (a setup failed), `tray`, `link`. */
     readonly from?: string;
     /** What the reader saw, as the opener said it. */
     readonly reason?: string;
@@ -365,8 +366,11 @@ export type LocalMachineAction = `signIn` | `startDocker` | `retry` | `start` | 
 
 export interface LocalProjectHost {
     preview(): Promise<LocalProjectPreview>;
-    /** This window's folder put in line for this computer's sandbox under `project`, its name in /work. Never waits. */
-    attach(names: { readonly project: string }): Promise<LocalProjectStart>;
+    /**
+     * This window's folder put in line for this computer's sandbox under `project`, its name in /work, or the first of
+     * `alternatives` free when that is taken (sandbox-contract's `projectDirCandidates`). Never waits.
+     */
+    attach(names: { readonly project: string; readonly alternatives?: readonly string[] }): Promise<LocalProjectStart>;
     /** This computer's own sandbox, once the app has said. */
     readonly machine: Readonly<Ref<LocalMachineSandbox | undefined>>;
     /** This window's folder on its way into it, while it is. */

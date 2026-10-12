@@ -560,8 +560,8 @@ pub const DEVICE_ROUTE: &str = "/device";
 /// The route of the folder itself.
 pub const FILES_ROUTE: &str = "/workspace";
 
-/// The main window in front, at a route of its own shell (`/agents`, `/repair?from=tray`): the way a link, the tray
-/// or a notification opens one of the local shell's views.
+/// The main window in front, at a route of its own shell (`/repair?from=tray`): the way a link, the tray or a
+/// notification opens one of the local shell's views.
 pub(crate) fn show_home_route(app: &AppHandle, route: &str) {
     app.state::<AppState>().remember_last_face(Face::Home);
     show_home_at(app, Some(route), Keyboard::Take);

@@ -57,7 +57,7 @@ const emit = defineEmits<{ copied: [] }>();
                      still needed its own setup, so the window's "Set up this PC" is named as the likely next step. -->
                 <span v-else-if="variant === `app`" class="min-w-0">
                     <span class="font-medium">{{ t(`setup.setupNudge.stillNothing`) }}</span>
-                    {{ t(`setup.setupNudge.checkWindowSetUpPc`, { action: t(`local.agents.steps.setup.action`), button: t(`setup.setup.setUpNow`) }) }}
+                    {{ t(`setup.setupNudge.checkWindowSetUpPc`, { action: t(`local.setUpThisPc`), button: t(`setup.setup.setUpNow`) }) }}
                 </span>
                 <!-- Not a correction: the app said this setup waits on the PC's own, which it is running. -->
                 <span v-else-if="variant === `pcSetup`" class="min-w-0">

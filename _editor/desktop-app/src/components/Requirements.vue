@@ -19,7 +19,7 @@ const props = defineProps<{
     progress?: Record<string, RequirementProgress>;
     /** How the session ended for this setup before it resumed, when it did (App.vue `resumedHow`). */
     resumedFrom?: SessionEnd;
-    /** No hosted alternative to offer: this computer's own sandbox is about this computer (device/MachineSandboxSection.vue). */
+    /** No hosted alternative to offer: this computer's own sandbox is about this computer (device/machineSandbox/MachineSandboxSection.vue). */
     hideElsewhere?: boolean;
 }>();
 const emit = defineEmits<{ install: []; restart: []; signout: []; recheck: []; elsewhere: [] }>();

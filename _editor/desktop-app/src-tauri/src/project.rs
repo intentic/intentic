@@ -283,15 +283,43 @@ fn distro_refusal(inside: &str) -> Option<Refusal> {
     }
 }
 
-/// Why `path` cannot become a project for being inside or around one that already is.
+/// Where `root` sits inside the folder `project`: "" for that folder itself, `src/ui` below it (joined with `/`, as the
+/// machine agent names a project's paths), None anywhere else. Compared as the disk compares names: case folded on
+/// Windows, so `C:\Code\App` is inside `c:\code`. Pure.
+pub(crate) fn within(project: &Path, root: &Path, windows: bool) -> Option<String> {
+    let name = |part: std::path::Component| {
+        let said = part.as_os_str().to_string_lossy().into_owned();
+        if windows {
+            said.to_lowercase()
+        } else {
+            said
+        }
+    };
+    let held: Vec<_> = project.components().collect();
+    let asked: Vec<_> = root.components().collect();
+    if asked.len() < held.len() || held.iter().zip(&asked).any(|(a, b)| name(*a) != name(*b)) {
+        return None;
+    }
+    Some(
+        asked[held.len()..]
+            .iter()
+            .map(|part| part.as_os_str().to_string_lossy().into_owned())
+            .collect::<Vec<_>>()
+            .join("/"),
+    )
+}
+
+/// Why `path` cannot become a project for being inside or around one that already is, or one on its way into this
+/// computer's sandbox. Inside a live one never reaches here: that folder is covered ([`covering_project`]).
 fn nested(path: &Path, taken: &[PathBuf]) -> Option<Refusal> {
+    let windows = cfg!(windows);
     for other in taken {
-        if path != other && path.starts_with(other) {
+        if within(other, path, windows).is_some_and(|rest| !rest.is_empty()) {
             return Some(Refusal::Inside {
                 other: other.display().to_string(),
             });
         }
-        if path != other && other.starts_with(path) {
+        if within(path, other, windows).is_some_and(|rest| !rest.is_empty()) {
             return Some(Refusal::Around {
                 other: other.display().to_string(),
             });
@@ -454,27 +482,85 @@ pub(crate) fn is_live(roster: &Roster, project: &Project) -> bool {
     }
 }
 
-/// The project `root` is, while its sandbox is still there.
-fn live_project_of(app: &AppHandle, root: &Path) -> Option<Project> {
+/// The live project that holds `root`, and where `root` is inside it: the folder itself (""), or the nearest folder
+/// around it that went into a sandbox. A folder inside one that is in this computer's sandbox is in it already, so it is
+/// opened, told and brought back from as that one, never attached a second time beside it (2026-10-12).
+pub(crate) fn covering_project(app: &AppHandle, root: &Path) -> Option<(Project, String)> {
     let roster = app.state::<AppState>().roster();
-    project_of(app, root).filter(|project| is_live(&roster, project))
+    holding(
+        app.state::<AppState>()
+            .projects()
+            .into_iter()
+            .filter(|project| is_live(&roster, project)),
+        root,
+    )
 }
 
-/// Whether the folder at `root` has a sandbox of its own to open: what a window on it is told (local.rs `face_of`).
-pub fn has_live_project(app: &AppHandle, root: &Path) -> bool {
-    live_project_of(app, root).is_some()
+/// Of `projects`, the one holding `root` (itself first, else the nearest around it), and where `root` is inside it.
+pub(crate) fn holding(
+    projects: impl IntoIterator<Item = Project>,
+    root: &Path,
+) -> Option<(Project, String)> {
+    projects
+        .into_iter()
+        .filter_map(|project| {
+            within(Path::new(&project.path), root, cfg!(windows)).map(|rest| (project, rest))
+        })
+        .min_by_key(|(_, rest)| rest.len())
+}
+
+/// A project verb's answer (`result`) narrowed to the folder `inside` its project: only the entries under it, named
+/// from it, as the window on that folder lists its own files. Everything else in the answer stands. Pure.
+pub(crate) fn narrowed(mut result: serde_json::Value, inside: &str) -> serde_json::Value {
+    if inside.is_empty() {
+        return result;
+    }
+    let prefix = format!("{inside}/");
+    for key in ["changes", "applied", "skipped"] {
+        if let Some(entries) = result
+            .get_mut(key)
+            .and_then(serde_json::Value::as_array_mut)
+        {
+            entries.retain_mut(|entry| {
+                let Some(rest) = entry["path"]
+                    .as_str()
+                    .and_then(|path| path.strip_prefix(&prefix))
+                    .map(str::to_string)
+                else {
+                    return false;
+                };
+                entry["path"] = serde_json::Value::String(rest);
+                true
+            });
+        }
+    }
+    result
+}
+
+/// The project holding `root`, while its sandbox is still there ([`covering_project`]).
+fn live_project_of(app: &AppHandle, root: &Path) -> Option<Project> {
+    covering_project(app, root).map(|(project, _)| project)
 }
 
 /// Why `root` cannot become a project on this machine, against the projects it still has and the user's home.
 fn refusal_here(app: &AppHandle, root: &Path) -> Option<Refusal> {
     let roster = app.state::<AppState>().roster();
-    let taken: Vec<PathBuf> = app
+    let mut taken: Vec<PathBuf> = app
         .state::<AppState>()
         .projects()
         .iter()
         .filter(|project| is_live(&roster, project))
         .map(|project| PathBuf::from(&project.path))
         .collect();
+    // And the folders on their way in: two in line, one inside the other, would sync the same files twice.
+    taken.extend(
+        crate::machine_sandbox::status(app)
+            .folders
+            .iter()
+            .filter(|folder| folder.state != crate::machine_sandbox::FolderState::Failed)
+            .map(|folder| PathBuf::from(&folder.path))
+            .filter(|path| path != root),
+    );
     let home = app.path().home_dir().ok();
     refusal(root, home.as_deref(), &taken)
 }
@@ -580,7 +666,14 @@ pub enum Preview {
 #[serde(rename_all = "camelCase")]
 pub struct AttachAsk {
     pub project: String,
+    /// The names it may take instead when `project` is taken, best first (sandbox-contract's `projectDirCandidates`:
+    /// `code-app` for a second `app`). Each is held to the same rule; an older page sends none.
+    #[serde(default)]
+    pub alternatives: Vec<String>,
 }
+
+/// The most alternatives a press is held to: the page sends three at most, and a page is never trusted with more.
+const ALTERNATIVES_MAX: usize = 3;
 
 /// What came of the press. It never waits on the sandbox: the window's card and button follow the folder from here.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -662,12 +755,23 @@ pub async fn project_attach(
         let folder = root.clone();
         let _ = tauri::async_runtime::spawn_blocking(move || release_folder(&folder)).await;
     }
-    attach_at_path(&app, &root, &ask.project)
+    let alternatives: Vec<String> = ask
+        .alternatives
+        .into_iter()
+        .filter(|name| is_project_dir_name(name))
+        .take(ALTERNATIVES_MAX)
+        .collect();
+    attach_named(&app, &root, &ask.project, &alternatives)
 }
 
-/// A folder put in line for this computer's sandbox by path alone (first_task.rs): the same queueing as
-/// [`project_attach`], without a window's folder.
-pub fn attach_at_path(app: &AppHandle, root: &Path, project: &str) -> Result<Attached, String> {
+/// A folder put in line for this computer's sandbox by path alone (first_task.rs) as well as by a window's press: the
+/// same queueing as [`project_attach`], with the names the folder may take instead of `project` when it is taken.
+pub fn attach_named(
+    app: &AppHandle,
+    root: &Path,
+    project: &str,
+    alternatives: &[String],
+) -> Result<Attached, String> {
     if let Some(existing) = live_project_of(app, root) {
         open_existing(app, &existing);
         return Ok(Attached::Opened);
@@ -685,7 +789,7 @@ pub fn attach_at_path(app: &AppHandle, root: &Path, project: &str) -> Result<Att
     if stale {
         release_folder(root);
     }
-    let name = crate::machine_sandbox::queue(app, root, project);
+    let name = crate::machine_sandbox::queue(app, root, project, alternatives);
     Ok(Attached::Queued { name })
 }
 
@@ -1240,23 +1344,39 @@ pub fn work(app: &AppHandle, label: &str, root: &Path, verb: &LocalVerb) {
     let Some(name) = project_verb(verb) else {
         return;
     };
-    let is_project = app
-        .state::<AppState>()
-        .projects()
-        .iter()
-        .any(|project| Path::new(&project.path) == root);
-    if !is_project {
+    let refused =
+        |error: &str| serde_json::json!({ "kind": "error", "verb": name, "error": error });
+    // The project holding the folder: the folder itself, or the one around it that went into the sandbox, whose sync
+    // the verb runs on, its answer narrowed to this folder. Answered either way: a window left waiting on a check that
+    // nobody runs never hears that there is nothing to check.
+    let Some((project, inside)) = holding(app.state::<AppState>().projects(), root) else {
         eprintln!(
             "{label} asked to {name} {}, which has no sandbox of its own",
             root.display()
         );
+        tell(app, label, &refused("This folder isn't in a sandbox."));
         return;
+    };
+    let held = PathBuf::from(&project.path);
+    if !inside.is_empty() {
+        let refusal = match verb {
+            LocalVerb::Direction(_) => Some(format!(
+                "{} syncs as part of {}: change how it syncs from {}'s own window.",
+                folder_name(root),
+                folder_name(&held),
+                folder_name(&held)
+            )),
+            LocalVerb::BringBack(None) => Some("Choose the files to bring back.".to_string()),
+            _ => None,
+        };
+        if let Some(refusal) = refusal {
+            tell(app, label, &refused(&refusal));
+            return;
+        }
     }
-    let refused =
-        |error: &str| serde_json::json!({ "kind": "error", "verb": name, "error": error });
     let claim = match name {
         "changes" => None,
-        _ => match Working::claim(root) {
+        _ => match Working::claim(&held) {
             Some(claim) => Some(claim),
             None => {
                 tell(
@@ -1269,7 +1389,7 @@ pub fn work(app: &AppHandle, label: &str, root: &Path, verb: &LocalVerb) {
         },
     };
     let paths = match verb {
-        LocalVerb::BringBack(Some(paths)) => match PathsFile::write(app, paths) {
+        LocalVerb::BringBack(Some(paths)) => match PathsFile::write(app, &under(&inside, paths)) {
             Ok(file) => Some(file),
             Err(error) => {
                 eprintln!("{label} asked to bring back {} paths: {error}", paths.len());
@@ -1283,18 +1403,30 @@ pub fn work(app: &AppHandle, label: &str, root: &Path, verb: &LocalVerb) {
         },
         _ => None,
     };
-    let Some(run) = agent_run(verb, root, paths.as_ref().map(|file| file.0.as_path())) else {
+    let Some(run) = agent_run(verb, &held, paths.as_ref().map(|file| file.0.as_path())) else {
         return;
     };
     let app = app.clone();
     let label = label.to_string();
     tauri::async_runtime::spawn_blocking(move || {
-        let answer = crate::scripts::agent_json(&run.args, run.limit);
+        let answer = crate::scripts::agent_json(&run.args, run.limit)
+            .map(|result| narrowed(result, &inside));
         // Given back before the window hears, so a request it makes on hearing is not turned away.
         drop(paths);
         drop(claim);
         tell(&app, &label, &project_detail(&run, answer));
     });
+}
+
+/// Paths the window names from its own folder, named from the project's (`inside` it) for the machine agent. Pure.
+fn under(inside: &str, paths: &[String]) -> Vec<String> {
+    if inside.is_empty() {
+        return paths.to_vec();
+    }
+    paths
+        .iter()
+        .map(|path| format!("{inside}/{path}"))
+        .collect()
 }
 
 /// What the window is told: the agent's own object as `result`, or why there is none as a sentence.
@@ -1526,6 +1658,92 @@ mod tests {
 
     /// One sandbox per folder, and never one folder synced into two sandboxes by nesting.
     #[cfg(not(windows))]
+    #[test]
+    fn a_folder_is_placed_inside_another_as_the_disk_names_them() {
+        let code = Path::new("/home/me/code");
+        assert_eq!(
+            within(code, Path::new("/home/me/code"), false).as_deref(),
+            Some("")
+        );
+        assert_eq!(
+            within(code, Path::new("/home/me/code/app/web/"), false).as_deref(),
+            Some("app/web")
+        );
+        assert_eq!(within(code, Path::new("/home/me/codex"), false), None);
+        assert_eq!(within(code, Path::new("/home/me"), false), None);
+        // Windows folds case: `Code` is the same folder as `code` there, and only there.
+        assert_eq!(
+            within(code, Path::new("/HOME/Me/Code/App"), true).as_deref(),
+            Some("App")
+        );
+        assert_eq!(within(code, Path::new("/HOME/Me/Code/App"), false), None);
+    }
+
+    fn project_at(path: &str, dir: &str) -> Project {
+        Project {
+            path: path.into(),
+            dir: dir.into(),
+            sandbox_id: None,
+            slug: None,
+        }
+    }
+
+    // A folder inside one already in the sandbox is that one's: the nearest around it, never a second attach.
+    #[test]
+    fn a_folder_inside_an_attached_one_is_held_by_the_nearest() {
+        let projects = vec![
+            project_at("/home/me/code", "code"),
+            project_at("/home/me/code/app", "app"),
+        ];
+        let held = |root: &str| {
+            holding(projects.clone(), Path::new(root))
+                .map(|(project, inside)| (project.dir, inside))
+        };
+        assert_eq!(
+            held("/home/me/code/app"),
+            Some(("app".into(), String::new()))
+        );
+        assert_eq!(
+            held("/home/me/code/app/web"),
+            Some(("app".into(), "web".into()))
+        );
+        assert_eq!(
+            held("/home/me/code/site/css"),
+            Some(("code".into(), "site/css".into()))
+        );
+        assert_eq!(held("/home/me/notes"), None);
+    }
+
+    // The window on `code/site` asks of `code`'s sync, and hears only of its own files, named from itself.
+    #[test]
+    fn a_covered_folder_asks_its_projects_agent_and_hears_only_of_itself() {
+        let answer = serde_json::json!({
+            "ok": true,
+            "direction": "to-sandbox",
+            "changes": [
+                { "path": "site/index.html", "kind": "modified" },
+                { "path": "site-old/x", "kind": "added" },
+                { "path": "api/server.ts", "kind": "modified" }
+            ],
+            "truncated": false
+        });
+        assert_eq!(
+            narrowed(answer.clone(), "site"),
+            serde_json::json!({
+                "ok": true,
+                "direction": "to-sandbox",
+                "changes": [{ "path": "index.html", "kind": "modified" }],
+                "truncated": false
+            })
+        );
+        assert_eq!(narrowed(answer.clone(), ""), answer);
+        assert_eq!(
+            under("site", &["index.html".into(), "css/a.css".into()]),
+            vec!["site/index.html".to_string(), "site/css/a.css".to_string()]
+        );
+        assert_eq!(under("", &["a".into()]), vec!["a".to_string()]);
+    }
+
     #[test]
     fn a_folder_inside_or_around_one_that_has_a_sandbox_is_refused() {
         let taken = [PathBuf::from("/home/me/code/app")];

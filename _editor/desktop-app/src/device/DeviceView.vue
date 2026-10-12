@@ -24,16 +24,20 @@ import FixProgress from "../components/FixProgress.vue";
 import Requirements from "../components/Requirements.vue";
 import SetupProgress from "../components/SetupProgress.vue";
 import { openUrl, revealLog, signIn, workspaceOpen } from "../desktop";
-import MachineSandboxSection from "./MachineSandboxSection.vue";
-import PcSetupGate from "./pcSetup/PcSetupGate.vue";
+import LeftoverSandboxes from "./machineSandbox/LeftoverSandboxes.vue";
+import MachineSandboxSection from "./machineSandbox/MachineSandboxSection.vue";
 import { machineSandbox } from "./machineSandbox";
+import PcSetupCard from "./pcSetup/PcSetupCard.vue";
+import { pcCardShown } from "./pcSetup/livePcCard";
 import { DEVICES_PATH, DOCKER_DOCS, REFRESH_EVERY_MS, useDevice } from "./useDevice";
 
 // THIS DEVICE: the page the app adds to a local window's rail (host.ts), where the launcher window's card used to be.
 // This computer's sandboxes with every verb the workspace's Devices tab has for them, its machine agent, the Docker
 // engine they run in, and the work the app runs here: the recovery panel's fix and a setup handed over from the workspace
-// lead the page for as long as they are here. A computer that runs no sandbox is told what one is for and offered the
-// way to one, and nothing about Docker: somebody here for their files has no business with it.
+// lead the page for as long as they are here. A new Windows PC's own setup, its sign-in and the first task written
+// meanwhile are a card of their own (pcSetup/PcSetupCard.vue), the local shell's Agents view until 2026-10-12. A
+// computer that runs no sandbox is told what one is for and offered the way to one, and nothing about Docker: somebody
+// here for their files has no business with it.
 
 const t = useT();
 const device = useDevice();
@@ -128,12 +132,6 @@ const {
     endSession,
     freshCode,
     pcParked,
-    pcCheck,
-    pcSetup,
-    pcError,
-    setUpThisPc,
-    recheckThisPc,
-    restartThisPc,
     syncSetup,
     syncLines,
     retrySync,
@@ -273,8 +271,14 @@ onMounted(() => {
                 @dismiss="dismissFix"
             />
 
+            <!-- THIS PC'S OWN SETUP, ITS SIGN-IN AND THE FIRST TASK, on a Windows PC until it is ready and someone is signed in:
+                 ahead of this computer's sandbox, which waits for it. -->
+            <PcSetupCard />
+
             <!-- THIS COMPUTER'S OWN SANDBOX, made by the app in the background for the folders worked on with an agent. -->
             <MachineSandboxSection v-if="machineShown" />
+            <!-- What this computer left on the account before it kept one sandbox: offered for removal, never removed by itself. -->
+            <LeftoverSandboxes :signed-in="signedIn" />
 
             <!-- A SETUP HANDED OVER FROM THE WORKSPACE leads the page while it is here: the one thing on it with minutes of its own. -->
             <section v-if="setupMode" class="flex flex-col gap-4 rounded-xl bg-card shadow-sm p-5">
@@ -310,18 +314,9 @@ onMounted(() => {
                     <span class="flex-1">{{ resumedHow ? t(`desktop.app.setupCodeRanOut`) : t(`desktop.app.setupCodeRanOutHere`) }}</span>
                     <Button class="ml-2 shrink-0" size="small" tier="boring" :label="t(`desktop.app.getFreshCode`)" @click="freshCode" />
                 </Notice>
-                <!-- THIS PC'S OWN SETUP COMES FIRST: the setup is parked until it is done, and carries on by itself after. -->
-                <PcSetupGate
-                    v-if="pcParked && !expired"
-                    :check="pcCheck"
-                    :setup="pcSetup"
-                    :error="pcError"
-                    @set-up="setUpThisPc()"
-                    @recheck="recheckThisPc"
-                    @restart="restartThisPc"
-                />
-                <!-- `=== false`, not `!`: unknown is a real third state here, not yet a warning. -->
-                <p v-else-if="dockerReady === false && !expired && requirements.length === 0" class="flex items-start gap-2.5 text-xs text-subtle">
+                <!-- THIS PC'S OWN SETUP COMES FIRST: parked, the header's one line says so, and the card for this PC above
+                     does it; the setup carries on by itself after. `=== false`, not `!`: unknown is a real third state here. -->
+                <p v-if="!pcParked && dockerReady === false && !expired && requirements.length === 0" class="flex items-start gap-2.5 text-xs text-subtle">
                     <Icon name="box" class="mt-0.5 shrink-0 text-warning" />
                     <span v-if="info?.os === `windows`">{{ t(`desktop.app.sandboxRunsInDocker`) }}</span>
                     <span v-else>{{ t(`desktop.app.sandboxRunsInDocker2`) }}</span>
@@ -554,9 +549,10 @@ onMounted(() => {
             <!-- NO SANDBOX HERE YET: what one is for, where it can run, and the one step to it. Never while a setup or a
                  sync is on the page, which is the sandbox arriving, nor before the machine has been read, nor while the
                  engine of a computer that hosts sandboxes is down: the list is empty then because nothing can be asked,
-                 and the notice above says its sandboxes are not running (seen on omen, 2026-10-10). -->
+                 and the notice above says its sandboxes are not running (seen on omen, 2026-10-10). Nor beside this PC's
+                 own card, which carries the sign-in and the way to agents here: one way forward, not two. -->
             <section
-                v-else-if="read && !setupMode && !syncSetup && !listError && !machineShown && !engineDownWithSandboxes"
+                v-else-if="read && !setupMode && !syncSetup && !listError && !machineShown && !engineDownWithSandboxes && !pcCardShown"
                 class="flex flex-col items-start gap-3 rounded-xl border border-dashed border-line p-5"
             >
                 <div class="flex items-start gap-3">

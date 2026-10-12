@@ -301,6 +301,8 @@ export interface OnboardingMachineParts {
 export interface OnboardingCheckRow {
     readonly id: string;
     readonly state: `met` | `ours` | `yours` | `blocked`;
+    /** The row in `ic`'s own words: drawn where this app has none of its own for the id (onboarding/pc.ts `rowLabel`). */
+    readonly title?: string;
     readonly detail?: string;
     readonly admin: boolean;
 }
@@ -402,9 +404,18 @@ export const deviceAgentRestart = (): Promise<string> => invoke(`machine_restart
 export const workspaceOpen = (path?: string): Promise<void> => invoke(`workspace_open`, { path: path ?? null });
 
 export const firstTaskRead = (): Promise<LocalFirstTask | null> => invoke(`first_task_read`);
-export const firstTaskQueue = (folder: string, text: string): Promise<void> => invoke(`first_task_queue`, { folder, text });
+// `names`: what the folder may be called in the sandbox, best first (sandbox-contract's `projectDirCandidates`).
+export const firstTaskQueue = (folder: string, text: string, names: readonly string[]): Promise<void> =>
+    invoke(`first_task_queue`, { folder, text, names });
 export const firstTaskClear = (): Promise<void> => invoke(`first_task_clear`);
 export const firstTaskPickFolder = (): Promise<string | null> => invoke(`first_task_pick_folder`);
+/** A first task begun by "Ask about this" while no sandbox could answer: its folder and its opening words. */
+export interface FirstTaskDraft {
+    readonly folder: string;
+    readonly text: string;
+}
+/** The draft "Ask about this" left for This computer's card, taken (first_task.rs `first_task_take_draft`): once. */
+export const firstTaskTakeDraft = (): Promise<FirstTaskDraft | null> => invoke(`first_task_take_draft`);
 // Brings the main window to the front at This device, for a run that stopped while nobody was looking (windows.rs takes
 // the frame back rather than opening beside it).
 export const setupAlert = (): Promise<void> => invoke(`setup_alert`);
@@ -555,6 +566,8 @@ export type ProjectPreview =
 /** The folder's name inside the sandbox's /work, derived by the page from the folder's (project.rs `AttachAsk`). */
 export interface ProjectAsk {
     readonly project: string;
+    /** The names it may take instead when `project` is taken, best first (sandbox-contract's `projectDirCandidates`). */
+    readonly alternatives?: readonly string[];
 }
 
 /** What came of the press (project.rs `Attached`): in line for this computer's sandbox, or opened on its own sandbox. */
@@ -614,8 +627,18 @@ export const machineSandboxStatus = (): Promise<MachineSandbox> => invoke(`machi
 export const machineSandboxRetry = (consent = false): Promise<void> => invoke(`machine_sandbox_retry`, { consent });
 /** Look again now: Docker was just started here. */
 export const machineSandboxCheck = (): Promise<void> => invoke(`machine_sandbox_check`);
-/** A new one, in place of one the account no longer has. */
+/** Set up again where its container is gone: on the same row, or a new one where the account no longer has it. */
 export const machineSandboxRecreate = (): Promise<void> => invoke(`machine_sandbox_recreate`);
+/** A sandbox of the account this computer left behind before it kept one (machine_sandbox.rs `Leftover`). */
+export interface LeftoverSandbox {
+    readonly id: string;
+    readonly name: string;
+}
+/** The ones this computer left behind; none when the platform or this machine's listing does not answer. */
+export const machineSandboxLeftovers = (): Promise<readonly LeftoverSandbox[]> => invoke(`machine_sandbox_leftovers`);
+/** Those of `ids` still left behind taken off the account (the platform's trash keeps each a week). How many went. */
+export const machineSandboxRemoveLeftovers = (ids: readonly string[]): Promise<number> =>
+    invoke(`machine_sandbox_remove_leftovers`, { ids });
 /** Its stopped container started (`ic`). Resolves once it has. */
 export const machineSandboxStart = (): Promise<void> => invoke(`machine_sandbox_start`);
 /** The restart or sign-out its setup's first pass asked of Windows; the next launch runs it again, agreed to. */

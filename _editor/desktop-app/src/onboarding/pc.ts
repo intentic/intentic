@@ -43,10 +43,12 @@ let lastCheckKey = ``;
 let prefetchMemory: PrefetchMemory = NO_PREFETCH;
 let setupMemory: SetupMemory = NO_SETUP;
 
-// A row ic names that this app has no words for yet (a newer ic) shows its id rather than the key.
+// The row in this app's words; else, for a row ic names that this app has no words for yet (a newer ic), ic's own title;
+// the id only when ic sent neither. Before 2026-10-12 ic's title was dropped on the way (onboarding.rs `CheckRow`), and a
+// signed-out first launch read "wsl", "disk-space" and "docker-running" down its checklist.
 const rowLabel = (row: OnboardingCheckRow): string => {
     const label = t(`desktop.onboarding.rows.${row.id}`);
-    return label === `desktop.onboarding.rows.${row.id}` ? row.id : label;
+    return label === `desktop.onboarding.rows.${row.id}` ? (row.title ?? row.id) : label;
 };
 
 const formatMachine = (parts: NonNullable<OnboardingCheck[`machine`]>): string => {
@@ -64,7 +66,7 @@ const formatMachine = (parts: NonNullable<OnboardingCheck[`machine`]>): string =
 
 // The app says `null` until its check has answered once (onboarding.rs serializes the missing check as null). Before
 // 2026-10-12 this read `null.state`, which threw on the first snapshot of every launch whose check was still running: the
-// listener's start failed for good, and with it every button on the Agents page, "Set up this PC" included.
+// listener's start failed for good, and with it every button of this PC's setup, "Set up this PC" included.
 const mapCheck = (raw: OnboardingCheck | null | undefined): LocalPcCheck | undefined => {
     if (raw === undefined || raw === null) {
         return undefined;
@@ -211,6 +213,28 @@ const followQuietly = async (): Promise<void> => {
 
 const answered = (raw: OnboardingCheck | undefined): raw is OnboardingCheck => raw !== undefined && raw.state !== `checking`;
 
+/** Where this PC's own setup stands, for This computer's rail tile (device/badge.ts `DeviceSigns.pc`). */
+export type PcStanding = `settingUp` | `needsYou` | `needsSetup`;
+
+/**
+ * This PC's own setup as the rail's tile tells it while the reader is elsewhere: running, stopped for the reader (a
+ * restart, Windows' permission, a sign-out, a failure), or offered and not started. Nothing once it is done, on a PC
+ * that cannot run a sandbox (a machine we host is the card's offer, not a debt), and before the check has answered.
+ */
+export const pcStanding = computed((): PcStanding | undefined => {
+    switch (rawSetup.value.state) {
+        case `running`:
+            return `settingUp`;
+        case `waiting`:
+        case `failed`:
+            return `needsYou`;
+        case `ready`:
+            return undefined;
+        case `idle`:
+            return rawCheck.value?.state === `needsSetup` ? `needsSetup` : undefined;
+    }
+});
+
 /**
  * This PC's check as it stands, once it has answered: never undefined, never `checking`. What a setup handed over from the
  * workspace asks before it runs (device/setup.ts), and This device's card. The check is `ic docker prepare --dry-run`,
@@ -240,11 +264,11 @@ export const followPcSetup = (): Readonly<Ref<OnboardingSetup>> => {
 };
 
 /**
- * "Set up this PC": the Agents page's button, This device's card, and a handed-over setup that finds this PC not ready
- * all start the same one setup (`ic docker prepare --yes`); a second press while it runs changes nothing. `from` names
+ * "Set up this PC": This computer's card (device/pcSetup/PcSetupCard.vue) and a handed-over setup that finds this PC not
+ * ready start the same one setup (`ic docker prepare --yes`); a second press while it runs changes nothing. `from` names
  * the button, for the funnel.
  */
-export const setUpThisPc = async (from = `agents`): Promise<void> => {
+export const setUpThisPc = async (from = `device`): Promise<void> => {
     await ensureListening();
     track(`onboarding_setup`, { action: `pressed`, from });
     await onboardingSetUp();
@@ -262,7 +286,7 @@ export const pcParts = (): PcParts => {
             await ensureListening();
             await onboardingRecheck();
         },
-        setUp: () => setUpThisPc(`agents`),
+        setUp: () => setUpThisPc(`device`),
         pause: async (paused: boolean) => {
             await ensureListening();
             await onboardingPause(paused);

@@ -2,7 +2,7 @@
     "_deploy/cli/src/demo.ts": 1,
     "_deploy/cli/src/init/init.ts": 1,
     "_devices/webext/src/page/driver.ts": 1,
-    "_editor/desktop-app/local/devDesktop.ts": 11,
+    "_editor/desktop-app/local/devDesktop.ts": 9,
     "_editor/desktop-app/local/main.ts": 5,
     "_editor/ui/src/composables/useHighlighter.ts": 1,
     "_editor/ui/src/composables/useTheme.ts": 1,

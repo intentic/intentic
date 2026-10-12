@@ -8,6 +8,7 @@ import type {
     AccountAsk,
     DesktopInfo,
     HomeFacts,
+    LeftoverSandbox,
     LocalRecent,
     LocalRoster,
     LocalSandbox,
@@ -15,6 +16,11 @@ import type {
     MachineFolder,
     MachineSandbox,
     MachineStanding,
+    OnboardingCheck,
+    OnboardingCheckRow,
+    OnboardingPrefetch,
+    OnboardingSetup,
+    OnboardingSnapshot,
     ProjectAsk,
     ProjectAttached,
     ProjectPreview,
@@ -40,6 +46,11 @@ import type {
 // "Work on this with an agent" answers as `?project=` says, kept with the machine: `new` (the default) a folder that can
 // have one, `cautions` one that a sync service already holds and that is large, `refused` one inside a folder that has
 // one, `fail` one whose attach this computer's agent turns down.
+//
+// This PC's own setup (src-tauri/src/onboarding.rs, the card on This computer) is as `?pc=` says, kept with the machine:
+// `ready` (the default), `checking`, `unknown`, `needsSetup`, `metered`, `prefetchFailed`, `settingUp`, `needsYou`,
+// `quiet`, `restart`, `restartScheduled`, `admin`, `signOut`, `failed`, `cantRun`, or `taskFailed` (a ready PC whose
+// first task did not start). Until it is ready, a signed-in machine's own sandbox waits for it, as the app's does.
 
 type Machine = `fresh` | `host` | `setup`;
 const MACHINES: readonly Machine[] = [`fresh`, `host`, `setup`];
@@ -57,6 +68,18 @@ const machineOf = (): Machine => {
         return known;
     }
     return MACHINES.find((machine) => machine === sessionStorage.getItem(MACHINE_KEY)) ?? `fresh`;
+};
+
+// A case picked by `?<param>=` on the dev address and kept for the tab's reloads under `key`; else the one kept; else
+// `fallback`. Read at install, while the address still carries it.
+const picked = <Case extends string>(param: string, key: string, cases: readonly Case[], fallback: Case): Case => {
+    const asked = new URL(window.location.href).searchParams.get(param);
+    const known = cases.find((kind) => kind === asked);
+    if (known !== undefined) {
+        sessionStorage.setItem(key, known);
+        return known;
+    }
+    return cases.find((kind) => kind === sessionStorage.getItem(key)) ?? fallback;
 };
 
 const NOW_S = Math.floor(Date.now() / 1000);
@@ -205,15 +228,7 @@ type SandboxCase = `creating` | `ready` | `docker` | `waiting` | `failed` | `sto
 const SANDBOX_CASES: readonly SandboxCase[] = [`creating`, `ready`, `docker`, `waiting`, `failed`, `stopped`, `gone`];
 const SANDBOX_KEY = `intentic.local.devSandbox`;
 
-const sandboxCaseOf = (): SandboxCase => {
-    const asked = new URL(window.location.href).searchParams.get(`sandbox`);
-    const known = SANDBOX_CASES.find((kind) => kind === asked);
-    if (known !== undefined) {
-        sessionStorage.setItem(SANDBOX_KEY, known);
-        return known;
-    }
-    return SANDBOX_CASES.find((kind) => kind === sessionStorage.getItem(SANDBOX_KEY)) ?? `creating`;
-};
+const sandboxCaseOf = (): SandboxCase => picked(`sandbox`, SANDBOX_KEY, SANDBOX_CASES, `creating`);
 
 const STANDING_OF: Readonly<Record<SandboxCase, MachineStanding>> = {
     creating: { state: `creating`, percent: 0 },
@@ -313,6 +328,12 @@ const startMachineSandbox = (machine: Machine): void => {
     if (!signedIn(machine)) {
         return;
     }
+    // This PC not ready yet: the app holds this computer's sandbox for its setup, asking nothing of its own
+    // (machine_sandbox.rs `Waiting` for consent, with no requirements).
+    if (!pcReady()) {
+        record = { ...record, state: `waiting`, for: `consent`, requirements: [] };
+        return;
+    }
     const kind = sandboxCaseOf();
     if (kind === `creating`) {
         // A moment after the page is up, as the app's supervisor would start it after sign-in.
@@ -337,15 +358,7 @@ type ProjectCase = `new` | `cautions` | `refused` | `fail`;
 const PROJECT_CASES: readonly ProjectCase[] = [`new`, `cautions`, `refused`, `fail`];
 const PROJECT_KEY = `intentic.local.devProject`;
 
-const projectCaseOf = (): ProjectCase => {
-    const asked = new URL(window.location.href).searchParams.get(`project`);
-    const known = PROJECT_CASES.find((kind) => kind === asked);
-    if (known !== undefined) {
-        sessionStorage.setItem(PROJECT_KEY, known);
-        return known;
-    }
-    return PROJECT_CASES.find((kind) => kind === sessionStorage.getItem(PROJECT_KEY)) ?? `new`;
-};
+const projectCaseOf = (): ProjectCase => picked(`project`, PROJECT_KEY, PROJECT_CASES, `new`);
 
 const projectPreview = (): ProjectPreview => {
     const face = window.__INTENTIC_LOCAL__;
@@ -411,8 +424,11 @@ type Answer =
     | SandboxStatus[]
     | MachineEnvironment[]
     | SetupArgs
+    | OnboardingSnapshot
     | ProjectPreview
     | MachineSandbox
+    | readonly LeftoverSandbox[]
+    | number
     | Promise<ProjectAttached>
     | string
     | boolean
@@ -438,6 +454,211 @@ const DESKTOP_INFO: DesktopInfo = {
 };
 
 const signedIn = (machine: Machine): boolean => machine !== `fresh` && sessionStorage.getItem(SIGNED_OUT_KEY) === null;
+
+/* THIS PC'S OWN SETUP (src-tauri/src/onboarding.rs): the check made at launch, the download started then, and the setup
+   behind "Set up this PC", in the app's own shapes, so onboarding/pc.ts maps them as it does in the app. */
+
+type PcCase =
+    | `ready`
+    | `checking`
+    | `unknown`
+    | `needsSetup`
+    | `metered`
+    | `prefetchFailed`
+    | `settingUp`
+    | `needsYou`
+    | `quiet`
+    | `restart`
+    | `restartScheduled`
+    | `admin`
+    | `signOut`
+    | `failed`
+    | `cantRun`
+    | `taskFailed`;
+const PC_CASES: readonly PcCase[] = [
+    `ready`,
+    `checking`,
+    `unknown`,
+    `needsSetup`,
+    `metered`,
+    `prefetchFailed`,
+    `settingUp`,
+    `needsYou`,
+    `quiet`,
+    `restart`,
+    `restartScheduled`,
+    `admin`,
+    `signOut`,
+    `failed`,
+    `cantRun`,
+    `taskFailed`,
+];
+const PC_KEY = `intentic.local.devPc`;
+
+const pcCaseOf = (): PcCase => picked(`pc`, PC_KEY, PC_CASES, `ready`);
+
+const GIB = 1024 ** 3;
+// What `ic docker prepare --dry-run` says of a Windows 11 laptop: the rows as onboarding.rs passes them on, with ic's own
+// titles, so a row this app has no words for shows ic's rather than its id.
+const row = (id: string, state: OnboardingCheckRow[`state`], title: string, detail?: string, admin = false): OnboardingCheckRow =>
+    detail === undefined ? { id, state, title, admin } : { id, state, title, detail, admin };
+const MET: readonly OnboardingCheckRow[] = [
+    row(`memory`, `met`, `Physical memory`),
+    row(`windows-edition`, `met`, `Windows edition`),
+    row(`virtualization`, `met`, `Hardware virtualization`),
+    row(`disk-space`, `met`, `Free disk space`),
+];
+const LAPTOP = { os: `Windows 11 Home`, build: 22631, memoryBytes: 16 * GIB, freeBytes: 214 * GIB, cpus: 8, virtualization: true };
+const CHECK_READY: OnboardingCheck = {
+    state: `ready`,
+    rows: [...MET, row(`wsl`, `met`, `WSL2`), row(`engine`, `met`, `the intentic engine running`)],
+    machine: LAPTOP,
+    restart: false,
+    admin: false,
+    downloadBytes: 0,
+    minutes: 2,
+    engine: `intentic`,
+};
+const CHECK_NEEDS_SETUP: OnboardingCheck = {
+    state: `needsSetup`,
+    rows: [
+        row(`wsl-features`, `ours`, `Windows features for Docker`, `Virtual Machine Platform and WSL are off on this PC.`, true),
+        row(`engine`, `ours`, `the intentic engine`, `the intentic engine is not installed yet, and WSL2 has to finish first.`),
+        ...MET,
+    ],
+    machine: LAPTOP,
+    restart: true,
+    admin: true,
+    downloadBytes: 2_900_000_000,
+    minutes: 18,
+    engine: `intentic`,
+};
+const CHECK_CANT_RUN: OnboardingCheck = {
+    state: `cantRun`,
+    rows: [
+        row(`slat`, `blocked`, `Processor features`, `This processor lacks second-level address translation, which Windows needs to run any virtual machine. No setting adds it.`),
+        row(`memory`, `blocked`, `Physical memory`, `This PC has 4 GB of memory; a sandbox needs at least 8 GB.`),
+        row(`windows-edition`, `met`, `Windows edition`),
+    ],
+    machine: { ...LAPTOP, memoryBytes: 4 * GIB, freeBytes: 61 * GIB },
+    restart: false,
+    admin: false,
+    downloadBytes: 0,
+    minutes: 0,
+};
+const CHECK_UNKNOWN: OnboardingCheck = {
+    state: `unknown`,
+    rows: [row(`check`, `blocked`, ``, `ic docker prepare --dry-run did not answer within 2 minutes`)],
+    restart: false,
+    admin: false,
+    downloadBytes: 0,
+    minutes: 0,
+};
+
+const FETCHING: OnboardingPrefetch = { state: `running`, done: 1_150_000_000, total: 2_900_000_000, attempt: 1 };
+const LOG = `${HOME}\\.intentic\\logs\\pc-setup.log`;
+
+const pcSnapshotOf = (kind: PcCase): OnboardingSnapshot => {
+    const nowS = Math.floor(Date.now() / 1000);
+    const needs = (setup: OnboardingSetup, prefetch: OnboardingPrefetch = FETCHING): OnboardingSnapshot => ({ check: CHECK_NEEDS_SETUP, prefetch, setup });
+    switch (kind) {
+        case `ready`:
+        case `taskFailed`:
+            return { check: CHECK_READY, prefetch: { state: `done`, done: 2_900_000_000, total: 2_900_000_000 }, setup: { state: `idle` } };
+        case `checking`:
+            return { check: null, prefetch: FETCHING, setup: { state: `idle` } };
+        case `unknown`:
+            return { check: CHECK_UNKNOWN, setup: { state: `idle` } };
+        case `needsSetup`:
+            return needs({ state: `idle` });
+        case `metered`:
+            return needs({ state: `idle` }, { state: `metered`, done: 0, total: 2_900_000_000 });
+        case `prefetchFailed`:
+            return needs(
+                { state: `idle` },
+                { state: `failed`, done: 1_150_000_000, total: 2_900_000_000, attempt: 2, failure: { phase: `image`, reason: `could not fetch ghcr.io/intentic/sandbox:stable ahead: connection reset by peer` } },
+            );
+        case `settingUp`:
+            return needs({ state: `running`, step: `Turning on Windows features for Docker`, percent: 38 });
+        case `needsYou`:
+            return needs({ state: `running`, step: `Turning on Windows features for Docker`, percent: 12, needsYou: true });
+        case `quiet`:
+            return needs({ state: `running`, step: `Installing the intentic engine`, percent: 64, quietSince: nowS - 21 * 60, log: LOG });
+        case `restart`:
+            return needs({ state: `waiting`, for: `restart` });
+        case `restartScheduled`:
+            return needs({ state: `waiting`, for: `restart`, restartAt: nowS + 10 * 60 });
+        case `admin`:
+            return needs({ state: `waiting`, for: `admin` });
+        case `signOut`:
+            return needs({ state: `waiting`, for: `signOut` });
+        case `failed`:
+            return needs({ state: `failed`, reason: `ic docker prepare stopped: the Windows features could not be turned on (DISM exit 87).` });
+        case `cantRun`:
+            return { check: CHECK_CANT_RUN, setup: { state: `idle` } };
+    }
+};
+
+let onboarding: OnboardingSnapshot = { check: null, setup: { state: `idle` } };
+
+const pcReady = (): boolean => onboarding.check?.state === `ready` || onboarding.setup.state === `ready`;
+
+const changeOnboarding = async (next: Partial<OnboardingSnapshot>): Promise<void> => {
+    onboarding = { ...onboarding, ...next };
+    await emit(`desktop://onboarding`, onboarding);
+};
+
+// "Set up this PC", played out in a few seconds: Windows' features, the engine, then ready, and this computer's own
+// sandbox made after it on a signed-in machine. It answers once the run has ended, as the app's command does.
+const PC_STEPS: readonly (readonly [string, number])[] = [
+    [`Turning on Windows features for Docker`, 12],
+    [`Turning on Windows features for Docker`, 38],
+    [`Installing the intentic engine`, 64],
+    [`Starting the intentic engine`, 88],
+];
+const runPcSetup = async (machine: Machine): Promise<void> => {
+    for (const [step, percent] of PC_STEPS) {
+        await changeOnboarding({ setup: { state: `running`, step, percent } });
+        await pause(2000);
+    }
+    await changeOnboarding({ check: CHECK_READY, setup: { state: `ready` } });
+    if (signedIn(machine) && record.state === `waiting`) {
+        await runMachineSetup();
+    }
+};
+
+// Whether the page sent `name` as `value`: desktop.ts's `onboarding*` wrappers send named arguments, never raw bytes.
+const sent = (args: InvokeArgs | undefined, name: string, value: string | boolean): boolean =>
+    args !== undefined && !Array.isArray(args) && !(args instanceof ArrayBuffer) && !(args instanceof Uint8Array) && args[name] === value;
+
+const onboardingVerb = (machine: Machine, command: string, args: InvokeArgs | undefined): Promise<void> | undefined => {
+    switch (command) {
+        case `onboarding_recheck`:
+            return pause(1500).then(() => changeOnboarding({}));
+        case `onboarding_set_up`:
+            return onboarding.setup.state === `running` && !sent(args, `again`, true) ? Promise.resolve() : runPcSetup(machine);
+        case `onboarding_pause`: {
+            const prefetch = onboarding.prefetch;
+            if (prefetch === undefined) {
+                return Promise.resolve();
+            }
+            return changeOnboarding({ prefetch: { state: sent(args, `paused`, true) ? `paused` : `running`, done: prefetch.done, total: prefetch.total } });
+        }
+        case `onboarding_restart`: {
+            if (sent(args, `when`, `now`)) {
+                // As the app comes back from the restart: the setup finished, this PC ready.
+                return pause(1500).then(() => changeOnboarding({ check: CHECK_READY, setup: { state: `ready` } }));
+            }
+            // In ten minutes, or put off to the next time Windows starts (which cancels one scheduled).
+            const setup: OnboardingSetup = sent(args, `when`, `in10Minutes`)
+                ? { state: `waiting`, for: `restart`, restartAt: Math.floor(Date.now() / 1000) + 10 * 60 }
+                : { state: `waiting`, for: `restart` };
+            return changeOnboarding({ setup });
+        }
+        default:
+            return undefined;
+    }
+};
 
 /** The first task kept while dev local face runs (first_task.rs). */
 let devFirstTask: {
@@ -481,6 +702,13 @@ const accountAnswer = (machine: Machine, ask: AccountAsk): AccountAnswer => {
     }
 };
 
+// The rows this computer left behind before it kept one sandbox (machine_sandbox.rs `leftovers`).
+// allow(module-state): the stand-in's one account, as the remove press leaves it
+let leftovers: readonly LeftoverSandbox[] = [
+    { id: `cm-old-1`, name: `ADA-LAPTOP sandbox` },
+    { id: `cm-old-2`, name: `ADA-LAPTOP sandbox 2` },
+];
+
 // Every command the page reads back, answered for the machine chosen. A dialog answers yes, and picks nothing.
 const ANSWERS = new Map<string, (machine: Machine) => Answer>([
     [`desktop_info`, () => DESKTOP_INFO],
@@ -509,12 +737,25 @@ const ANSWERS = new Map<string, (machine: Machine) => Answer>([
     [`resumable_setup`, () => null],
     [`project_preview`, projectPreview],
     [`machine_sandbox_status`, () => record],
+    // What a computer that made a row per recreate left on the account, on a machine set up long ago: removed for good
+    // here once the reader says so, as the platform would (its trash is not played).
+    [`machine_sandbox_leftovers`, (machine) => (signedIn(machine) && machine === `host` ? leftovers : [])],
+    [
+        `machine_sandbox_remove_leftovers`,
+        () => {
+            const removed = leftovers.length;
+            leftovers = [];
+            return removed;
+        },
+    ],
     [`sandbox_logs`, () => `intentic: sandbox up\nlistening on :7777\n`],
     [`machine_restart`, () => `restarted`],
     [`plugin:dialog|confirm`, () => true],
     [`plugin:dialog|ask`, () => true],
     [`plugin:dialog|open`, () => null],
     [`first_task_read`, () => devFirstTask],
+    [`first_task_take_draft`, () => null],
+    [`onboarding_state`, () => onboarding],
     [`first_task_clear`, () => { devFirstTask = null; return null; }],
 ]);
 
@@ -543,7 +784,7 @@ const answer = (machine: Machine, command: string, args: InvokeArgs | undefined)
     if (command === `first_task_pick_folder`) {
         return `${HOME}\\code\\my-app`;
     }
-    const verb = machineVerb(command, args);
+    const verb = machineVerb(command, args) ?? onboardingVerb(machine, command, args);
     if (verb !== undefined) {
         return verb;
     }
@@ -562,10 +803,23 @@ export const installDevDesktop = (): void => {
     // Read now, while the address still carries it: the page rewrites its address before anything asks (local/main.ts).
     projectCaseOf();
     sandboxCaseOf();
+    const pc = pcCaseOf();
+    onboarding = pcSnapshotOf(pc);
+    if (pc === `taskFailed`) {
+        devFirstTask = {
+            folder: `${HOME}\\code\\shop`,
+            text: `Make the checkout page remember the last shipping address.`,
+            queuedAt: NOW_S - 600,
+            state: `failed`,
+            reason: `That folder is already being synced with another sandbox.`,
+        };
+    }
     startMachineSandbox(machine);
     mockIPC((command, args) => answer(machine, command, args), { shouldMockEvents: true });
     // The window this page is, as the app labels it (windows.rs `HOME`, local.rs `files-<n>`): the main window's setup
     // titles its own window (src/device/title.ts), which asks which window it is.
     mockWindows(window.__INTENTIC_LOCAL__?.home === true ? `home` : `files-1`);
-    console.warn(`[dev desktop] the app is stood in for as the "${machine}" machine; ?machine=${MACHINES.join(`|`)} picks another`);
+    console.warn(
+        `[dev desktop] the app is stood in for as the "${machine}" machine, this PC "${pc}"; ?machine=${MACHINES.join(`|`)} and ?pc=${PC_CASES.join(`|`)} pick others`,
+    );
 };

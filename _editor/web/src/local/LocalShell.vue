@@ -48,13 +48,11 @@ const viewTile = (view: LocalView): Tile => {
     return badge === undefined ? tile : { ...tile, badge };
 };
 
-// Files first, as the sandbox shell ranks its workspace, then the app's views in the order it gives them.
-// Agents second, from the first launch where the app can set this PC up (agents/LocalAgents.vue); a view the app routes
-// without a tile (Repair, opened from where it is needed) is left off the rail.
-const agentsTile = (): readonly Tile[] => (host.onboarding === undefined ? [] : [{ section: `agents`, to: `/agents`, label: t(`shared.agents`) }]);
+// Files first, as the sandbox shell ranks its workspace, then the app's views in the order it gives them; a view the app
+// routes without a tile (Repair, opened from where it is needed) is left off the rail. This PC's own setup is This
+// computer's (the app's view), not a tile of its own: the Agents tile that held it until 2026-10-12 had nothing else.
 const tiles = computed<readonly Tile[]>(() => [
     { section: `workspace`, to: `/workspace`, label: t(`shared.files`) },
-    ...agentsTile(),
     ...host.views.filter((view) => view.inRail !== false).map(viewTile),
 ]);
 

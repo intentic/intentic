@@ -329,6 +329,10 @@
     {
       "type": "{ attachedAt: number; name: string }",
       "since": "v1.327.0"
+    },
+    {
+      "type": "{ attachedAt: number; hostPath?: string; machine?: string; name: string }",
+      "since": "unreleased"
     }
   ],
   "history:provider-refusals.json": [

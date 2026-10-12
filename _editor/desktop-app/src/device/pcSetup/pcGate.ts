@@ -1,10 +1,11 @@
 import type { OnboardingCheck, OnboardingSetup } from "../../desktop";
 
 // WHETHER A SETUP HANDED OVER CAN RUN ON THIS PC YET (2026-10-12). On Windows, Docker and WSL for this PC are set up by
-// onboarding (onboarding.rs, the Agents page's "Set up this PC"), not by a sandbox's setup run. A setup handed over
-// while this PC still needs that used to do nothing at all: the card offered only "Back" and "Dismiss", and the
-// workspace page waited on a run that never started. Now it is parked (setup.ts `pcParked`), the card offers this PC's
-// setup, and the parked setup carries on by itself once the PC is ready. Pure, given what the app knows.
+// onboarding (onboarding.rs, the "Set up this PC" of This computer's card, PcSetupCard.vue), not by a sandbox's setup
+// run. A setup handed over while this PC still needs that used to do nothing at all: the card offered only "Back" and
+// "Dismiss", and the workspace page waited on a run that never started. Now it is parked (setup.ts `pcParked`), This
+// computer's card for this PC offers this PC's setup, and the parked setup carries on by itself once the PC is ready.
+// Pure, given what the app knows.
 
 /** `go`: run it now. `checking`: the PC check has not answered yet. `needsSetup`: this PC's own setup comes first. */
 export type PcGate = `go` | `checking` | `needsSetup`;

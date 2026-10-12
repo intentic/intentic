@@ -279,26 +279,23 @@ const beginAttempt = (args: SetupArgs, startedAt: number): void => {
  */
 export type InstallTrigger = `arrival` | `resume` | `consent` | `recheck` | `retry` | `renewed` | `pcReady`;
 
-/* A SETUP HANDED OVER BEFORE THIS PC IS READY (pcSetup/pcGate.ts) is parked until this PC's own setup is done, the card offering
-   that setup, and then carries on by itself. Before, it silently did nothing: the card had only "Back" and "Dismiss",
-   and the workspace page waited on a run that never started (2026-10-12). */
+/* A SETUP HANDED OVER BEFORE THIS PC IS READY (pcSetup/pcGate.ts) is parked until this PC's own setup is done, This
+   computer's card for this PC offering that setup (pcSetup/PcSetupCard.vue), and then carries on by itself. Before, it
+   silently did nothing: the card had only "Back" and "Dismiss", and the workspace page waited on a run that never
+   started (2026-10-12). */
 
 /** Parked for this PC's own setup (Docker/WSL, onboarding.rs): the workspace page hears `waitingFor: "pcSetup"`. */
 export const pcParked = ref(false);
-// Onboarding's own reading of this PC (onboarding/pc.ts, as the Agents page follows it), from the first park on: its
-// check for the card, and this PC's setup as it runs. Shallow: their fields are refs of their own.
+// Onboarding's own reading of this PC (onboarding/pc.ts, as This computer's card follows it), from the first park on: its
+// check for the gate, and this PC's setup as it runs. Shallow: their fields are refs of their own.
 interface PcFollowed {
     readonly host: PcParts;
     readonly setup: Readonly<Ref<OnboardingSetup>>;
 }
 const pcFollowed = shallowRef<PcFollowed | undefined>(undefined);
 const followPc = (): PcFollowed => (pcFollowed.value ??= { host: pcParts(), setup: followPcSetup() });
-/** The PC check while parked: what the card says this PC needs. */
-export const pcCheck = computed(() => pcFollowed.value?.host.check.value);
 /** This PC's own setup while parked: started, running, waiting on Windows, or stopped. */
 export const pcSetup = computed(() => pcFollowed.value?.setup.value);
-/** A press on the card that the app refused (a restart Windows would not do), in its own words. */
-export const pcError = ref<string | undefined>(undefined);
 // The park's watch on the gate, and its slow Docker probe, both stopped when the setup runs or is given up; and whether
 // the gate has opened and the run is on its way, so a gate that opens twice runs it once.
 let pcWatch: WatchStopHandle | undefined;
@@ -368,7 +365,6 @@ const saveParked = async (args: SetupArgs): Promise<void> => {
 
 const unpark = (): void => {
     pcParked.value = false;
-    pcError.value = undefined;
     pcWatch?.();
     pcWatch = undefined;
     clearInterval(pcProbe);
@@ -439,36 +435,26 @@ const carryOn = async (): Promise<void> => {
     }
 };
 
-/** The card's "Set up this PC": the Agents page's own press (onboarding/pc.ts `setUpThisPc`), which it follows itself. */
-export const setUpThisPc = async (from: `card` | `consent` = `card`): Promise<void> => {
+/**
+ * This PC's own setup, started for a setup parked behind it: the requirements card's go-ahead (`consent`) is the same
+ * press as This computer's "Set up this PC" (onboarding/pc.ts `setUpThisPc`), which the park follows itself.
+ */
+export const setUpThisPc = async (from: `consent` = `consent`): Promise<void> => {
     followPc();
-    pcError.value = undefined;
     track(`desktop_install_pc_setup`, { action: `pressed`, from });
     try {
         await startPcSetup(`device`);
     } catch (error) {
-        // How it stopped is its own state (`pcSetup`), which the card draws; a press refused outright is said here.
-        pcError.value = String(error);
+        // How it stopped is its own state, which This computer's card draws; a press refused outright is the console's.
+        console.error(`[setup] this PC's setup could not be started:`, error);
     }
 };
 
-/** "Installed Docker yourself? Check again": the PC check and the Docker probe asked again. */
+/** This PC asked about again while a setup is parked behind it: the PC check and the Docker probe both. */
 export const recheckThisPc = async (): Promise<void> => {
     track(`desktop_install_pc_setup`, { action: `recheck` });
     const { host } = followPc();
     await Promise.all([probeDocker(), recheckPc(host)]);
-};
-
-/** This PC's setup waits for a restart: restart now, the setup saved to carry on afterwards. */
-export const restartThisPc = async (): Promise<void> => {
-    const { host } = followPc();
-    track(`desktop_install_pc_setup`, { action: `restart` });
-    pcError.value = undefined;
-    try {
-        await host.restart(`now`);
-    } catch (error) {
-        pcError.value = String(error);
-    }
 };
 
 /** A fresh code is being asked for: up to a minute and a half with no run active. */

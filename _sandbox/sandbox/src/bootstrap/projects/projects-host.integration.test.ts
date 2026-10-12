@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import { MEMORY_FILE } from "@intentic/constants";
 import type { DevicePairing, DeviceReport } from "@intentic/sandbox-contract";
 import { createLogger } from "../../logger.js";
-import { attachedProjects, registerProject } from "../../system/projects-registry.js";
+import { attachedProjectEntries, attachedProjects, registerProject } from "../../system/projects-registry.js";
 import { repoGitDir } from "../../workspace/layout/git-layout.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
 import { workspacePaths } from "../../workspace/workspace.js";
@@ -49,9 +49,12 @@ const report = (...pairings: DevicePairing[]): DeviceReport => ({
     capturedAt: 1,
 });
 
-const note = (root: string, names: [string, ...string[]]): string => {
+// The note as a projects host writes it: each folder, and where it is on the owner's computer as the reports said it
+// (`attached` puts every one at /home/ada/<name> on ada-laptop). A folder registered with no report has no place.
+const note = (root: string, names: [string, ...string[]], placed = true): string => {
     const [first, ...rest] = names;
-    return `<!-- intentic:project:start -->\n${projectNote([join(root, first), ...rest.map((name) => join(root, name))])}\n<!-- intentic:project:end -->\n`;
+    const places = placed ? names.map((name) => ({ path: join(root, name), hostPath: `/home/ada/${name}`, machine: "ada-laptop" })) : [];
+    return `<!-- intentic:project:start -->\n${projectNote([join(root, first), ...rest.map((name) => join(root, name))], places)}\n<!-- intentic:project:end -->\n`;
 };
 
 test("a folder a report names is made a repo, registered, and named in the note", async () => {
@@ -144,7 +147,7 @@ test("a boot puts every registered folder's repo and the note back, and a second
     await convergeAttachedProjects(deps);
 
     expect(await discoverRepos(deps.root)).toEqual(["api", "blog"]);
-    expect(await readFile(join(deps.root, MEMORY_FILE), "utf8")).toBe(`# House rules\n\n${note(deps.root, ["blog", "api"])}`);
+    expect(await readFile(join(deps.root, MEMORY_FILE), "utf8")).toBe(`# House rules\n\n${note(deps.root, ["blog", "api"], false)}`);
 
     await rm(join(deps.root, "blog", ".git"));
     await convergeAttachedProjects(deps);
@@ -155,6 +158,34 @@ test("a boot puts every registered folder's repo and the note back, and a second
     await convergeAttachedProjects(deps);
     expect((await stat(join(deps.root, MEMORY_FILE))).mtimeMs).toBe(before.mtimeMs);
     expect(await Promise.all(["blog", "api"].map((name) => readFile(join(deps.root, name, ".git"), "utf8")))).toEqual(pointers);
+});
+
+// The sandbox holds the folder map: where each folder is on the owner's computer follows the reports, so a folder moved
+// there, or one attached before the map was kept, is placed by the next report without being attached again.
+test("a folder moved on the computer keeps its repo, and its place and the note follow the report", async () => {
+    const deps = await host();
+    await attachReportedProjects(deps, report(attached("blog")));
+    const pointer = await readFile(join(deps.root, "blog", ".git"), "utf8");
+
+    const moved: DevicePairing = { ...attached("blog"), localDir: "/home/ada/sites/blog" };
+    expect(await attachReportedProjects(deps, report(moved))).toEqual([]);
+
+    expect(await attachedProjectEntries(deps.historyRoot)).toEqual([
+        { name: "blog", attachedAt: expect.any(Number), hostPath: "/home/ada/sites/blog", machine: "ada-laptop" },
+    ]);
+    expect(await readFile(join(deps.root, "blog", ".git"), "utf8")).toBe(pointer);
+    expect(await readFile(join(deps.root, MEMORY_FILE), "utf8")).toContain(`- \`${  join(deps.root, "blog")  }\` is \`/home/ada/sites/blog\` on ada-laptop`);
+});
+
+test("a folder attached before the map was kept is placed by the next report", async () => {
+    const deps = await host();
+    await registerProject(deps.historyRoot, "blog");
+    await convergeAttachedProjects(deps);
+    expect(await readFile(join(deps.root, MEMORY_FILE), "utf8")).toBe(note(deps.root, ["blog"], false));
+
+    expect(await attachReportedProjects(deps, report(attached("blog")))).toEqual([]);
+
+    expect(await readFile(join(deps.root, MEMORY_FILE), "utf8")).toBe(note(deps.root, ["blog"]));
 });
 
 test("a boot of a projects host nothing has attached to yet writes nothing", async () => {

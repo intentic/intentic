@@ -33,7 +33,7 @@ export const eventReason = (text: string, log?: string): string =>
 const minutesSince = (seconds: number | undefined, now: number): number | undefined =>
     seconds === undefined ? undefined : Math.max(0, Math.round((now / 1000 - seconds) / 60));
 
-/** The download as the Agents page draws it: a failure says why, and whether it is about to try again by itself. */
+/** The download as This computer's card draws it: a failure says why, and whether it is about to try again by itself. */
 export const mapPrefetch = (raw: OnboardingPrefetch): LocalPrefetch => {
     if (raw.state !== `failed`) {
         return { state: raw.state, done: raw.done, total: raw.total };

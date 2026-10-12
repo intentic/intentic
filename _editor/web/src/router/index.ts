@@ -421,12 +421,6 @@ const routes: RouteRecordRaw[] = [
                   component: () => import(`../features/settings/DesignKit.vue`),
               } satisfies RouteRecordRaw,
               {
-                  path: `/kit/agents`,
-                  name: `kit-agents`,
-                  meta: { title: () => t(`local.agents.heading`) },
-                  component: () => import(`../local/agents/AgentsKitSection.vue`),
-              } satisfies RouteRecordRaw,
-              {
                   path: `/kit/repair`,
                   name: `kit-repair`,
                   meta: { title: () => t(`local.repair.title`) },
@@ -464,18 +458,8 @@ const localRoutes = (): RouteRecordRaw[] => [
                 meta: { title: () => localFace()?.name ?? t(`shared.files`) },
                 component: asyncView(() => import(`../local/LocalFiles.vue`)),
             },
-            // FIRST RUN (2026-10-09): Agents from the first launch, where an app is behind the page to set this PC up; and
-            // Repair, the agent that runs on this computer outside every sandbox, routed with no tile of its own.
-            ...(localHost().onboarding === undefined
-                ? []
-                : [
-                      {
-                          path: `agents`,
-                          name: `local-agents`,
-                          meta: { title: () => t(`shared.agents`) },
-                          component: asyncView(() => import(`../local/agents/LocalAgents.vue`)),
-                      } satisfies RouteRecordRaw,
-                  ]),
+            // Repair, the agent that runs on this computer outside every sandbox, routed with no tile of its own. (This PC's
+            // own first-run setup is the app's This computer view since 2026-10-12, not a route of the shell's.)
             ...(localHost().repair === undefined
                 ? []
                 : [

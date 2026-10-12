@@ -4,6 +4,7 @@
 import { Button, ConfirmDialog, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref, watch } from "vue";
+import { localFace } from "../../app/environments/local";
 import type { SandboxChange } from "./bringBack";
 import BringBackReview from "./BringBackReview.vue";
 import { useBringBack } from "./useBringBack";
@@ -47,6 +48,9 @@ const skippedLines = computed(() => {
 const answeredLine = computed(() => step.value.at === `checked` || step.value.at === `brought` || step.value.at === `restored`);
 // The line of steps, unless there is nothing on it: a folder synced both ways with nothing found shows its direction alone.
 const lineShown = computed(() => step.value.at !== `idle` && !(step.value.at === `checked` && step.value.changes.length === 0));
+
+// A folder in the sandbox as part of one around it syncs as that one does: its direction is changed from that window.
+const partOf = computed(() => localFace()?.partOf);
 
 // Both ways is the reader's choice to make with the risk in front of them; back to copy-first needs no warning.
 const confirmingBoth = ref(false);
@@ -109,7 +113,7 @@ const syncBothWays = (): void => {
             />
         </div>
         <button
-            v-if="state.direction === `both`"
+            v-if="partOf === undefined && state.direction === `both`"
             type="button"
             :class="ui.textButton({ tone: `quiet` })"
             :disabled="state.switching"
@@ -119,7 +123,7 @@ const syncBothWays = (): void => {
             {{ t(`local.localBringBack.switchToCopyFirst`) }}
         </button>
         <button
-            v-else-if="state.direction === `to-sandbox`"
+            v-else-if="partOf === undefined && state.direction === `to-sandbox`"
             type="button"
             :class="ui.textButton({ tone: `quiet` })"
             :disabled="state.switching"

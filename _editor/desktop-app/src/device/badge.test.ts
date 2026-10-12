@@ -48,6 +48,27 @@ describe(`the This device tile`, () => {
         expect(deviceBadge({ ...AT_REST, machine: `signedOut` })).toBeUndefined();
     });
 
+    it(`spins while this PC's own setup runs, beside this computer's sandbox being made and behind a setup or a fix`, () => {
+        expect(deviceBadge({ ...AT_REST, pc: `settingUp`, waiting: true, updateReady: true })).toEqual({ running: `desktop.device.pcSettingUpBadge` });
+        expect(deviceBadge({ ...AT_REST, pc: `settingUp`, machine: `creating` })).toEqual({ running: `desktop.device.machineBadge` });
+        expect(deviceBadge({ ...AT_REST, pc: `settingUp`, settingUp: true })).toEqual({ running: `desktop.device.settingUpBadge` });
+    });
+
+    it(`marks this PC's own setup stopped for the reader as needing them, ahead of Docker being started`, () => {
+        expect(deviceBadge({ ...AT_REST, pc: `needsYou`, startingDocker: true, updateReady: true })).toEqual({
+            mark: `exclamation`,
+            tone: `warning`,
+            tooltip: `desktop.device.needsYouBadge`,
+        });
+    });
+
+    it(`offers this PC's own setup quietly, behind everything this computer's sandbox says and ahead of the update`, () => {
+        expect(deviceBadge({ ...AT_REST, pc: `needsSetup`, updateReady: true })).toEqual({ mark: `bolt`, tone: `info`, tooltip: `desktop.device.pcSetupBadge` });
+        expect(deviceBadge({ ...AT_REST, pc: `needsSetup`, machine: `waiting` })).toEqual({ mark: `exclamation`, tone: `warning`, tooltip: `desktop.device.needsYouBadge` });
+        expect(deviceBadge({ ...AT_REST, pc: `needsSetup`, startingDocker: true })).toEqual({ running: `desktop.device.startingDockerBadge` });
+        expect(deviceBadge({ ...AT_REST, pc: undefined })).toBeUndefined();
+    });
+
     it(`spins while Docker is being started, and only then offers the update`, () => {
         expect(deviceBadge({ ...AT_REST, startingDocker: true, updateReady: true })).toEqual({ running: `desktop.device.startingDockerBadge` });
         expect(deviceBadge({ ...AT_REST, updateReady: true })).toEqual({ mark: `arrow-up`, tone: `info`, tooltip: `desktop.device.updateReadyBadge` });

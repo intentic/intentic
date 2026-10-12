@@ -36,7 +36,7 @@ const folder = ref<LocalFolderSandbox | undefined>(undefined);
 
 const fakeProject = (preview: LocalProjectPreview, attached: Promise<`queued` | `opened`> = Promise.resolve(`queued`)) => {
     const asked = jest.fn(async () => preview);
-    const attach = jest.fn(async (_names: { readonly project: string }) => attached);
+    const attach = jest.fn(async (_names: { readonly project: string; readonly alternatives?: readonly string[] }) => attached);
     const act = jest.fn(async () => undefined);
     const open = jest.fn(async () => undefined);
     const project: LocalProjectHost = { preview: asked, attach, machine, folder, open, act, detailsPath: `/device` };
@@ -97,7 +97,8 @@ it(`puts the folder in line under the name derived from its own, and the dialog 
     const flow = useLocalProject();
     await flow.ask();
     await flow.attach();
-    expect(attach).toHaveBeenCalledWith({ project: `My-App` });
+    // Its own name, and, should that be taken, its parents' in front of it rather than a number.
+    expect(attach).toHaveBeenCalledWith({ project: `My-App`, alternatives: [`Documents-My-App`, `me-Documents-My-App`] });
     expect(act).not.toHaveBeenCalled();
     expect({ open: flow.dialogOpen.value, folded: flow.minimized.value }).toEqual({ open: false, folded: false });
 });

@@ -22,6 +22,9 @@ export interface LocalFace {
     readonly file?: string;
     // Set when the folder already has a sandbox of its own (the app's projects.json), which the way to an agent opens.
     readonly sandbox?: boolean;
+    // Set when that sandbox holds the folder as part of one around it that went in (project.rs `covering_project`): that
+    // folder's name. It syncs as that one does, so how it syncs is that window's to change.
+    readonly partOf?: string;
     // Set on the app's main window (windows.rs `HOME`), the one the app shows for work of its own: a setup handed over
     // from the workspace, a Docker start at launch. Every other local window is a folder or a document opened beside it.
     readonly home?: boolean;

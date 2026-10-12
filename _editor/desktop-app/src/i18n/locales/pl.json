@@ -47,15 +47,8 @@
         "startEngine": "Uruchom silnik",
         "pcSetupFirst": "Ten komputer potrzebuje Dockera, zanim uruchomi się na nim Twój sandbox, więc konfiguracja sandboxa czeka na konfigurację tego komputera. Gdy komputer będzie gotowy, będzie kontynuowana sama.",
         "pcSetupChecking": "Sprawdzanie, czego potrzebuje ten komputer…",
-        "pcSetupWhat": "Konfiguracja tego komputera przygotowuje Dockera i Podsystem Windows dla systemu Linux (WSL): silnik, w którym działa Twój sandbox.",
-        "pcSetupAdmin": "Windows raz poprosi o uprawnienia administratora.",
-        "pcSetupRestart": "W trakcie komputer trzeba będzie uruchomić ponownie, a konfiguracja sandboxa będzie potem kontynuowana sama.",
         "setUpThisPc": "Skonfiguruj ten komputer",
-        "pcSetupInstalledDocker": "Docker zainstalowany samodzielnie? Sprawdź ponownie",
-        "pcSetupRunning": "Konfigurowanie tego komputera… {percent}%",
         "pcSetupAdminDeclined": "Windows nie otrzymał uprawnień administratora, więc nic się nie zmieniło. Skonfiguruj komputer ponownie i wybierz „Tak”, gdy Windows zapyta.",
-        "pcSetupNeedsRestart": "Ten komputer musi zostać uruchomiony ponownie, aby dokończyć konfigurację. Konfiguracja sandboxa będzie kontynuowana sama po powrocie.",
-        "pcSetupNeedsSignOut": "Wyloguj się z Windows i zaloguj ponownie, aby dokończyć konfigurację tego komputera. Konfiguracja sandboxa będzie kontynuowana sama po powrocie.",
         "pcSetupFailed": "Konfiguracja tego komputera zatrzymała się przed końcem."
     },
     "closeConfirm": {
@@ -214,7 +207,9 @@
         "keptBy": "Obsługiwany przez {place}",
         "keptByNote": "Start, stop i restart stąd",
         "keptByTitle": "Utrzymanie działa tam",
-        "agentsElsewhere": "Agent maszyny Intentic działa na tym komputerze także w {places} i dba o skonfigurowane tam sandboxy."
+        "agentsElsewhere": "Agent maszyny Intentic działa na tym komputerze także w {places} i dba o skonfigurowane tam sandboxy.",
+        "pcSettingUpBadge": "konfiguracja tego komputera",
+        "pcSetupBadge": "ten komputer można przygotować dla agentów"
     },
     "machineSandbox": {
         "title": "Sandbox tego komputera",
@@ -242,7 +237,7 @@
             "ready": "Foldery, nad którymi pracujesz z agentem, trafiają do niego, każdy do osobnego folderu.",
             "stopped": "Jest na tym komputerze, ale nie działa. Uruchom go, aby pracować nad folderami z agentem.",
             "failed": "Konfiguracja się zatrzymała. Log pokazuje, co wtedy robiła.",
-            "gone": "Nie ma go już na Twoim koncie ani na tym komputerze. Utwórz nowy, a Twoje foldery do niego trafią."
+            "gone": "Nie ma go już na tym komputerze. Skonfiguruj go ponownie, a Twoje foldery do niego wrócą, razem z jego plikami, jeśli ten komputer wciąż je ma."
         },
         "percent": "{percent}%",
         "open": "Otwórz",
@@ -250,14 +245,15 @@
         "getDocker": "Pobierz Docker Desktop",
         "showLog": "Pokaż log",
         "start": "Uruchom",
-        "recreate": "Utwórz nowy",
+        "recreate": "Skonfiguruj ponownie",
         "folder": {
             "queued": "czeka",
             "attaching": "dodawanie",
             "copying": "kopiowanie",
             "ready": "w środku",
             "failed": "nie udało się dodać"
-        }
+        },
+        "waitsForPc": "Powstanie, gdy ten komputer zostanie skonfigurowany dla agentów."
     },
     "engine": {
         "runsOn": {
@@ -348,7 +344,103 @@
             "engine-start": "Silnik kontenerów działa",
             "docker-desktop": "Docker Desktop",
             "docker-path": "Docker w PATH",
-            "docker-users": "Uprawnienia Docker dla tego konta"
+            "docker-users": "Uprawnienia Docker dla tego konta",
+            "wsl": "Obsługa Linuksa w Windows (WSL 2)",
+            "wsl-kernel": "Jądro Linuksa dla WSL",
+            "disk-space": "Wystarczająco wolnego miejsca na dysku",
+            "docker-running": "Docker Desktop działa",
+            "docker-linux-containers": "Docker ustawiony na kontenery Linuksa",
+            "docker-own": "Twój własny Docker",
+            "arch": "64-bitowy procesor Intel lub AMD",
+            "windows-version": "Wersja Windows",
+            "slat": "Funkcje wirtualizacji procesora",
+            "nested-virtualization": "Wirtualizacja w tej maszynie wirtualnej",
+            "pending-restart": "Restart, na który czeka Windows",
+            "check": "Odczyt tego komputera"
         }
+    },
+    "pcSetup": {
+        "title": "Skonfiguruj agentów na tym komputerze",
+        "state": {
+            "checkUnknown": "nie udało się sprawdzić",
+            "needsSetup": "jeszcze nieskonfigurowany",
+            "settingUp": "konfiguracja w toku",
+            "restart": "potrzebny restart",
+            "admin": "potrzebna zgoda Windows",
+            "signOut": "potrzebne wylogowanie",
+            "setupFailed": "konfiguracja zatrzymana",
+            "cantRun": "nie uruchomi agentów"
+        },
+        "passed": "Spełnione warunki: {met} z {total}",
+        "cost": {
+            "minutes": "Około {count} min",
+            "restart": "jeden restart",
+            "download": "{size} do pobrania",
+            "admin": "Windows raz poprosi o zgodę"
+        },
+        "unknown": "Coś przeszkodziło Intentic sprawdzić, czy ten komputer może uruchamiać agentów. Sprawdź ponownie albo i tak go skonfiguruj: konfiguracja sama to sprawdzi.",
+        "needsYou": "Windows prosi o Twoją zgodę. Wybierz Tak, aby kontynuować.",
+        "minutesLeft": "zostało {count} min",
+        "quiet": {
+            "title": "Konfiguracja nie odzywa się od {count} min",
+            "body": "Windows może czekać na odpowiedź w oknie schowanym za tym, więc najpierw sprawdź pasek zadań. Jeśli nic tam nie czeka, log pokaże, co konfiguracja zrobiła ostatnio, i możesz uruchomić ją od nowa.",
+            "again": "Zacznij od nowa"
+        },
+        "restart": {
+            "body": "Jeden restart kończy konfigurację tego komputera: Windows potrzebuje go, by włączyć obsługę Linuksa. Potem Intentic otworzy się sam i dokończy konfigurację w około dwie minuty.",
+            "at": "Restart o {time}.",
+            "cancel": "Anuluj restart",
+            "in10Minutes": "Za 10 minut",
+            "later": "Później",
+            "save": "Najpierw zapisz pracę w innych aplikacjach."
+        },
+        "signOut": "Wyloguj się z Windows i zaloguj ponownie, aby dokończyć konfigurację tego komputera. Będzie kontynuowana sama po powrocie.",
+        "repair": "Otwórz Naprawę",
+        "hosted": "Twoich agentów może zamiast tego uruchomić nasz komputer w chmurze.",
+        "cloud": "Użyj Intentic w chmurze",
+        "ready": "Ten komputer jest gotowy na agentów.",
+        "signIn": {
+            "now": "Zaloguj się, a Intentic utworzy sandbox, w którym pracują Twoi agenci.",
+            "meanwhile": "Agenci pracują na Twoim koncie. Zaloguj się, kiedy chcesz: konfiguracja tego komputera na to nie czeka."
+        },
+        "prefetch": {
+            "label": "Pobieramy to, czego potrzebują agenci",
+            "todo": "{total} do pobrania",
+            "progress": "{done} z {total}",
+            "paused": "wstrzymano",
+            "metered": "czekamy na połączenie bez limitu danych",
+            "yielded": "wstrzymano na czas konfiguracji sandboxa na tym komputerze",
+            "failed": "Pobieranie zatrzymało się przed końcem.",
+            "retrying": "Za chwilę spróbujemy ponownie.",
+            "later": "To, co już pobrano, zostaje, a resztę pobierze konfiguracja, gdy ruszy.",
+            "pause": "Wstrzymaj",
+            "resume": "Wznów",
+            "anyway": "Pobierz mimo to"
+        },
+        "task": {
+            "title": "Daj agentom pierwsze zadanie",
+            "lead": "Wybierz folder i napisz, co ma zostać zrobione.",
+            "placeholder": "Opisz zadanie dla swoich agentów…",
+            "pickFolder": "Wybierz folder",
+            "changeFolder": "Zmień folder",
+            "queue": "Dodaj do kolejki",
+            "keptTitle": "Twoje pierwsze zadanie",
+            "edit": "Edytuj",
+            "sending": "Wysyłanie…",
+            "failedTitle": "Twoje pierwsze zadanie nie ruszyło",
+            "starts": {
+                "pc": "Ruszy samo, gdy ten komputer będzie gotowy.",
+                "pcAndSignIn": "Ruszy samo, gdy ten komputer będzie gotowy, a Ty się zalogujesz.",
+                "signIn": "Ruszy, gdy tylko się zalogujesz.",
+                "now": "Ruszy od razu."
+            }
+        }
+    },
+    "leftovers": {
+        "title": "Na Twoim koncie wciąż jest {count} stary sandbox z tego komputera | Na Twoim koncie wciąż są {count} stare sandboxy z tego komputera | Na Twoim koncie wciąż jest {count} starych sandboxów z tego komputera",
+        "detail": "{names}. Nic ich już nie uruchamia: ten komputer ma teraz jeden sandbox.",
+        "remove": "Usuń",
+        "confirmHeader": "Usunąć {count} stary sandbox? | Usunąć {count} stare sandboxy? | Usunąć {count} starych sandboxów?",
+        "confirmDetail": "{names} zostaną usunięte z Twojego konta. Przez 7 dni możesz je przywrócić z kosza."
     }
 }

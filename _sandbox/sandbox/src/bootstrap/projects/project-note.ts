@@ -12,6 +12,13 @@ import { textFile } from "../../store/plain-files/text-file.js";
 
 export const PROJECT_NOTE_FENCE = "intentic:project";
 
+/** Where an attached folder is on the owner's computer (system/projects-registry.ts): its `/work` name and their path. */
+export interface ProjectPlace {
+    readonly name: string;
+    readonly hostPath: string;
+    readonly machine: string | undefined;
+}
+
 // "`a`", "`a` and `b`", "`a`, `b` and `c`".
 const listed = (folders: readonly string[]): string => {
     const quoted = folders.map((folder) => `\`${folder}\``);
@@ -19,9 +26,32 @@ const listed = (folders: readonly string[]): string => {
     return quoted.length === 0 ? (last ?? "") : `${quoted.join(", ")} and ${last ?? ""}`;
 };
 
+// Where each folder is on the owner's computer, one line each, so a path an agent works with turns into the one the owner
+// opens, and back: `/work/code-app/src/x.ts` is `C:\Users\radar\code\app\src\x.ts`. Nothing when none is known.
+// One folder's place, by the `/work` path agents reach it by.
+interface PlacedPath {
+    readonly path: string;
+    readonly hostPath: string;
+    readonly machine: string | undefined;
+}
+
+const placesNote = (places: readonly PlacedPath[]): string[] =>
+    places.length === 0
+        ? []
+        : [
+              "",
+              "Where each is on their computer, for turning a path here into the one they open, and back:",
+              "",
+              ...places.map((place) => `- \`${place.path}\` is \`${place.hostPath}\`${place.machine === undefined ? "" : ` on ${place.machine}`}`),
+          ];
+
 // `folders` are the paths agents reach them by: `/work/<name>` in the container. One folder (a project sandbox's, or the
 // only one attached to a projects host) reads as it always has; several are named together, in the order they came.
-export const projectNote = (folders: readonly [string, ...string[]]): string => {
+// `places` are where the ones the sandbox knows of are on the owner's computer, by the same `/work` path.
+export const projectNote = (
+    folders: readonly [string, ...string[]],
+    places: readonly PlacedPath[] = [],
+): string => {
     const [only] = folders;
     if (folders.length === 1) {
         return [
@@ -33,6 +63,7 @@ export const projectNote = (folders: readonly [string, ...string[]]): string => 
                 "that unless they ask. Its git history stays on their computer. The sandbox tracks the " +
                 "folder in a repository of its own, so their commits and branches are not here, and nothing committed here " +
                 "reaches theirs. Work inside it, not at the workspace root, unless they ask otherwise.",
+            ...placesNote(places),
         ].join("\n");
     }
     return [
@@ -44,6 +75,7 @@ export const projectNote = (folders: readonly [string, ...string[]]): string => 
             "never do that unless they ask. Their git history stays on their computer. The sandbox tracks each folder in a " +
             "repository of its own, so their commits and branches are not here, and nothing committed here reaches theirs. " +
             "Work inside the folder the task is about, not at the workspace root, unless they ask otherwise.",
+        ...placesNote(places),
     ].join("\n");
 };
 
@@ -51,14 +83,18 @@ export const projectNote = (folders: readonly [string, ...string[]]): string => 
 // review, and so does an empty list: a projects host nothing has attached to yet has no folder to name. Through textFile,
 // whose read takes only a missing file as empty and whose write is atomic and queued: the write replaces the whole file,
 // and those are the owner's own rules, which a boot's converge and an attach's must not race to drop.
-export const convergeProjectNote = async (workspaceRoot: string, names: readonly string[]): Promise<boolean> => {
+export const convergeProjectNote = async (workspaceRoot: string, names: readonly string[], places: readonly ProjectPlace[] = []): Promise<boolean> => {
     const [first, ...rest] = names.map((name) => join(workspaceRoot, name));
     if (first === undefined) {
         return false;
     }
+    const known = new Set(names);
+    const placed = places
+        .filter((place) => known.has(place.name))
+        .map((place) => ({ path: join(workspaceRoot, place.name), hostPath: place.hostPath, machine: place.machine }));
     let wrote = false;
     await textFile(join(workspaceRoot, MEMORY_FILE)).update((existing) => {
-        const next = mergeFenced(existing, PROJECT_NOTE_FENCE, projectNote([first, ...rest]));
+        const next = mergeFenced(existing, PROJECT_NOTE_FENCE, projectNote([first, ...rest], placed));
         wrote = next !== existing;
         return wrote ? next : undefined;
     });

@@ -2,10 +2,17 @@ import type { DeviceReport } from "@intentic/sandbox-contract";
 import { serialLock } from "@intentic/base/async";
 import type { GitRunner } from "@intentic/base/git";
 import { ensureProjectRepo } from "../../git/remote/project-repo.js";
-import { attachedProjects, registerProject, reportedProjects } from "../../system/projects-registry.js";
+import {
+    type AttachedProject,
+    attachedProjectEntries,
+    attachedProjects,
+    placeProjects,
+    registerProject,
+    reportedProjects,
+} from "../../system/projects-registry.js";
 import { announceRepoChange } from "../../workspace/watch/repo-watch.js";
 import type { WorkspacePaths } from "../../workspace/workspace.js";
-import { convergeProjectNote } from "./project-note.js";
+import { convergeProjectNote, type ProjectPlace } from "./project-note.js";
 
 // A PROJECTS HOST takes in the folders attached to it (system/projects-registry.ts): each becomes a repo of its own, as a
 // project sandbox's one folder does (git/remote/project-repo.ts), and the workspace's AGENTS.md names every one. A boot
@@ -36,9 +43,16 @@ export interface ProjectsHostDeps {
     readonly git?: GitRunner;
 }
 
-// The note names every attached folder; said only when it changed.
-const noteAttached = async (deps: ProjectsHostDeps, names: readonly string[]): Promise<void> => {
-    if (deps.writesNote && (await convergeProjectNote(deps.workspace.root, names))) {
+// Where the entries the registry knows the place of are on the owner's computer.
+const placesOf = (entries: readonly AttachedProject[]): ProjectPlace[] =>
+    entries.flatMap((entry) =>
+        entry.hostPath === undefined ? [] : [{ name: entry.name, hostPath: entry.hostPath, machine: entry.machine }],
+    );
+
+// The note names every attached folder, and where each is on the owner's computer; said only when it changed.
+const noteAttached = async (deps: ProjectsHostDeps, entries: readonly AttachedProject[]): Promise<void> => {
+    const names = entries.map((entry) => entry.name);
+    if (deps.writesNote && (await convergeProjectNote(deps.workspace.root, names, placesOf(entries)))) {
         deps.logger.info({ repos: names }, "attached project folders: the workspace's AGENTS.md names every one as the owner's");
     }
 };
@@ -54,19 +68,21 @@ const ensureRepo = async (deps: ProjectsHostDeps, name: string): Promise<void> =
 // What a boot does: every attached folder's repo, then the note. One folder that cannot be made a repo is said and
 // skipped, so it costs the others nothing.
 export const convergeAttachedProjects = async (deps: ProjectsHostDeps): Promise<void> => {
-    const names = await attachedProjects(deps.historyRoot);
-    for (const name of names) {
+    const entries = await attachedProjectEntries(deps.historyRoot);
+    for (const { name } of entries) {
         await ensureRepo(deps, name).catch((error) =>
             deps.logger.warn({ err: error, repo: name }, "attached project folder not made a repo, its files read as the workspace's own in the Changes review"),
         );
     }
-    await noteAttached(deps, names);
+    await noteAttached(deps, entries);
 };
 
-// Attaches each folder the report names that is not attached yet: its repo first, then its name, so a folder whose repo
-// could not be made is tried again by the next report rather than kept as attached. Then the note is rewritten to name
-// it too, and open editors are told the repo set moved. Answers the names it attached; a report naming nothing new, the
-// one nearly every report is, reads the registry and writes nothing.
+// Attaches each folder the report names that is not attached yet: its repo first, then its name and where it is on the
+// owner's computer, so a folder whose repo could not be made is tried again by the next report rather than kept as
+// attached. A folder attached already has its place brought up to date (moved on the computer, or attached before the
+// map was kept). Then the note is rewritten to name them, and, for a new folder, open editors are told the repo set
+// moved. Answers the names it attached; a report naming nothing new, the one nearly every report is, reads the registry
+// and writes nothing.
 export const attachReportedProjects = async (deps: ProjectsHostDeps, report: DeviceReport): Promise<string[]> => {
     const reported = reportedProjects(report);
     if (reported.length === 0) {
@@ -74,23 +90,31 @@ export const attachReportedProjects = async (deps: ProjectsHostDeps, report: Dev
     }
     const known = new Set(await attachedProjects(deps.historyRoot));
     const attached: string[] = [];
-    for (const name of reported.filter((candidate) => !known.has(candidate))) {
+    for (const project of reported.filter((candidate) => !known.has(candidate.name))) {
         try {
-            await ensureRepo(deps, name);
-            await registerProject(deps.historyRoot, name);
-            attached.push(name);
+            await ensureRepo(deps, project.name);
+            await registerProject(deps.historyRoot, project.name, Date.now(), project);
+            attached.push(project.name);
         } catch (error) {
-            deps.logger.warn({ err: error, repo: name }, "attached project folder not made a repo, the next report from its computer tries again");
+            deps.logger.warn({ err: error, repo: project.name }, "attached project folder not made a repo, the next report from its computer tries again");
         }
     }
-    if (attached.length === 0) {
+    const moved = await placeProjects(
+        deps.historyRoot,
+        reported.filter((candidate) => known.has(candidate.name)),
+    );
+    if (attached.length === 0 && !moved) {
         return attached;
     }
-    deps.logger.info({ repos: attached }, "project folders attached to this computer's sandbox");
-    await noteAttached(deps, await attachedProjects(deps.historyRoot)).catch((error) =>
+    if (attached.length > 0) {
+        deps.logger.info({ repos: attached }, "project folders attached to this computer's sandbox");
+    }
+    await noteAttached(deps, await attachedProjectEntries(deps.historyRoot)).catch((error) =>
         deps.logger.warn({ err: error }, "project note not rewritten, agents are not told about the folders just attached"),
     );
-    announceRepoChange();
+    if (attached.length > 0) {
+        announceRepoChange();
+    }
     return attached;
 };
 

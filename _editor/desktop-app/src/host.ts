@@ -5,6 +5,7 @@ import { computed } from "vue";
 import { track } from "./analytics";
 import { readAccount, signOutAccount, updateAccount } from "./account";
 import { onboardingHost } from "./onboarding";
+import { pcStanding } from "./onboarding/pc";
 import { repairHost } from "./repair";
 import {
     foundOnMachine,
@@ -55,6 +56,8 @@ const badge = computed(() => {
         // A deb or rpm upgrade installed under the running app is one restart away too.
         updateReady: device.update.value.kind === `ready` || device.update.value.kind === `installed`,
         machine: machineSandbox.value?.state,
+        // Only Windows has this PC's own setup: elsewhere its check speaks of Docker, which the tile already does.
+        pc: device.info.value?.os === `windows` ? pcStanding.value : undefined,
     });
 });
 

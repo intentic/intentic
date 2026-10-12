@@ -26,6 +26,7 @@ use std::sync::{Arc, Condvar, LazyLock, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 
 use crate::project::{Made, Minted};
@@ -211,6 +212,10 @@ pub struct Record {
     /// to the platform: from then on the row may be live somewhere, and a failure never takes it off the account.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub announced: bool,
+    /// The platform answered a setup code for this row with "no such sandbox": it was deleted from the account. The one
+    /// case a recreate makes a new row; otherwise it sets the same row up again ([`recreated`]).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub row_gone: bool,
 }
 
 /* READING THE SETUP'S OWN LINES. */
@@ -439,7 +444,7 @@ pub enum Container {
 pub enum Ask {
     /// "Try again" (a stopped setup), the requirements card's go-ahead (`consent`), or its "Check again".
     Retry { consent: bool },
-    /// "Make a new one", for a sandbox that is gone.
+    /// "Set it up again", for a sandbox whose container is gone: on the same row unless the account no longer has it.
     Recreate,
 }
 
@@ -533,7 +538,9 @@ pub fn decide(record: &Record, facts: &Facts) -> Decision {
         return Decision::Reset;
     }
     let retry = match facts.asked {
-        Some(Ask::Recreate) => return Decision::Recreate,
+        // Only a sandbox that is gone is made again: a press that raced the card back to another state asks nothing.
+        Some(Ask::Recreate) if record.standing == Standing::Gone => return Decision::Recreate,
+        Some(Ask::Recreate) => None,
         Some(Ask::Retry { consent }) => Some(consent),
         None => None,
     };
@@ -692,6 +699,27 @@ pub fn reset_for(record: &Record, account: &str) -> Record {
     }
 }
 
+/// The record for a recreate: started over as [`reset_for`] starts it, but on the SAME row (2026-10-12). A setup code
+/// minted again for the row binds the new container to it, and its volumes are keyed by the row's slug, so `/work` and
+/// `/history` come back if this computer still has them. A new row each time is how one computer came to have
+/// "<COMPUTER> sandbox", "… 2" and "… 3" on its account, the old ones never removed. Only a row the platform no longer
+/// has ([`Record::row_gone`]) is left behind for a new one. `announced`, so a setup that fails can never take the row
+/// off the account ([`discards_row`]): it was live before. Pure.
+pub fn recreated(record: &Record, account: &str) -> Record {
+    let fresh = reset_for(record, account);
+    if record.row_gone || record.sandbox_id.is_none() {
+        return fresh;
+    }
+    Record {
+        sandbox_id: record.sandbox_id.clone(),
+        slug: record.slug.clone(),
+        hostname: record.hostname.clone(),
+        name: record.name.clone(),
+        announced: true,
+        ..fresh
+    }
+}
+
 /// The record as a launch finds it: an attach the last quit cut short is a folder copying (its pairing was recorded)
 /// or one still waiting (it was not), and folders that finished are nobody's news any more.
 pub fn settle_on_launch(record: &mut Record, projects: &[Project]) {
@@ -739,9 +767,11 @@ pub fn pause_for(record: &Record) -> Duration {
 
 /* FOLDERS — named, put in line, attached, and followed into the sandbox. */
 
-/// A folder's name inside `/work`, unique among `taken` (any case): `name`, then `name-2`, `name-3`… cut to the 64
-/// characters a project's name may have, as `projectDirNameFor` names one.
-pub fn unique_name(name: &str, taken: &[String]) -> String {
+/// A folder's name inside `/work`, unique among `taken` (any case): `name`, else the first of `alternatives` that is
+/// free (the page's `projectDirCandidates`: the parent's name in front, `code-app`, which says which `app` it is), and
+/// only past all of them `name-2`, `name-3`… cut to the 64 characters a project's name may have, as `projectDirNameFor`
+/// names one. An alternative no project may be called is passed over.
+pub fn unique_name(name: &str, alternatives: &[String], taken: &[String]) -> String {
     let free = |candidate: &str| {
         !taken
             .iter()
@@ -749,6 +779,12 @@ pub fn unique_name(name: &str, taken: &[String]) -> String {
     };
     if free(name) {
         return name.to_string();
+    }
+    if let Some(named) = alternatives
+        .iter()
+        .find(|alternative| crate::project::is_project_dir_name(alternative) && free(alternative))
+    {
+        return named.clone();
     }
     (2..)
         .map(|number| {
@@ -763,7 +799,13 @@ pub fn unique_name(name: &str, taken: &[String]) -> String {
 
 /// `path` put in line under a name made unique among the folders already in this computer's sandbox (`attached`) and
 /// those waiting for it. A folder already in line keeps its place and its name, and one that failed is asked again.
-pub fn enqueue(record: &mut Record, path: &str, wanted: &str, attached: &[String]) -> String {
+pub fn enqueue(
+    record: &mut Record,
+    path: &str,
+    wanted: &str,
+    alternatives: &[String],
+    attached: &[String],
+) -> String {
     if let Some(folder) = record.folders.iter_mut().find(|folder| folder.path == path) {
         if matches!(folder.state, FolderState::Failed | FolderState::Ready) {
             folder.state = FolderState::Queued;
@@ -774,7 +816,7 @@ pub fn enqueue(record: &mut Record, path: &str, wanted: &str, attached: &[String
     }
     let mut taken: Vec<String> = attached.to_vec();
     taken.extend(record.folders.iter().map(|folder| folder.name.clone()));
-    let name = unique_name(wanted, &taken);
+    let name = unique_name(wanted, alternatives, &taken);
     record.folders.push(Folder {
         path: path.to_string(),
         name: name.clone(),
@@ -826,29 +868,40 @@ pub fn copy_state(status: &str) -> FolderState {
     }
 }
 
-/// The sandbox's name on the account: this computer's own, as the reader calls it, numbered past one the account
-/// already gives another.
-pub fn sandbox_name(host: Option<&str>, taken: &[String]) -> String {
-    let host: Option<String> = host
-        .map(str::trim)
+/// The sandbox's name on the account, the same on every computer (2026-10-12). The account's switcher names the device
+/// on the row's second line, so the name says what the sandbox is rather than where: "<COMPUTER> sandbox 3" said the
+/// computer twice and read as the third of three. The platform holds no name unique, so no number is ever added.
+pub const SANDBOX_NAME: &str = "Local";
+
+/// This computer's name as the app once put it into a sandbox's name: trimmed, on one line, at most 40 characters.
+fn shown_host(host: Option<&str>) -> Option<String> {
+    host.map(str::trim)
         .filter(|host| !host.is_empty() && !host.chars().any(char::is_control))
-        .map(|host| host.chars().take(40).collect());
-    let base = match host {
-        Some(host) => format!("{host} sandbox"),
-        None => "This computer's sandbox".to_string(),
-    };
-    let free = |candidate: &str| {
-        !taken
-            .iter()
-            .any(|held| held.eq_ignore_ascii_case(candidate))
-    };
-    if free(&base) {
-        return base;
-    }
-    (2..)
-        .map(|number| format!("{base} {number}"))
-        .find(|candidate| free(candidate))
-        .unwrap_or(base)
+        .map(|host| host.chars().take(40).collect())
+}
+
+/// Whether `name` is one this app gave the sandbox before it was called [`SANDBOX_NAME`]: `<host> sandbox`, numbered
+/// past a taken one (`<host> sandbox 2`), or `This computer's sandbox` where the system named no host. Such a name is
+/// the app's, so it is renamed ([`rename_old_name`]) and such a row may be taken up again ([`adoptable`]); any other is
+/// one the reader chose, and is left alone. Pure.
+pub fn named_the_old_way(name: &str, host: Option<&str>) -> bool {
+    let bases = shown_host(host)
+        .map(|host| format!("{host} sandbox"))
+        .into_iter()
+        .chain(std::iter::once("This computer's sandbox".to_string()));
+    bases.into_iter().any(|base| {
+        let Some(rest) = name
+            .get(..base.len())
+            .filter(|head| head.eq_ignore_ascii_case(&base))
+            .map(|_| &name[base.len()..])
+        else {
+            return false;
+        };
+        rest.is_empty()
+            || rest.strip_prefix(' ').is_some_and(|number| {
+                !number.is_empty() && number.bytes().all(|byte| byte.is_ascii_digit())
+            })
+    })
 }
 
 /// This computer's name, as its system gives it.
@@ -1123,6 +1176,9 @@ fn round(app: &AppHandle, launch: bool, asked: Option<Ask>) {
         }
         Decision::Recreate => recreate(app),
     }
+    if status(app).standing == Standing::Ready {
+        rename_old_name(app);
+    }
     attach_queued(app);
     follow_copies(app);
 }
@@ -1245,11 +1301,24 @@ fn create(app: &AppHandle, consent: bool) {
         update(app, |record| record.standing = Standing::SignedOut);
         return;
     };
-    let taken: Vec<String> = roster
-        .sandboxes
-        .iter()
-        .map(|entry| entry.name.clone())
-        .collect();
+    // A record that holds no row may have lost one this computer still runs (its file unreadable, the app reinstalled,
+    // another account in between): that one is taken up again rather than a second made beside it.
+    if status(app).sandbox_id.is_none() {
+        if let Some(found) = find_adoptable(app, &window) {
+            update(app, |record| *record = adopted(record, &account, &found));
+            finished(app, &found.id, Some(&found.slug), &found.name);
+            kick();
+            return;
+        }
+    }
+    // The row's name as the account has it now, which a reader may have changed: a row set up again keeps it.
+    let named_now = status(app).sandbox_id.and_then(|id| {
+        roster
+            .sandboxes
+            .iter()
+            .find(|entry| entry.id == id)
+            .map(|entry| entry.name.clone())
+    });
     let record = update(app, |record| {
         record.account = Some(account);
         record.attempt += 1;
@@ -1262,12 +1331,18 @@ fn create(app: &AppHandle, consent: bool) {
         record.requirements.clear();
         record.consented = consent;
         record.resume_on_launch = false;
+        if let Some(named) = named_now
+            .as_deref()
+            .filter(|named| crate::project::is_sandbox_name(named))
+        {
+            record.name = Some(named.to_string());
+        }
         if !record
             .name
             .as_deref()
             .is_some_and(crate::project::is_sandbox_name)
         {
-            record.name = Some(sandbox_name(host_name().as_deref(), &taken));
+            record.name = Some(SANDBOX_NAME.to_string());
         }
     });
     let name = record.name.clone().unwrap_or_default();
@@ -1306,7 +1381,10 @@ fn create(app: &AppHandle, consent: bool) {
         .as_ref()
         .is_ok_and(|answered| row_gone(reused, answered))
     {
-        update(app, |record| record.standing = Standing::Gone);
+        update(app, |record| {
+            record.standing = Standing::Gone;
+            record.row_gone = true;
+        });
         return;
     }
     let (code, slug) = match minted.map(crate::project::minted_code) {
@@ -1700,6 +1778,333 @@ fn finished(app: &AppHandle, sandbox_id: &str, slug: Option<&str>, name: &str) {
     state.remember_roster(crate::project::with_row(state.roster(), sandbox_id, name));
 }
 
+/// A row of the account this computer's sandbox can be taken up again from: owned, not hosted, named by this app
+/// ([`SANDBOX_NAME`], or [`named_the_old_way`]), and with a container here.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Adoptable {
+    pub id: String,
+    pub name: String,
+    pub slug: String,
+    pub hostname: String,
+}
+
+/// The slugs a listed row's container could have here: its address's first label, and the one its connect token
+/// derives (`sandbox-` and the token's sha256, 12 hex), which is the same for a row the platform gave an address.
+fn slugs_of(row: &serde_json::Value) -> Vec<String> {
+    let from_address = row["daemonUrl"]
+        .as_str()
+        .and_then(|url| url.split("://").nth(1))
+        .and_then(|rest| rest.split(['/', ':', '.']).next())
+        .filter(|label| !label.is_empty())
+        .map(str::to_ascii_lowercase);
+    let from_token = row["token"]
+        .as_str()
+        .filter(|token| !token.is_empty())
+        .map(|token| {
+            let digest = Sha256::digest(token.as_bytes());
+            let hex: String = digest
+                .iter()
+                .take(6)
+                .map(|byte| format!("{byte:02x}"))
+                .collect();
+            format!("sandbox-{hex}")
+        });
+    from_address.into_iter().chain(from_token).collect()
+}
+
+/// Which of the account's sandboxes (`/rpc/sandbox/list`'s `sandboxes`) this computer's sandbox is, when the record has
+/// lost it: one this app named, owned and not hosted, whose container this machine lists (`here`: slug and whether it
+/// runs). A running one before a stopped one, then the one seen last. Never another sandbox this computer runs for the
+/// reader, which carries a name of their own. Pure.
+pub fn adoptable(
+    listed: &serde_json::Value,
+    here: &[(String, bool)],
+    host: Option<&str>,
+) -> Option<Adoptable> {
+    let rows = listed["sandboxes"].as_array()?;
+    rows.iter()
+        .filter(|row| row["role"].as_str() == Some("owner") && row["hosted"].is_null())
+        .filter_map(|row| {
+            let name = row["name"].as_str()?;
+            if !(name.eq_ignore_ascii_case(SANDBOX_NAME) || named_the_old_way(name, host)) {
+                return None;
+            }
+            let hostname = row["daemonUrl"]
+                .as_str()?
+                .split("://")
+                .nth(1)?
+                .split(['/', ':'])
+                .next()?
+                .to_string();
+            let (slug, running) = slugs_of(row).into_iter().find_map(|slug| {
+                here.iter()
+                    .find(|(held, _)| *held == slug)
+                    .map(|(_, running)| (slug, *running))
+            })?;
+            let seen = row["lastSeenAt"].as_str().unwrap_or_default().to_string();
+            Some((
+                running,
+                seen,
+                Adoptable {
+                    id: row["id"].as_str()?.to_string(),
+                    name: name.to_string(),
+                    slug,
+                    hostname,
+                },
+            ))
+        })
+        .max_by(
+            |(left_running, left_seen, _), (right_running, right_seen, _)| {
+                left_running
+                    .cmp(right_running)
+                    .then_with(|| left_seen.cmp(right_seen))
+            },
+        )
+        .map(|(_, _, found)| found)
+}
+
+/// The record taken up again on a row found by [`adoptable`]: made already, and ready until the next round reads its
+/// container. The folders waiting for it keep waiting, for it. Pure.
+pub fn adopted(record: &Record, account: &str, found: &Adoptable) -> Record {
+    Record {
+        standing: Standing::Ready,
+        sandbox_id: Some(found.id.clone()),
+        slug: Some(found.slug.clone()),
+        hostname: Some(found.hostname.clone()),
+        name: Some(found.name.clone()),
+        made: true,
+        announced: true,
+        ..reset_for(record, account)
+    }
+}
+
+/// [`adoptable`], asked of the platform and of this machine's sandboxes. Nothing found, or either one not answering, is
+/// a new row as before.
+fn find_adoptable(app: &AppHandle, window: &WebviewWindow) -> Option<Adoptable> {
+    let listed = match tauri::async_runtime::block_on(crate::account::platform_get(
+        app,
+        window,
+        "/rpc/sandbox/list",
+    )) {
+        Ok(crate::account::Answered::Json { status, body }) if (200..300).contains(&status) => body,
+        _ => return None,
+    };
+    let rows = crate::scripts::ic_listing(
+        app,
+        crate::commands::list_script(crate::scripts::Host::current(), crate::commands::VERSION),
+    )
+    .ok()?;
+    let here: Vec<(String, bool)> = rows
+        .iter()
+        .filter_map(|row| {
+            Some((
+                row["slug"].as_str()?.to_string(),
+                row["running"].as_bool() != Some(false),
+            ))
+        })
+        .collect();
+    adoptable(&listed, &here, host_name().as_deref())
+}
+
+/// A sandbox of the account this computer left behind before it kept one row ([`recreated`], [`adoptable`]): offered on
+/// This computer to be taken off the account, never taken off by itself.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Leftover {
+    pub id: String,
+    pub name: String,
+}
+
+/// How long a row must have been silent to count as left behind: a sandbox that runs anywhere announces itself far
+/// more often than this, so one this machine's listing misses (another engine, a WSL side) is never offered.
+const LEFTOVER_SILENT_SECS: i64 = 24 * 60 * 60;
+
+/// Unix seconds of an ISO instant as the platform writes them (`2026-10-12T20:00:00.000Z`); None for anything else.
+fn instant_secs(iso: &str) -> Option<i64> {
+    let (date, time) = iso.trim_end_matches('Z').split_once('T')?;
+    let mut day = date.split('-').map(str::parse::<i64>);
+    let (year, month, mday) = (day.next()?.ok()?, day.next()?.ok()?, day.next()?.ok()?);
+    let mut clock = time.split(['.', ':']).map(str::parse::<i64>);
+    let (hour, minute, second) = (
+        clock.next()?.ok()?,
+        clock.next()?.ok()?,
+        clock.next()?.ok()?,
+    );
+    // Days from the civil date (Howard Hinnant's days_from_civil), so no date crate is pulled in for one comparison.
+    let shifted = if month <= 2 { year - 1 } else { year };
+    let era = shifted.div_euclid(400);
+    let of_era = shifted - era * 400;
+    let of_year = (153 * (if month > 2 { month - 3 } else { month + 9 }) + 2) / 5 + mday - 1;
+    let of_cycle = of_era * 365 + of_era / 4 - of_era / 100 + of_year;
+    let days = era * 146_097 + of_cycle - 719_468;
+    Some(days * 86_400 + hour * 3_600 + minute * 60 + second)
+}
+
+/// The account's sandboxes (`/rpc/sandbox/list`) this computer left behind: owned and not hosted, named by this app the
+/// old way for THIS computer ([`named_the_old_way`]), not the one it keeps now, not run by this machine (`here`), and
+/// removed or silent for a day. Anything named otherwise, or that may still run somewhere, is never offered. Pure.
+pub fn leftovers(
+    listed: &serde_json::Value,
+    here: &[String],
+    current: Option<&str>,
+    host: Option<&str>,
+    now: i64,
+) -> Vec<Leftover> {
+    let Some(rows) = listed["sandboxes"].as_array() else {
+        return Vec::new();
+    };
+    rows.iter()
+        .filter(|row| row["role"].as_str() == Some("owner") && row["hosted"].is_null())
+        .filter_map(|row| {
+            let id = row["id"].as_str()?;
+            let name = row["name"].as_str()?;
+            if Some(id) == current || !named_the_old_way(name, host) {
+                return None;
+            }
+            if slugs_of(row).iter().any(|slug| here.contains(slug)) {
+                return None;
+            }
+            let removed = row["removedAt"].as_str().is_some();
+            let silent = row["lastSeenAt"]
+                .as_str()
+                .and_then(instant_secs)
+                .is_none_or(|seen| now - seen > LEFTOVER_SILENT_SECS);
+            (removed || silent).then(|| Leftover {
+                id: id.to_string(),
+                name: name.to_string(),
+            })
+        })
+        .collect()
+}
+
+/// [`leftovers`], asked of the platform and of this machine. Nothing when either does not answer: an offer to remove is
+/// made only on what both said.
+#[tauri::command]
+pub async fn machine_sandbox_leftovers(app: AppHandle, window: WebviewWindow) -> Vec<Leftover> {
+    let listed = match crate::account::platform_get(&app, &window, "/rpc/sandbox/list").await {
+        Ok(crate::account::Answered::Json { status, body }) if (200..300).contains(&status) => body,
+        _ => return Vec::new(),
+    };
+    let listing_app = app.clone();
+    let here = tauri::async_runtime::spawn_blocking(move || {
+        crate::scripts::ic_listing(
+            &listing_app,
+            crate::commands::list_script(crate::scripts::Host::current(), crate::commands::VERSION),
+        )
+    })
+    .await;
+    let Ok(Ok(rows)) = here else {
+        return Vec::new();
+    };
+    let here: Vec<String> = rows
+        .iter()
+        .filter_map(|row| row["slug"].as_str().map(str::to_string))
+        .collect();
+    let current = status(&app).sandbox_id;
+    let now = i64::try_from(now()).unwrap_or(i64::MAX);
+    leftovers(
+        &listed,
+        &here,
+        current.as_deref(),
+        host_name().as_deref(),
+        now,
+    )
+}
+
+/// The left-behind sandboxes the reader chose taken off the account (the platform's trash keeps each a week), and out
+/// of this app's roster. Only ids [`machine_sandbox_leftovers`] would offer now are removed, whatever the page sent.
+/// Answers how many went.
+#[tauri::command]
+pub async fn machine_sandbox_remove_leftovers(
+    app: AppHandle,
+    window: WebviewWindow,
+    ids: Vec<String>,
+) -> Result<usize, String> {
+    let offered = machine_sandbox_leftovers(app.clone(), window.clone()).await;
+    let mut removed = 0;
+    for leftover in offered.iter().filter(|leftover| ids.contains(&leftover.id)) {
+        let body = serde_json::json!({ "sandboxId": leftover.id });
+        match crate::account::platform_post(&app, &window, "/rpc/sandbox/delete", &body).await {
+            Ok(crate::account::Answered::Json { status, .. })
+                if (200..300).contains(&status) || status == 404 =>
+            {
+                let state = app.state::<AppState>();
+                state.remember_roster(without_row(state.roster(), &leftover.id));
+                removed += 1;
+            }
+            answered => {
+                return Err(format!(
+                    "{} couldn't be removed from your account ({answered:?}). Remove it from the workspace's sandbox list instead.",
+                    leftover.name
+                ));
+            }
+        }
+    }
+    Ok(removed)
+}
+
+/// Tried once a launch, so a platform that refuses the rename is not asked every round.
+static RENAME_TRIED: AtomicBool = AtomicBool::new(false);
+
+/// A sandbox this app named the old way ([`named_the_old_way`]) renamed to [`SANDBOX_NAME`], once it is made and while
+/// the account still calls it that: a name the reader gave it since is theirs, and so is one the roster does not show
+/// yet (nobody signed in), which is left for a later round.
+fn rename_old_name(app: &AppHandle) {
+    if RENAME_TRIED.load(Ordering::SeqCst) {
+        return;
+    }
+    let record = status(app);
+    let (Some(id), Some(name)) = (record.sandbox_id.clone(), record.name.clone()) else {
+        return;
+    };
+    if !record.made || !named_the_old_way(&name, host_name().as_deref()) {
+        return;
+    }
+    let state = app.state::<AppState>();
+    let roster = state.roster();
+    if !roster
+        .sandboxes
+        .iter()
+        .any(|entry| entry.id == id && entry.name == name)
+    {
+        return;
+    }
+    let Some(window) = any_window(app) else {
+        return;
+    };
+    RENAME_TRIED.store(true, Ordering::SeqCst);
+    let body = serde_json::json!({ "sandboxId": id, "name": SANDBOX_NAME });
+    match tauri::async_runtime::block_on(crate::account::platform_post(
+        app,
+        &window,
+        "/rpc/sandbox/update",
+        &body,
+    )) {
+        Ok(crate::account::Answered::Json { status, .. }) if (200..300).contains(&status) => {
+            update(app, |record| record.name = Some(SANDBOX_NAME.to_string()));
+            if let Some(slug) = record.slug.as_deref() {
+                state.remember_name(slug, Some(SANDBOX_NAME));
+            }
+            state.remember_roster(renamed_row(state.roster(), &id, SANDBOX_NAME));
+        }
+        answered => {
+            eprintln!("intentic: this computer's sandbox {id} was not renamed: {answered:?}")
+        }
+    }
+}
+
+/// The roster with the row `id` called `name`, as the account now calls it. Pure.
+pub(crate) fn renamed_row(
+    mut roster: crate::setup_link::Roster,
+    id: &str,
+    name: &str,
+) -> crate::setup_link::Roster {
+    for entry in roster.sandboxes.iter_mut().filter(|entry| entry.id == id) {
+        entry.name = name.to_string();
+    }
+    roster
+}
+
 /// Whether minting a code for a row this record already held says the row is gone: the platform answers a sandbox it
 /// has no row for (or not for this account) with 404. A row made by this very attempt is never read as gone.
 fn row_gone(reused: bool, answered: &crate::account::Answered) -> bool {
@@ -1715,8 +2120,9 @@ fn failed(app: &AppHandle, reason: String) {
     update(app, |record| record.standing = Standing::Failed { reason });
 }
 
-/// A new sandbox in place of one that is gone: the folders that were in the old one go into the new one under the
-/// same names, once the machine agent has let go of them.
+/// This computer's sandbox set up again where its container is gone: on the same row ([`recreated`]) unless the platform
+/// no longer has it. The folders that were in it go back in under the same names, once the machine agent has let go of
+/// them.
 fn recreate(app: &AppHandle) {
     let old = status(app);
     let moved: Vec<Project> = app
@@ -1739,10 +2145,10 @@ fn recreate(app: &AppHandle) {
     }
     update(app, |record| {
         let account = record.account.clone();
-        let mut fresh = reset_for(record, account.as_deref().unwrap_or_default());
+        let mut fresh = recreated(record, account.as_deref().unwrap_or_default());
         fresh.account = account;
         for project in &moved {
-            enqueue(&mut fresh, &project.path, &project.dir, &[]);
+            enqueue(&mut fresh, &project.path, &project.dir, &[], &[]);
         }
         *record = fresh;
     });
@@ -1760,13 +2166,13 @@ fn attached_names(app: &AppHandle, sandbox_id: Option<&str>) -> Vec<String> {
 }
 
 /// A folder put in line for this computer's sandbox (project.rs `project_attach`), under the name it gets there.
-pub fn queue(app: &AppHandle, root: &Path, wanted: &str) -> String {
+pub fn queue(app: &AppHandle, root: &Path, wanted: &str, alternatives: &[String]) -> String {
     let path = root.display().to_string();
     let sandbox_id = status(app).sandbox_id;
     let attached = attached_names(app, sandbox_id.as_deref());
     let mut name = String::new();
     update(app, |record| {
-        name = enqueue(record, &path, wanted, &attached)
+        name = enqueue(record, &path, wanted, alternatives, &attached)
     });
     kick();
     name
@@ -1807,7 +2213,7 @@ fn attach_queued(app: &AppHandle) {
                 app,
                 &folder.path,
                 FolderState::Failed,
-                Some("This computer's sandbox has no address to add a folder to. Make a new one from This computer.".to_string()),
+                Some("This computer's sandbox has no address to add a folder to. Set it up again from This computer.".to_string()),
                 None,
             );
             continue;
@@ -1896,7 +2302,7 @@ pub fn machine_sandbox_check() {
     kick();
 }
 
-/// "Make a new one", for a sandbox the account no longer has.
+/// "Set it up again", for a sandbox that is gone ([`recreated`]).
 #[tauri::command]
 pub fn machine_sandbox_recreate() {
     ask(Ask::Recreate);
@@ -2752,14 +3158,45 @@ mod tests {
 
     #[test]
     fn a_folder_is_named_once_and_never_onto_another() {
-        assert_eq!(unique_name("app", &[]), "app");
-        assert_eq!(unique_name("app", &["App".into(), "app-2".into()]), "app-3");
+        assert_eq!(unique_name("app", &[], &[]), "app");
+        assert_eq!(
+            unique_name("app", &[], &["App".into(), "app-2".into()]),
+            "app-3"
+        );
         let long = "a".repeat(64);
-        let numbered = unique_name(&long, std::slice::from_ref(&long));
+        let numbered = unique_name(&long, &[], std::slice::from_ref(&long));
         assert_eq!(numbered.len(), 64);
         assert!(numbered.ends_with("-2"));
         assert!(crate::project::is_project_dir_name(&numbered));
-        assert_eq!(unique_name("app.", &["app.".into()]), "app-2");
+        assert_eq!(unique_name("app.", &[], &["app.".into()]), "app-2");
+    }
+
+    // A second `app` is named for where it is (`code-app`), and only past every such name numbered.
+    #[test]
+    fn a_second_folder_of_a_name_takes_its_parents_in_front() {
+        let alternatives: Vec<String> = vec!["code-app".into(), "ada-code-app".into()];
+        assert_eq!(unique_name("app", &alternatives, &[]), "app");
+        assert_eq!(
+            unique_name("app", &alternatives, &["app".into()]),
+            "code-app"
+        );
+        assert_eq!(
+            unique_name("app", &alternatives, &["app".into(), "Code-App".into()]),
+            "ada-code-app"
+        );
+        assert_eq!(
+            unique_name(
+                "app",
+                &alternatives,
+                &["app".into(), "code-app".into(), "ada-code-app".into()]
+            ),
+            "app-2"
+        );
+        // A name no project may take is passed over, never used.
+        assert_eq!(
+            unique_name("app", &["public".into(), "../x".into()], &["app".into()]),
+            "app-2"
+        );
     }
 
     #[test]
@@ -2770,19 +3207,19 @@ mod tests {
             percent: 5,
         });
         assert_eq!(
-            enqueue(&mut held, "/home/me/app", "app", &["app".into()]),
+            enqueue(&mut held, "/home/me/app", "app", &[], &["app".into()]),
             "app-2"
         );
         assert_eq!(
-            enqueue(&mut held, "/work/other/app", "app", &["app".into()]),
+            enqueue(&mut held, "/work/other/app", "app", &[], &["app".into()]),
             "app-3"
         );
         // Asked again: the same name, the same place.
-        assert_eq!(enqueue(&mut held, "/home/me/app", "app", &[]), "app-2");
+        assert_eq!(enqueue(&mut held, "/home/me/app", "app", &[], &[]), "app-2");
         assert_eq!(held.folders.len(), 2);
         held.folders[0].state = FolderState::Failed;
         held.folders[0].reason = Some("refused".into());
-        enqueue(&mut held, "/home/me/app", "app", &[]);
+        enqueue(&mut held, "/home/me/app", "app", &[], &[]);
         assert_eq!(
             (held.folders[0].state, held.folders[0].reason.clone()),
             (FolderState::Queued, None)
@@ -2877,19 +3314,278 @@ mod tests {
     }
 
     #[test]
-    fn the_sandbox_is_named_after_this_computer() {
+    fn the_sandbox_is_called_local_and_the_names_it_had_before_are_known() {
+        assert!(crate::project::is_sandbox_name(SANDBOX_NAME));
+        // The app's own names from before, in any case and with any number: renamed.
+        for name in [
+            "RADARSU-ROG sandbox",
+            "RADARSU-ROG sandbox 3",
+            "radarsu-rog Sandbox 12",
+            "This computer's sandbox",
+            "This computer's sandbox 2",
+        ] {
+            assert!(named_the_old_way(name, Some("RADARSU-ROG\n")), "{name}");
+        }
+        // A name of the reader's own, or another computer's: left alone.
+        for name in [
+            "Local",
+            "horus",
+            "RADARSU-ROG sandbox for work",
+            "RADARSU-ROG sandbox 2b",
+            "RADARSU-ROG sandbox ",
+            "OMEN sandbox",
+            "RADARSU-ROG",
+        ] {
+            assert!(!named_the_old_way(name, Some("RADARSU-ROG")), "{name}");
+        }
+        // The name was cut at 40 characters, so the host is too.
+        let long = "x".repeat(200);
+        assert!(named_the_old_way(
+            &format!("{} sandbox 2", "x".repeat(40)),
+            Some(&long)
+        ));
+        assert!(named_the_old_way("This computer's sandbox", None));
+    }
+
+    // One computer, one row: a recreate sets the same row up again, so the account never gains a second.
+    #[test]
+    fn a_recreate_keeps_the_row_unless_the_platform_has_none() {
+        let mut held = made(Standing::Gone);
+        held.name = Some("Local".into());
+        held.attempt = 3;
+        let again = recreated(&held, "me@example.com");
         assert_eq!(
-            sandbox_name(Some("ada-laptop\n"), &[]),
-            "ada-laptop sandbox"
+            (
+                again.sandbox_id.as_deref(),
+                again.slug.as_deref(),
+                again.hostname.as_deref(),
+                again.name.as_deref()
+            ),
+            (
+                Some("cm-machine"),
+                Some("sandbox-2c8eb2c5b3a5"),
+                Some("sandbox-2c8eb2c5b3a5.sbx.intentic.dev"),
+                Some("Local")
+            )
+        );
+        // Made again from the start, and never taken off the account if that fails: it was live before.
+        assert!(!again.made);
+        assert!(again.announced);
+        assert_eq!(again.attempt, 0);
+        assert!(!discards_row(&again, Container::Missing));
+
+        held.row_gone = true;
+        let fresh = recreated(&held, "me@example.com");
+        assert_eq!(
+            (fresh.sandbox_id, fresh.slug, fresh.row_gone),
+            (None, None, false)
+        );
+    }
+
+    #[test]
+    fn only_a_sandbox_that_is_gone_is_made_again() {
+        let asked = Facts {
+            asked: Some(Ask::Recreate),
+            ..facts()
+        };
+        assert_eq!(decide(&made(Standing::Gone), &asked), Decision::Recreate);
+        // A press that raced the card back to a running sandbox asks nothing.
+        assert_ne!(decide(&made(Standing::Ready), &asked), Decision::Recreate);
+        assert_ne!(decide(&made(Standing::Stopped), &asked), Decision::Recreate);
+    }
+
+    fn listed(rows: serde_json::Value) -> serde_json::Value {
+        serde_json::json!({ "sandboxes": rows })
+    }
+
+    // A record that lost its row takes up the one this computer still runs, never another sandbox of the reader's.
+    #[test]
+    fn a_lost_row_is_taken_up_again_from_the_account() {
+        let rows = listed(serde_json::json!([
+            { "id": "horus", "name": "horus", "role": "owner", "hosted": null,
+              "daemonUrl": "https://sandbox-111111111111.sbx.intentic.dev", "lastSeenAt": "2026-10-12T20:00:00.000Z" },
+            { "id": "old", "name": "RADARSU-ROG sandbox", "role": "owner", "hosted": null,
+              "daemonUrl": "https://sandbox-222222222222.sbx.intentic.dev", "lastSeenAt": "2026-10-10T20:00:00.000Z" },
+            { "id": "cloud", "name": "Local", "role": "owner", "hosted": { "region": "fra", "warm": true },
+              "daemonUrl": "https://sandbox-333333333333.sbx.intentic.dev" },
+            { "id": "shared", "name": "Local", "role": "editor", "hosted": null,
+              "daemonUrl": "https://sandbox-444444444444.sbx.intentic.dev" },
+            { "id": "three", "name": "RADARSU-ROG sandbox 3", "role": "owner", "hosted": null,
+              "daemonUrl": "https://sandbox-555555555555.sbx.intentic.dev/", "lastSeenAt": "2026-10-12T21:00:00.000Z" }
+        ]));
+        let here = |slugs: &[(&str, bool)]| -> Vec<(String, bool)> {
+            slugs
+                .iter()
+                .map(|(slug, running)| ((*slug).to_string(), *running))
+                .collect()
+        };
+        let all_here = here(&[
+            ("sandbox-111111111111", true),
+            ("sandbox-222222222222", false),
+            ("sandbox-333333333333", true),
+            ("sandbox-444444444444", true),
+            ("sandbox-555555555555", true),
+        ]);
+        // A running one before a stopped one; hosted, shared and the reader's own names are never taken.
+        assert_eq!(
+            adoptable(&rows, &all_here, Some("RADARSU-ROG")),
+            Some(Adoptable {
+                id: "three".into(),
+                name: "RADARSU-ROG sandbox 3".into(),
+                slug: "sandbox-555555555555".into(),
+                hostname: "sandbox-555555555555.sbx.intentic.dev".into(),
+            })
         );
         assert_eq!(
-            sandbox_name(Some("ada-laptop"), &["ADA-LAPTOP sandbox".into()]),
-            "ada-laptop sandbox 2"
+            adoptable(
+                &rows,
+                &here(&[("sandbox-222222222222", false)]),
+                Some("RADARSU-ROG")
+            )
+            .map(|found| found.id),
+            Some("old".into())
         );
-        assert_eq!(sandbox_name(None, &[]), "This computer's sandbox");
-        assert_eq!(sandbox_name(Some("  "), &[]), "This computer's sandbox");
-        let long = sandbox_name(Some(&"x".repeat(200)), &[]);
-        assert!(crate::project::is_sandbox_name(&long), "{long}");
+        // Nothing of this app's running here: a new row, as before.
+        assert_eq!(
+            adoptable(
+                &rows,
+                &here(&[("sandbox-111111111111", true)]),
+                Some("RADARSU-ROG")
+            ),
+            None
+        );
+        assert_eq!(
+            adoptable(&serde_json::json!({}), &all_here, Some("RADARSU-ROG")),
+            None
+        );
+    }
+
+    // A row with no address yet is matched by the slug its connect token derives, as `ic` names the container.
+    #[test]
+    fn a_row_is_matched_by_its_token_as_well_as_its_address() {
+        let token = "intentic-connect-token";
+        let digest = Sha256::digest(token.as_bytes());
+        let slug = format!(
+            "sandbox-{}",
+            digest
+                .iter()
+                .take(6)
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+        );
+        let row = serde_json::json!({ "token": token, "daemonUrl": "https://Sandbox-ABC.sbx.intentic.dev" });
+        assert_eq!(slugs_of(&row), vec!["sandbox-abc".to_string(), slug]);
+    }
+
+    #[test]
+    fn a_row_taken_up_again_is_made_and_keeps_the_folders_waiting() {
+        let mut held = record(Standing::SignedOut);
+        held.folders.push(Folder {
+            path: "/a".into(),
+            name: "a".into(),
+            state: FolderState::Queued,
+            reason: None,
+            status: None,
+        });
+        let found = Adoptable {
+            id: "three".into(),
+            name: "Local".into(),
+            slug: "sandbox-555555555555".into(),
+            hostname: "sandbox-555555555555.sbx.intentic.dev".into(),
+        };
+        let taken = adopted(&held, "me@example.com", &found);
+        assert_eq!(
+            (
+                taken.standing,
+                taken.sandbox_id.as_deref(),
+                taken.made,
+                taken.announced,
+                taken.folders.len()
+            ),
+            (Standing::Ready, Some("three"), true, true, 1)
+        );
+    }
+
+    #[test]
+    fn the_platforms_instants_read_as_unix_seconds() {
+        assert_eq!(instant_secs("1970-01-01T00:00:00.000Z"), Some(0));
+        assert_eq!(
+            instant_secs("2026-10-12T20:00:00.000Z"),
+            Some(1_791_835_200)
+        );
+        assert_eq!(instant_secs("2024-02-29T12:30:15Z"), Some(1_709_209_815));
+        assert_eq!(instant_secs("yesterday"), None);
+    }
+
+    // Only what this computer left behind, and only once nothing anywhere could still be running it.
+    #[test]
+    fn a_sandbox_this_computer_left_behind_is_offered_and_nothing_else() {
+        let now = instant_secs("2026-10-12T20:00:00.000Z").unwrap();
+        let rows = listed(serde_json::json!([
+            { "id": "now", "name": "Local", "role": "owner", "hosted": null,
+              "daemonUrl": "https://sandbox-555555555555.sbx.intentic.dev", "lastSeenAt": "2026-10-12T19:59:00.000Z" },
+            { "id": "old", "name": "RADARSU-ROG sandbox", "role": "owner", "hosted": null,
+              "daemonUrl": "https://sandbox-111111111111.sbx.intentic.dev", "lastSeenAt": "2026-10-10T20:00:00.000Z" },
+            { "id": "never-ran", "name": "RADARSU-ROG sandbox 2", "role": "owner", "hosted": null },
+            { "id": "removed", "name": "RADARSU-ROG sandbox 4", "role": "owner", "hosted": null,
+              "lastSeenAt": "2026-10-12T19:00:00.000Z", "removedAt": "2026-10-12T19:30:00.000Z" },
+            { "id": "seen-lately", "name": "RADARSU-ROG sandbox 5", "role": "owner", "hosted": null,
+              "daemonUrl": "https://sandbox-777777777777.sbx.intentic.dev", "lastSeenAt": "2026-10-12T12:00:00.000Z" },
+            { "id": "runs-here", "name": "RADARSU-ROG sandbox 6", "role": "owner", "hosted": null,
+              "daemonUrl": "https://sandbox-888888888888.sbx.intentic.dev", "lastSeenAt": "2026-10-01T12:00:00.000Z" },
+            { "id": "other-pc", "name": "OMEN sandbox", "role": "owner", "hosted": null },
+            { "id": "mine", "name": "horus", "role": "owner", "hosted": null },
+            { "id": "shared", "name": "RADARSU-ROG sandbox 7", "role": "editor", "hosted": null }
+        ]));
+        let here = vec!["sandbox-888888888888".to_string()];
+        let offered = leftovers(&rows, &here, Some("now"), Some("RADARSU-ROG"), now);
+        assert_eq!(
+            offered
+                .iter()
+                .map(|leftover| leftover.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["old", "never-ran", "removed"]
+        );
+        assert_eq!(
+            leftovers(
+                &serde_json::json!({}),
+                &here,
+                None,
+                Some("RADARSU-ROG"),
+                now
+            ),
+            Vec::new()
+        );
+    }
+
+    #[test]
+    fn a_renamed_row_keeps_its_place_in_the_roster() {
+        let roster = crate::setup_link::Roster {
+            account: None,
+            sandboxes: vec![
+                crate::setup_link::RosterEntry {
+                    id: "a".into(),
+                    name: "horus".into(),
+                    place: "own".into(),
+                    shared: false,
+                },
+                crate::setup_link::RosterEntry {
+                    id: "b".into(),
+                    name: "RADARSU-ROG sandbox 3".into(),
+                    place: "device".into(),
+                    shared: false,
+                },
+            ],
+        };
+        let renamed = renamed_row(roster, "b", SANDBOX_NAME);
+        assert_eq!(
+            renamed
+                .sandboxes
+                .iter()
+                .map(|entry| entry.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["horus", "Local"]
+        );
     }
 
     #[test]

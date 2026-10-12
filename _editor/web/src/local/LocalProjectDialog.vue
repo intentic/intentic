@@ -8,6 +8,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
 import { localFace } from "../app/environments/local";
+import { localHost } from "../app/environments/localHost";
 import AgentHouse from "./house/AgentHouse.vue";
 import { cautionSentence, copyWeight, refusalSentence } from "./projectWords";
 import { useLocalProject } from "./useLocalProject";
@@ -18,10 +19,11 @@ const face = computed(localFace);
 const { dialogOpen, preview, attaching, failure, attach, cancel } = useLocalProject();
 const router = useRouter();
 
-// A folder taken in on a PC that cannot run agents yet goes on to the Agents view, which sets the PC up.
+// A folder taken in on a PC that cannot run agents yet goes on to This computer, whose card sets the PC up.
 const attachAndGo = async (): Promise<void> => {
-    if ((await attach()) === `agents`) {
-        await router.push({ path: `/agents`, query: { why: `pc` } });
+    const details = localHost().project?.detailsPath;
+    if ((await attach()) === `pcSetup` && details !== undefined) {
+        await router.push(details);
     }
 };
 

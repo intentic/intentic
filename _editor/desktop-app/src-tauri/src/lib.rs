@@ -202,6 +202,8 @@ pub fn run() {
             machine_sandbox::machine_sandbox_retry,
             machine_sandbox::machine_sandbox_check,
             machine_sandbox::machine_sandbox_recreate,
+            machine_sandbox::machine_sandbox_leftovers,
+            machine_sandbox::machine_sandbox_remove_leftovers,
             machine_sandbox::machine_sandbox_start,
             machine_sandbox::machine_sandbox_end_session,
             found::found_on_machine,
@@ -218,6 +220,7 @@ pub fn run() {
             first_task::first_task_queue,
             first_task::first_task_clear,
             first_task::first_task_pick_folder,
+            first_task::first_task_take_draft,
             // Repair, the agent that runs on this computer outside every sandbox (repair.rs).
             repair::repair_state,
             repair::repair_start,

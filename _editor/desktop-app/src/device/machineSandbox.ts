@@ -72,7 +72,7 @@ const pressed = async (action: () => Promise<void>): Promise<void> => {
 export const retryMachine = (consent = false): Promise<void> => pressed(() => machineSandboxRetry(consent));
 /** Look again now (Docker was just started). */
 export const checkMachine = (): Promise<void> => pressed(() => machineSandboxCheck());
-/** "Make a new one". */
+/** "Set it up again" (machine_sandbox.rs `recreated`). */
 export const recreateMachine = (): Promise<void> => pressed(() => machineSandboxRecreate());
 // A start takes its minute: said while it runs, so a second press is not mistaken for nothing happening.
 export const machineStarting = ref(false);

@@ -1,4 +1,4 @@
-import { projectDirNameFor } from "@intentic/sandbox-contract";
+import { projectDirCandidates, projectDirNameFor } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
 import { askLocalApp } from "../app/environments/local";
 import { localHost, type LocalFolderSandbox, type LocalMachineSandbox, type LocalProjectPreview } from "../app/environments/localHost";
@@ -135,9 +135,9 @@ const ask = async (): Promise<void> => {
  * unique by the app), and the dialog gone at once. Nobody signed in is asked to sign in now, and the sandbox, and the
  * folder in it, follow the sign-in by themselves.
  */
-// Answers `agents` when the folder is in but this PC cannot run agents yet: the dialog then takes the reader to the
-// Agents view, which sets the PC up (the dialog navigates, since this module sits below the router).
-const attach = async (): Promise<`agents` | undefined> => {
+// Answers `pcSetup` when the folder is in but this PC cannot run agents yet: the dialog then takes the reader to This
+// computer, whose card sets the PC up (the dialog navigates, since this module sits below the router).
+const attach = async (): Promise<`pcSetup` | undefined> => {
     const project = host();
     const asked = preview.value;
     if (project === undefined || asked?.kind !== `new` || attaching.value) {
@@ -146,13 +146,15 @@ const attach = async (): Promise<`agents` | undefined> => {
     attaching.value = true;
     failure.value = undefined;
     try {
-        await project.attach({ project: projectDirNameFor(asked.name) });
+        // Its own name, or, taken already, its parent's in front of it (`code-app`) rather than a number.
+        const named = projectDirNameFor(asked.name);
+        await project.attach({ project: named, alternatives: projectDirCandidates(asked.path).filter((name) => name !== named) });
         fold(false);
         dialogOpen.value = false;
         const pc = localHost().onboarding?.check.value;
         const machine = asked.machine;
         if (pc !== undefined && pc.state !== `ready` && machine.state !== `ready` && machine.state !== `signedOut`) {
-            return `agents`;
+            return `pcSetup`;
         }
         if (asked.machine.state === `signedOut`) {
             await project.act(`signIn`);

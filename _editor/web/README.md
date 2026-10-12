@@ -130,10 +130,10 @@ flowchart LR
   on arrival and on focus, finds changes to bring back), and the way to a folder's own
   sandbox (`LocalProject.vue`): the window's dialog for "Work on this with an agent" (`LocalProjectDialog.vue`), and the
   card the sandbox's build stands on in the notification lane while the reader keeps working (`LocalProjectBuild.vue`),
-  drawn as the agent's house going up with the setup's real phases (`AgentHouse.vue`, `agentHouse.ts`). The **Agents**
-  view (`local/agents/LocalAgents.vue`, `/agents` on the main window's rail from first launch) draws the PC check, setup,
-  sign-in, prefetch, the first task while the PC is prepared, and the way into the workspace once this computer's sandbox
-  is ready; dev fixtures live at `/kit/agents`. The place chip names the
+  drawn as the agent's house going up with the setup's real phases (`AgentHouse.vue`, `agentHouse.ts`). A new Windows
+  PC's own first-run setup (the PC check, the setup, the sign-in, the download, the first task) is the desktop app's,
+  drawn on its This device view from `LocalOnboardingHost` (`localHost.ts`); the shell's own Agents view that held it
+  was removed on 2026-10-12, and a folder taken in on a PC not ready yet goes to `project.detailsPath`. The place chip names the
   window's folder and lists the account's sandboxes, the only other places the window goes, as the sandbox switcher
   lists "This computer" first in the app's workspace window, with the same digits for the same places in both: Alt+0
   this computer, Alt+1–9 the sandboxes. What only the desktop app can answer (the recent places, whether there is an

@@ -2,8 +2,8 @@
 import { Button, Notice, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import Requirements from "../components/Requirements.vue";
-import { openUrl, signIn, workspaceOpen, type MachineFolder } from "../desktop";
+import Requirements from "../../components/Requirements.vue";
+import { openUrl, signIn, workspaceOpen, type MachineFolder } from "../../desktop";
 import {
     endMachineSession,
     machineActionError,
@@ -14,14 +14,15 @@ import {
     retryMachine,
     revealMachineLog,
     startMachine,
-} from "./machineSandbox";
+} from "../machineSandbox";
 import { localHost } from "@intentic/web/local-host";
-import { DOCKER_DOCS, useDevice } from "./useDevice";
+import { pcCardShown } from "../pcSetup/livePcCard";
+import { DOCKER_DOCS, useDevice } from "../useDevice";
 
 // THIS COMPUTER'S OWN SANDBOX, at the top of This device: the one the app makes after sign-in, in the background, and
 // keeps for the folders the reader works on with an agent (the app's machine_sandbox.rs). Every state it can be in is
 // said here in a sentence, with the one thing that moves it on: sign in, Docker, the requirements its setup stopped on,
-// try again with its log beside it, start it, make a new one. A folder window's card says the same in short and sends
+// try again with its log beside it, start it, set it up again. A folder window's card says the same in short and sends
 // the reader here for anything with more than a button to it.
 
 const t = useT();
@@ -53,6 +54,10 @@ const folders = computed(() => record.value?.folders ?? []);
 const cloudOffered = computed(
     () => localHost().onboarding?.check.value?.state === `cantRun`,
 );
+// Waiting with nothing of its own to ask: the app holds it for this PC's own setup (machine_sandbox.rs `Waiting` for
+// consent, with no requirements), which the card above this one offers. Drawn as the requirements card, it said "This
+// computer can't run a sandbox yet:" over an empty list, beside the card that says what it needs.
+const waitsForPc = computed(() => state.value === `waiting` && machineRequirements.value.length === 0 && pcCardShown.value);
 
 // The workspace at this computer's sandbox, once it is up.
 const open = (): void => {
@@ -75,14 +80,16 @@ const useCloud = (): void => {
             <Icon v-if="state === `creating` || state === `interrupted`" name="spinner" spin class="mt-0.5 shrink-0 text-link" />
             <Icon v-else-if="state === `ready`" name="check-circle" class="mt-0.5 shrink-0 text-success" />
             <Icon v-else-if="state === `signedOut`" name="box" class="mt-0.5 shrink-0 text-subtle" />
+            <Icon v-else-if="waitsForPc" name="clock" class="mt-0.5 shrink-0 text-subtle" />
             <Icon v-else name="exclamation-circle" class="mt-0.5 shrink-0" :class="state === `failed` || state === `gone` ? `text-danger` : `text-warning`" />
             <div class="min-w-0 flex-1">
                 <h2 class="flex flex-wrap items-baseline gap-x-2 text-sm leading-tight font-semibold">
                     <span>{{ t(`desktop.machineSandbox.title`) }}</span>
-                    <span class="text-2xs font-normal text-subtle">{{ t(`desktop.machineSandbox.state.${state}`) }}</span>
+                    <span v-if="!waitsForPc" class="text-2xs font-normal text-subtle">{{ t(`desktop.machineSandbox.state.${state}`) }}</span>
                 </h2>
                 <p v-if="record.name" class="truncate text-2xs text-subtle">{{ record.name }}</p>
                 <p v-if="detail && state !== `waiting`" class="mt-1 max-w-read-sm text-xs leading-relaxed text-muted">{{ detail }}</p>
+                <p v-else-if="waitsForPc" class="mt-1 max-w-read-sm text-xs leading-relaxed text-muted">{{ t(`desktop.machineSandbox.waitsForPc`) }}</p>
             </div>
             <Button v-if="state === `ready`" size="small" tier="boring" class="-my-1 shrink-0" :label="t(`desktop.machineSandbox.open`)" @click="open">
                 <template #icon><Icon name="arrow-up-right" /></template>
@@ -109,7 +116,7 @@ const useCloud = (): void => {
 
         <!-- Stopped on what this computer needs first: the same card a handed-over setup asks on, with no hosted way out. -->
         <Requirements
-            v-if="state === `waiting`"
+            v-if="state === `waiting` && !waitsForPc"
             :requirements="machineRequirements"
             :busy="false"
             @install="retryMachine(true)"
@@ -129,7 +136,8 @@ const useCloud = (): void => {
 
         <!-- The one thing that moves it on, as the primary press; the log beside a failure. -->
         <div v-if="state !== `creating` && state !== `ready` && state !== `waiting` && state !== `interrupted`" class="flex flex-wrap items-center gap-2">
-            <Button v-if="state === `signedOut`" size="small" :label="t(`desktop.machineSandbox.signIn`)" @click="signIn">
+            <!-- Not beside the card for this PC, which carries the sign-in itself. -->
+            <Button v-if="state === `signedOut` && !pcCardShown" size="small" :label="t(`desktop.machineSandbox.signIn`)" @click="signIn">
                 <template #icon><Icon name="sign-in" /></template>
             </Button>
             <template v-if="state === `needsDocker` && record.state === `needsDocker`">

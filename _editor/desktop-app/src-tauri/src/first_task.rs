@@ -1,9 +1,10 @@
-//! FIRST RUN (2026-10-09): the first task, written on the local shell's Agents view while this PC is set up, kept on
-//! disk so a restart keeps it, and handed to the workspace once this computer's sandbox is ready (the web's
-//! localHost.ts `LocalFirstTask` and `TASK_QUERY`; the app's half is src/onboarding/firstTask.ts).
+//! FIRST RUN (2026-10-09): the first task, written on This computer's card while this PC is set up, kept on disk so a
+//! restart keeps it, and handed to the workspace once this computer's sandbox is ready (the web's localHost.ts
+//! `LocalFirstTask` and `TASK_QUERY`; the app's half is src/onboarding/firstTask.ts, drawn by
+//! src/device/pcSetup/PcSetupCard.vue).
 
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Mutex, PoisonError};
 
 use base64::Engine;
 use serde::{Deserialize, Serialize};
@@ -19,9 +20,24 @@ use crate::state::write_json;
 use crate::windows::{self, HOME};
 
 pub const EVENT: &str = "desktop://first-task";
+/// A draft handed to This computer's card ([`prefill_from_ask`]), with the draft itself as its payload.
+pub const DRAFT_EVENT: &str = "desktop://first-task-draft";
 const FILE_NAME: &str = "first-task.json";
 
-/// Serializes every read-modify-write of the task file. `attach_at_path` can re-enter through
+/// A first task not yet written, only begun: the folder and the opening words "Ask about this" filled in while no
+/// sandbox can answer. Held here rather than in the route that opens the page (`/agents?draftFolder=…` until
+/// 2026-10-12), so a main window still being built finds it when its card asks ([`first_task_take_draft`]); kept in
+/// memory only, since a draft nobody saw before the app closed is not worth bringing back.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Draft {
+    folder: String,
+    text: String,
+}
+
+static DRAFT: Mutex<Option<Draft>> = Mutex::new(None);
+
+/// Serializes every read-modify-write of the task file. `attach_named` can re-enter through
 /// `machine_sandbox::change` → `machine_changed` → `try_send`; the task is marked `Sending` before attach so a
 /// re-entrant call does nothing, and the gate is dropped before attach so the outer call cannot deadlock.
 static GATE: Mutex<()> = Mutex::new(());
@@ -39,6 +55,27 @@ struct StoredTask {
     /// Set once the workspace was opened with the task query, so a later record change does not open twice.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     opened_at: Option<u64>,
+    /// The names the folder may take in this computer's sandbox, best first, as the page derived them
+    /// (sandbox-contract's `projectDirCandidates`). Empty for a task kept before the page sent any.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    names: Vec<String>,
+}
+
+/// The most names a queued task is held to: the page sends a few, and is never trusted with more.
+const NAMES_MAX: usize = 4;
+
+/// The folder's name in the sandbox and the ones it may take instead: the page's, held to the project rule, else the
+/// folder's own name, as a task kept before the page sent names was asked under. Pure.
+fn names_for(names: &[String], folder: &Path) -> (String, Vec<String>) {
+    let mut valid = names
+        .iter()
+        .filter(|name| project::is_project_dir_name(name))
+        .take(NAMES_MAX)
+        .cloned();
+    match valid.next() {
+        Some(first) => (first, valid.collect()),
+        None => (folder_name(folder), Vec::new()),
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -132,7 +169,12 @@ fn mint_id() -> String {
     uuid::Uuid::new_v4().simple().to_string()
 }
 
-fn queue_task(app: &AppHandle, folder: String, text: String) -> Result<(), String> {
+fn queue_task(
+    app: &AppHandle,
+    folder: String,
+    text: String,
+    names: Vec<String>,
+) -> Result<(), String> {
     let folder_path = PathBuf::from(&folder);
     if !folder_path.is_dir() {
         return Err("Pick a folder that is still there.".to_string());
@@ -150,6 +192,7 @@ fn queue_task(app: &AppHandle, folder: String, text: String) -> Result<(), Strin
         state: TaskState::Queued,
         reason: None,
         opened_at: None,
+        names: names.into_iter().take(NAMES_MAX).collect(),
     };
     save(app, &task);
     drop(_gate);
@@ -157,15 +200,32 @@ fn queue_task(app: &AppHandle, folder: String, text: String) -> Result<(), Strin
     Ok(())
 }
 
-/// "Ask about this" while no sandbox can answer yet: open Agents with a draft, not a queued task.
+fn draft_from_ask(folder: &Path, file_name: &str) -> Draft {
+    Draft {
+        folder: folder.display().to_string(),
+        text: format!("About {file_name}: "),
+    }
+}
+
+/// "Ask about this" while no sandbox can answer yet: This computer, its first-task box filled with a draft rather than a
+/// task queued. Every window open hears it at once; a main window still being built takes it when it asks.
 pub fn prefill_from_ask(app: &AppHandle, folder: &Path, file_name: &str) {
-    let text = format!("About {file_name}: ");
-    let route = format!(
-        "/agents?draftFolder={}&draftText={}",
-        urlencode(&folder.display().to_string()),
-        urlencode(&text),
-    );
-    windows::show_home_route(app, &route);
+    let draft = draft_from_ask(folder, file_name);
+    *DRAFT.lock().unwrap_or_else(PoisonError::into_inner) = Some(draft.clone());
+    if let Err(error) = app.emit(DRAFT_EVENT, &draft) {
+        eprintln!("intentic: the windows could not be told about the draft task: {error}");
+    }
+    windows::show_device(app);
+}
+
+/// The draft "Ask about this" left for This computer's card, taken: the next window to ask gets none.
+#[tauri::command]
+pub fn first_task_take_draft() -> Option<serde_json::Value> {
+    DRAFT
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .take()
+        .and_then(|draft| serde_json::to_value(draft).ok())
 }
 
 /// The task kept on disk, as `LocalFirstTask` names it, or none.
@@ -184,8 +244,13 @@ pub fn first_task_read(app: AppHandle) -> Option<serde_json::Value> {
 
 /// Keep a task to send once this computer's sandbox is ready, in place of any kept before.
 #[tauri::command]
-pub fn first_task_queue(app: AppHandle, folder: String, text: String) -> Result<(), String> {
-    queue_task(&app, folder, text)
+pub fn first_task_queue(
+    app: AppHandle,
+    folder: String,
+    text: String,
+    names: Option<Vec<String>>,
+) -> Result<(), String> {
+    queue_task(&app, folder, text, names.unwrap_or_default())
 }
 
 /// Forget the task kept, whatever became of it.
@@ -250,7 +315,7 @@ fn folder_ready_in(record: &Record, folder: &str) -> bool {
 fn try_send(app: &AppHandle) {
     let record = machine_sandbox::status(app);
     let folder_path;
-    let name;
+    let names;
     {
         let _gate = GATE.lock().unwrap();
         let Some(mut task) = read(app) else {
@@ -273,13 +338,13 @@ fn try_send(app: &AppHandle) {
             save(app, &task);
             return;
         }
-        name = folder_name(&folder_path);
+        names = names_for(&task.names, &folder_path);
         task.state = TaskState::Sending;
         save(app, &task);
     }
     // Gate dropped before attach: `machine_sandbox::queue` may call `change` → `machine_changed` re-entrantly; state is
     // already `Sending`, so the inner `try_send` does not attach twice.
-    let attach_result = project::attach_at_path(app, &folder_path, &name);
+    let attach_result = project::attach_named(app, &folder_path, &names.0, &names.1);
     let record = machine_sandbox::status(app);
     let _gate = GATE.lock().unwrap();
     let Some(mut task) = read(app) else {
@@ -397,11 +462,50 @@ mod tests {
             state: TaskState::Sending,
             reason: None,
             opened_at: None,
+            names: Vec::new(),
         };
         let path = workspace_path("sb1", "work", &task).expect("path");
         assert!(path.contains("task="));
         assert!(path.contains("sandbox=sb1"));
         assert!(path.contains("project=work"));
+    }
+
+    // The page's names for the folder are taken, held to the project rule; a task kept before it sent any is asked under
+    // the folder's own name, as it always was.
+    #[test]
+    fn a_task_goes_in_under_the_names_the_page_gave_it() {
+        let names = vec![
+            "My-App".to_string(),
+            "public".to_string(),
+            "code-My-App".to_string(),
+        ];
+        assert_eq!(
+            names_for(&names, Path::new("/home/ada/code/My App")),
+            ("My-App".to_string(), vec!["code-My-App".to_string()])
+        );
+        assert_eq!(
+            names_for(&[], Path::new("/home/ada/shop")),
+            ("shop".to_string(), Vec::new())
+        );
+    }
+
+    #[test]
+    fn a_draft_from_ask_names_the_folder_and_the_file() {
+        let draft = draft_from_ask(Path::new("/home/ada/shop"), "notes.md");
+        assert_eq!(
+            serde_json::to_value(&draft).expect("serialized"),
+            serde_json::json!({ "folder": "/home/ada/shop", "text": "About notes.md: " })
+        );
+    }
+
+    #[test]
+    fn a_draft_is_taken_once() {
+        *DRAFT.lock().unwrap() = Some(draft_from_ask(Path::new("/home/ada/shop"), "a.txt"));
+        assert_eq!(
+            first_task_take_draft(),
+            Some(serde_json::json!({ "folder": "/home/ada/shop", "text": "About a.txt: " }))
+        );
+        assert_eq!(first_task_take_draft(), None);
     }
 
     #[test]

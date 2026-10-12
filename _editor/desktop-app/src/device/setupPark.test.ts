@@ -214,7 +214,7 @@ describe(`a setup handed over to a Windows PC that still needs its own setup`, (
         expect(setup.pcParked.value).toBe(false);
     });
 
-    it(`offers this PC's setup, the same press as the Agents page's`, async () => {
+    it(`offers this PC's setup, the same press as This computer's card`, async () => {
         const setup = await started();
         await setup.loadPending();
         await setup.setUpThisPc();

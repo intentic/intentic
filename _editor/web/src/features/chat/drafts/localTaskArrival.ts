@@ -59,7 +59,7 @@ const runTask = async (handoff: { readonly id: string; readonly text: string }):
         reportSent(handoff.id);
         return;
     }
-    const reason = t(`local.agents.taskSendFailed`);
+    const reason = t(`local.firstTaskSendFailed`);
     warn(reason);
     reportFailed(handoff.id, reason);
 };

@@ -286,12 +286,20 @@ impl LocalFiles {
         let mut windows = self.windows.lock().unwrap();
         windows
             .iter_mut()
-            .filter(|(_, grant)| grant.folder && grant.root == folder)
-            .map(|(label, grant)| {
+            .filter_map(|(label, grant)| {
+                // The folder itself, and any window on a folder inside it, which is in the sandbox as part of it.
+                let inside = crate::project::within(folder, &grant.root, cfg!(windows))
+                    .filter(|_| grant.folder)?;
                 if let Some(face) = grant.face.as_object_mut() {
                     face.insert("sandbox".to_string(), serde_json::Value::Bool(true));
+                    if !inside.is_empty() {
+                        face.insert(
+                            "partOf".to_string(),
+                            serde_json::Value::String(crate::project::folder_name(folder)),
+                        );
+                    }
                 }
-                (label.clone(), grant.face.clone())
+                Some((label.clone(), grant.face.clone()))
             })
             .collect()
     }
@@ -327,7 +335,7 @@ fn face_of(
     port: u16,
     grant: &Grant,
     granted: &Granted,
-    has_sandbox: bool,
+    sandbox: &FolderSandbox,
     home: bool,
 ) -> serde_json::Value {
     let mut face = serde_json::json!({
@@ -336,8 +344,11 @@ fn face_of(
         "id": grant.id,
         "name": granted.name,
         "path": granted.root,
-        "sandbox": has_sandbox,
+        "sandbox": sandbox.has,
     });
+    if let Some(part_of) = &sandbox.part_of {
+        face["partOf"] = serde_json::Value::String(part_of.clone());
+    }
     if let Some(file) = &granted.file {
         face["file"] = serde_json::Value::String(file.clone());
     }
@@ -345,6 +356,26 @@ fn face_of(
         face["home"] = serde_json::Value::Bool(true);
     }
     face
+}
+
+/// Whether a window's folder is in a sandbox, and the folder it went in with when that is one around it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct FolderSandbox {
+    pub has: bool,
+    /// The name of the folder around this one that went into the sandbox: this one is in it as part of that one.
+    pub part_of: Option<String>,
+}
+
+/// [`FolderSandbox`] for the folder at `root`, read off the projects this machine remembers (project.rs).
+fn folder_sandbox(app: &AppHandle, root: &Path) -> FolderSandbox {
+    match crate::project::covering_project(app, root) {
+        None => FolderSandbox::default(),
+        Some((project, inside)) => FolderSandbox {
+            has: true,
+            part_of: (!inside.is_empty())
+                .then(|| crate::project::folder_name(Path::new(&project.path))),
+        },
+    }
 }
 
 fn daemon_url(port: u16) -> String {
@@ -590,8 +621,12 @@ fn open_new(app: &AppHandle, asked: &Path, folder: bool) -> Result<(), Trouble> 
     grant.root = PathBuf::from(&granted.root);
     grant.file.clone_from(&granted.file);
     // Whether the way to an agent is a new sandbox or this folder's own (project.rs), whose sandbox is still there.
-    let has_sandbox = folder && crate::project::has_live_project(app, &grant.root);
-    grant.face = face_of(port, &grant, &granted, has_sandbox, false);
+    let sandbox = if folder {
+        folder_sandbox(app, &grant.root)
+    } else {
+        FolderSandbox::default()
+    };
+    grant.face = face_of(port, &grant, &granted, &sandbox, false);
     let title = format!("{} · Intentic", granted.name);
     match take_spare(app) {
         Some(window) => {
@@ -757,8 +792,8 @@ fn granted_folder(
             }
         })?;
     grant.root = PathBuf::from(&granted.root);
-    let has_sandbox = crate::project::has_live_project(app, &grant.root);
-    grant.face = face_of(port, &grant, &granted, has_sandbox, home);
+    let sandbox = folder_sandbox(app, &grant.root);
+    grant.face = face_of(port, &grant, &granted, &sandbox, home);
     Ok((grant, granted.name))
 }
 
@@ -1473,17 +1508,31 @@ mod tests {
             name: "app".into(),
             file: None,
         };
-        let face = face_of(4100, &grant, &folder, true, false);
+        let held = FolderSandbox {
+            has: true,
+            part_of: None,
+        };
+        let face = face_of(4100, &grant, &folder, &held, false);
         assert_eq!(face["daemonUrl"], "http://127.0.0.1:4100");
         assert_eq!(face["sandbox"], true);
         assert!(face.get("file").is_none(), "{face}");
+        assert!(face.get("partOf").is_none(), "{face}");
+        // A folder inside one in the sandbox is in it as part of that one, and its window is told which.
+        let covered = FolderSandbox {
+            has: true,
+            part_of: Some("code".into()),
+        };
+        assert_eq!(
+            face_of(4100, &grant, &folder, &covered, false)["partOf"],
+            "code"
+        );
         let document = Granted {
             root: "/home/me/app".into(),
             name: "brief.docx".into(),
             file: Some("brief.docx".into()),
         };
         assert_eq!(
-            face_of(4100, &grant, &document, false, false)["file"],
+            face_of(4100, &grant, &document, &FolderSandbox::default(), false)["file"],
             "brief.docx"
         );
     }
@@ -1498,8 +1547,11 @@ mod tests {
             name: "local".into(),
             file: None,
         };
-        assert_eq!(face_of(4100, &grant, &folder, false, true)["home"], true);
-        let other = face_of(4100, &grant, &folder, false, false);
+        assert_eq!(
+            face_of(4100, &grant, &folder, &FolderSandbox::default(), true)["home"],
+            true
+        );
+        let other = face_of(4100, &grant, &folder, &FolderSandbox::default(), false);
         assert!(other.get("home").is_none(), "{other}");
     }
 

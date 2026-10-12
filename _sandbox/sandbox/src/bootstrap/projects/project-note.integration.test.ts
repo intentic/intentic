@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MEMORY_FILE } from "@intentic/constants";
+import { MEMORY_FILE, WORKSPACE_ROOT } from "@intentic/constants";
 import { convergeProjectNote, PROJECT_NOTE_FENCE, projectNote } from "./project-note.js";
 
 // Against a real workspace root on disk: the file is the owner's, and what this may never do is lose a byte of it.
@@ -93,6 +93,22 @@ test("several attached folders are named together, with everything the one-folde
             "reaches theirs. Work inside the folder the task is about, not at the workspace root, unless they ask otherwise.",
     );
     expect(projectNote(["/work/site", "/work/api"])).toContain("`/work/site` and `/work/api` are the owner's own folders");
+});
+
+// The folder map the sandbox keeps (system/projects-registry.ts), said where agents read it: one line a folder, so a path
+// here turns into the one the owner opens. Only folders it knows the place of are listed; none known, no list.
+test("the note says where each folder is on the owner's computer, when that is known", () => {
+    const codeApp = `${WORKSPACE_ROOT}/code-app`;
+    const app = `${WORKSPACE_ROOT}/app`;
+    const note = projectNote([codeApp, `${WORKSPACE_ROOT}/api`], [{ path: codeApp, hostPath: "C:\\Users\\ada\\code\\app", machine: "ADA-LAPTOP" }]);
+    expect(
+        note.endsWith(
+            "\n\nWhere each is on their computer, for turning a path here into the one they open, and back:\n\n" +
+                `- \`${codeApp}\` is \`C:\\Users\\ada\\code\\app\` on ADA-LAPTOP`,
+        ),
+    ).toBe(true);
+    expect(projectNote([app], [{ path: app, hostPath: "/home/ada/app", machine: undefined }])).toContain(`- \`${app}\` is \`/home/ada/app\``);
+    expect(projectNote([app])).not.toContain("Where each is");
 });
 
 // The block is replaced where it stands as the list grows, so a second attach never leaves the first one's note behind.

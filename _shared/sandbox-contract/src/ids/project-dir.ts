@@ -56,6 +56,20 @@ export const projectDirNameFor = (folderBasename: string): string => {
     return RESERVED_PROJECT_DIR_NAMES.includes(name) ? `${name}-project` : name;
 };
 
+// The names a folder may take in this computer's sandbox, best first: its own name, then its parent's name in front of
+// it, then its grandparent's too (`app`, `code-app`, `radar-code-app`), each one `isProjectDirName` accepts and none
+// twice. The desktop app takes the first one free (machine_sandbox.rs `unique_name`) and numbers only past all of them,
+// so a second folder called `app` reads as `code-app`, which says which one it is, rather than `app-2` (2026-10-12). A
+// drive (`C:`) and a network share's server and share (`\\server\share`, `\\wsl.localhost\<distro>`) are where a folder
+// is, not what it is called, so they never lend a name.
+export const projectDirCandidates = (hostPath: string): string[] => {
+    const unc = /^[\\/]{2}[^\\/]/.test(hostPath);
+    const segments = hostPath.split(/[\\/]+/).filter((segment) => segment !== "");
+    const named = (unc ? segments.slice(2) : segments).filter((segment) => !/^[A-Za-z]:$/.test(segment));
+    const candidates = [1, 2, 3].flatMap((depth) => (named.length < depth ? [] : [projectDirNameFor(named.slice(-depth).join("-"))]));
+    return [...new Set(candidates)];
+};
+
 // Where a project folder lands in the sandbox, and the name back out of such a path: exactly `<root>/<name>`, anything
 // else (a deeper path, a trailing slash, a reserved name) is not a project dir.
 export const projectRemoteDir = (name: string): string => `${WORKSPACE_ROOT}/${name}`;

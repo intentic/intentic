@@ -75,6 +75,8 @@ const COMMANDS: &[&str] = &[
     "machine_sandbox_retry",
     "machine_sandbox_check",
     "machine_sandbox_recreate",
+    "machine_sandbox_leftovers",
+    "machine_sandbox_remove_leftovers",
     "machine_sandbox_start",
     "machine_sandbox_end_session",
     "found_on_machine",
@@ -91,6 +93,7 @@ const COMMANDS: &[&str] = &[
     "first_task_queue",
     "first_task_clear",
     "first_task_pick_folder",
+    "first_task_take_draft",
     // Repair (repair.rs).
     "repair_state",
     "repair_start",

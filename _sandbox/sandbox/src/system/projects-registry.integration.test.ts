@@ -3,7 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { DevicePairing, DeviceReport } from "@intentic/sandbox-contract";
-import { attachedProjects, attachedProjectsDocument, registerProject, reportedProjects } from "./projects-registry.js";
+import {
+    attachedProjectEntries,
+    attachedProjects,
+    attachedProjectsDocument,
+    placeProjects,
+    registerProject,
+    reportedProjects,
+} from "./projects-registry.js";
 
 // Against a real history root on disk: the registry is the one record of which folders a projects host has taken in.
 
@@ -93,6 +100,44 @@ test("a report names the folders it syncs into /work/<name>, once each, and noth
                 { sandboxId, mode: "sync", localDir: "/home/ada/y", remoteDir: `${WORKSPACE_ROOT}/a/b` },
             ]),
         ),
-    ).toEqual(["blog", "api"]);
+    ).toEqual([
+        { name: "blog", hostPath: "/home/ada/blog", machine: "ada-laptop" },
+        { name: "api", hostPath: "/home/ada/api", machine: "ada-laptop" },
+    ]);
     expect(reportedProjects(report([]))).toEqual([]);
+});
+
+// A Windows folder and a WSL distro's are named as the machine agent names them, never rewritten here.
+test("a report's folder keeps its place as the computer spells it", () => {
+    const sandboxId = "sandbox-abc";
+    expect(
+        reportedProjects(
+            report([
+                { sandboxId, mode: "sync", localDir: "C:\\Users\\ada\\code\\app", remoteDir: `${WORKSPACE_ROOT}/code-app` },
+                { sandboxId, mode: "sync", localDir: "\\\\wsl.localhost\\arch\\home\\ada\\api", remoteDir: `${WORKSPACE_ROOT}/api` },
+                { sandboxId, mode: "sync", remoteDir: `${WORKSPACE_ROOT}/docs` },
+            ]),
+        ),
+    ).toEqual([
+        { name: "code-app", hostPath: "C:\\Users\\ada\\code\\app", machine: "ada-laptop" },
+        { name: "api", hostPath: "\\\\wsl.localhost\\arch\\home\\ada\\api", machine: "ada-laptop" },
+        { name: "docs", machine: "ada-laptop" },
+    ]);
+});
+
+test("a folder is kept with where it is, and a report that moves it rewrites the entry only then", async () => {
+    const root = await historyRoot();
+    expect(await registerProject(root, "blog", 1, { hostPath: "/home/ada/blog", machine: "ada-laptop" })).toBe(true);
+    expect(await registerProject(root, "api", 2)).toBe(true);
+    const written = await readFile(join(root, attachedProjectsDocument.path), "utf8");
+
+    // What is kept already, or a folder nobody attached, writes nothing.
+    expect(await placeProjects(root, [{ name: "blog", hostPath: "/home/ada/blog", machine: "ada-laptop" }, { name: "docs", hostPath: "/x" }])).toBe(false);
+    expect(await readFile(join(root, attachedProjectsDocument.path), "utf8")).toBe(written);
+
+    expect(await placeProjects(root, [{ name: "blog", hostPath: "/home/ada/sites/blog" }, { name: "api", hostPath: "/home/ada/api", machine: "ada-laptop" }])).toBe(true);
+    expect(await attachedProjectEntries(root)).toEqual([
+        { name: "blog", attachedAt: 1, hostPath: "/home/ada/sites/blog", machine: "ada-laptop" },
+        { name: "api", attachedAt: 2, hostPath: "/home/ada/api", machine: "ada-laptop" },
+    ]);
 });

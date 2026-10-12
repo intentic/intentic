@@ -158,7 +158,7 @@ describe(`the download's events`, () => {
     });
 });
 
-describe(`the download as the Agents page draws it`, () => {
+describe(`the download as This computer's card draws it`, () => {
     it(`gives a failure its reason, without paths, and whether a retry is coming`, () => {
         const failed = prefetch(`failed`, {
             done: 7,

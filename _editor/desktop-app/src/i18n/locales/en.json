@@ -47,15 +47,8 @@
         "startEngine": "Start the engine",
         "pcSetupFirst": "This PC needs Docker before your sandbox can run on it, so the sandbox's setup waits for this PC's own setup. Once this PC is ready, it carries on by itself.",
         "pcSetupChecking": "Checking what this PC needs…",
-        "pcSetupWhat": "Setting up this PC gets Docker and Windows Subsystem for Linux (WSL) ready: the engine your sandbox runs in.",
-        "pcSetupAdmin": "Windows asks for administrator permission once.",
-        "pcSetupRestart": "The PC needs to restart part way, and your sandbox's setup carries on by itself afterwards.",
         "setUpThisPc": "Set up this PC",
-        "pcSetupInstalledDocker": "Installed Docker yourself? Check again",
-        "pcSetupRunning": "Setting up this PC… {percent}%",
         "pcSetupAdminDeclined": "Windows didn't get administrator permission, so nothing changed. Set up this PC again and choose Yes when Windows asks.",
-        "pcSetupNeedsRestart": "This PC needs to restart to finish its setup. Your sandbox's setup carries on by itself once you're back.",
-        "pcSetupNeedsSignOut": "Sign out of Windows and back in to finish this PC's setup. Your sandbox's setup carries on by itself once you're back.",
         "pcSetupFailed": "This PC's setup stopped before it was done."
     },
     "closeConfirm": {
@@ -214,7 +207,9 @@
         "keptBy": "Kept by {place}",
         "keptByNote": "Start, stop, restart work here",
         "keptByTitle": "Upkeep runs there",
-        "agentsElsewhere": "Intentic's machine agent also runs in {places} on this computer, and looks after the sandboxes set up there."
+        "agentsElsewhere": "Intentic's machine agent also runs in {places} on this computer, and looks after the sandboxes set up there.",
+        "pcSettingUpBadge": "setting up this PC",
+        "pcSetupBadge": "this PC can be set up for agents"
     },
     "machineSandbox": {
         "title": "This computer's sandbox",
@@ -242,7 +237,7 @@
             "ready": "The folders you work on with an agent go into it, each in a folder of its own.",
             "stopped": "It's on this computer and not running. Start it to work on your folders with an agent.",
             "failed": "Its setup stopped. The log says what it was doing.",
-            "gone": "It's no longer on your account or on this computer. Make a new one, and your folders go into it."
+            "gone": "It isn't on this computer any more. Set it up again, and your folders go back into it, with its files if this computer still has them."
         },
         "percent": "{percent}%",
         "open": "Open",
@@ -250,14 +245,15 @@
         "getDocker": "Get Docker Desktop",
         "showLog": "Show log",
         "start": "Start",
-        "recreate": "Make a new one",
+        "recreate": "Set it up again",
         "folder": {
             "queued": "waiting",
             "attaching": "adding",
             "copying": "copying",
             "ready": "in",
             "failed": "couldn't be added"
-        }
+        },
+        "waitsForPc": "It's made once this PC is set up for agents."
     },
     "engine": {
         "runsOn": {
@@ -348,7 +344,103 @@
             "engine-start": "Container engine running",
             "docker-desktop": "Docker Desktop",
             "docker-path": "Docker on PATH",
-            "docker-users": "Docker permission for this account"
+            "docker-users": "Docker permission for this account",
+            "wsl": "Linux support for Windows (WSL 2)",
+            "wsl-kernel": "Linux kernel for WSL",
+            "disk-space": "Enough free disk space",
+            "docker-running": "Docker Desktop running",
+            "docker-linux-containers": "Docker set to Linux containers",
+            "docker-own": "Your own Docker",
+            "arch": "A 64-bit Intel or AMD processor",
+            "windows-version": "Windows version",
+            "slat": "Processor virtualization features",
+            "nested-virtualization": "Virtualization inside this virtual machine",
+            "pending-restart": "A restart Windows is waiting for",
+            "check": "Reading this PC"
         }
+    },
+    "pcSetup": {
+        "title": "Set up agents on this PC",
+        "state": {
+            "checkUnknown": "couldn't be checked",
+            "needsSetup": "not set up yet",
+            "settingUp": "setting up",
+            "restart": "needs a restart",
+            "admin": "needs Windows' permission",
+            "signOut": "needs a sign-out",
+            "setupFailed": "stopped",
+            "cantRun": "can't run agents"
+        },
+        "passed": "{met} of {total} checks passed",
+        "cost": {
+            "minutes": "About {count} minutes",
+            "restart": "one restart",
+            "download": "{size} download",
+            "admin": "Windows asks for permission once"
+        },
+        "unknown": "Something stopped Intentic from reading whether this PC can run agents. Check again, or set it up anyway: the setup finds out for itself.",
+        "needsYou": "Windows is asking for your permission. Choose Yes to continue.",
+        "minutesLeft": "{count} min left",
+        "quiet": {
+            "title": "No word from the setup for {count} minutes",
+            "body": "Windows may be waiting for an answer in a window behind this one, so look in the taskbar first. If nothing is waiting there, the log shows the last thing the setup did, and you can start it again.",
+            "again": "Start again"
+        },
+        "restart": {
+            "body": "One restart finishes setting up this PC: Windows needs it to switch on Linux support. Intentic opens by itself afterwards and finishes in about two minutes.",
+            "at": "Restarting at {time}.",
+            "cancel": "Cancel the restart",
+            "in10Minutes": "In 10 minutes",
+            "later": "Later",
+            "save": "Save your work in other apps first."
+        },
+        "signOut": "Sign out of Windows and back in to finish setting up this PC. It carries on by itself once you're back.",
+        "repair": "Ask Repair",
+        "hosted": "A computer we host can run your agents instead.",
+        "cloud": "Use Intentic in the cloud",
+        "ready": "This PC is ready for agents.",
+        "signIn": {
+            "now": "Sign in, and Intentic makes the sandbox your agents work in.",
+            "meanwhile": "Agents work under your account. Sign in whenever you like: this PC's setup doesn't wait for it."
+        },
+        "prefetch": {
+            "label": "Downloading what agents need",
+            "todo": "{total} to download",
+            "progress": "{done} of {total}",
+            "paused": "paused",
+            "metered": "waiting for an unmetered connection",
+            "yielded": "paused while a sandbox is set up on this computer",
+            "failed": "The download stopped before it finished.",
+            "retrying": "Trying again in a moment.",
+            "later": "What it already has is kept, and the setup downloads the rest when it runs.",
+            "pause": "Pause",
+            "resume": "Resume",
+            "anyway": "Download anyway"
+        },
+        "task": {
+            "title": "Give agents a first task",
+            "lead": "Pick a folder and say what you want done.",
+            "placeholder": "Describe the task for your agents…",
+            "pickFolder": "Choose folder",
+            "changeFolder": "Change folder",
+            "queue": "Queue task",
+            "keptTitle": "Your first task",
+            "edit": "Edit",
+            "sending": "Sending…",
+            "failedTitle": "Your first task didn't start",
+            "starts": {
+                "pc": "It starts by itself once this PC is ready.",
+                "pcAndSignIn": "It starts by itself once this PC is ready and you've signed in.",
+                "signIn": "It starts as soon as you sign in.",
+                "now": "It starts right away."
+            }
+        }
+    },
+    "leftovers": {
+        "title": "{count} old sandbox from this computer is still on your account | {count} old sandboxes from this computer are still on your account",
+        "detail": "{names}. Nothing runs them any more: this computer keeps one sandbox now.",
+        "remove": "Remove",
+        "confirmHeader": "Remove {count} old sandbox? | Remove {count} old sandboxes?",
+        "confirmDetail": "{names} will be taken off your account. You can restore them from the trash for 7 days."
     }
 }

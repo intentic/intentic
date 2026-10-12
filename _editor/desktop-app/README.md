@@ -30,12 +30,14 @@ flowchart LR
 - **The main window.** The editor's shell with the sandbox shell's rail, holding what needs no sandbox and no
   account: at the top the place chip (the folder this window shows, and the account's sandboxes, each opening the
   workspace on itself at `/?sandbox=<id>` and picked from anywhere in the window by Alt+1–9 as in the workspace, or
-  the sign-in before an account), then Files (the folder's tree and documents, `/workspace`), then **Agents**
-  (`/agents`, from first launch while this PC is set up), then This device (`/device`), and at the foot the sandbox
-  shell's own account control (who is signed in, Settings, Sign out), or the sign-in in the default browser until there
-  is an account. The **first task** the reader writes on Agents is kept in `first-task.json` under the app config dir,
-  announced on `desktop://first-task`, attached to this computer's sandbox when it is ready, and opened in the workspace
-  with `?task=`; the workspace answers on `intentic://first-task?do=sent|failed&id=…`. Settings open in the window itself (`#/settings`), and
+  the sign-in before an account), then Files (the folder's tree and documents, `/workspace`), then This device
+  (`/device`), and at the foot the sandbox shell's own account control (who is signed in, Settings, Sign out), or the
+  sign-in in the default browser until there is an account. The **first task** the reader writes on This device's card
+  for this PC (below) is kept in `first-task.json` under the app config dir, announced on `desktop://first-task`,
+  attached to this computer's sandbox when it is ready, and opened in the workspace with `?task=`; the workspace answers
+  on `intentic://first-task?do=sent|failed&id=…`. "Ask about this" while no sandbox can answer leaves a draft of one
+  (`first_task.rs` `prefill_from_ask`: announced on `desktop://first-task-draft`, and kept in memory for a main window
+  still being built, which takes it with `first_task_take_draft`) and opens This device on it. Settings open in the window itself (`#/settings`), and
   signing out leaves it on its folder. The sandboxes and the account are what the workspace last told the app: its
   switcher hands them over on `intentic://roster` whenever either changes, a sign-out empties them, and the app keeps
   them in `roster.json` (`local_roster`), with no address, token or logo, so a row carries a name, where it runs and
@@ -357,13 +359,24 @@ flowchart LR
   `machine-sandbox.json`, written on every change and sent whole to every window (`desktop://machine-sandbox`, and
   `machine_sandbox_status` for a window that opens later): `signedOut`, `needsDocker` (not installed, not running, or
   turning this account away), `creating`, `waiting` (the yes, restart or sign-out a setup stopped on, exit 3 or 4),
-  `ready`, `stopped`, `failed` (with its log), `interrupted`, and `gone` (the account no longer lists it and it is not on
-  this computer). It looks again at launch, at every roster the workspace sends, at a sign-in or a sign-out, at a press,
+  `ready`, `stopped`, `failed` (with its log), `interrupted`, and `gone` (its container is not on this computer). It looks again at launch, at every roster the workspace sends, at a sign-in or a sign-out, at a press,
   every 15 seconds while Docker is awaited, every minute while it is not ready and every five once it is. A quit stops a
   setup under way with everything it started; the next launch finds the record `creating`, says it was interrupted, and
   runs it again on the same row with its code minted afresh (the platform hands back the live one). The system's
   notification says once that it is ready and once each time it newly needs the reader, and nothing while a window of
   this computer has the focus, where the card says it already.
+
+  _(2026-10-12)_ **One row per computer, called "Local".** The sandbox is named `Local` on every computer
+  (`SANDBOX_NAME`): the account's switcher names the device on the row's second line, and the old "<COMPUTER> sandbox",
+  numbered past one already taken, said the computer twice and read as the third of three. A sandbox named that old way
+  is renamed once it is ready (`/rpc/sandbox/update`), unless the account shows a name the reader gave it. "Set it up
+  again" on a sandbox that is gone runs the setup on the SAME row (`recreated`), so its volumes, keyed by the row's slug,
+  bring `/work` and `/history` back if this computer still has them; only a row the platform no longer has
+  (`row_gone`) makes way for a new one. A record that holds no row (its file unreadable, the app reinstalled) first takes
+  up the row this computer still runs (`adoptable`: owned, not hosted, named by this app, its container listed here)
+  instead of making a second. The rows earlier versions left behind are offered for removal on This device
+  (`LeftoverSandboxes.vue`, `machine_sandbox_leftovers`): named the old way for this computer, not the current one, run
+  nowhere here and silent for a day; removed only on the reader's press, into the platform's week-long trash.
 
   _(2026-10-05)_ Three changes. **One run, across launches too:** a setup run holds a lock in the app's data folder
   (`machine-setup.pid.json`: the script's pid, the start time its system gives that process, and the two files it writes
@@ -381,6 +394,13 @@ flowchart LR
   and a second sandbox on the same Docker. The card says where the sandboxes are kept, and its Try again sets one up here
   all the same.
 
+  A folder's name in `/work` is its own (`projectDirNameFor`), or, when another folder already has that, the first free
+  of the names its parents lend it (`projectDirCandidates`: `code-app`, then `ada-code-app`), which says which one it
+  is; only past those is it numbered. A folder inside one already attached is covered by it (`covering_project`): its
+  window is told it has a sandbox (`partOf` names the folder it went in with), its button opens that one, and Bring back
+  runs on that folder's sync, narrowed to this folder's own files; its sync direction is that folder's to change. A
+  folder around one already attached, or one still in line, is refused, so no file is ever synced twice.
+
   Once it is ready, each folder in line is attached by the machine agent (`intentic-machine sync attach --sandbox-url
   https://<hostname> --dir <folder> --name <name> --json`, which only records the pairing), remembered in
   `projects.json` with this computer's sandbox, and every window on it hears so (`intentic:sandbox`). The app then
@@ -390,11 +410,11 @@ flowchart LR
   by stage as the setup's real phases arrive (the plans, the ground and its materials as the image arrives, the walls as
   the container starts, the roof as the daemon comes up, the lights as it answers), then the folder's copy moves in
   through the door. It says every state with the one press that moves it on (Sign in, Start Docker, This computer for
-  the requirements, Try again beside the log, Start, Make a new one), folds to a line, and remembers the fold for what it
+  the requirements, Try again beside the log, Start, Set it up again), folds to a line, and remembers the fold for what it
   showed in every window. The folder's button says how far it is ("Waiting for this computer's sandbox (42%)", "Copying
   your folder…") and then opens the sandbox on the folder (`/?sandbox=<id>&project=<name>`, the web's
   `router/sandboxArrival.ts`), never on the `/work` around it. This device leads with the same states and presses
-  (`src/device/MachineSandboxSection.vue`), and the rail's tile spins while it is made and marks it while it needs the
+  (`src/device/machineSandbox/MachineSandboxSection.vue`), and the rail's tile spins while it is made and marks it while it needs the
   reader.
 
   The folder is copied into the sandbox's `/work/<name>` and kept up to date from here; agents change the copy, and
@@ -693,17 +713,29 @@ The local face runs in a plain browser too, on the dev server alone: open
 `http://127.0.0.1:47147/files/local?daemon=…&token=…&id=…&name=…&path=…[&home=1]` against a running `intentic-files`
 granted that token. With no app behind the page, its commands are answered by a stand-in (`local/devDesktop.ts`,
 Tauri's own IPC mock), for a machine picked by `?machine=fresh|host|setup`: a first launch, one hosting two sandboxes,
-or one mid-setup.
+or one mid-setup; and this PC's own setup by `?pc=` (`ready`, `needsSetup`, `settingUp`, `restart`, `cantRun` and the
+rest the stand-in lists), so every phase of This device's card for it can be looked at in a browser.
 
 ## First launch on Windows (2026-10-09)
 
 At launch the app runs a read-only `ic docker prepare --dry-run` and streams the result to every local window as
-`desktop://onboarding` (`onboarding.rs`, `src/onboarding/pc.ts`). The reader sees it on the Agents view; rows are
-labelled in the desktop app's i18n (`desktop.onboarding.rows.*`), not in Rust.
+`desktop://onboarding` (`onboarding.rs`, `src/onboarding/pc.ts`). The reader sees it on This device, in a card of its
+own ahead of this computer's sandbox (`src/device/pcSetup/PcSetupCard.vue`, its phase from the pure
+`pcSetup/pcCard.ts`): only on Windows, for as long as the PC is not ready, or nobody is signed in, or the first task
+failed to start. It lists only the rows still to do; the met ones are a count beside the machine. Rows are labelled in
+the desktop app's i18n (`desktop.onboarding.rows.*`), falling back to `ic`'s own `title` for an id the catalog does not
+name; a row is ours, the reader's or blocked by `ic`'s `action` (`onboarding.rs` `row_state`). While the card is up,
+This device's no-sandbox card stands back and this computer's sandbox, held for the PC's setup with nothing of its own
+to ask, says only that it waits for it; the rail's tile spins while the setup runs, marks it needing the reader while
+it waits or failed, and shows a quiet mark while it is offered (`src/device/badge.ts`).
+
+> 2026-10-12: this card replaced the local shell's **Agents** view (`/agents`, a rail tile of its own), whose
+> signed-out checklist listed every requirement already met, several under raw ids, and whose first-task step said its
+> own heading twice. The dev stand-in draws every phase with `?pc=` (below).
 
 A few seconds after the first launch, on an unmetered connection, the app prefetches what agents need: `ic engine fetch`
 then `ic image prefetch`, parsing both with the same `intentic-prefetch:` markers (`prefetch.rs`). The reader can pause
-it from Agents; a metered connection waits until unmetered or the reader starts it anyway. The office editor download
+it from This device's card; a metered connection waits until unmetered or the reader starts it anyway. The office editor download
 (`sidecar.rs` `prefetch-office`) waits until that prefetch is `done` or `failed`.
 
 "Set up this PC", the `/device` setup flow, and a folder's "Work on this with an agent" when Docker is not ready all

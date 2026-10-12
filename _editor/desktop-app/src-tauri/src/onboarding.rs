@@ -1,6 +1,6 @@
 //! FIRST RUN (2026-10-09): this PC's read-only check at launch, the download started at first launch, and the PC's own
-//! setup behind the reader's one "Set up this PC", for the local shell's Agents view (the web's localHost.ts
-//! `LocalOnboardingHost`, drawn by local/agents/LocalAgents.vue; the app's half is src/onboarding/pc.ts).
+//! setup behind the reader's one "Set up this PC", for This computer's card (the web's localHost.ts
+//! `LocalOnboardingHost`, drawn by src/device/pcSetup/PcSetupCard.vue; the app's half is src/onboarding/pc.ts).
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -122,6 +122,10 @@ pub struct MachineParts {
 pub struct CheckRow {
     pub id: String,
     pub state: String,
+    /// The row in `ic`'s own words (its `title`): what the page says for an id it has no words of its own for, rather
+    /// than the bare id (a newer `ic`'s requirement, or one the catalog never named).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
     pub admin: bool,
@@ -704,7 +708,7 @@ fn schedule_restart(app: &AppHandle, delay: Duration) -> Result<(), String> {
                 kind: NoticeKind::Asks,
                 title: "Restarting this PC in one minute".into(),
                 body: Some(
-                    "Save your work in other apps. Open Intentic to restart now or choose Not now."
+                    "Save your work in other apps. Open Intentic to restart now or cancel the restart."
                         .into(),
                 ),
                 path: Some(notice::THIS_DEVICE.into()),
@@ -729,6 +733,7 @@ fn run_check(app: &AppHandle) {
                 rows: vec![CheckRow {
                     id: "check".into(),
                     state: "blocked".into(),
+                    title: None,
                     detail: Some(reason),
                     admin: false,
                 }],
@@ -807,24 +812,33 @@ fn parse_prepare_output(text: &str) -> Result<Check, String> {
     })
 }
 
+/// Whose a requirement `ic` reported is, by its `action` (prepare/plan.rs `Action::id`): ours to do with the reader's
+/// consent (`fix`, and `fixElevated` behind Windows' permission prompt, which is still Intentic's own fix), the reader's
+/// (a restart, a sign-out, something only a person can do), or nothing anybody can do on this PC (firmware, a guest
+/// VM's host, an unsupported build). Before 2026-10-12 this read an action called `blocked`, which `ic` never sends, and
+/// took `admin` for the reader's: every row Intentic fixes behind the prompt read "you'll have to do this".
+#[cfg_attr(not(windows), allow(dead_code))]
+fn row_state(value: &Value) -> &'static str {
+    match value["action"].as_str() {
+        Some("firmware" | "hostVm" | "unsupported") => "blocked",
+        Some("fix" | "fixElevated") => "ours",
+        Some("restart" | "user" | "signOut") => "yours",
+        // An action this app has no word for (a newer `ic`): whose `ic` says it is.
+        _ if value["ours"].as_bool().unwrap_or(false) => "ours",
+        _ => "yours",
+    }
+}
+
 #[cfg_attr(not(windows), allow(dead_code))]
 fn row_from_requirement(value: &Value, met: bool) -> CheckRow {
-    let state = if met {
-        "met".into()
-    } else if value["action"].as_str() == Some("blocked") {
-        "blocked".into()
-    } else if value["ours"].as_bool().unwrap_or(false) || value.get("ours").is_none() && !met {
-        if value["admin"].as_bool().unwrap_or(false) {
-            "yours".into()
-        } else {
-            "ours".into()
-        }
-    } else {
-        "yours".into()
-    };
+    let state = if met { "met" } else { row_state(value) };
     CheckRow {
         id: value["id"].as_str().unwrap_or("").to_string(),
-        state,
+        state: state.into(),
+        title: value["title"]
+            .as_str()
+            .filter(|title| !title.is_empty())
+            .map(str::to_string),
         detail: value["detail"]
             .as_str()
             .or_else(|| value["problem"].as_str())
@@ -1913,6 +1927,58 @@ intentic-prepare-summary: {\"state\":\"needsSetup\",\"engine\":\"intentic\",\"re
             .any(|row| row.id == "virtualization" && row.state == "met"));
         assert!(check.rows.iter().any(|row| row.id == "wsl-features"));
         assert_eq!(check.machine.as_ref().unwrap().build, 22631);
+    }
+
+    #[test]
+    fn check_rows_keep_ics_title_for_the_page_to_fall_back_on() {
+        let text = "\
+intentic-requirement: {\"id\":\"wsl-kernel\",\"title\":\"Windows features for Docker\",\"problem\":\"the WSL kernel is missing\",\"remedy\":\"we install it\",\"action\":\"fixElevated\",\"detail\":null,\"admin\":true,\"ours\":true}
+intentic-prepare-summary: {\"state\":\"needsSetup\",\"met\":[{\"id\":\"disk-space\",\"title\":\"Free disk space\",\"detail\":null},{\"id\":\"memory\",\"title\":\"\",\"detail\":null}]}
+";
+        let check = parse_prepare_output(text).expect("parsed");
+        let titles: Vec<(&str, Option<&str>)> = check
+            .rows
+            .iter()
+            .map(|row| (row.id.as_str(), row.title.as_deref()))
+            .collect();
+        assert_eq!(
+            titles,
+            vec![
+                ("wsl-kernel", Some("Windows features for Docker")),
+                ("disk-space", Some("Free disk space")),
+                // An empty title is no title: the page's own words, else the id.
+                ("memory", None),
+            ]
+        );
+        // On the wire as `title`, beside the id the page looks its own words up by.
+        let wire = serde_json::to_value(&check.rows[0]).expect("serialized");
+        assert_eq!(wire["title"], "Windows features for Docker");
+        assert_eq!(wire["state"], "ours");
+    }
+
+    #[test]
+    fn check_rows_are_ours_yours_or_blocked_by_ics_action() {
+        let state_of = |action: &str, ours: bool| {
+            let value = json!({ "id": "x", "action": action, "admin": true, "ours": ours });
+            row_from_requirement(&value, false).state
+        };
+        // Intentic's own fixes, the one behind Windows' permission prompt included.
+        assert_eq!(state_of("fix", true), "ours");
+        assert_eq!(state_of("fixElevated", true), "ours");
+        // The reader's: a restart, a sign-out, what only a person can do.
+        assert_eq!(state_of("restart", false), "yours");
+        assert_eq!(state_of("signOut", false), "yours");
+        assert_eq!(state_of("user", false), "yours");
+        // Nothing anybody can do on this PC.
+        assert_eq!(state_of("firmware", false), "blocked");
+        assert_eq!(state_of("hostVm", false), "blocked");
+        assert_eq!(state_of("unsupported", false), "blocked");
+        // An action this app has no word for: whose `ic` says it is.
+        assert_eq!(state_of("someday", true), "ours");
+        assert_eq!(state_of("someday", false), "yours");
+        // Met is met, whatever the action.
+        let met = json!({ "id": "wsl", "title": "WSL2", "action": "firmware" });
+        assert_eq!(row_from_requirement(&met, true).state, "met");
     }
 
     #[test]
