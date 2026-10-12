@@ -2,6 +2,7 @@
 import { type AccountFix, providerLabel } from "@intentic/sandbox-contract";
 import { Card, SearchBar, SkeletonSnapshot, type Tip, ui, vSkeletonSource } from "@intentic/ui";
 import { computed, onMounted, ref } from "vue";
+import { RouterLink } from "vue-router";
 import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
 import { accountsLoaded, providerAccounts, translatorAccounts } from "../../chat/accounts/providerAccounts";
 import { refreshConnections } from "../../chat/accounts/useChat-accounts";
@@ -139,22 +140,35 @@ const attentionTip = (row: PlanLimitAttention[`rows`][number]): Tip => ({
 // so thirty expired sign-ins can't push the two accounts missing something else off the panel.
 const ATTENTION_SHOWN = 12;
 const attentionExpanded = ref(false);
-const attentionTotal = computed(() => summary.value.attention.reduce((count, group) => count + group.rows.length, 0));
-// Split by who can fix it (the verdict's `fix`): a lost seat is handed back by the organisation, a verification by the
-// account's owner on the provider's page, the rest by signing in again.
-const fixTotal = (fix: Exclude<AccountFix, `wait`>): number => summary.value.attention.find((group) => group.fix === fix)?.rows.length ?? 0;
-const seatTotal = computed(() => fixTotal(`admin`));
-const reconnectTotal = computed(() => fixTotal(`reconnect`));
-const verifyTotal = computed(() => fixTotal(`verify`));
+// One row per fix, read as a sentence a glance long: what is wrong, how many, what to do. Split by who can fix it (the
+// verdict's `fix`): a lost seat is handed back by the organisation, a verification by the account's owner on the
+// provider's page, the rest by signing in again on the Models tab.
+const fixCopy = (fix: AccountFix) => {
+    switch (fix) {
+        case `reconnect`:
+            return { title: t(`sandbox.planLimitsPanel.fixReconnect`), action: t(`sandbox.planLimitsPanel.fixReconnectAction`) };
+        case `verify`:
+            return { title: t(`sandbox.planLimitsPanel.fixVerify`), action: t(`sandbox.planLimitsPanel.fixVerifyAction`) };
+        case `admin`:
+            return { title: t(`sandbox.planLimitsPanel.fixAdmin`), action: t(`sandbox.planLimitsPanel.fixAdminAction`) };
+        case `wait`:
+            return { title: accountFixLabel(fix), action: `` };
+    }
+};
 const attentionShown = computed(() =>
-    summary.value.attention.map((group) => ({
-        fix: group.fix,
-        reason: accountFixLabel(group.fix),
-        // The providers' own words, each once, under the fix's name: thirty expired sign-ins are one line, not thirty.
-        detail: group.reasons.join(` · `),
-        rows: attentionExpanded.value ? group.rows : group.rows.slice(0, ATTENTION_SHOWN),
-        hidden: attentionExpanded.value ? 0 : Math.max(0, group.rows.length - ATTENTION_SHOWN),
-    })),
+    summary.value.attention.map((group) => {
+        const { title, action } = fixCopy(group.fix);
+        return {
+            fix: group.fix,
+            title,
+            action,
+            total: group.rows.length,
+            // The providers' own words, each once, behind the title's hover: a paragraph nobody needs to read twice.
+            detail: group.reasons.join(`\n`),
+            rows: attentionExpanded.value ? group.rows : group.rows.slice(0, ATTENTION_SHOWN),
+            hidden: attentionExpanded.value ? 0 : Math.max(0, group.rows.length - ATTENTION_SHOWN),
+        };
+    }),
 );
 
 // the roster
@@ -252,29 +266,34 @@ const roster = computed(() => {
                         </div>
 
                         <!-- 3. ATTENTION: beside the count it explains, since both are about the whole fleet rather than one provider. -->
-                        <div v-if="summary.attention.length > 0" class="flex flex-col gap-2 border-t border-line-subtle pt-4">
-                            <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                                <span class="text-2xs font-medium text-danger">{{ t(`sandbox.planLimitsPanel.cantServeTurn`, { attentionTotal }) }}</span>
-                                <span v-if="reconnectTotal > 0" class="text-2xs text-subtle">
-                                    {{ t(`sandbox.planLimitsPanel.reconnectOnAgentTab`, { count: reconnectTotal }, reconnectTotal) }}
-                                </span>
-                                <span v-if="verifyTotal > 0" class="text-2xs text-subtle">
-                                    {{ t(`sandbox.planLimitsPanel.verifyEachLink`, { count: verifyTotal }, verifyTotal) }}
-                                </span>
-                                <span v-if="seatTotal > 0" class="text-2xs text-subtle">
-                                    {{ t(`sandbox.planLimitsPanel.seatFromAdmin`, { count: seatTotal }, seatTotal) }}
-                                </span>
-                            </div>
-                            <div v-for="group in attentionShown" :key="group.fix" class="flex flex-col gap-1">
-                                <span class="text-2xs text-muted">{{ group.reason }}</span>
-                                <span class="text-2xs text-subtle">{{ group.detail }}</span>
+                        <!-- Three tiers, nothing else: a heading, one line per fix (what, how many, what to do), the names.
+                             The providers' own paragraphs live in hovers, on the fix's title and on each name. -->
+                        <div v-if="summary.attention.length > 0" class="flex flex-col gap-3 border-t border-line-subtle pt-4">
+                            <span class="flex items-center gap-1.5 text-xs font-semibold text-danger">
+                                <Icon name="exclamation-circle" class="text-2xs" />
+                                {{ t(`sandbox.planLimitsPanel.needsAction`) }}
+                            </span>
+                            <div v-for="group in attentionShown" :key="group.fix" class="flex flex-col gap-1.5">
+                                <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                    <span
+                                        v-tooltip.top="group.detail || undefined"
+                                        class="cursor-help text-xs font-medium text-content underline decoration-line-strong decoration-dotted underline-offset-2"
+                                        >{{ group.title }}</span
+                                    >
+                                    <span class="text-xs tabular-nums text-subtle">{{ group.total }}</span>
+                                    <!-- The action is the door when there is one to open; a sign-in is redone where it was made. -->
+                                    <RouterLink v-if="group.fix === `reconnect`" to="/sandbox/models" class="ml-auto text-2xs text-link hover:underline">{{
+                                        group.action
+                                    }}</RouterLink>
+                                    <span v-else-if="group.action !== ``" class="ml-auto text-2xs text-subtle">{{ group.action }}</span>
+                                </div>
                                 <!-- Wraps as a set, not a column: names are short, unordered, and scanned for the one you recognise. -->
-                                <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
+                                <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
                                     <span
                                         v-for="row in group.rows"
                                         :key="row.id"
                                         v-tooltip.top="attentionTip(row)"
-                                        class="flex min-w-0 items-center gap-1.5 text-2xs"
+                                        class="flex min-w-0 max-w-full items-center gap-1.5 text-2xs"
                                     >
                                         <ProviderLogo :provider="row.provider" class="shrink-0 text-muted" />
                                         <!-- A verification is done by the account's owner on the provider's own page: the name is that door. -->

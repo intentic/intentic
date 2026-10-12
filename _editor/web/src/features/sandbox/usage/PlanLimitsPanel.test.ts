@@ -4,6 +4,12 @@ import "@intentic/testing/dom";
 import type { AccountUsage, OauthAccount, TranslatorAccounts } from "@intentic/sandbox-contract";
 import { type App, createApp, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
+import * as vueRouterOriginal from "vue-router";
+import { RouterLinkStub } from "../../../testing/routerLinkStub";
+
+// SAFETY: the panel's one link passes a string `to`, which the stub renders as the anchor RouterLink would; vue-router's
+// own type describes the whole component API, which no stub can claim to be.
+jest.mock(`vue-router`, () => ({ ...vueRouterOriginal, RouterLink: RouterLinkStub as never }));
 
 // Import chain touches window.matchMedia (@intentic/ui useDevice) and window.env (environment.ts) at import time.
 
@@ -81,7 +87,15 @@ it(`does not print an identity twice for an account already named by its email`,
 const spent: AccountUsage = { measuredAt: Date.now(), windows: [{ kind: `five_hour`, utilization: 96, gates: `all` }] };
 
 const alarm = (el: HTMLElement): HTMLElement | undefined =>
-    [...el.querySelectorAll(`span`)].find((span) => span.textContent?.trim().startsWith(`Can't serve a turn`) === true);
+    [...el.querySelectorAll(`span`)].find((span) => span.textContent?.trim() === `Needs action`);
+
+// One fix's line, read as the reader does: its title, then how many.
+const fixLine = (el: HTMLElement, title: string): string =>
+    [
+        ...([...el.querySelectorAll(`span`)].find((span) => span.textContent?.trim() === title)?.parentElement?.children ?? []),
+    ]
+        .map((child) => child.textContent?.trim())
+        .join(` `);
 
 it(`stays silent about a fleet that is merely spent: the pools reopen on their own`, () => {
     const el = mount([1, 2, 3, 4, 5].map((n) => claudeAccount({ id: `acc-${n}`, label: `account-${n}@example.com`, usage: spent })));
@@ -98,11 +112,11 @@ it(`states the fix once and spends the rest of the section on names`, () => {
         claudeAccount({ id: `acc-3`, label: `third@example.com`, usage: spent }),
     ]);
 
-    expect(alarm(el)?.textContent?.trim()).toBe(`Can't serve a turn · 2`);
-    expect(el.textContent?.match(/reconnect them on the Agent tab/g)?.length).toBe(1);
-    // The condition itself is named once, above the accounts it holds.
-    const section = alarm(el)?.closest(`div.flex.flex-col`);
-    expect(section?.textContent).toContain(`sign-in expired`);
+    expect(alarm(el)?.textContent?.trim()).toBe(`Needs action`);
+    // The condition, its count and its fix, once, above the accounts it holds.
+    expect(fixLine(el, `Signed out`)).toBe(`Signed out 2 Reconnect`);
+    expect(el.textContent?.match(/Reconnect/g)?.length).toBe(1);
+    const section = alarm(el)?.parentElement;
     expect(section?.textContent).toContain(`first@example.com`);
     // The spent (not expired) account is excluded from the named list.
     expect(section?.textContent).not.toContain(`third@example.com`);
@@ -119,8 +133,9 @@ it(`names a routed credential benched for good, and keeps it out of the capacity
         ],
     });
 
-    expect(alarm(el)?.textContent?.trim()).toBe(`Can't serve a turn · 1`);
-    expect(alarm(el)?.closest(`div.flex.flex-col`)?.textContent).toContain(`no Antigravity project on this Google account`);
+    expect(alarm(el)?.textContent?.trim()).toBe(`Needs action`);
+    // The provider's own sentence is a hover, not a paragraph: the line itself stays a few words long.
+    expect(alarm(el)?.parentElement?.textContent).not.toContain(`no Antigravity project on this Google account`);
     // Two accounts are a question about room; the third is not one of them, and says so in the legend instead.
     expect(el.textContent).toContain(`0 of 2 accounts have room`);
     expect(el.textContent).toContain(`can't serve`);
@@ -135,7 +150,7 @@ it(`caps the names rather than growing a column again, and says how many it held
         }),
     );
 
-    expect(alarm(el)?.textContent?.trim()).toBe(`Can't serve a turn · 15`);
+    expect(fixLine(el, `Signed out`)).toBe(`Signed out 15 Reconnect`);
     const more = [...el.querySelectorAll(`button`)].find((button) => /\+3 more/.test(button.textContent ?? ``));
     expect(el.textContent).not.toContain(`account-14@example.com`);
 
