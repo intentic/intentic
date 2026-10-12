@@ -8,6 +8,7 @@ import { type RouteLocationRaw, RouterLink } from "vue-router";
 import type { StandingChip, TileRim } from "../../agents/fleet/agentStatus";
 import { sandboxNow } from "../../agents/fleet/sandboxClock";
 import { markSegments } from "../../../lib/markSegments";
+import { useSelectionBlade } from "../../agents/board/cards/selectionBlade";
 import IdentityTile from "../../capabilities/connect/IdentityTile.vue";
 import MatchLine from "../../../components/MatchLine.vue";
 import { useT } from "@intentic/ui/i18n";
@@ -46,7 +47,7 @@ const props = defineProps<{
     dashed?: boolean;
     // For a destination rather than an open session (e.g. off-list search hits): drops the ink a step.
     quiet?: boolean;
-    // True while a card is only being previewed (Conversation.peek); italic, matching FileTabs' preview tabs.
+    // True while a card is only being previewed (Conversation.peek); said to a screen reader, the keep press says it on screen.
     peek?: boolean;
     // Why this row matched the filter: the hit line and its speaker (rendered by MatchLine).
     snippet?: MatchSnippet;
@@ -59,6 +60,8 @@ const props = defineProps<{
 // On the sandbox's clock, which stamped `since` (sandboxClock.ts): a browser clock running fast drew a fresh turn as minutes old.
 const tick = useNow(() => props.live?.since !== undefined);
 const now = computed(() => sandboxNow(tick.value));
+
+const blade = useSelectionBlade(() => props.selected);
 
 const titleRuns = computed(() => markSegments(props.title, props.needle ?? ``, props.matchCase === true));
 // Only the "Updated" chip earns a hover: "New" already says unopened, while this hides when you last looked.
@@ -79,6 +82,7 @@ const chipHint = computed((): Tip | undefined =>
             { 'session-card-on': selected, 'session-card-attention': attention, 'border-dashed': dashed },
             $slots[`aside`] ? `items-stretch gap-2.5` : `flex-col gap-1.5`,
         ]"
+        :style="blade"
     >
         <!-- Aside slot for a mark beside the whole card; rows without it keep the default column layout. -->
         <slot name="aside" />
@@ -114,7 +118,7 @@ const chipHint = computed((): Tip | undefined =>
                 <!-- Clamped to two lines; most titles fit whole at this width. -->
                 <span
                     class="line-clamp-2 min-w-0 flex-1 text-xs font-semibold leading-4"
-                    :class="[quiet ? 'text-muted' : 'text-content', { italic: peek }]"
+                    :class="quiet ? 'text-muted' : 'text-content'"
                 >
                     <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{
                         run.text

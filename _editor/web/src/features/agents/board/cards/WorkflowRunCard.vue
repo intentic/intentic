@@ -5,6 +5,7 @@ import { computed } from "vue";
 import { laneOfRun, runningTitles, spentOn } from "../../fleet/useWorkflowRuns";
 import { liveSessions } from "../../../chat/run/chatRun";
 import { useT } from "@intentic/ui/i18n";
+import { useSelectionBlade } from "./selectionBlade";
 
 // A workflow run's row on the board, an agent card's sibling, not one: same shell (radius, border, lane bar, hover)
 // since it shares the column, but no provider/branch/worktree/transcript, so Land/Archive/diff don't apply.
@@ -40,6 +41,7 @@ const bigLane = computed(() => dense !== true && lane.value !== `finished`);
 const { coarse } = useDevice();
 const HOVER_REVEAL = `opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100`;
 const hoverAction = computed(() => (coarse.value ? `` : HOVER_REVEAL));
+const blade = useSelectionBlade(() => selected);
 const graphAction = computed(() => (coarse.value || selected ? `` : HOVER_REVEAL));
 
 const TONE: Record<WorkflowRun["state"], string> = {
@@ -73,6 +75,7 @@ const TONE: Record<WorkflowRun["state"], string> = {
             // that opens the run's sessions is not one of them.
             stopping ? 'opacity-60' : '',
         ]"
+        :style="blade"
         @click="emit(`open`)"
         @keydown.enter.self.prevent="emit(`open`)"
         @keydown.space.self.prevent="emit(`open`)"

@@ -33,8 +33,7 @@ const sheetOpen = ref(false);
             @click="sheetOpen = true"
         >
             <Icon v-if="active" v-bind="statusIcon(active.status.value)" />
-            <!-- Italic while this chat is only being looked at (Conversation.peek): the phone's tap on a fleet card is a look like the desktop's click. -->
-            <span class="min-w-0 flex-1 truncate text-sm font-medium text-content" :class="{ italic: active?.peek.value }">{{
+            <span class="min-w-0 flex-1 truncate text-sm font-medium text-content">{{
                 active?.title.value ?? (active?.isolated.value ? t(`chat.words.newAgent`) : t(`chat.words.newChat`))
             }}</span>
             <PresenceAvatars

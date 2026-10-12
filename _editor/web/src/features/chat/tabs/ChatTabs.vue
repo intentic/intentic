@@ -473,10 +473,9 @@ const openHistory = (event: Event): void => {
                 <span v-if="isArchived(active)" class="flex shrink-0 items-center" :aria-label="t(`shared.archived`)">
                     <Icon name="box" class="text-2xs text-subtle" />
                 </span>
-                <!-- Italic while this chat is only being looked at (Conversation.peek), the same mark the rail cards and the workspace preview tab wear. -->
-                <span
+                                <span
                     class="min-w-0 flex-1 truncate text-left font-medium"
-                    :class="[statusTabClass(active.status.value), { italic: active.peek.value }]"
+                    :class="statusTabClass(active.status.value)"
                     v-tooltip.bottom.overflow="tabLabel(active)"
                     >{{ tabLabel(active) }}</span
                 >

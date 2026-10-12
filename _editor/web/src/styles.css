@@ -172,14 +172,15 @@
    moves the fill under it and never replaces its selected appearance. */
     .session-card.session-card-on {
         color: var(--color-content);
-        --card-tint: color-mix(in oklab, var(--color-selection-edge) 5%, transparent);
+        --card-tint: color-mix(in oklab, var(--color-selection-edge) 7%, transparent);
         --card-accent: inset 1px 0 0 0 var(--color-selection-edge);
         background-image: linear-gradient(var(--card-tint), var(--card-tint));
     }
-/* THE BLADE: a slanted band of the selection's hue sweeps across the card in 1.5s, then rests 6.5s, so the open session
-   catches the eye without the board ever standing still around a card that never does. Drawn like the skeleton's sheen
-   (utilities.css says why): the band is SMIL in the SVG the mask is drawn from, not a CSS animation, because selection
-   follows the route and a CSS animation started on every navigation rebuilds an open DevTools Styles editor. */
+/* THE BLADE: a slanted band of the selection's hue sweeps across the card the moment it is selected, then every 8s, so the
+   open session catches the eye where the click put it. Drawn like the skeleton's sheen (utilities.css says why): the band
+   is SMIL in the SVG the mask is drawn from, not a CSS animation, because selection follows the route and a CSS animation
+   started on every navigation rebuilds an open DevTools Styles editor. The card hands the mask in through its own style
+   (features/agents/board/cards/selectionBlade.ts, which says why each selection needs an image of its own); without one, nothing shows. */
     .session-card.session-card-on::before {
         content: "";
         position: absolute;
@@ -188,12 +189,9 @@
         border-radius: inherit;
         pointer-events: none;
         background-color: color-mix(in oklab, var(--color-selection-edge) 22%, transparent);
-        mask-image: var(--session-card-blade);
+        mask-image: var(--session-card-blade, linear-gradient(#0000, #0000));
         mask-size: 100% 100%;
         mask-repeat: no-repeat;
-    }
-    :root {
-        --session-card-blade: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1' preserveAspectRatio='none'%3E%3ClinearGradient id='b' x1='-.9' x2='-.3' y2='.25'%3E%3Cstop offset='0' stop-opacity='0'/%3E%3Cstop offset='.5'/%3E%3Cstop offset='1' stop-opacity='0'/%3E%3Canimate attributeName='x1' values='-.9;1.5;1.5' keyTimes='0;.19;1' calcMode='spline' keySplines='.45 0 .25 1;0 0 1 1' dur='8s' repeatCount='indefinite'/%3E%3Canimate attributeName='x2' values='-.3;2.1;2.1' keyTimes='0;.19;1' calcMode='spline' keySplines='.45 0 .25 1;0 0 1 1' dur='8s' repeatCount='indefinite'/%3E%3C/linearGradient%3E%3Crect width='1' height='1' fill='url(%23b)'/%3E%3C/svg%3E");
     }
 /* Reduced motion: no blade; the wash and the edge still say which card is open. */
     :root[data-motion="reduced"] .session-card.session-card-on::before {

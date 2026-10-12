@@ -78,6 +78,7 @@ import ChildCount from "./ChildCount.vue";
 import { boxImageOf, boxNameOf } from "../../fleet/fleetScope";
 import { accountBadge } from "../session/accountChip";
 import { previewOf } from "../../../chat/panel/useChat-strip";
+import { useSelectionBlade } from "./selectionBlade";
 import { providerAccounts } from "../../../chat/accounts/providerAccounts";
 import { markSegments } from "../../../../lib/markSegments";
 import { settingsChip, useSettingsRefusal } from "../../review/settingsRefusal";
@@ -104,7 +105,7 @@ const props = defineProps<{
     pending?: PendingAction;
     // This agent's chat is on screen, one weight regardless of how many columns share it.
     selected?: boolean;
-    // Chat is open only as a temporary look (Conversation.peek); italic title, with a keep press to make it stick.
+    // Chat is open only as a temporary look (Conversation.peek); the keep press makes it stick.
     peek?: boolean;
     // Evidence for why the board's filter matched; absent when the hit was the title, marked there instead.
     match?: MatchSnippet;
@@ -140,6 +141,9 @@ const emit = defineEmits<{
     keep: [];
     grab: [event: PointerEvent, card: HTMLElement];
 }>();
+
+// A fresh blade each time this card is selected, so its sweep starts on the click (selectionBlade.ts).
+const blade = useSelectionBlade(() => props.selected);
 
 const { mobile } = useDevice();
 const { user } = useAuth();
@@ -628,6 +632,7 @@ const grab = (event: PointerEvent): void => {
             idMatch?.exact === true ? 'session-card-found' : 'outline-none',
             dragging ? 'opacity-40' : '',
         ]"
+        :style="blade"
         @pointerdown="grab"
         @dragstart.prevent
         @click="openCard"
@@ -660,12 +665,12 @@ const grab = (event: PointerEvent): void => {
                 <!-- A LIVE CARD'S TITLE WRAPS, a receipt's clips. -->
                 <span
                     class="min-w-0 flex-1 font-semibold text-content"
-                    :class="[live ? 'line-clamp-2 break-words text-sm leading-snug' : 'truncate text-xs', peek ? 'italic' : '']"
+                    :class="live ? 'line-clamp-2 break-words text-sm leading-snug' : 'truncate text-xs'"
                 >
                     <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{
                         run.text
                     }}</span>
-                    <!-- Italic is invisible to a screen reader, so the peek state rides along as text, not an aria-label with no role. -->
+                    <!-- The peek state rides along as text for a screen reader, not an aria-label with no role. -->
                     <span v-if="peek" class="sr-only">{{ t(`agents.agentCard.temporary`) }}</span>
                 </span>
                 <!-- The card's own presses (cardActions), revealed on hover where there is a pointer and folded behind one ⋯ on a phone. -->
