@@ -31,6 +31,7 @@ const stamped = (): z.infer<typeof StampFile> => {
     try {
         return StampFile.parse(JSON.parse(readFileSync(join(packageRoot(import.meta.url), BUILD_INFO_FILE), "utf8")));
     } catch {
+        // allow(silent-catch): only an image build writes the stamp; a checkout without one, or a stamp it cannot read, is an unstamped build.
         return {};
     }
 };

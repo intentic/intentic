@@ -10,7 +10,7 @@ import type { OrpcContext } from "../app-env.js";
 import { AttemptRefused } from "../conversations/fix/fix-attempts.js";
 import { ciFailureEvidence, runOf, startCiFix } from "./ci-fix.js";
 import { fixPressed, mainFailures, streakFixerFor } from "./main-fixer.js";
-import { createCiFailureLog } from "./ci-failure-log.js";
+import { createCiFailureLog } from "./logs/ci-failure-log.js";
 import { ciClientFor, type FetchFn } from "./providers.js";
 import { ciProjects, type CiProject } from "./projects.js";
 

@@ -31,7 +31,7 @@ jest.mock(`./analytics`, () => ({ replaySessionId: () => liveReplay }));
 
 let currentTarget: typeof target | undefined = target;
 const { postClientDiagnostics } = await import("../client/sandbox/clientReport");
-const { resetPerf, trackPerf } = await import("./perf");
+const { resetPerf, trackPerf } = await import("./perf/perf");
 
 interface Posted {
     events: { event: string; level: string; message: string; requestId?: string; fields?: Record<string, unknown> }[];

@@ -288,14 +288,14 @@ flowchart LR
   the subagents it spawned (`agent/subagents/family-cancel.ts`); a paused child's end is kept in
   `/history/paused-children.json` so a restart still tells its parent (2026-10-05).
 - A restart storm resumes nothing (2026-10-05): each boot is recorded in `/history/boot-history.json`
-  (`system/boot/boot-history.ts`), and the third within 30 minutes honours neither a resume ask (which `ic` now writes
+  (`system/boot/restarts/boot-history.ts`), and the third within 30 minutes honours neither a resume ask (which `ic` now writes
   before every restart) nor autoResumeOnRestart, says so in the log and on the settings-problems card, and leaves the
   cut turns interrupted. A parked turn whose cards cannot come back is given up after three boots.
   `/run/intentic/work.json` adds `bootedAt`, `previousBootAt`, `bootsInWindow`, `restartStorm` and `lastRestartAt`
   beside `liveTurns` and `at`, so the host's keeper sees the storm too.
 - Every restart says why (2026-10-11). Whoever is about to stop or restart the sandbox (the owner's Devices card,
   update-when-quiet, a rebuild, idle-stop, `ic`, the device keeper, the desktop app) first writes
-  `/history/logs/restart-intent.json` (`{at, by, host?, side?, action, reason, checks?}`, `system/boot/restart-record.ts`).
+  `/history/logs/restart-intent.json` (`{at, by, host?, side?, action, reason, checks?}`, `system/boot/restarts/restart-record.ts`).
   The stop logs its signal, that initiator, uptime and build, and stamps them on `daemon-exit.json`. The next boot logs
   one `daemon <build> starting; previous run ended: …` line (stopped, exited, crashed, killed or unknown, whether the
   container restarted and whether `/tmp` was emptied), appends it to `/history/logs/restarts.jsonl` (newest 500) and

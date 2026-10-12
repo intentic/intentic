@@ -2,10 +2,10 @@ import { join } from "node:path";
 import type { ManifestProblem } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { z } from "zod";
-import { opt } from "../../opt.js";
-import { recordStandingProblem } from "../../store/manifest/manifest-problems.js";
-import { defineDocument } from "../../store/evolution/documents.js";
-import { openDocument } from "../../store/open-document.js";
+import { opt } from "../../../opt.js";
+import { recordStandingProblem } from "../../../store/manifest/manifest-problems.js";
+import { defineDocument } from "../../../store/evolution/documents.js";
+import { openDocument } from "../../../store/open-document.js";
 
 // WHEN THIS SANDBOX'S DAEMON BOOTED, FOR TELLING A RESTART STORM FROM A RESTART (2026-10-05). Every boot that owns the
 // history root writes its time here before anything else on it runs, a boot that fails before the gate included. A

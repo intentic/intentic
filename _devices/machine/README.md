@@ -755,7 +755,7 @@ record left open is told apart by the machine's boot time against the last-alive
 
 `machine.log` is checked every ten minutes and, at 8 MB, copied to `machine.log.1` and cut in place
 ([`log-roll.ts`](src/resident/log-roll.ts)): the supervisor holds it open for appending, so a rename would leave its
-lines going to the `.1` (or fail on Windows). The `device_logs` tool ([`tools/logs.ts`](src/device/tools/logs.ts))
+lines going to the `.1` (or fail on Windows). The `device_logs` tool ([`tools/logs/logs.ts`](src/device/tools/logs/logs.ts))
 lists `machine.log`(`.1`), `machine-update.log`, `audit.jsonl`(`.1`) and ic's per-run logs (`$INTENTIC_LOG_DIR`, else
 `~/.intentic/logs`, newest first), and tails one by name, never by path: the last MB, with `grep`, `lines`, and for
 the audit `tool` and `failedOnly`. It is gated like `sandbox_logs`. `describe` names the `ic` that answers (path,

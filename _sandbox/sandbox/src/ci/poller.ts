@@ -3,7 +3,7 @@ import { CI_POLL_INTERVAL_MS, isPipelineInFlight } from "@intentic/sandbox-contr
 import type { Services } from "../composition.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { ciResultOf, dispatchCiRun, rememberCiRun } from "./events.js";
-import { createCiFailureLog, vendorStatusOf } from "./ci-failure-log.js";
+import { createCiFailureLog, vendorStatusOf } from "./logs/ci-failure-log.js";
 import { runInFlight } from "./main-fixer.js";
 import { ciClientFor, type FetchFn } from "./providers.js";
 import { ciProjects } from "./projects.js";

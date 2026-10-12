@@ -152,7 +152,7 @@ it("refuses to save the settings files while other work is staged, and lands not
     mocked(landAgent).mockClear();
     stub.staged.push(`${STATE_DIR}/config/personas.json`, `src/app.ts`);
 
-    await changes.land(`check`, undefined, false, [`.intentic/config/personas.json`]);
+    await changes.land(`check`, undefined, false, [`${STATE_DIR}/config/personas.json`]);
     expect(changes.actionError.value?.detail).toContain(`1 other change staged`);
     expect(stub.commits).toEqual([]);
     expect(mocked(landAgent)).not.toHaveBeenCalled();

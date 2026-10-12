@@ -4,7 +4,7 @@ import { onErrorCaptured, shallowRef } from "vue";
 import { messageOr } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { describeError, type ReportFields, reportClient } from "../app/clientDiagnostics";
-import { extensionStatuses } from "../extension-host/loader";
+import { extensionStatuses } from "../features/extensions/extensionStatuses";
 import { registeredViews } from "../workbench/views/registry";
 
 const t = useT();

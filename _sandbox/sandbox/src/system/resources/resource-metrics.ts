@@ -6,7 +6,7 @@ import { getHeapSpaceStatistics, getHeapStatistics } from "node:v8";
 import { PROCESS_ROLES, type ProcessRole } from "@intentic/sandbox-contract";
 import { gitRunCallers, gitRunCounts, gitSpawnStats } from "@intentic/base/git";
 import type { Logger } from "pino";
-import { logsRoot } from "../../logs/log-files.js";
+import { logsRoot } from "../../seams/logs-root.js";
 import { flatKeyed, readCgroup, readText } from "./cgroup.js";
 import { scanProcesses, type ScannedProcess } from "./process-scan.js";
 import { queueSnapshot } from "./queue-slots.js";

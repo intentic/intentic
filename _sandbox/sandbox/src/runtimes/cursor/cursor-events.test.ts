@@ -1,7 +1,8 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { InteractionUpdate } from "@cursor/sdk";
 import { createCursorEventMapper } from "./cursor-events.js";
 
-const CWD = "/work";
+const CWD = WORKSPACE_ROOT;
 
 // Type-only guard: zod is overridden to 4 elsewhere but @cursor/sdk needs zod ^3, so pnpm-workspace.yaml exempts it; if
 // that exemption breaks, this assignment fails to compile instead of every SDK type silently becoming unknown.
@@ -102,7 +103,7 @@ test("a successful call keeps what it returned, and a command its exit code", ()
             status: "success",
             value: {
                 workspaceResults: {
-                    "/work": { type: "content", output: { matches: [{ file: "api/a.ts", lineNumber: 3, line: "from(users)" }], totalMatches: 1 } },
+                    [CWD]: { type: "content", output: { matches: [{ file: "api/a.ts", lineNumber: 3, line: "from(users)" }], totalMatches: 1 } },
                     "/work/b": { type: "files", output: { files: ["b.ts"], count: 1 } },
                 },
             },
@@ -114,7 +115,7 @@ test("a successful call keeps what it returned, and a command its exit code", ()
     const ls = {
         type: "ls",
         args: { path: "/work/src" },
-        result: { status: "success", value: { directoryTreeRoot: { absPath: "/work/src", childrenFiles: [{ name: "a.ts" }], childrenDirs: [{ absPath: "/work/src/lib", childrenFiles: [], childrenDirs: [] }] } } },
+        result: { status: "success", value: { directoryTreeRoot: { absPath: `${CWD}/src`, childrenFiles: [{ name: "a.ts" }], childrenDirs: [{ absPath: `${CWD}/src/lib`, childrenFiles: [], childrenDirs: [] }] } } },
     };
     expect(finished("l1", ls)).toEqual([{ kind: "tool_call_update", id: "l1", status: "completed", content: [{ type: "text", text: "/work/src/\n/work/src/a.ts\n/work/src/lib/" }] }]);
 });
@@ -225,7 +226,7 @@ test("a task's subagent sits on its card, its nested steps under it, its last wo
                 toolCall: {
                     type: "grep",
                     args: { pattern: "from(users)" },
-                    result: { status: "success", value: { workspaceResults: { "/work": { type: "files", output: { files: ["api/a.ts"], count: 1 } } } } },
+                    result: { status: "success", value: { workspaceResults: { [CWD]: { type: "files", output: { files: ["api/a.ts"], count: 1 } } } } },
                 },
             }),
         ),

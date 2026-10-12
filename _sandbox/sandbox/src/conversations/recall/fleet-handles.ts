@@ -1,5 +1,6 @@
 import { open, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { z } from "zod";
 import type { Services } from "../../composition.js";
 import { statePath } from "../../state-paths.js";
@@ -12,7 +13,7 @@ import { type FleetRecallDeps, type HandleResolution, present, resolveHandle } f
 // what it looks for, so an ordinary miss costs nothing. Agents met these ids in logs, terminal names and tool output
 // and got "No conversation answers to" for every one of them.
 
-export type FleetHandleDeps = FleetRecallDeps & Pick<Services, "activity" | "config">;
+export type FleetHandleDeps = FleetRecallDeps & Pick<Services, "activity" | "config" | "logger">;
 
 // A session id as the shell meets it: whole, or its first eight hex digits.
 const SESSION = /^[0-9a-f]{8}(?:-[0-9a-f-]+)?$/u;
@@ -34,7 +35,10 @@ const found = (deps: FleetRecallDeps, id: string, via: string): HandleResolution
 // Conversations whose turns ran in a session (or a turn) the activity log recorded: every turn writes its session and
 // conversation there, so a session the conversation has since retired still names it.
 const fromActivity = async (deps: FleetHandleDeps, wanted: string): Promise<HandleResolution | undefined> => {
-    const events = await deps.activity.list({ limit: ACTIVITY_SCAN }).catch(() => []);
+    const events = await deps.activity.list({ limit: ACTIVITY_SCAN }).catch((error) => {
+        deps.logger.warn({ err: error }, "fleet: the activity log could not be read for a handle lookup");
+        return [];
+    });
     const bySession = new Set<string>();
     const byTurn = new Set<string>();
     for (const event of events) {
@@ -62,7 +66,10 @@ const fromActivity = async (deps: FleetHandleDeps, wanted: string): Promise<Hand
 
 // A run id, through the `run <id>` line the phrase index keeps for every run of a record.
 const fromRun = async (deps: FleetHandleDeps, wanted: string): Promise<HandleResolution | undefined> => {
-    const hits = await deps.saidIndex.search(`run ${wanted}`, "conversation", true, true).catch(() => new Map<string, never>());
+    const hits = await deps.saidIndex.search(`run ${wanted}`, "conversation", true, true).catch((error) => {
+        deps.logger.warn({ err: error }, "fleet: the phrase index could not be searched for a run id");
+        return new Map<string, never>();
+    });
     const [id] = [...hits.keys()];
     return id === undefined ? undefined : found(deps, id, `run ${wanted} is one of its runs`);
 };
@@ -84,6 +91,7 @@ const metaOf = (raw: string): SubagentMeta => {
     try {
         parsed = JSON.parse(raw);
     } catch {
+        // allow(silent-catch): the runtime's meta file is its own to write; one that is not JSON names nothing, and the lookup goes on without its words.
         return {};
     }
     const meta = SubagentMetaSchema.safeParse(parsed);
@@ -93,9 +101,9 @@ const metaOf = (raw: string): SubagentMeta => {
 // Where the runtime filed this subagent: `<project>/<parent session>/subagents/agent-<id>.meta.json`.
 const subagentFile = async (projects: string, agentId: string): Promise<{ project: string; session: string; meta: SubagentMeta } | undefined> => {
     const file = `agent-${agentId}.meta.json`;
-    for (const project of await readdir(projects).catch(() => [])) {
-        for (const session of await readdir(join(projects, project)).catch(() => [])) {
-            const raw = await readFile(join(projects, project, session, "subagents", file), "utf8").catch(() => undefined);
+    for (const project of (await readdir(projects).catch(undefinedIfMissing)) ?? []) {
+        for (const session of (await readdir(join(projects, project)).catch(undefinedIfMissing)) ?? []) {
+            const raw = await readFile(join(projects, project, session, "subagents", file), "utf8").catch(undefinedIfMissing);
             if (raw !== undefined) {
                 return { project, session, meta: metaOf(raw) };
             }
@@ -106,7 +114,7 @@ const subagentFile = async (projects: string, agentId: string): Promise<{ projec
 
 // The `agent/<id>` branch a session ran on, which the runtime stamps on every entry of its file.
 const branchOfSession = async (file: string): Promise<string | undefined> => {
-    const handle = await open(file, "r").catch(() => undefined);
+    const handle = await open(file, "r").catch(undefinedIfMissing);
     if (handle === undefined) {
         return undefined;
     }

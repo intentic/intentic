@@ -4,7 +4,7 @@ import type { TurnArmPlan, TurnContext, TurnRefusal } from "../../providers/adap
 import type { TurnBriefing } from "../../prompt/turn-briefing.js";
 import type { TurnTrimState } from "../../prompt/window/context-trim.js";
 import { armSupervisor } from "../../subagents/children.js";
-import { dependencyDirForCommand } from "../../tools/agent-deps.js";
+import { dependencyDirForCommand } from "../../tools/notices/agent-deps.js";
 import type { TurnBase } from "../../providers/agent-request.js";
 import { decideTurn, type TurnDecision } from "../decide/turn-decision.js";
 import { recordTurnStanding, type TurnStanding } from "../../../conversations/actor/turn-standing.js";

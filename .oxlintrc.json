@@ -423,8 +423,8 @@
                 "_shared/connector-runtime/**",
                 "_devices/acp-bridge/**",
                 "_sandbox/sandbox/src/extensions/backend/**",
-                "_editor/web/src/app/perf.ts",
-                "_editor/web/src/app/renderTrace.ts",
+                "_editor/web/src/app/perf/perf.ts",
+                "_editor/web/src/app/perf/renderTrace.ts",
                 "_editor/web/src/features/chat/run/focusTrace.ts"
             ],
             "rules": {

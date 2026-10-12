@@ -2,7 +2,7 @@ import type { ClientDiagnostic, ClientPage } from "@intentic/sandbox-contract";
 import { replaySessionId } from "./analytics";
 import { buildId } from "./buildEpoch";
 import { desktopApp } from "./environments/desktop";
-import { lastFailedRequest } from "./perf";
+import { lastFailedRequest } from "./perf/perf";
 import { t } from "@intentic/ui/i18n";
 import { z } from "zod";
 

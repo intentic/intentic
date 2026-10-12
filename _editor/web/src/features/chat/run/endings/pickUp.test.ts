@@ -1,3 +1,4 @@
+import { t } from "@intentic/ui/i18n";
 import { formatClock, formatWeekdayTime } from "@intentic/ui/format";
 import {
     atReopenPhrase,
@@ -164,7 +165,10 @@ describe(`pickUpStatus`, () => {
 });
 
 describe(`atReopenPhrase`, () => {
-    const KEYS = { at: `chat.chatContinueStrip.continueAt`, in: `chat.chatContinueStrip.continueIn` };
+    const KEYS = {
+        at: (when: string) => t(`chat.chatContinueStrip.continueAt`, { when }),
+        in: (when: string) => t(`chat.chatContinueStrip.continueIn`, { when }),
+    };
     // The press says the instant the way the composer's time-labelled button does: a wait while close, a clock past that.
     it(`says a close reopen as a wait and a far one as the clock`, () => {
         expect(atReopenPhrase(KEYS, NOW + 40 * 60_000, NOW)).toBe(`Continue in 40m`);

@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { pino } from "pino";
 
 // The engine itself is a child process with ML models; what is under test is only what the daemon says of its progress.
@@ -15,7 +16,7 @@ const { createCodeSearchEngine } = await import("./code-search.js");
 const started = () => {
     const lines: { level: number; message: string; remaining?: number }[] = [];
     const logger = pino({ level: "debug", messageKey: "message" }, { write: (line: string) => lines.push(JSON.parse(line)) });
-    createCodeSearchEngine({ iqModelDir: "", iqRgPath: "" }, "/work", logger);
+    createCodeSearchEngine({ iqModelDir: "", iqRgPath: "" }, WORKSPACE_ROOT, logger);
     lines.length = 0;
     return { lines, progress: (remaining: number) => handed.onIndexProgress?.(remaining) };
 };

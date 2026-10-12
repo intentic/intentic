@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { IN_MEMORY } from "@intentic/base/sqlite";
 import type { TranscriptRow } from "@intentic/sandbox-contract";
 import { openSearchIndex } from "./search-index.js";
@@ -196,7 +197,7 @@ test("deeds are found only when asked for, each saying what kind of line it was"
                     category: "other",
                     status: "completed",
                     subagent: { kind: "subagent", status: "completed", description: "Map the land queue" },
-                    children: [{ id: "t4", name: "Read", category: "read", status: "completed", target: "/work/queue-run.ts" }],
+                    children: [{ id: "t4", name: "Read", category: "read", status: "completed", target: `${WORKSPACE_ROOT}/queue-run.ts` }],
                 },
             ],
             question: {

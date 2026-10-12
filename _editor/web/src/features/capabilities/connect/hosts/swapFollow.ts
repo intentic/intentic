@@ -76,7 +76,7 @@ export const followSwap = (options: SwapFollowOptions): SwapFollow => {
         settle = resolve;
         giveUp = reject;
     });
-    // A deadline can run out before anybody awaits this (while the stream still races it); that is no unhandled refusal.
+    // allow(silent-catch): a deadline can run out before anybody awaits this (while the stream still races it); whoever awaits it hears the refusal, and that is no unhandled one.
     landed.catch(() => undefined);
 
     const set = (patch: Partial<SwapProgress>): void => {
@@ -166,7 +166,8 @@ export const followSwap = (options: SwapFollowOptions): SwapFollow => {
 
 /** Test seam: a follow outlives its view on purpose, and one left watching would follow one test into the next. */
 export const forgetSwapFollows = (): void => {
-    for (const stop of [...live]) {
+    // A Set iterates on past the entry each stop deletes, so no copy is needed.
+    for (const stop of live) {
         stop();
     }
 };

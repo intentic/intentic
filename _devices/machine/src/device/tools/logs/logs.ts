@@ -1,12 +1,13 @@
 import { open, readdir, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import { errorMessage } from "@intentic/base/errors";
 import { homeDir } from "@intentic/local-agent";
 import type { DeviceScopes } from "@intentic/sandbox-contract";
 import { z } from "zod";
-import { agentLogPath, baseDir, runLogPath } from "../../config.js";
-import { auditPath } from "../config.js";
-import { assertScope } from "../policy.js";
+import { agentLogPath, baseDir, runLogPath } from "../../../config.js";
+import { auditPath } from "../../config.js";
+import { assertScope } from "../../policy.js";
 
 /* THIS DEVICE'S OWN RECORDS, READ FROM THE SANDBOX (2026-10-11). The agent keeps its log (machine.log, rolled to
    machine.log.1), its update log, the audit of every call, and ic leaves one log per connect, recreate or update under
@@ -37,7 +38,7 @@ export interface DeviceLog {
 // Where ic writes its logs, as ic decides it (ic: logfile.rs, log_dir): INTENTIC_LOG_DIR, else ~/.intentic/logs.
 export const icLogDir = (env: NodeJS.ProcessEnv = process.env, home: string = homeDir()): string => {
     const set = env["INTENTIC_LOG_DIR"];
-    return set !== undefined && set !== "" ? set : join(home, ".intentic", "logs");
+    return set !== undefined && set !== "" ? set : join(home, STATE_DIR, "logs");
 };
 
 const KIND_PURPOSE = {

@@ -17,7 +17,7 @@ import { z } from "zod";
 import { audit } from "./audit.js";
 import { assertScope, ScopeError } from "./policy.js";
 import { describeText } from "./tools/describe.js";
-import { DEFAULT_LOG_LINES as DEFAULT_DEVICE_LOG_LINES, deviceLogs, MAX_LOG_LINES as MAX_DEVICE_LOG_LINES } from "./tools/logs.js";
+import { DEFAULT_LOG_LINES as DEFAULT_DEVICE_LOG_LINES, deviceLogs, MAX_LOG_LINES as MAX_DEVICE_LOG_LINES } from "./tools/logs/logs.js";
 import { editTextFile, listDirectory, readTextFile, trashFile, writeTextFile } from "./tools/files.js";
 import { focusWindow, listWindows, openTarget, readClipboard, writeClipboard } from "./tools/apps.js";
 import { clickElement, fillElement, listTabs, openPage, pressKey, readPage, selectTab, snapshotPage } from "./tools/browser.js";

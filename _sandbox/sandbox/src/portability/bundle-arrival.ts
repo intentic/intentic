@@ -17,7 +17,7 @@ import { isUnder, realPathOf, resolveWithin } from "../workspace/files/workspace
 import { writeStreamCounted } from "../workspace/files/workspace-files-upload.js";
 import { setWorkspaceMtime } from "../workspace/files/workspace-files.js";
 import { ArrivalFormatError } from "../arrival-error.js";
-import { drain, extractAll, memberPath } from "../tar-extract.js";
+import { drain, extractAll, memberPath } from "../store/tar-extract.js";
 import { BUNDLE_MANIFEST_ENTRY } from "./bundle.js";
 import { definitionDocument } from "../definition/definition.js";
 import { carries, historyMayContain, historyPortability, workspaceMayContain, workspacePortability } from "./classify.js";

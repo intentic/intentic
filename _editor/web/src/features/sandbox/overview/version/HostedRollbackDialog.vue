@@ -36,6 +36,7 @@ const confirm = async (): Promise<void> => {
             await rollBackHosted(target.id);
             // The row says whether there is anything left to go back to; read it again rather than guess. Not waited
             // on, and its own failure is not the rollback's: the dialog closes on the platform's yes.
+            // allow(silent-catch): a refresh that fails leaves the row as it was, which the next read corrects.
             void refresh().catch(() => undefined);
         },
     });

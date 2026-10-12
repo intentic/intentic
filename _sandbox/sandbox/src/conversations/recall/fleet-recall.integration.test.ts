@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HISTORY_ROOT } from "@intentic/constants";
 import type { TranscriptRow, SessionOwner } from "@intentic/sandbox-contract";
+import { createLogger } from "../../logger.js";
 import { conversationEntry } from "../../testing.js";
 import { endingStatus, PersistedAgentSchema, type PersistedAgent, type RepoRecord } from "../registry/agents-store.js";
 import { statePath } from "../../state-paths.js";
@@ -323,6 +324,7 @@ const deepDeps = (workspaceRoot: string, events: readonly Record<string, unknown
         ...depsOver(ROSTER),
         activity: { list: async () => events },
         config: { workspaceRoot },
+        logger: createLogger({ logLevel: "silent", logPretty: false, historyRoot: "" }),
     }) as unknown as FleetHandleDeps;
 
 test("a retired session or a turn resolves through the activity log, saying how", async () => {

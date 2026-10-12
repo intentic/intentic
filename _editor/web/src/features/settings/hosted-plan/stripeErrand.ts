@@ -31,10 +31,11 @@ let current: (() => void) | undefined;
 export const waitForStripe = async (left: string, read: () => Promise<HostedPlanState>): Promise<boolean> => {
     current?.();
     let deadline = Date.now() + BROWSER_WAIT_MS;
-    let dropped = false;
+    // Set by stop(), which runs from outside the loop below.
+    const run = { dropped: false };
     let wake: () => void = () => undefined;
     const stop = (): void => {
-        dropped = true;
+        run.dropped = true;
         wake();
     };
     current = stop;
@@ -47,7 +48,7 @@ export const waitForStripe = async (left: string, read: () => Promise<HostedPlan
     window.addEventListener(`focus`, onReturn);
     document.addEventListener(`visibilitychange`, onReturn);
     try {
-        while (!dropped && Date.now() <= deadline) {
+        while (!run.dropped && Date.now() <= deadline) {
             await new Promise<void>((resolve) => {
                 const tick = setTimeout(resolve, POLL_EVERY_MS);
                 wake = () => {
@@ -55,9 +56,9 @@ export const waitForStripe = async (left: string, read: () => Promise<HostedPlan
                     resolve();
                 };
             });
-            // A read that fails is "not yet", which the next tick asks again.
-            const state = dropped ? undefined : await read().catch(() => undefined);
-            if (!dropped && state !== undefined && planMark(state) !== left) {
+            // allow(silent-catch): a read that fails is "not yet", which the next tick asks again.
+            const state = run.dropped ? undefined : await read().catch(() => undefined);
+            if (!run.dropped && state !== undefined && planMark(state) !== left) {
                 return true;
             }
         }

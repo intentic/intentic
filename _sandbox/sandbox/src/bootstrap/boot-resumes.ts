@@ -8,7 +8,7 @@ import { onInputWaitStarted } from "../agent/tools/jobs/input-wait-follow.js";
 import { restoreWatchers } from "../agent/verification/watchers.js";
 import { resumeInterruptedFires } from "../automations/fire-resume.js";
 import { resumeWorkflowExecution } from "../workflows/workflow-runner.js";
-import { bootFacts, RESTART_STORM, reportRestartStorm } from "../system/boot/boot-history.js";
+import { bootFacts, RESTART_STORM, reportRestartStorm } from "../system/boot/restarts/boot-history.js";
 import type { BootPhase } from "./boot-phase.js";
 
 // Every restart is gated and attempt-bounded; a failure leaves the item on the record as interrupted.

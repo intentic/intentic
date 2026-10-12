@@ -7,7 +7,7 @@ import type { Logger } from "pino";
 import { z } from "zod";
 import { defineDocument } from "../../store/evolution/documents.js";
 import { version } from "../../version.js";
-import { type Teardown, tearDown } from "./daemon-stop.js";
+import { type Teardown, tearDown } from "./restarts/daemon-stop.js";
 
 // Why the last boot on this volume failed before it could serve, left by the daemon that failed just before it exits
 // (main.ts), for the host: `ic` reads it with `docker exec cat` when a sandbox it started never comes up, and says why

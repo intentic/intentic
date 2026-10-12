@@ -17,9 +17,9 @@ import { describeError, installClientDiagnostics, reportClient, sendClientDiagno
 import { postClientDiagnostics } from "./client/sandbox/clientReport";
 import { localFace } from "./app/environments/local";
 import { installDesktopLinks, installDesktopOpener } from "./app/environments/desktop";
-import { installPerfConsole, installPerfReporter, observeLongFrames } from "./app/perf";
-import { watchStalledQueries } from "./app/queryStalls";
-import { installRenderTrace } from "./app/renderTrace";
+import { installPerfConsole, installPerfReporter, observeLongFrames } from "./app/perf/perf";
+import { watchStalledQueries } from "./app/perf/queryStalls";
+import { installRenderTrace } from "./app/perf/renderTrace";
 import { queryClient } from "./lib/queryPersistence";
 import { installSkeletonPersistence } from "./lib/skeletonPersistence";
 import { installSelfHeal, purgeIfMarked, reportStartupError } from "./app/selfHeal";

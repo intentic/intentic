@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { hostname } from "node:os";
 import { promisify } from "node:util";
+import { HISTORY_ROOT } from "@intentic/constants";
 import { errorMessage } from "@intentic/base/errors";
 import type { Log } from "@intentic/local-agent";
 import { z } from "zod";
@@ -581,7 +582,7 @@ export const restartIntent = (doing: string, trigger: FixTrigger, side: RestartS
 
 // How long writing the intent may take: it races the restart it announces, and never holds it up.
 export const INTENT_DEADLINE_MS = 3_000;
-export const RESTART_INTENT_PATH = "/history/logs/restart-intent.json";
+export const RESTART_INTENT_PATH = `${HISTORY_ROOT}/logs/restart-intent.json`;
 
 const sideOf = async (): Promise<RestartSide> => {
     const side = await thisSide();
@@ -809,7 +810,7 @@ export const machineKeeperSeams = ({ links, loopback, watching }: KeeperWiring):
     hold: (slug) => holdIcFlow(slug, KEEPER_HOLD),
     now: Date.now,
     sleepMinutes: async () => sleepMinutesOf(await readMachineConfig()),
-    sleep: async (minutes) => await runIc(sleepArgs(minutes), () => undefined, {}, { deadlineMs: SLEEP_DEADLINE_MS }),
+    sleep: async (idleMinutes) => await runIc(sleepArgs(idleMinutes), () => undefined, {}, { deadlineMs: SLEEP_DEADLINE_MS }),
     side: sideOf,
     writeIntent: writeIntentInto,
 });

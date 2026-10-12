@@ -1,6 +1,6 @@
 import { type Logger, pino } from "pino";
 import { createCiFailureLog } from "./ci-failure-log.js";
-import { CiRateLimited } from "./providers.js";
+import { CiRateLimited } from "../providers.js";
 
 const capturing = (): { logger: Logger; lines: Record<string, unknown>[] } => {
     const lines: Record<string, unknown>[] = [];

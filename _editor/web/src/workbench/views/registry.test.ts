@@ -21,7 +21,6 @@ import {
     registerView,
     railPolicy,
     onRailOnlyByVisit,
-    tabBarIds,
     viewAsks,
     provideBuiltinViews,
 } from "./registry";

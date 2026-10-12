@@ -4,8 +4,8 @@ import type { Config } from "../env.config.js";
 import { createLogger } from "../logger.js";
 import { logsRoot, terminalLogsDir } from "../logs/log-files.js";
 import { adoptDaemonGeneration, DAEMON_ONLY_ENV } from "../seams/workload-stamp.js";
-import { claimBootMarker } from "../system/boot/boot-marker.js";
-import { recordBoot } from "../system/boot/boot-history.js";
+import { claimBootMarker } from "../system/boot/restarts/boot-marker.js";
+import { recordBoot } from "../system/boot/restarts/boot-history.js";
 import { fileRestartResume } from "../system/restart-resume.js";
 import type { ProfileTraits } from "../system/boot/profile.js";
 

@@ -1,7 +1,7 @@
 import type { TranscriptRequests, TranscriptRow } from "@intentic/sandbox-contract";
 import { useTouchMotion } from "@intentic/ui/motion";
 import { computed, type ComputedRef, ref, shallowRef } from "vue";
-import { recordPerf } from "../../../app/perf";
+import { recordPerf } from "../../../app/perf/perf";
 import type { ChatMessage } from "./transcript";
 import { appendMessage, applyPatch, attachRun, emptyTranscriptState, flushPending, rebuildKeeping, revealPending, type TranscriptState } from "./transcriptState";
 import type { AttachEntry, AttachHead, TurnContext } from "../run/turnStream";

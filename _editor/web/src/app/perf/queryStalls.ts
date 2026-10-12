@@ -1,5 +1,5 @@
 import type { QueryClient } from "@tanstack/vue-query";
-import { reportClient } from "./clientDiagnostics";
+import { reportClient } from "../clientDiagnostics";
 
 // A read still pending long past any budget a daemon call has (perf.ts gives one 1.5 s before calling it slow). A view
 // whose read never settles draws its skeleton forever, and nothing else anywhere records it: a slow span is filed only

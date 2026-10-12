@@ -1,5 +1,6 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
-import { syncHookOutput } from "../../testing.js";
+import { syncHookOutput } from "../../../testing.js";
 import { depsNoticeHooks } from "./agent-deps.js";
 import { outputNoticeMatcher, placeholderConnection, staleDistSymptom } from "./agent-output-notices.js";
 
@@ -23,8 +24,8 @@ const fire = async (output: string, command: string, session: string) => {
 test.each([
     [
         "TS6305 with the dist path",
-        `error TS6305: Output file '/work/intentic/_shared/constants/dist/index.d.ts' has not been built from source file '/work/intentic/_shared/constants/src/index.ts'.`,
-        "/work/intentic/_shared/constants",
+        `error TS6305: Output file '${WORKSPACE_ROOT}/intentic/_shared/constants/dist/index.d.ts' has not been built from source file '${WORKSPACE_ROOT}/intentic/_shared/constants/src/index.ts'.`,
+        `${WORKSPACE_ROOT}/intentic/_shared/constants`,
     ],
     [
         "a missing export from a workspace package",
@@ -38,8 +39,8 @@ test.each([
     ],
     [
         "bun's runtime wording against a built file",
-        `SyntaxError: Export named 'queueRoot' not found in module '/work/intentic/_shared/constants/dist/index.js'.`,
-        "/work/intentic/_shared/constants",
+        `SyntaxError: Export named 'queueRoot' not found in module '${WORKSPACE_ROOT}/intentic/_shared/constants/dist/index.js'.`,
+        `${WORKSPACE_ROOT}/intentic/_shared/constants`,
     ],
 ])("%s is read as a stale dist, naming the package", (_name, output, target) => {
     expect(staleDistSymptom(output)).toEqual({ target });
@@ -53,7 +54,7 @@ test.each([
     ["an ordinary type error", `src/a.ts(3,1): error TS2322: Type 'string' is not assignable to type 'number'.`],
     ["a missing export from a relative module", `error TS2305: Module '"./util"' has no exported member 'x'.`],
     ["a missing third-party module", `Cannot find module 'vue'`],
-    ["a missing export from a source file", `SyntaxError: Export named 'a' not found in module '/work/app/src/b.ts'.`],
+    ["a missing export from a source file", `SyntaxError: Export named 'a' not found in module '${WORKSPACE_ROOT}/app/src/b.ts'.`],
 ])("%s is not a stale dist", (_name, output) => {
     expect(staleDistSymptom(output)).toBeUndefined();
 });

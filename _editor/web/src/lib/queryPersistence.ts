@@ -4,7 +4,7 @@ import { defaultShouldDehydrateQuery, QueryCache, QueryClient } from "@tanstack/
 import { del, get, set } from "idb-keyval";
 import { buildId } from "../app/buildEpoch";
 import { reportClient } from "../app/clientDiagnostics";
-import { trackPerf } from "../app/perf";
+import { trackPerf } from "../app/perf/perf";
 import { throttleTrailing } from "./throttleTrailing";
 import { whenIdle } from "./whenIdle";
 

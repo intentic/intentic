@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { CAPABILITY_CATALOG, localModelGb } from "@intentic/capability-catalog";
-import { type LocalModelFitResponse, LOCAL_MODEL_WINDOW_DEFAULT, type CapabilitySummary } from "@intentic/sandbox-contract";
+import { humanizeModelId, type LocalModelFitResponse, LOCAL_MODEL_WINDOW_DEFAULT, type CapabilitySummary } from "@intentic/sandbox-contract";
 import { Button, Icon, type IconName, type NoticeModel, Row, RowNote, SkeletonSnapshot, StatusBadge, type StatusVariant, ui, vSkeletonSource } from "@intentic/ui";
 import { computed, watch } from "vue";
 import { RouterLink } from "vue-router";
@@ -131,7 +131,7 @@ const addModel = async (model: string, context: string): Promise<void> => {
     if (busy.value !== undefined || installedFor(model) !== undefined) {
         return;
     }
-    const label = optionOf(model)?.label ?? model;
+    const label = optionOf(model)?.label ?? humanizeModelId(model);
     const id = suggestName(card, installed.value, optionOf(model)?.label);
     await adding.run({
         what: t(`connect.localModelLane.starting`, { label }),

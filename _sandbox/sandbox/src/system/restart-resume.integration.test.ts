@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DeviceFlowLine } from "@intentic/sandbox-contract";
-import { readRestartIntent } from "./boot/restart-record.js";
+import { readRestartIntent } from "./boot/restarts/restart-record.js";
 import { askedRestart, fileRestartResume } from "./restart-resume.js";
 
 // The owner's "continue them once the sandbox is back", kept on the history volume across the restart it is about and

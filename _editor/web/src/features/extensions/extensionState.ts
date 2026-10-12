@@ -1,5 +1,5 @@
 import type { StatusVariant } from "@intentic/ui";
-import type { ExtensionHostStatus } from "../../extension-host/loader";
+import type { ExtensionHostStatus } from "./extensionStatuses";
 import { t } from "@intentic/ui/i18n";
 
 // How an extension's host status reads on a row; `active` gets no badge since an on switch already says so. What

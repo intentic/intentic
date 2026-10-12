@@ -3,7 +3,7 @@ import { useDevice } from "@intentic/ui";
 import { basename } from "@intentic/ui/path";
 import { t } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
-import { trackPerf } from "../../../app/perf";
+import { trackPerf } from "../../../app/perf/perf";
 import { uuid } from "../../../lib/uuid";
 import { whenIdle } from "../../../lib/whenIdle";
 import { orRefusal, SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";

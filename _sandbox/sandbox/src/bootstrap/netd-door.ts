@@ -28,7 +28,7 @@ import type { ProfileTraits } from "../system/boot/profile.js";
 import { sameProcess } from "../system/resources/proc-stat.js";
 import { planTerminal, type TerminalPlanDeps } from "../terminal/terminal-plan.js";
 import { buildId } from "../version.js";
-import { LINK_LOST_EXIT } from "../system/boot/daemon-stop.js";
+import { LINK_LOST_EXIT } from "../system/boot/restarts/daemon-stop.js";
 import { visitWorkspaceApp } from "../scaffold/app-rest.js";
 import type { BootPhase } from "./boot-phase.js";
 

@@ -2,7 +2,7 @@ import { type DeviceFlowLine, type DeviceSandboxFlowInput, type DeviceSandboxOp,
 import { sandboxSlugOf } from "@intentic/sandbox-run";
 import { implement } from "@orpc/server";
 import { askedRestart, fileRestartResume } from "../system/restart-resume.js";
-import type { RestartAction } from "../system/boot/restart-record.js";
+import type { RestartAction } from "../system/boot/restarts/restart-record.js";
 import { requireMaintainer } from "../auth/owner-gates.js";
 import type { OrpcContext } from "../app-env.js";
 import type { Services } from "../composition.js";

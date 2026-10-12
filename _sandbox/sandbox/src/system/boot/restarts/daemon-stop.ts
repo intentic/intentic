@@ -1,8 +1,8 @@
 import { errorMessage } from "@intentic/base/errors";
 import type { DisposeOutcome } from "@intentic/base/lifecycle";
 import type { Logger } from "pino";
-import { opt } from "../../opt.js";
-import { buildInfo, buildText } from "./build-info.js";
+import { opt } from "../../../opt.js";
+import { buildInfo, buildText } from "../build-info.js";
 import { noteStop, writeRestartIntent } from "./boot-marker.js";
 import { initiatorText, type ReadIntent, readRestartIntent, type RestartAction, spanOf, standingIntent } from "./restart-record.js";
 

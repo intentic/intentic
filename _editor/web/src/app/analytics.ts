@@ -133,6 +133,7 @@ export const replaySessionId = (): string | undefined => {
     try {
         return client?.get_session_id();
     } catch {
+        // allow(silent-catch): an error report asks for this id; a throw here would lose the report it was meant to annotate.
         return undefined;
     }
 };

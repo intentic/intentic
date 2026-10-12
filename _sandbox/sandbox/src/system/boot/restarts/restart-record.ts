@@ -1,7 +1,7 @@
 import { readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
-import { opt } from "../../opt.js";
+import { opt } from "../../../opt.js";
 
 // WHY THE DAEMON LAST STOPPED, SAID ONCE AT THE NEXT BOOT (2026-10-11). A restart used to leave a bare "shutting down"
 // line and a boot timestamp, so whoever asked why a job died or /tmp emptied rebuilt it from uptime drops across two

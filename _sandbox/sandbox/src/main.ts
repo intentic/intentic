@@ -33,9 +33,9 @@ import { logsRoot } from "./logs/log-files.js";
 import { CONTAINER_SECRET_ENV, loadConfig } from "./env.config.js";
 import { sealConfigSecrets } from "./seams/sealed-env.js";
 import { type BootAttempt, clearBootFailure, failBoot } from "./system/boot/boot-failure.js";
-import { bootFacts } from "./system/boot/boot-history.js";
+import { bootFacts } from "./system/boot/restarts/boot-history.js";
 import { claimContainer } from "./system/boot/container-owner.js";
-import { announceStop, type StopCause, tearDown } from "./system/boot/daemon-stop.js";
+import { announceStop, type StopCause, tearDown } from "./system/boot/restarts/daemon-stop.js";
 import { type BootFault, bootFault, CRASH_AFTER_READY_MS } from "./system/boot/fault.js";
 import { finishPrewarm } from "./system/boot/prewarm.js";
 import { listenHost, profileTraits, requireLocalContract } from "./system/boot/profile.js";
@@ -51,6 +51,11 @@ import { join } from "node:path";
 import { authRootOf } from "./state-paths.js";
 import { agentDomainPolicyDocument, fileAgentDomainPolicy } from "./workload/domain/agent-domain-policy.js";
 import { requireAgentDomainRollout } from "./workload/domain/agent-domain-rollout.js";
+
+// Where the work signal is found by what starts before it (the quiet watch, in main below).
+interface WorkSignalSlot {
+    signal?: WorkSignal;
+}
 
 // Sandbox container's entrypoint; config comes from env injected at run time, never baked in. It settles the process,
 // builds the services once, and then calls each phase of boot in the one order that is behavior: listeners come up
@@ -161,7 +166,8 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
         shutdown.push(() => room.close());
         // Since when nobody has needed the sandbox, for the host's keeper that puts an unused one to sleep (quiet-watch.ts);
         // a change is written at once rather than on the signal's next beat.
-        let work: WorkSignal | undefined;
+        // The work signal starts after the quiet watch it reads, so the watch's change reaches it through this slot.
+        const ticks: WorkSignalSlot = {};
         const quiet = startQuietWatch(
             {
                 connected: connectedCount,
@@ -170,18 +176,18 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
                 appsInUse: () => anyConnected(services.processes.ports()),
                 nextWakeAt: () => nextPromisedWakeAt(services),
             },
-            { logger, onChange: () => void work?.tick() },
+            { logger, onChange: () => void ticks.signal?.tick() },
         );
         shutdown.push(() => quiet.stop());
         // How much a restart would cut, for the host's keeper, which then asks before it restarts this sandbox (work-signal.ts).
-        work = startWorkSignal({
+        const signal = startWorkSignal({
             working: () => workingNow(services, "restart").length,
             events: services.events,
             logger,
             boot: bootFacts,
             quiet: quiet.read,
         });
-        const signal = work;
+        ticks.signal = signal;
         shutdown.push(() => signal.stop());
     }
     // The credential gateway, on loopback beside netd rather than behind it, up before any turn can be handed one of its

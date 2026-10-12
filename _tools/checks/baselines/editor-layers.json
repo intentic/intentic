@@ -5,7 +5,7 @@
     "features/extensions -> extension-host": "standing upward import when the editor's layers were declared (2026-10-06, lib/editor-layers.mjs)",
     "features/sandbox -> core-views": "standing upward import when the editor's layers were declared (2026-10-06, lib/editor-layers.mjs)",
     "features/sandbox -> extension-host": {
-        "count": 5,
+        "count": 4,
         "why": "standing upward import when the editor's layers were declared (2026-10-06, lib/editor-layers.mjs)"
     },
     "features/sandbox -> router": {
