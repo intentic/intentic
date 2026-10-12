@@ -8,6 +8,7 @@ import type { Services } from "../composition.js";
 import { environmentSourcesOf } from "../environment-composers.js";
 import { environmentSourcesFake } from "../testing.js";
 import { unstubbed } from "@intentic/testing";
+import { waitFor } from "@intentic/testing/bun";
 import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../workspace/files/workspace-files.js";
 import { AUTO_MARKER } from "./auto-drafts.js";
 import { fileRuntimeInstallsStore } from "./runtime-installs.js";
@@ -29,6 +30,8 @@ import {
     removeFromEnvironment,
     withoutRuntimeDirectives,
 } from "./environment.js";
+import { overlayInputsMoved, recomposeOnInputChanges } from "./recompose-on-change.js";
+import { stateRelPath } from "../state-paths.js";
 import { PROVIDER_MODULES } from "../runtimes/runtime-table.js";
 
 // Pins PACK_STAMPS_DIR to an empty directory so every compose here means "no base image bakes this pack," regardless of
@@ -191,6 +194,43 @@ test("reject deletes the proposal and leaves the approved custom section untouch
     expect(state.proposal).toBeUndefined();
     expect(state.custom).toEqual({ content: CUSTOM, hash: sha256Hex(CUSTOM) });
     expect(state.approved).toEqual(expect.any(Object));
+});
+
+// A land, a commit or a checkout rewrites the custom section on disk without an approve. The overlay has to follow it, or
+// a rebuild bakes the one composed before the move and the boot after it reads "pending rebuild" (2026-10-12).
+test("a custom section rewritten on disk recomposes the approved overlay the rebuild reads", async () => {
+    const services = stubServices();
+    await services.files.write(customPath(services), "# ---- htop ----\nRUN apt-get install -y htop\n");
+    const before = await composeEnvironment(services);
+    let deliver: (paths: string[]) => void = () => undefined;
+    const stop = recomposeOnInputChanges(services, (listener) => {
+        deliver = listener;
+        return () => undefined;
+    });
+
+    // Landed: the file changes and the watcher names it, with no route of the daemon's involved.
+    await services.files.write(customPath(services), "RUN apt-get install -y cowsay\n");
+    deliver(["intentic/README.md", stateRelPath(".intentic/config/environment.custom.Dockerfile")]);
+    const after = await waitFor(async () => {
+        const approved = (await services.files.read(approvedPath(services)))!;
+        expect(approved).toContain("cowsay");
+        return sha256Hex(approved);
+    });
+    expect(after).not.toBe(before);
+    // The same bytes a compose of its own reaches, so the hash the card offers is the one the rebuild checks.
+    expect(await composeEnvironment(services)).toBe(after);
+    stop();
+});
+
+test("only a batch that may have moved an overlay input recomposes", () => {
+    expect(overlayInputsMoved([stateRelPath(".intentic/config/environment.custom.Dockerfile")])).toBe(true);
+    expect(overlayInputsMoved([stateRelPath(".intentic/config/capabilities.json")])).toBe(true);
+    // Unnamed: could be anything.
+    expect(overlayInputsMoved([])).toBe(true);
+    // Its own output, and the agent requests that wait for approval, change nothing it composes.
+    expect(overlayInputsMoved([stateRelPath(".intentic/local/environment.approved.Dockerfile")])).toBe(false);
+    expect(overlayInputsMoved([stateRelPath(".intentic/config/environment.Dockerfile"), stateRelPath(".intentic/config/environment.d/", "htop.Dockerfile")])).toBe(false);
+    expect(overlayInputsMoved(["intentic/README.md"])).toBe(false);
 });
 
 test("compose folds a capability's fragment (install + runtime directives) into a valid overlay", async () => {

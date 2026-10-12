@@ -4,6 +4,7 @@ import { capabilitiesDocument } from "../capabilities/capabilities-store.js";
 import { invalidateContributions } from "../capabilities/contributions.js";
 import { extensionsRoot, workspaceExtensionsRoot } from "../capabilities/extension-dirs.js";
 import { extensionDevDocument } from "../extensions/extension-dev.js";
+import { recomposeOnInputChanges } from "../environment/recompose-on-change.js";
 import { extensionEnablementDocument } from "../extensions/extension-enablement.js";
 import { followExtensionDirs, stopPendingExtensionProcesses } from "../extensions/extension-processes.js";
 import { onListenerStatusMoved } from "../extensions/listener/listener-status.js";
@@ -27,7 +28,7 @@ const extensionSourceOf = (root: string): ((path: string) => boolean) => {
     return (path) => files.has(path) || dirs.some((dir) => path.startsWith(dir));
 };
 
-export const startChangeReactions = ({ logger, services, shutdown, traits }: BootPhase): void => {
+export const startChangeReactions = ({ logger, role, services, shutdown, traits }: BootPhase): void => {
     // Built once, not per change batch.
     const extensionSource = extensionSourceOf(services.workspace.root);
     shutdown.push(startWorkspaceWatch(services.workspace.root, logger));
@@ -58,6 +59,11 @@ export const startChangeReactions = ({ logger, services, shutdown, traits }: Boo
             }
         }),
     );
+    // The approved overlay follows its inputs however they moved, so a rebuild bakes what the card shows. Composed by the
+    // container's own daemon only, as at boot (boot-restores.ts).
+    if (role.container) {
+        shutdown.push(recomposeOnInputChanges(services, subscribeWorkspaceChanges));
+    }
     shutdown.push(startRepoWatch(services.workspace.root, logger));
     shutdown.push(startRefWatch(services.workspace.root, subscribeRepoChanges, logger));
     // A ref can move without a workspace byte changing, so only the ref feed can invalidate health.
