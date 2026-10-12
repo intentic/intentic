@@ -456,7 +456,8 @@ const confirmRemove = async (): Promise<void> => {
         >
             <SandboxLogo :image="sandbox.active.value?.image ?? null" :name="sandbox.active.value?.name" />
         </button>
-        <!-- WHERE IT RUNS AND WHETHER IT ANSWERS, one mark on the corner presence has always been read off. The glyph
+        <!-- WHERE IT RUNS AND WHETHER IT ANSWERS, on the bottom-left corner: bottom-right is where every icon on the
+             rail shows its running mark, so that corner belongs to the spinner below. The glyph
              is the machine, its ink the connection: quiet whenever the answer is neither "online" nor "wrong", so a
              fact that is always true carries an errand's weight only when there is one. A plate, where the running
              mark is a bare glyph: this one sits over whatever picture the owner uploaded, and a glyph alone on a photo
@@ -465,7 +466,7 @@ const confirmRemove = async (): Promise<void> => {
              aria-hidden: both sentences are already in the button's label above. -->
         <span
             v-if="placement"
-            class="sandbox-switcher-mark pointer-events-none absolute bottom-0.5 right-0.5 inline-flex h-[1.6em] w-[1.6em] items-center justify-center rounded-full bg-[color:var(--ui-tile-ground)] leading-none"
+            class="sandbox-switcher-mark pointer-events-none absolute bottom-0.5 left-0.5 inline-flex h-[1.6em] w-[1.6em] items-center justify-center rounded-full bg-[color:var(--ui-tile-ground)] leading-none"
             :class="connectionInkClass"
             aria-hidden="true"
         >
@@ -478,14 +479,14 @@ const confirmRemove = async (): Promise<void> => {
         <ViewBadgeChip :badge="attentionBadge" class="sandbox-switcher-mark pointer-events-none absolute right-0.5 top-0.5" aria-hidden="true" />
         <!-- Getting started's way to connecting a model: the sandbox's own settings start here. Its hint leads to them. -->
         <TourMark step="models" place="rail" still side="right" class="absolute left-0.5 top-0.5" />
-        <!-- The rail's running mark, on a corner of its own: it is an errand in flight, where the two beside it are
-     standing facts, and the one thing here that must never be crowded. The sentence rides the control's own label,
+        <!-- The rail's running mark, on the bottom-right corner as on every other rail icon: it is an errand in flight,
+     where the two beside it are standing facts, and the one thing here that must never be crowded. The sentence rides the control's own label,
      since a tooltip on a mark inside a tooltipped button nests inside it. -->
         <TileMark
             v-if="restarting !== undefined"
             name="spinner"
             spin
-            :class="[RUNNING_MARK_CLASS, `sandbox-switcher-mark pointer-events-none absolute bottom-0.5 left-0.5`]"
+            :class="[RUNNING_MARK_CLASS, `sandbox-switcher-mark pointer-events-none absolute bottom-0.5 right-0.5`]"
         />
     </span>
 
