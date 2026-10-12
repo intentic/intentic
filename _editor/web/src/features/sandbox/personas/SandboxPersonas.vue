@@ -5,6 +5,7 @@ import {
     Button,
     ui,
     ConfirmDialog,
+    InlineRename,
     Notice,
     type NoticeModel,
     PersonaFace,
@@ -382,14 +383,23 @@ const confirmRemove = async (): Promise<void> => {
                         :controls="detailsId"
                         :signed-in="ready(persona)"
                         :saving="isOpen(persona) && save.isPending.value"
-                        :write="renameOf(persona)"
                         @select="toggleOpen(persona)"
                         @remove="removing = persona"
                     />
                 </div>
 
                 <div :id="detailsId" class="mt-4">
-                    <div v-if="selected && draft" :key="selected.id" class="rounded-xl bg-card shadow-sm p-4">
+                    <div v-if="selected && draft" :key="selected.id" class="flex flex-col gap-3 rounded-xl bg-card p-4 shadow-sm">
+                        <!-- The persona's name, renamed in place beside its pencil: the app's one rename, as the sandbox's. -->
+                        <h3 class="-ml-1 flex min-w-0 text-base font-semibold">
+                            <InlineRename
+                                :value="selected.label ?? selected.id"
+                                :write="renameOf(selected)"
+                                :label="t(`sandbox.sandboxPersonas.personaName`)"
+                                :action="t(`sandbox.sandboxPersonas.renamePersona`)"
+                                :failure="t(`sandbox.personaSelector.couldntRename`)"
+                            />
+                        </h3>
                         <PersonaForm :draft="draft" :accounts="accounts" :connected="connected" :grantables="grantables" :error="saveError" />
                     </div>
                 </div>

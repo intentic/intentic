@@ -126,9 +126,9 @@ const buttonLabelled = (el: HTMLElement, label: string): HTMLButtonElement | und
 const nameField = (el: HTMLElement): HTMLInputElement => el.querySelector<HTMLInputElement>(`input[aria-label="Name this persona"]`)!;
 const byAriaLabel = (el: HTMLElement, label: string): HTMLElement | undefined =>
     el.querySelector<HTMLElement>(`[aria-label="${label}"]`) ?? undefined;
-// Rename is a separate action on the selector, so it never changes the selection.
-const nameControl = (el: HTMLElement, name: string): HTMLButtonElement =>
-    [...el.querySelectorAll(`button`)].find((button) => button.getAttribute(`aria-label`) === `${name}, Rename persona`)!;
+// Rename rides the open persona's heading (<InlineRename>): the name itself is the press target, and says the verb.
+const nameControl = (el: HTMLElement, name: string): HTMLButtonElement | undefined =>
+    [...el.querySelectorAll<HTMLButtonElement>(`h3 button`)].find((button) => (button.textContent ?? ``).trim() === `${name}, Rename persona`);
 
 const tileFor = (el: HTMLElement, id: string): HTMLButtonElement => {
     const persona = personas.value.find((entry) => entry.id === id)!;
@@ -583,15 +583,17 @@ it(`keeps repository switches full-size beside long names without changing which
     expect(el.querySelectorAll(`label input[type="checkbox"]`)).toHaveLength(1);
 });
 
-it(`shows the name as text and turns it into a field only when clicked`, async () => {
+it(`names the open persona in its heading, and turns that name into a field only when pressed`, async () => {
     personas.value = [{ id: `work`, label: `Work`, capabilities: [`reddit-work`] }];
     const el = mount();
+    // A tile is only a selector: nothing on it renames.
+    expect(nameControl(el, `Work`)).toBeUndefined();
+    await openPersona(el, `work`);
     expect(el.querySelector(`input[aria-label="Persona name"]`)).toBeNull();
-    nameControl(el, `Work`).click();
+    nameControl(el, `Work`)!.click();
     await nextTick();
     expect(el.querySelector(`input[aria-label="Persona name"]`)).not.toBeNull();
-    expect(tileFor(el, `work`).getAttribute(`aria-pressed`)).toBe(`false`);
-    expect(text(el)).not.toContain(`Speaks through`);
+    expect(tileFor(el, `work`).getAttribute(`aria-pressed`)).toBe(`true`);
     expect(el.querySelector(`button button, button input`)).toBeNull();
 });
 
@@ -599,7 +601,8 @@ it(`shows the name as text and turns it into a field only when clicked`, async (
 it(`renames a persona on Enter, keeping the rest of its persona`, async () => {
     personas.value = [{ id: `work`, label: `Work`, capabilities: [`reddit-work`, `x-company`] }];
     const el = mount();
-    nameControl(el, `Work`).click();
+    await openPersona(el, `work`);
+    nameControl(el, `Work`)!.click();
     await nextTick();
     const field = el.querySelector<HTMLInputElement>(`input[aria-label="Persona name"]`)!;
     await type(field, `Work crew`);
@@ -611,14 +614,14 @@ it(`renames a persona on Enter, keeping the rest of its persona`, async () => {
     expect([...written.capabilities]).toEqual([`reddit-work`, `x-company`]);
     await nextTick();
     expect(tileFor(el, `work`).getAttribute(`aria-label`)).toBe(`Work crew`);
-    expect(tileFor(el, `work`).getAttribute(`aria-pressed`)).toBe(`false`);
+    expect(tileFor(el, `work`).getAttribute(`aria-pressed`)).toBe(`true`);
 });
 
 it(`abandons a rename on Escape without writing`, async () => {
     personas.value = [{ id: `work`, label: `Work`, capabilities: [] }];
     const el = mount();
     await openPersona(el, `work`);
-    nameControl(el, `Work`).click();
+    nameControl(el, `Work`)!.click();
     await nextTick();
     const field = el.querySelector<HTMLInputElement>(`input[aria-label="Persona name"]`)!;
     await type(field, `Nope`);
@@ -629,20 +632,21 @@ it(`abandons a rename on Escape without writing`, async () => {
     expect(tileFor(el, `work`).getAttribute(`aria-pressed`)).toBe(`true`);
 });
 
-it(`keeps a refused rename on the selector so it can be retried`, async () => {
+it(`keeps a refused rename open in the heading so it can be retried`, async () => {
     personas.value = [{ id: `work`, label: `Work`, capabilities: [] }];
     save.mockRejectedValueOnce(new Error(`Write unavailable`));
     const el = mount();
-    nameControl(el, `Work`).click();
+    await openPersona(el, `work`);
+    nameControl(el, `Work`)!.click();
     await nextTick();
     const field = el.querySelector<HTMLInputElement>(`input[aria-label="Persona name"]`)!;
     await type(field, `Work crew`);
     field.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Enter`, bubbles: true }));
-    await waitFor(() => expect(el.querySelector(`[role="alert"]`)?.textContent).toContain(`Write unavailable`));
+    // The refusal floats on the document body, so a card that clips cannot cut it in half.
+    await waitFor(() => expect(document.body.querySelector(`[role="alert"]`)?.textContent).toContain(`Write unavailable`));
     expect(field.value).toBe(`Work crew`);
-    expect(field.getAttribute(`aria-invalid`)).toBe(`true`);
     expect(tileFor(el, `work`).getAttribute(`aria-label`)).toBe(`Work`);
-    expect(tileFor(el, `work`).getAttribute(`aria-pressed`)).toBe(`false`);
+    expect(tileFor(el, `work`).getAttribute(`aria-pressed`)).toBe(`true`);
 
     field.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Enter`, bubbles: true }));
     await waitFor(() => expect(el.querySelector(`input[aria-label="Persona name"]`)).toBeNull());

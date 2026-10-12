@@ -114,6 +114,9 @@ watch(
     { flush: `post` },
 );
 onBeforeUnmount(disarm);
+
+// For a caller that opens the field itself: a thing just made, whose name is the next thing to type.
+defineExpose({ begin: (): void => rename.begin() });
 </script>
 
 <template>

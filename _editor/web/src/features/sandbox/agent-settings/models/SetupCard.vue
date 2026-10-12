@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { MODEL_ROLES, type ModelPin, type ModelRole, type ModelRoleSpec } from "@intentic/sandbox-contract";
-import { type ActionItem, OverflowActions, StatusBadge, ui } from "@intentic/ui";
-import { computed, nextTick, ref, watch } from "vue";
+import { type ActionItem, InlineRename, OverflowActions, StatusBadge } from "@intentic/ui";
+import { computed, onMounted, useTemplateRef, watch } from "vue";
 import AddModelButton from "./AddModelButton.vue";
 import JobChip from "./JobChip.vue";
 import { type PinnedList, pinKnobSummary, pinnedList } from "./modelPinList";
@@ -85,39 +85,31 @@ const emptyNote = computed<string | undefined>(() => {
     return kinds.has(`helper`) ? t(`sandbox.agentModels.emptyHelpers`) : t(`sandbox.agentModels.emptyRuns`);
 });
 
-/* RENAMING, in place: the name becomes a field, Enter or leaving it keeps the words, Escape puts the old ones back. */
+/* RENAMING, in place, with the app's one rename (<InlineRename>): the same pencil and field as the sandbox's own name. */
 
-const renaming = ref(false);
-const draft = ref(``);
-const field = ref<HTMLInputElement>();
-const startRename = async (): Promise<void> => {
-    draft.value = name.value;
-    renaming.value = true;
-    await nextTick();
-    field.value?.focus();
-    field.value?.select();
+const nameField = useTemplateRef<InstanceType<typeof InlineRename>>(`nameField`);
+const startRename = (): void => nameField.value?.begin();
+// Renaming is the name's own pencil only, never also an action here, so a card never wears two.
+// The page writes and redraws; the field closes on the name it was given.
+const writeName = async (next: string): Promise<void> => {
+    emit(`rename`, next);
 };
-const commitRename = (): void => {
-    if (!renaming.value) {
-        return;
+// On mount rather than an immediate watch, which runs before the field exists; the watch catches a later ask.
+onMounted(() => {
+    if (renameOnMount) {
+        startRename();
     }
-    renaming.value = false;
-    if (draft.value.trim() !== name.value) {
-        emit(`rename`, draft.value);
-    }
-};
+});
 watch(
     () => renameOnMount,
     (now) => {
         if (now) {
-            void startRename();
+            startRename();
         }
     },
-    { immediate: true },
 );
 
 const actions = computed<readonly ActionItem[]>(() => [
-    { id: `rename`, icon: `pencil`, label: t(`sandbox.agentModels.rename`), disabled, run: () => void startRename() },
     ...(setup.preset !== undefined && !setup.derived
         ? [{ id: `suggested`, icon: `sparkles`, label: t(`sandbox.agentModels.useSuggested`), note: t(`sandbox.agentModels.useSuggestedNote`), disabled, run: () => emit(`suggested`) } satisfies ActionItem]
         : []),
@@ -132,30 +124,27 @@ const zoneLabel = computed(() => t(`sandbox.agentModels.jobsOn`, { name: name.va
 <template>
     <section class="flex flex-col gap-3 rounded-xl bg-card p-3 shadow-sm" :aria-label="name">
         <header class="flex min-h-7 items-center gap-2">
-            <input
-                v-if="renaming"
-                ref="field"
-                v-model="draft"
-                :class="ui.input({ size: `sm` }, `min-w-0 flex-1`)"
-                maxlength="40"
-                :aria-label="t(`sandbox.agentModels.setupName`)"
-                @keydown.enter.prevent="commitRename"
-                @keydown.escape.prevent="renaming = false"
-                @blur="commitRename"
-            />
-            <template v-else>
-                <h3 class="truncate text-sm font-medium text-content">{{ name }}</h3>
-                <span v-if="setup.preset !== undefined && setup.name !== undefined" class="truncate text-2xs text-subtle">{{
-                    t(`sandbox.agentModels.presetWas`, { preset: setupName({ preset: setup.preset, name: undefined }) })
-                }}</span>
-                <StatusBadge
-                    v-if="setup.derived && setup.pins.length > 0"
-                    size="xs"
-                    variant="info"
-                    :label="t(`sandbox.agentModels.suggested`)"
-                    v-tooltip.top="{ title: t(`sandbox.agentModels.suggested`), note: t(`sandbox.agentModels.suggestedNote`) }"
+            <h3 class="flex min-w-0 text-sm font-medium text-content">
+                <InlineRename
+                    ref="nameField"
+                    :value="name"
+                    :write="writeName"
+                    :label="t(`sandbox.agentModels.setupName`)"
+                    :action="t(`sandbox.agentModels.rename`)"
+                    :editable="!disabled"
+                    :maxlength="40"
                 />
-            </template>
+            </h3>
+            <span v-if="setup.preset !== undefined && setup.name !== undefined" class="truncate text-2xs text-subtle">{{
+                t(`sandbox.agentModels.presetWas`, { preset: setupName({ preset: setup.preset, name: undefined }) })
+            }}</span>
+            <StatusBadge
+                v-if="setup.derived && setup.pins.length > 0"
+                size="xs"
+                variant="info"
+                :label="t(`sandbox.agentModels.suggested`)"
+                v-tooltip.top="{ title: t(`sandbox.agentModels.suggested`), note: t(`sandbox.agentModels.suggestedNote`) }"
+            />
             <div class="ml-auto flex shrink-0 items-center gap-1">
                 <AddModelButton
                     :label="t(`sandbox.agentModels.addModelTo`, { name })"

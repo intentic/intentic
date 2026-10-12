@@ -177,7 +177,7 @@ const tray = (host: HTMLElement): HTMLElement => host.querySelector<HTMLElement>
 
 // Each setup card, top to bottom, by its name; the jobs on one; and the page as names to jobs.
 const cards = (host: HTMLElement): HTMLElement[] => [...host.querySelectorAll<HTMLElement>(`section[aria-label]:has(> header)`)];
-const nameOf = (card: HTMLElement): string => card.querySelector(`h3`)?.textContent?.trim() ?? ``;
+const nameOf = (card: HTMLElement): string => card.getAttribute(`aria-label`) ?? ``;
 const card = (host: HTMLElement, name: string): HTMLElement => cards(host).find((candidate) => nameOf(candidate) === name)!;
 const jobsOf = (scope: HTMLElement): string[] =>
     [...scope.querySelectorAll(`li[id^="model-job-"] button > span:first-of-type`)].map((label) => label.textContent?.trim() ?? ``);
@@ -382,7 +382,8 @@ test("renaming writes the name; a preset keeps saying what it was", async () => 
     const host = await mountPage();
 
     const high = card(host, `High`);
-    button(high, `Rename`).click();
+    // The name is its own rename (<InlineRename>), the same press as the sandbox's name.
+    high.querySelector<HTMLButtonElement>(`h3 button`)!.click();
     await flush();
     const field = high.querySelector<HTMLInputElement>(`input`)!;
     field.value = `Heavy`;
