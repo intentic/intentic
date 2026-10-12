@@ -66,8 +66,8 @@ it(`lights eight identical petals on staggered offsets`, async () => {
     ]);
 });
 
-// SMIL, never a CSS animation: reducedMotion.test.ts bans those app-wide because DevTools rebuilds an open Styles
-// editor whenever one starts or stops, and a turn's status line starts one on every turn.
+// SMIL, never a CSS animation: _tools/checks/reduced-motion.mjs bans those app-wide because DevTools rebuilds an open
+// Styles editor whenever one starts or stops, and a turn's status line starts one on every turn.
 it(`animates inside the SVG rather than with a CSS animation`, async () => {
     const host = await mount();
 

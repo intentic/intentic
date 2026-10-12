@@ -33,6 +33,13 @@ What remains is the risk the design accepts: a sandbox could claim a typecheck p
 
 The hashes match because a sandbox and CI run the same turbo on the same lockfile with the same Node. For commit `6d4c368`, a sandbox's dry run reproduced every typecheck and build hash in CI's log. Test hashes match only with `CI=true`, which `turbo.json` hashes on purpose, so tests are not warmed today.
 
+## Who else reads it
+
+The turn check's second half ([reach-typecheck.mjs](../scripts/verify/reach-typecheck.mjs)) asks the server whether a
+package typechecked clean before a change, under its `--only` hash and under the full-graph hash the base gives it,
+which is CI's own verify run. It charges a change with a dependent's failure only when one of those entries exists.
+Without the card it typechecks nothing, since no other cache holds CI's records.
+
 ## Deploying it
 
 On the fleet host, in the distro the runners use:

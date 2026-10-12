@@ -7,7 +7,7 @@ import { presetSystemPrompt } from "../agent/prompt/preset-prompt.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { readInputSavings } from "../logs/filter-stats.js";
-import { declaredRepoChecks, readRepoDeclaration, summariesOf } from "../rules/repo-checks.js";
+import { declaredRepoChecks, earlierDeclarations, readRepoDeclaration, summariesOf } from "../rules/repo-checks.js";
 import { ManifestUnreadableError } from "../store/json-file.js";
 import { readTurnExperiments } from "../usage/turn-experiments.js";
 import { fieldNotesStatus } from "./field-notes-status.js";
@@ -118,7 +118,8 @@ export const createSettingsRoutes = (services: Services) => {
                 services.sandboxSettings.get(),
                 services.ruleFirings.get(),
             ]);
-            return { repos: summariesOf(declarations, settings.adoptedChecks, firings) };
+            const earlier = await earlierDeclarations(services.workspace.root, declarations, settings.adoptedChecks, Date.now());
+            return { repos: summariesOf(declarations, settings.adoptedChecks, firings, earlier) };
         }),
 /* ADOPTION: the owner's answer to what a repository asks for, recorded against the fingerprint of what it asks for NOW. */
         adoptRepoChecks: i.adoptRepoChecks.handler(async ({ input }) => {

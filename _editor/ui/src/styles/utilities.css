@@ -100,9 +100,9 @@
    before the next, so a skeleton reads as work under way rather than as a layout that forgot its words.
 
    The band is SMIL inside the SVG a mask is drawn from, not a CSS Animation: Chrome DevTools rebuilds an open Styles
-   editor whenever a CSS animation starts or stops, and a skeleton starts on every request (app/reducedMotion.test.ts).
-   An SVG drawn as an image keeps its own timeline, one per image, so every bar on the screen sweeps in step, and it
-   costs a repaint of the bars alone: nothing is re-styled or laid out.
+   editor whenever a CSS animation starts or stops, and a skeleton starts on every request
+   (_tools/checks/reduced-motion.mjs). An SVG drawn as an image keeps its own timeline, one per image, so every bar on
+   the screen sweeps in step, and it costs a repaint of the bars alone: nothing is re-styled or laid out.
 
    The mask only weights the bar's own colour, so the hue is the theme's (`--ui-skeleton-ink`, which a skin may
    answer): light takes ink AWAY under the band, letting the paper through, and dark adds it, so the band is a

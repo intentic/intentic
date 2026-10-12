@@ -154,7 +154,8 @@ applies from every conversation's next turn, with no restart.
                                      fails. "land" is retired: a declaration naming it parses and runs nothing.
                                      Tracked in the repository, so it travels with a clone; inert until the
                                      owner switches it on (Sandbox ▸ Agent ▸ Tools ▸ Checks after edits, or the repo's own row
-                                     in the tree), and held again if it changes afterwards. Propose one as an
+                                     in the tree). A check added or rewritten afterwards waits for the owner
+                                     again; the ones they agreed to keep running. Propose one as an
                                      ordinary diff; never expect a check you just wrote to run this turn.
 /work/.intentic/records/             sessions/ (transcripts), artifacts/browser/ (screenshots). Shared live
 /work/.intentic/local/               cache/, tmp/, environment.approved.Dockerfile (the composed overlay). Shared live

@@ -96,7 +96,7 @@ const upload = async (cache, hash, body, durationMs) => {
 
 /** Which of `hashes` the cache holds, asked a few at a time. A hash it could not be asked about counts as not held,
  *  which at worst sends an entry the server then keeps as it was; how many went unasked, and why, is said once. */
-const heldRemotely = async (cache, hashes) => {
+export const heldRemotely = async (cache, hashes) => {
     const held = new Set();
     const queue = [...new Set(hashes)];
     const unasked = { count: 0, first: undefined };

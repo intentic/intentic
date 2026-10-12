@@ -156,7 +156,7 @@ flowchart LR
   has no meaning for is still refused. `reshape-later` and the old `reshape` op stay only for pages and daemons from
   before `set-shape` (v1.312.0 and older), and go in v1.314.0.
 - Every path under the user's home goes through `homeDir()` from [local-agent](../local-agent), which follows a `HOME`
-  set after startup; a test holds the sources to it.
+  set after startup; a check holds the sources to it ([home-dir](../../_tools/checks/home-dir.mjs)).
 - Scopes are enforced here and nowhere else: the sandbox only asks, and a refusal names the switch that is off.
   Files stay inside the configured roots, writes need their own switch, and every call is appended to
   `~/.intentic/machine/audit.jsonl`, set aside as `audit.jsonl.1` once it reaches 8 MB (2026-10-05: it grew without

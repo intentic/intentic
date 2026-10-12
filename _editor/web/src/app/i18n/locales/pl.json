@@ -5945,6 +5945,8 @@
             "waitsOn": "Czeka na"
         },
         "repoCheckRow": {
+            "partlyPaused": "Częściowo wstrzymane: {count} sprawdzenie jest nowe lub zmienione, odkąd to włączyłeś, i czeka na ciebie; te, na które się zgodziłeś, działają dalej. Przeczytaj je poniżej i włącz ponownie, żeby je przyjąć. | Częściowo wstrzymane: {count} sprawdzenia są nowe lub zmienione, odkąd to włączyłeś, i czekają na ciebie; te, na które się zgodziłeś, działają dalej. Przeczytaj je poniżej i włącz ponownie, żeby je przyjąć. | Częściowo wstrzymane: {count} sprawdzeń jest nowych lub zmienionych, odkąd to włączyłeś, i czeka na ciebie; te, na które się zgodziłeś, działają dalej. Przeczytaj je poniżej i włącz ponownie, żeby je przyjąć.",
+            "waitsForYou": "nowe lub zmienione, czeka na ciebie",
             "changedSinceSwitchedOn": "Wstrzymane: to się zmieniło, odkąd to włączyłeś. Przeczytaj poniżej i włącz ponownie, żeby to przyjąć.",
             "checksFileCouldNot": "Nie udało się odczytać jego pliku sprawdzeń: {error}",
             "declaredNotRunningNothing": "Wyłączone. Nic, co deklaruje repozytorium, nie działa, dopóki tego nie włączysz.",

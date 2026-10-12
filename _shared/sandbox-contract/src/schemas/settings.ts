@@ -543,13 +543,15 @@ export const SandboxSettingsSchema = z.object({
         ),
     // Which repositories' own declarations (`<repo>/.intentic/checks.json`) the owner has switched on, each against the
     // fingerprint of what was declared when they did. A declaration that has since changed no longer matches its
-    // fingerprint and is held rather than run, which is what makes adoption a decision about a command rather than a
-    // permanent permission on a folder. Keyed by repo id, so `/` in the key is ordinary.
+    // fingerprint: the daemon finds the version that did in the repository's history, keeps running each check that is
+    // still word for word one of its checks, and holds every new or rewritten one, which is what makes adoption a
+    // decision about a command rather than a permanent permission on a folder, without one added check switching off
+    // all the others. Keyed by repo id, so `/` in the key is ordinary.
     adoptedChecks: z
         .record(z.string(), z.string())
         .default({})
         .describe(
-            "Which repositories may run the checks they declare for themselves, and exactly which version of those checks you agreed to. A repository's declaration does nothing until it appears here, the same rule git keeps for hooks, which are never cloned; and a declaration that changes afterwards is held until you look at it again.",
+            "Which repositories may run the checks they declare for themselves, and exactly which version of those checks you agreed to. A repository's declaration does nothing until it appears here, the same rule git keeps for hooks, which are never cloned; and a check it adds or rewrites afterwards waits until you look at it again, while the ones you agreed to keep running.",
         ),
     // The owner's alone, since a rule can hold work. A command is refused here: it belongs to the repository it checks,
     // in that repository's `.intentic/checks.json`, never in settings.
@@ -833,7 +835,13 @@ export const RepoChecksSummarySchema = z.object({
     changed: z
         .boolean()
         .describe(
-            "Whether the declaration changed since it was adopted, which holds it until the owner looks again. True only for a repository that was adopted before.",
+            "Whether the declaration gained or rewrote a check since it was adopted. What changed waits until the owner looks again; the checks the owner already agreed to, word for word, keep running (`held` says which is which). True only for a repository that was adopted before.",
+        ),
+    held: z
+        .array(z.boolean())
+        .optional()
+        .describe(
+            "For a changed declaration, which of its checks wait for the owner, in the file's order: true for one that is new or rewritten since they agreed, false for one still running as agreed, or retired. Absent when nothing changed, and from a sandbox that holds a changed declaration whole.",
         ),
     error: z.string().optional().describe("Why the file could not be read, when it exists but does not parse. The checks list is empty in that case."),
 });

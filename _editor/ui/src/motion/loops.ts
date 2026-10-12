@@ -42,11 +42,11 @@ export function useReducedMotion(active: () => boolean = () => true): Readonly<R
 // WHERE A LOOPING GLYPH MAY RUN, as a question about the screen: true on a touch-first one (a phone, a tablet), where
 // the glyph turns as a CSS animation on its own compositor layer, and false under a desktop pointer, where a developer's
 // build keeps it SMIL (useCompositedLoops). SMIL is that build's answer because Chrome DevTools rebuilds an open Styles
-// editor whenever a CSS animation starts or stops (reducedMotion.test.ts), and a spinner starts on every request. It is
-// the wrong answer anywhere else: SMIL runs on the main thread and re-styles, re-lays-out and re-paints the page every
-// frame it is on screen — measured on the /agents board at 4× CPU throttle, nine spinners held the main thread 56% busy
-// with nothing happening, and 3% once they turned as CSS transforms. Nobody edits styles in DevTools on the phone
-// itself; device emulation matches too, which is the one place the two answers meet.
+// editor whenever a CSS animation starts or stops (_tools/checks/reduced-motion.mjs), and a spinner starts on every
+// request. It is the wrong answer anywhere else: SMIL runs on the main thread and re-styles, re-lays-out and re-paints
+// the page every frame it is on screen — measured on the /agents board at 4× CPU throttle, nine spinners held the main
+// thread 56% busy with nothing happening, and 3% once they turned as CSS transforms. Nobody edits styles in DevTools on
+// the phone itself; device emulation matches too, which is the one place the two answers meet.
 //
 // One shared query, bound on first use rather than at import: a test that stubs `window.matchMedia` gets a fresh binding
 // on its next mount, and the previous one lets go of its listener.

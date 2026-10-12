@@ -85,6 +85,8 @@ export default defineConfig({
     define: { ...shared.define, __POSTHOG_KEY__: JSON.stringify(process.env[`POSTHOG_KEY`] ?? ``) },
     plugins: [...shared.plugins, platformOrigin(), onePage(), contentPolicy()],
     resolve: {
+        // The shared resolve, its source-first conditions with it; only the aliases below are added.
+        ...shared.resolve,
         alias: {
             ...shared.resolve.alias,
             // The editor's entry and the one module of it the bootstrap reads, source-first.

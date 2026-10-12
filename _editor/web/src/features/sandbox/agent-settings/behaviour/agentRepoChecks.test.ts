@@ -153,6 +153,40 @@ test(`a declaration that changed since it was adopted says it is not running`, (
     expect(host.textContent).toContain(`changed since you switched it on`);
 });
 
+// A check added to an agreed file waits on its own; the checks the owner already read keep running and say so.
+test(`a declaration that gained a check runs what was agreed to, and marks only the new one as waiting`, () => {
+    repos.value = [
+        declaring({
+            adopted: false,
+            changed: true,
+            checks: [
+                { when: `edit`, run: `pnpm exec eslint {file}` },
+                { when: `turn`, run: `node warm.mjs` },
+            ],
+            fired: [FIVE_DAYS_AGO, null],
+            held: [false, true],
+        }),
+    ];
+    const host = mount();
+    expect(host.textContent).toContain(`Partly paused: 1 check is new or changed`);
+    const lines = [...host.querySelectorAll(`li`)];
+    const eslint = lines.find((line) => line.textContent?.includes(`eslint`));
+    const warm = lines.find((line) => line.textContent?.includes(`warm.mjs`));
+    expect(eslint?.textContent).toContain(`last flagged`);
+    expect(eslint?.className).not.toContain(`opacity-60`);
+    expect(warm?.textContent).toContain(`new or changed, waits for you`);
+    expect(warm?.className).toContain(`opacity-60`);
+});
+
+// An older sandbox says only `changed`: the whole file reads as paused, as it is there.
+test(`a changed declaration that says nothing of which checks wait reads as wholly paused`, () => {
+    repos.value = [declaring({ adopted: false, changed: true, fired: [FIVE_DAYS_AGO] })];
+    const host = mount();
+    expect(host.textContent).toContain(`Paused: this changed since you switched it on`);
+    expect(host.textContent).not.toContain(`last flagged`);
+    expect(host.textContent).toContain(`new or changed, waits for you`);
+});
+
 test(`a declaration nobody has answered yet says so, and counts itself at the foot`, () => {
     repos.value = [declaring({ adopted: false })];
     const host = mount();

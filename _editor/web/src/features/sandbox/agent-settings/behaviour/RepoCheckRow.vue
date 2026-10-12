@@ -47,10 +47,15 @@ const firedWords = (at: number | null | undefined): string =>
         ? t(`sandbox.repoCheckRow.neverFlagged`)
         : t(`sandbox.repoCheckRow.lastFlagged`, { ago: timeAgo(at, { days: true }) });
 
-// Declared checks that are not running; only their own lines dim, never the switch that would start them.
-const idle = computed(() => !entry.adopted && !entry.changed);
+// Whether a check runs: all of them once the owner agreed to the file as it stands, and in a file changed since, each one
+// still word for word what they agreed to. A sandbox that does not say which (no `held`) holds a changed file whole.
+const runs = (index: number): boolean =>
+    entry.checks[index]?.when !== `land` && (entry.adopted || (entry.changed && entry.held !== undefined && entry.held[index] === false));
 
-type Line = { key: string; when: RepoCheckMoment; run: string; paths: readonly string[]; note: string | undefined; dim: boolean };
+// New or rewritten since the owner agreed: what switching the row on again would accept.
+const waits = (index: number): boolean => entry.changed && entry.checks[index]?.when !== `land` && (entry.held?.[index] ?? true);
+
+type Line = { key: string; when: RepoCheckMoment; run: string; paths: readonly string[]; note: string | undefined; waiting: boolean; dim: boolean };
 
 // In the order of their moments, so one moment's checks sit together under a single label.
 const lines = computed((): Line[] =>
@@ -60,14 +65,22 @@ const lines = computed((): Line[] =>
             when: check.when,
             run: check.run,
             paths: check.paths ?? [],
-            // An edit or turn check stamps a firing when it reports something; a retired one has nothing left to have
-            // flagged.
-            note: check.when !== `land` && entry.adopted ? firedWords(entry.fired[index]) : undefined,
-            // A retired check reads as inert as one nobody switched on: neither runs.
-            dim: idle.value || check.when === `land`,
+            // A running check stamps a firing when it reports something; one that waits says so instead, and a retired
+            // one has nothing left to have flagged.
+            note: runs(index) ? firedWords(entry.fired[index]) : waits(index) ? t(`sandbox.repoCheckRow.waitsForYou`) : undefined,
+            waiting: waits(index),
+            // Only a check's own line dims when it does not run, never the switch that would start it; a retired check
+            // reads as inert as one nobody switched on.
+            dim: !runs(index),
         }))
         .toSorted((a, b) => MOMENTS.indexOf(a.when) - MOMENTS.indexOf(b.when)),
 );
+
+// How many of a changed file's checks wait, when some of the rest still run; zero when the whole file is paused.
+const waitingWhileRunning = computed((): number => {
+    const indices = entry.checks.map((_, index) => index);
+    return indices.some(runs) ? indices.filter(waits).length : 0;
+});
 
 type Status = { tone: `success` | `warning` | `default`; words: string } | undefined;
 
@@ -77,7 +90,12 @@ const status = computed((): Status => {
         return undefined;
     }
     if (entry.changed) {
-        return { tone: `warning`, words: t(`sandbox.repoCheckRow.changedSinceSwitchedOn`) };
+        const waiting = waitingWhileRunning.value;
+        return {
+            tone: `warning`,
+            words:
+                waiting > 0 ? t(`sandbox.repoCheckRow.partlyPaused`, { count: waiting }, waiting) : t(`sandbox.repoCheckRow.changedSinceSwitchedOn`),
+        };
     }
     return entry.adopted
         ? { tone: `success`, words: t(`sandbox.repoCheckRow.running`) }
@@ -145,7 +163,8 @@ const STATUS_TEXT = { success: `text-success`, warning: `text-warning`, default:
                         </span>
                     </span>
                     <span
-                        class="col-start-2 row-start-1 min-w-0 break-words text-right text-2xs tabular-nums text-subtle @xl/repo-check:col-start-3"
+                        class="col-start-2 row-start-1 min-w-0 break-words text-right text-2xs tabular-nums @xl/repo-check:col-start-3"
+                        :class="line.waiting ? `text-warning` : `text-subtle`"
                         >{{ line.note ?? `` }}</span
                     >
                 </li>

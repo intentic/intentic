@@ -160,16 +160,14 @@ const guardSnapshots = () => {
 };
 
 /**
- * What each of `ids` said at `rev`, keyed by check id, for turn-findings.mjs to read the live run against.
- *
- * Checks out `rev` in its own worktree (not a stash, which would mutate the tree the caller is standing in) — `--detach`,
- * since nothing here needs a branch. `undefined` when the snapshot couldn't be taken, in which case the caller counts
- * every problem as its own: the safe direction to be wrong in. The worktree is taken back however the run ends: after the
- * check, on a termination signal, or by the next run's sweep when the process was killed outright.
+ * `use(snapshot, lent)` run in a throwaway worktree of `rev` (not a stash, which would mutate the tree the caller is
+ * standing in) — `--detach`, since nothing here needs a branch — with this checkout's node_modules lent to it, `lent`
+ * saying whether they were. `undefined` when the snapshot couldn't be taken. The worktree is taken back however the run
+ * ends: after `use`, on a termination signal, or by the next run's sweep when the process was killed outright.
  */
-export const reportsAt = (root, rev, ids) => {
-    if (ids.length === 0 || git(root, "rev-parse", "-q", "--verify", rev) === undefined) {
-        return undefined; // nothing askable, or a rev this checkout does not have: there is no "before" to compare against
+export const withSnapshot = (root, rev, use) => {
+    if (git(root, "rev-parse", "-q", "--verify", rev) === undefined) {
+        return undefined; // a rev this checkout does not have: there is no "before" to look at
     }
     sweepSnapshots(root);
     guardSnapshots();
@@ -190,6 +188,22 @@ export const reportsAt = (root, rev, ids) => {
             return undefined;
         }
         borrowed = lendModules(root, snapshot);
+        return use(snapshot, borrowed.lent);
+    } finally {
+        release();
+    }
+};
+
+/**
+ * What each of `ids` said at `rev`, keyed by check id, for turn-findings.mjs to read the live run against, from a
+ * snapshot of `rev` (withSnapshot). `undefined` when the snapshot couldn't be taken, in which case the caller counts
+ * every problem as its own: the safe direction to be wrong in.
+ */
+export const reportsAt = (root, rev, ids) => {
+    if (ids.length === 0) {
+        return undefined; // nothing askable
+    }
+    return withSnapshot(root, rev, (snapshot, lent) => {
         const verdicts = checkVerdicts(snapshot, ids);
         return verdicts === undefined
             ? undefined
@@ -197,10 +211,8 @@ export const reportsAt = (root, rev, ids) => {
                   verdicts.map((verdict) => [
                       verdict.id,
                       // `findings` keys each line with the source it anchors to in the snapshot, read before it is removed.
-                      { ok: verdict.ok, lines: problemLines(verdict), findings: findingCounts(verdict, snapshot), blind: blindAtBase(verdict, borrowed.lent) },
+                      { ok: verdict.ok, lines: problemLines(verdict), findings: findingCounts(verdict, snapshot), blind: blindAtBase(verdict, lent) },
                   ]),
               );
-    } finally {
-        release();
-    }
+    });
 };

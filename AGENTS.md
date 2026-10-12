@@ -48,7 +48,9 @@ edit and never stops the turn. Fix it there. A finding that is right where it st
 **When the turn ends**, in a checkout of your own: the `turn` check in `.intentic/checks.json`
 (`node _tools/scripts/verify/verify-turn.mjs`) runs once, if the turn changed this repository. It runs every check the
 manifest lists on your tree, files not yet added to git included, and says back only what your change added against
-where your branch left `main`, so a failure main already carries is charged to no conversation. Its findings arrive as
+where your branch left `main`, so a failure main already carries is charged to no conversation. With the turbo-cache
+card connected it then typechecks the packages that depend on what you edited, and charges you only for one that CI
+recorded as clean before your change. Its findings arrive as
 you stop: fix the ones that are yours, or say why one is not. A tidy finding that is right where it stands is declared
 by an `Allow: <check> — <reason>` line ending your final message, which the land copies into its commit. It is said
 once and holds nothing. Only a Claude Code turn meets it, and never a turn on the main tree, whose working tree holds

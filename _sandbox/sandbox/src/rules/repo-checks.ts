@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { errnoCode, errorMessage, undefinedIfMissing } from "@intentic/base/errors";
+import { forkedExec } from "@intentic/base/git";
 import {
     REPO_CHECKS_FILE,
     type RepoCheck,
@@ -105,10 +106,43 @@ const answers = (adopted: Readonly<Record<string, string>>, declaration: RepoDec
     return recorded !== undefined && (recorded === declaration.fingerprint || declaration.formerFingerprints?.includes(recorded) === true);
 };
 
-/** Whether what a repository declares now is what the owner said yes to. A changed declaration is held, not run; one
- *  that declares nothing that can run has nothing to adopt. */
-export const isAdopted = (adopted: Readonly<Record<string, string>>, declaration: RepoDeclaration): boolean =>
-    standing(declaration.checks).length > 0 && answers(adopted, declaration);
+// One check alone, as a fingerprint: how a check the owner agreed to is recognised in a declaration that has since
+// gained or rewritten others.
+const checkFingerprint = (check: RepoCheck): string => fingerprintOf([check]);
+
+/** The declarations a repository's file held before, newest first, by repository: where an answer recorded against an
+ *  older declaration finds what it agreed to (declarationHistory reads them off git). */
+export type EarlierDeclarations = Readonly<Record<string, readonly (readonly RepoCheck[])[]>>;
+
+/**
+ * Which of a declaration's checks the owner agreed to, in the file's order; a retired land check never counts. An answer
+ * to the declaration as it stands agrees to all of it. An answer recorded against an older one (`earlier`, newest first)
+ * agreed to exactly the checks that version listed, so each check still word for word one of them keeps running and
+ * every check added or rewritten since waits for a new yes: adding one check to a file holds that check, not the whole
+ * file. An answer no earlier version gives agrees to nothing, which is where a declaration from outside lands.
+ */
+export const agreedChecks = (adopted: Readonly<Record<string, string>>, declaration: RepoDeclaration, earlier: readonly (readonly RepoCheck[])[] = []): boolean[] => {
+    const runs = declaration.checks.map((check) => check.when !== "land");
+    if (adopted[declaration.repo] === undefined) {
+        return runs.map(() => false);
+    }
+    if (answers(adopted, declaration)) {
+        return runs;
+    }
+    const agreedTo = earlier.find((checks) => answers(adopted, declarationOf(declaration.repo, checks)));
+    if (agreedTo === undefined) {
+        return runs.map(() => false);
+    }
+    const prints = new Set(standing(agreedTo).map(checkFingerprint));
+    return declaration.checks.map((check, index) => runs[index] === true && prints.has(checkFingerprint(check)));
+};
+
+/** Whether everything a repository declares now is something the owner said yes to, as it stands or check by check in
+ *  an earlier version (agreedChecks). One that declares nothing that can run has nothing to adopt. */
+export const isAdopted = (adopted: Readonly<Record<string, string>>, declaration: RepoDeclaration, earlier: readonly (readonly RepoCheck[])[] = []): boolean => {
+    const agreed = agreedChecks(adopted, declaration, earlier);
+    return declaration.checks.some((check) => check.when !== "land") && declaration.checks.every((check, index) => check.when === "land" || agreed[index] === true);
+};
 
 // A rule id is lowercase alphanumerics and dashes, so a repo id's slashes and dots become dashes. Prefixed, so a
 // synthesized rule is recognisable in a log line and can never be mistaken for one the owner wrote.
@@ -142,9 +176,9 @@ const globsOf = (repo: string, check: RepoCheck): string[] | undefined =>
 /** One declaration as rules, any retired land check aside. Pure, so what a repository's file means can be tested
  *  without a workspace. Ids count every check in the file, so a retired check left in it shifts no other check's
  *  history. */
-export const rulesOf = (declaration: RepoDeclaration): Rule[] =>
+export const rulesOf = (declaration: RepoDeclaration, agreed?: readonly boolean[]): Rule[] =>
     declaration.checks.flatMap((check, index) => {
-        if (check.when === "land") {
+        if (check.when === "land" || (agreed !== undefined && agreed[index] !== true)) {
             return [];
         }
         const paths = globsOf(declaration.repo, check);
@@ -161,26 +195,39 @@ export const rulesOf = (declaration: RepoDeclaration): Rule[] =>
         return [rule];
     });
 
-/** The adopted declarations as rules, in repository order; what gets merged into the owner's own list. */
-export const adoptedRules = (declarations: readonly RepoDeclaration[], adopted: Readonly<Record<string, string>>): Rule[] =>
-    declarations.filter((declaration) => isAdopted(adopted, declaration)).flatMap(rulesOf);
+/** The checks the owner agreed to, as rules, in repository order; what gets merged into the owner's own list. */
+export const adoptedRules = (declarations: readonly RepoDeclaration[], adopted: Readonly<Record<string, string>>, earlier: EarlierDeclarations = {}): Rule[] =>
+    declarations.flatMap((declaration) => rulesOf(declaration, agreedChecks(adopted, declaration, earlier[declaration.repo])));
 
 /** One row per repository for a screen: what it declares, where that stands with the owner, and when each check last
  *  spoke. */
-export const summariesOf = (declarations: readonly RepoDeclaration[], adopted: Readonly<Record<string, string>>, firings: RuleFirings = {}): RepoChecksSummary[] =>
+export const summariesOf = (
+    declarations: readonly RepoDeclaration[],
+    adopted: Readonly<Record<string, string>>,
+    firings: RuleFirings = {},
+    earlier: EarlierDeclarations = {},
+): RepoChecksSummary[] =>
     declarations
-        .map(
-            (declaration): RepoChecksSummary => ({
+        .map((declaration): RepoChecksSummary => {
+            const agreed = agreedChecks(adopted, declaration, earlier[declaration.repo]);
+            const whole = isAdopted(adopted, declaration, earlier[declaration.repo]);
+            // Only a repository adopted before can have changed; a first sighting is simply not adopted yet. A file that
+            // only lost or reordered checks the owner agreed to holds nothing, so it has not changed in any way that waits.
+            const changed = adopted[declaration.repo] !== undefined && !whole;
+            const summary: RepoChecksSummary = {
                 repo: declaration.repo,
                 path: repoChecksPath(declaration.repo),
                 checks: [...declaration.checks],
                 fired: declaration.checks.map((check, index) => (check.when === "land" ? null : (firings[ruleId(declaration.repo, index)] ?? null))),
-                adopted: isAdopted(adopted, declaration),
-                // Only a repository adopted before can have changed; a first sighting is simply not adopted yet.
-                changed: adopted[declaration.repo] !== undefined && !answers(adopted, declaration),
+                adopted: whole,
+                changed,
                 ...(declaration.error === undefined ? {} : { error: declaration.error }),
-            }),
-        )
+            };
+            if (changed) {
+                summary.held = declaration.checks.map((check, index) => check.when !== "land" && agreed[index] !== true);
+            }
+            return summary;
+        })
         .sort((left, right) => (left.repo === "root" ? -1 : right.repo === "root" ? 1 : left.repo.localeCompare(right.repo)));
 
 export type RepoChecksDeps = Pick<Services, "workspace" | "sandboxSettings" | "logger">;
@@ -198,11 +245,87 @@ const recentDeclarations = async (root: string, now: number): Promise<readonly R
     return declarations;
 };
 
+/* EARLIER DECLARATIONS: where an answer to an older version of a file finds the checks it agreed to. */
+
+// How many commits that touched a declaration are read back for the version an answer was given to: a file changes a
+// handful of times a month, so this reaches months back while bounding the read on a repository with a long history.
+const HISTORY_DEPTH = 50;
+
+// A git read that fails is an answer of nothing, never a fault: no repository, or a commit without the file.
+const gitText = async (dir: string, args: readonly string[]): Promise<string | undefined> => {
+    try {
+        return (await forkedExec("git", ["-C", dir, ...args])).stdout;
+    } catch {
+        // allow(silent-catch): no history to read offers no earlier version, so what changed stays held, the safe side
+        return undefined;
+    }
+};
+
+// One version's checks; one that does not parse (a commit caught mid-edit) offers none.
+const checksIn = (text: string): RepoCheck[] | undefined => {
+    try {
+        return RepoChecksFileSchema.parse(JSON.parse(text)).checks;
+    } catch {
+        // allow(silent-catch): a version that does not parse agreed to nothing; the versions around it still count
+        return undefined;
+    }
+};
+
+/** A repository's declaration as each commit that changed it left it, newest first. A version that no longer parses
+ *  is skipped, and a repository git cannot read has no history: either way what changed stays held, the safe side. */
+export const declarationHistory = async (root: string, repo: string): Promise<RepoCheck[][]> => {
+    const dir = repo === "root" ? root : join(root, repo);
+    const listed = await gitText(dir, ["log", `-n${HISTORY_DEPTH}`, "--format=%H", "--", REPO_CHECKS_FILE]);
+    const commits = (listed ?? "").split("\n").filter((line) => line !== "");
+    const versions = await Promise.all(
+        commits.map(async (commit) => {
+            const text = await gitText(dir, ["show", `${commit}:./${REPO_CHECKS_FILE}`]);
+            return text === undefined ? undefined : checksIn(text);
+        }),
+    );
+    return versions.filter((checks): checks is RepoCheck[] => checks !== undefined);
+};
+
+// The version each recorded answer was given to, by repository and answer: found once and kept, since a commit's file
+// never changes. An answer no version gives is asked again a minute later, by when the commit carrying it may exist.
+const MISS_MS = 60_000;
+const answered = new Map<string, { readonly checks: readonly RepoCheck[] | undefined; readonly at: number }>();
+
+/** For each declaration held by an answer to an older version of itself, that version, as agreedChecks reads it. */
+export const earlierDeclarations = async (
+    root: string,
+    declarations: readonly RepoDeclaration[],
+    adopted: Readonly<Record<string, string>>,
+    now: number,
+    history: (root: string, repo: string) => Promise<RepoCheck[][]> = declarationHistory,
+): Promise<EarlierDeclarations> => {
+    const found = await Promise.all(
+        declarations.map(async (declaration): Promise<[string, readonly (readonly RepoCheck[])[]] | undefined> => {
+            const recorded = adopted[declaration.repo];
+            if (recorded === undefined || answers(adopted, declaration)) {
+                return undefined;
+            }
+            const key = `${root}\0${declaration.repo}\0${recorded}`;
+            const known = answered.get(key);
+            if (known !== undefined && (known.checks !== undefined || now - known.at < MISS_MS)) {
+                return known.checks === undefined ? undefined : [declaration.repo, [known.checks]];
+            }
+            const versions = await history(root, declaration.repo);
+            const checks = versions.find((version) => answers(adopted, declarationOf(declaration.repo, version)));
+            answered.set(key, { checks, at: now });
+            return checks === undefined ? undefined : [declaration.repo, [checks]];
+        }),
+    );
+    return Object.fromEntries(found.filter((entry) => entry !== undefined));
+};
+
 /** The rules standing because a repository asked for them. */
 export const repoCheckRules = async (deps: RepoChecksDeps): Promise<Rule[]> => {
     try {
-        const [declarations, settings] = await Promise.all([recentDeclarations(deps.workspace.root, Date.now()), deps.sandboxSettings.get()]);
-        return adoptedRules(declarations, settings.adoptedChecks);
+        const now = Date.now();
+        const [declarations, settings] = await Promise.all([recentDeclarations(deps.workspace.root, now), deps.sandboxSettings.get()]);
+        const earlier = await earlierDeclarations(deps.workspace.root, declarations, settings.adoptedChecks, now);
+        return adoptedRules(declarations, settings.adoptedChecks, earlier);
     } catch (error) {
         deps.logger.warn({ err: error }, "repo checks: could not read what the repositories declare");
         return [];

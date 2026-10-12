@@ -6497,6 +6497,8 @@
             "waitsOn": "Waits on"
         },
         "repoCheckRow": {
+            "partlyPaused": "Partly paused: {count} check is new or changed since you switched it on and waits for you; the ones you agreed to keep running. Read it below, then switch it on again to accept it. | Partly paused: {count} checks are new or changed since you switched it on and wait for you; the ones you agreed to keep running. Read them below, then switch it on again to accept them.",
+            "waitsForYou": "new or changed, waits for you",
             "changedSinceSwitchedOn": "Paused: this changed since you switched it on. Read it below, then switch it on again to accept it.",
             "checksFileCouldNot": "Its checks file could not be read: {error}",
             "declaredNotRunningNothing": "Off. Nothing a repository declares runs until you switch it on.",

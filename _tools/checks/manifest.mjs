@@ -129,6 +129,22 @@ export const CHECKS = [
         about: "no new process the daemon starts by hand instead of through runCheck, spawnAs or @intentic/base/git's exec (ratcheted)",
     },
     {
+        id: "quote-splices",
+        file: "quote-splices.mjs",
+        needs: "checkout",
+        gate: "code",
+        scoped: true,
+        about: "no value spliced into a command between bare quotes outside a file that imports @intentic/sandbox-run/quote, and the files that carry secrets to a host still import it",
+    },
+    {
+        id: "home-dir",
+        file: "home-dir.mjs",
+        needs: "checkout",
+        gate: "code",
+        scoped: true,
+        about: "the device agent (_devices/machine) reaches the home directory only through homeDir(), which follows a HOME set after startup",
+    },
+    {
         id: "format-tiers",
         ratchet: true,
         file: "format-tiers.mjs",
@@ -146,6 +162,14 @@ export const CHECKS = [
         about: "every clipboard read and write the editor and the extensions make goes through the kit's clipboardOf, never navigator.clipboard",
     },
     {
+        id: "reduced-motion",
+        file: "reduced-motion.mjs",
+        needs: "checkout",
+        gate: "code",
+        scoped: true,
+        about: "only @intentic/ui/motion asks the OS about reduced motion, and the app shell, the kit and the extensions start no CSS animation and carry no motion-reduce: variant",
+    },
+    {
         id: "time-zones",
         file: "time-zones.mjs",
         needs: "checkout",
@@ -156,6 +180,14 @@ export const CHECKS = [
     { id: "md-links", file: "md-links.mjs", needs: "checkout", gate: "tidy", about: "every relative link in the documentation resolves" },
     { id: "metaphor-home", file: "metaphor-home.mjs", needs: "checkout", gate: "tidy", about: "the four-noun picture is defined once, reached from the docs, and never from the home page" },
     { id: "alias-targets", file: "alias-targets.mjs", needs: "checkout", gate: "code", about: "every resolver alias points at a path that exists" },
+    {
+        id: "ignored-imports",
+        file: "ignored-imports.mjs",
+        needs: "checkout",
+        gate: "tidy",
+        scoped: true,
+        about: "no relative import reaches a path git ignores: a real break, not a cost (the import lands without its file and every clean checkout fails to load it), tidy while it proves itself",
+    },
     {
         id: "i18n",
         file: "i18n-catalogs.mjs",

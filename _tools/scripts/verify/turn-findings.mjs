@@ -73,6 +73,37 @@ export const findingCounts = (verdict, root, renames = new Map()) => {
 export const blindAtBase = (verdict, lentModules) =>
     verdict.measured === false || (!lentModules && CHECKS.find((check) => check.id === verdict.id)?.needs === "node_modules");
 
+// A count a finding states, standing alone between spaces or brackets: "31 files", "2 silent catch(es), the baseline
+// allows 0". A number inside a path or a name (`file2.ts`, `TS2307`) is part of what the finding names, never a count.
+const COUNT = /(?<=^|[\s(])\d+(?=$|[\s),;%])/g;
+const uncounted = (key) => key.replace(COUNT, "#");
+const countsIn = (key) => [...key.matchAll(COUNT)].map(([count]) => Number(count));
+
+/** Whether a finding is one the base printed, at counts no higher: a directory that went from 32 files to 31 still
+ *  holds too many, and that is the base's finding, made smaller, not the change's. A count that rose is the change's. */
+export const noWorseThan = (key, baseKey) => {
+    const now = countsIn(key);
+    const before = countsIn(baseKey);
+    return uncounted(key) === uncounted(baseKey) && now.length === before.length && now.every((count, index) => count <= (before[index] ?? -1));
+};
+
+// The live lines past what the base printed under their key, less those that are a base finding the base no longer
+// matches only because its count fell: each base line the live run printed fewer of can stand for one such line, once.
+const unmatchedLines = (live, held) => {
+    const leftover = [...live].flatMap(([key, lines]) => lines.slice(held?.get(key)?.length ?? 0).map((line) => ({ key, line })));
+    const spare = [...(held ?? new Map())].flatMap(([key, lines]) => Array.from({ length: Math.max(0, lines.length - (live.get(key)?.length ?? 0)) }, () => key));
+    return leftover
+        .filter(({ key }) => {
+            const at = spare.findIndex((baseKey) => noWorseThan(key, baseKey));
+            if (at === -1) {
+                return true;
+            }
+            spare.splice(at, 1);
+            return false;
+        })
+        .map(({ line }) => line);
+};
+
 /**
  * The caller's share of what the checks found: for each failing verdict, which of its lines the work under test is
  * answerable for.
@@ -98,7 +129,7 @@ export const judgeAgainstBase = (failed, before, root, renames) =>
         // A base read without source (no `findings`) is compared by its lines' keys alone, as it was taken.
         const held = standing?.findings ?? (standing === undefined ? undefined : findingCounts({ stderr: [...standing.lines.values()].join("\n"), stdout: "" }));
         const live = findingCounts(verdict, standing?.findings === undefined ? undefined : root, renames);
-        const unmatched = [...live].flatMap(([key, lines]) => lines.slice(held?.get(key)?.length ?? 0));
+        const unmatched = unmatchedLines(live, held);
         if (standing?.blind === true) {
             return { verdict, added: [], unsure: unmatched };
         }

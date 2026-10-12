@@ -32,6 +32,8 @@ export default defineConfig({
     ...shared,
     plugins: [...shared.plugins, spaFallback()],
     resolve: {
+        // The shared resolve, its source-first conditions with it; only the aliases below are added.
+        ...shared.resolve,
         alias: {
             ...shared.resolve.alias,
             // App's entry, source-first; no dist between an app edit and the demo showing it.

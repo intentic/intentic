@@ -2,7 +2,7 @@ import tailwindcss from "@tailwindcss/vite";
 import vue from "@vitejs/plugin-vue";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
-import { defineConfig } from "vite";
+import { defaultClientConditions, defineConfig } from "vite";
 
 const root = repoRoot(import.meta.url);
 
@@ -21,6 +21,8 @@ export default defineConfig({
             "@intentic/ui/clipboard": join(root, `_editor/ui/src/lib/clipboard.ts`),
             "@intentic/ui": join(root, `_editor/ui/src/index.ts`),
         },
+        // Workspace libraries from source, as the editor's build reads them (../web/vite.shared.ts says why).
+        conditions: [`@intentic/src`, ...defaultClientConditions],
     },
     clearScreen: false,
     server: {

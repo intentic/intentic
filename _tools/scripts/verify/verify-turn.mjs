@@ -3,7 +3,11 @@
 // that made it can still act on it. The sandbox runs it once when an isolated turn is about to stop (`turn` in
 // .intentic/checks.json; _sandbox/sandbox/src/agent/run/turn-checks.ts) and says what it printed back to the model,
 // which may fix it or say why not. Nothing waits on it: it holds no turn, land, commit or push. By hand it is
-// `node _tools/scripts/verify/verify-turn.mjs [--base <sha>]`.
+// `node _tools/scripts/verify/verify-turn.mjs [--base <sha>] [--no-reach]`.
+//
+// Then, within what is left of the Stop's time, the packages that DEPEND on what the change edits are typechecked, and a
+// failure is the change's only where that package typechecked clean before it (reach-typecheck.mjs): the break a change
+// makes in a package nobody working on it opens, such as a table in the demo that must name every contract procedure.
 //
 // The tree is judged as it stands, committed and uncommitted work together, files nobody has added to git yet included,
 // against the commit the work is built on: `--base`, else where HEAD left the main line. Only what the change added is
@@ -25,11 +29,16 @@ import { repoRoot } from "../../constants/src/node.mjs";
 import { changesSince, git } from "../lib/git.mjs";
 import { checkVerdicts, reportsAt } from "./check-snapshot.mjs";
 import { sortJudged } from "./measure-change.mjs";
+import { REACH_BUDGET_SECONDS, reachTypecheck } from "./reach-typecheck.mjs";
 import { judgeAgainstBase } from "./turn-findings.mjs";
 
 // Where a change is read as leaving the main line, asked in this order: the local default branch, then the remote's
 // own idea of it, so a clone that never checked `main` out still has an answer.
 const MAIN_LINES = ["main", "origin/HEAD", "origin/main"];
+
+// How long after it starts the whole run may still be typechecking: under the 180 seconds a turn's Stop allows every check
+// together (TURN_CHECK_CEILING_MS), with room left for warm.mjs, which follows it.
+const REACH_CEILING_MS = 120_000;
 
 // Findings printed per check before the rest are counted: enough to act on, while a check that broke wholesale cannot
 // fill the turn's context.
@@ -222,7 +231,8 @@ const judgeTree = async (root, base, verdicts, renames) => {
 
 // `root` and `args` are the checkout and the command line's arguments; exported so the whole run can be exercised in a
 // checkout of a test's own. Throws only for a fault of its own, which `runGuarded` answers.
-export const run = async (root, args) => {
+export const run = async (root, args, reach = reachTypecheck) => {
+    const started = Date.now();
     const baseArg = args.includes("--base") ? (args[args.indexOf("--base") + 1] ?? "") : undefined;
     const base = baseOf(root, baseArg);
     const why = base === undefined ? noBase(baseArg) : unjudged(root, base);
@@ -242,7 +252,20 @@ export const run = async (root, args) => {
     for (const line of out) {
         process.stdout.write(`${line}\n`);
     }
-    return code;
+    // Then the packages that depend on what the change edits, typechecked within what is left of the Stop's ceiling
+    // (reach-typecheck.mjs); `--no-reach` reads the checks alone.
+    if (args.includes("--no-reach")) {
+        return code;
+    }
+    const deadline = Math.min(Date.now() + REACH_BUDGET_SECONDS * 1000, started + REACH_CEILING_MS);
+    const reached = await reach({ root, base, changed: changesSince(root, base).paths ?? [], deadline });
+    for (const line of reached.notes) {
+        note(line);
+    }
+    for (const line of reached.out) {
+        process.stdout.write(`${line}\n`);
+    }
+    return Math.max(code, reached.code);
 };
 
 /**

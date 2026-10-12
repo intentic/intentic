@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { repoRoot } from "@intentic/constants/node";
 import tailwindcss from "@tailwindcss/vite";
 import vue from "@vitejs/plugin-vue";
-import type { Plugin, ResolvedConfig } from "vite";
+import { defaultClientConditions, type Plugin, type ResolvedConfig } from "vite";
 import { shikiLangDeps } from "../../_tools/code-read/src/langs.ts";
 import { sourceAliases } from "./source-aliases.ts";
 
@@ -26,6 +26,7 @@ export const BUILD_COMMIT = ((): string | null => {
         }).trim();
         return sha === `` ? null : sha;
     } catch {
+        // allow(silent-catch): no git on PATH, or a tree exported without one, is a build with no commit to name
         return null;
     }
 })();
@@ -151,6 +152,11 @@ export const shared = {
     resolve: {
         // Source-first workspace aliases shared with bun.setup.ts; see source-aliases.ts.
         alias: sourceAliases(),
+        // Every other workspace library at the source its `@intentic/src` export condition names, as tsc reads it
+        // (tsconfig.base.json's customConditions) and the site's build does. Through a library's `dist` a build is only
+        // as fresh as whatever last compiled it: CI's self-hosted runners keep `dist` between jobs, the desktop job
+        // builds no library first, and run 38135375327 failed on exports _tools/constants/dist did not have yet.
+        conditions: [`@intentic/src`, ...defaultClientConditions],
     },
     optimizeDeps: {
         // Pre-bundled since each loads via dynamic import from the source-linked ui lib, which the dep optimizer

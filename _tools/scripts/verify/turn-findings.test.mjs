@@ -7,7 +7,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { blindAtBase, findingCounts, judgeAgainstBase, problemLines } from "./turn-findings.mjs";
+import { blindAtBase, findingCounts, judgeAgainstBase, noWorseThan, problemLines } from "./turn-findings.mjs";
 
 // The shape _tools/checks/run.mjs emits per check, with `lines` where a real one writes its findings to stderr.
 const verdict = (id, lines, { ok = false, measured = true } = {}) => ({
@@ -124,4 +124,27 @@ test("a finding that only followed its file to a new path is the same finding, n
     // A second finding in the moved file is still the turn's.
     const extra = "  - _extensions/new/src/locales/en.json: view.other";
     assert.deepEqual(judgeAgainstBase([verdict("paths", [moved, extra])], base, undefined, renames)[0].added, [extra]);
+});
+
+// A finding that states a count changes its words when the count changes. A change that took one file out of a crowded
+// directory once read as having added "31 files" because the base said "32 files".
+test("a standing finding whose count fell is the base's finding made smaller, not the change's", () => {
+    const live = [verdict("layout", ["  - _editor/web/src/app: 31 files"])];
+    const [judged] = judgeAgainstBase(live, atBase([verdict("layout", ["  - _editor/web/src/app: 32 files"])], true));
+    assert.deepEqual(judged.added, []);
+});
+
+test("a standing finding whose count rose is the change's", () => {
+    const live = [verdict("layout", ["  - _editor/web/src/app: 33 files"])];
+    const [judged] = judgeAgainstBase(live, atBase([verdict("layout", ["  - _editor/web/src/app: 32 files"])], true));
+    assert.deepEqual(judged.added, ["  - _editor/web/src/app: 33 files"]);
+});
+
+test("one base finding stands for one smaller finding, and a number inside a name is no count", () => {
+    const base = [verdict("layout", ["  - a/b: 32 files"])];
+    const [twice] = judgeAgainstBase([verdict("layout", ["  - a/b: 31 files", "  - a/b: 30 files"])], atBase(base, true));
+    assert.equal(twice.added.length, 1);
+    assert.equal(noWorseThan("  - src/file1.ts: 1 spelling(s), the baseline allows 0", "  - src/file2.ts: 1 spelling(s), the baseline allows 0"), false);
+    assert.equal(noWorseThan("  - src/a.ts: 1 silent catch(es), the baseline allows 0", "  - src/a.ts: 2 silent catch(es), the baseline allows 0"), true);
+    assert.equal(noWorseThan("  - src/a.ts: 1 silent catch(es), the baseline allows 1", "  - src/a.ts: 2 silent catch(es), the baseline allows 0"), false);
 });

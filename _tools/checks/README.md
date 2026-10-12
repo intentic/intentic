@@ -103,13 +103,17 @@ pnpm checks                                  # all of them; pnpm checks:tidy for
 | [vocabulary](vocabulary.mjs) | a retired word spelled again |
 | [silent-catch](silent-catch.mjs) | a new handler that throws an error away unnarrowed |
 | [process-tiers](process-tiers.mjs) | a daemon process started by hand instead of through `runCheck`, `spawnAs` or `@intentic/base/git`'s `exec` (ratcheted: `baselines/process-tiers.json`) |
+| [quote-splices](quote-splices.mjs) | a value spliced into a command between bare quotes instead of through `@intentic/sandbox-run/quote`, or a file carrying secrets to a host that stopped importing it |
+| [home-dir](home-dir.mjs) | `homedir()` in the device agent (`_devices/machine/src`) instead of `homeDir()` from `@intentic/local-agent` |
 | [time-zones](time-zones.mjs) | a cron, date format or day bucket with no zone |
 | [format-tiers](format-tiers.mjs) | a number or date the editor or an extension formats by hand instead of through the kit (ratcheted: `baselines/format-tiers.json`) |
 | [clipboard-tiers](clipboard-tiers.mjs) | the clipboard reached through `navigator.clipboard` in the editor or an extension instead of through the kit |
+| [reduced-motion](reduced-motion.mjs) | the OS asked about reduced motion outside `@intentic/ui/motion`, a CSS animation utility or `motion-reduce:` variant in the app shell, the kit or an extension, or a skeleton that moves by CSS animation |
 | [layout](layout.mjs) | ghost, over-full, twin, colliding or dead directories |
 | [md-links](md-links.mjs) | a relative documentation link that does not resolve |
 | [metaphor-home](metaphor-home.mjs) | the four-noun picture defined twice or on the home page |
 | [alias-targets](alias-targets.mjs) | a resolver alias pointing at a missing path |
+| [ignored-imports](ignored-imports.mjs) | a relative import of a path `.gitignore` ignores, which lands without its file and fails every clean checkout |
 | [i18n](i18n-catalogs.mjs) | translation keys, placeholders or plurals English lacks, and any key English has that Polish lacks (Polish has users, so it must be complete) |
 | [i18n-literals](i18n-literals.mjs) | English typed into a Vue template, or handed to a notice, a receipt or a failure line from a `.ts` module (ratcheted against `baselines/i18n-code-literals.json`, empty since the 2026-10 sweep, so any finding fails) |
 | [i18n-keys](i18n-keys.mjs) | a missing `t()` key, an unused message, a message that does not compile |

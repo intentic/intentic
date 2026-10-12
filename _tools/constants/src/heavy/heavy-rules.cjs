@@ -40,6 +40,10 @@ const SHIPPED_HEAVY_COMMANDS = Object.freeze({
             pattern: "--watch|--lsp\\b|\\bnodemon\\b|\\b(pnpm|npm|yarn|bun)\\s+(run\\s+)?(dev|serve|start)\\b",
             exempt: true,
         },
+        // A turbo dry run plans a graph and hashes its inputs; it compiles and tests nothing, so it never needs a slot.
+        // The turn check and the cache warmer each plan one as a turn ends, and queued behind two typechecks a plan waited
+        // longer than the whole Stop allows.
+        { id: "turbo-dry-run", pattern: "^turbo\\b.*\\s--dry(-run)?(=\\S+)?(\\s|$)", exempt: true },
         // A repo-wide verification, one at a time in the same pool: two of them are the most expensive thing that can
         // happen to a sandbox at once (measured: 24.9 GiB against a 16 GiB cap), and the second is usually the same
         // work over the same tree, which turbo's cache makes nearly free once the first is done. Never two at once,

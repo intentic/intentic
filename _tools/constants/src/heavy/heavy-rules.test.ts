@@ -63,6 +63,16 @@ test.each(["vitest --watch", "vitest --watchAll", "pnpm test --watch=true", "vue
     },
 );
 
+// A dry run plans and hashes; it compiles nothing, so a plan never waits behind a typecheck. The run it plans still does.
+test.each(["turbo run typecheck --filter=@intentic/demo --only --dry=json", "turbo run build --dry", "turbo run test --dry-run"])("the plan %s is exempt", (invocation) => {
+    expect(matched(invocation)).toBeUndefined();
+});
+
+test(`the run a dry run plans still takes turns`, () => {
+    expect(matched(`turbo run typecheck --filter=@intentic/demo --only`)).toBe(`turbo-fanout`);
+    expect(matched(`turbo run typecheck --filter=@intentic/dry-run-fixture`)).toBe(`turbo-fanout`);
+});
+
 // An agent may install inside its turn, and the daemon installs beside it: every install takes one lane, one at a time,
 // whichever manager and however it is spelled, including the ones that add a test runner or a type-checker.
 test.each([

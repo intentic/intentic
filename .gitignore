@@ -4,7 +4,9 @@
 **/.local
 **/.turbo
 **/dist
-**/dist-*
+# Directories only (dist-bin and its kin): a source file whose name starts with `dist-` is code, and a bare
+# `**/dist-*` kept _tools/scripts/build/dist-staleness.mjs out of every land while suites.mjs imported it.
+**/dist-*/
 # The browser extension's packed artifact (_devices/webext/scripts/pack.mjs). `**/dist` does not cover it:
 # that pattern matches a path component called `dist`, and this is a file called `dist.zip`.
 **/dist.zip
