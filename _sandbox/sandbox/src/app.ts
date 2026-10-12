@@ -26,6 +26,7 @@ import type { Services } from "./composition.js";
 import { type AppEnv, buildOrpcContext } from "./app-env.js";
 import { createDiffRawRoute } from "./git/changes/diff-raw.js";
 import { createSpeechRoute, createSpeechStreamRoute } from "./speech/speech.routes.js";
+import { createVoiceRoute, createVoiceStreamRoute } from "./speech/voice/voice.routes.js";
 import { createEnrollCodeRoute, createEnrollRoute } from "./inventory/enroll.routes.js";
 import { createRouter } from "./router.js";
 import { verifySyncToken } from "./peers/desktop-sync.js";
@@ -332,6 +333,9 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // The composer's live dictation: phrases in as they are spoken, running guesses and finals back. Served next to the
     // other speech routes, where raw-routes.ts declares it.
     serve("GET /speech/stream", createSpeechStreamRoute(services));
+    // Speaking a reply aloud: the voices to choose from, the HTTP door Discord's calls read, and the editor's player.
+    app.route("/", createVoiceRoute(services));
+    serve("GET /speech/say", createVoiceStreamRoute(services));
 
     // The workspace's byte routes: raw file read, the ranged media read a <video> talks to, the ZIP download of a selection, and the three upload doors.
     // Off oRPC since their bodies are streamed bytes; registered before the catch-all, like /health.

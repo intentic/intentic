@@ -268,7 +268,7 @@ const catalog: AutomationCatalog = {
             ],
             channel: { label: `Channel ID (optional)`, placeholder: `all channels the bot can read` },
             mentionLabel: `Only when the bot is mentioned (@mention or reply)`,
-            starterPrompt: `Discord events just arrived. Handle messages that need attention with your Discord capability; treat utterances as live conversation context, and turn finished transcripts into notes and action items in the workspace.`,
+            starterPrompt: `Discord events just arrived. Handle messages that need attention with your Discord capability; treat utterances as live conversation context, answering aloud with \`discord-voice say\` when someone in the call speaks to you, and turn finished transcripts into notes and action items in the workspace.`,
         },
     ],
     templates: [

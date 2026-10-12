@@ -1,4 +1,4 @@
-import { type PasskeysList, ProviderKeysApplySchema, type SandboxVitals } from "@intentic/sandbox-contract";
+import { type PasskeysList, ProviderKeysApplySchema, type SandboxVitals, type VoicesView } from "@intentic/sandbox-contract";
 import { type RawContext, type RawRoutes, refuse } from "@intentic/contract-serve";
 import { KNOWLEDGE_BASE } from "../../vendor/knowledge/wire-types";
 import { type DemoGrant, grantAccess, grants, revokeAccess } from "../fixture/access";
@@ -105,6 +105,22 @@ const okAfter = (write: () => void): { ok: true } => {
     return { ok: true };
 };
 
+// The voices a sandbox speaks with, as the Voice settings list them: a few of Kokoro's and Piper's, none of them
+// installed yet, which is how a fresh sandbox reads. Speaking itself needs a real machine (unserved.ts).
+const DEMO_VOICES: VoicesView = {
+    voices: [
+        { id: `kokoro/af_heart`, label: `Heart`, languages: [`en`], accent: `US`, gender: `female`, model: `kokoro-multi-lang-v1_0`, bytes: 349_906_910, installed: false },
+        { id: `kokoro/am_michael`, label: `Michael`, languages: [`en`], accent: `US`, gender: `male`, model: `kokoro-multi-lang-v1_0`, bytes: 349_906_910, installed: false },
+        { id: `kokoro/bf_emma`, label: `Emma`, languages: [`en`], accent: `GB`, gender: `female`, model: `kokoro-multi-lang-v1_0`, bytes: 349_906_910, installed: false },
+        { id: `kokoro/ef_dora`, label: `Dora`, languages: [`es`], gender: `female`, model: `kokoro-multi-lang-v1_0`, bytes: 349_906_910, installed: false },
+        { id: `piper/pl_PL-gosia-medium`, label: `Gosia`, languages: [`pl`], accent: `PL`, gender: `female`, model: `vits-piper-pl_PL-gosia-medium`, bytes: 67_211_182, installed: false },
+        { id: `piper/pl_PL-darkman-medium`, label: `Darkman`, languages: [`pl`], accent: `PL`, gender: `male`, model: `vits-piper-pl_PL-darkman-medium`, bytes: 67_215_635, installed: false },
+        { id: `piper/de_DE-thorsten-medium`, label: `Thorsten`, languages: [`de`], accent: `DE`, gender: `male`, model: `vits-piper-de_DE-thorsten-medium`, bytes: 67_214_254, installed: false },
+    ],
+    defaults: { en: `kokoro/af_heart`, es: `kokoro/ef_dora`, pl: `piper/pl_PL-gosia-medium`, de: `piper/de_DE-thorsten-medium` },
+    provisioned: true,
+};
+
 // The routes the daemon serves outside oRPC that the app reaches here, keyed as the contract declares them.
 export const raw = {
     // No loopback shortcut here; the demo daemon is only ever at its own origin.
@@ -114,6 +130,7 @@ export const raw = {
     // No phone is paired in the demo, but adding the Android card mints a pairing, so its QR code can be seen; nothing
     // can ever redeem this one.
     "GET /system/phones": () => json({ phones: [] }),
+    "GET /speech/voices": () => json(DEMO_VOICES),
     "POST /system/phones/pair": () => json({ token: `demo-pairing-never-redeemable`, expiresIn: 600_000 }),
     // intentic-netd's own answer in a real sandbox: a daemon that is up, idle and never restarted.
     "GET /system/vitals": () =>

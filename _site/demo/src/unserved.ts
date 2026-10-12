@@ -177,6 +177,8 @@ export const UNSERVED = {
     "POST /speech/prepare": REAL_MACHINE,
     "POST /speech/transcribe": REAL_MACHINE,
     "GET /speech/stream": REAL_MACHINE,
+    "POST /speech/say": REAL_MACHINE,
+    "GET /speech/say": REAL_MACHINE,
     "GET /system/browser-profile": REAL_MACHINE,
     "POST /environment/approve": REAL_MACHINE,
     "POST /environment/reject": REAL_MACHINE,

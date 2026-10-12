@@ -22,6 +22,20 @@ export type DaemonState<TConfig> = Omit<ListenerState, "connectors"> & {
     readonly connectors: ReadonlyArray<{ id: string; config: TConfig }>;
 };
 
+// One utterance from the sandbox's own voice: mono s16le at `sampleRate`, one rate for the whole answer, streamed as the
+// daemon makes it.
+export interface Speech {
+    readonly sampleRate: number;
+    readonly pcm: AsyncIterable<Uint8Array>;
+}
+
+export interface SpeakOptions {
+    // The listeners' language, a hint the text's own language overrides when it can be told.
+    readonly lang?: string | undefined;
+    // Aborting stops the daemon mid-sentence: the request is dropped and it stops making speech nobody will hear.
+    readonly signal?: AbortSignal | undefined;
+}
+
 export interface DaemonClient<TConfig> {
     readonly state: () => Promise<DaemonState<TConfig>>;
     readonly dispatch: (message: ListenerMessage) => Promise<void>;
@@ -32,7 +46,19 @@ export interface DaemonClient<TConfig> {
     // One utterance (a 16 kHz mono s16le WAV) to its words through the sandbox's own speech engine, empty when it held
     // none. Waits out the model's first fetch rather than refusing; the manifest must declare POST /speech/transcribe.
     readonly transcribe: (wav: Uint8Array, language: string | undefined) => Promise<string>;
+    // Text to speech through the sandbox's own voice, the one the owner set for the text's language; undefined when the
+    // text held nothing to say. The manifest must declare POST /speech/say.
+    readonly speak: (text: string, options?: SpeakOptions) => Promise<Speech | undefined>;
 }
+
+// A speech route's refusal as one sentence: the status and the start of what the daemon said about it.
+const refusal = async (route: string, res: Response, log: Logger): Promise<Error> => {
+    const detail = await res.text().catch((error: Error) => {
+        log.warn({ err: error }, `${route} returned ${res.status} and its body could not be read`);
+        return "";
+    });
+    return new Error(`${route} returned ${res.status}${detail === "" ? "" : `: ${detail.slice(0, 200)}`}`);
+};
 
 export const createDaemonClient = <TConfig>(provider: string, daemon: DaemonDoor, log: Logger): DaemonClient<TConfig> => {
     const url = (route: Parameters<typeof listenerRouteUrl>[0]): string => listenerRouteUrl(route, provider);
@@ -88,14 +114,35 @@ export const createDaemonClient = <TConfig>(provider: string, daemon: DaemonDoor
                 body: new Blob([new Uint8Array(wav)], { type: "audio/wav" }),
             });
             if (!res.ok) {
-                const detail = await res.text().catch((error: unknown) => {
-                    log.warn({ err: error }, `/speech/transcribe returned ${res.status} and its body could not be read`);
-                    return "";
-                });
-                throw new Error(`/speech/transcribe returned ${res.status}${detail === "" ? "" : `: ${detail.slice(0, 200)}`}`);
+                throw await refusal("/speech/transcribe", res, log);
             }
             const { text } = (await res.json()) as { text?: unknown };
             return typeof text === "string" ? text : "";
+        },
+        speak: async (text, options = {}) => {
+            const query = new URLSearchParams({ as: "plain" });
+            if (options.lang !== undefined) {
+                query.set("lang", options.lang);
+            }
+            const res = await daemon.request(`/speech/say?${query}`, {
+                method: "POST",
+                headers: { "content-type": "text/plain; charset=utf-8" },
+                body: text,
+                signal: options.signal ?? null,
+            });
+            // 204 is the daemon finding nothing to say in the text (only markup, say), which is no failure.
+            if (res.status === 204) {
+                return undefined;
+            }
+            if (!res.ok || res.body === null) {
+                throw await refusal("/speech/say", res, log);
+            }
+            const sampleRate = Number(res.headers.get("x-sample-rate"));
+            if (!Number.isInteger(sampleRate) || sampleRate <= 0) {
+                await res.body.cancel();
+                throw new Error(`/speech/say answered without a sample rate (x-sample-rate: ${res.headers.get("x-sample-rate") ?? "absent"})`);
+            }
+            return { sampleRate, pcm: chunksOf(res.body) };
         },
         status: (snapshot) => report("status", snapshot, {}),
     };

@@ -3,11 +3,25 @@ import { type GatewayHooks, runConnectorGateway } from "@intentic/connector-runt
 import { type Client, REST } from "discord.js";
 import { type DiscordConnectorConfig, discordGatewayState, ensureDiscordClient, releaseDiscordClient } from "./client.js";
 import { type ChannelLookup, clientLookup, createDiscordListener, deliverToChannel, restLookup } from "./listener.js";
-import { activeVoiceSession, joinVoice, leaveVoice, stopVoice, voiceStatus } from "./voice.js";
+import { activeVoiceSession, joinVoice, leaveVoice, sayInVoice, stopSpeaking, stopVoice, voiceStatus } from "./voice.js";
 
 // Discord gateway: a baked extension's autoStart process. Reconciles a discord.js connection per bot token, dispatches
 // messages, holds voice sessions, and exposes the loopback surface `discord-voice` hits; the daemon holds no Discord
 // connection itself. The connector runtime shares reconcile/status/shutdown; this file is only what's Discord-specific.
+
+// One string field of a control route's JSON body, empty when it is absent. Only discord-voice posts here (loopback), and
+// a body that is not JSON reads as one without the field, which each route refuses as the missing field it is.
+const fieldOf = (raw: string, key: "channelId" | "text"): string => {
+    try {
+        // SAFETY: JSON.parse yields an object, a primitive or null; only `key` is read, and through String(), so a value
+        // of any type is read as text rather than trusted to be it.
+        const parsed = JSON.parse(raw || "{}") as Partial<Record<typeof key, string>> | null;
+        return String(parsed?.[key] ?? "").trim();
+    } catch {
+        // allow(silent-catch): a body that is not JSON carries no field, and the route answers 400 for it
+        return "";
+    }
+};
 
 void runConnectorGateway<DiscordConnectorConfig, Client>({
     provider: "discord",
@@ -78,8 +92,15 @@ void runConnectorGateway<DiscordConnectorConfig, Client>({
                 if (req.method === "POST" && path === "/voice/leave") {
                     return { body: await leaveVoice() };
                 }
+                if (req.method === "POST" && path === "/voice/say") {
+                    const text = fieldOf(await body(), "text");
+                    return text === "" ? { status: 400, body: "text required" } : { body: await sayInVoice(text) };
+                }
+                if (req.method === "POST" && path === "/voice/stop") {
+                    return { body: stopSpeaking() };
+                }
                 if (req.method === "POST" && path === "/voice/join") {
-                    const channelId = String((JSON.parse((await body()) || "{}") as { channelId?: unknown }).channelId ?? "");
+                    const channelId = fieldOf(await body(), "channelId");
                     if (channelId === "") {
                         return { status: 400, body: "channelId required" };
                     }

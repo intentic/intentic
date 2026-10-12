@@ -76,6 +76,8 @@ import { transcriptSearchMetrics } from "./sessions/transcript-search.js";
 import { fileWebchatOutbox, outboxStreamFor, webchatOutboxDocument } from "./webchat/webchat-outbox.js";
 import { fileShareStore, sharesDocument, type ShareStore } from "./share/share-store.js";
 import { createSpeech, type Speech } from "./speech/transcribe.js";
+import { composeSpokenReply } from "./agent/models/spoken-reply.js";
+import { createVoice, type Voice } from "./speech/voice/voice.js";
 import { fileSafetyLog, type SafetyLog, safetyLogDocument } from "./safety/safety-log.js";
 import { createHeldCards, type HeldCards } from "./guard/held-cards.js";
 import { holdDepsOf } from "./guard/held-asks.js";
@@ -276,6 +278,9 @@ export interface Services
     readonly shares: ShareStore;
     // Dictation, heard on this machine: the composer's microphone and Discord's calls (speech/transcribe.ts).
     readonly speech: Speech;
+    // Speaking replies aloud, on this machine or through the owner's own provider: the editor's player and Discord's
+    // calls (speech/voice/voice.ts).
+    readonly voice: Voice;
     // What a panel's preview hostname actually serves; the panels list only advertises a URL where it answers.
     readonly panelUpstreamOf: PanelUpstreamResolver;
 }
@@ -532,6 +537,17 @@ const createDaemonMembers = (
     };
 };
 
+// Speaking replies aloud (speech/voice/voice.ts). Settings, secrets and the spoken-reply job are read through `whole` on
+// every utterance, so a change is heard on the next one.
+const voiceOf = (whole: () => Services, workspaceRoot: string, logger: Services["logger"], settings: Services["sandboxSettings"]): Voice =>
+    createVoice({
+        workspaceRoot,
+        log: (message) => logger.info(`voice: ${message}`),
+        settings: async () => (await settings.get()).voice,
+        secret: async (name) => (await whole().secretRegistry()).find((secret) => secret.name === name)?.value,
+        spokenReply: (ask) => composeSpokenReply(whole(), ask),
+    });
+
 // Builds production services from config, one slice builder at a time in the order their dependencies ask for: each
 // takes what it reads as a typed argument, so a dependency missing here is a compile error, not a first-request crash.
 // Where a gate holds a card its caller stopped waiting on: the turn close's registry, and the conversation's own turn.
@@ -770,6 +786,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         reaper,
         // Each source reads the finished services per call; none runs before composing returns.
         environmentSources: environmentSourcesOf(whole),
+        voice: voiceOf(whole, workspace.root, logger, sandboxSettings),
     };
     wireReactions(services);
     // Registration only; nothing runs until a boot phase drives a moment, so a test build carries it unpaid for.

@@ -3831,6 +3831,24 @@
             "unfitCredentials": "This model signs in from here only; a Claude Code model can run there",
             "unfitPrivacy": "The privacy shield keeps new sessions on this machine",
             "unfitUnmeasured": "Hasn't said how big it is yet"
+        },
+        "readAloud": {
+            "read": "Read aloud",
+            "stop": "Stop reading",
+            "preparing": "Getting the voice ready…",
+            "downloading": "Downloading the voice… {percent}%"
+        },
+        "voiceCards": {
+            "question": "{question} {options}?",
+            "questions": "It has {count} questions for you on screen.",
+            "permission": "It wants to {action}. Allow it?",
+            "plan": "It has a plan ready: {title}. Shall it go ahead?",
+            "or": "or",
+            "notUnderstood": "I didn't catch an answer to that. You can answer on screen."
+        },
+        "voiceReply": {
+            "speaking": "Speaking…",
+            "stopHint": "Esc stops it"
         }
     },
     "common": {
@@ -8088,6 +8106,10 @@
             "handoffSummary": {
                 "label": "Hand-off summaries",
                 "blurb": "The summary a fresh session opens with when you choose to summarise a long conversation that hit a usage limit, instead of re-reading it all."
+            },
+            "spokenReply": {
+                "label": "Spoken replies",
+                "blurb": "The few sentences you hear when you talk to the agent hands-free: what it did and what it needs from you, while the full reply stays on screen."
             }
         },
         "personaBounds": {
@@ -8133,6 +8155,49 @@
             "group": "Pages in chat",
             "title": "Answer with pages",
             "description": "In-chat charts, tables, diagrams and choices. Off hides the tools."
+        },
+        "agentVoice": {
+            "group": "Voice",
+            "replies": "Answer out loud when you talk hands-free",
+            "repliesNote": "A few spoken sentences: what it did and what it needs from you. The full reply stays on screen.",
+            "interrupt": "Stop speaking when you talk over it",
+            "interruptNote": "On speakers without echo cancellation it can hear itself and stop. Off, the microphone rests while it speaks.",
+            "speed": "Speed",
+            "speedNote": "How fast it speaks; 1× is the voice's own pace.",
+            "voiceFor": "Voice for",
+            "voiceForNote": "Which voice speaks each language. Play to hear it.",
+            "language": "Language",
+            "voice": "Voice",
+            "defaultVoice": "Default ({voice})",
+            "providerDefault": "{provider} (its default voice)",
+            "providerVoice": "{provider} · {voice}",
+            "downloads": "{voice} (downloads {size})",
+            "female": "female",
+            "male": "male",
+            "play": "Play",
+            "stop": "Stop",
+            "preparing": "Getting the voice ready…",
+            "downloading": "Downloading the voice… {percent}%",
+            "picked": "Voices you picked",
+            "override": "{language} — {voice}",
+            "removeOverride": "Use the default voice for {language}",
+            "unprovisioned": "Voices on this sandbox can't run on its machine. A speech provider below still works.",
+            "unavailable": "Couldn't read the voices this sandbox has",
+            "providerGroup": "Speech provider",
+            "provider": "Speech provider",
+            "providerNote": "A service of your own, for every language it speaks unless you picked a voice above.",
+            "none": "None",
+            "secret": "API key",
+            "secretNote": "The stored secret holding its key, by name, as Secrets lists it.",
+            "model": "Model",
+            "modelNote": "Empty takes its fast default, the one made for conversation.",
+            "modelPlaceholder": "fast default",
+            "cloudVoice": "Voice ID",
+            "cloudVoiceNote": "One of its voices, by its own ID. Empty takes a default that speaks the language.",
+            "cloudVoicePlaceholder": "default voice",
+            "keyFound": "Key found",
+            "keyMissing": "No stored secret by that name",
+            "sentTo": "What it speaks is sent to {provider}."
         }
     },
     "settings": {

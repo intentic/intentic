@@ -2,6 +2,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, type ComputedRef, type Ref, watch } from "vue";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import type { ComposerVoice } from "../../composer/voice/useComposerVoice";
+import { useSpeechPlayer } from "../../voice/speechPlayer";
 import { type InputHistory, inputHistoryFor, recallStep } from "../../drafts/inputHistory";
 import type { Conversation } from "../../session/conversation";
 import type { ConversationView } from "../useChat-view";
@@ -100,10 +101,16 @@ export const useComposerKeys = (host: KeysHost) => {
         return list !== undefined && POPOVER_KEYS[event.key]?.(list, event) === true;
     };
 
+    const speech = useSpeechPlayer();
     // Escape, after the lists and recall had their claim: voice catches a counting-down send and quits hands-free; an
     // armed edit is abandoned (free: nothing changed); only then does it stop a turn that is generating, since a
     // card-parked turn spends nothing and Stop is the way out of it instead, and one already ending has nothing to stop.
     const escapeKeydown = (): boolean => {
+        // A reply being read aloud is the first thing Escape silences; hands-free stays on for the next thing said.
+        if (speech.speaking.value !== undefined) {
+            speech.stop();
+            return true;
+        }
         if (host.voice.live.value) {
             host.voice.quit();
             return true;

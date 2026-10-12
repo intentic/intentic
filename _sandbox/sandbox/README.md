@@ -377,6 +377,20 @@ flowchart LR
   they cannot be read, and published under numbers rather than their file names. The policy lives off the workspace and only the owner changes it; the agent's `privacy` CLI can only teach
   it a dataset's values.
 
+- Speech runs on this machine in both directions (`speech/`), each in a child process of its own over
+  `sherpa-onnx-node`, so a model's memory goes back to the box when it idles and a native crash takes down only that
+  process. Dictation (`speech/transcribe.ts`) hears the composer's microphone and Discord's calls: Parakeet for 25
+  European languages, baked into the standard image, and Whisper for the rest, fetched the first time one is spoken.
+  Speaking (`speech/voice/`) reads replies aloud for the editor's player (`GET /speech/say`, a socket) and Discord's
+  calls (`POST /speech/say`). The voice is picked from the text's own language: the owner's pick for that language
+  (`settings.voice.voices`), else their own provider (ElevenLabs, Cartesia or Deepgram, its key a stored secret)
+  where it speaks the language, else Kokoro for the eight languages it speaks and a Piper voice for 33 more, fetched
+  from sherpa-onnx's release the first time a voice of them is asked for. A provider that fails part way through
+  hands the rest of the text to the local voice and says so. Text is made speakable first (`voice-text.ts`): code
+  and tables announced rather than spelled, paths and links said short. A hands-free reply is shortened to a few
+  spoken sentences by the `spoken-reply` model job, or cut to its opening words and closing question when no
+  model is set for it.
+
 More: [subsystems](docs/subsystems.md) (how the parts connect), [environment](docs/env-contract.md) (what the daemon
 reads at start), [debugging](docs/debugging.md) (logs, diagnostics, state on disk).
 
@@ -398,7 +412,7 @@ Main groups under `src/`:
 | Turns and agents | `agent/` `conversations/` `runtimes/` `sessions/` `personas/` `loops/` `workflows/` `guard/` `rules/` |
 | Workspace | `workspace/` `git/` `history/` `derived/` `terminal/` `processes/` `ports/` `panels/` |
 | Owner controls | `auth/` `secrets/` `needs/` `areas/` `approvals/` `safety/` `privacy/` `usage/` `wallet/` `settings/` |
-| Outside world | `capabilities/` `extensions/` `browser/` `desktop/` `hosts/` `peers/` `webext/` `phones/` `runners/` `sandboxes/` `ci/` `automations/` |
+| Outside world | `capabilities/` `extensions/` `browser/` `desktop/` `hosts/` `peers/` `webext/` `phones/` `runners/` `sandboxes/` `ci/` `automations/` `speech/` |
 | Network | `netd/` `tunnel/` `vpn/` `exit/` `netdisk/` `public/` `share/` `webchat/` |
 | Plumbing | `bootstrap/` `store/` `seams/` `system/` `http/` `logs/` `invariants/` `workload/` |
 | Test support | `harness/` `fences/` `e2e/` |

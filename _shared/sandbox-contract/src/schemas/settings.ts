@@ -10,6 +10,7 @@ import { LimitHandoffSchema } from "./providers/handoff.js";
 import { SessionsPlacementSchema } from "./offload.js";
 import { LimitPolicySchema, RetryPolicySchema, RoomPolicySchema } from "./turn-break.js";
 import { ZoneSchema } from "../time/zone.js";
+import { VoiceSettingsSchema } from "./voice.js";
 // Which prompt base the agent runs before this turn composes anything on top: Intentic's own (default), Claude Code's
 // preset, or the owner's text. Declared out here since both the daemon and the browser branch on it.
 // Kept in the daemon's auth root, never in SandboxSettings: an agent cannot edit its execution boundary.
@@ -560,6 +561,11 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "How many failures in a row before an automation switches itself off. Zero means never, which is the default, because the failure is not always the automation's fault and a job disabled at three in the morning is one nobody re-enables. Only real errors count: a guard deciding there was nothing to do, or the sandbox dying mid-run, say nothing about the automation.",
         ),
+    // Speaking replies aloud (schemas/voice.ts): which voice speaks each language, and whether a hands-free turn is
+    // answered out loud. Read by the daemon's voice engine on every utterance, so a change is heard on the next one.
+    voice: VoiceSettingsSchema.prefault({}).describe(
+        "How the agent's replies are spoken aloud: whether a hands-free conversation is answered out loud, which voice speaks each language, and a speech provider of your own if you connected one.",
+    ),
     // Defaults all-allow, so a fresh sandbox behaves as it did before this floor existed.
     admission: AdmissionPolicySchema.prefault({}).describe(
         "Whether work started from outside may run, per kind of trigger: let it, hold it for approval, or refuse it. Composes with each automation's own setting, and the stricter of the two wins, so holding every visitor's message needs no edit to each automation.",

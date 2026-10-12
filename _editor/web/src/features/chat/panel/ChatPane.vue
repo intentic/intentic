@@ -14,6 +14,8 @@ import { useRole } from "../../../client/sandbox/useRole";
 import { useChatAttachments } from "../drafts/useChatAttachments";
 import { useQueuedAttachments } from "../drafts/pendingAttachments";
 import { useComposerVoice } from "../composer/voice/useComposerVoice";
+import { useVoiceTalk } from "../voice/useVoiceTalk";
+import { useSandboxSettings } from "../../sandbox/overview/useSandboxSettings";
 import { useEditorContextChip } from "../composer/useEditorContextChip";
 import { useRunThrough } from "../models/run-settings/useRunThrough";
 import { isBlocked } from "../../../client/sandbox/connection";
@@ -394,7 +396,26 @@ const sendNow = (): void => {
 const caretHint = computed((): TooltipValue => ({ title: t(`chat.sendLater.title`), note: t(`chat.sendLater.caretNote`) }));
 
 // Hands-free voice: the mic, and what the pause does; below the send, since the pause is the send.
-const voice = useComposerVoice({ draft, reachable, manages: useRole().canShip, grew: grow, send: submit });
+// Words heard while a card waits answer the card, said out loud by the talking half below (useVoiceTalk).
+const voice = useComposerVoice({
+    draft,
+    reachable,
+    manages: useRole().canShip,
+    grew: grow,
+    send: submit,
+    intercept: (heard) => talk.intercept(heard),
+});
+// The agent answering out loud while hands-free is on: its reply said short, a card it waits on put to the person.
+const voiceSettings = useSandboxSettings().settings;
+const talk = useVoiceTalk({
+    voice,
+    messages,
+    streaming,
+    awaitingDecision: paneView.awaitingDecision,
+    conversationId: () => props.conversation.conversationId,
+    reply: (requestId, answer) => props.conversation.requests.reply(requestId, answer),
+    settings: computed(() => voiceSettings.value?.voice),
+});
 const {
     on: voiceOn,
     state: voiceState,
@@ -439,7 +460,8 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
     history,
     popovers,
     lists: { mention: mentionPopover, command: commandPopover },
-    voice,
+    // While the agent speaks, the slot says so and how to stop it.
+    voice: { ...voice, slotHint: computed(() => talk.hint.value ?? voice.slotHint.value) },
     reachable,
     mobile,
     continueKeyHint,

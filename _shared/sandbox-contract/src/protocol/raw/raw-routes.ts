@@ -21,6 +21,12 @@ export const RAW_ROUTES = {
     // The live phrase stream (schemas/speech.ts): a WebSocket, so the query ticket, floored at the collaborator in the
     // handler like the transcribe it streams.
     "GET /speech/stream": { auth: "door" },
+    // Speaking (schemas/voice.ts): the voices to choose from is a read any tier makes; speech costs this box's CPU or
+    // the owner's provider credits, so saying anything is the collaborator's, like dictating. The WebSocket floors its
+    // query ticket in the handler; the HTTP door is Discord's calls and anything without a socket.
+    "GET /speech/voices": { guest: true },
+    "POST /speech/say": { floor: "collaborator" },
+    "GET /speech/say": { auth: "door" },
     // The bytes behind the workspace reads; each applies the caller's fence itself.
     "GET /workspace/raw": { guest: true, lane: "bulk" },
     // No door, unlike media: the page fetches a thumbnail itself, so the request carries the header.

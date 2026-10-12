@@ -121,6 +121,11 @@ export interface VoiceInput {
     error: Ref<VoiceError | undefined>;
     /** How many times in a row this same failure has come back: a press that fails again must not look like nothing. */
     repeats: Ref<number>;
+    /**
+     * The microphone rests: still open, but what it hears is neither cut into phrases nor sent, and its level reads
+     * nothing. Set while a reply is spoken through the speakers, so the voice that answers is not heard as the person.
+     */
+    resting: Ref<boolean>;
     start(onTranscript: (text: string, heard: Heard) => void): void;
     /** Stop capturing; phrases already spoken are still written out (not sent) as their words land. */
     stop(): void;
@@ -144,6 +149,7 @@ export function useVoiceInput(options: { readonly lang?: () => string; readonly 
     const bridged = ref(false);
     const error = ref<VoiceError>();
     const repeats = ref(0);
+    const resting = ref(false);
 
     // Outlives a press's clearing of `error`, so a press that meets the same failure counts as a repeat. Forgotten once
     // the mic actually comes on.
@@ -436,7 +442,7 @@ export function useVoiceInput(options: { readonly lang?: () => string; readonly 
                 const capture = new AudioWorkletNode(audio, `intentic-voice-capture`);
                 capture.port.addEventListener(`message`, (event: MessageEvent<Float32Array>) => {
                     if (alive() && segmenter === cut) {
-                        level.value = cut.push(resampleTo16k(event.data, audio.sampleRate));
+                        level.value = resting.value ? 0 : cut.push(resampleTo16k(event.data, audio.sampleRate));
                     }
                 });
                 // Unlike `onmessage`, addEventListener doesn't implicitly open the port.
@@ -470,5 +476,5 @@ export function useVoiceInput(options: { readonly lang?: () => string; readonly 
         })();
     };
 
-    return { state, level, pending, speaking, interim, model, bridged, error, repeats, start, stop, abandon, dismiss, retry, warm };
+    return { state, level, pending, speaking, interim, model, bridged, error, repeats, resting, start, stop, abandon, dismiss, retry, warm };
 }

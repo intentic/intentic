@@ -1,5 +1,7 @@
+import { Readable } from "node:stream";
+import { createAudioResource, StreamType } from "@discordjs/voice";
 import { OpusEncoder } from "mediaplex";
-import { to16kMonoPcm } from "./audio.js";
+import { discordFramesOf, to16kMonoPcm } from "./audio.js";
 
 // Pins the Opus decoder contract voice.ts assumes: `new OpusEncoder(48000, 2)` and `decode(packet)` returning 48kHz
 // stereo s16le Buffers. A native-dependency assumption that breaks silently on an upgrade, not on an edit.
@@ -58,4 +60,30 @@ test("a corrupt frame costs one frame, never the rest of the utterance", () => {
     }
     // Decoder must stay usable after a caught corrupt frame.
     expect(decoder.decode(source).length).toBe(FRAME_BYTES);
+});
+
+test("a frame of the bot's speech encodes to one packet that decodes back to a 20ms frame", async () => {
+    // Half a second of a 24 kHz voice, as the daemon streams it, to the packets voice.ts plays into the call.
+    async function* voice(): AsyncGenerator<Uint8Array> {
+        const mono = Buffer.alloc(12_000 * 2);
+        for (let i = 0; i < 12_000; i += 1) {
+            mono.writeInt16LE(Math.round(Math.sin((2 * Math.PI * 180 * i) / 24_000) * 8_000), i * 2);
+        }
+        yield mono;
+    }
+    const encoder = new OpusEncoder(48_000, 2);
+    const decoder = new OpusEncoder(48_000, 2);
+    const packets: Buffer[] = [];
+    for await (const frame of discordFramesOf(voice(), 24_000)) {
+        packets.push(encoder.encode(frame));
+    }
+    expect(packets.length).toBe(25);
+    expect(packets.every((encoded) => decoder.decode(encoded).length === FRAME_BYTES)).toBe(true);
+});
+
+// voice.ts encodes the bot's speech itself because @discordjs/voice's raw-PCM path reaches for an Opus package
+// (@discordjs/opus, opusscript) this tree leaves out; Opus packets go to the player as they are, through no codec.
+test("the player takes the bot's Opus packets as they are, with no codec of its own between", () => {
+    const resource = createAudioResource(Readable.from([packet()]), { inputType: StreamType.Opus });
+    expect(resource.edges).toEqual([]);
 });

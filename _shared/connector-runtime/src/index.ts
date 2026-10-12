@@ -1,5 +1,5 @@
 export type { GatewayCtx } from "./context.js";
-export { createDaemonClient, type DaemonClient, type DaemonState } from "./daemon.js";
+export { createDaemonClient, type DaemonClient, type DaemonState, type SpeakOptions, type Speech } from "./daemon.js";
 export {
     type CloseReason,
     type ConnectorEntry,

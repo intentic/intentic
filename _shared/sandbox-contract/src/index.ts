@@ -207,6 +207,7 @@ export * from "./policy/persona-home.js";
 export * from "./schemas/agents.js";
 export * from "./schemas/speaker.js";
 export * from "./schemas/speech.js";
+export * from "./schemas/voice.js";
 export * from "./schemas/approvals.js";
 export * from "./schemas/automations.js";
 export * from "./schemas/agents-list.js";

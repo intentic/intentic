@@ -35,6 +35,7 @@ const fakeInput = () => {
         bridged: ref(false),
         error: ref<VoiceError>(),
         repeats: ref(0),
+        resting: ref(false),
         start: (transcript) => {
             onTranscript = transcript;
             input.state.value = `listening`;
@@ -59,7 +60,14 @@ const fakeInput = () => {
 };
 
 // Mounted, since the composable lets go of the mic on unmount.
-const mounted = (options: { manages?: boolean; page?: Parameters<typeof useComposerVoice>[0][`page`]; draft?: string } = {}) => {
+const mounted = (
+    options: {
+        manages?: boolean;
+        page?: Parameters<typeof useComposerVoice>[0][`page`];
+        draft?: string;
+        intercept?: (heard: string) => boolean;
+    } = {},
+) => {
     const fake = fakeInput();
     const draft = ref(options.draft ?? ``);
     const sent: string[] = [];
@@ -78,6 +86,7 @@ const mounted = (options: { manages?: boolean; page?: Parameters<typeof useCompo
                     },
                     page: options.page ?? capable,
                     input: fake.input,
+                    intercept: options.intercept ?? (() => false),
                 });
                 return () => h(`div`);
             },
@@ -100,6 +109,41 @@ describe(`a page that can never record`, () => {
         });
         voice.toggle();
         expect(calls).toEqual([]);
+    });
+});
+
+describe(`words that answer a card said out loud`, () => {
+    it(`are taken by the card, leaving the box as it was and sending nothing`, () => {
+        jest.useFakeTimers();
+        const taken: string[] = [];
+        const { voice, input, draft, sent, say } = mounted({
+            draft: `Note:`,
+            intercept: (heard) => {
+                taken.push(heard);
+                return true;
+            },
+        });
+        voice.toggle();
+        input.interim.value = `the second`;
+        say(`The second one.`);
+        input.interim.value = ``;
+        jest.advanceTimersByTime(2000);
+        expect(taken).toEqual([`The second one.`]);
+        expect(draft.value).toBe(`Note:`);
+        expect(sent).toEqual([]);
+    });
+
+    it(`go to the box as ever when nothing takes them, and rest the mic only when asked`, () => {
+        jest.useFakeTimers();
+        const { voice, input, sent, say } = mounted({ intercept: () => false });
+        voice.toggle();
+        say(`Ship it.`);
+        jest.advanceTimersByTime(1200);
+        expect(sent).toEqual([`Ship it.`]);
+        voice.rest(true);
+        expect(input.resting.value).toBe(true);
+        voice.rest(false);
+        expect(input.resting.value).toBe(false);
     });
 });
 

@@ -86,7 +86,7 @@ export const spokenText = (engine: SpeechEngine, raw: string): string => {
 
 // Whether sherpa-onnx ships a binary for this machine; only a new image could change the answer. A package that is not
 // there is the expected no; anything else is still a no, since nothing could load it, but said in the log.
-const runtimePresent = (log: (message: string) => void): boolean => {
+export const runtimePresent = (log: (message: string) => void): boolean => {
     try {
         const require = createRequire(import.meta.url);
         createRequire(require.resolve("sherpa-onnx-node")).resolve(`sherpa-onnx-${process.platform}-${process.arch}/package.json`);

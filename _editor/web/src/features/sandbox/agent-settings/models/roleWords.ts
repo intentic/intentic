@@ -21,6 +21,7 @@ const LABELS: Readonly<Record<ModelRole, () => string>> = {
     "approval-queue": () => t(`sandbox.modelRoles.approvalQueue.label`),
     "extension-review": () => t(`sandbox.modelRoles.extensionReview.label`),
     "loop-iteration": () => t(`sandbox.modelRoles.loopIteration.label`),
+    "spoken-reply": () => t(`sandbox.modelRoles.spokenReply.label`),
 };
 
 const BLURBS: Readonly<Record<ModelRole, () => string>> = {
@@ -39,6 +40,7 @@ const BLURBS: Readonly<Record<ModelRole, () => string>> = {
     "approval-queue": () => t(`sandbox.modelRoles.approvalQueue.blurb`),
     "extension-review": () => t(`sandbox.modelRoles.extensionReview.blurb`),
     "loop-iteration": () => t(`sandbox.modelRoles.loopIteration.blurb`),
+    "spoken-reply": () => t(`sandbox.modelRoles.spokenReply.blurb`),
 };
 
 /** The job's name, as its row and every sentence about it say it. */

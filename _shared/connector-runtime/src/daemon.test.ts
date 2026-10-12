@@ -101,3 +101,44 @@ test("a streamed dispatch skips and logs a line that is not JSON, and delivers t
     ]);
     expect(warned.map((entry) => entry.fields)).toEqual([{ line: "not json" }]);
 });
+
+// Discord's calls speak through this: the text goes as the body, the language as a hint, and the PCM comes back as it is
+// made at the rate the daemon names once for the whole answer.
+test("speak posts the text and streams back the daemon's PCM at the rate it names", async () => {
+    const seen: Array<{ url: string; body: string; type: string | null }> = [];
+    stubGlobal(
+        "fetch",
+        jest.fn(async (url: string, init?: RequestInit) => {
+            seen.push({ url, body: String(init?.body), type: new Headers(init?.headers).get("content-type") });
+            const body = new ReadableStream<Uint8Array>({
+                start(controller) {
+                    controller.enqueue(new Uint8Array([1, 0, 2]));
+                    controller.enqueue(new Uint8Array([0]));
+                    controller.close();
+                },
+            });
+            return new Response(body, { status: 200, headers: { "x-sample-rate": "24000", "content-type": "audio/L16; rate=24000; channels=1" } });
+        }),
+    );
+    const { log } = recordingLog();
+    const speech = await createDaemonClient("discord", door, log).speak("Dzień dobry.", { lang: "pl" });
+    expect(speech?.sampleRate).toBe(24_000);
+    const chunks: number[][] = [];
+    for await (const chunk of speech?.pcm ?? []) {
+        chunks.push([...chunk]);
+    }
+    expect(chunks).toEqual([[1, 0, 2], [0]]);
+    expect(seen).toEqual([{ url: "http://127.0.0.1:1/speech/say?as=plain&lang=pl", body: "Dzień dobry.", type: "text/plain; charset=utf-8" }]);
+});
+
+test("speak reads 204 as nothing to say, and a refusal as an error carrying the daemon's words", async () => {
+    const answers = [new Response(null, { status: 204 }), new Response(JSON.stringify({ error: "no speech runtime for linux-riscv64" }), { status: 501 })];
+    stubGlobal(
+        "fetch",
+        jest.fn(async () => answers.shift() ?? new Response("unexpected", { status: 500 })),
+    );
+    const { log } = recordingLog();
+    const client = createDaemonClient("discord", door, log);
+    expect(await client.speak("```ts```")).toBeUndefined();
+    await expect(client.speak("hello")).rejects.toThrow('/speech/say returned 501: {"error":"no speech runtime for linux-riscv64"}');
+});

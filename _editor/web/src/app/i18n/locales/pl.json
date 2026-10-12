@@ -3831,6 +3831,24 @@
             "unfitCredentials": "Ten model loguje się tylko stąd; model Claude Code może działać tam",
             "unfitPrivacy": "Tarcza prywatności zatrzymuje nowe sesje na tej maszynie",
             "unfitUnmeasured": "Jeszcze nie podała swoich zasobów"
+        },
+        "readAloud": {
+            "read": "Czytaj na głos",
+            "stop": "Przestań czytać",
+            "preparing": "Przygotowuję głos…",
+            "downloading": "Pobieranie głosu… {percent}%"
+        },
+        "voiceCards": {
+            "question": "{question} {options}?",
+            "questions": "Na ekranie czekają na ciebie pytania: {count}.",
+            "permission": "Chce {action}. Pozwolić?",
+            "plan": "Ma gotowy plan: {title}. Ma go wykonać?",
+            "or": "czy",
+            "notUnderstood": "Nie udało mi się zrozumieć odpowiedzi. Możesz odpowiedzieć na ekranie."
+        },
+        "voiceReply": {
+            "speaking": "Mówi…",
+            "stopHint": "Esc przerywa"
         }
     },
     "common": {
@@ -7549,6 +7567,10 @@
             "handoffSummary": {
                 "label": "Streszczenia przekazania",
                 "blurb": "Streszczenie, którym otwiera się nowa sesja, gdy zdecydujesz się streścić długą rozmowę, która wyczerpała limit, zamiast odczytywać ją całą od nowa."
+            },
+            "spokenReply": {
+                "label": "Odpowiedzi głosowe",
+                "blurb": "Kilka zdań, które słyszysz, gdy rozmawiasz z agentem bez użycia rąk: co zrobił i czego od ciebie potrzebuje, a pełna odpowiedź zostaje na ekranie."
             }
         },
         "personaBounds": {
@@ -7594,6 +7616,49 @@
             "group": "Strony w czacie",
             "title": "Odpowiadaj stronami",
             "description": "Wykresy, tabele i strony wyboru w czacie. Wył.: bez narzędzi."
+        },
+        "agentVoice": {
+            "group": "Głos",
+            "replies": "Odpowiadaj na głos, gdy mówisz bez rąk",
+            "repliesNote": "Kilka wypowiedzianych zdań: co zrobił i czego od ciebie potrzebuje. Pełna odpowiedź zostaje na ekranie.",
+            "interrupt": "Przestań mówić, gdy wejdziesz mu w słowo",
+            "interruptNote": "Na głośnikach bez usuwania echa może usłyszeć sam siebie i umilknąć. Wyłączone: mikrofon odpoczywa, gdy agent mówi.",
+            "speed": "Tempo",
+            "speedNote": "Jak szybko mówi; 1× to naturalne tempo głosu.",
+            "voiceFor": "Głos dla języka",
+            "voiceForNote": "Który głos mówi w danym języku. Odtwórz, żeby go usłyszeć.",
+            "language": "Język",
+            "voice": "Głos",
+            "defaultVoice": "Domyślny ({voice})",
+            "providerDefault": "{provider} (jego domyślny głos)",
+            "providerVoice": "{provider} · {voice}",
+            "downloads": "{voice} (do pobrania {size})",
+            "female": "kobiecy",
+            "male": "męski",
+            "play": "Odtwórz",
+            "stop": "Zatrzymaj",
+            "preparing": "Przygotowuję głos…",
+            "downloading": "Pobieranie głosu… {percent}%",
+            "picked": "Wybrane głosy",
+            "override": "{language} — {voice}",
+            "removeOverride": "Wróć do domyślnego głosu: {language}",
+            "unprovisioned": "Głosy tego sandboxa nie mogą działać na jego maszynie. Dostawca mowy poniżej nadal zadziała.",
+            "unavailable": "Nie udało się odczytać głosów tego sandboxa",
+            "providerGroup": "Dostawca mowy",
+            "provider": "Dostawca mowy",
+            "providerNote": "Własna usługa, dla każdego języka, w którym mówi, chyba że wyżej wybrano dla niego głos.",
+            "none": "Brak",
+            "secret": "Klucz API",
+            "secretNote": "Zapisany sekret z jego kluczem, pod nazwą z listy Sekretów.",
+            "model": "Model",
+            "modelNote": "Puste: jego szybki model domyślny, stworzony do rozmowy.",
+            "modelPlaceholder": "szybki domyślny",
+            "cloudVoice": "ID głosu",
+            "cloudVoiceNote": "Jeden z jego głosów, pod jego własnym ID. Puste: domyślny głos mówiący w danym języku.",
+            "cloudVoicePlaceholder": "domyślny głos",
+            "keyFound": "Klucz znaleziony",
+            "keyMissing": "Brak zapisanego sekretu o tej nazwie",
+            "sentTo": "To, co mówi, trafia do {provider}."
         }
     },
     "settings": {

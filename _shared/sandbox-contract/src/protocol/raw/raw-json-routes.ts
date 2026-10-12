@@ -14,6 +14,7 @@ import {
 } from "../../schemas/environment.js";
 import { SyncStatusSchema } from "../../schemas/devices.js";
 import { HostsListSchema } from "../../schemas/hosts.js";
+import { VoicesViewSchema } from "../../schemas/voice.js";
 import { MemberEmailSchema, MemberGrantSchema, MembersListSchema, MembersRosterSchema } from "../../schemas/members.js";
 import { PhonesListSchema, PhoneWakeRegistrationSchema } from "../../schemas/phone.js";
 import { OkSchema } from "../../schemas/shared.js";
@@ -65,6 +66,8 @@ export interface RawJsonRoute {
 }
 
 export const RAW_JSON_ROUTES = {
+    // The voices a sandbox speaks with, for the Voice settings (schemas/voice.ts).
+    "GET /speech/voices": { output: VoicesViewSchema },
     // A server-connect code for the owner's command (short-codes.ts).
     "POST /system/enroll/code": { input: EnrollCodeRequestSchema, output: EnrollCodeAnswerSchema },
     // The roster is ownership's; every write answers the roster after it.

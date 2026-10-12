@@ -25,6 +25,7 @@ import AgentSafetyLog from "../agent-settings/safety/AgentSafetyLog.vue";
 import AgentSafetyPolicy from "../agent-settings/safety/AgentSafetyPolicy.vue";
 import AgentSkills from "../agent-settings/skills/AgentSkills.vue";
 import AgentSubagents from "../agent-settings/behaviour/AgentSubagents.vue";
+import AgentVoice from "../agent-settings/behaviour/AgentVoice.vue";
 import AgentOffload from "../agent-settings/behaviour/AgentOffload.vue";
 import { useT } from "@intentic/ui/i18n";
 
@@ -133,6 +134,8 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
             <AgentCommandOutput />
             <!-- What it may answer with besides words: a page drawn in the chat, or one it asks on. -->
             <AgentChatPages />
+            <!-- Beside it, the other way it answers besides text: out loud, when you talk to it hands-free. -->
+            <AgentVoice />
             <AgentSubagents />
             <!-- Last: not what it may reach for but where the heaviest of it runs, which only matters once a machine has a runner. -->
             <AgentOffload />

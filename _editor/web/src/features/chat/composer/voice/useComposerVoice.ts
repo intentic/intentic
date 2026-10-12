@@ -44,6 +44,10 @@ export interface ComposerVoice {
     readonly toggle: () => void;
     /** Leaves hands-free and lets go of the last failure: what typing and leaving the pane do. */
     readonly quit: () => void;
+    /** A phrase is being spoken into the mic right now: what talking over a spoken reply is read from. */
+    readonly speaking: Ref<boolean>;
+    /** Rests the mic (open, but deaf) while a reply is spoken aloud, and wakes it after. */
+    readonly rest: (deaf: boolean) => void;
 }
 
 export interface VoiceFailure {
@@ -137,11 +141,16 @@ export const useComposerVoice = (composer: {
     readonly send: () => void;
     /** The page asked what it can capture with; the real one unless a test hands it another. */
     readonly page?: VoicePage;
+    /**
+     * Takes words heard while hands-free when they are an answer to something other than the box (a card the agent is
+     * waiting on, said out loud): true, and they are neither written nor sent.
+     */
+    readonly intercept?: (heard: string) => boolean;
     /** The voice input to drive; the real one unless a test hands it another. */
     readonly input?: ReturnType<typeof useVoiceInput>;
 }): ComposerVoice => {
     const input = composer.input ?? useVoiceInput();
-    const { state, level, pending, speaking, interim, model, bridged, error, repeats, start, stop, abandon, dismiss, retry, warm } = input;
+    const { state, level, pending, speaking, interim, model, bridged, error, repeats, resting, start, stop, abandon, dismiss, retry, warm } = input;
     // Asked once: a page's security, its policy and its browser don't change while it is open.
     const unsupported = voiceUnsupported(composer.page);
     const on = computed(() => state.value !== `idle`);
@@ -197,6 +206,12 @@ export const useComposerVoice = (composer: {
     const heard = (text: string, { live }: Heard): void => {
         const committed = beforeGuess ?? composer.draft.value.trim();
         beforeGuess = undefined;
+        if (live && composer.intercept?.(text) === true) {
+            // The guess shown while it was spoken goes with it: the box holds what it held before.
+            composer.draft.value = committed;
+            void nextTick(() => composer.grew());
+            return;
+        }
         composer.draft.value = joinWords(committed, text);
         void nextTick(() => composer.grew());
         if (!live) {
@@ -316,5 +331,9 @@ export const useComposerVoice = (composer: {
             start(heard);
         },
         quit,
+        speaking,
+        rest: (deaf: boolean): void => {
+            resting.value = deaf;
+        },
     };
 };

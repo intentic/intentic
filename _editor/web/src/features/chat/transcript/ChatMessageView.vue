@@ -21,6 +21,7 @@ import { claimInText, openClaimed, openClaimedLinkFromEvent } from "../../../wor
 import { openLoopbackPreview } from "../../terminal/portPreview";
 import { usePaneView } from "../panel/useChat-view";
 import ChatAttachmentStrip from "../composer/ChatAttachmentStrip.vue";
+import ChatReadAloud from "../voice/ChatReadAloud.vue";
 import ChatBrowserHelpCard from "./cards/ChatBrowserHelpCard.vue";
 import ChatCapabilityCard from "./cards/ChatCapabilityCard.vue";
 import NeedCard from "../../needs/NeedCard.vue";
@@ -611,9 +612,19 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
 
             <ChatTodoList v-if="showsTodos" :todos="message.todos!" :live="live" :view="checklistView" />
 
-            <!-- Markdown parts preserve settled DOM while the live tail updates. -->
-            <div v-if="message.text" class="md-prose chat-markdown chat-surface-assistant w-full rounded-lg px-3.5 py-2.5">
-                <MarkdownParts :parts="body" />
+            <!-- Markdown parts preserve settled DOM while the live tail updates. The read-aloud press sits on the bubble's
+                 corner once the reply has stopped growing, shown on hover (always on a phone, and while it reads). -->
+            <div v-if="message.text" class="group/reply relative w-full">
+                <div class="md-prose chat-markdown chat-surface-assistant w-full rounded-lg px-3.5 py-2.5">
+                    <MarkdownParts :parts="body" />
+                </div>
+                <ChatReadAloud
+                    v-if="!live"
+                    :text="message.text"
+                    :read-key="message.id"
+                    class="absolute top-1 right-1 focus-visible:opacity-100 aria-pressed:opacity-100 group-hover/reply:opacity-100"
+                    :class="mobile ? `opacity-60` : `opacity-0`"
+                />
             </div>
             <!-- Marks a message the user wrote in the agent's voice (composer "as agent"); the agent itself never sees this flag. -->
             <p

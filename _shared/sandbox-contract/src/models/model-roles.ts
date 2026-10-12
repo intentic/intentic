@@ -74,6 +74,16 @@ export const MODEL_ROLES = [
         setup: "low",
     },
     {
+        // Reads one finished reply (and the ask it answered) and writes what a person hears in hands-free voice: a few
+        // short sentences, never markdown. A fast model matters more than a strong one, since the person is waiting.
+        id: "spoken-reply",
+        label: "Spoken replies",
+        blurb: "The few sentences you hear when you talk to the agent hands-free: what it did and what it needs from you, while the full reply stays on screen.",
+        kind: "helper",
+        icon: "volume-up",
+        setup: "low",
+    },
+    {
         // One reading answering both halves of "what does this chat open on": an offered `provider:model` line with an
         // effort and an account, and a persona id, each a classification over a fixed list rather than free text. The
         // id predates the persona half and stays as it is, since it is what a settings file already carries.

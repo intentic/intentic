@@ -159,3 +159,7 @@ export const REGISTRY = family(`registry`);
 export const SANDBOX_MEMBERS = family(`members`);
 // Desktop sync's sandbox-level state (GET /system/sync): the one read behind the sync badges and the Add device card.
 export const SYNC_HEALTH = family(`sync-health`);
+// The voices this sandbox can speak with (GET /speech/voices), read by the Agent tab's Voice card. Not one contract read
+// and pushed by no domain: the card refetches it itself after a voice setting is saved, since whether the connected
+// provider's key resolves is part of the answer.
+export const SPEECH_VOICES = family(`speech-voices`);
