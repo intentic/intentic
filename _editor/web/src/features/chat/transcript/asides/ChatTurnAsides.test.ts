@@ -140,7 +140,7 @@ describe(`ChatTurnAsides run node`, () => {
         });
     });
 
-    it(`breathes while the row is being written, and never spins`, () => {
+    it(`marks only the live row for animation, and never spins`, () => {
         const running = [read(`a.ts`), tool({ category: `execute`, name: `Bash`, status: `in_progress` })];
         const live = mount({ tools: running, live: true });
         expect(wash(live)?.classList.contains(`chat-spine-wash-live`)).toBe(true);
