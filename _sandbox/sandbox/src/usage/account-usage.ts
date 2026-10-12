@@ -4,8 +4,7 @@ import {
     bindingWindow,
     type ModelRef,
     type UsageUnread,
-    type UsageWindow,
-    windowLive,
+    currentWindows,
 } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { at, pinDefault } from "../store/evolution/conversions.js";
@@ -28,8 +27,8 @@ export const accountUsageDocument = defineDocument({
 });
 
 export interface AccountUsageStore {
-    // Every account's snapshot, keyed by account; windows already reset are omitted, and an account left with none is
-    // absent rather than measured-and-empty.
+    // Every account's snapshot, keyed by account; a window already reset is kept as lapsed (currentWindows), and an
+    // account with no window still current is absent rather than measured-and-empty.
     readonly read: () => Promise<Record<string, AccountUsage>>;
     readonly record: (account: string, usage: AccountUsage) => Promise<void>;
     // Says a re-read failed on the snapshot it failed to replace, in one write: a read-then-record would put back a
@@ -38,13 +37,6 @@ export interface AccountUsageStore {
     readonly markUnread: (account: string, unread: UsageUnread) => Promise<AccountUsage | undefined>;
     readonly clear: (account: string) => Promise<void>;
 }
-
-// Utilization only climbs within a window, so a reading is a valid floor until `resetsAt`; past it the window no longer
-// exists. A window with no published reset is retired by its own length instead (windowLive): a five-hour pool read as
-// empty says nothing about the window that opened after it, and without this a provider that publishes no reset for an
-// idle pool leaves a 0% on screen for as long as nothing can be re-read.
-const liveWindows = (usage: AccountUsage, now: number): UsageWindow[] =>
-    usage.windows.filter((window) => windowLive(window, usage.measuredAt, now));
 
 // Reset of the pool that refused the turn: the fullest pool this model spends (bindingWindow), scoped to the model
 // since a separately metered pool (e.g. Opus at 100%) must not name its reset over a refused Sonnet turn.
@@ -67,9 +59,12 @@ export const fileAccountUsageStore = (path: string): AccountUsageStore => {
     return {
         read: async () => {
             const now = Date.now();
+            // Utilization only climbs within a window, so a reading is a valid floor until `resetsAt` (or, with none
+            // published, its own length). Past it the pool is kept as lapsed at the floor of 0, not dropped: dropping it
+            // is how an account whose re-reads kept failing lost its five-hour row within hours while the weekly stayed.
             return Object.fromEntries(
                 Object.entries(await file.read())
-                    .map(([id, usage]): [string, AccountUsage] => [id, { ...usage, windows: liveWindows(usage, now) }])
+                    .map(([id, usage]): [string, AccountUsage] => [id, { ...usage, windows: currentWindows(usage, now) }])
                     .filter(([, usage]) => usage.windows.length > 0),
             );
         },
@@ -86,7 +81,7 @@ export const fileAccountUsageStore = (path: string): AccountUsageStore => {
                 marked = { ...usage, unread: { ...unread, since: usage.unread?.since ?? unread.since } };
                 return { ...current, [account]: marked };
             });
-            return marked === undefined ? undefined : { ...marked, windows: liveWindows(marked, Date.now()) };
+            return marked === undefined ? undefined : { ...marked, windows: currentWindows(marked, Date.now()) };
         },
         clear: async (account) => {
             await file.update((current) => {

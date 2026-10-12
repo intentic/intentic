@@ -260,6 +260,17 @@ describe(`usageDetail`, () => {
         expect(detail).toContain(formatAge(measuredAt));
     });
 
+    it(`says a pool whose window closed since it was read reset then, rather than naming a reset that has passed`, () => {
+        const lapsedAt = 1_700_000_000;
+        const projected = headroom({
+            windows: [window({ kind: `five_hour`, utilization: 0, lapsedAt }), window({ kind: `seven_day`, utilization: 40, resetsAt: lapsedAt + 86_400 })],
+            measuredAt: Date.now(),
+        });
+        expect(projected.pools.find((pool) => pool.kind === `five_hour`)?.lapsedAt).toBe(lapsedAt);
+        expect(usageDetail(projected)).toContain(`(reset ${formatReset(lapsedAt)}, not re-read since)`);
+        expect(usageDetail(projected)).toContain(`(resets ${formatReset(lapsedAt + 86_400)})`);
+    });
+
     it(`marks every figure as a ceiling once the reading is old enough to have been overtaken elsewhere`, () => {
         const measuredAt = Date.now() - 8 * 3_600_000;
         const projected = headroom({ windows: [window({ kind: `seven_day`, utilization: 1 })], measuredAt });

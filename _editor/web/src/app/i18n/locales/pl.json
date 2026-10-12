@@ -3336,7 +3336,6 @@
             "refusedAuth": "Dane logowania odrzucone",
             "refusedEntitlement": "Konto odrzucone",
             "refusedLimit": "Limit użycia osiągnięty",
-            "resets": "odnowienie {when}",
             "weeklyAllModels": "Tygodniowo · wszystkie modele",
             "weeklyOverage": "Tygodniowo · wliczona nadwyżka",
             "weeklyScoped": "Tygodniowo · {label}",
@@ -3845,6 +3844,7 @@
             "atMostOtherDevices": "≤ oznacza co najwyżej: inne urządzenia na tym koncie czerpią z tych samych pul.",
             "everyPoolResetFull": "Każda pula została zresetowana: dostępny jest pełny przydział.",
             "heldUntil": "wstrzymane do odnowienia: {pool}",
+            "lapsed": "zresetowano {resetsAt}, od tamtej pory nieodczytane",
             "measured": "zmierzono {measuredAt}",
             "resets": "reset {resetsAt}"
         },

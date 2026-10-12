@@ -56,11 +56,17 @@ test("concurrent records leave a parseable file holding every account", async ()
     expect(Object.keys(JSON.parse(await readFile(path, "utf8"))).toSorted()).toEqual(ids.toSorted());
 });
 
-test("only the window that has reset is dropped: its account keeps the pools that are still live", async () => {
+// Dropping the reset window is how an account whose re-reads kept failing lost its five-hour row within hours while its
+// weekly rows stayed: a partial card that read as complete.
+test("a window that has reset stays on its account as lapsed, at the floor, beside the pools still live", async () => {
     const { store } = tempStore();
-    const rolledOver = window({ kind: "five_hour", utilization: 99, resetsAt: Math.floor((Date.now() - 60 * SECOND) / SECOND) });
+    const closedAt = Math.floor((Date.now() - 60 * SECOND) / SECOND);
+    const rolledOver = window({ kind: "five_hour", utilization: 99, resetsAt: closedAt, rounded: true });
     await store.record("acct-1", snapshot({ windows: [rolledOver, window({ kind: "seven_day", utilization: 40 })] }));
-    expect((await store.read())["acct-1"]?.windows.map((entry) => entry.kind)).toEqual(["seven_day"]);
+    expect((await store.read())["acct-1"]?.windows).toEqual([
+        { kind: "five_hour", utilization: 0, gates: "all", lapsedAt: closedAt },
+        window({ kind: "seven_day", utilization: 40 }),
+    ]);
 });
 
 test("an account left with no live window is absent, not reported as measured-and-empty", async () => {

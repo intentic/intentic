@@ -1,5 +1,6 @@
 import {
     bindingWindow,
+    currentWindows,
     gatesModel,
     gatingWindows,
     headroomState,
@@ -114,6 +115,38 @@ test("a reading is live until its reset, or, with none published, for one window
 
     // And a pool whose length nothing names has only its reset instant; without one it stands.
     expect(windowLive(window({ kind: "claude:tangelo" }), NOW - 400 * HOUR, NOW)).toBe(true);
+});
+
+test("a pool whose window closed since its reading stays on the account, at the floor and marked lapsed, not dropped", () => {
+    const NOW = 1_700_000_000_000;
+    const HOUR = 3_600_000;
+    // The case that lost the five-hour row: re-reads failing for hours, the weekly pools still current.
+    const stale: AccountUsage = {
+        measuredAt: NOW - 8 * HOUR,
+        windows: [
+            window({ kind: "five_hour", utilization: 63, resetsAt: (NOW - 5 * HOUR) / 1_000, rounded: true }),
+            window({ kind: "seven_day", utilization: 42, resetsAt: NOW / 1_000 + 100 * 3_600 }),
+            window({ kind: "model:Fable", label: "Fable", utilization: 0, resetsAt: NOW / 1_000 + 100 * 3_600, gates: { models: ["Fable"] } }),
+        ],
+    };
+    const current = currentWindows(stale, NOW);
+    expect(current.map((pool) => pool.kind)).toEqual(["five_hour", "seven_day", "model:Fable"]);
+    expect(current[0]).toEqual({ kind: "five_hour", utilization: 0, gates: "all", lapsedAt: (NOW - 5 * HOUR) / 1_000 });
+    expect(current.slice(1)).toEqual(stale.windows.slice(1));
+    // The floor binds nothing: the weekly pool is still the one that gates the next turn.
+    expect(bindingWindow({ ...stale, windows: current })?.kind).toBe("seven_day");
+    // Applying it again changes nothing, so a surface may run it over rows the daemon already ran it over.
+    expect(currentWindows({ ...stale, windows: current }, NOW)).toEqual(current);
+
+    // An idle pool published with no reset lapses at the end of its own length.
+    const idle: AccountUsage = {
+        measuredAt: NOW - 6 * HOUR,
+        windows: [window({ kind: "five_hour", utilization: 0 }), window({ kind: "seven_day", utilization: 5, resetsAt: NOW / 1_000 + 3_600 })],
+    };
+    expect(currentWindows(idle, NOW)[0]?.lapsedAt).toBe((NOW - HOUR) / 1_000);
+
+    // A reading with nothing current left says nothing about now: the account reads as unmeasured.
+    expect(currentWindows({ measuredAt: NOW - 8 * HOUR, windows: stale.windows.slice(0, 1) }, NOW)).toEqual([]);
 });
 
 // Serviceability: the one verdict on whether an account can serve a turn.

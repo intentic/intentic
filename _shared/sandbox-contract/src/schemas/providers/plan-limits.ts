@@ -30,6 +30,12 @@ export const UsageWindowSchema = z.object({
         .describe(
             "The provider rounds this figure to a whole percent (Anthropic does), so a reading of 100 may be 99.5 and the pool can still serve. Such a pool reads as at the line, not spent: only the provider's refusal proves it empty.",
         ),
+    lapsedAt: z
+        .number()
+        .optional()
+        .describe(
+            "When the window this pool was last read in closed, in epoch seconds, while nothing has read the pool since. Its `utilization` is then 0, the floor every new window starts from, not a measurement, and `resetsAt` is absent because the next reset is unknown.",
+        ),
 });
 export type UsageWindow = z.infer<typeof UsageWindowSchema>;
 // A failed re-read, whatever the cause: a 429 park, a 403 asking for verification, a 5xx, a timeout. Recorded as the fact

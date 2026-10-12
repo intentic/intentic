@@ -4,13 +4,13 @@ import { computed, type CSSProperties, nextTick, onBeforeUnmount, ref } from "vu
 import {
     formatAge,
     formatRemaining,
-    formatReset,
     meterFill,
     meterTint,
     meterTrack,
     nestPools,
     type PlanHeadroom,
     type PlanLimitPool,
+    poolResetNote,
     usageDetail,
     usageTone,
 } from "./usageStatus";
@@ -203,8 +203,8 @@ onBeforeUnmount(hide);
                         <span v-if="held && heldBy(parent) !== undefined" class="text-2xs text-subtle" :class="depth > 0 ? `ml-3` : ``">{{
                             t(`common.usageRing.heldUntil`, { pool: heldBy(parent)?.label })
                         }}</span>
-                        <span v-else-if="pool.resetsAt !== undefined" class="text-2xs text-subtle" :class="depth > 0 ? `ml-3` : ``">{{
-                            t(`common.usageRing.resets`, { resetsAt: formatReset(pool.resetsAt) })
+                        <span v-else-if="poolResetNote(pool) !== undefined" class="text-2xs text-subtle" :class="depth > 0 ? `ml-3` : ``">{{
+                            poolResetNote(pool)
                         }}</span>
                     </div>
 

@@ -2019,6 +2019,7 @@
             "atMostOtherDevices": "≤ significa como máximo: otros dispositivos de esta cuenta gastan de las mismas bolsas.",
             "everyPoolResetFull": "Todas las bolsas se han reiniciado: la asignación completa está disponible.",
             "heldUntil": "en pausa hasta que se restablezca {pool}",
+            "lapsed": "se reinició {resetsAt}, sin leer desde entonces",
             "measured": "medido {measuredAt}",
             "resets": "se reinicia {resetsAt}"
         },

@@ -124,6 +124,8 @@ export interface PlanLimitPool {
     readonly gates: WindowGates;
     // Read in whole percents (UsageWindow.rounded): at 100 it is at the line, not proven spent.
     readonly rounded?: boolean | undefined;
+    // When the window it was last read in closed (UsageWindow.lapsedAt): `percent` is then the floor, not a reading.
+    readonly lapsedAt?: number | undefined;
 }
 
 // One reading as its pools: named, worst-first, at the provider's precision — the shared basis for every plan-limit display
@@ -136,7 +138,17 @@ const usagePools = (usage: AccountUsage): readonly PlanLimitPool[] =>
         resetsAt: window.resetsAt,
         gates: window.gates,
         rounded: window.rounded,
+        lapsedAt: window.lapsedAt,
     }));
+
+// The line under a pool saying when it moves: its reset, or, for a pool whose window closed since it was read, that it
+// reset then and has not been read since. Undefined when the plan publishes neither.
+export const poolResetNote = (pool: Pick<PlanLimitPool, `resetsAt` | `lapsedAt`>): string | undefined =>
+    pool.lapsedAt !== undefined
+        ? t(`common.usageRing.lapsed`, { resetsAt: formatReset(pool.lapsedAt) })
+        : pool.resetsAt === undefined
+          ? undefined
+          : t(`common.usageRing.resets`, { resetsAt: formatReset(pool.resetsAt) });
 
 // Short label for a pool's window length (e.g. "5h", "wk"), so a narrow rail can show both allowances instead
 // of a bare percent. The rule lives in the contract (windowPeriod), since the daemon retires a reading with no
@@ -407,10 +419,10 @@ export const meterTint = (percent: number): { color?: string } => {
 export const usageDetail = (headroom: PlanHeadroom): string =>
     [
         ...headroom.pools.map(
-            (pool) =>
-                `${pool.label} ${formatRemaining(pool.percent, headroom.stale)}${
-                    pool.resetsAt === undefined ? `` : ` (${t(`chat.usageStatus.resets`, { when: formatReset(pool.resetsAt) })})`
-                }`,
+            (pool) => {
+                const note = poolResetNote(pool);
+                return `${pool.label} ${formatRemaining(pool.percent, headroom.stale)}${note === undefined ? `` : ` (${note})`}`;
+            },
         ),
         t(`chat.usageStatus.measured`, { age: formatAge(headroom.measuredAt) }),
     ].join(` · `);

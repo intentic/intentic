@@ -146,6 +146,28 @@ export const windowLive = (window: UsageWindow, measuredAt: number, now: number)
     return period === undefined || measuredAt + period.seconds * 1000 > now;
 };
 
+// A pool whose reading belongs to a window that has since closed: still the account's pool, at the floor any new window
+// starts from, and marked with when the old window closed so a surface can say it has not been re-read since.
+const lapsedWindow = (window: UsageWindow, measuredAt: number): UsageWindow => {
+    const { resetsAt, rounded: _rounded, utilization: _utilization, ...pool } = window;
+    // Only reached for a window windowLive retired, so with no published reset its length is known.
+    const closedAt = resetsAt ?? Math.floor((measuredAt + (windowPeriod(window)?.seconds ?? 0) * 1000) / 1000);
+    return { ...pool, utilization: 0, lapsedAt: closedAt };
+};
+
+// What a reading says about each of the account's pools now. A window past its reset is kept rather than dropped, as a
+// lapsed pool (lapsedWindow): dropping it made a reading whose re-reads were failing lose its five-hour row within hours
+// while the weekly rows stayed, a partial card that reads as complete. The floor of 0 is what dropping it already meant
+// to every verdict (an absent pool binds nothing). A reading with no window still current says nothing about now and
+// answers none, so the account reads as unmeasured. Idempotent: a pool already lapsed stays as it is.
+export const currentWindows = (usage: AccountUsage, now: number): UsageWindow[] => {
+    const live = (window: UsageWindow): boolean => window.lapsedAt === undefined && windowLive(window, usage.measuredAt, now);
+    if (!usage.windows.some(live)) {
+        return [];
+    }
+    return usage.windows.map((window) => (window.lapsedAt !== undefined || live(window) ? window : lapsedWindow(window, usage.measuredAt)));
+};
+
 // Whether an account can serve a turn: the one rule every picker and surface reads (AccountState). The daemon runs it and
 // publishes the verdict on each account row; the editor runs it only on a row from a daemon older than that field.
 

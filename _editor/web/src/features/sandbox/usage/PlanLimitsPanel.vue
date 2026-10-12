@@ -27,6 +27,7 @@ import {
     type PlanLimitRow,
     planLimitRows,
     planLimitSummary,
+    poolResetNote,
     remainingFigure,
     usageTone,
 } from "../../chat/session/usageStatus";
@@ -426,11 +427,7 @@ const roster = computed(() => {
                                                 {{ formatRemaining(pool.percent, row.stale) }}
                                             </span>
                                             <span class="shrink-0 truncate text-right text-2xs text-subtle @xl:w-32">
-                                                {{
-                                                    pool.resetsAt === undefined
-                                                        ? ``
-                                                        : t(`sandbox.planLimitsPanel.resets`, { resetsAt: formatReset(pool.resetsAt) })
-                                                }}
+                                                {{ poolResetNote(pool) ?? `` }}
                                             </span>
                                         </div>
                                     </div>

@@ -3336,7 +3336,6 @@
             "refusedAuth": "Refused its credential",
             "refusedEntitlement": "Turned this account away",
             "refusedLimit": "Hit its usage limit",
-            "resets": "resets {when}",
             "weeklyAllModels": "Weekly · all models",
             "weeklyOverage": "Weekly · included overage",
             "weeklyScoped": "Weekly · {label}",
@@ -3845,6 +3844,7 @@
             "atMostOtherDevices": "≤ means at most: other devices on this account spend the same pools.",
             "everyPoolResetFull": "Every pool has reset: the full allowance is available.",
             "heldUntil": "on hold until {pool} resets",
+            "lapsed": "reset {resetsAt}, not re-read since",
             "measured": "measured {measuredAt}",
             "resets": "resets {resetsAt}"
         },
