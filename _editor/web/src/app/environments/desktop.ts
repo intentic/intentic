@@ -139,6 +139,12 @@ export const readDesktopSetupReport = (detail: unknown): DesktopSetupReport | un
 /* The way back to the app's setup card once "Back to your workspace" has stepped it aside: the same face, holding the same run. */
 export const DESKTOP_LAUNCHER_LINK = `intentic://launcher`;
 
+/* THIS COMPUTER, the app's other face: its main local window on its folder (setup_link.rs `Launcher { files: true }`).
+   The workspace window's way back there, from the sandbox switcher and from the screens outside the shell (sign-in,
+   setup) that would otherwise be a dead end in a window whose only frame is the page. An app older than `to` reads the
+   bare link, which is this computer too. */
+export const openThisComputer = (): void => openDesktopLink(`${DESKTOP_LAUNCHER_LINK}?to=files`);
+
 /* `frameless` above says the window arrived without a platform frame; these are the presses that work it. */
 export type DesktopWindowVerb = "ready" | "minimize" | "maximize" | "close" | "drag" | "raise";
 

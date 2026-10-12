@@ -43,7 +43,7 @@ import HostedRollbackDialog from "../overview/version/HostedRollbackDialog.vue";
 import { oneLiner } from "../../../app/environments/scriptCommand";
 import RunCommand from "../../../components/RunCommand.vue";
 import { oneLinerFits } from "@intentic/constants";
-import { announceDesktopRoster, DESKTOP_LAUNCHER_LINK, desktopApp, openDesktopLink } from "../../../app/environments/desktop";
+import { announceDesktopRoster, desktopApp, openThisComputer } from "../../../app/environments/desktop";
 import { useAuth } from "../../../client/auth/useAuth";
 import { removalTakes } from "./switcherRows";
 import { useT } from "@intentic/ui/i18n";
@@ -223,7 +223,7 @@ const resumeSetup = (option: SandboxSummary) => ({ path: `/setup`, query: { sand
 const inDesktopApp = desktopApp() !== undefined;
 const toThisComputer = (): void => {
     open.value = false;
-    openDesktopLink(`${DESKTOP_LAUNCHER_LINK}?to=files`);
+    openThisComputer();
 };
 
 // The app's local windows list these same sandboxes in their own switcher and show this account at their rail's foot,

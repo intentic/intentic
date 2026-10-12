@@ -7,7 +7,7 @@ import { useAuth } from "../../client/auth/useAuth";
 import { useBrowserHandoff } from "./browserHandoff";
 import { hasFedCm, useGooglePress } from "./googlePress";
 import { useGoogleIdentity } from "../../client/auth/useGoogleIdentity";
-import { desktopVersion } from "../../app/environments/desktop";
+import { desktopVersion, openThisComputer } from "../../app/environments/desktop";
 import { desktopInstaller } from "../../app/environments/desktopDownloads";
 import { returnPath } from "../../lib/routes/signIn";
 import { useT } from "@intentic/ui/i18n";
@@ -127,6 +127,16 @@ watch(
         <!-- Pinned to a fixed 16:9 across the full width so the two figures stay whole; the bottom crops instead, into the fade below. -->
         <div class="entry-plate" aria-hidden="true"><div class="entry-plate-img"></div></div>
 
+        <!-- The way back in the desktop app, whose workspace window opens here when it holds no session (the local
+             window's "Your workspace"): this screen is outside the shell and its sandbox switcher, and the window has
+             no frame of its own, so without this the only way off it is a sign-in. In the band the window's own
+             buttons sit in, at the other end. -->
+        <div v-if="desktop" class="back-band">
+            <Button :label="t(`shared.backToThisComputer`)" tier="quiet" class="back" @click="openThisComputer">
+                <template #icon><Icon name="arrow-left" /></template>
+            </Button>
+        </div>
+
         <main class="shell">
             <header class="mark"><AppBrand /></header>
 
@@ -238,6 +248,20 @@ watch(
     flex-direction: column;
     align-items: center;
     padding: clamp(1rem, 2.5vw, 2rem) 1.5rem;
+}
+
+/* Out of the flow, so it costs the door none of the height a short window has to spare, and centred on the title band's
+   height, level with the window's own buttons in the opposite corner. */
+.back-band {
+    position: absolute;
+    top: 0;
+    left: 0.5rem;
+    display: flex;
+    align-items: center;
+    height: var(--bar-height);
+}
+.back {
+    font-size: 0.8125rem;
 }
 
 /* The empty axis in the art. */

@@ -8860,6 +8860,7 @@
         }
     },
     "shared": {
+        "backToThisComputer": "Back to This computer",
         "account": "Account",
         "active": "Active",
         "address": "Address",

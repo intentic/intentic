@@ -45,12 +45,15 @@ const desktopInstaller = jest.fn<() => { platform: string; label: string; href: 
 // An ordinary browser unless a test says this is the installed app, whose sign-in is handed to the real browser.
 const desktopVersion = jest.fn<() => string | undefined>(() => undefined);
 const signInThroughBrowser = jest.fn();
+// The app's local window on its folder, asked for by link (desktop.ts `openThisComputer`).
+const openThisComputer = jest.fn();
 jest.mock(`../../app/environments/desktop`, () => ({
     ...actualDesktop,
     DESKTOP_SIGN_IN_LINK: ``,
     desktopVersion: () => desktopVersion(),
     openDesktopLink: jest.fn(),
     signInThroughBrowser: () => signInThroughBrowser(),
+    openThisComputer: () => openThisComputer(),
 }));
 jest.mock(`../../app/environments/desktopDownloads`, () => ({ desktopInstaller: () => desktopInstaller() }));
 
@@ -94,6 +97,7 @@ beforeEach(() => {
     desktopInstaller.mockReset().mockReturnValue(undefined);
     desktopVersion.mockReset().mockReturnValue(undefined);
     signInThroughBrowser.mockReset();
+    openThisComputer.mockReset();
     refusedCredentials.value = 0;
     track.mockReset();
     withFedCm();
@@ -104,6 +108,13 @@ afterEach(() => {
     app = undefined;
     document.body.innerHTML = ``;
     Reflect.deleteProperty(window, `IdentityCredential`);
+});
+
+// A browser tab has its own back button and no app to go back to.
+it(`offers no way back to This computer outside the installed app`, async () => {
+    const el = await mount();
+
+    expect(el.textContent).not.toContain(`Back to This computer`);
 });
 
 it(`signs in to the platform with the token the browser minted`, async () => {
@@ -349,6 +360,18 @@ describe(`in the installed app`, () => {
 
         expect(el.textContent).not.toContain(`Finish signing in in your browser…`);
         expect(el.textContent).toContain(`Continue with Google in your browser`);
+    });
+
+    // The local window's "Your workspace" opens the workspace window here when it holds no session, and this screen is
+    // outside the shell and its sandbox switcher: with no way back, a sign-in was the only way off it.
+    it(`offers the way back to This computer, before and during the wait for the browser`, async () => {
+        await mount();
+        await pressing(`Back to This computer`);
+        expect(openThisComputer).toHaveBeenCalledTimes(1);
+
+        await pressing(`Continue with Google in your browser`);
+        await pressing(`Back to This computer`);
+        expect(openThisComputer).toHaveBeenCalledTimes(2);
     });
 
     // Its reader is already in the app: "Install the app" as the step still to come sent them nowhere.

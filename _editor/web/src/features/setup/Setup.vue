@@ -22,7 +22,7 @@ import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
-import { desktopSetupStopLink, desktopTakesProjects, desktopVersion, openDesktopLink } from "../../app/environments/desktop";
+import { desktopSetupStopLink, desktopTakesProjects, desktopVersion, openDesktopLink, openThisComputer } from "../../app/environments/desktop";
 import { desktopInstaller } from "../../app/environments/desktopDownloads";
 import { openOnProject } from "../../app/projectScope";
 import { apiClient } from "../../lib/useApi";
@@ -466,6 +466,17 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                         :label="t(`setup.setup.backToWorkspace`)"
                         tier="quiet"
                         class="mast-back shrink-0"
+                    >
+                        <template #icon><Icon name="arrow-left" /></template>
+                    </Button>
+                    <!-- With no workspace to go back to, the desktop app's window still has the folder it came from: this page
+                         is outside the shell and its sandbox switcher, so it says so itself, or signing out is the only way off. -->
+                    <Button
+                        v-else-if="desktop"
+                        :label="t(`shared.backToThisComputer`)"
+                        tier="quiet"
+                        class="mast-back shrink-0"
+                        @click="openThisComputer"
                     >
                         <template #icon><Icon name="arrow-left" /></template>
                     </Button>

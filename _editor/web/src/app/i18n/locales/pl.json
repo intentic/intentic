@@ -8321,6 +8321,7 @@
         }
     },
     "shared": {
+        "backToThisComputer": "Wróć na Ten komputer",
         "desktop": "Pulpit",
         "effort": "Wysiłek",
         "model": "Model",

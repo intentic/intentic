@@ -135,12 +135,15 @@ const desktopApp = ref<string | undefined>(undefined);
 const appTakesProjects = ref(true);
 // Every link the page hands the app; a sync link carries the pairing a hosted project's folder is copied in with.
 const openDesktopLink = jest.fn<(link: string) => void>();
+// The app's local window on its folder, asked for by link (desktop.ts `openThisComputer`).
+const openThisComputer = jest.fn<() => void>();
 jest.mock(`../../../app/environments/desktop`, () => ({
     ...actualDesktop,
     desktopSetupLink: () => ``,
     desktopVersion: () => desktopApp.value,
     desktopTakesProjects: () => desktopApp.value !== undefined && appTakesProjects.value,
     openDesktopLink,
+    openThisComputer,
 }));
 jest.mock(`../../../app/environments/desktopDownloads`, () => ({
     ...actualDesktopDownloads,
@@ -239,6 +242,7 @@ beforeEach(() => {
     platformProvision.mockReset().mockImplementation(async ({ sandboxId }) => sandboxRow({ id: sandboxId, hosted: { region: `iad`, warm: false } }));
     mintSyncPairing.mockReset().mockResolvedValue({ token: `pair-token`, mode: `sync` });
     openDesktopLink.mockReset();
+    openThisComputer.mockReset();
     hostedOffer.mockReset().mockResolvedValue({ enabled: false, remaining: 0 });
     addressOffer.mockReset().mockResolvedValue({ enabled: true });
     trash.mockReset().mockResolvedValue({ sandboxes: [] });
@@ -297,6 +301,32 @@ it(`keeps the sandbox once a machine has been started for it`, async () => {
     await waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`, `tok`));
     leave();
     expect(remove).not.toHaveBeenCalled();
+});
+
+// The app's window has no frame and this page is outside the shell and its sandbox switcher: with no workspace to go
+// back to, signing out was the only way off it, so the folder the window came from is offered instead.
+describe(`the way back off the page`, () => {
+    it(`is This computer inside the app while there is no workspace to go back to`, async () => {
+        desktopApp.value = `1.340.0`;
+        await mount();
+        buttonLabelled(`Back to This computer`)!.click();
+        expect(openThisComputer).toHaveBeenCalledTimes(1);
+    });
+
+    it(`is the workspace once there is one`, async () => {
+        desktopApp.value = `1.340.0`;
+        const existing = sandboxRow({ id: `s1`, name: `workspace`, lastSeenAt: `2026-08-06T00:00:00.000Z` });
+        sandboxes.value = [existing];
+        list.mockResolvedValue([existing]);
+        const el = await mount();
+        expect(el.querySelector(`header`)?.textContent).toContain(`Back to workspace`);
+        expect(buttonLabelled(`Back to This computer`)).toBeUndefined();
+    });
+
+    it(`is not This computer in a browser, which has no app to go back to`, async () => {
+        await mount();
+        expect(buttonLabelled(`Back to This computer`)).toBeUndefined();
+    });
 });
 
 // Signing out leaves by a full navigation, which unmounts nothing, so the draft goes first: after the session has ended
@@ -770,7 +800,11 @@ describe(`a folder the app picked, where the platform's machines can hold it`, (
         jest.useFakeTimers();
         await advanceTimersByTimeAsync(500);
         await waitFor(() => expect(el.textContent).toContain(`Handed to the app`));
-        expect({ platform: platformProvision.mock.calls.length, store: hostedProvision.mock.calls.length, opened: openDesktopLink.mock.calls }).toEqual({
+        expect({
+            platform: platformProvision.mock.calls.length,
+            store: hostedProvision.mock.calls.length,
+            opened: openDesktopLink.mock.calls,
+        }).toEqual({
             platform: 0,
             store: 0,
             opened: [[``]],
