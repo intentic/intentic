@@ -2222,13 +2222,11 @@
             "briefReach": "Primeras {sent} de {total} secciones · {chars} caracteres",
             "characters": "caracteres",
             "codeSearch": "Búsqueda de código",
-            "compactMap": "Compacto",
-            "fullMap": "Completo",
             "iqCodeSearch": "Búsqueda de código iq",
             "lengthLimit": "Límite de longitud",
             "noBriefYet": "Aún no se ha escrito. La automatización mensual escribe el primero.",
             "notScheduled": "Sin programar",
-            "ofConversationsGetFullMap": "de las conversaciones reciben el mapa completo",
+            "ofConversationsOpenWithout": "de las conversaciones empiezan sin el mapa",
             "ofConversationsRunWithout": "de las conversaciones funcionan sin iq",
             "ofConversationsRunWithoutNotes": "de las conversaciones funcionan sin las notas de campo",
             "openAutomations": "Abrir automatizaciones",
@@ -2241,6 +2239,7 @@
             "updates": "Actualización",
             "useIqSearchCli": "Usar la CLI de búsqueda iq en vez de grep/find/glob.",
             "withIq": "Con iq",
+            "withMap": "Con mapa",
             "withNotes": "Con notas"
         },
         "agentCommandOutput": {

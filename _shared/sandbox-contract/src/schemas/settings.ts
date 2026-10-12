@@ -337,18 +337,19 @@ export const SandboxSettingsSchema = z.object({
         .boolean()
         .default(false)
         .describe(
-            "Open every conversation with a map of the project it starts in: the parts recent work touched and what each is for, the rest by name, where the agent is standing, and which folders the last three weeks of commits landed in. Worked out fresh each time from the tree and its history rather than written down anywhere, because a written layout is wrong within a fortnight. Off by default, since it spends tokens on the first message of every conversation.",
+            "Open every conversation with a map of the project it starts in: what is in it, what each part is for, and where the agent is standing. Worked out fresh each time rather than written down anywhere, because a written layout is wrong within a fortnight. Off by default, since it spends tokens on the first message of every conversation.",
         ),
     // Judged on the opening turn's own directory listings, not averaged across the conversation, or a twelve-turn
-    // conversation would divide the effect by twelve. Since 2026-10-06 the held-out share gets the full map (every area
-    // with its size) rather than none: the map-or-none comparison had settled its one effect, fewer opening listings.
+    // conversation would divide the effect by twelve. From 2026-10-06 to 10-12 the held-out share got the full map
+    // against a compact one; that changed nothing measurable, so the compact form went and the holdout opens without a
+    // map again.
     workspaceMapHoldout: z
         .number()
         .min(0)
         .max(1)
         .default(0)
         .describe(
-            "What share of conversations to open with the full map instead, every area with its size, so the two forms can be compared. Whole conversations rather than individual turns, because the map is sent once and stays in the conversation's history afterwards.",
+            "What share of conversations to open without the map, so the two can be compared. Whole conversations rather than individual turns, because the map is sent once and stays in the conversation's history afterwards.",
         ),
     // The one composed piece that is WRITTEN rather than derived: a monthly automation rewrites it off the session
     // corpus, so it carries what no scan of the tree can (which commands really work here, what the box can take, how

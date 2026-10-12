@@ -20,14 +20,16 @@ flowchart LR
 - Runtime-neutral on purpose: nothing here knows the daemon's event shapes, settings or state paths. The daemon adapts
   its frames onto `createTurnMetrics` and passes its own notes path; the plugin does the same from hook payloads and
   `~/.claude/projects`.
-- `workspace-map` recomputes a project's areas from the filesystem every time (2,800-character ceiling), in two
-  forms: `full`, every area by size with its languages and the biggest opened up, and `compact`, the areas recent
-  commits touched with their purposes, the rest by name, and the feature-sized folders the last three weeks of commits
-  landed in (`workspace-activity`). The plugin sends `full`; the daemon sends `compact` and measures it against `full`.
-  - 2026-10-06: `compact` exists because the full map's only measured effect was fewer opening `ls` calls (−43% ±22),
-    with no change in calls before reaching the edited file, while the first edits of 38% of sessions landed in six
-    folders two levels below anything the full map names. A purpose is now a README's or manifest's first sentence,
-    markup stripped and cut at a clause, in both forms.
+- `workspace-map` recomputes a project's areas from the filesystem every time (2,800-character ceiling): every area
+  by size with its languages, the biggest opened up, and each one's purpose (a README's or manifest's first sentence,
+  markup stripped and cut at a clause). The plugin and the daemon send the same note; the daemon measures it against
+  no map at all.
+  - 2026-10-12: a `compact` form (the areas recent commits touched, the rest by name, and the folders three weeks of
+    commits landed in) ran against this one for six days and was removed. On 101 against 107 opening turns it changed
+    nothing measurable: opening listings 0.13 against 0.15, calls before the edited file 39.3 against 28.6 (+37% ±55,
+    leaning the full map's way). Its one gain was 1,600 fewer characters, under 500 tokens once per conversation.
+    Before it, the map-or-none comparison (2026-09-05 to 10-06, 826 against 242 opening turns) measured −47% (±20)
+    opening listings and −18% (±18) calls before the edited file, which is what the daemon measures again now.
 - `field-notes` slices a ranked TOON brief to a budget, and `field-notes-prompt` is the brief both writers of that
   file are given, so the writer and the reader cannot drift apart.
 - `experiments` draws a conversation's arm from a salted hash of its id, `turn-metrics` scores one turn's tool calls
@@ -49,8 +51,7 @@ flowchart LR
 
 ## Key files
 
-- [src/workspace-map.ts](src/workspace-map.ts) — the project map: area discovery, purposes, and both renders.
-- [src/workspace-activity.ts](src/workspace-activity.ts) — where recent commits landed, for the compact map.
+- [src/workspace-map.ts](src/workspace-map.ts) — the project map: area discovery, purposes, and the budgeted render.
 - [src/field-notes.ts](src/field-notes.ts) — reads a field-notes file by rank, never re-encoding it.
 - [src/turn-metrics.ts](src/turn-metrics.ts) — the per-turn call ledger every reading is taken from.
 - [src/arm-stats.ts](src/arm-stats.ts) — which readings judge which mechanism, and the two-arm arithmetic.

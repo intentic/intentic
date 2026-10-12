@@ -15,6 +15,7 @@ import type { FieldNotes } from "@intentic/agent-context/field-notes";
 import { IQ_SEARCH_INSTRUCTION_TITLE } from "../../prompt/iq-search-instruction.js";
 import { WORKSPACE_MAP_NOTE_TITLE } from "@intentic/agent-context/workspace-map";
 import { MAP_COMPARISON } from "./experiments.js";
+import { opt } from "../../../opt.js";
 import type { ChildSupervisor } from "../../subagents/children.js";
 import { SPAWN_NOTE_TITLE } from "../../subagents/spawn-note.js";
 import type { TurnContext } from "../../providers/adapter.js";
@@ -210,13 +211,13 @@ test("a gated connector loses its variables from the shell and its skill, and no
     expect(titles(decision)).toEqual([GATED_CREDENTIALS_TITLE]);
 });
 
-// the project map: an opening, non-fork message, in both arms of a measured conversation, which differ only in its form
+// the project map: an opening, non-fork message, and only in the treatment arm of a measured conversation
 
 const MAP = "## Map of this project\n\nbilling/ takes the payments; mailer/ sends the receipts.";
 const MAP_ON = SandboxSettingsSchema.parse({ workspaceMap: true });
 const MAP_MEASURED = SandboxSettingsSchema.parse({ workspaceMap: true, workspaceMapHoldout: 0.5 });
-const MAP_TREATED = conversationIn("workspace-map-form", true);
-const MAP_CONTROL = conversationIn("workspace-map-form", false);
+const MAP_TREATED = conversationIn("workspace-map-or-none", true);
+const MAP_CONTROL = conversationIn("workspace-map-or-none", false);
 const LEAN: Persona = { id: "lean", capabilities: [], briefing: { omit: ["map"] } };
 // A conversation cut from another, on its first turn.
 const FORK = { conversationId: "parent", keep: 2, files: "now" } as const;
@@ -232,12 +233,12 @@ test.each([
         { turnIndex: 0, mapArm: true, mapCohort: MAP_COMPARISON, mapChars: MAP.length },
     ],
     [
-        "the opening turn of a control conversation, which gets the full form",
+        "the opening turn of a control conversation",
         MAP_MEASURED,
         { conversationId: MAP_CONTROL },
         undefined,
-        true,
-        { turnIndex: 0, mapArm: false, mapCohort: MAP_COMPARISON, mapChars: MAP.length },
+        false,
+        { turnIndex: 0, mapArm: false, mapCohort: MAP_COMPARISON },
     ],
     [
         "a fork's opening turn",
@@ -457,7 +458,7 @@ const MEASURED_FACTS: AdmittedTurnFacts = { ...FACTS, settings: ALL_MEASURED, iq
 
 test.each(Array.from({ length: 8 }, (_, index) => `conversation-${index}`))("%s draws one arm per salt, the same on every turn", (conversationId) => {
     const search = experimentArm("iq-search", conversationId, 0.5);
-    const map = experimentArm("workspace-map-form", conversationId, 0.5);
+    const map = experimentArm("workspace-map-or-none", conversationId, 0.5);
     const notes = experimentArm("field-notes", conversationId, 0.5);
 
     const first = decided(MEASURED_FACTS, turn({ conversationId }));
@@ -468,8 +469,8 @@ test.each(Array.from({ length: 8 }, (_, index) => `conversation-${index}`))("%s 
         iqSearchCohort: TEACHING.cohort,
         mapArm: map,
         mapCohort: MAP_COMPARISON,
-        // Both arms are sent a map; they differ in its form.
-        mapChars: MAP.length,
+        // What the opening message paid, so only on a conversation that was sent the map.
+        ...opt("mapChars", map ? MAP.length : undefined),
         notesArm: notes,
         // What the prompt paid, so only on a turn that was sent the brief; the cohort on both arms, to pair them.
         ...(notes ? { notesChars: BRIEF.chars } : {}),

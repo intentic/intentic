@@ -39,8 +39,10 @@ interface Experiment<Reading> {
     readonly stamps: (reading: Reading) => TurnExperimentStamps;
 }
 
-// What the map experiment compares, stamped on both arms so a reading never mixes it with the map-or-none rows before.
-export const MAP_COMPARISON = "compact-vs-full";
+// What the map experiment compares, stamped on both arms so a reading never mixes it with the rows of an earlier
+// comparison: the unstamped map-or-none rows, whose holdout share moved between 10% and 54% while the population moved
+// under it, and the compact-vs-full rows (2026-10-06 to 10-12), whose arm meant another thing.
+export const MAP_COMPARISON = "map-vs-none";
 
 // Annotated, not inferred: a nested ternary over a literal and a union widens to `string`.
 const deliveryOf = (outcome: TurnContextOutcome | undefined): TurnContextSkip | "delivered" | undefined =>
@@ -54,10 +56,10 @@ export const EXPERIMENTS: { readonly [K in keyof ExperimentReadings]: Experiment
         // A cohort only beside its arm: on an unmeasured turn it names a revision nothing was compared against.
         stamps: ({ arm, cohort }) => ({ ...opt("iqSearchArm", arm), ...opt("iqSearchCohort", arm === undefined ? undefined : cohort) }),
     },
-    // Compact map (the arm) against the full one (the holdout); both arms get a map. Its own salt and cohort, since the
-    // map-or-none comparison before it stamped the same arm field with another meaning.
+    // The map (the arm) against none (the holdout). Its own salt and cohort, since both comparisons before it stamped
+    // the same arm field.
     workspaceMap: {
-        salt: "workspace-map-form",
+        salt: "workspace-map-or-none",
         on: (settings) => settings.workspaceMap,
         holdout: (settings) => settings.workspaceMapHoldout,
         stamps: ({ arm, notes }) => ({

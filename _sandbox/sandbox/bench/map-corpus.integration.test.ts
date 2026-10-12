@@ -87,6 +87,7 @@ test("the run's own area is recognised as the one it is standing in", () => {
     expect(parsed?.here).toBe("engine");
 });
 
+// The compact form was sent from 2026-10-06 to 10-12 and is no longer rendered; transcripts from that week still carry it.
 test("the compact form reads back too: its rows, its also-line names, and the project it names", () => {
     const note = [
         "## Map of this project",
@@ -103,14 +104,6 @@ test("the compact form reads back too: its rows, its also-line names, and the pr
     expect(parsed?.areas.map((area) => area.name)).toEqual(["web/features", "billing", "web/shell", "web/ui", "docs"]);
     expect(parsed?.areas.filter((area) => area.purpose).map((area) => area.name)).toEqual(["web/features", "billing"]);
     expect(parsed).toMatchObject({ project: "shop", here: "billing", truncated: true, chars: note.length });
-});
-
-test("the compact note the renderer produces is the note this reads back", () => {
-    const root = workspaceOf();
-    const note = workspaceMapNote({ root, cwd: root, form: "compact" });
-    const parsed = parseMapNote(`${note ?? ""}\n\nfix the thing please`);
-    expect(parsed?.areas.map((area) => area.name).toSorted()).toEqual(["engine", "notes", "site"]);
-    expect(parsed?.chars).toBe(note?.length);
 });
 
 /* ---- the corpus reading ---- */

@@ -2,7 +2,7 @@ import { experimentArm } from "@intentic/agent-context/experiments";
 import { type AgentTurn, SandboxSettingsSchema, capabilitiesOf } from "@intentic/sandbox-contract";
 import { premiseOf, type TurnRuntime } from "./turn-premise.js";
 
-// The map's form as the premise settles it: the arm picks compact or full, and a sandbox measuring nothing gets compact.
+// Whether the premise sends the map: the arm decides where one was drawn, the switch where none was.
 
 const conversationIn = (salt: string, arm: boolean): string => {
     const id = Array.from({ length: 64 }, (_, index) => `conversation-${index}`).find((each) => experimentArm(salt, each, 0.5) === arm);
@@ -22,16 +22,13 @@ const premise = (settings: object, conversationId: string | undefined) =>
     );
 
 test.each([
-    ["a treated conversation", { workspaceMap: true, workspaceMapHoldout: 0.5 }, conversationIn("workspace-map-form", true), "compact"],
-    ["a held-out conversation", { workspaceMap: true, workspaceMapHoldout: 0.5 }, conversationIn("workspace-map-form", false), "full"],
-    ["a sandbox measuring nothing", { workspaceMap: true }, "conversation-0", "compact"],
-] as const)("%s is sent a map on its opening turn, in the form its arm picks", (_case, settings, conversationId, form) => {
-    const settled = premise(settings, conversationId);
-
-    expect(settled.send.map).toBe(true);
-    expect(settled.mapForm).toBe(form);
+    ["a treated conversation", { workspaceMap: true, workspaceMapHoldout: 0.5 }, conversationIn("workspace-map-or-none", true), true],
+    ["a held-out conversation", { workspaceMap: true, workspaceMapHoldout: 0.5 }, conversationIn("workspace-map-or-none", false), false],
+    ["a sandbox measuring nothing", { workspaceMap: true }, "conversation-0", true],
+] as const)("%s is sent the map on its opening turn only if its arm says so", (_case, settings, conversationId, sent) => {
+    expect(premise(settings, conversationId).send.map).toBe(sent);
 });
 
 test("with the switch off neither arm is sent a map", () => {
-    expect(premise({ workspaceMap: false, workspaceMapHoldout: 0.5 }, conversationIn("workspace-map-form", false)).send.map).toBe(false);
+    expect(premise({ workspaceMap: false, workspaceMapHoldout: 0.5 }, conversationIn("workspace-map-or-none", true)).send.map).toBe(false);
 });

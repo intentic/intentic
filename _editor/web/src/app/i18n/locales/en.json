@@ -4764,14 +4764,12 @@
             "briefUnreadable": "The brief is there but cannot be sent: {why}",
             "characters": "characters",
             "codeSearch": "Code search",
-            "compactMap": "Compact",
             "fieldNotes": "Field notes",
-            "fullMap": "Full",
             "iqCodeSearch": "iq code search",
             "lengthLimit": "Length limit",
             "noBriefYet": "Not written yet. The monthly automation writes the first one.",
             "notScheduled": "Not scheduled",
-            "ofConversationsGetFullMap": "of conversations get the full map",
+            "ofConversationsOpenWithout": "of conversations start without the map",
             "ofConversationsRunWithout": "of conversations run without iq",
             "ofConversationsRunWithoutNotes": "of conversations run without the field notes",
             "openAutomations": "Open automations",
@@ -4785,6 +4783,7 @@
             "useIqSearchCli": "Use iq search CLI instead of grep/find/glob.",
             "whatSessionsLearned": "What sessions here had to learn the hard way, ranked and rewritten monthly, carried into every turn.",
             "withIq": "With iq",
+            "withMap": "With map",
             "withNotes": "With notes"
         },
         "agentCommandOutput": {

@@ -1,5 +1,4 @@
 import { type AgentCapabilities, type AgentHarness, type AgentProvider, type AgentTurn, type Area, type ConversationGrant, type Persona, type SandboxSettings, capabilitiesOf, type RoutedAgentTurn } from "@intentic/sandbox-contract";
-import type { MapForm } from "@intentic/agent-context/workspace-map";
 import { conversationFence } from "../../../areas/area-scope.js";
 import { compactedSinceLastTurn, type PersistedAgent } from "../../../conversations/registry/agents-store.js";
 import { type TurnPersona, turnPersona, widenPersona } from "../../../personas/personas.js";
@@ -53,14 +52,12 @@ export interface TurnPremise {
     // Workspace-relative: the card's own folder, else the one the conversation latched at its first turn.
     readonly startIn: string | undefined;
     readonly send: { readonly map: boolean; readonly landingChecks: boolean; readonly iqTeaching: boolean };
-    // Which form the map takes when it is sent: the arm's where one was drawn (on is compact), else compact.
-    readonly mapForm: MapForm;
 }
 
 // The opening (non-fork) message only: the map stays in the transcript, and the layout has not moved by the second
-// turn. Both arms get a map; the experiment only decides which form, so the switch alone decides whether one is sent.
-const mapDue = (briefing: TurnBriefing, settings: SandboxSettings, input: AgentTurn, turns: number): boolean =>
-    briefing.sends("map") && EXPERIMENTS.workspaceMap.on(settings) && input.forkOf === undefined && turns === 0;
+// turn. The card is asked first, since a card that dropped the map is never in the experiment `arm` measures.
+const mapDue = (briefing: TurnBriefing, settings: SandboxSettings, arm: boolean | undefined, input: AgentTurn, turns: number): boolean =>
+    briefing.sends("map") && (arm ?? EXPERIMENTS.workspaceMap.on(settings)) && input.forkOf === undefined && turns === 0;
 
 // Said once on the opening message, and again after a compaction summarizes away the history that held it. `>=`
 // inside compactedSinceLastTurn, since the turn after the one a compaction is filed under is the one that owes it.
@@ -95,10 +92,9 @@ export const premiseOf = (facts: PremiseFacts, input: AgentTurn, runtime: TurnRu
         iqSearchEnabled,
         startIn: persona.workspace?.startIn ?? entry?.identity.startIn ?? input.startIn,
         send: {
-            map: mapDue(briefing, settings, input, runtime.conversationTurns),
+            map: mapDue(briefing, settings, map, input, runtime.conversationTurns),
             landingChecks: briefing.sends("checks") && landingChecksDue(input, entry, runtime.conversationTurns),
             iqTeaching: iqTeachingDue(runtime, iqSearchEnabled),
         },
-        mapForm: map === false ? "full" : "compact",
     };
 };

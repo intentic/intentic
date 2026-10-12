@@ -4252,14 +4252,12 @@
             "briefUnreadable": "Notatka jest na miejscu, ale nie da się jej wysłać: {why}",
             "characters": "znaków",
             "codeSearch": "Wyszukiwanie kodu",
-            "compactMap": "Zwięzła",
             "fieldNotes": "Notatki z terenu",
-            "fullMap": "Pełna",
             "iqCodeSearch": "Wyszukiwanie kodu iq",
             "lengthLimit": "Limit długości",
             "noBriefYet": "Jeszcze niespisana. Pierwszą napisze comiesięczna automatyzacja.",
             "notScheduled": "Nie zaplanowano",
-            "ofConversationsGetFullMap": "rozmów dostaje pełną mapę",
+            "ofConversationsOpenWithout": "rozmów zaczyna się bez mapy",
             "ofConversationsRunWithout": "rozmów działa bez iq",
             "ofConversationsRunWithoutNotes": "rozmów działa bez notatek z terenu",
             "openAutomations": "Otwórz automatyzacje",
@@ -4273,6 +4271,7 @@
             "useIqSearchCli": "Używaj CLI wyszukiwania iq zamiast grep/find/glob.",
             "whatSessionsLearned": "To, czego sesje tutaj musiały nauczyć się na własnej skórze, uszeregowane i przepisywane co miesiąc, dołączane do każdej tury.",
             "withIq": "Z iq",
+            "withMap": "Z mapą",
             "withNotes": "Z notatkami"
         },
         "agentCommandOutput": {

@@ -84,8 +84,9 @@ const noteLinesOf = (message: string): string[] | undefined => {
     return lines.slice(0, end + 1);
 };
 
-// The compact form (workspace-map.ts renderCompact): rows of a name and its purpose under the prose, the rest named on
-// an "Also:" line with `parent/{a,b}` groups, then the recent-work line. No sizes, so `files` reads 0.
+// The compact form, sent 2026-10-06 to 10-12 and no longer rendered, still read back since that week's transcripts
+// carry it: rows of a name and its purpose under the prose, the rest named on an "Also:" line with `parent/{a,b}`
+// groups, then the recent-work line. No sizes, so `files` reads 0.
 const COMPACT_HEAD = /^You are (?:at the top of|here:) .*This is its layout/;
 const COMPACT_ROW = /^(\S+)(?: {2,}(.*?))?(?: {2}← you are here)?$/;
 const COMPACT_ALSO = /^Also: (.*)$/;

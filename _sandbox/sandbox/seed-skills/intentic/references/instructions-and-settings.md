@@ -60,10 +60,9 @@ isolated turn, and it arrives by itself. During an isolated turn the owner's liv
 
 Some things ride only a conversation's first message, so turning them on shows in new conversations: the project
 map (`workspaceMap`), and, on OpenCode, Pi, Cursor and ACP, the list of skills (those runtimes cannot read the
-skills folder themselves). The map comes in two forms: compact (the areas recent work touched, the rest by name, and
-the folders the last three weeks of commits landed in) and full (every area with its size); `workspaceMapHoldout`
-is the share that gets the full one. The comparison shares (`workspaceMapHoldout`, `iqSearchHoldout`,
-`fieldNotesHoldout`) assign whole conversations, not turns.
+skills folder themselves). The map lists every area of the project with its size and purpose;
+`workspaceMapHoldout` is the share of conversations that open without it. The comparison shares
+(`workspaceMapHoldout`, `iqSearchHoldout`, `fieldNotesHoldout`) assign whole conversations, not turns.
 
 Changing the model within the same provider keeps the conversation's session. Changing the provider, the loop
 (harness) or the account starts a fresh session on the next turn, handed the conversation's record and a "Where the

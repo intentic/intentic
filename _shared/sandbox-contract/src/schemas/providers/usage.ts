@@ -80,8 +80,8 @@ export const UsageTurnSchema = z.object({
     // Arm of the project-map experiment, stable per conversation; mapChars is the note's length when sent.
     mapArm: z.boolean().optional(),
     mapChars: z.number().optional(),
-    // Which comparison `mapArm` belongs to: absent on the map-or-none rows, "compact-vs-full" since 2026-10-06, when
-    // the arm became the compact map and the holdout the full one.
+    // Which comparison `mapArm` belongs to: absent on the first map-or-none rows; "compact-vs-full" from 2026-10-06 to
+    // 10-12, when the arm was the compact map and the holdout the full one; "map-vs-none" since, the map against none.
     mapCohort: z.string().optional(),
     // Arm of the field-notes experiment, stable per conversation; notesChars is what the budget let through.
     notesArm: z.boolean().optional(),
