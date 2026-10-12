@@ -299,7 +299,7 @@ export interface Tray {
     // Children stopped on something that is their parent's news first, a row per thing they stopped on.
     readonly groups: readonly TrayGroup[];
     // Settled children of either kind behind the toggle; nothing is folded while a filter is on, since a result set must
-    // not hide its own matches.
+    // not hide its own matches, nor when one child settled alone, which is drawn as its own row in `tail`.
     readonly folded: number;
     readonly open: boolean;
     // Drawn under the toggle: all of the settled children while it is open, newest first as Finished orders its cards,
@@ -375,6 +375,11 @@ export const trayOf = (
             return { key, members, open, shown: open || members.length === 1 ? members : members.filter((child) => child.id === state.selected) };
         });
     const dealt = withSubagents(lead, settled, subagents);
+    // One settled child alone is its own row, as a stop group of one is: the toggle would take the same line to say less,
+    // and a press to read a single line.
+    if (dealt.settled.length === 1) {
+        return { asks, lead: dealt.lead, groups, folded: 0, open: false, tail: dealt.settled };
+    }
     const open = state.opened.has(FINISHED_FOLD);
     const tail = open ? dealt.settled : dealt.settled.filter((child) => child.id === state.selected);
     return { asks, lead: dealt.lead, groups, folded: dealt.settled.length, open, tail };

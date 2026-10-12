@@ -277,6 +277,11 @@ describe(`what a tray draws`, () => {
         expect(ids(trayRows(tray))).toEqual([`w1`, `w2`, `s1`, `s2`]);
     });
 
+    it(`draws one settled child alone as its own row, with no fold to open`, () => {
+        expect(trayOf([w1, s1], at())).toEqual({ asks: [], lead: [w1], groups: [], folded: 0, open: false, tail: [s1] });
+        expect(ids(trayRows(trayOf([w1, s1], at())))).toEqual([`w1`, `s1`]);
+    });
+
     it(`keeps the settled child wearing the ring in sight with the fold shut`, () => {
         const tray = trayOf(brood, at({ selected: `s2` }));
         expect(tray?.folded).toBe(2);
@@ -299,9 +304,10 @@ describe(`what a tray draws`, () => {
             [`limit:kimi`, [`k`], [`k`]],
             [`error`, [`e1`, `e2`], []],
         ]);
-        expect(ids(trayRows(tray))).toEqual([`w1`, `k`]);
+        // The lone settled child is its own row rather than a fold of one.
+        expect(ids(trayRows(tray))).toEqual([`w1`, `k`, `s1`]);
         const opened = trayOf([w1, ...broke, ...spent, other, s1], at({ opened: new Set([`error`]), selected: `c1` }));
-        expect(ids(trayRows(opened))).toEqual([`w1`, `c1`, `k`, `e1`, `e2`]);
+        expect(ids(trayRows(opened))).toEqual([`w1`, `c1`, `k`, `e1`, `e2`, `s1`]);
     });
 
     it(`names what a child stopped on`, () => {
@@ -358,7 +364,7 @@ describe(`what a tray draws`, () => {
 
         it(`draws a tray for a card whose only children ran in-process`, () => {
             expect(trayOf([], at(), [early])).toEqual({ asks: [], lead: [early], groups: [], folded: 0, open: false, tail: [] });
-            expect(trayOf(undefined, at(), [newest])).toEqual({ asks: [], lead: [], groups: [], folded: 1, open: false, tail: [] });
+            expect(trayOf(undefined, at(), [newest])).toEqual({ asks: [], lead: [], groups: [], folded: 0, open: false, tail: [newest] });
         });
 
         it(`lists the ones a filter matched beside the conversations it matched`, () => {

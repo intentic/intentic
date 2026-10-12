@@ -290,10 +290,11 @@ describe(`children riding under their parent`, () => {
     });
 
     it(`walks a Shift+click range through the rows a tray draws, and not through the ones it folds`, () => {
-        const { lanes } = boardOf([parent, helper(`h1`, { status: `running`, startedAt: 2 }), helper(`h2`), card(`after`)]);
+        const settled = [helper(`h2`, { updatedAt: 2 }), helper(`h3`, { updatedAt: 1 })];
+        const { lanes } = boardOf([parent, helper(`h1`, { status: `running`, startedAt: 2 }), ...settled, card(`after`)]);
         expect(ids(lanes.paneOrder.value)).toEqual([`p`, `h1`, `after`]);
         lanes.toggleTray(parent);
-        expect(ids(lanes.paneOrder.value)).toEqual([`p`, `h1`, `h2`, `after`]);
+        expect(ids(lanes.paneOrder.value)).toEqual([`p`, `h1`, `h2`, `h3`, `after`]);
     });
 
     it(`files and brings back a card with its settled children, never one still working`, () => {
