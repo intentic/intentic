@@ -6,7 +6,7 @@ import { computed, ref } from "vue";
 import { useT } from "@intentic/ui/i18n";
 
 // What the sandbox says before the user does, as a persona's own decision. Rows are named with the exact titles the
-// chat's "Sent with your message" fold shows, so switching one off means switching off the line you just read there.
+// chat's "Sent ahead of your message" fold shows, so switching one off means switching off the line you just read there.
 // The draft is the parent's, mutated in place, like <PersonaPowersFields>.
 
 const t = useT();

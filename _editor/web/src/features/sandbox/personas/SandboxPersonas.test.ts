@@ -793,7 +793,7 @@ it(`adds a persona's own skill through the same row and the same editor as the s
 });
 
 // The checklist that lets a persona starve a small-context model of everything it does not need. Named with the exact
-// titles the chat's own "Sent with your message" fold shows, so the two surfaces stay one vocabulary.
+// titles the chat's own "Sent ahead of your message" fold shows, so the two surfaces stay one vocabulary.
 it(`drops a preamble note by the name the transcript gives it`, async () => {
     const dropped = TURN_BRIEFING_NOTES[0]!;
     personas.value = [{ id: `work`, capabilities: [] }];

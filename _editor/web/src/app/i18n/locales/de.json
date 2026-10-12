@@ -1316,7 +1316,7 @@
         },
         "chatNotes": {
             "addedContext": "Beigefügter Kontext",
-            "sentMessage": "Mit Ihrer Nachricht gesendet"
+            "sentMessage": "Vor Ihrer Nachricht gesendet"
         },
         "chatPane": {
             "acts": "Handelt als: {personaName}",
@@ -3189,7 +3189,7 @@
             "unusedOneCodePlus": "{remaining} ungenutzt. Ein Code plus Ihre Google-Anmeldung öffnet die Sandbox, wenn alle Passkeys verloren sind; jeder funktioniert einmal."
         },
         "personaBriefingFields": {
-            "sandboxPutsInFront": "Die Sandbox stellt diese der Nachricht voran, bevor das Modell sie liest; der Chat zeigt sie unter „Mit Ihrer Nachricht gesendet“. Schalten Sie eines für eine Persona ab, deren Modell wenig Platz hat oder deren Arbeit es nie braucht.",
+            "sandboxPutsInFront": "Die Sandbox stellt diese der Nachricht voran, bevor das Modell sie liest; der Chat zeigt sie unter „Vor Ihrer Nachricht gesendet“. Schalten Sie eines für eine Persona ab, deren Modell wenig Platz hat oder deren Arbeit es nie braucht.",
             "sentEveryMessage": "Mit jeder Nachricht gesendet",
             "turnedOffPersonaEvery": "{dropped} von {count} für diese Persona abgeschaltet. Jeder andere Chat in dieser Sandbox bekommt weiterhin alle."
         },

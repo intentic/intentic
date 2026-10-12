@@ -7,10 +7,12 @@ import { useT } from "@intentic/ui/i18n";
 const t = useT();
 
 // The context the sandbox added to a message, as one figure on the spine: a paperclip and a count standing in the
-// left gutter beside the message it went out with (`.chat-notes-node` in chat.css), since these are things attached to
-// that message, not words the user wrote. Opened, it is the LIST of what was added, each note opening to its own
-// words: the titles answer "what went with this" without charging the reader for the text of five notes to find out.
-// A lone note shows the paperclip bare: "1" is what a paperclip already says, so the count only appears when it adds to it.
+// left gutter, in the seam above the message it went out with (`.chat-notes-row` in chat.css), since these are things
+// attached to that message, not words the user wrote. Above because that is where they went: the model reads them
+// before the user's words (turn-preamble.ts). Opened, it is the LIST of what was added, between the paperclip and the
+// message, each note opening to its own words: the titles answer "what went with this" without charging the reader for
+// the text of five notes to find out. A lone note shows the paperclip bare: "1" is what a paperclip already says, so the
+// count only appears when it adds to it.
 
 defineProps<{ notes: readonly TurnNote[] }>();
 
@@ -36,12 +38,11 @@ const body = (text: string): string => text.replace(/^#{1,6} .*(\n|$)/, ``).trim
     <div class="flex w-full flex-col">
         <div class="chat-spine-bar">
             <ChatSpineNode
-                class="chat-notes-node"
                 icon="paperclip"
                 :count="notes.length > 1 ? notes.length : undefined"
                 :open="open"
                 :label="t(`chat.chatNotes.sentMessage`)"
-                :tip="t(`chat.chatNotes.addedContext`)"
+                :tip="{ title: t(`chat.chatNotes.addedContext`), note: t(`chat.chatNotes.sentMessage`) }"
                 @toggle="toggleList"
             />
         </div>

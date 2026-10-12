@@ -238,7 +238,7 @@
 /* THE SPINE: what the agent was given and what it did, down the LEFT edge of the column, where the eye starts every
    line. A run of tool calls (ChatTurnAsides) is a glyph and a count standing in the seam between two paragraphs, never
    beside a line of words, where it would read as that line's bullet; the context a message went out with (ChatNotes)
-   stands level with the message. No rule, no plate: the figure is the whole of it. The right edge is the reader's own
+   stands in the seam above the message, since it was sent ahead of the words. No rule, no plate: the figure is the whole of it. The right edge is the reader's own
    (fork, edit). Nothing here costs a row height: the lane it replaced cost every run a blank band a line and a half tall. */
 .chat-turns {
 /* The left gutter, where the figures stand: a narrow column's 1rem gutter is short of a thought mark and two digits, so
@@ -434,24 +434,17 @@
     margin-left: calc(-1 * var(--chat-spine-gutter));
     padding-left: var(--chat-spine-gutter);
 }
-/* A MESSAGE'S ADDED CONTEXT (ChatNotes) is its own row under the message, so it never rides in the pinned band, but
-   shut it is no row at all: it takes back the gap above it, and its paperclip stands up beside the message's last line
-   (the bubble's 0.5rem inset, then half a line of leading-relaxed), leaving the seam below to the first run's figure.
-   It paints outside its box, so it is not paint-contained; opened, the list takes the gap back. */
+/* A MESSAGE'S ADDED CONTEXT (ChatNotes) is its own row ABOVE the message, in the order the model read them: the notes,
+   then the words. As its own row it never rides in the pinned band. Shut, it is no row at all: it takes back the gap
+   below it, and its paperclip stands in the seam above the message, the way a run's figure stands above the words it
+   led to. It paints outside its box, so it is not paint-contained. Opened, the list sits between the paperclip and
+   the message and gives the gap back. */
 .chat-notes-row {
-    margin-top: calc(-1 * var(--chat-gap));
+    margin-bottom: calc(-1 * var(--chat-gap));
     content-visibility: visible;
 }
-.chat-notes-node {
-    top: calc(-0.5rem - var(--text-xs) * 0.8125);
-}
-/* A message that carries a trailer ("↳ Continue ×3") ends a gap and a 2xs line below its bubble: the paperclip still
-   stands beside the bubble, not the trailer. */
-.chat-notes-row-trailed .chat-notes-node {
-    top: calc(-0.5rem - var(--text-xs) * 0.8125 - var(--chat-gap) - var(--text-2xs) * var(--text-2xs--line-height));
-}
 .chat-notes-row .chat-mark-material:not([hidden]) {
-    margin-top: var(--chat-gap);
+    margin-bottom: var(--chat-gap);
 }
 /* THE SCROLLER RESERVES ITS SCROLLBAR ON BOTH EDGES, so the column re-centres in the width the reader actually sees. */
 .chat-scroller {

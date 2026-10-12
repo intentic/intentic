@@ -961,7 +961,7 @@ describe(`ChatMessageView added-notes mark`, () => {
         const mark = element.querySelector(`[aria-expanded]`)!;
         // A count and a glyph is the whole of it: the name is on hover, so the lane stays out of the reading column.
         expect(mark.textContent?.trim()).toBe(String(notes.length));
-        expect(mark.getAttribute(`aria-label`)).toBe(`Sent with your message`);
+        expect(mark.getAttribute(`aria-label`)).toBe(`Sent ahead of your message`);
         expect(mark.querySelector(`[data-icon="paperclip"]`)).not.toBeNull();
         expect(shownText(element)).not.toContain(notes[0]!.title);
 
@@ -1044,9 +1044,17 @@ describe(`ChatMessageView added-notes mark`, () => {
         const mark = element.querySelector(`[aria-expanded]`)!;
         // The left edge's one language (ChatSpineNode), not a chip in the lane past the column.
         expect(mark.classList.contains(`chat-spine-node`)).toBe(true);
-        expect(mark.classList.contains(`chat-notes-node`)).toBe(true);
         expect(element.querySelector(`.chat-mark-bar`)).toBeNull();
         expect(mark.closest(`.chat-notes-row`)).not.toBeNull();
+    });
+
+    // The model reads the notes first, then a `---`, then the words (turn-preamble.ts), so the chat may not draw them after.
+    it(`stands above the message it went out with, in the order the model read them`, () => {
+        const element = mount({ id: 10, role: `user`, text: `fix the bug`, notes });
+
+        const row = element.querySelector(`.chat-notes-row`)!;
+        const prompt = element.querySelector(`.chat-prompt`)!;
+        expect(row.compareDocumentPosition(prompt) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
     it(`sits outside the prompt, so it never rides in the pinned band`, () => {
@@ -1060,7 +1068,7 @@ describe(`ChatMessageView added-notes mark`, () => {
 
     it(`stays out of the way of an ordinary message`, () => {
         const element = mount({ id: 5, role: `user`, text: `fix the bug` });
-        expect(element.querySelector(`[aria-label="Sent with your message"]`)).toBeNull();
+        expect(element.querySelector(`[aria-label="Sent ahead of your message"]`)).toBeNull();
         expect(element.querySelector(`.chat-mark-bar`)).toBeNull();
     });
 });

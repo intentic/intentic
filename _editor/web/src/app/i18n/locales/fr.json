@@ -1318,7 +1318,7 @@
         },
         "chatNotes": {
             "addedContext": "Contexte ajouté",
-            "sentMessage": "Envoyé avec votre message"
+            "sentMessage": "Envoyé avant votre message"
         },
         "chatPane": {
             "acts": "Agit en tant que : {personaName}",
@@ -3191,7 +3191,7 @@
             "unusedOneCodePlus": "{remaining} inutilisés. Un code plus votre connexion Google ouvre le sandbox si toutes les passkeys sont perdues ; chacun ne sert qu'une fois."
         },
         "personaBriefingFields": {
-            "sandboxPutsInFront": "Le sandbox place ceci devant le message avant que le modèle ne le lise ; le chat les montre sous « Envoyé avec votre message ». Désactivez-en un pour un persona dont le modèle a peu de place, ou dont le travail n'en a jamais besoin.",
+            "sandboxPutsInFront": "Le sandbox place ceci devant le message avant que le modèle ne le lise ; le chat les montre sous « Envoyé avant votre message ». Désactivez-en un pour un persona dont le modèle a peu de place, ou dont le travail n'en a jamais besoin.",
             "sentEveryMessage": "Envoyé avec chaque message",
             "turnedOffPersonaEvery": "{dropped} sur {count} désactivés pour ce persona. Tous les autres chats de ce sandbox les reçoivent encore tous."
         },

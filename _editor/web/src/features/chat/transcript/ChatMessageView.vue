@@ -425,6 +425,14 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
 </script>
 
 <template>
+    <!-- The context the sandbox sent with this message stands ABOVE it, because it went out first: the wire message is the
+         notes, a `---`, then the user's words (turn-preamble.ts withTurnPreamble). It is a row of its own, not part of the
+         bubble below, because a pinned prompt charges its whole height against reading room. `chat-notes-row`: shut, it
+         is no row at all, just its paperclip in the left gutter in the seam above the message (chat.css). -->
+    <div v-if="message.notes?.length" class="chat-message chat-notes-row chat-stack flex flex-col" :class="{ 'chat-doomed': doomed }">
+        <ChatNotes :notes="message.notes" />
+    </div>
+
     <!-- Delegated markdown controls (copy buttons, file links), since both live inside v-html. -->
     <!-- A folded message renders like any other row: no pin, no extra inset. -->
     <!-- Blocks within a message share the transcript's own gap (.chat-stack, --chat-gap). -->
@@ -627,15 +635,5 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
         <span v-if="trailer" class="text-2xs text-subtle"
             >↳ {{ trailer.label }}<template v-if="trailer.count > 1"> ×{{ trailer.count }}</template></span
         >
-    </div>
-
-    <!-- Its own row, not part of the bubble above: a pinned prompt charges its whole height against reading room. -->
-    <!-- `chat-notes-row`: shut, no row at all, its paperclip standing up beside the message in the left gutter (chat.css). -->
-    <div
-        v-if="message.notes?.length"
-        class="chat-message chat-notes-row chat-stack flex flex-col"
-        :class="{ 'chat-doomed': doomed, 'chat-notes-row-trailed': trailer }"
-    >
-        <ChatNotes :notes="message.notes" />
     </div>
 </template>

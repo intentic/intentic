@@ -2701,7 +2701,7 @@
         },
         "chatNotes": {
             "addedContext": "Dodany kontekst",
-            "sentMessage": "Wysłane razem z Twoją wiadomością"
+            "sentMessage": "Wysłane przed Twoją wiadomością"
         },
         "chatPane": {
             "acts": "Działa jako: {personaName}",
@@ -5836,7 +5836,7 @@
             "usedAgo": "użyty {ago}"
         },
         "personaBriefingFields": {
-            "sandboxPutsInFront": "Sandbox stawia to przed wiadomością, zanim model ją przeczyta; czat pokazuje je pod „Wysłane razem z Twoją wiadomością”. Wyłącz któreś dla persony, której model ma mało miejsca albo której praca nigdy tego nie potrzebuje.",
+            "sandboxPutsInFront": "Sandbox stawia to przed wiadomością, zanim model ją przeczyta; czat pokazuje je pod „Wysłane przed Twoją wiadomością”. Wyłącz któreś dla persony, której model ma mało miejsca albo której praca nigdy tego nie potrzebuje.",
             "sentEveryMessage": "Wysyłane z każdą wiadomością",
             "turnedOffPersonaEvery": "Wyłączono {dropped} z {count} dla tej persony. Każdy inny czat w tym sandboxie wciąż dostaje wszystkie.",
             "countMoreAlwaysSent": "{count} kolejna jest wysyłana zawsze | {count} kolejne są wysyłane zawsze | {count} kolejnych jest wysyłanych zawsze"

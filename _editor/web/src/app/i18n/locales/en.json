@@ -2701,7 +2701,7 @@
         },
         "chatNotes": {
             "addedContext": "Added context",
-            "sentMessage": "Sent with your message"
+            "sentMessage": "Sent ahead of your message"
         },
         "chatPane": {
             "acts": "Acts as: {personaName}",
@@ -6373,7 +6373,7 @@
             "usedAgo": "used {ago}"
         },
         "personaBriefingFields": {
-            "sandboxPutsInFront": "The sandbox puts these in front of the message before the model reads it; the chat shows them under \"Sent with your message\". Turn one off for a persona whose model has little room to spare, or whose work never needs it.",
+            "sandboxPutsInFront": "The sandbox puts these in front of the message before the model reads it; the chat shows them under \"Sent ahead of your message\". Turn one off for a persona whose model has little room to spare, or whose work never needs it.",
             "sentEveryMessage": "Sent with every message",
             "turnedOffPersonaEvery": "{dropped} of {count} turned off for this persona. Every other chat in this sandbox still gets all of them.",
             "countMoreAlwaysSent": "{count} more is always sent | {count} more are always sent"

@@ -1325,7 +1325,7 @@
         },
         "chatNotes": {
             "addedContext": "Contexto añadido",
-            "sentMessage": "Enviado con tu mensaje"
+            "sentMessage": "Enviado antes de tu mensaje"
         },
         "chatPane": {
             "acts": "Actúa como: {personaName}",
@@ -3202,7 +3202,7 @@
             "unusedOneCodePlus": "{remaining} sin usar. Un código más tu sesión de Google abre el sandbox si se pierden todas las passkeys; cada uno funciona una vez."
         },
         "personaBriefingFields": {
-            "sandboxPutsInFront": "El sandbox pone esto delante del mensaje antes de que el modelo lo lea; el chat lo muestra bajo «Enviado con tu mensaje». Desactiva alguno para una persona cuyo modelo tenga poco espacio, o cuyo trabajo nunca lo necesite.",
+            "sandboxPutsInFront": "El sandbox pone esto delante del mensaje antes de que el modelo lo lea; el chat lo muestra bajo «Enviado antes de tu mensaje». Desactiva alguno para una persona cuyo modelo tenga poco espacio, o cuyo trabajo nunca lo necesite.",
             "sentEveryMessage": "Enviado con cada mensaje",
             "turnedOffPersonaEvery": "{dropped} de {count} desactivados para esta persona. Todos los demás chats de este sandbox siguen recibiéndolos todos."
         },
