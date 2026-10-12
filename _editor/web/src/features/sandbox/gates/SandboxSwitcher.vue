@@ -10,8 +10,8 @@ import {
     SandboxLogo,
     StatusBadge,
     type Tip,
-    type TipRow,
     type CommandOs,
+    useHoverMenu,
 } from "@intentic/ui";
 import { sandboxSubdomain } from "@intentic/sandbox-contract";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch, type WatchStopHandle } from "vue";
@@ -29,7 +29,7 @@ import { sandboxIdFromToken } from "../session/sandboxIdFromToken";
 import { sandboxAvailabilityVisual } from "../overview/availability";
 import { placementOf, type SandboxPlacement } from "../overview/placement";
 import { useSandboxPlacement } from "../overview/useSandboxPlacement";
-import { attentionByBox, subscribe as watchOtherBoxes } from "../live/fleetAcross";
+import { attentionByBox, otherBoxes, subscribe as watchOtherBoxes } from "../live/fleetAcross";
 import { connectedSandboxes, unfinishedSandboxes } from "../live/roster";
 import { useSandboxAvailability } from "../overview/useSandboxAvailability";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
@@ -49,6 +49,12 @@ import { useT } from "@intentic/ui/i18n";
 // Rail control to switch between the user's sandboxes or add another; selecting one re-points every sandbox-backed
 // view and the liveness probe at the chosen daemon. Settings, access and everything else about the active sandbox
 // live on the tabbed /sandbox hub, opened from here.
+//
+// RESTING ON THE LOGO OPENS IT, as a press does. Switching is the errand this corner is visited for, and it should
+// not cost a press first. A pointer passing over raises nothing (the hover clock's dwell), the way across the rail
+// to a lower row keeps it up (useHoverMenu's corridor), and a press pins it. The sandboxes come first and always stand
+// in the same place, so the Nth one is the same reach every time. What concerns only the sandbox in use (what it
+// needs, what is worth knowing, its settings) is gathered under them, beside its settings.
 
 const t = useT();
 
@@ -85,23 +91,8 @@ const switcherLabel = computed(() => {
     return [name, placement.value?.detail, status, restarting.value, tooltip].filter((part) => part !== undefined).join(` · `);
 });
 
-// The same facts as a hover card, one figure each: where it runs, a state other than live, the work replacing it, and
-// how much waits for its owner (or that a staged update does). The joined line above stays the accessible name.
-const switcherTip = computed((): Tip => {
-    const quiet = availability.value === `live` || availability.value === `stale`;
-    const staged = attention.value.length === 0 && attentionNotes.value.some((item) => item.badges === true);
-    const status: TipRow = { label: t(`sandbox.sandboxSwitcher.status`), value: quiet ? `` : availabilityVisual.value.label };
-    return {
-        title: sandbox.active.value?.name ?? t(`sandbox.sandboxSwitcher.sandboxes`),
-        rows: [
-            { label: t(`sandbox.sandboxSwitcher.runsOn`), value: placement.value?.label ?? `` },
-            availabilityVisual.value.variant === `warning` ? { ...status, tone: `warning` } : status,
-            { label: t(`sandbox.sandboxSwitcher.inProgress`), value: restarting.value ?? `` },
-            { label: t(`sandbox.sandboxSwitcher.needsYou`), value: attention.value.length > 0 ? attention.value.length : `` },
-            { label: t(`sandbox.sandboxSwitcher.update`), value: staged ? t(`sandbox.sandboxSwitcher.ready`) : `` },
-        ],
-    };
-});
+// Live, or a retry too short to mention: the connection says nothing anywhere until it is something else.
+const quiet = computed(() => availability.value === `live` || availability.value === `stale`);
 
 // A short retry keeps the healthy ink; changing colour is itself the alarm being avoided.
 const connectionInkClass = computed(() => availabilityVisual.value.inkClass);
@@ -116,19 +107,26 @@ const ROW_TONE: Record<SandboxAttentionItem["tone"], string> = {
 
 // Anchored rather than PrimeVue's Popover, so one overlay alone decides where a panel goes.
 const trigger = ref<HTMLButtonElement | null>(null);
-const open = ref(false);
+const panel = ref<HTMLElement | null>(null);
+const menu = useHoverMenu(panel);
+const open = menu.open;
+const pressed = menu.pressed;
 
 // Reads these counts only while the popover is open, since the control is mounted for the whole session; a second
-// open within the freshness window paints instantly from the store's last read.
+// open within the freshness window paints instantly from the store's last read. A pointer resting on the logo starts
+// the read before the dwell is out, so the counts are usually there by the time the panel is.
 let releaseBoxes: (() => void) | undefined;
-watch(open, (showing) => {
-    if (showing) {
-        releaseBoxes ??= watchOtherBoxes();
-        return;
-    }
-    releaseBoxes?.();
-    releaseBoxes = undefined;
-});
+watch(
+    () => open.value || menu.hovering.value,
+    (wanted) => {
+        if (wanted) {
+            releaseBoxes ??= watchOtherBoxes();
+            return;
+        }
+        releaseBoxes?.();
+        releaseBoxes = undefined;
+    },
+);
 onUnmounted(() => {
     releaseBoxes?.();
     releaseBoxes = undefined;
@@ -140,16 +138,41 @@ const switchable = computed(() => connectedSandboxes(sandbox.sandboxes.value));
 const unfinished = computed(() => unfinishedSandboxes(sandbox.sandboxes.value));
 
 // How much is waiting in every other sandbox; absent for the active row since its badge is already on the rail.
-// An unanswered box gets undefined, drawn as a dash, never a zero.
+// An unanswered box gets undefined, which draws nothing rather than a zero.
 const attentionFor = (option: SandboxSummary): number | undefined => (isActive(option) ? undefined : attentionByBox.value.get(option.id));
 
-// Whether this row has ever answered, separating "0" from "-"; a single number can't carry both.
-const answered = (option: SandboxSummary): boolean => attentionFor(option) !== undefined;
+// A box whose last read went unanswered. Said in words on its row, because "is it even up" is the question a reader
+// asks before switching to it. A box still on its first read says nothing yet: a hover-raised panel opens on that
+// moment every time, and a word that flickers away a beat later teaches the reader not to read it.
+const silent = (option: SandboxSummary): boolean =>
+    !isActive(option) && otherBoxes.value.some((box) => box.sandbox.id === option.id && box.state === `unreachable`);
 
 // The same fact per row, and the ACTIVE row borrows the refined one above rather than deriving its own: the tile and
 // the row it opens onto are the same sandbox, and a glyph that changed between them would read as two answers.
 const placementFor = (option: SandboxSummary): SandboxPlacement =>
     isActive(option) && placement.value !== undefined ? placement.value : placementOf(option);
+
+// THE ROW'S SECOND LINE: where it runs, then whatever else is true of it, each fact in its own ink so a warning colours
+// only the words that warn. On the ACTIVE row it is what the logo's own marks say (the hover card the logo used to
+// carry): its connection when that is anything but fine, and the work replacing it while that runs, which outranks
+// everything else there is to say.
+interface NotePart {
+    readonly text: string;
+    readonly ink?: string;
+}
+const rowNote = (option: SandboxSummary): readonly NotePart[] => {
+    if (isActive(option) && restarting.value !== undefined) {
+        return [{ text: restarting.value, ink: RUNNING_MARK_CLASS }];
+    }
+    const place = placementFor(option);
+    const parts: (NotePart | undefined)[] = [
+        { text: place.label },
+        option.role !== `owner` && place.kind !== `shared` ? { text: t(`shared.shared`).toLocaleLowerCase() } : undefined,
+        isActive(option) && !quiet.value ? { text: connectionLabel.value, ink: connectionInkClass.value } : undefined,
+        silent(option) ? { text: t(`sandbox.sandboxSwitcher.notAnswering`).toLocaleLowerCase(), ink: `text-warning` } : undefined,
+    ];
+    return parts.filter((part) => part !== undefined);
+};
 
 // A row's place as its hover card; the active row adds whether its machine answers, since its glyph is inked by that.
 const placementTip = (option: SandboxSummary): Tip => {
@@ -409,15 +432,17 @@ const confirmRemove = async (): Promise<void> => {
 <template>
     <!-- The rail's top control: a live chip for the active sandbox, click to switch. -->
     <span class="relative flex">
+        <!-- No tooltip: resting here opens the panel itself, on the side a tooltip would take, and the facts the
+             tooltip carried are the active row's second line. The joined sentence stays the accessible name. -->
         <button
             ref="trigger"
             type="button"
             class="sandbox-switcher flex items-center justify-center overflow-hidden transition-opacity hover:opacity-80"
-            :class="route.path.startsWith('/sandbox') ? 'text-link' : 'text-muted'"
+            :class="[route.path.startsWith('/sandbox') ? 'text-link' : 'text-muted', open && 'opacity-80']"
             :aria-label="t(`sandbox.sandboxSwitcher.switchSandbox`, { switcherLabel })"
-            v-tooltip.right="switcherTip"
+            aria-haspopup="dialog"
             :aria-expanded="open"
-            @click="open = !open"
+            v-on="menu.trigger"
         >
             <SandboxLogo :image="sandbox.active.value?.image ?? null" :name="sandbox.active.value?.name" />
         </button>
@@ -454,49 +479,10 @@ const confirmRemove = async (): Promise<void> => {
         />
     </span>
 
-    <!-- Zeroed padding: PrimeVue's popover padding reads as a frame around rows with their own inset. -->
-    <AnchoredOverlay v-model="open" :anchor="trigger ?? undefined" side="right" cross="start" menu>
-        <div class="flex w-64 flex-col gap-0.5 p-1">
-            <!-- The badge's detail: one row per pending item, routing to the hub tab that resolves it. -->
-            <template v-if="attention.length > 0">
-                <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`shared.needs`) }}</div>
-                <RouterLink
-                    v-for="item in attention"
-                    :key="item.message"
-                    :to="item.to"
-                    class="flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-content/5"
-                    @click="dismiss"
-                >
-                    <span class="flex h-5 w-5 shrink-0 items-center justify-center" :class="ROW_TONE[item.tone]">
-                        <Icon :name="item.icon" class="text-xs" />
-                    </span>
-                    <span class="min-w-0 flex-1 text-content">{{ item.message }}</span>
-                    <Icon name="chevron-right" class="shrink-0 text-2xs text-subtle" />
-                </RouterLink>
-                <div class="my-1 border-t border-line-subtle"></div>
-            </template>
-
-            <!-- Things simply true (a contended port, a newer image): found on arrival, not advertised by the badge. -->
-            <template v-if="attentionNotes.length > 0">
-                <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">
-                    {{ t(`shared.worthKnowing`) }}
-                </div>
-                <RouterLink
-                    v-for="item in attentionNotes"
-                    :key="item.message"
-                    :to="item.to"
-                    class="flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-content/5"
-                    @click="(event: MouseEvent) => followRow(event, item.to)"
-                >
-                    <span class="flex h-5 w-5 shrink-0 items-center justify-center text-subtle">
-                        <Icon :name="item.icon" class="text-xs" />
-                    </span>
-                    <span class="min-w-0 flex-1 text-muted">{{ item.message }}</span>
-                    <Icon name="chevron-right" class="shrink-0 text-2xs text-subtle" />
-                </RouterLink>
-                <div class="my-1 border-t border-line-subtle"></div>
-            </template>
-
+    <!-- Zeroed padding: PrimeVue's popover padding reads as a frame around rows with their own inset. Focus goes back
+         to the logo only when a press opened it: a panel the pointer raised never took the keyboard's place. -->
+    <AnchoredOverlay v-model="open" :anchor="trigger ?? undefined" side="right" cross="start" :restore-focus="pressed" menu>
+        <div ref="panel" class="flex min-h-0 w-80 max-w-[calc(100vw-5rem)] flex-col gap-0.5 overflow-y-auto overscroll-contain p-1" v-on="menu.panel">
             <!-- The app's other face, a place of the same rank as the sandboxes and first, as the local window's switcher
                  lists it: this computer's own folder, no sandbox needed. Always there and always one row, so the
                  sandboxes growing under it never move it. No arrow: the app shows it in this window's own frame, as
@@ -504,14 +490,15 @@ const confirmRemove = async (): Promise<void> => {
             <template v-if="inDesktopApp">
                 <button
                     type="button"
-                    class="group flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-content/5"
+                    data-menu-row
+                    class="group flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-content/5"
                     @click="toThisComputer"
                 >
-                    <span class="flex h-5 w-5 shrink-0 items-center justify-center text-muted">
+                    <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-content/5 text-muted">
                         <Icon name="desktop" class="text-sm" />
                     </span>
                     <span class="flex min-w-0 flex-1 flex-col">
-                        <span class="truncate text-content">{{ t(`sandbox.sandboxSwitcher.thisComputer`) }}</span>
+                        <span class="truncate font-medium text-content">{{ t(`sandbox.sandboxSwitcher.thisComputer`) }}</span>
                         <span class="truncate text-2xs text-subtle">{{ t(`sandbox.sandboxSwitcher.thisComputerNote`) }}</span>
                     </span>
                     <kbd
@@ -525,82 +512,93 @@ const confirmRemove = async (): Promise<void> => {
 
             <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`shared.sandboxes`) }}</div>
 
+            <!-- Two lines a row: the name, and where it runs with whatever else is true of it (rowNote). The logo is the
+                 row's height, so a reader finds a box by its picture before reading a word. -->
             <button
                 v-for="(option, at) in switchable"
                 :key="option.id"
                 type="button"
-                class="group flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors"
-                :class="option.id === sandbox.activeSandboxId.value ? 'bg-primary-600/15' : 'hover:bg-content/5'"
+                data-menu-row
+                :data-current="isActive(option) || undefined"
+                :aria-current="isActive(option) || undefined"
+                class="group flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-xs transition-colors"
+                :class="isActive(option) ? 'bg-primary-600/15' : 'hover:bg-content/5'"
                 @click="pick(option)"
             >
-                <SandboxLogo :size="20" :image="option.image ?? null" :name="option.name" />
-                <span class="min-w-0 flex-1 truncate" :class="option.id === sandbox.activeSandboxId.value ? 'text-link' : 'text-content'">{{
-                    option.name
-                }}</span>
-                <!-- Where that one runs, beside its name: the reason to switch to a box is often which machine it is
-                     on. On the ACTIVE row it is the tile's mark exactly — the same glyph inked by the connection —
-                     and so it is drawn even under a "Shared" pill, which says whose the box is and not whether it
-                     answers. On every other row it is the placement alone, dropped where the pill already says it. -->
-                <Icon
-                    v-if="isActive(option) || placementFor(option).kind !== 'shared'"
-                    :name="placementFor(option).icon"
-                    class="shrink-0 text-2xs"
-                    :class="isActive(option) ? connectionInkClass : 'text-subtle'"
-                    v-tooltip.top="placementTip(option)"
-                    :aria-label="isActive(option) ? `${placementFor(option).detail} · ${connectionLabel}` : placementFor(option).detail"
-                />
-                <!-- What's waiting in that sandbox; nothing waiting draws nothing, an unanswered box draws a dash. The
-                     active row is never either: its own badge is on the rail, so it reports no count to read. -->
+                <SandboxLogo :size="28" :image="option.image ?? null" :name="option.name" />
+                <span class="flex min-w-0 flex-1 flex-col">
+                    <span class="truncate font-medium" :class="isActive(option) ? 'text-link' : 'text-content'">{{ option.name }}</span>
+                    <!-- Where that one runs, the reason to switch to a box being often which machine it is on. On the
+                         ACTIVE row the glyph is the tile's mark exactly, the same glyph inked by the connection; on every
+                         other row it is the placement alone. While the work replacing it runs, its spinner stands in. -->
+                    <span class="flex min-w-0 items-center gap-1 text-2xs text-subtle">
+                        <Icon v-if="isActive(option) && restarting !== undefined" name="spinner" spin class="shrink-0" :class="RUNNING_MARK_CLASS" />
+                        <!-- The hover card is the glyph's alone: on the whole line it rose under every pointer sweeping
+                             down the list, over the row above. -->
+                        <Icon
+                            v-else
+                            :name="placementFor(option).icon"
+                            class="shrink-0"
+                            :class="isActive(option) ? connectionInkClass : undefined"
+                            v-tooltip.top="placementTip(option)"
+                            :aria-label="isActive(option) ? `${placementFor(option).detail} · ${connectionLabel}` : placementFor(option).detail"
+                        />
+                        <span class="truncate">
+                            <template v-for="(part, index) in rowNote(option)" :key="index">
+                                <template v-if="index > 0"> · </template><span :class="part.ink">{{ part.text }}</span>
+                            </template>
+                        </span>
+                    </span>
+                </span>
+                <!-- What's waiting in that sandbox; nothing waiting, or not known yet, draws nothing. The active row is
+                     never either: its own badge is on the logo, so it reports no count to read. -->
                 <StatusBadge
-                    v-if="!isActive(option) && answered(option) && attentionFor(option)! > 0"
+                    v-if="(attentionFor(option) ?? 0) > 0"
                     variant="warning"
                     size="xs"
                     class="shrink-0 leading-4"
                     v-tooltip.top="t(`sandbox.sandboxSwitcher.needsYou`)"
                     >{{ attentionFor(option) }}</StatusBadge
                 >
-                <span
-                    v-else-if="!isActive(option) && !answered(option)"
-                    class="shrink-0 px-1 text-2xs leading-4 text-subtle"
-                    v-tooltip.top="{ title: t(`sandbox.sandboxSwitcher.notAnswering`), note: t(`sandbox.sandboxSwitcher.waitingUnknown`) }"
-                    :aria-label="t(`sandbox.sandboxSwitcher.notAnswering`)"
-                    >&ndash;</span
-                >
-                <span v-if="option.role !== 'owner'" class="ui-status-pill shrink-0 bg-content/10 text-2xs font-medium text-subtle">{{
-                    t(`shared.shared`)
-                }}</span>
-                <!-- Which digit this row is, the only place the chord can be learned; fades under the trash icon's hover. -->
-                <kbd
-                    v-if="slotChord(at)"
-                    class="shrink-0 rounded border border-line px-1 font-mono text-2xs font-normal leading-4 text-subtle transition-opacity group-hover:opacity-0"
-                    >{{ slotChord(at) }}</kbd
-                >
-                <!-- The platform's way back for a hosted machine, here as well as on the update card because this list
-                     answers while the sandbox itself doesn't. -->
-                <Icon
-                    v-if="option.role === 'owner' && option.hosted?.canRollBack === true"
-                    name="undo"
-                    @click.stop="askRollBack(option)"
-                    v-tooltip.top="{ title: t(`sandbox.sandboxSwitcher.rollBack`), note: t(`sandbox.sandboxSwitcher.undoLastUpdate`) }"
-                    class="shrink-0 text-xs opacity-0 transition hover:text-content group-hover:opacity-60"
-                />
-                <Icon
-                    name="trash"
-                    @click.stop="askRemove(option)"
-                    v-tooltip.top="option.role === 'owner' ? t(`ui.action.remove`) : t(`ui.action.leave`)"
-                    class="shrink-0 text-xs opacity-0 transition hover:text-danger group-hover:opacity-60"
-                />
+                <!-- Which digit this row is, the only place the chord can be learned, and under it the row's own actions,
+                     which take its place on hover. Laid over the chord rather than beside it, so the second line keeps
+                     the room the actions only need while the pointer is on the row. -->
+                <span class="relative flex min-w-9 shrink-0 items-center justify-end">
+                    <kbd
+                        v-if="slotChord(at)"
+                        class="rounded border border-line px-1 font-mono text-2xs font-normal leading-4 text-subtle transition-opacity group-hover:opacity-0"
+                        >{{ slotChord(at) }}</kbd
+                    >
+                    <span class="absolute inset-y-0 right-0 flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
+                        <!-- The platform's way back for a hosted machine, here as well as on the update card because this
+                             list answers while the sandbox itself doesn't. -->
+                        <Icon
+                            v-if="option.role === 'owner' && option.hosted?.canRollBack === true"
+                            name="undo"
+                            @click.stop="askRollBack(option)"
+                            v-tooltip.top="{ title: t(`sandbox.sandboxSwitcher.rollBack`), note: t(`sandbox.sandboxSwitcher.undoLastUpdate`) }"
+                            class="text-xs text-subtle transition-colors hover:text-content"
+                        />
+                        <Icon
+                            name="trash"
+                            @click.stop="askRemove(option)"
+                            v-tooltip.top="option.role === 'owner' ? t(`ui.action.remove`) : t(`ui.action.leave`)"
+                            class="text-xs text-subtle transition-colors hover:text-danger"
+                        />
+                    </span>
+                </span>
             </button>
 
             <RouterLink
                 to="/setup"
-                class="flex w-full items-start gap-2 rounded-md px-2 py-1 text-left text-xs text-content transition-colors hover:bg-content/5"
+                data-menu-row
+                class="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-xs text-content transition-colors hover:bg-content/5"
                 @click="dismiss"
             >
-                <span class="flex h-5 w-5 shrink-0 items-center justify-center">
-                    <Icon name="plus" class="text-base text-muted" />
+                <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-dashed border-line text-muted">
+                    <Icon name="plus" class="text-sm" />
                 </span>
-                <span class="min-w-0 flex-1 self-center">{{ t(`sandbox.words.addSandbox`) }}</span>
+                <span class="min-w-0 flex-1">{{ t(`sandbox.words.addSandbox`) }}</span>
             </RouterLink>
 
             <!-- Setups that were never finished, as their own section below Add sandbox, since they're errands, not places to go. -->
@@ -613,6 +611,7 @@ const confirmRemove = async (): Promise<void> => {
                     v-for="option in unfinished"
                     :key="option.id"
                     :to="resumeSetup(option)"
+                    data-menu-row
                     class="group flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-content/5"
                     @click="dismiss"
                 >
@@ -633,9 +632,54 @@ const confirmRemove = async (): Promise<void> => {
 
             <div class="my-1 border-t border-line-subtle"></div>
 
+            <!-- THE SANDBOX IN USE, under the list: what it needs, what is worth knowing, and its settings, kept
+                 together because they are about one box. Below the sandboxes rather than above them, so how much one box
+                 needs never moves where the others are. -->
+            <!-- The badge's detail: one row per pending item, routing to the hub tab that resolves it. -->
+            <template v-if="attention.length > 0">
+                <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`shared.needs`) }}</div>
+                <RouterLink
+                    v-for="item in attention"
+                    :key="item.message"
+                    :to="item.to"
+                    data-menu-row
+                    class="flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-content/5"
+                    @click="dismiss"
+                >
+                    <span class="flex h-5 w-5 shrink-0 items-center justify-center" :class="ROW_TONE[item.tone]">
+                        <Icon :name="item.icon" class="text-xs" />
+                    </span>
+                    <span class="min-w-0 flex-1 text-content">{{ item.message }}</span>
+                    <Icon name="chevron-right" class="shrink-0 text-2xs text-subtle" />
+                </RouterLink>
+            </template>
+
+            <!-- Things simply true (a contended port, a newer image): found on arrival, not advertised by the badge. -->
+            <template v-if="attentionNotes.length > 0">
+                <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">
+                    {{ t(`shared.worthKnowing`) }}
+                </div>
+                <RouterLink
+                    v-for="item in attentionNotes"
+                    :key="item.message"
+                    :to="item.to"
+                    data-menu-row
+                    class="flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-content/5"
+                    @click="(event: MouseEvent) => followRow(event, item.to)"
+                >
+                    <span class="flex h-5 w-5 shrink-0 items-center justify-center text-subtle">
+                        <Icon :name="item.icon" class="text-xs" />
+                    </span>
+                    <span class="min-w-0 flex-1 text-muted">{{ item.message }}</span>
+                    <Icon name="chevron-right" class="shrink-0 text-2xs text-subtle" />
+                </RouterLink>
+            </template>
+            <div v-if="attention.length > 0 || attentionNotes.length > 0" class="my-1 border-t border-line-subtle"></div>
+
             <!-- The sandbox management hub has no rail tile; this chip is its home, and every attention row lands here too. -->
             <RouterLink
                 :to="hubPath"
+                data-menu-row
                 class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs text-content transition-colors hover:bg-content/5"
                 @click="dismiss"
             >

@@ -373,6 +373,9 @@ export { type SettledOptions, useSettled } from "./composables/useSettled.js";
 // flashes for a normal round trip.
 export { useLoadingReveal } from "./composables/loadingReveal.js";
 export { type HoverIntent, type HoverIntentOptions, useHoverIntent } from "./composables/useHoverIntent.js";
+// A menu the pointer opens and a press pins, with the corridor that keeps it up on the way to it.
+export { type HoverMenu, useHoverMenu } from "./composables/useHoverMenu.js";
+export { inCorridor } from "./lib/pointerCorridor.js";
 export { isOverlayTarget, isTypingTarget } from "./lib/eventTarget.js";
 export { messageOr, noticeFrom, noticeOf, useAsyncAction, useConcurrentActions } from "./composables/useAsyncAction.js";
 // Declares an account preference: read, write, apply and cross-window change notification in one definition, so

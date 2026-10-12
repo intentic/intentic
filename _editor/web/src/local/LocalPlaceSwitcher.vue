@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AnchoredOverlay, Notice, SandboxLogo, type Tip } from "@intentic/ui";
+import { AnchoredOverlay, Notice, SandboxLogo, useHoverMenu } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { localFace } from "../app/environments/local";
@@ -16,6 +16,9 @@ import { sandboxSlot, sandboxSlotChord } from "./localKeys";
 // The sandboxes are the ones the workspace last told the app about (localHost.ts `roster`): this page cannot ask
 // the platform. So a row carries what came with it (a name, where it runs, whether it is shared) and no count or state,
 // which would be as old as the workspace's last look. Until the workspace has said, the row is the workspace itself.
+//
+// It opens as the workspace's switcher does (SandboxSwitcher.vue): resting on the chip raises it, a press pins it. The
+// folder the chip names heads the panel, where its hover card used to say it.
 
 const t = useT();
 const host = localHost();
@@ -23,7 +26,9 @@ const host = localHost();
 const face = computed(localFace);
 
 const trigger = ref<HTMLButtonElement | null>(null);
-const open = ref(false);
+const panel = ref<HTMLElement | null>(null);
+const menu = useHoverMenu(panel);
+const open = menu.open;
 
 // The main window is the one the workspace swaps in for; from any other, a sandbox opens in that window, not this one.
 const inMainWindow = face.value?.home === true;
@@ -31,7 +36,6 @@ const inMainWindow = face.value?.home === true;
 // The window's folder, as the chip names it. A document opened on its own names its folder too: the chip is about the
 // place, the tab row about the document.
 const name = computed(() => face.value?.name ?? t(`shared.files`));
-const chipTip = computed((): Tip => ({ title: name.value, note: face.value?.path ?? `` }));
 
 // Read each time the chip opens. Only the newest read writes, so one answering late cannot put back a list the reader
 // has since changed.
@@ -116,7 +120,7 @@ const onKeydown = (event: KeyboardEvent): void => {
 onMounted(() => window.addEventListener(`keydown`, onKeydown));
 onUnmounted(() => window.removeEventListener(`keydown`, onKeydown));
 
-const rowClass = `group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-content/5`;
+const rowClass = `group flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-content/5`;
 const failedAt = (...keys: readonly string[]): string | undefined => (failure.value !== undefined && keys.includes(failure.value.key) ? failure.value.message : undefined);
 // The workspace's failure, said under the sandboxes it is about.
 const agentsFailure = computed(() => failedAt(`:agents`, `:add`));
@@ -130,9 +134,9 @@ const agentsFailure = computed(() => failedAt(`:agents`, `:add`));
             type="button"
             class="icon-rail-tile flex items-center justify-center overflow-hidden rounded-lg transition-opacity hover:opacity-80"
             :aria-label="t(`local.placeSwitcher.switchPlace`, { name })"
+            aria-haspopup="dialog"
             :aria-expanded="open"
-            v-tooltip.right="open ? undefined : chipTip"
-            @click="open = !open"
+            v-on="menu.trigger"
         >
             <SandboxLogo :name="name" />
         </button>
@@ -144,17 +148,29 @@ const agentsFailure = computed(() => failedAt(`:agents`, `:add`));
         </span>
     </span>
 
-    <AnchoredOverlay v-model="open" :anchor="trigger ?? undefined" side="right" cross="start" menu>
-        <div class="flex w-72 flex-col gap-0.5 p-1">
+    <AnchoredOverlay v-model="open" :anchor="trigger ?? undefined" side="right" cross="start" :restore-focus="menu.pressed.value" menu>
+        <div ref="panel" class="flex w-80 max-w-[calc(100vw-5rem)] flex-col gap-0.5 p-1" v-on="menu.panel">
+            <!-- Where this window is: the folder the chip names and its path, as the chip's hover card said them. Not a
+                 row to pick, being the place the window already shows. -->
+            <div class="flex items-center gap-2.5 rounded-md bg-primary-600/15 px-2 py-1.5 text-xs">
+                <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-content/5 text-link">
+                    <Icon name="desktop" class="text-sm" />
+                </span>
+                <span class="flex min-w-0 flex-1 flex-col">
+                    <span class="truncate font-medium text-link">{{ name }}</span>
+                    <span v-if="face?.path" class="truncate font-mono text-2xs text-subtle" :title="face.path">{{ face.path }}</span>
+                </span>
+            </div>
+            <div class="my-1 border-t border-line-subtle"></div>
             <!-- The account's sandboxes, where agents work, each opening the workspace on itself. -->
             <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`shared.sandboxes`) }}</div>
             <template v-if="facts?.accountSeen === true">
                 <template v-for="(box, at) in sandboxes" :key="box.id">
-                    <button type="button" :class="rowClass" @click="pickSandbox(box)">
-                        <span v-if="working === sandboxKey(box)" class="flex h-5 w-5 shrink-0 items-center justify-center text-subtle">
-                            <Icon name="spinner" spin class="text-xs" />
+                    <button type="button" data-menu-row :class="rowClass" @click="pickSandbox(box)">
+                        <span v-if="working === sandboxKey(box)" class="flex h-7 w-7 shrink-0 items-center justify-center text-subtle">
+                            <Icon name="spinner" spin class="text-sm" />
                         </span>
-                        <SandboxLogo v-else :size="20" :name="box.name" />
+                        <SandboxLogo v-else :size="28" :name="box.name" />
                         <span class="min-w-0 flex-1 truncate text-content">{{ box.name }}</span>
                         <!-- Where it runs, as the workspace's switcher marks the same row: dropped where the Shared pill already says it. -->
                         <Icon
@@ -177,8 +193,8 @@ const agentsFailure = computed(() => failedAt(`:agents`, `:add`));
                     </div>
                 </template>
                 <!-- The workspace has not told the app its sandboxes yet (an install updated since it was last open): the workspace itself, which knows them. -->
-                <button v-if="sandboxes.length === 0" type="button" :class="rowClass" @click="toAgents">
-                    <span class="flex h-5 w-5 shrink-0 items-center justify-center text-muted">
+                <button v-if="sandboxes.length === 0" type="button" data-menu-row :class="rowClass" @click="toAgents">
+                    <span class="flex h-7 w-7 shrink-0 items-center justify-center text-muted">
                         <Icon :name="working === `:agents` ? `spinner` : `robot`" :spin="working === `:agents`" class="text-sm" />
                     </span>
                     <span class="flex min-w-0 flex-1 flex-col">
@@ -187,16 +203,16 @@ const agentsFailure = computed(() => failedAt(`:agents`, `:add`));
                     </span>
                     <Icon name="arrow-up-right" class="shrink-0 text-2xs text-subtle" />
                 </button>
-                <button type="button" :class="rowClass" @click="addSandbox">
-                    <span class="flex h-5 w-5 shrink-0 items-center justify-center text-muted">
+                <button type="button" data-menu-row :class="rowClass" @click="addSandbox">
+                    <span class="flex h-7 w-7 shrink-0 items-center justify-center text-muted">
                         <Icon :name="working === `:add` ? `spinner` : `plus`" :spin="working === `:add`" class="text-sm" />
                     </span>
                     <span class="min-w-0 flex-1 truncate text-content">{{ t(`sandbox.words.addSandbox`) }}</span>
                 </button>
             </template>
             <!-- No account on this install yet: what agents need, and the sign-in that brings the workspace. -->
-            <button v-else type="button" :class="rowClass" @click="toAgents">
-                <span class="flex h-5 w-5 shrink-0 items-center justify-center text-muted">
+            <button v-else type="button" data-menu-row :class="rowClass" @click="toAgents">
+                <span class="flex h-7 w-7 shrink-0 items-center justify-center text-muted">
                     <Icon :name="working === `:agents` ? `spinner` : `robot`" :spin="working === `:agents`" class="text-sm" />
                 </span>
                 <span class="flex min-w-0 flex-1 flex-col">
