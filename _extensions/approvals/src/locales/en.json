@@ -37,6 +37,7 @@
         "edit": "Edit {item}",
         "editPost": "Edit post",
         "failed": "Failed",
+        "failedNoReason": "The run did not say why.",
         "fileDeletedAgentWould": "The file is deleted. Your agent would have to propose it again.",
         "fired": "fired",
         "goingAhead": "Going ahead",
@@ -52,7 +53,7 @@
         "needsReview": "Needs your review",
         "nothingUndone": "Nothing is undone",
         "nothingWaitingPostsAgent": "Nothing waiting. Posts your agent wants to publish, anything else it should not do unasked, and automations set to ask first all land here for you to approve.",
-        "seeWhatNeedsYou": "See what needs you",
+        "seeWhatAgentsWaitOn": "See what your agents are waiting on",
         "open": "Open",
         "postStaysUpOn": "The post stays up on {rejecting}: only this record of it is deleted.",
         "proposed": "proposed {createdAt}",
@@ -94,17 +95,6 @@
         "approveItem": "Approve {item}",
         "invalidFiles": "{count} file couldn't be read and won't run: | {count} files couldn't be read and won't run:"
     },
-    "asks": {
-        "post": "Post",
-        "action": "Action",
-        "files": "Files",
-        "holdNote": "Approving starts a one-minute hold you can call back from Approvals.",
-        "failedNoReason": "The run did not say why.",
-        "hooksTitle": "Let {count} Claude Code hook run | Let {count} Claude Code hooks run",
-        "hooksNote": "Until you say yes, turns run with every hook off.",
-        "unreadableTitle": "{count} approval file can't be read | {count} approval files can't be read",
-        "ledgerTitle": "The record of approved hooks can't be read"
-    },
     "extension": {
         "approvals": "Approvals"
     },
@@ -136,6 +126,13 @@
         "runsCode": "This plugin runs code inside Claude Code, with everything the agent's session can reach.",
         "runsCodeDoing": "This plugin runs code inside Claude Code: it {powers}.",
         "runsCodeUnreadable": "This plugin runs code inside Claude Code, and what that code does could not be read ({reason}). Approving lets it run all the same."
+    },
+    "owed": {
+        "failed": "{count} failed | {count} failed",
+        "unreadable": "{count} file can't be read | {count} files can't be read",
+        "ledger": "the record of approved hooks can't be read",
+        "proposed": "{count} to approve | {count} to approve",
+        "hooks": "{count} hook set waiting | {count} hook sets waiting"
     },
     "postBody": {
         "showLess": "Show less",

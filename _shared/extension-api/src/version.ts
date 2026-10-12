@@ -143,7 +143,9 @@
 // "what is waiting on me" and sent the reader to the other; the inbox now answers it whole. Gated on the manifest's
 // `badge: true`, since the asks are the badge's count spelled out. Additive: a view that declares none is unchanged,
 // and an older host ignores the field. The recorded surface grows a grain for it, ViewRegistration's own fields
-// (`viewRegistration`).
+// (`viewRegistration`). Since 2026-10-12 every host ignores it: the inbox left the editor, since the rail already badged
+// each place a wait is answered. The field stays, deprecated, until a major can drop it; no version moved, since no
+// surface did.
 // 2.24.0 adds the `phone` capability kind: a phone family the user connects their own phone of, through an app installed
 // on it (`install`, where that app comes from), with a SKILL.md teaching the agent to work on that phone, the way a
 // `webext` card stands for a browser family. Additive, but a manifest declaring one needs this version: an older host

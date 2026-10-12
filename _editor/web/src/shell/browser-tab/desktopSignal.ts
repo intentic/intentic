@@ -118,7 +118,7 @@ const describeAsk = (source: string, key: string): NoticeSubject | undefined => 
             title: t(`shell.desktopSignal.heldTitle`),
             line: wake.title ?? t(`shell.desktopSignal.heldLine`),
             elsewhere,
-            path: `/needs?${new URLSearchParams({ sandbox }).toString()}`,
+            path: `/agents?${new URLSearchParams({ sandbox }).toString()}`,
         };
     }
     const agent = (box === undefined ? fleet.value : box.agents).find((entry) => entry.id === key);

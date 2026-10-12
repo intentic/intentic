@@ -2,6 +2,7 @@ import type { IconName } from "@intentic/ui";
 import type { ViewBadge } from "@intentic/extension-api";
 import { useNow } from "@intentic/ui/async";
 import { computed } from "vue";
+import { roleAtLeast } from "@intentic/sandbox-contract";
 import { providerAccounts, translatorAccounts } from "../../chat/accounts/providerAccounts";
 import { acpProviders, endpointProviders } from "../../chat/accounts/providerCatalog";
 import { accessKnown, providerReady } from "../../chat/session/access";
@@ -21,6 +22,7 @@ import { PUBLISH_ANCHOR } from "../access/publishAnchor";
 import { useUnbackedWork } from "./backup/useUnbackedWork";
 import { t } from "@intentic/ui/i18n";
 import { MODELS_PATH } from "../../../lib/routes/modelsPath";
+import { useExtensions } from "../../extensions/useExtensions";
 
 // What the active sandbox needs from its owner, versus what's merely true of it: one list, split by `kind`, read
 // by the rail chip and the mobile menu so they agree. Lives as a badge on the chip, not a dismissible bar, since
@@ -91,8 +93,11 @@ const updateItems = (available: boolean, staged: boolean): SandboxAttentionItem[
 };
 
 export function useSandboxAttention() {
-    const { isGuest } = useRole();
+    const { isGuest, role } = useRole();
     const { pending, proposal } = useEnvironment();
+    // Extensions an agent wrote into this workspace, which run nothing until a maintainer approves the powers they ask
+    // for. They were a row in the Needs you inbox until 2026-10-12; the Extensions tab is where the yes is given.
+    const { pending: waitingExtensions } = useExtensions();
     // A hosted sandbox's build, which the platform runs for minutes: "Rebuild needed" over a build already under way
     // asked an hour of its reader for something they had already done, or that nobody needed to do.
     const { active } = useSandbox();
@@ -163,6 +168,18 @@ export function useSandboxAttention() {
                     tone: `warning`,
                     message: t(`sandbox.sandboxAttention.agentProposedChangeTo`),
                     to: `/sandbox/environment`,
+                    kind: `needs`,
+                },
+            },
+            // The same kind of yes, for code rather than an image: below maintainer the daemon refuses the press.
+            {
+                when: waitingExtensions.value.length > 0 && roleAtLeast(role.value, `maintainer`),
+                item: {
+                    icon: `sliders-h`,
+                    tone: `warning`,
+                    message: t(`sandbox.sandboxAttention.extensionsWaiting`, { count: waitingExtensions.value.length }, waitingExtensions.value.length),
+                    to: `/sandbox/extensions`,
+                    count: waitingExtensions.value.length,
                     kind: `needs`,
                 },
             },

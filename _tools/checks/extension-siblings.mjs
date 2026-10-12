@@ -5,9 +5,10 @@ import { join } from "node:path";
 import { finish } from "./lib/report.mjs";
 import { repoRoot } from "../constants/src/node.mjs";
 
-// logs and scrub are tracked by the workspace repo; the rest are nested clones of their own extension repositories.
+// logs, needs and scrub are tracked by the workspace repo; the rest are nested clones of their own extension repositories.
 const ALLOWED = new Set([
     `logs`,
+    `needs`,
     `scrub`,
     `intentic-saldeo`,
     `acceptance`,

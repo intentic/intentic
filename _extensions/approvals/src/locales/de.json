@@ -37,6 +37,7 @@
         "edit": "{item} bearbeiten",
         "editPost": "Beitrag bearbeiten",
         "failed": "Fehlgeschlagen",
+        "failedNoReason": "Der Lauf hat keinen Grund genannt.",
         "fileDeletedAgentWould": "Die Datei ist gelöscht. Ihr Agent müsste sie erneut vorschlagen.",
         "fired": "ausgelöst",
         "goingAhead": "Geht los",
@@ -70,17 +71,6 @@
         "whatDoneStaysDone": "Was getan wurde, bleibt getan: nur dieser Eintrag darüber wird gelöscht.",
         "wontGoAhead": "Geht nicht los"
     },
-    "asks": {
-        "post": "Beitrag",
-        "action": "Aktion",
-        "files": "Dateien",
-        "holdNote": "Die Zustimmung startet eine einminütige Pause, die du in Freigaben zurückrufen kannst.",
-        "failedNoReason": "Der Lauf hat keinen Grund genannt.",
-        "hooksTitle": "{count} Claude-Code-Hook ausführen lassen | {count} Claude-Code-Hooks ausführen lassen",
-        "hooksNote": "Bis du zustimmst, laufen Züge mit allen Hooks aus.",
-        "unreadableTitle": "{count} Freigabedatei kann nicht gelesen werden | {count} Freigabedateien können nicht gelesen werden",
-        "ledgerTitle": "Die Liste der freigegebenen Hooks kann nicht gelesen werden"
-    },
     "extension": {
         "approvals": "Genehmigungen"
     },
@@ -111,6 +101,13 @@
         "runsCode": "Dieses Plugin führt Code in Claude Code aus, mit allem, was die Sitzung des Agenten erreicht.",
         "runsCodeDoing": "Dieses Plugin führt Code in Claude Code aus: Es {powers}.",
         "runsCodeUnreadable": "Dieses Plugin führt Code in Claude Code aus, und was dieser Code tut, ließ sich nicht lesen ({reason}). Eine Freigabe lässt ihn trotzdem laufen."
+    },
+    "owed": {
+        "failed": "{count} fehlgeschlagen | {count} fehlgeschlagen",
+        "unreadable": "{count} Datei nicht lesbar | {count} Dateien nicht lesbar",
+        "ledger": "das Verzeichnis freigegebener Hooks ist nicht lesbar",
+        "proposed": "{count} zu genehmigen | {count} zu genehmigen",
+        "hooks": "{count} Hook-Satz wartet | {count} Hook-Sätze warten"
     },
     "postBody": {
         "showLess": "Weniger anzeigen",

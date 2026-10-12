@@ -24,7 +24,6 @@ import { useVocabulary } from "../workbench/views/vocabulary";
 import { badgeChip, badgeClass, badgeToneClass, RUNNING_MARK_CLASS } from "../workbench/views/viewBadge";
 import { usePanels } from "../features/extensions/usePanels";
 import { useRole } from "../client/sandbox/useRole";
-import { useInbox } from "../features/needs/inbox/useInbox";
 import { useSandboxAttention } from "../features/sandbox/overview/sandboxAttention";
 import { useRebuildOffer } from "../features/sandbox/environment/rebuild/useRebuildOffer";
 import { identityHue } from "../lib/identityHue";
@@ -84,8 +83,6 @@ const { panels } = usePanels();
 const { capabilities } = useCapabilities();
 // The Sandbox row below stays badge-free; the tab's own badge already flags this, so a chip would repeat it.
 const { needs: sandboxAttention, notes: sandboxNotes } = useSandboxAttention();
-// The one row to everything waiting on a person, with what it counts said on the row, since a phone has no hover.
-const { badge: inboxBadge } = useInbox();
 // "Rebuild needed" carries its own press where one press is the whole errand (useRebuildOffer); the row still links to
 // the card's step, which says why wherever the press is not offered.
 const rebuildOffer = useRebuildOffer();
@@ -166,15 +163,7 @@ const logout = async (): Promise<void> => {
             <GettingStartedList fill />
         </div>
         <!-- First on the page: the tab's badge is what brought the reader here, one row per pending item. -->
-        <RowGroup v-if="inboxBadge !== undefined || sandboxAttention.length > 0" :label="t(`shared.needs`)">
-            <MenuRow
-                v-if="inboxBadge !== undefined"
-                to="/needs"
-                icon="exclamation-circle"
-                :tone="inboxBadge.tone === `danger` ? `danger` : `warning`"
-                :title="t(`needs.inbox.title`)"
-                :description="inboxBadge.tooltip"
-            />
+        <RowGroup v-if="sandboxAttention.length > 0" :label="t(`shared.needs`)">
             <template v-for="item in sandboxAttention" :key="item.message">
                 <MenuRow :to="item.to" :icon="item.icon" :tone="item.tone" :title="item.message" />
                 <MenuRow

@@ -59,9 +59,13 @@ export interface ViewAskAction {
     readonly run: () => Promise<void>;
 }
 
-// Something a person owes this view a decision on, drawn in the host's Needs you inbox beside what agents are waiting
-// on, so one place answers "what is waiting on me" whichever extension holds it. The view stays where the thing is
-// handled in depth (edited, scheduled, looked back on); the ask is only the decision.
+// Something a person owes this view a decision on, drawn until 2026-10-12 in the host's Needs you inbox beside what
+// agents were waiting on. The view stays where the thing is handled in depth (edited, scheduled, looked back on); the
+// ask was only the decision.
+/**
+ * @deprecated The host draws no asks since 2026-10-12, when its Needs you inbox left the editor: a view's badge on its
+ * own tile is what says a person owes it something. Kept so a 2.x extension that declares asks still type-checks.
+ */
 export interface ViewAsk {
     // Stable for as long as the ask stands; the inbox keeps its selection by it.
     readonly id: string;
@@ -128,9 +132,10 @@ export interface ViewRegistration {
     // Read inside the host's computed, so a ref read here re-renders the tile; called on every render, so
     // keep it cheap, pure and non-writing. Requires `badge: true` on the manifest entry.
     readonly badge?: ((activation: Activation) => ViewBadge | undefined) | undefined;
-    // What a person owes this view, itemised for the host's Needs you inbox (see ViewAsk). Read inside the host's
-    // computed like `badge`, so cheap, pure and non-writing, off module state that stays current while the view is
-    // closed (`sandboxPoll`). Requires `badge: true` on the manifest entry: the asks are the badge's count, spelled out.
+    /**
+     * @deprecated Ignored: the host draws no asks since its Needs you inbox left the editor (2026-10-12). Say what a
+     * person owes the view with `badge`; the field stays so a 2.x extension that sets it still type-checks.
+     */
     readonly asks?: (() => readonly ViewAsk[]) | undefined;
     // Declare the query (not a fetcher) the loader should read ahead of need; use the same key your view's
     // `useQuery` reads. A wish, never a guarantee; called every loader beat, so keep it cheap and pure.

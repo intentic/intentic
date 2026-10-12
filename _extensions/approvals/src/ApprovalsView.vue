@@ -52,8 +52,8 @@ import { usePlatformCatalog } from "./usePlatformCatalog";
 import { usePostEdit } from "./usePostEdit";
 import { t } from "./i18n.js";
 
-// Where an empty queue points: what agents ask while they work is answered from Needs you.
-const needsLink = appLink(host().href(`/needs`), () => host().navigate(`/needs`));
+// Where an empty queue points: what agents ask while they work is answered on the board, from each agent's card.
+const agentsLink = appLink(host().href(`/agents`), () => host().navigate(`/agents`));
 
 // The approval inbox: the agent proposes a post or an action, and only the owner's click makes it real. Approving isn't
 // instant: it starts a one-minute hold with a live countdown and a way to call it back. Sections are ordered by what's
@@ -224,9 +224,8 @@ const holding = computed(() => approvals.value.filter((item) => item.status === 
 
 const isEmpty = computed(() => approvals.value.length === 0 && invalid.value.length === 0 && held.value.length === 0 && hookSets.value.length === 0);
 
-// What this queue asks of a person in Needs you is module state a background poll owns, so it survives with nothing
-// mounted to correct it: a reader who opens the queue and finds it empty would otherwise keep the asks that sent them
-// here. Opening the page is the one moment both readings are on screen at once, so it is where they are made to agree.
+// What this queue owes a person is module state a background poll owns, so it survives with nothing mounted to correct
+// it: a reader who opens the queue and finds it empty would otherwise keep the badge that sent them here. Opening the page is the one moment both readings are on screen at once, so it is where they are made to agree.
 onMounted(() => approvalsAttention.refresh());
 
 // A countdown hold runs itself when the timer passes; the row just says so and keeps cancel in reach. "starting…"
@@ -420,10 +419,10 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                 </template>
 
                 <!-- Nothing at all. A reader arriving deliberately is owed an explanation, and the way to everything else that
-                     waits on them: what agents ask while they work is answered from Needs you, never here. -->
+                     waits on them: what agents ask while they work is answered on the board, never here. -->
                 <div v-else-if="isEmpty" v-skeleton-source="`approvals.queue`" :class="ui.emptyState(`flex flex-col items-center gap-3 py-8`)">
                     <p>{{ t(`approvalsView.nothingWaitingPostsAgent`) }}</p>
-                    <a v-bind="needsLink" :class="ui.textButton()">{{ t(`approvalsView.seeWhatNeedsYou`) }}</a>
+                    <a v-bind="agentsLink" :class="ui.textButton()">{{ t(`approvalsView.seeWhatAgentsWaitOn`) }}</a>
                 </div>
 
                 <div v-else v-skeleton-source="`approvals.queue`" class="flex flex-col gap-6">
@@ -484,7 +483,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                     </template>
                                     <ActionBody v-else :action="item" />
                                     <!-- Failed rows show their reason as the primary content. -->
-                                    <Notice :of="noticeOf(item.error ?? t(`asks.failedNoReason`))" class="mt-3 max-w-read" />
+                                    <Notice :of="noticeOf(item.error ?? t(`approvalsView.failedNoReason`))" class="mt-3 max-w-read" />
                                     <div v-if="lengthOf(item)" :class="FACTS">
                                         <span :class="isOver(item) ? `text-danger` : ``">{{ lengthOf(item) }}</span>
                                     </div>

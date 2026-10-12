@@ -4,7 +4,8 @@ import { AWAITING_AGENT_ID, FEATURED_AGENT_ID } from "./fleet";
 
 // What the demo's agents are waiting on people for (docs/architecture/needs.md): one of each kind a visitor is likely
 // to meet, on conversations the board already shows, so the chat's cards, the strip above the composer, the board's
-// "Needs you" chip and the inbox all have something real to draw. Answers move this store, as the daemon's would.
+// "Needs you" chip and the Access tab's standing grants all have something real to draw. Answers move this store, as the
+// daemon's would.
 
 const minutes = (count: number): number => count * 60_000;
 

@@ -2,12 +2,9 @@ import type { Activation, CapabilityFacts, Disposable, RepoFacts, ViewBadge, Vie
 import { computed, shallowRef } from "vue";
 import { type Audience, useAudience } from "../../app/useAudience";
 import { useRole } from "../../client/sandbox/useRole";
-import { registerViewAsksGatherer, viewAsks, type ViewAsks } from "../../lib/registries/viewAsks";
 import { guestAllowedPath } from "../../lib/routes/guestPaths";
 import { badgeSpeaks } from "./viewBadge";
 import { t } from "@intentic/ui/i18n";
-
-export { viewAsks, type ViewAsks };
 
 // Runtime extension registry: the core views are handed in at startup, third-party bundles join via api.views.register.
 // Module-level singleton ref, so every host (rail, mobile menu, ExtensionHost, DirectoryOperator) recomputes
@@ -102,10 +99,11 @@ export const DESKTOP_VIEW_ID = `desktop`;
 const judge = (): RailGroup => ({
     id: `judge`,
     label: t(`views.registry.judge`),
-    // Needs you leads the band: what agents are waiting on a person for, on the rail only while anything is.
-    items: [signal(`needs`), signal(`approvals`), signal(`acceptance`), signal(`deployments`), signal(`maintenance`)],
+    // Approvals leads the band: nothing in its queue moves until the owner acts. What agents wait on while they work is
+    // the Agents tile's count, not a tile of its own (the Needs you tile led here until 2026-10-12).
+    items: [signal(`approvals`), signal(`acceptance`), signal(`deployments`), signal(`maintenance`)],
 });
-// Authored once, then left alone. Automations never badges: a held wake is counted in Needs you instead.
+// Authored once, then left alone. Automations never badges: a held wake is a card on the board, counted on Agents.
 const setup = (): RailGroup => ({ id: `setup`, label: t(`views.words.setUp`), items: [signal(`workflows`), signal(`automations`)] });
 // Consulted deliberately, not summoned; Documentation badges rarely and meaningfully, the others don't at all.
 const know = (): RailGroup => ({
@@ -182,10 +180,10 @@ export const onRailOnlyByVisit = (
 
 // What the mobile tab bar already promotes, so the mobile menu doesn't list it again. View ids, the same
 // key RAIL_GROUPS and detectActivations use, not package ids. The home tile is not among them: on a phone the file
-// tree and the Project page live on the Menu, and Chat takes the tile. Approvals is not either: with that pack on the
-// Review tab opens Needs you, where its decisions wait (shell/mobileTabs.ts), and the queue itself is a Menu row.
+// tree and the Project page live on the Menu, and Chat takes the tile. Approvals is: with that pack on the Review tab
+// opens its queue and wears its badge (shell/mobileTabs.ts), so a Menu row would be the same place twice.
 export const APPROVALS_VIEW_ID = `approvals`;
-export const tabBarIds = (): readonly string[] => [`chat`, `agents`];
+export const tabBarIds = (): readonly string[] => [`chat`, `agents`, APPROVALS_VIEW_ID];
 
 const railOrder = (): readonly string[] => activeGroups().flatMap((group) => group.items.map((item) => item.id));
 
@@ -239,24 +237,6 @@ export const detectActivations = (repos: readonly RepoFacts[], capabilities: rea
     // Ordered here, not per-surface, so the rail and menu can't disagree; unlisted ids share the last rank.
     return resolved.toSorted((left, right) => railRank(left.extension.id) - railRank(right.extension.id));
 };
-
-// What each registered view says a person owes it (ViewRegistration.asks), for the Needs you inbox. Contained like
-// detect(): a throwing asks() costs that view its rows, not the inbox. Every registration, detected or not: an ask is
-// owed whatever the rail is showing, and a view whose extension is switched off is not registered at all.
-registerViewAsksGatherer(() =>
-    views.value.flatMap(({ owner, registration }) => {
-        if (registration.asks === undefined) {
-            return [];
-        }
-        try {
-            const asks = registration.asks();
-            return asks.length === 0 ? [] : [{ view: registration, asks }];
-        } catch (error) {
-            console.error(`extension ${owner}/${registration.id}: asks() failed`, error);
-            return [];
-        }
-    }),
-);
 
 // An element's badge, contained like detect(): a throwing badge costs its own tile, not the whole rail.
 // Normalizes to undefined when there's nothing to draw, so callers only test for presence. `badgeSpeaks`

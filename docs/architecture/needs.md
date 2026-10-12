@@ -6,7 +6,7 @@ A need is something an agent cannot finish its task without and only a person ca
 flowchart LR
     agent["Agent<br/>capabilities · secrets · grants · environment"] -->|"POST /needs/ask"| store(["needs store<br/>survives the turn and a restart"])
     browser["The person's browser<br/>ask_access"] -.->|"seen, not asked"| store
-    store --> card["Card in the chat<br/>and in Needs you"]
+    store --> card["Card in the chat<br/>and on the board"]
     card -->|"the person answers<br/>in the card"| store
     store -->|"met while the call waits"| agent
     store -->|"met later"| wake["wake: steer the live turn<br/>or start the next one"]
@@ -38,30 +38,27 @@ Before raising a card the daemon checks what the turn can already reach ([`turn-
 
 ## The person's side
 
-- The card draws the need live, wherever it is: in the transcript where it was raised, pinned under the conversation while it is open, and in the Needs you inbox with everything else waiting on a person.
+- The card draws the need live, wherever it is: in the transcript where it was raised, pinned under the conversation while it is open, and on its agent's card on the board, whose tile counts it.
 - It is answered in place. A connection's form opens inside the card with everything the agent could fill already filled and only the credential empty; a secret has one masked field whose value goes straight to the store and never into the transcript; a grant offers this conversation or the persona; an environment proposal shows its steps with Approve and Rebuild.
 - A push names the conversation and what it needs, and is sent to the people who are away, not to nobody because someone else has a tab open.
 - A conversation that came from a channel (Slack, Telegram, Discord…) hears it there too ([`need-channel.ts`](../../_sandbox/sandbox/src/needs/need-channel.ts)), with where to answer it and, for a secret, a warning not to paste it into the channel. A visitor's chat never does: nothing a need asks for is a stranger's to give.
 - A pending plan names the conversation's open needs under itself, so the person answers them in the same sitting as the plan rather than one interruption at a time.
-- Every yes still standing (what a grant widened, which credentials were released, whether its installs run unasked) is listed on Needs you's Allowed tab, by conversation, each with Take back ([`standing-grants.ts`](../../_sandbox/sandbox/src/needs/standing-grants.ts)); it applies from the conversation's next turn, and for installs from its next install. A yes is kept until a person takes it back or the conversation is gone: a restart forgets none of them.
-- That includes a credential gateway card's "Allow requests like this with <name> in this conversation", listed in the card's own words ("Requests like GET api.github.com/… with GitHub") and taken back by capability and rule. A yes a card writes mid-turn closes no need, so the daemon pushes a `grants` runtime change whenever a conversation's grants or releases move, and the tab reads again.
+- Every yes still standing (what a grant widened, which credentials were released, whether its installs run unasked) is listed on the Sandbox hub's Access tab under What you have allowed, by conversation, each with Take back ([`standing-grants.ts`](../../_sandbox/sandbox/src/needs/standing-grants.ts), drawn by [`StandingGrants.vue`](../../_editor/web/src/features/sandbox/access/StandingGrants.vue)); it applies from the conversation's next turn, and for installs from its next install. A yes is kept until a person takes it back or the conversation is gone: a restart forgets none of them.
+- That includes a credential gateway card's "Allow requests like this with <name> in this conversation", listed in the card's own words ("Requests like GET api.github.com/… with GitHub") and taken back by capability and rule. A yes a card writes mid-turn closes no need, so the daemon pushes a `grants` runtime change whenever a conversation's grants or releases move, and the list reads again.
 
-## Needs you
+## Where a person finds it
 
-One inbox answers "what is waiting on me", whichever part of the app holds it ([`useInbox.ts`](../../_editor/web/src/features/needs/inbox/useInbox.ts)):
+There is no one inbox. Each wait badges the rail tile of the place it is answered, so the tile a reader picks already says what kind of thing waits:
 
-| Source | Answered |
-| --- | --- |
-| an open need | in place, with the need's own card controls |
-| a turn parked on a person in its chat (a plan, a question, a permission, a setup, a release, a hand-off) | a permission's Allow once and Skip in place; the rest in the chat |
-| a held automation wake with no countdown | Start it or Drop it in place |
-| an extension written in the workspace waiting for its yes | on the Extensions tab, where its powers are read in full |
-| anything an extension view says a person owes it (`ViewRegistration.asks`: the Approvals queue's proposals, failures and hook sets) | up to three presses in place, the rest in that view |
+| Waiting | Counted on | Answered |
+| --- | --- | --- |
+| an open need, or a turn parked on a person (a plan, a question, a permission, a setup, a release, a hand-off) | the Agents tile, and the agent's own card on the board | in the card, in place or in the chat |
+| a held automation wake with no countdown | the Agents tile; a card on the board | Start it or Drop it on that card, or in Approvals |
+| a proposal, a failure or a hook set in the Approvals queue | the Approvals tile, and the phone's Review tab while that pack is on ([`owed.ts`](../../_extensions/approvals/src/owed.ts)) | on the Approvals page |
+| an extension written in the workspace waiting for its yes | the sandbox chip ([`sandboxAttention.ts`](../../_editor/web/src/features/sandbox/overview/sandboxAttention.ts)) | on the Extensions tab, where its powers are read in full |
 
-- It is a list of short rows beside the one opened, not a feed of open cards: rows are grouped into what an agent is standing still on (a parked turn, or a need whose conversation stopped on it) and what is only waiting, oldest first, a broken one first in its group. Answering one opens the next.
-- The desktop rail's Needs you tile, the phone's Menu row and, with the Approvals pack on, the phone's Review tab carry its one count ([`inboxItems.ts`](../../_editor/web/src/features/needs/inbox/inboxItems.ts) `inboxBadge`): warning while an agent is stopped on one, danger while one already broke.
-- What was answered and what is still allowed are tabs of the same page, not sections under the list.
-- 2026-09-30: the page was a feed of every need's card, each with its form open, and the Approvals page held the other half of the question under its own count; each sent the reader to the other. Standing conditions of the sandbox (no backup, no AI account) stay on the sandbox chip: they are health, not asks.
+- Standing conditions of the sandbox (no backup, no AI account) stay on the sandbox chip too: they are health, not asks.
+- 2026-10-04 to 2026-10-12 a Needs you inbox gathered all of these on one page and one rail tile, with `ViewRegistration.asks` letting an extension view add its rows; the Approvals tile badged nothing so the inbox could hold the one count. It left the editor: the rail already badged every place a wait is answered, and a tile for everything said less than the tile it duplicated. The store, the cards and the routes are unchanged. The page lives on, read-only, as the installable `intentic.needs` debugging extension ([`extensions/needs`](../../../extensions/needs)), a Sandbox hub tab that lists every need open and answered, the standing grants, the held wakes and the extensions waiting, each with its raw record.
 
 ## After the answer
 

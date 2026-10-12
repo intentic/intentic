@@ -1,6 +1,6 @@
 # approvals
 
-The Approvals rail view: the queue of everything the agent prepared but may not do unasked, from posts and actions to held automation wakes and workspace hooks, whose decisions wait in the host's Needs you inbox.
+The Approvals rail view: the queue of everything the agent prepared but may not do unasked, from posts and actions to held automation wakes and workspace hooks, with a badge on its tile for every decision it is owed.
 
 ```mermaid
 flowchart LR
@@ -8,25 +8,24 @@ flowchart LR
     dir --> view(["approvals"])
     held["Held automation wakes"] --> view
     hooks["Unapproved hook sets"] --> view
-    view -->|"asks"| inbox(["Needs you<br/>host inbox"])
-    inbox -->|"approve · retry · let run"| daemon["Daemon executor"]
-    view -->|"edit · schedule · reject"| daemon
+    view -->|"badge"| tile(["Approvals tile<br/>on the rail"])
+    view -->|"approve · retry · let run<br/>edit · schedule · reject"| daemon["Daemon executor"]
     daemon --> out["Post published<br/>or action turn"]
 ```
 
 - Runs in the browser, compiled into the web bundle. The daemon owns the rest: [approvals-executor.ts](../../_sandbox/sandbox/src/approvals/approvals-executor.ts) fires each approved item at its due time, posting to Discord through the Discord gateway's `/deliver` and handing every other post or action to a fresh agent turn. The character limits it counts a post against are the contract's [message-limits.ts](../../_shared/sandbox-contract/src/policy/message-limits.ts), the same table the gateways spill a reply at.
 - An item moves proposed → approved → running → done or failed. Approving starts a short hold with a live countdown and a way to call it back; rejecting deletes the file.
 - Posts are editable in place before approval, with a length count against the platform's limit. Platform names and logos come from the enabled extensions' catalogs.
-- Every decision it is owed is an ask (`ViewRegistration.asks`, [src/asks.ts](src/asks.ts)) in the host's Needs you inbox, beside what agents are waiting on: a proposal to approve, a failure to retry, a hook set to let run or keep off, and a record that could not be read. The inbox carries the one count, so this tile badges nothing of its own (2026-09-30: its count and the inbox's were two numbers for one question, and each page sent the reader to the other). Held wakes are not asked here: the host lists those from the board's own read. A background poll keeps the asks current while the view is closed, since hook sets live outside `/work` and no file write announces them.
+- The tile badges every decision it is owed ([src/owed.ts](src/owed.ts)): a proposal to approve, a failure to retry, a hook set to let run or keep off, and a record that could not be read, in danger's tone while anything already broke. That badge is what brings the tile onto the rail by itself. Held wakes are listed on this page but not counted: the board draws each as a card and the Agents tile counts it. A background poll keeps the badge current while the view is closed, since hook sets live outside `/work` and no file write announces them. From 2026-09-30 to 2026-10-12 each decision was an ask in the host's Needs you inbox instead, and this tile badged nothing; the inbox left the editor, since every other tile already badged its own wait.
 - A hook set lists each hook with the file declaring it, and each plugin in it with what brought it. A plugin's hooks module runs inside Claude Code, so its card says in plain words what it does, read off the events it hooks and the methods it calls, which the daemon has Claude Code's own `plugin validate` report ([src/hookSet.ts](src/hookSet.ts)); one that could not be read says so. The raw lists sit under the sentence.
-- Editing, scheduling, rejecting, calling back a hold and the history stay on this page, which each ask opens on its slice.
+- Approving, retrying, editing, scheduling, rejecting, calling back a hold and the history all happen on this page.
 - Below the maintainer role the queue is read-only, and asks nothing of that reader.
-- What an agent asks while it works (a permission, a question, a plan) is not this queue's; it waits in Needs you too, and the empty page links there rather than reading as if nothing waited anywhere.
+- What an agent asks while it works (a permission, a question, a plan) is not this queue's; it waits on the agent's card on the board, and the empty page links there rather than reading as if nothing waited anywhere.
 
 ## Key files
 
-- [src/extension.ts](src/extension.ts) — registers the rail view, the `approvalsAttention` poll and the asks read off it.
-- [src/asks.ts](src/asks.ts) — what the queue asks of a person, item by item, for Needs you.
+- [src/extension.ts](src/extension.ts) — registers the rail view, the `approvalsAttention` poll and the badge read off it.
+- [src/owed.ts](src/owed.ts) — what the queue owes a person, as the tile's badge.
 - [src/ApprovalsView.vue](src/ApprovalsView.vue) — the queue: sections by what is owed, countdown strip, bulk approve.
 - [src/useApprovals.ts](src/useApprovals.ts) — the queue query, upsert-by-id and reject.
 - [src/useHeldWakes.ts](src/useHeldWakes.ts) — automation wakes parked for approval.

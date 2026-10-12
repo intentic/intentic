@@ -299,13 +299,10 @@ const routes: RouteRecordRaw[] = [
                 meta: { title: () => t(`shared.agents`) },
                 component: asyncView(() => import(`../features/agents/fleet/Agents.vue`)),
             },
-            // Everything agents wait on people for, answered in place (docs/architecture/needs.md).
-            {
-                path: `needs`,
-                name: `needs`,
-                meta: { title: () => t(`needs.inbox.title`) },
-                component: asyncView(() => import(`../features/needs/NeedsInbox.vue`)),
-            },
+            // The Needs you inbox until 2026-10-12, when each of its rows went back to the tile that already badged it
+            // (docs/architecture/needs.md). Kept for a bookmark or an older build's notification: the board is where an
+            // agent's ask and a held wake are cards.
+            { path: `needs`, redirect: (to) => ({ path: `/agents`, query: to.query }) },
             // Drill-in for one agent: full-screen chat plus isolated diff review; an agent's conversation is its chat
             // surface.
             {

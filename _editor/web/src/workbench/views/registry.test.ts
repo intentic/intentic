@@ -21,7 +21,6 @@ import {
     registerView,
     railPolicy,
     onRailOnlyByVisit,
-    viewAsks,
     provideBuiltinViews,
 } from "./registry";
 import { coreViews } from "../../core-views/coreViews";
@@ -278,7 +277,7 @@ describe(`rail order`, () => {
     it(`tiles configuration below everything that lights up`, () => {
         // Workflows never badges; it held the third tile only by being filed beside Agents.
         expect(railRank(`workflows`)).toBe(railRank(`automations`) - 1);
-        for (const summons of [`needs`, `approvals`, `acceptance`, `pipelines`, `deployments`, `maintenance`]) {
+        for (const summons of [`approvals`, `acceptance`, `pipelines`, `deployments`, `maintenance`]) {
             expect(railRank(summons)).toBeLessThan(railRank(`workflows`));
         }
     });
@@ -295,10 +294,11 @@ describe(`rail order`, () => {
         expect(railRank(`maintenance`)).toBe(railRank(`deployments`) + 1);
     });
 
-    it(`heads the decisions band with Needs you, then Approvals: the two where nothing moves until the owner acts`, () => {
-        // Needs you first: what an agent is blocked on right now, in a conversation that resumes the moment it is answered.
+    it(`heads the decisions band with Approvals, where nothing moves until the owner acts`, () => {
+        // What an agent is blocked on is the Agents tile's count, so the band has no tile of its own for it.
         const judge = railGroups().find((group) => group.id === `judge`);
-        expect(judge?.items.slice(0, 2).map((item) => item.id)).toEqual([`needs`, `approvals`]);
+        expect(judge?.items[0]?.id).toBe(`approvals`);
+        expect(railGroups().flatMap((group) => group.items.map((item) => item.id))).not.toContain(`needs`);
     });
 
     it(`keeps an unlisted view at the end instead of letting it jump the queue`, () => {
@@ -541,28 +541,5 @@ describe(`a guest's rail`, () => {
         for (const section of [`/workspace`, `/preview`, `/browsers`, `/sandbox`, `/ext/intentic.approvals`]) {
             expect(sectionReachable(section), section).toBe(true);
         }
-    });
-});
-
-// What a view says a person owes it, gathered for the Needs you inbox: every registration that has any, and one whose
-// asks() throws costs only its own rows.
-describe(`viewAsks`, () => {
-    const register = (id: string, asks: ViewRegistration[`asks`]): Disposable =>
-        registerView(`test`, { id, label: id, surface: `rail`, detect: () => [], view: async () => await Promise.resolve({}), asks });
-
-    it(`lists each view's asks under that view, and leaves out a view with none and one that throws`, () => {
-        const owed = register(`owed`, () => [{ id: `p1`, kind: `Post`, title: `Post to #general`, open: `/ext/owed` }]);
-        const quiet = register(`quiet`, () => []);
-        const broken = register(`broken`, () => {
-            throw new Error(`no state yet`);
-        });
-        const error = jest.spyOn(console, `error`).mockImplementation(() => {});
-        const gathered = viewAsks().filter(({ view }) => [`owed`, `quiet`, `broken`].includes(view.id));
-        expect(gathered.map(({ view, asks }) => [view.id, asks.map((ask) => ask.id)])).toEqual([[`owed`, [`p1`]]]);
-        expect(error).toHaveBeenCalledWith(`extension test/broken: asks() failed`, expect.any(Error));
-        error.mockRestore();
-        owed.dispose();
-        quiet.dispose();
-        broken.dispose();
     });
 });

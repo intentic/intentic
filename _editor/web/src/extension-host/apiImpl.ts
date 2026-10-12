@@ -229,16 +229,15 @@ export const createExtensionApi = (
                     throw new Error(`view "${view.id}" (${view.surface}) is not declared in the manifest's contributes.views`);
                 }
                 // The manifest's label and badge permission win over the runtime value; a view never approved to badge
-                // loses only that function, not the registration. Its asks ride the same permission: they are the badge's
-                // count spelled out, and a claim on the Needs you inbox no install dialog showed.
-                const { badge, asks, ...rest } = view;
+                // loses only that function, not the registration. `asks` is dropped: nothing draws it since the Needs you
+                // inbox left the editor (2026-10-12), and the tile's badge is what a person owes the view.
+                const { badge, asks: _undrawn, ...rest } = view;
                 const mayBadge = declared.badge === true;
                 return track(
                     registerView(extensionId, {
                         ...rest,
                         label: declared.label,
                         badge: mayBadge ? badge : undefined,
-                        asks: mayBadge ? asks : undefined,
                     }),
                 );
             },

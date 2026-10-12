@@ -77,7 +77,6 @@ import PresenceAvatars from "../workbench/presence/PresenceAvatars.vue";
 import QuickOpen from "./commands/QuickOpen.vue";
 import SandboxGate from "../features/sandbox/gates/SandboxGate.vue";
 import SandboxSwitcher from "../features/sandbox/gates/SandboxSwitcher.vue";
-import { useInbox } from "../features/needs/inbox/useInbox";
 import { useT } from "@intentic/ui/i18n";
 
 // A rail element; the identity half (id, route, label, icon) is RailTile, shared with the rail's memory.
@@ -228,17 +227,6 @@ const fixedTiles = computed<readonly SectionTile[]>(() => [
     },
     ...(canShip.value ? [devicesTile.value] : []),
 ]);
-// Everything waiting on a person (docs/architecture/needs.md, the Needs you inbox): what agents asked for, turns parked
-// on an answer, held wakes, extensions and every view's asks, in one count. A signal tile heading the Judge band
-// (registry.ts): on the rail while something waits or the reader pins it, behind More otherwise.
-const { badge: inboxBadge } = useInbox();
-const needsTile = computed<SectionTile>(() => ({
-    id: `needs`,
-    to: `/needs`,
-    label: t(`needs.inbox.title`),
-    icon: `exclamation-circle`,
-    ...(inboxBadge.value === undefined ? {} : { badge: inboxBadge.value }),
-}));
 // RailIcon selects bespoke glyphs by view id and validates extension fallbacks before drawing them.
 const extensionTile = (active: ActiveExtension): SectionTile => {
     const { extension, activation } = active;
@@ -257,7 +245,6 @@ const extensionTile = (active: ActiveExtension): SectionTile => {
 const tiles = computed<readonly SectionTile[]>(() =>
     [
         ...fixedTiles.value,
-        needsTile.value,
         ...detectActivations(panels.value, capabilities.value)
             // Only rail-surface extensions get a tile; per-repo panels open from the Workspace tree instead.
             .filter(({ extension }) => extension.surface === `rail`)

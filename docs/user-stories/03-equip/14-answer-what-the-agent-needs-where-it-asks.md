@@ -18,7 +18,7 @@ I should not have to answer at all where nobody needs to decide. A secret the ta
 - [ ] A persona grant, a folder, a shelf, a device switch and a Docker engine option are each allowed on the card with one press, saying before the press whether it needs a rebuild or a restart
 - [ ] Proposed image steps are shown on the card and approved one tool at a time; steps that would re-download everything on every image update are refused before they reach me
 - [ ] A site the agent asks for in my own browser shows as a card in the chat too, and the conversation continues as soon as I allow it in the browser
-- [ ] Everything waiting on me is listed under Needs you, with a badge on the rail and a notification when I am away; a conversation that came from Slack, Telegram or Discord hears the ask in its channel, with a warning not to paste a secret there
+- [ ] Everything waiting on me badges the rail tile of the place I answer it (an agent's ask on Agents, an approval on Approvals), with a notification when I am away; a conversation that came from Slack, Telegram or Discord hears the ask in its channel, with a warning not to paste a secret there
 - [ ] A plan the agent presents lists what it still needs from me, so I answer everything in one sitting
 - [ ] A secret the task can make for itself is generated and stored by the sandbox with nobody asked, and never shown
-- [ ] Every standing grant and credential release is listed with who allowed it, and taking one back applies from the conversation's next turn
+- [ ] Every standing grant and credential release is listed on the Access tab with who allowed it, and taking one back applies from the conversation's next turn

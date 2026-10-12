@@ -1,9 +1,9 @@
 import type { GrantRevoke, StandingGrants } from "@intentic/sandbox-contract";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
-import { rpcKey, rpcPrefix } from "../../lib/queryKeys";
-import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
-import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
+import { rpcKey, rpcPrefix } from "../../../lib/queryKeys";
+import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 
 // The yeses still standing (docs/architecture/needs.md): what grant needs widened past a persona or an area, and which
 // gated credentials a named person released, by conversation. Refreshed with the needs push, since most are the answer

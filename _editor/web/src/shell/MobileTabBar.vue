@@ -5,7 +5,7 @@ import { computed } from "vue";
 import { type RouteLocationNormalizedLoaded, RouterLink, useRoute } from "vue-router";
 import ViewBadgeChip from "../workbench/views/ViewBadgeChip.vue";
 import { agentsBadge, agentsScopeNote } from "../features/agents/board/agentsTile";
-import { reviewBadgeFor, useInboxTile } from "./mobileTabs";
+import { reviewBadgeFor, useReviewTile } from "./mobileTabs";
 import { mobileChatPath } from "../lib/routes/tabRoots";
 import { useChat } from "../features/chat/run/useChat";
 import RailIcon from "./rail/RailIcon.vue";
@@ -27,8 +27,8 @@ const { isGuest } = useRole();
 
 // Four fixed tabs: Agents (fleet, "needs you" badge), Chat (the conversation you were last in), Review (the count of
 // whichever page it opens), Menu (what the sandbox needs, standing in for the desktop rail's chip); everything else,
-// the file tree included, lives on the Menu page. Review's tab reads the approvals extension's registry entry by id,
-// for placement only; with that pack on, the tab opens the Needs you inbox its decisions now wait in.
+// the file tree included, lives on the Menu page. Review's tab reads the approvals extension's registry entry by id;
+// with that pack on, the tab opens its queue and wears its badge.
 
 interface Tab {
     readonly id: string;
@@ -81,8 +81,8 @@ const chatTab = computed<Tab>(() => ({
     ...(chatBadge.value === undefined ? {} : { badge: chatBadge.value }),
 }));
 
-// The inbox while the approvals pack is on (mobileTabs.ts), else undefined and Review is the Changes panel.
-const inboxTile = useInboxTile();
+// The Approvals queue while that pack is on (mobileTabs.ts), else undefined and Review is the Changes panel.
+const reviewTile = useReviewTile();
 
 // What the Changes panel would say, for the tab when it opens that panel: the same push-owed glyph as the desktop rail
 // when nothing is uncommitted.
@@ -106,7 +106,7 @@ const changesBadge = (): ViewBadge | undefined => {
     return { mark: outgoingMark(work), tooltip: outgoingSummary(work), ...landing };
 };
 const reviewBadge = computed<ViewBadge | undefined>(() =>
-    reviewBadgeFor(inboxTile.value, inboxTile.value === undefined ? changesBadge() : undefined),
+    reviewBadgeFor(reviewTile.value, reviewTile.value === undefined ? changesBadge() : undefined),
 );
 
 const tabs = computed<readonly Tab[]>(() => [
@@ -127,12 +127,12 @@ const tabs = computed<readonly Tab[]>(() => [
         ? []
         : [
               {
-                  /* Needs you when the approvals pack is on; the workspace's OWN review: its Changes panel, when it is off. */
+                  /* The Approvals queue when that pack is on; the workspace's OWN review: its Changes panel, when it is off. */
                   id: `approvals`,
-                  to: inboxTile.value?.to ?? `/workspace?panel=changes`,
+                  to: reviewTile.value?.to ?? `/workspace?panel=changes`,
                   label: t(`shared.review`),
                   ...(reviewBadge.value === undefined ? {} : { badge: reviewBadge.value }),
-                  ...(inboxTile.value === undefined ? { panel: `changes` as const } : {}),
+                  ...(reviewTile.value === undefined ? { panel: `changes` as const } : {}),
               },
           ]),
     { id: `menu`, to: `/menu`, label: t(`shared.menu`), ...(menuBadge.value === undefined ? {} : { badge: menuBadge.value }) },

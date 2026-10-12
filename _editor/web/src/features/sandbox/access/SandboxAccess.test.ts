@@ -1,7 +1,7 @@
 // Access tab's rendered text after an invite: which of its two writes (daemon grant, platform record/email) failed, and
 // refusal vs silence, must all read differently on screen.
 import "@intentic/testing/dom";
-import type { MemberRole } from "@intentic/sandbox-contract";
+import type { MemberRole, StandingGrants } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
@@ -10,6 +10,8 @@ import { IconStub } from "@intentic/ui/testing";
 import { formatDate } from "@intentic/ui/format";
 import type { SandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
+
+type StandingConversation = StandingGrants["conversations"][number];
 
 // Import chain touches the API client and a media query (UI barrel's useDevice) at module eval; hence jsdom.
 
@@ -69,6 +71,10 @@ jest.mock(`../../../workbench/presence/usePresence`, () => ({ presenceOthers: []
 // Session module touches GIS/localStorage at eval; needs only its expiry. Fixed date avoids timezone drift.
 const sessionExpiresAt = ref<number | undefined>(Date.parse(`2026-09-24T12:00:00.000Z`));
 jest.mock(`../../../client/session/sandboxSession`, () => ({ useSandboxSession: () => ({ sessionExpiresAt }) }));
+// What conversations were allowed past their persona: none unless a test lists one. Its take-back is a vue-query
+// mutation, and this page mounts without a query client.
+const standing = ref<readonly StandingConversation[]>([]);
+jest.mock(`./useStandingGrants`, () => ({ useStandingGrants: () => ({ conversations: standing, error: ref(undefined), revoke: { mutateAsync: jest.fn() } }) }));
 
 const { default: SandboxAccess } = await import("./SandboxAccess.vue");
 const { forgetOperations } = await import("../../../workbench/operations/operations");
@@ -143,6 +149,7 @@ afterEach(() => {
     list.mockReset();
     list.mockResolvedValue({ members: [] });
     sessionExpiresAt.value = Date.parse(`2026-09-24T12:00:00.000Z`);
+    standing.value = [];
     app?.unmount();
     app = undefined;
     forgetOperations();
@@ -535,4 +542,24 @@ it(`lists only the doors in use, with paired machines counted`, async () => {
     expect(shown()).toContain(`Release gates`);
     expect(shown()).toContain(`2 devices, each holding its own enrollment key.`);
     expect(shown()).not.toContain(`0 runners`);
+});
+
+// What a conversation was allowed past its persona is taken back here, where the rest of who-reaches-this-box is: the
+// Needs you inbox's Allowed tab until 2026-10-12. Nothing standing draws nothing.
+it(`lists what conversations were allowed past their persona, each with Take back`, async () => {
+    mount();
+    await settle();
+    expect(shown()).not.toContain(`What you have allowed`);
+    app?.unmount();
+    document.body.innerHTML = ``;
+
+    standing.value = [
+        { conversationId: `c1`, capabilities: [`github`], folders: [], shelves: [], installs: false, secrets: [], everything: false, rules: [], releases: [] },
+    ];
+    mount();
+    await settle();
+
+    expect(shown()).toContain(`What you have allowed`);
+    expect(shown()).toContain(`github, although its persona leaves it out`);
+    expect(buttonLabelled(`Take back`)?.disabled).toBe(false);
 });

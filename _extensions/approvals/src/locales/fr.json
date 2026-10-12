@@ -37,6 +37,7 @@
         "edit": "Modifier {item}",
         "editPost": "Modifier la publication",
         "failed": "Échoué",
+        "failedNoReason": "L'exécution n'a pas dit pourquoi.",
         "fileDeletedAgentWould": "Le fichier est supprimé. Votre agent devrait le proposer à nouveau.",
         "fired": "déclenchée",
         "goingAhead": "Part",
@@ -70,17 +71,6 @@
         "whatDoneStaysDone": "Ce qui a été fait reste fait : seule cette trace en est supprimée.",
         "wontGoAhead": "Ne part pas"
     },
-    "asks": {
-        "post": "Publication",
-        "action": "Action",
-        "files": "Fichiers",
-        "holdNote": "Approuver lance une attente d'une minute que tu peux annuler depuis Approbations.",
-        "failedNoReason": "L'exécution n'a pas dit pourquoi.",
-        "hooksTitle": "Laisser {count} hook Claude Code s'exécuter | Laisser {count} hooks Claude Code s'exécuter",
-        "hooksNote": "Tant que tu n'as pas dit oui, les tours s'exécutent avec tous les hooks désactivés.",
-        "unreadableTitle": "{count} fichier d'approbation illisible | {count} fichiers d'approbation illisibles",
-        "ledgerTitle": "Le registre des hooks approuvés est illisible"
-    },
     "extension": {
         "approvals": "Approbations"
     },
@@ -111,6 +101,13 @@
         "runsCode": "Ce plugin exécute du code dans Claude Code, avec tout ce que la session de l'agent peut atteindre.",
         "runsCodeDoing": "Ce plugin exécute du code dans Claude Code : il {powers}.",
         "runsCodeUnreadable": "Ce plugin exécute du code dans Claude Code, et ce que fait ce code n'a pas pu être lu ({reason}). L'approuver le laisse s'exécuter quand même."
+    },
+    "owed": {
+        "failed": "{count} en échec | {count} en échec",
+        "unreadable": "{count} fichier illisible | {count} fichiers illisibles",
+        "ledger": "le registre des hooks approuvés est illisible",
+        "proposed": "{count} à approuver | {count} à approuver",
+        "hooks": "{count} ensemble de hooks en attente | {count} ensembles de hooks en attente"
     },
     "postBody": {
         "showLess": "Afficher moins",

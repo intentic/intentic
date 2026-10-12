@@ -3236,11 +3236,11 @@
       "anchors": [
         {
           "path": "_extensions/approvals/src/extension.ts",
-          "what": "registers the rail view, the approvalsAttention poll and the asks read off it."
+          "what": "registers the rail view, the approvalsAttention poll and the badge read off it."
         },
         {
-          "path": "_extensions/approvals/src/asks.ts",
-          "what": "what the queue asks of a person, item by item, for Needs you."
+          "path": "_extensions/approvals/src/owed.ts",
+          "what": "what the queue owes a person, as the tile's badge."
         },
         {
           "path": "_extensions/approvals/src/ApprovalsView.vue",

@@ -6,7 +6,7 @@ import { Notice, timeAgo, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
-import { useOperations } from "../../workbench/operations/operations";
+import { useOperations } from "../../../workbench/operations/operations";
 import { useStandingGrants } from "./useStandingGrants";
 
 const t = useT();

@@ -37,6 +37,7 @@
         "edit": "Edytuj {item}",
         "editPost": "Edytuj wpis",
         "failed": "Nieudane",
+        "failedNoReason": "Uruchomienie nie podało powodu.",
         "fileDeletedAgentWould": "Plik jest usunięty. Twój agent musiałby zaproponować go od nowa.",
         "fired": "odpalone",
         "goingAhead": "Rusza",
@@ -52,7 +53,7 @@
         "needsReview": "Wymaga Twojego przeglądu",
         "nothingUndone": "Nic nie jest cofane",
         "nothingWaitingPostsAgent": "Nic nie czeka. Wpisy, które Twój agent chce opublikować, wszystko inne, czego nie powinien robić bez pytania, i automatyzacje ustawione na „najpierw zapytaj” — wszystko ląduje tutaj do zatwierdzenia.",
-        "seeWhatNeedsYou": "Zobacz, co na Ciebie czeka",
+        "seeWhatAgentsWaitOn": "Zobacz, na co czekają twoi agenci",
         "open": "Otwórz",
         "postStaysUpOn": "Wpis zostaje na {rejecting}: usuwany jest tylko ten jego ślad.",
         "proposed": "zaproponowano {createdAt}",
@@ -94,17 +95,6 @@
         "approveItem": "Zatwierdź {item}",
         "invalidFiles": "Nie dało się odczytać {count} pliku, więc nie zostanie uruchomiony: | Nie dało się odczytać {count} plików, więc nie zostaną uruchomione: | Nie dało się odczytać {count} plików, więc nie zostaną uruchomione:"
     },
-    "asks": {
-        "post": "Post",
-        "action": "Działanie",
-        "files": "Pliki",
-        "holdNote": "Zatwierdzenie zaczyna minutowe wstrzymanie, które możesz odwołać w Zatwierdzeniach.",
-        "failedNoReason": "Uruchomienie nie podało powodu.",
-        "hooksTitle": "Pozwól działać {count} hookowi Claude Code | Pozwól działać {count} hookom Claude Code | Pozwól działać {count} hookom Claude Code",
-        "hooksNote": "Dopóki się nie zgodzisz, tury działają z wyłączonymi hookami.",
-        "unreadableTitle": "Nie da się odczytać {count} pliku zatwierdzeń | Nie da się odczytać {count} plików zatwierdzeń | Nie da się odczytać {count} plików zatwierdzeń",
-        "ledgerTitle": "Nie da się odczytać zapisu zatwierdzonych hooków"
-    },
     "extension": {
         "approvals": "Zatwierdzenia"
     },
@@ -136,6 +126,13 @@
         "runsCode": "Ta wtyczka uruchamia kod wewnątrz Claude Code, ze wszystkim, do czego sięga sesja agenta.",
         "runsCodeDoing": "Ta wtyczka uruchamia kod wewnątrz Claude Code: {powers}.",
         "runsCodeUnreadable": "Ta wtyczka uruchamia kod wewnątrz Claude Code i nie udało się odczytać, co ten kod robi ({reason}). Zatwierdzenie i tak pozwoli mu działać."
+    },
+    "owed": {
+        "failed": "{count} nieudane | {count} nieudane | {count} nieudanych",
+        "unreadable": "{count} plik nieczytelny | {count} pliki nieczytelne | {count} plików nieczytelnych",
+        "ledger": "nie można odczytać rejestru zatwierdzonych hooków",
+        "proposed": "{count} do zatwierdzenia | {count} do zatwierdzenia | {count} do zatwierdzenia",
+        "hooks": "{count} zestaw hooków czeka | {count} zestawy hooków czekają | {count} zestawów hooków czeka"
     },
     "postBody": {
         "showLess": "Pokaż mniej",
