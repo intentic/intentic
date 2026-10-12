@@ -2,7 +2,7 @@
 // composition in the order the model reads it, and nothing is fetched until a reader asks — the payload is the whole
 // prompt, and a transcript that opened one per pane would pay for it every time.
 import "@intentic/testing/dom";
-import type { ConversationPrompt } from "@intentic/sandbox-contract";
+import type { ConversationPrompt, TurnNote } from "@intentic/sandbox-contract";
 import { IconStub } from "@intentic/ui/testing";
 import PrimeVue from "primevue/config";
 import { type App, createApp, h, ref, toValue } from "vue";
@@ -45,10 +45,10 @@ jest.mock(`../../../../client/sandbox/sandboxRpc`, () => ({ sandboxRpc: fakeSand
 
 let app: App | undefined;
 
-const mount = (): HTMLElement => {
+const mount = (notes?: readonly TurnNote[]): HTMLElement => {
     const element = document.createElement(`div`);
     document.body.append(element);
-    app = createApp({ render: () => h(ChatSystemPrompt, { conversationId: `c-1` }) });
+    app = createApp({ render: () => h(ChatSystemPrompt, { conversationId: `c-1`, notes }) });
     app.use(PrimeVue);
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
@@ -96,4 +96,23 @@ test("a section's own heading is dropped from the reading and kept in what is co
     // The title is drawn once, by the row; the words under it are the section's own.
     expect(opened).toContain(`pnpm's exit code lies here.`);
     expect(opened.match(/Field notes for this sandbox/g)).toHaveLength(1);
+});
+
+test("the first message's context follows the prompt as its own group, read without waiting on the fetch", async () => {
+    mount([{ title: `Map of this project`, text: `## Map of this project\n\nfive areas` }]);
+    document.querySelector<HTMLButtonElement>(`button`)?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const dialog = document.querySelector(`[role="dialog"]`);
+    expect([...(dialog?.querySelectorAll(`h3`) ?? [])].map((heading) => heading.textContent?.trim())).toEqual([
+        `System prompt`,
+        `Sent with your first message`,
+    ]);
+    const row = [...(dialog?.querySelectorAll<HTMLButtonElement>(`button[aria-expanded]`) ?? [])].find((button) =>
+        button.textContent?.includes(`Map of this project`),
+    );
+    row?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const opened = document.querySelector(`[role="dialog"]`)?.textContent ?? ``;
+    expect(opened).toContain(`five areas`);
+    expect(opened.match(/Map of this project/g)).toHaveLength(1);
 });

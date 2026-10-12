@@ -63,6 +63,9 @@ const props = defineProps<{
     checklistView?: ChecklistView;
     // Rows follow this live bubble, so the column's foot draws the turn's status line rather than this bubble.
     statusBelow?: boolean;
+    // The context this message went out with is read from the chip at the top of the column (ChatSystemPrompt), so it
+    // draws no paperclip of its own: set on a conversation's first message.
+    notesAbove?: boolean;
 }>();
 
 // A snapshot that moved nothing is not a checklist event, so it draws no line at all — not an empty one.
@@ -429,7 +432,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
          notes, a `---`, then the user's words (turn-preamble.ts withTurnPreamble). It is a row of its own, not part of the
          bubble below, because a pinned prompt charges its whole height against reading room. `chat-notes-row`: shut, it
          is no row at all, just its paperclip in the left gutter in the seam above the message (chat.css). -->
-    <div v-if="message.notes?.length" class="chat-message chat-notes-row chat-stack flex flex-col" :class="{ 'chat-doomed': doomed }">
+    <div v-if="message.notes?.length && !notesAbove" class="chat-message chat-notes-row chat-stack flex flex-col" :class="{ 'chat-doomed': doomed }">
         <ChatNotes :notes="message.notes" />
     </div>
 

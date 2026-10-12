@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ConversationPrompt, PromptSection } from "@intentic/sandbox-contract";
+import type { ConversationPrompt, PromptSection, TurnNote } from "@intentic/sandbox-contract";
 import { CopyButton, MarkdownDocument, Modal, Notice, ui } from "@intentic/ui";
 import { formatTokens, timeAgo } from "@intentic/ui/format";
 import { computed, ref } from "vue";
@@ -13,9 +13,16 @@ import { useT } from "@intentic/ui/i18n";
 // alike.
 //
 // It sits above the first prompt because that is where it sits in the conversation: all of it was said before the
-// reader's first word.
+// reader's first word. So is the context the sandbox sent with that first message (the project map, the checks, the
+// skills), which is why it is read here too, as a second group, rather than as a paperclip a line below this chip that
+// says the same thing. Context added to a LATER message stays beside that message (ChatNotes): there the paperclip
+// answers "what changed on this turn", which a list at the top could not.
 
-const props = defineProps<{ conversationId: string }>();
+const props = defineProps<{
+    conversationId: string;
+    // The notes the first message went out with, drawn here instead of on it (ChatPaneTurns).
+    notes?: readonly TurnNote[];
+}>();
 
 const t = useT();
 
@@ -41,6 +48,8 @@ interface Row {
     readonly whence: string;
     // Absent for a runtime that keeps its own prompt: there is a base, and it cannot be read from here.
     readonly text?: string;
+    // The words as read, without the heading the row's title already draws; `text` stays what is copied.
+    readonly reading?: string;
 }
 
 // Written as literal keys rather than a lookup table: the catalogs are checked by reading these call sites, and a key
@@ -84,13 +93,37 @@ const rows = computed((): readonly Row[] => {
                 : prompt.base.kind === `trimmed`
                   ? t(`chat.chatSystemPrompt.whenceTrimmed`)
                   : t(`chat.chatSystemPrompt.whenceBase`),
-        ...(prompt.base.text === undefined ? {} : { text: prompt.base.text }),
+        ...(prompt.base.text === undefined ? {} : { text: prompt.base.text, reading: shown(prompt.base.text, baseTitle(prompt)) }),
     };
     return [
         base,
-        ...prompt.sections.map((section) => ({ key: section.source, title: section.title, whence: whenceOf(section.source), text: section.text })),
+        ...prompt.sections.map((section) => ({
+            key: section.source,
+            title: section.title,
+            whence: whenceOf(section.source),
+            text: section.text,
+            reading: shown(section.text, section.title),
+        })),
     ];
 });
+
+// Already in the transcript, so drawn the moment the dialog opens, whatever the fetch above is still doing. A note's
+// first line is its own heading, worded differently from its title (turn-preamble.ts), so any heading is dropped.
+const noteRows = computed((): readonly Row[] =>
+    (props.notes ?? []).map((note) => ({
+        key: `note:${note.title}`,
+        title: note.title,
+        whence: t(`chat.chatSystemPrompt.whenceNote`),
+        text: note.text,
+        reading: note.text.replace(/^#{1,6} .*(\n|$)/, ``).trim(),
+    })),
+);
+
+// The prompt group is always drawn, since its fetch has states to say; the notes group only when there are notes.
+const groups = computed(() => [
+    { key: `prompt`, heading: t(`chat.chatSystemPrompt.promptHeading`), rows: rows.value },
+    ...(noteRows.value.length > 0 ? [{ key: `notes`, heading: t(`chat.chatSystemPrompt.notesHeading`), rows: noteRows.value }] : []),
+]);
 
 // One row open at a time: the list is what the chip is for, and two open sections bury it.
 const opened = ref<string>();
@@ -120,7 +153,7 @@ const shown = (text: string, title: string): string => {
             type="button"
             :class="ui.chip({ on: open }, `cursor-pointer`)"
             :aria-label="t(`chat.chatSystemPrompt.chip`)"
-            v-tooltip.bottom="{ title: t(`chat.chatSystemPrompt.instructions`), note: t(`chat.chatSystemPrompt.sentBeforeYours`) }"
+            v-tooltip.bottom="{ title: t(`chat.chatSystemPrompt.tipTitle`), note: t(`chat.chatSystemPrompt.tipNote`) }"
             @click="open = true"
         >
             <Icon name="align-left" class="text-2xs" />
@@ -129,57 +162,63 @@ const shown = (text: string, title: string): string => {
     </div>
 
     <Modal v-model:open="open" size="lg" :header="t(`chat.chatSystemPrompt.title`)" :description="t(`chat.chatSystemPrompt.lede`)">
-        <div v-if="loading" class="flex items-center gap-2 py-6 text-xs text-muted">
-            <Icon name="spinner" spin />
-            {{ t(`chat.chatSystemPrompt.reading`) }}
-        </div>
-        <Notice v-else-if="error !== undefined" tone="danger" class="text-2xs">{{ error }}</Notice>
-        <Notice v-else-if="missing" tone="info" class="text-2xs">{{ t(`chat.chatSystemPrompt.nothing`) }}</Notice>
-        <div v-else-if="disclosure !== undefined" class="flex flex-col gap-3">
-            <!-- Which turn this was, because a persona switch or an edited AGENTS.md changes it mid-conversation. -->
-            <p class="text-2xs text-subtle">
-                {{ t(`chat.chatSystemPrompt.composed`, { runtime: disclosure.runtime, when: timeAgo(disclosure.at, { days: true }) }) }}
-            </p>
-            <div class="flex flex-col border-y border-line-subtle">
-                <div v-for="row in rows" :key="row.key" class="flex flex-col border-b border-line-subtle last:border-b-0">
-                    <button
-                        type="button"
-                        class="flex cursor-pointer items-center gap-2 py-2 text-left text-xs transition-colors hover:text-content"
-                        :class="opened === row.key ? `text-content` : `text-muted`"
-                        :aria-expanded="opened === row.key"
-                        @click="toggle(row.key)"
-                    >
-                        <Icon :name="opened === row.key ? `chevron-down` : `chevron-right`" class="shrink-0 text-2xs" />
-                        <span class="min-w-0 flex-1 truncate font-medium">{{ row.title }}</span>
-                        <!-- Characters, not tokens: what a section costs is measurable here, what it tokenizes to is not. -->
-                        <span
-                            v-if="row.text !== undefined"
-                            class="shrink-0 font-mono text-2xs text-subtle tabular-nums"
-                            v-tooltip.left="t(`chat.chatSystemPrompt.characters`, { count: row.text.length })"
+        <div class="flex flex-col gap-5">
+            <!-- Two groups, each headed: the chip's own word is "Context", so the heading is where "System prompt" is said. -->
+            <section v-for="group in groups" :key="group.key" class="flex flex-col gap-2">
+                <h3 class="text-xs font-medium text-content">{{ group.heading }}</h3>
+                <template v-if="group.key === `prompt`">
+                    <div v-if="loading" class="flex items-center gap-2 py-4 text-xs text-muted">
+                        <Icon name="spinner" spin />
+                        {{ t(`chat.chatSystemPrompt.reading`) }}
+                    </div>
+                    <Notice v-else-if="error !== undefined" tone="danger" class="text-2xs">{{ error }}</Notice>
+                    <Notice v-else-if="missing" tone="info" class="text-2xs">{{ t(`chat.chatSystemPrompt.nothing`) }}</Notice>
+                    <!-- Which turn this was, because a persona switch or an edited AGENTS.md changes it mid-conversation. -->
+                    <p v-else-if="disclosure !== undefined" class="text-2xs text-subtle">
+                        {{ t(`chat.chatSystemPrompt.composed`, { runtime: disclosure.runtime, when: timeAgo(disclosure.at, { days: true }) }) }}
+                    </p>
+                </template>
+                <div v-if="group.rows.length > 0" class="flex flex-col border-y border-line-subtle">
+                    <div v-for="row in group.rows" :key="row.key" class="flex flex-col border-b border-line-subtle last:border-b-0">
+                        <button
+                            type="button"
+                            class="flex cursor-pointer items-center gap-2 py-2 text-left text-xs transition-colors hover:text-content"
+                            :class="opened === row.key ? `text-content` : `text-muted`"
+                            :aria-expanded="opened === row.key"
+                            @click="toggle(row.key)"
                         >
-                            {{ formatTokens(row.text.length) }}
-                        </span>
-                    </button>
-                    <!-- Shut until found rather than absent, so find-in-page reaches a section and opens it. -->
-                    <div :hidden.attr="opened === row.key ? undefined : `until-found`" @beforematch="opened = row.key">
-                        <div v-if="row.text !== undefined" class="pb-3">
-                            <p class="mb-2 text-2xs text-subtle">{{ row.whence }}</p>
-                            <!-- Capped and scrolled rather than clamped: one of these rows is the whole base prompt. -->
-                            <div class="ui-softscroll max-h-[45dvh] overflow-auto" style="--prose-measure: 76ch">
-                                <MarkdownDocument :model-value="shown(row.text, row.title)" :label="row.title" />
+                            <Icon :name="opened === row.key ? `chevron-down` : `chevron-right`" class="shrink-0 text-2xs" />
+                            <span class="min-w-0 flex-1 truncate font-medium">{{ row.title }}</span>
+                            <!-- Characters, not tokens: what a section costs is measurable here, what it tokenizes to is not. -->
+                            <span
+                                v-if="row.text !== undefined"
+                                class="shrink-0 font-mono text-2xs text-subtle tabular-nums"
+                                v-tooltip.left="t(`chat.chatSystemPrompt.characters`, { count: row.text.length })"
+                            >
+                                {{ formatTokens(row.text.length) }}
+                            </span>
+                        </button>
+                        <!-- Shut until found rather than absent, so find-in-page reaches a section and opens it. -->
+                        <div :hidden.attr="opened === row.key ? undefined : `until-found`" @beforematch="opened = row.key">
+                            <div v-if="row.text !== undefined" class="pb-3">
+                                <p class="mb-2 text-2xs text-subtle">{{ row.whence }}</p>
+                                <!-- Capped and scrolled rather than clamped: one of these rows is the whole base prompt. -->
+                                <div class="ui-softscroll max-h-[45dvh] overflow-auto" style="--prose-measure: 76ch">
+                                    <MarkdownDocument :model-value="row.reading ?? row.text" :label="row.title" />
+                                </div>
+                                <div class="mt-2 flex justify-end">
+                                    <!-- Copies the section as it was sent, heading and all, whatever the reading above dropped. -->
+                                    <CopyButton :text="row.text" :label="t(`ui.action.copy`)" />
+                                </div>
                             </div>
-                            <div class="mt-2 flex justify-end">
-                                <!-- Copies the section as it was sent, heading and all, whatever the reading above dropped. -->
-                                <CopyButton :text="row.text" :label="t(`ui.action.copy`)" />
-                            </div>
+                            <p v-else class="pb-3 text-2xs text-subtle">{{ row.whence }}</p>
                         </div>
-                        <p v-else class="pb-3 text-2xs text-subtle">{{ row.whence }}</p>
                     </div>
                 </div>
-            </div>
-            <div class="flex items-center justify-end gap-2">
-                <CopyButton :text="whole" :label="t(`chat.chatSystemPrompt.copyAll`)" />
-            </div>
+                <div v-if="group.key === `prompt` && whole.length > 0" class="flex items-center justify-end gap-2">
+                    <CopyButton :text="whole" :label="t(`chat.chatSystemPrompt.copyAll`)" />
+                </div>
+            </section>
         </div>
     </Modal>
 </template>

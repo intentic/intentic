@@ -86,6 +86,11 @@ const budget = useRowBudget({
 const shownTurns = computed(() => windowTurns(turns.value, messages.value.length, budget.value));
 // Every row is drawn: only then is the column's top the conversation's (the paging press, the fork line, the prompt).
 const whole = computed(() => budget.value >= messages.value.length);
+// The top of the conversation is on screen, so the chip that says what it was told before its first word is drawn.
+const showsPrompt = computed(() => !conversation.value.transcript.historyMore.value && whole.value && messages.value.length > 0 && !props.subagent);
+// The first message the reader sent: the context it went out with was also said before their first word, so the chip
+// reads it out (ChatSystemPrompt) and that message draws no paperclip of its own.
+const opening = computed(() => (showsPrompt.value ? messages.value.find((message) => message.role === `user`) : undefined));
 const doomed = computed(() => conversation.value.transcript.doomed.value);
 // The error line only where it adds to the transcript: the daemon's notice already says a turn's failure.
 const error = computed(() => unsaidError(conversation.value.error.value, messages.value));
@@ -132,10 +137,7 @@ const imprint = computed(() => (quiet ? undefined : `chat.transcript:${conversat
         <!-- What the conversation was told before its first word, at the one place in the column where that is
              true: above everything it has said. Drawn only at the real top, since in the middle of a paged
              history it would claim a beginning that isn't on screen. -->
-        <ChatSystemPrompt
-            v-if="!conversation.transcript.historyMore.value && whole && messages.length > 0 && !props.subagent"
-            :conversation-id="conversation.conversationId"
-        />
+        <ChatSystemPrompt v-if="showsPrompt" :conversation-id="conversation.conversationId" :notes="opening?.notes" />
         <!-- Rows above the window are not drawn: this mark, within a screen of the top, draws the next slice of them. -->
         <div v-if="messages.length > 0 && !whole" ref="edge" class="h-px shrink-0" aria-hidden="true"></div>
         <!-- The turns as one element, so the skeleton has one thing to remember them by; stacked by the column's own gap. -->
@@ -169,6 +171,7 @@ const imprint = computed(() => (quiet ? undefined : `chat.transcript:${conversat
                             repeatedChecklists.has(message.id),
                             checklistViews.get(message.id),
                             heldRow === message.id,
+                            opening?.id === message.id,
                         ]"
                         class="chat-row contents"
                         :class="cutsAbove.get(message.id) !== undefined && !props.subagent && `chat-cut-row`"
@@ -183,6 +186,7 @@ const imprint = computed(() => (quiet ? undefined : `chat.transcript:${conversat
                             :folded="message.id === turn.id ? turn.folded : undefined"
                             :doomed="doomed.has(message.id)"
                             :checklist-view="checklistViews.get(message.id)"
+                            :notes-above="opening?.id === message.id"
                         />
                     </div>
                     <!-- The documents the turn made or changed, for a person to open (ChatTurnDeliverables). -->
