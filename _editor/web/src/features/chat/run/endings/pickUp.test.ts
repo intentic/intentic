@@ -1,5 +1,6 @@
 import { formatClock, formatWeekdayTime } from "@intentic/ui/format";
 import {
+    atReopenPhrase,
     cooledPickUp,
     handoffPicked,
     LIMIT_COOLDOWN_MS,
@@ -25,7 +26,13 @@ describe(`pressCost`, () => {
     });
 
     it(`reads a held turn with a choice of hand-offs off the way picked: the person's, else the suggestion`, () => {
-        const handoff = { suggested: `trim`, basis: `size`, carry: { tokens: 430_000 }, trim: { tokens: 110_000, cleared: 180 }, summary: { tokens: 40_000 } } as const;
+        const handoff = {
+            suggested: `trim`,
+            basis: `size`,
+            carry: { tokens: 430_000 },
+            trim: { tokens: 110_000, cleared: 180 },
+            summary: { tokens: 40_000 },
+        } as const;
         const held = { ran: true, contextTokens: 430_000, handoff };
         expect(pressCost(held)).toEqual({ kind: `trim`, tokens: 110_000 });
         expect(pressCost({ ...held, handoff: { ...handoff, chosen: `summary` } })).toEqual({ kind: `summary`, tokens: 40_000 });
@@ -124,7 +131,7 @@ describe(`pickUpStatus`, () => {
 
     it(`says why Continue rests after a refusal where nothing ran`, () => {
         expect(pickUpStatus(cooledPickUp({ reason: `limit`, held: { ran: false } }, NOW), NOW + 1_000)).toBe(
-            `Limit reached · nothing ran · reset time unknown · Continue opens again in a minute`,
+            `Limit reached · nothing ran · reset time unknown · you can try again in a minute`,
         );
     });
 
@@ -138,6 +145,30 @@ describe(`pickUpStatus`, () => {
     it(`counts nothing before the first re-run has gone`, () => {
         expect(pickUpStatus({ reason: `stopped`, held: { ran: true }, retries: { made: 0, max: 3 } }, NOW)).toBe(`Turn stopped short · work kept`);
         expect(pickUpStatus({ reason: `stopped`, held: { ran: true } }, NOW)).toBe(`Turn stopped short · work kept`);
+    });
+
+    // A turn that stopped some other way on a spent account cannot go on before its reopen either: said beside what
+    // happened, once, in the clock the rest of the card uses. A limit ending already says its own reopen.
+    it(`names a spent account's reopen beside any other ending, and not twice beside a limit`, () => {
+        const spentUntil = NOW + 30 * 60_000;
+        expect(pickUpStatus({ reason: `stopped`, held: { ran: true } }, NOW, spentUntil)).toBe(
+            `Turn stopped short · work kept · allowance back about 30 min`,
+        );
+        expect(pickUpStatus({ reason: `outage` }, NOW, spentUntil)).toBe(`Provider failed · work kept · allowance back about 30 min`);
+        expect(pickUpStatus({ reason: `limit`, held: { ran: true }, readyAt: spentUntil }, NOW, spentUntil)).toBe(
+            `Limit reached · work kept · back about 30 min`,
+        );
+        // A reopen already passed is a stale reading, said as nothing.
+        expect(pickUpStatus({ reason: `stopped`, held: { ran: true } }, NOW, NOW - 1)).toBe(`Turn stopped short · work kept`);
+    });
+});
+
+describe(`atReopenPhrase`, () => {
+    const KEYS = { at: `chat.chatContinueStrip.continueAt`, in: `chat.chatContinueStrip.continueIn` };
+    // The press says the instant the way the composer's time-labelled button does: a wait while close, a clock past that.
+    it(`says a close reopen as a wait and a far one as the clock`, () => {
+        expect(atReopenPhrase(KEYS, NOW + 40 * 60_000, NOW)).toBe(`Continue in 40m`);
+        expect(atReopenPhrase(KEYS, NOW + 3 * 3_600_000, NOW)).toMatch(/^Continue at /u);
     });
 });
 

@@ -2373,7 +2373,11 @@
             "answerNotSaved": "That answer didn't save.",
             "trimStarts": "Trimmed copy starts from",
             "summaryStarts": "Fresh session starts from",
-            "continueOnWith": "Continue on {fallback}"
+            "continueOnWith": "Continue on {fallback}",
+            "continueAt": "Continue at {when}",
+            "continueIn": "Continue in {when}",
+            "tryNow": "Try now",
+            "tryNowNote": "The account reads spent, and the reset time is only the provider's estimate. If it is still spent, nothing runs and this waits again."
         },
         "chatDocumentBody": {
             "clipped": "clipped"
@@ -2450,7 +2454,10 @@
             "waitsForGone": "waits for an agent that is gone",
             "change": "Change",
             "sendNowAfterNote": "It goes without waiting for that agent's work.",
-            "sendNowTimeNote": "It goes now rather than at its time."
+            "sendNowTimeNote": "It goes now rather than at its time.",
+            "sendAt": "Send at {when}",
+            "sendIn": "Send in {when}",
+            "sendAtTitle": "Send when the allowance reopens"
         },
         "sandboxNotice": {
             "compacted": "Context compacted to free up space.",
@@ -2744,7 +2751,11 @@
             "holdsOnBranch": "Holds on branch",
             "landsWhenDoneNote": "Press to hold on branch",
             "holdsOnBranchNote": "Press to land by itself",
-            "appliesAfterTurn": "Applies when this turn ends"
+            "appliesAfterTurn": "Applies when this turn ends",
+            "enterToContinueAt": "Enter to continue at {when}",
+            "enterToContinueIn": "Enter to continue in {when}",
+            "enterToSendAgainAt": "Enter to send again at {when}",
+            "enterToSendAgainIn": "Enter to send again in {when}"
         },
         "chatPaneNotices": {
             "accountNeedsToReconnected": "This account needs to be reconnected.",
@@ -3157,7 +3168,13 @@
             "placeholderLater": "Write the message to schedule…",
             "hintLater": "Schedule",
             "hintLaterNote": "It waits in this chat, where you can send it sooner, change when, or take it back.",
-            "hintIdleScheduled": "What is scheduled in this chat goes now too."
+            "hintIdleScheduled": "What is scheduled in this chat goes now too.",
+            "hintContinueAtReopen": "Continue at reset",
+            "hintContinueAtReopenNote": "Books a Continue for the reopen. It waits in this chat, where you can send it sooner or take it back; nothing is sent before.",
+            "hintSendAgainAtReopen": "Send again at reset",
+            "hintSendAgainAtReopenNote": "Sets this chat's answer above to Send again: the held turn goes by itself once the allowance reopens.",
+            "hintGoesAtReopen": "Goes by itself at reset",
+            "hintGoesAtReopenNote": "This chat's answer above already sends the held turn again once the allowance reopens."
         },
         "composerModelPill": {
             "chooseModel": "Choose a model",
@@ -3372,13 +3389,14 @@
             "whenNear": "{wait}",
             "resetUnknown": "reset time unknown",
             "goesNever": "Nothing resends it by itself: the provider gave no reset time. Continue tries again.",
-            "coolingDown": "Continue opens again in a minute",
+            "coolingDown": "you can try again in a minute",
             "memoryEnding": "Sandbox memory low",
             "resendMemory": "Send when memory frees",
             "resendMemoryBrief": "Sends once memory frees up",
             "resendMemoryNote": "Sends the message by itself once the sandbox's memory has stayed free for half a minute, one held chat at a time.",
             "waitMemoryNote": "Nothing is sent for you. The message waits here until somebody presses Send anyway.",
-            "goesWhenRoom": "Goes by itself once memory frees up"
+            "goesWhenRoom": "Goes by itself once memory frees up",
+            "allowanceBack": "allowance back {when}"
         },
         "words": {
             "connectAModel": "Connect a model",

@@ -414,6 +414,85 @@ it(`leaves the outage waiting until somebody answers for it`, async () => {
     expect(continueButton()?.disabled).toBe(false);
 });
 
+// The account the chat runs on reads spent until a named reopen (epoch s), the verdict the daemon stamps on its row.
+const spentAccount = (reopensInMs: number): number => {
+    const reopensAt = Math.round((Date.now() + reopensInMs) / 1_000);
+    providerAccounts.value = {
+        ...providerAccounts.value,
+        claude: [{ id: `acc-1`, label: `Claude`, email: `a@b.c`, connectedAt: 1, state: { kind: `spent`, reopensAt } }],
+    };
+    return reopensAt;
+};
+
+// 2026-10-12: a turn that stopped short while the account it runs on was spent offered Continue and Keep trying, both
+// refused before anything ran, while the composer's 02:00 press beside them sat greyed. The wall in the way is the
+// allowance, so the card says so, its solid press continues at the reopen (as that 02:00 press and Enter now do too),
+// trying now is a quiet press, and no ladder is offered whose every try would be refused.
+it(`continues a turn that stopped short at the spent account's reopen, instead of offering tries it would refuse`, async () => {
+    const reopensAt = spentAccount(6 * 3_600_000);
+    const conversation = stoppedChat();
+    conversation.pickUp.value = { reason: `stopped`, held: { ran: true } };
+    const schedule = jest.spyOn(conversation.turn, `schedule`).mockResolvedValue(undefined);
+    const carry = jest.spyOn(conversation.turn, `continueTurn`).mockResolvedValue(undefined);
+    await mountPanel();
+
+    expect(composerText()).toContain(`Turn stopped short · work kept · allowance back`);
+    expect(answerPills()).toEqual([]);
+    expect(button(`Try now`)).toEqual(expect.any(Object));
+    expect(button(`Continue at`)).toEqual(expect.any(Object));
+    expect(composerText()).toContain(`Enter to continue at`);
+
+    button(`Continue at`)!.click();
+    await settle();
+
+    expect(schedule.mock.calls).toEqual([[`Continue`, { sendAt: reopensAt * 1_000 }]]);
+    // Set for a reopen the provider named too early, as any scheduled send sets it.
+    expect(setBreakPolicy).toHaveBeenCalledWith(conversation.conversationId, `limit`, `resend`);
+    expect(carry).not.toHaveBeenCalled();
+
+    // Trying now is still one quiet press away: the reopen is only the provider's estimate.
+    button(`Try now`)!.click();
+    await settle();
+    expect(carry).toHaveBeenCalledTimes(1);
+});
+
+it(`books the same continuation from Enter on the empty box`, async () => {
+    const reopensAt = spentAccount(6 * 3_600_000);
+    const conversation = stoppedChat();
+    const schedule = jest.spyOn(conversation.turn, `schedule`).mockResolvedValue(undefined);
+    const carry = jest.spyOn(conversation.turn, `continueTurn`).mockResolvedValue(undefined);
+    await mountPanel();
+
+    composer().dispatchEvent(new KeyboardEvent(`keydown`, { key: `Enter`, bubbles: true }));
+    await settle();
+
+    expect(schedule.mock.calls).toEqual([[`Continue`, { sendAt: reopensAt * 1_000 }]]);
+    expect(carry).not.toHaveBeenCalled();
+});
+
+// A held limit turn has an appointment of its own, its answer: the question stays, and Enter sets it rather than trying
+// a Continue the spent account would refuse. Set, the bare press has nothing left to do and says nothing.
+it(`asks a held limit turn its own question on a spent account, and lets Enter set its resend`, async () => {
+    spentAccount(6 * 3_600_000);
+    const conversation = stoppedChat();
+    conversation.pickUp.value = { reason: `limit`, readyAt: Date.now() + 6 * 3_600_000, held: { ran: true } };
+    const rerun = jest.spyOn(conversation.turn, `resumeHeldTurn`).mockResolvedValue(true);
+    await mountPanel();
+
+    expect(answerPills().map((pill) => pill.textContent?.trim())).toEqual([`Wait for me`, `Send again`]);
+    expect(button(`Try now`)).toEqual(expect.any(Object));
+    expect(continueButton()).toBeUndefined();
+    expect(composerText()).toContain(`Enter to send again at`);
+
+    composer().dispatchEvent(new KeyboardEvent(`keydown`, { key: `Enter`, bubbles: true }));
+    await settle();
+
+    expect(setBreakPolicy).toHaveBeenCalledWith(conversation.conversationId, `limit`, `resend`);
+    expect(rerun).not.toHaveBeenCalled();
+    expect(armedAnswer()).toBe(`Send again`);
+    expect(composerText()).not.toContain(`Enter to send again`);
+});
+
 it(`says nothing on a chat whose turn finished`, async () => {
     const chat = useChat();
     chat.active.value.transcript.restoreMessages([

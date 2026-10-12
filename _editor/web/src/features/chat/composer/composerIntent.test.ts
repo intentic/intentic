@@ -7,6 +7,8 @@ import {
     continueOffered,
     continueVisible,
     placeholderFor,
+    reopenHintFor,
+    reopenPressOf,
     sendable,
     sendHintFor,
     type SendIntent,
@@ -77,15 +79,39 @@ it(`schedules only a send that would start a turn on a spent account`, () => {
     expect(sendable(chat(spent), `scheduled`, undefined)).toBe(false);
 });
 
-// The scheduled button reads as a time: an empty press there meaning "Continue now" did the opposite of its label, and
-// on a spent account was refused before anything ran. Continue stays offered, to the strip's own button and to Enter.
-it(`keeps a scheduled send's button shut on an empty box, even with a turn to continue`, () => {
-    const held = chat({ spentUntil: 5_000, pickUp: { ready: true } });
-    expect(continueOffered(held)).toBe(true);
-    expect(sendable(held, `scheduled`, undefined)).toBe(false);
+// The scheduled button reads as a time: an empty press there meaning "Continue now" did the opposite of its label, and on
+// a spent account was refused before anything ran. So a stopped turn's bare press there continues at the reopen, as the
+// button says (2026-10-12: Continue and Keep trying were offered while the 02:00 press sat greyed beside them).
+it(`makes a scheduled send's empty press continue a stopped turn at the reopen, never now`, () => {
+    const booking = chat({ spentUntil: 5_000, pickUp: { ready: true, atReopen: `book` } });
+    expect(continueOffered(booking)).toBe(false);
+    expect(reopenPressOf(booking)).toBe(`book`);
+    expect(sendable(booking, `scheduled`, undefined)).toBe(true);
+    // A held limit turn's own appointment is its answer: the press sets it, or finds it set and has nothing to do.
+    expect(reopenPressOf(chat({ spentUntil: 5_000, pickUp: { ready: true, atReopen: `arm` } }))).toBe(`arm`);
+    const armed = chat({ spentUntil: 5_000, pickUp: { ready: true, atReopen: `armed` } });
+    expect(reopenPressOf(armed)).toBeUndefined();
+    expect(sendable(armed, `scheduled`, undefined)).toBe(false);
+    // A turn only its own card re-runs (flagged) has no bare press at all on a spent account.
+    expect(sendable(chat({ spentUntil: 5_000, pickUp: { ready: true } }), `scheduled`, undefined)).toBe(false);
+    // Nothing to continue: an empty box still has nothing to book.
     expect(sendable(chat({ spentUntil: 5_000, queued: 1 }), `scheduled`, undefined)).toBe(false);
-    // An account with room keeps the ordinary empty press as Continue.
+    expect(reopenPressOf(chat({ spentUntil: 5_000, queued: 1, pickUp: { ready: true, atReopen: `book` } }))).toBeUndefined();
+    // An account with room keeps the ordinary empty press as Continue, now.
+    expect(continueOffered(chat({ pickUp: { ready: true, atReopen: `book` } }))).toBe(true);
+    expect(reopenPressOf(chat({ pickUp: { ready: true, atReopen: `book` } }))).toBeUndefined();
     expect(sendable(chat({ pickUp: { ready: true } }), `idle`, undefined)).toBe(true);
+});
+
+it(`says what the empty scheduled press does with a stopped turn, and that a set answer leaves it nothing to do`, () => {
+    const words = { ...WORDS, reopens: `Sun 08:20` };
+    expect(reopenHintFor(`book`, words)).toEqual({
+        title: `Continue at reset`,
+        rows: [{ label: `Sends`, value: `Sun 08:20` }],
+        note: `Books a Continue for the reopen. It waits in this chat, where you can send it sooner or take it back; nothing is sent before.`,
+    });
+    expect(reopenHintFor(`arm`, words)).toMatchObject({ title: `Send again at reset` });
+    expect(reopenHintFor(`armed`, words)).toMatchObject({ title: `Goes by itself at reset` });
 });
 
 it(`says when a scheduled send goes, and that a turn already waiting goes ahead of it`, () => {

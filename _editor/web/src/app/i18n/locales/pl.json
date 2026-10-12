@@ -2373,7 +2373,11 @@
             "answerNotSaved": "Nie udało się zapisać tej odpowiedzi.",
             "trimStarts": "Przycięta kopia zaczyna od",
             "summaryStarts": "Nowa sesja zaczyna od",
-            "continueOnWith": "Kontynuuj na {fallback}"
+            "continueOnWith": "Kontynuuj na {fallback}",
+            "continueAt": "Kontynuuj o {when}",
+            "continueIn": "Kontynuuj za {when}",
+            "tryNow": "Spróbuj teraz",
+            "tryNowNote": "Konto ma wyczerpany limit, a czas resetu to tylko szacunek dostawcy. Jeśli limit nadal jest wyczerpany, nic się nie uruchomi i tura znów poczeka."
         },
         "chatDocumentBody": {
             "clipped": "przycięte"
@@ -2450,7 +2454,10 @@
             "waitsForGone": "czeka na agenta, którego już nie ma",
             "change": "Zmień",
             "sendNowAfterNote": "Wyjdzie bez czekania na pracę tamtego agenta.",
-            "sendNowTimeNote": "Wyjdzie teraz zamiast o swojej porze."
+            "sendNowTimeNote": "Wyjdzie teraz zamiast o swojej porze.",
+            "sendAt": "Wyślij o {when}",
+            "sendIn": "Wyślij za {when}",
+            "sendAtTitle": "Wyślij, gdy limit się odnowi"
         },
         "sandboxNotice": {
             "compacted": "Kontekst został skrócony, żeby zwolnić miejsce.",
@@ -2744,7 +2751,11 @@
             "holdsOnBranch": "Czeka na gałęzi",
             "landsWhenDoneNote": "Naciśnij, by trzymać na gałęzi",
             "holdsOnBranchNote": "Naciśnij, by scalał się sam",
-            "appliesAfterTurn": "Zadziała po tej turze"
+            "appliesAfterTurn": "Zadziała po tej turze",
+            "enterToContinueAt": "Enter, aby kontynuować o {when}",
+            "enterToContinueIn": "Enter, aby kontynuować za {when}",
+            "enterToSendAgainAt": "Enter, aby wysłać ponownie o {when}",
+            "enterToSendAgainIn": "Enter, aby wysłać ponownie za {when}"
         },
         "chatPaneNotices": {
             "accountNeedsToReconnected": "To konto trzeba podłączyć ponownie.",
@@ -3157,7 +3168,13 @@
             "placeholderLater": "Napisz wiadomość do zaplanowania…",
             "hintLater": "Zaplanuj",
             "hintLaterNote": "Czeka w tym czacie, gdzie możesz wysłać ją wcześniej, zmienić termin albo ją wycofać.",
-            "hintIdleScheduled": "To, co zaplanowane w tym czacie, też pójdzie teraz."
+            "hintIdleScheduled": "To, co zaplanowane w tym czacie, też pójdzie teraz.",
+            "hintContinueAtReopen": "Kontynuuj po resecie",
+            "hintContinueAtReopenNote": "Planuje „Kontynuuj” na moment odnowienia limitu. Czeka w tym czacie, gdzie możesz wysłać je wcześniej albo wycofać; nic nie jest wysyłane wcześniej.",
+            "hintSendAgainAtReopen": "Wyślij ponownie po resecie",
+            "hintSendAgainAtReopenNote": "Ustawia odpowiedź tego czatu powyżej na „Wyślij ponownie”: wstrzymana tura ruszy sama, gdy limit się odnowi.",
+            "hintGoesAtReopen": "Ruszy sama po resecie",
+            "hintGoesAtReopenNote": "Odpowiedź tego czatu powyżej już wysyła wstrzymaną turę ponownie, gdy limit się odnowi."
         },
         "composerModelPill": {
             "chooseModel": "Wybierz model",
@@ -3491,13 +3508,14 @@
             "whenNear": "{wait}",
             "resetUnknown": "czas odnowienia nieznany",
             "goesNever": "Nic nie wyśle tego samo: dostawca nie podał czasu odnowienia. Kontynuuj próbuje ponownie.",
-            "coolingDown": "Kontynuuj będzie dostępne za minutę",
+            "coolingDown": "możesz spróbować ponownie za minutę",
             "memoryEnding": "Mało pamięci w sandboxie",
             "resendMemory": "Wyślij, gdy zwolni się pamięć",
             "resendMemoryBrief": "Wyśle, gdy zwolni się pamięć",
             "resendMemoryNote": "Sama wyśle wiadomość, gdy pamięć sandboxa pozostanie wolna przez pół minuty, po jednym wstrzymanym czacie naraz.",
             "waitMemoryNote": "Nic nie zostanie wysłane za Ciebie. Wiadomość czeka tutaj, aż ktoś kliknie „Wyślij mimo to”.",
-            "goesWhenRoom": "Ruszy sama, gdy zwolni się pamięć"
+            "goesWhenRoom": "Ruszy sama, gdy zwolni się pamięć",
+            "allowanceBack": "limit odnawia się {when}"
         },
         "chatWaitingBar": {
             "planWaiting": "Plan czeka na Twoją zgodę",

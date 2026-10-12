@@ -1,5 +1,5 @@
 import { bindingWindow, type OauthAccount } from "@intentic/sandbox-contract";
-import { computed, type ComputedRef, ref, watch } from "vue";
+import { computed, type ComputedRef, type Ref, ref, watch } from "vue";
 import { useAgents } from "../../../agents/fleet/useAgents";
 import { useSandboxSettings } from "../../../sandbox/overview/useSandboxSettings";
 import { effectivePolicy, sandboxPolicy } from "../../run/endings/turnBreak";
@@ -16,12 +16,21 @@ import type { SendIntent } from "../../composer/composerIntent";
 // How long a chat's first message may take to register it before the answer is written anyway (and refused, if not).
 const REGISTER_WAIT_MS = 10_000;
 
+/** This conversation's limit answer as the composer reads and writes it (useLimitResend). */
+export interface LimitResend {
+    /** Sets the answer to `resend`, unless something already arms it. */
+    readonly arm: () => Promise<void>;
+    /** Whether the answer already sends a held turn again by itself (`resend`, or `move`, which implies it). */
+    readonly armed: Readonly<Ref<boolean>>;
+}
+
 /**
  * Sets this conversation's limit answer to `resend` unless it already arms something (`move` implies the appointment),
  * writing it as a clear-to-inherit when the sandbox-wide answer already says `resend`. "Stay on" by design: the reader
- * has just said what this chat should do at the wall, and the limit card shows the answer and switches it back.
+ * has just said what this chat should do at the wall, and the limit card shows the answer and switches it back. `armed`
+ * reads the same answer through the same fold, so the composer knows when its press would have nothing left to set.
  */
-export const useLimitResend = (conversation: () => Conversation) => {
+export const useLimitResend = (conversation: () => Conversation): LimitResend => {
     const { agentById, setBreakPolicy } = useAgents();
     const { settings } = useSandboxSettings();
     // A chat's first message is what registers it, so the write waits for the entry rather than naming an unknown id.
@@ -42,7 +51,7 @@ export const useLimitResend = (conversation: () => Conversation) => {
                 resolve();
             }
         });
-    return async (): Promise<void> => {
+    const arm = async (): Promise<void> => {
         const id = conversation().conversationId;
         await registered(id);
         if (effectivePolicy(`limit`, agentById(id), settings.value) !== `wait`) {
@@ -50,6 +59,7 @@ export const useLimitResend = (conversation: () => Conversation) => {
         }
         await setBreakPolicy(id, `limit`, sandboxPolicy(`limit`, settings.value) === `resend` ? null : `resend`);
     };
+    return { arm, armed: computed(() => effectivePolicy(`limit`, agentById(conversation().conversationId), settings.value) !== `wait`) };
 };
 
 export interface ScheduledWaysHost {
@@ -70,7 +80,9 @@ export const useScheduledWays = (host: ScheduledWaysHost) => {
 
     // Another connected account with room for this model, by the same pick the daemon's own limit move makes.
     const fallback = computed(() =>
-        scheduled.value ? fallbackAccount(host.conversation().selection.provider.value, host.serving.value, host.accounts.value, model.value) : undefined,
+        scheduled.value
+            ? fallbackAccount(host.conversation().selection.provider.value, host.serving.value, host.accounts.value, model.value)
+            : undefined,
     );
 
     // The provider's weekly reset reopens only the five-hour window: offered only when that is the pool in the way, and

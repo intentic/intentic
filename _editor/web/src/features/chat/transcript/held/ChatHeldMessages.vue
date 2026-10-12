@@ -1,7 +1,11 @@
 <script setup lang="ts">
-import { Button, type Tip } from "@intentic/ui";
+import { Button, Icon, type Tip } from "@intentic/ui";
+import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
+import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
+import { useLimitResend } from "../../panel/pane/scheduledSend";
+import { atReopenPhrase, pickUpWhen } from "../../run/endings/pickUp";
 import TurnBreakQuestion from "../../panel/TurnBreakQuestion.vue";
 import { usePaneView } from "../../panel/useChat-view";
 import { memoryNext } from "../../run/endings/turnBreak";
@@ -21,15 +25,16 @@ defineProps<{
 }>();
 
 const t = useT();
-const { conversation, waiting, streaming, resumeQueue, bookedGroups } = usePaneView();
+const { conversation, waiting, streaming, resumeQueue, bookedGroups, spentReopensAt } = usePaneView();
 const { held, notice, reason, detail } = useHeldQueue();
+const limitResend = useLimitResend(() => conversation.value);
 
 // The one press, worded for what it overrides: a warning it goes past, a refusal it tries again, a stop it undoes. All
 // three let the hold go (TurnClient.resume), and none touches a booked message: a low-memory hold warns a person once a
 // spell, so the next try runs. Only the warning's press has a hover: the risk it runs.
 interface HeldPress {
     readonly label: string;
-    readonly hint?: Tip;
+    readonly hint?: Tip | undefined;
 }
 // What the press lets go: the messages the hold kept, by id, so a booking beside them stays on its time. Sent only to a
 // sandbox that books each message (TurnClient.resume); an older one lets its whole queue go, as it always did.
@@ -39,11 +44,44 @@ const press = computed((): HeldPress => {
         case `memory`:
             return { label: t(`chat.chatHeld.sendAnyway`), hint: sendAnywayTip() };
         case `stopped`:
-            return { label: t(`chat.chatQueue.sendNow`) };
+            return { label: t(`chat.chatQueue.sendNow`), hint: spentHint.value };
         default:
-            return { label: t(`agents.words.sendAgain`) };
+            return { label: t(`agents.words.sendAgain`), hint: spentHint.value };
     }
 });
+
+// The account these would go on is spent until a named reopen: sent now they are refused before anything runs, so the
+// solid press books them for the reopen instead (the press that sends them now steps back to a quiet one, since the
+// reopen is the provider's estimate). Booked, they stand under the scheduled line with their own Change and Send now;
+// the limit answer is set to send them again, as for any scheduled send, should the provider name that reopen too early.
+// A low-memory hold is about room, not the allowance, and keeps its own press.
+const spentAt = computed(() => (spentReopensAt.value === undefined ? undefined : spentReopensAt.value * 1_000));
+const now = useNow(() => held.value && spentAt.value !== undefined);
+const reopenAt = computed(() => {
+    const at = spentAt.value;
+    return at === undefined || at <= now.value || reason.value === `memory` || !supportsRoute(`agent.queueSchedule`) ? undefined : at;
+});
+// Sending now before that reopen, said on the press that does it: the allowance may still refuse it.
+const spentHint = computed((): Tip | undefined =>
+    reopenAt.value === undefined ? undefined : { title: t(`chat.chatHeld.sendNowTitle`), note: t(`chat.chatHeld.sendNowSpent`) },
+);
+const sendAtLabel = computed(() =>
+    reopenAt.value === undefined ? `` : atReopenPhrase({ at: `chat.chatHeld.sendAt`, in: `chat.chatHeld.sendIn` }, reopenAt.value, now.value),
+);
+const sendAtHint = computed((): Tip => ({
+    title: t(`chat.chatHeld.sendAtTitle`),
+    rows: reopenAt.value === undefined ? [] : [{ label: t(`chat.composerIntent.sendsAt`), value: pickUpWhen(reopenAt.value, now.value) }],
+    note: t(`chat.composerIntent.hintScheduledHeld`),
+}));
+const sendAtReopen = (): void => {
+    const at = reopenAt.value;
+    if (at === undefined) {
+        return;
+    }
+    // allow(silent-catch): the write is optimistic and rolls back on failure, so the limit card's control saying `wait` is the report.
+    void limitResend.arm().catch(() => undefined);
+    void conversation.value.turn.reschedule({ sendAt: at }, heldIds.value);
+};
 </script>
 
 <template>
@@ -59,7 +97,17 @@ const press = computed((): HeldPress => {
             <ChatHeldStatus :reason="reason" :detail="detail" :spread="compact" v-bind="{ [HELD_PRESS_ATTR]: `` }">
                 <!-- Held means nothing goes by itself, even after a turn running now: the press lets it go, after that turn if one runs. -->
                 <span class="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
-                    <Button size="small" thumb v-tooltip.top="press.hint" @click="resumeQueue(heldIds)">{{ press.label }}</Button>
+                    <Button
+                        size="small"
+                        thumb
+                        :tier="reopenAt === undefined ? undefined : `quiet`"
+                        v-tooltip.top="press.hint"
+                        @click="resumeQueue(heldIds)"
+                        >{{ press.label }}</Button
+                    >
+                    <Button v-if="reopenAt !== undefined" size="small" thumb v-tooltip.top="sendAtHint" @click="sendAtReopen()">
+                        <Icon name="clock" class="mr-1 text-2xs" />{{ sendAtLabel }}
+                    </Button>
                     <!-- Only a hold that named its ceiling can be raised past (a stall names none), and never under a live turn, which the restart would kill. -->
                     <MemoryRaise v-if="notice?.noticeAction === `sandboxMemory` && !streaming" />
                 </span>

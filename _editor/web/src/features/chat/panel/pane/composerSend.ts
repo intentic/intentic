@@ -9,6 +9,9 @@ import {
     continueOffered,
     continueVisible,
     placeholderFor,
+    reopenHintFor,
+    reopenPressOf,
+    type ReopenPress,
     sendable,
     sendHintFor,
     sendIntentOf,
@@ -23,12 +26,13 @@ import type { InputHistory } from "../../drafts/inputHistory";
 import { bookingOf, laterLabel, type SendLater, type TurnBooking } from "../../composer/later/sendLater";
 import type { RunThrough } from "../../models/run-settings/useRunThrough";
 import type { ChatRouting } from "../../routing/chatRoute";
-import { type ContinueOptions, pickUpReady, pickUpShort, wakesHeldUntil } from "../../run/endings/pickUp";
+import { atReopenPhrase, type ContinueOptions, type PickUp, pickUpReady, pickUpShort, wakesHeldUntil } from "../../run/endings/pickUp";
+import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { formatReset } from "../../session/usageStatus";
 import { planFeedback } from "../../session/cardReplies";
 import { track } from "../../../../app/analytics";
 import { invalidateAgentTranscript } from "../../transcript/agentTranscript";
-import type { ChatAttachment, ChatMessage } from "../../transcript/transcript";
+import { type ChatAttachment, type ChatMessage, continuationFor } from "../../transcript/transcript";
 import type { ConversationView } from "../useChat-view";
 
 // What one pane's Send means and does. The meaning is composerIntent.ts's ladder read against this composer's state
@@ -62,6 +66,9 @@ export interface SendHost {
     // again when the reopen it was booked for came too early and was refused. Runs beside the send, never ahead of it (a
     // chat's first message is what registers it), which is safe because the daemon asks the answer afresh at the refusal.
     readonly armLimitResend: () => Promise<void>;
+    // Whether that answer already sends a held turn again by itself: then a bare press on a spent account has nothing
+    // left to set, and its button says the turn goes by itself instead.
+    readonly limitArmed: Readonly<Ref<boolean>>;
     // Whether this composer may book a message for a time or another agent's land (composerMore's `later` control).
     readonly laterOffered: Readonly<Ref<boolean>>;
     // The title an agent's card goes by, for a message booked to wait for it.
@@ -164,6 +171,95 @@ const scheduledPress = (press: {
     };
 };
 
+// How a stopped turn goes on once the spent account reopens, when it may: a held limit turn by its own appointment (the
+// limit answer, which the press sets or finds set), anything else by a continuation booked for the reopen, which only a
+// sandbox that books can hold. A flagged turn has neither: only its own card re-runs it, without the stopped response,
+// and a booked word would send it again with that response still in the session.
+const atReopenOf = (pick: PickUp | undefined, limitArmed: boolean): ReopenPress | `armed` | undefined => {
+    if (pick === undefined || pick.reason === `flagged`) {
+        return undefined;
+    }
+    if (pick.reason === `limit` && pick.held !== undefined) {
+        return limitArmed ? `armed` : `arm`;
+    }
+    return supportsRoute(`agent.queueSchedule`) ? `book` : undefined;
+};
+
+// What a bare press does with a stopped turn: continue it now (an account with room, or a caller that just made room
+// itself, ahead of a spent reading the usage feed has not caught up with), continue it at the reopen, or neither.
+const barePressOf = (offered: boolean, press: ReopenPress | undefined, madeRoom: boolean): `now` | `reopen` | undefined => {
+    if (offered || (press !== undefined && madeRoom)) {
+        return `now`;
+    }
+    return press === undefined ? undefined : `reopen`;
+};
+
+// What Enter does on the empty box, said under it: continue now, or at the reopen the button beside it names.
+const continueKeyHintOf = (offered: boolean, until: number | undefined, press: ReopenPress | undefined, now: number): string | undefined => {
+    if (offered) {
+        return translate(`chat.chatPane.enterToContinue`);
+    }
+    if (until === undefined || press === undefined) {
+        return undefined;
+    }
+    const keys =
+        press === `book`
+            ? { at: `chat.chatPane.enterToContinueAt`, in: `chat.chatPane.enterToContinueIn` }
+            : { at: `chat.chatPane.enterToSendAgainAt`, in: `chat.chatPane.enterToSendAgainIn` };
+    return atReopenPhrase(keys, until, now);
+};
+
+// Continuing at the reopen, which is what the strip's "Continue at 02:00" and the time-labelled button both say: a held
+// limit turn's answer is set to send it again then; any other turn gets its continuation booked for then, which waits in
+// the queue drawn as scheduled (its own Change and Send now) and sends nothing before. The answer is set for a booking
+// too, as for any scheduled send: a reopen the provider named too early refuses it, and it goes at the next. A failed
+// write leaves the card's own control saying `wait`.
+const reopenContinuation =
+    (
+        host: Pick<SendHost, "view" | "reachable" | "armLimitResend" | "pin">,
+        spentUntil: Readonly<Ref<number | undefined>>,
+        press: Readonly<Ref<ReopenPress | undefined>>,
+    ) =>
+    (): void => {
+        const until = spentUntil.value;
+        const way = press.value;
+        if (!host.reachable.value || until === undefined || way === undefined) {
+            return;
+        }
+        // allow(silent-catch): the write is optimistic and rolls back on failure, so the card's control saying `wait` is the report.
+        void host.armLimitResend().catch(() => undefined);
+        if (way === `book`) {
+            const chat = host.view.conversation.value;
+            track(`message_sent`, { agent: chat.selection.provider.value, scheduled: true });
+            void chat.turn.schedule(continuationFor(host.view.messages.value), { sendAt: until });
+        }
+        host.pin();
+    };
+
+// The readings a stopped turn on a spent account adds to the ladder's, each one computed off the same snapshot.
+const reopenReadings = (on: {
+    readonly situation: Readonly<Ref<ComposerSituation>>;
+    readonly intent: Readonly<Ref<SendIntent>>;
+    readonly continueOffer: Readonly<Ref<boolean>>;
+    readonly spentUntil: Readonly<Ref<number | undefined>>;
+    readonly now: Readonly<Ref<number>>;
+}) => {
+    // How the strip's turn goes on at the reopen: the press that books or arms it, or that it already goes then.
+    const atReopen = computed(() => on.situation.value.pickUp?.atReopen);
+    // The bare press on a spent account with a stopped turn waiting: book its continuation, or arm its resend.
+    const reopenPress = computed(() => reopenPressOf(on.situation.value));
+    return {
+        atReopen,
+        reopenPress,
+        // What the time-labelled button says on an empty box with a turn to continue: that press, or that it is already set.
+        reopenShown: computed(() => (on.intent.value === `scheduled` && continueVisible(on.situation.value) ? atReopen.value : undefined)),
+        // Whether the strip's own press would get through now (a held turn always would; it is the account that may not).
+        pressable: computed(() => on.situation.value.pickUp?.ready === true),
+        // What Enter does on the empty box, said under it: continue now, or at the reopen the button beside it names.
+        keyHint: computed(() => continueKeyHintOf(on.continueOffer.value, on.spentUntil.value, reopenPress.value, on.now.value)),
+    };
+};
+
 export const useComposerSend = (host: SendHost) => {
     const { view, voiceAgent, history, editorContext } = host;
     const { draft, attachments, editing, awaitingDecision, pickUp, queued, connected, staged } = view;
@@ -207,7 +303,10 @@ export const useComposerSend = (host: SendHost) => {
         waitingOnYou: view.waitingOnYou.value,
         steerable: view.steerable.value,
         // Read against the clock here: the pure ladder (PickUpSituation) must not ask what time it is.
-        pickUp: pickUp.value === undefined ? undefined : { ready: pickUpReady(pickUp.value, paneNow.value) },
+        pickUp:
+            pickUp.value === undefined
+                ? undefined
+                : { ready: pickUpReady(pickUp.value, paneNow.value), atReopen: atReopenOf(pickUp.value, host.limitArmed.value) },
         // Not the sandbox's own words a spent allowance holds (wakesHeldUntil): they go with the held turn, so they neither
         // hide the strip that says the limit and offers Continue, nor give a bare press a queue to send that cannot go.
         queued: queued.value.length - (wakesHeldUntil(pickUp.value, view.waiting.value, paneNow.value) === undefined ? 0 : view.waiting.value.length),
@@ -221,6 +320,8 @@ export const useComposerSend = (host: SendHost) => {
     // Why Send is refusing, in the user's words; undefined when the press will land.
     const refusal = computed(() => sendRefusal(situation.value));
     const continueOffer = computed(() => continueOffered(situation.value));
+    const reopen = reopenReadings({ situation, intent, continueOffer, spentUntil, now: paneNow });
+    const { reopenPress, reopenShown } = reopen;
     const canSend = computed(() => sendable(situation.value, intent.value, refusal.value));
     // Everything a press needs: voice and edit intercept before `canSend`.
     const readyToSend = computed(() => connected.value && staged.value && refusal.value === undefined);
@@ -234,6 +335,10 @@ export const useComposerSend = (host: SendHost) => {
         void view.continueTurn(options);
         host.pin();
     };
+
+    const continueAtReopen = reopenContinuation(host, spentUntil, reopenPress);
+    // The two things a bare press over a stopped turn does (barePressOf).
+    const bareWays = { now: continueTurn, reopen: continueAtReopen };
 
     // Snaps the box back to one line with the caret in it: what every path that spends the draft ends with.
     const settleComposer = (): void => {
@@ -333,10 +438,14 @@ export const useComposerSend = (host: SendHost) => {
             return;
         }
         // Nothing typed and a turn left hanging means Continue, the strip's own press by keyboard ("Enter to continue"): it
-        // does exactly what that button does, so it leaves the strip's answer alone. Ahead of `canSend`, which a scheduled
-        // send's time-labelled button reads, and which stays shut on an empty box there.
-        if (continueOffer.value) {
-            continueTurn();
+        // does exactly what that button does, so it leaves the strip's answer alone. A caller that just made room itself
+        // (`now`: a reset claimed, an account switched) continues now, ahead of a spent reading the usage feed has not
+        // caught up with.
+        // On a spent account the same bare press continues at the reopen, as the time-labelled button it sits beside says
+        // ("Enter to continue at 02:00"), rather than now, where it would be refused before anything ran.
+        const bare = barePressOf(continueOffer.value, reopenPress.value, options.now === true);
+        if (bare !== undefined) {
+            bareWays[bare]();
             return;
         }
         if (!canSend.value) {
@@ -368,8 +477,14 @@ export const useComposerSend = (host: SendHost) => {
         continueOffer,
         canSend,
         continueTurn,
+        continueAtReopen,
         // The strip says what happened; the offer is the press, sharing one predicate.
         continueStrip: computed(() => continueVisible(situation.value)),
+        // When the account the press runs on reopens (ms), while it reads spent: the wall the strip names beside its ending.
+        spentUntil,
+        pickUpPressable: reopen.pressable,
+        atReopen: reopen.atReopen,
+        continueKeyHint: reopen.keyHint,
         // Typed text always has somewhere to go mid-turn, but an empty box has none, so Stop takes the slot until the
         // first keystroke; gated on `staged`, so a refused send keeps its greyed button and tooltip.
         sendShown: computed(() => !live.value || staged.value),
@@ -390,7 +505,12 @@ export const useComposerSend = (host: SendHost) => {
             }
             // A refusal's sentence is the status line's; the greyed button names it.
             const refused = sendRefusalTitle(situation.value);
-            return refused === undefined ? sendHintFor(intent.value, words.value) : { title: refused, tone: `warning` };
+            if (refused !== undefined) {
+                return { title: refused, tone: `warning` };
+            }
+            // An empty box over a stopped turn: the time-labelled press continues it then, or says it already goes then.
+            const shown = reopenShown.value;
+            return shown === undefined ? sendHintFor(intent.value, words.value) : reopenHintFor(shown, words.value);
         }),
         // Offered for every live turn, a parked one included, naming what goes with it there.
         stopLabel: computed(() => (awaitingDecision.value ? t(`chat.composerSend.stopTheTurn`) : t(`chat.composerSend.stopGenerating`))),

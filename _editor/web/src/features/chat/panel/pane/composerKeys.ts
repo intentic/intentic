@@ -42,7 +42,9 @@ export interface KeysHost {
     readonly voice: Pick<ComposerVoice, "live" | "quit" | "slotHint">;
     readonly reachable: Readonly<Ref<boolean>>;
     readonly mobile: Readonly<Ref<boolean>>;
-    readonly continueOffer: Readonly<Ref<boolean>>;
+    // What Enter does on an empty box over a stopped turn (continue now, or at a spent account's reopen), as a sentence;
+    // undefined when it does neither.
+    readonly continueKeyHint: Readonly<Ref<string | undefined>>;
     readonly grow: () => void;
     readonly submit: () => void;
 }
@@ -176,8 +178,9 @@ export const useComposerKeys = (host: KeysHost) => {
                 return t(`chat.chatPane.enterRunsCommand`, { name: command.name });
             }
             // Ranked ahead of recall: rarer, more useful, and the one place anyone learns the key exists.
-            if (host.continueOffer.value) {
-                return t(`chat.chatPane.enterToContinue`);
+            const continuing = host.continueKeyHint.value;
+            if (continuing !== undefined) {
+                return continuing;
             }
             if (recallable.value) {
                 return t(`chat.chatPane.upForPreviousMessage`);

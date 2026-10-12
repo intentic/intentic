@@ -27,7 +27,17 @@ export type SendIntent = `place` | `edit` | `plan` | `later` | `scheduled` | `id
 // pure predicate can't read time itself. `ready` is the only thing separating an offer from a countdown.
 export interface PickUpSituation {
     readonly ready: boolean;
+    /**
+     * What a bare press does with this turn while the account it would run on is spent (`spentUntil`): `book` puts a
+     * continuation in the queue for the reopen, `arm` sets the limit answer that sends the held turn again then, `armed`
+     * says that answer is already set and the press has nothing left to do. Undefined where neither can work (a flagged
+     * turn, which only its own card re-runs; a sandbox that cannot book), so the bare press does nothing there.
+     */
+    readonly atReopen?: ReopenPress | `armed` | undefined;
 }
+
+/** What a bare press does for a stopped turn on a spent account: book its continuation, or arm the held turn's resend. */
+export type ReopenPress = `book` | `arm`;
 
 /** Everything the four answers turn on, as plain values, one snapshot of the composer and its conversation. */
 export interface ComposerSituation {
@@ -161,7 +171,9 @@ const SEND_HINT: Record<SendIntent, (words: ComposerWords) => TooltipValue> = {
     }),
     // An ordinary send lets go what this chat holds scheduled, as any send to a held queue does: said before the press.
     idle: (words) =>
-        words.heldGoesToo === true ? { title: t(`chat.composerIntent.hintIdle`), note: t(`chat.composerIntent.hintIdleScheduled`) } : t(`chat.composerIntent.hintIdle`),
+        words.heldGoesToo === true
+            ? { title: t(`chat.composerIntent.hintIdle`), note: t(`chat.composerIntent.hintIdleScheduled`) }
+            : t(`chat.composerIntent.hintIdle`),
     // Says whether Send reaches the running turn or waits, so identical buttons don't mean different things.
     parked: () => ({ title: t(`chat.composerIntent.queue`), note: t(`chat.composerIntent.hintParked`) }),
     steer: () => t(`chat.composerIntent.hintSteer`),
@@ -253,12 +265,37 @@ export const sendRefusalTitle = (situation: ComposerSituation): string | undefin
 };
 
 // The last turn stopped, but staged words/files, a pending plan, or a queued message mean saying so
-// would be wrong. Visible is the strip; offered is the press, which additionally requires
-// `pickUp.ready`.
+// would be wrong. Visible is the strip; offered is the bare press continuing it NOW, which additionally requires
+// `pickUp.ready` and an account with room: on a spent one the press is refused before anything runs, so the bare press
+// there means "continue at the reopen" instead (reopenPressOf), which is what the time-labelled button beside it says.
 export const continueVisible = (situation: ComposerSituation): boolean =>
     situation.pickUp !== undefined && !situation.staged && situation.queued === 0 && !situation.pendingPlan && situation.connected;
 
-export const continueOffered = (situation: ComposerSituation): boolean => continueVisible(situation) && situation.pickUp?.ready === true;
+export const continueOffered = (situation: ComposerSituation): boolean =>
+    continueVisible(situation) && situation.pickUp?.ready === true && situation.spentUntil === undefined;
+
+/**
+ * What a bare press does for a stopped turn while the account is spent with a reopen ahead: book its continuation for
+ * then, or set the held turn's limit answer to send it again then. Undefined when the press has nothing to do: no turn
+ * to continue, room on the account (continueOffered), an answer already set, or a turn only its own card re-runs.
+ */
+export const reopenPressOf = (situation: ComposerSituation): ReopenPress | undefined => {
+    const press = situation.pickUp?.atReopen;
+    return continueVisible(situation) && situation.spentUntil !== undefined && (press === `book` || press === `arm`) ? press : undefined;
+};
+
+/** The scheduled button's hover on an empty box with a turn to continue: what it books, when, or that it is booked. */
+export const reopenHintFor = (press: ReopenPress | `armed`, words: ComposerWords): TooltipValue => {
+    const rows = [{ label: t(`chat.composerIntent.sendsAt`), value: words.reopens ?? `` }];
+    switch (press) {
+        case `book`:
+            return { title: t(`chat.composerIntent.hintContinueAtReopen`), rows, note: t(`chat.composerIntent.hintContinueAtReopenNote`) };
+        case `arm`:
+            return { title: t(`chat.composerIntent.hintSendAgainAtReopen`), rows, note: t(`chat.composerIntent.hintSendAgainAtReopenNote`) };
+        default:
+            return { title: t(`chat.composerIntent.hintGoesAtReopen`), rows, note: t(`chat.composerIntent.hintGoesAtReopenNote`) };
+    }
+};
 
 // A bare press with nothing typed, sending the messages written while the agent was busy.
 const queueFlushable = (situation: ComposerSituation): boolean =>
@@ -270,10 +307,14 @@ export const sendable = (situation: ComposerSituation, intent: SendIntent, refus
     if (refusal !== undefined) {
         return false;
     }
-    // Place and edit both need words in the box; empty would silently rewind without asking anything. A scheduled send
-    // does too, a booked one alike: its button reads as a time, so a bare press meaning "Continue now" (or "flush the
-    // queue now") would do the opposite of what it says, and the strip's own Continue sits right above it for that.
-    if (intent === `place` || intent === `edit` || intent === `scheduled` || intent === `later`) {
+    // Place and edit both need words in the box; empty would silently rewind without asking anything. A booked send
+    // does too: its button reads as a time, so a bare press meaning "Continue now" (or "flush the queue now") would do
+    // the opposite of what it says. A scheduled one alike, except that a stopped turn waiting gives its bare press the
+    // meaning its label already states: continue at the reopen (reopenPressOf).
+    if (intent === `scheduled`) {
+        return situation.staged || reopenPressOf(situation) !== undefined;
+    }
+    if (intent === `place` || intent === `edit` || intent === `later`) {
         return situation.staged;
     }
     return situation.staged || continueOffered(situation) || queueFlushable(situation);

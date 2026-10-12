@@ -129,7 +129,8 @@ const chatHolding = (queue: Omit<ConversationQueue, `revision`>, rows: ChatMessa
 };
 
 const buttons = (element: HTMLElement): HTMLButtonElement[] => [...element.querySelectorAll<HTMLButtonElement>(`button`)];
-const pressNamed = (element: HTMLElement, text: string): HTMLButtonElement[] => buttons(element).filter((button) => button.textContent?.trim() === text);
+const pressNamed = (element: HTMLElement, text: string): HTMLButtonElement[] =>
+    buttons(element).filter((button) => button.textContent?.trim() === text);
 // The line as it reads: its parts stand apart by the row's gap, not by spaces in the text.
 const statusLine = (element: HTMLElement): string =>
     [...(element.querySelector(`[role="status"]`)?.children ?? [])].map((part) => part.textContent?.trim() ?? ``).join(` `);
@@ -152,7 +153,9 @@ describe(`a message the sandbox held for low memory`, () => {
         const element = mount(chatHolding({ items: [held()], paused: `refused` }));
         await nextTick();
 
-        expect(element.querySelector(`.chat-surface-held`)?.textContent?.trim()).toBe(`We should be consistent and always use the same icon for "attention".`);
+        expect(element.querySelector(`.chat-surface-held`)?.textContent?.trim()).toBe(
+            `We should be consistent and always use the same icon for "attention".`,
+        );
         expect(element.querySelector<HTMLImageElement>(`img`)?.getAttribute(`src`)).toBe(`blob:${SHOT}`);
         expect(element.querySelector(`img`)?.getAttribute(`alt`)).toBe(`image.png`);
         expect(statusLine(element)).toBe(`Not sent · Sandbox memory is low`);
@@ -178,7 +181,11 @@ describe(`a message the sandbox held for low memory`, () => {
 
         const reason = [...element.querySelectorAll(`[role="status"] span`)].find((span) => span.textContent?.trim() === `Sandbox memory is low`)!;
         expect(tips.get(reason)).toEqual(READING_TIP);
-        expect(tips.get(pressNamed(element, `Send anyway`)[0]!)).toEqual({ title: `Starts now`, tone: `warning`, note: `Risk: slowdown, killed processes` });
+        expect(tips.get(pressNamed(element, `Send anyway`)[0]!)).toEqual({
+            title: `Starts now`,
+            tone: `warning`,
+            note: `Risk: slowdown, killed processes`,
+        });
     });
 
     it(`offers the raise beside the send only on a hold that named its ceiling`, async () => {
@@ -279,7 +286,9 @@ describe(`what happens next to a message held for low memory`, () => {
     });
 
     it(`asks nothing under a hold memory did not make`, async () => {
-        const stopped = mount(chatHolding({ items: [held({ attachments: [] })], paused: `stopped` }, [...SENT, { id: 3, role: `notice`, text: `Stopped.` }]));
+        const stopped = mount(
+            chatHolding({ items: [held({ attachments: [] })], paused: `stopped` }, [...SENT, { id: 3, role: `notice`, text: `Stopped.` }]),
+        );
         await nextTick();
         expect(answerPills(stopped)).toHaveLength(0);
     });
@@ -296,6 +305,27 @@ describe(`the other holds, drawn the same way`, () => {
         pressNamed(element, `Send now`)[0]!.click();
         expect(resume).toHaveBeenCalledTimes(1);
         expect(pressNamed(element, `Send anyway`)).toHaveLength(0);
+    });
+
+    // On a spent account, Send now is refused before anything runs: the line's solid press books what the stop held for
+    // the reopen, and sending now stays a quiet press that says the allowance may refuse it.
+    it(`books what a stop held for a spent account's reopen, keeping Send now as the quiet try`, async () => {
+        const reopensAt = Math.round(Date.now() / 1_000) + 6 * 3_600;
+        const chat = chatHolding({ items: [held({ attachments: [] })], paused: `stopped` }, [...SENT, { id: 3, role: `notice`, text: `Stopped.` }]);
+        const reschedule = jest.spyOn(chat.turn, `reschedule`).mockResolvedValue(true);
+        const resume = jest.spyOn(chat.turn, `resume`).mockResolvedValue(undefined);
+        const element = mount(chat, {}, undefined, reopensAt);
+        await nextTick();
+
+        const later = buttons(element).find((button) => button.textContent?.trim().startsWith(`Send at`) === true);
+        expect(later).toEqual(expect.any(Object));
+        const now = pressNamed(element, `Send now`)[0]!;
+        expect(tips.get(now)).toEqual({ title: `Send it now instead`, note: `The allowance may still be spent, and refuse it` });
+
+        later!.click();
+        await settled();
+        expect(reschedule.mock.calls).toEqual([[{ sendAt: reopensAt * 1_000 }, [`m1`]]]);
+        expect(resume).not.toHaveBeenCalled();
     });
 
     // The refusal's own row stays above with its specific reason; the held message's line only says it did not go.
@@ -344,14 +374,19 @@ describe(`a scheduled send`, () => {
         const element = mount(chatHolding({ items: [held({ attachments: [] })], paused: `scheduled`, until }, SENT));
         await nextTick();
 
-        expect(element.querySelector(`.chat-surface-held`)?.textContent?.trim()).toBe(`We should be consistent and always use the same icon for "attention".`);
+        expect(element.querySelector(`.chat-surface-held`)?.textContent?.trim()).toBe(
+            `We should be consistent and always use the same icon for "attention".`,
+        );
         expect(statusLine(element)).toMatch(/^Scheduled · sends in about 4[01] min$/u);
         expect(element.querySelector(`.text-warning`)).toBeNull();
     });
 
     it(`draws every message of a queue booked as a whole under its one line, with one Change and one Send now`, async () => {
         const until = Date.now() + 40 * 60 * 1_000 + 30_000;
-        const chat = chatHolding({ items: [held({ attachments: [] }), held({ id: `m2`, text: `and the docs`, attachments: [] })], paused: `scheduled`, until }, SENT);
+        const chat = chatHolding(
+            { items: [held({ attachments: [] }), held({ id: `m2`, text: `and the docs`, attachments: [] })], paused: `scheduled`, until },
+            SENT,
+        );
         const resume = jest.spyOn(chat.turn, `resume`).mockResolvedValue(undefined);
         const element = mount(chat);
         await nextTick();
@@ -418,7 +453,10 @@ describe(`messages booked each on its own`, () => {
         const late = Date.now() + 24 * HOUR;
         const chat = chatHolding(
             {
-                items: [held({ id: `m1`, text: `do the thing`, attachments: [], until: soon }), held({ id: `m2`, text: `second thing`, attachments: [], until: late })],
+                items: [
+                    held({ id: `m1`, text: `do the thing`, attachments: [], until: soon }),
+                    held({ id: `m2`, text: `second thing`, attachments: [], until: late }),
+                ],
                 paused: `scheduled`,
                 until: soon,
             },
@@ -441,7 +479,10 @@ describe(`messages booked each on its own`, () => {
     it(`holds a stopped message on its own line beside a booked one, and Resume lets only the stopped one go`, async () => {
         const chat = chatHolding(
             {
-                items: [held({ id: `m1`, text: `and the docs`, attachments: [] }), held({ id: `m2`, text: `then tag it`, attachments: [], until: Date.now() + HOUR })],
+                items: [
+                    held({ id: `m1`, text: `and the docs`, attachments: [] }),
+                    held({ id: `m2`, text: `then tag it`, attachments: [], until: Date.now() + HOUR }),
+                ],
                 paused: `stopped`,
             },
             [...SENT, { id: 3, role: `notice`, text: `Stopped.` }],
@@ -451,7 +492,10 @@ describe(`messages booked each on its own`, () => {
         await nextTick();
 
         expect(lines(element)).toEqual([`Not sent · The turn was stopped`, expect.stringMatching(/^Scheduled · sends in about (59|60) min$/u)]);
-        expect([...element.querySelectorAll(`.chat-surface-held`)].map((bubble) => bubble.textContent?.trim())).toEqual([`and the docs`, `then tag it`]);
+        expect([...element.querySelectorAll(`.chat-surface-held`)].map((bubble) => bubble.textContent?.trim())).toEqual([
+            `and the docs`,
+            `then tag it`,
+        ]);
         pressNamed(element, `Send now`)[0]!.click();
         expect(resume.mock.calls).toEqual([[[`m1`]]]);
     });

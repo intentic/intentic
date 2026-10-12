@@ -43,6 +43,7 @@ const composerOf = (spentReopensAt?: number) => {
         refocus: jest.fn(),
         openModels: jest.fn(),
         armLimitResend: jest.fn(() => Promise.resolve()),
+        limitArmed: ref(false),
         laterOffered: ref(true),
         titleOf: (id: string): string | undefined => (id === `brave-otter` ? `Fix the login bug` : undefined),
     };
@@ -175,39 +176,89 @@ describe(`a scheduled send`, () => {
         expect(send.sendHint.value).toBe(`Send`);
 
         // From a sandbox that books the whole queue, the same send lets the booking go too, and says so first.
-        chat.queue.value = { items: [{ id: `m1`, text: `ship it`, voice: `person`, queuedAt: 1, revision: 1 }], revision: 1, paused: `scheduled`, until };
+        chat.queue.value = {
+            items: [{ id: `m1`, text: `ship it`, voice: `person`, queuedAt: 1, revision: 1 }],
+            revision: 1,
+            paused: `scheduled`,
+            until,
+        };
         expect(send.sendHint.value).toEqual({ title: `Send`, note: `What is scheduled in this chat goes now too.` });
     });
 
-    it(`leaves its time-labelled button shut on an empty box; Enter continues as the strip's Continue does`, () => {
+    // The button reads as a time, and the bare press does what it says (2026-10-12): a held limit turn's own answer is
+    // set to send it again at the reopen, rather than a Continue now that the spent account refuses before anything runs.
+    it(`sets a held limit turn to go again at the reopen on an empty press, rather than continuing it now`, () => {
         const { chat, host, say, send } = composerOf(inHalfAnHour());
         const continued = jest.spyOn(chat.turn, `continueTurn`).mockResolvedValue(undefined);
         chat.pickUp.value = { reason: `limit`, readyAt: Date.now() + 60_000, held: { ran: true } };
 
         expect(send.intent.value).toBe(`scheduled`);
-        expect(send.continueOffer.value).toBe(true);
-        expect(send.canSend.value).toBe(false);
+        expect(send.continueOffer.value).toBe(false);
+        expect(send.canSend.value).toBe(true);
+        expect(send.continueKeyHint.value).toBe(`Enter to send again in 30m`);
+        expect(send.sendHint.value).toMatchObject({ title: `Send again at reset` });
         send.submit();
 
-        expect(continued).toHaveBeenCalledTimes(1);
-        // The strip's Wait for me / Send again is the reader's to set; a Continue never flips it.
-        expect(host.armLimitResend).not.toHaveBeenCalled();
+        expect(host.armLimitResend).toHaveBeenCalledTimes(1);
+        expect(continued).not.toHaveBeenCalled();
         expect(say).not.toHaveBeenCalled();
+
+        // Once that answer is set the press has nothing left to do: shut, saying the turn already goes then.
+        host.limitArmed.value = true;
+        expect(send.canSend.value).toBe(false);
+        expect(send.continueKeyHint.value).toBeUndefined();
+        expect(send.sendHint.value).toMatchObject({ title: `Goes by itself at reset` });
+    });
+
+    // A turn that stopped short on a spent account has no appointment of its own: the bare press books its continuation
+    // for the reopen, where it waits drawn as scheduled, and sets the limit answer for a reopen named too early.
+    it(`books a stopped turn's continuation for the reopen on an empty press`, () => {
+        const reopens = inHalfAnHour();
+        const { chat, host, say, send } = composerOf(reopens);
+        const schedule = jest.spyOn(chat.turn, `schedule`).mockResolvedValue(undefined);
+        const continued = jest.spyOn(chat.turn, `continueTurn`).mockResolvedValue(undefined);
+        chat.pickUp.value = { reason: `stopped`, held: { ran: true } };
+
+        expect(send.canSend.value).toBe(true);
+        expect(send.continueKeyHint.value).toBe(`Enter to continue in 30m`);
+        expect(send.sendHint.value).toMatchObject({ title: `Continue at reset` });
+        send.submit();
+
+        expect(schedule.mock.calls).toEqual([[`Continue`, { sendAt: reopens * 1_000 }]]);
+        expect(host.armLimitResend).toHaveBeenCalledTimes(1);
+        expect(continued).not.toHaveBeenCalled();
+        expect(say).not.toHaveBeenCalled();
+    });
+
+    // A caller that just made room (a reset claimed, an account switched) continues now, ahead of a usage reading that
+    // still says spent.
+    it(`continues now when the caller has just made room, whatever the reading still says`, () => {
+        const { chat, host, send } = composerOf(inHalfAnHour());
+        const schedule = jest.spyOn(chat.turn, `schedule`).mockResolvedValue(undefined);
+        const continued = jest.spyOn(chat.turn, `continueTurn`).mockResolvedValue(undefined);
+        chat.pickUp.value = { reason: `stopped`, held: { ran: true } };
+
+        send.submit({ now: true });
+
+        expect(continued).toHaveBeenCalledTimes(1);
+        expect(schedule).not.toHaveBeenCalled();
+        expect(host.armLimitResend).not.toHaveBeenCalled();
     });
 
     // A watch fired after the limit refused the turn: its report waits with the held turn, so it must not take the strip's
     // place (the one card that says the limit and when it reopens) nor give a bare press a queue it cannot send.
-    it(`keeps the limit strip and its Continue over a watch's report the limit holds`, () => {
-        const { chat, send } = composerOf(inHalfAnHour());
+    it(`keeps the limit strip and its bare press over a watch's report the limit holds`, () => {
+        const { chat, host, send } = composerOf(inHalfAnHour());
         const resumed = jest.spyOn(chat.turn, `resume`).mockResolvedValue(undefined);
         const continued = jest.spyOn(chat.turn, `continueTurn`).mockResolvedValue(undefined);
         chat.pickUp.value = { reason: `limit`, readyAt: Date.now() + 60_000, held: { ran: true } };
         chat.queue.value = { items: [{ id: `w1`, text: `Watch fired`, voice: `sandbox`, queuedAt: 1, revision: 1 }], revision: 1 };
 
         expect(send.continueStrip.value).toBe(true);
-        expect(send.continueOffer.value).toBe(true);
+        expect(send.canSend.value).toBe(true);
         send.submit();
-        expect(continued).toHaveBeenCalledTimes(1);
+        expect(host.armLimitResend).toHaveBeenCalledTimes(1);
+        expect(continued).not.toHaveBeenCalled();
         expect(resumed).not.toHaveBeenCalled();
 
         // A person's words beside it go the ordinary way, and the strip steps aside for them as before.

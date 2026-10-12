@@ -295,6 +295,8 @@ const { personas, pickedPersona, personaName, personaNotice, pickPersona } = use
 });
 
 const history = useRecallRing(() => props.conversation);
+// This chat's answer to a spent allowance, which a scheduled press sets and a stopped turn's bare press may find set.
+const limitResend = useLimitResend(() => props.conversation);
 const {
     intent,
     scheduledLabel,
@@ -302,6 +304,11 @@ const {
     scheduledWhen,
     continueStrip,
     continueOffer,
+    continueAtReopen,
+    pickUpPressable,
+    spentUntil,
+    atReopen,
+    continueKeyHint,
     canSend,
     refusal,
     sendShown,
@@ -337,7 +344,8 @@ const {
     openModels: () => {
         modelOpen.value = true;
     },
-    armLimitResend: useLimitResend(() => props.conversation),
+    armLimitResend: limitResend.arm,
+    limitArmed: limitResend.armed,
     laterOffered: computed(() => controlSituation.value.laterOffered),
     titleOf,
 });
@@ -362,7 +370,15 @@ const micShares = computed(() => canDrive.value && !props.strip && !staged.value
 // An empty box is as tall as its placeholder, and the placeholder changes under it (a plan waiting, a turn going live), so
 // it is measured again then: sized for the old one, a phone's two-line ask is cut off after its first line.
 watch(composerPlaceholder, () => grow(), { flush: `post` });
-const { open: waysOpen, ways: hasWays, fallbackName, canReset, resetting, note: waysNote, sendOnFallback, resetAndSend } = scheduledWays;
+const { open: waysOpen, ways, fallbackName, canReset, resetting, note: waysNote, sendOnFallback, resetAndSend } = scheduledWays;
+// The caret's ways each send what is in the box sooner, so it stands only while the box holds something: on an empty box
+// it was a greyed control beside a press it could not help, and a stopped turn's own ways on are the strip's above.
+const hasWays = computed(() => ways.value && staged.value);
+watch(hasWays, (shown) => {
+    if (!shown) {
+        waysOpen.value = false;
+    }
+});
 const waysAnchor = ref<HTMLElement>();
 
 // Hands-free voice: the mic, and what the pause does; below the send, since the pause is the send.
@@ -414,7 +430,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
     voice,
     reachable,
     mobile,
-    continueOffer,
+    continueKeyHint,
     grow,
     submit,
 });
@@ -482,7 +498,16 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                         <!-- This chat's standing: archived, the account gate, the trial, a credential to renew, an outage resuming (ChatPaneNotices). -->
                         <ChatPaneNotices />
                         <!-- The turn stopped before finishing, and the way on (ChatContinueStrip): a word to it, so a subagent's is its parent's. -->
-                        <ChatContinueStrip v-if="!subagentOf && !strip" :visible="continueStrip" :ready="continueOffer" @continue="continueTurn" />
+                        <ChatContinueStrip
+                            v-if="!subagentOf && !strip"
+                            :visible="continueStrip"
+                            :ready="pickUpPressable"
+                            :enter-continues="continueOffer"
+                            :spent-until="spentUntil"
+                            :at-reopen="atReopen"
+                            @continue="continueTurn"
+                            @continue-at-reopen="continueAtReopen"
+                        />
                         <!-- The turn is over, but the chat is not: what it left running, and the watches it armed (ChatLeftRunning). -->
                         <ChatLeftRunning v-if="!strip" />
                         <!-- What waits on the reader (a card the agent is parked on, a message held for memory), pinned where it cannot scroll away (ChatWaitingBar). A subagent's chat too: a permission there is the reader's. -->

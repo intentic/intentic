@@ -49,7 +49,7 @@ const keysOf = () => {
         voice,
         reachable: ref(true),
         mobile: ref(false),
-        continueOffer: ref(false),
+        continueKeyHint: ref<string | undefined>(undefined),
         grow: jest.fn(),
         submit: jest.fn(),
     };
@@ -227,7 +227,7 @@ describe(`the hint slot`, () => {
         host.history.value.record(`the one before`);
         expect(keys.composerHint.value).toBe(t(`chat.chatPane.upForPreviousMessage`));
 
-        host.continueOffer.value = true;
+        host.continueKeyHint.value = t(`chat.chatPane.enterToContinue`);
         expect(keys.composerHint.value).toBe(t(`chat.chatPane.enterToContinue`));
 
         command.value = { name: `review`, description: `Review the diff.` };
