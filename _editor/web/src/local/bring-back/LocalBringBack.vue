@@ -1,4 +1,5 @@
-<!-- Bring back: what agents changed in this folder's own sandbox, reviewed and copied into the folder on request, with the folder's sync direction beside it. -->
+<!-- Bring back: what agents changed in this folder's own sandbox, reviewed and copied into the folder on request, with the folder's sync direction beside it.
+     Drawn only with something to say (bringBack.ts `sectionShown`); the folder's page checks for changes on its own (useBringBack.ts `useQuietChecks`). -->
 <script setup lang="ts">
 import { Button, ConfirmDialog, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
@@ -12,7 +13,7 @@ import { useBringBack } from "./useBringBack";
 // the app and every answer an event (useBringBack.ts), so each line below is a step waiting on, or showing, one answer.
 
 const t = useT();
-const { state, check, bringBack, undo, switchTo } = useBringBack();
+const { state, shown, check, bringBack, undo, switchTo } = useBringBack();
 const step = computed(() => state.value.step);
 
 // The list the review was opened on, held while its copy runs: the step moves on, the box does not.
@@ -44,6 +45,8 @@ const skippedLines = computed(() => {
 });
 // With an answer on the line, asking again is a glyph at its end; with none, it is the line.
 const answeredLine = computed(() => step.value.at === `checked` || step.value.at === `brought` || step.value.at === `restored`);
+// The line of steps, unless there is nothing on it: a folder synced both ways with nothing found shows its direction alone.
+const lineShown = computed(() => step.value.at !== `idle` && !(step.value.at === `checked` && step.value.changes.length === 0));
 
 // Both ways is the reader's choice to make with the risk in front of them; back to copy-first needs no warning.
 const confirmingBoth = ref(false);
@@ -54,12 +57,12 @@ const syncBothWays = (): void => {
 </script>
 
 <template>
-    <section class="flex shrink-0 flex-col gap-1.5 border-t border-line px-3 py-2 text-xs" aria-labelledby="local-bring-back-title">
+    <section v-if="shown" class="flex shrink-0 flex-col gap-1.5 border-t border-line px-3 py-2 text-xs" aria-labelledby="local-bring-back-title">
         <h2 id="local-bring-back-title" :class="ui.sectionLabel({ size: `xs` })">{{ t(`local.localBringBack.title`) }}</h2>
         <p class="text-muted">
             {{ state.direction === `both` ? t(`local.localBringBack.bothWays`) : t(`local.localBringBack.copyFirst`) }}
         </p>
-        <div class="flex min-h-7 flex-wrap items-center gap-x-2 gap-y-1">
+        <div v-if="lineShown" class="flex min-h-7 flex-wrap items-center gap-x-2 gap-y-1">
             <template v-if="step.at === `checked` && step.changes.length > 0">
                 <span class="text-content">{{
                     t(`local.localBringBack.changes`, { count: `${step.changes.length}${step.truncated ? `+` : ``}` }, step.changes.length)
@@ -67,7 +70,6 @@ const syncBothWays = (): void => {
                 <span class="text-subtle" aria-hidden="true">·</span>
                 <button type="button" :class="ui.textButton()" @click="review">{{ t(`local.localBringBack.review`) }}</button>
             </template>
-            <span v-else-if="step.at === `checked`" class="text-content">{{ t(`local.localBringBack.noChanges`) }}</span>
             <span v-else-if="step.at === `bringing`" class="flex items-center gap-1.5 text-muted">
                 <Icon name="spinner" spin class="text-2xs" />{{ t(`local.localBringBack.bringing`, { count: step.count }, step.count) }}
             </span>
@@ -98,7 +100,7 @@ const syncBothWays = (): void => {
                 <Icon name="refresh" class="text-xs" />
             </button>
             <Button
-                v-else-if="step.at === `idle` || step.at === `checking` || step.at === `failed`"
+                v-else-if="step.at === `checking` || step.at === `failed`"
                 size="small"
                 tier="boring"
                 :label="t(`local.localBringBack.check`)"

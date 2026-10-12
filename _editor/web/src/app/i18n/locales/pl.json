@@ -10196,7 +10196,6 @@
             "check": "Sprawdź zmiany",
             "checkAgain": "Sprawdź ponownie",
             "changes": "{count} zmiana w sandboxie | {count} zmiany w sandboxie | {count} zmian w sandboxie",
-            "noChanges": "Brak zmian",
             "review": "Przejrzyj",
             "bringing": "Przenoszenie {count} pliku… | Przenoszenie {count} plików… | Przenoszenie {count} plików…",
             "brought": "Przeniesiono {count} plik | Przeniesiono {count} pliki | Przeniesiono {count} plików",
@@ -10221,7 +10220,9 @@
             "syncedSandbox": "Sandbox zsynchronizowany",
             "toggleFolder": "Przełącz folder",
             "dropFilesToAdd": "Upuść pliki, żeby dodać je do {name}",
-            "machineSandbox": "Sandbox tego komputera"
+            "machineSandbox": "Sandbox tego komputera",
+            "opening": "Otwieranie {name}…",
+            "openingSlow": "Folder wciąż jest wczytywany. Duży folder lub folder w WSL za pierwszym razem potrzebuje chwili."
         },
         "folderMenu": {
             "switchFolder": "{name}: otwórz inny folder",

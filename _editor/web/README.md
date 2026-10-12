@@ -109,7 +109,8 @@ flowchart LR
   the foot the sandbox shell's own account control `shell/AccountPanel.vue`, or the sign-in `LocalAccountTile.vue`
   before there is an account), Ctrl+P, Ctrl+Shift+F, Ctrl+W (by default: they follow the keymap's overrides for the workspace commands they stand
   for) and Alt+1–9 (`localKeys.ts`), the close guard for unsaved edits
-  (`useUnsavedGuard.ts`), a project folder's Bring back section (`bring-back/LocalBringBack.vue`), and the way to a folder's own
+  (`useUnsavedGuard.ts`), a project folder's Bring back section (`bring-back/LocalBringBack.vue`, drawn only when a check the window runs on its own,
+  on arrival and on focus, finds changes to bring back), and the way to a folder's own
   sandbox (`LocalProject.vue`): the window's dialog for "Work on this with an agent" (`LocalProjectDialog.vue`), and the
   card the sandbox's build stands on in the notification lane while the reader keeps working (`LocalProjectBuild.vue`),
   drawn as the agent's house going up with the setup's real phases (`AgentHouse.vue`, `agentHouse.ts`). The **Agents**

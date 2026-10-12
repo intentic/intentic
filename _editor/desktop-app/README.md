@@ -395,7 +395,9 @@ flowchart LR
   reader.
 
   The folder is copied into the sandbox's `/work/<name>` and kept up to date from here; agents change the copy, and
-  nothing in the folder changes until the window's "Bring back changes", which keeps a restore point first. A folder
+  nothing in the folder changes until the window's "Bring back changes", which keeps a restore point first. The window
+  asks `changes` on its own once the folder's first copy is done, and again when the reader comes back to it (at most
+  once a minute), and draws Bring back only when the sandbox holds something to bring back. A folder
   that already has a sandbox of its own, made for it alone before this, keeps opening that one. The workspace's own
   `/setup?project=<name>&machine=mine` can still hand a project's setup back as `intentic://setup?…&project=<name>`, for
   the folder this app parked. A hosted sandbox's project, asked for by name, is enrolled with

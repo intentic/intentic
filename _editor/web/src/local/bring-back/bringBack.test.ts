@@ -1,4 +1,14 @@
-import { answered, type BringBackState, chosenPaths, firstChosen, IDLE, type ProjectAnswer, projectAnswer, type SandboxChange } from "./bringBack";
+import {
+    answered,
+    type BringBackState,
+    chosenPaths,
+    firstChosen,
+    IDLE,
+    type ProjectAnswer,
+    projectAnswer,
+    type SandboxChange,
+    sectionShown,
+} from "./bringBack";
 
 // Pins the exchange behind a local window's Bring back section: what the app's `intentic:project` answers read back as,
 // and the step each one leaves the section on.
@@ -82,9 +92,10 @@ describe(`the step an answer leaves`, () => {
     });
 
     it(`says why a verb failed, whether the sandbox refused it or it never reached one`, () => {
+        const checking: BringBackState = { ...IDLE, step: { at: `checking` } };
         expect([
             at(IDLE, { kind: `brought-back`, result: { ok: false, error: `Disk full.` } }).step,
-            at(IDLE, { kind: `error`, verb: `changes`, error: `No machine agent runs on this computer.` }).step,
+            at(checking, { kind: `error`, verb: `changes`, error: `No machine agent runs on this computer.` }).step,
         ]).toEqual([
             { at: `failed`, error: `Disk full.` },
             { at: `failed`, error: `No machine agent runs on this computer.` },
@@ -104,6 +115,66 @@ describe(`the step an answer leaves`, () => {
             [`brought`, `to-sandbox`, false, `The sandbox is stopped.`],
             [`brought`, `to-sandbox`, false, `No machine agent runs on this computer.`],
         ]);
+    });
+});
+
+// The window checks on its own (useBringBack.ts `useQuietChecks`): what it finds is drawn only when it is news, and the
+// reader's own step is never taken from under them.
+describe(`a check nobody pressed for`, () => {
+    const at = (state: BringBackState, ...answers: ProjectAnswer[]): BringBackState => answers.reduce(answered, state);
+    const quiet = (state: BringBackState): BringBackState => ({ ...state, quiet: true });
+    const found = (changes: SandboxChange[]): ProjectAnswer => ({ kind: `changes`, result: { ok: true, direction: `to-sandbox`, changes } });
+    const receipt: BringBackState = { ...IDLE, step: { at: `brought`, point: `rp-1`, count: 2, skipped: [] } };
+
+    it(`fails without a word, leaving whatever was on screen`, () => {
+        expect([
+            at(quiet(IDLE), { kind: `changes`, result: { ok: false, error: `The sandbox is stopped.` } }),
+            at(quiet(receipt), { kind: `error`, verb: `changes`, error: `No machine agent runs on this computer.` }),
+        ]).toEqual([IDLE, receipt]);
+    });
+
+    it(`lists what it found, and learns the direction even when it found nothing`, () => {
+        expect([at(quiet(IDLE), found(CHANGES)).step, at(quiet(IDLE), found([]))]).toEqual([
+            { at: `checked`, changes: CHANGES, truncated: false },
+            { ...IDLE, direction: `to-sandbox`, step: { at: `checked`, changes: [], truncated: false } },
+        ]);
+    });
+
+    it(`keeps a receipt's Undo while nothing new has come, and gives way to changes that have`, () => {
+        expect([at(quiet(receipt), found([])).step, at(quiet(receipt), found(CHANGES)).step.at]).toEqual([receipt.step, `checked`]);
+    });
+
+    it(`leaves a copy on its way alone`, () => {
+        const bringing: BringBackState = { ...IDLE, step: { at: `bringing`, count: 2 } };
+        expect(at(quiet(bringing), found(CHANGES)).step).toEqual(bringing.step);
+    });
+});
+
+describe(`whether the section is drawn`, () => {
+    const checked = (changes: SandboxChange[]): BringBackState => ({ ...IDLE, step: { at: `checked`, changes, truncated: false } });
+
+    // "Bring back changes" over a folder with nothing to bring back read as a fault.
+    it(`stays away until there is something to bring back, or something the reader set going`, () => {
+        const states: BringBackState[] = [
+            IDLE,
+            { ...IDLE, quiet: true },
+            checked([]),
+            checked(CHANGES),
+            { ...IDLE, step: { at: `checking` } },
+            { ...IDLE, step: { at: `failed`, error: `Disk full.` } },
+            { ...IDLE, step: { at: `restored`, count: 1 } },
+        ];
+        expect(states.map(sectionShown)).toEqual([false, false, false, true, true, true, true]);
+    });
+
+    // Both ways, nothing is ever left to bring back, and the way back to copy-first is in the section.
+    it(`stays for a folder synced both ways, and while a switch of direction is on its way or has failed`, () => {
+        const states: BringBackState[] = [
+            { ...checked([]), direction: `both` },
+            { ...IDLE, switching: true },
+            { ...IDLE, switchError: `The sandbox is stopped.` },
+        ];
+        expect(states.map(sectionShown)).toEqual([true, true, true]);
     });
 });
 

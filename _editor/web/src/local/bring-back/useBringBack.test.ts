@@ -3,7 +3,7 @@ import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { type App, createApp } from "vue";
 import { BRING_BACK_CAP, type SandboxChange } from "./bringBack";
 import { activeSandboxId } from "../../lib/activeSandbox";
-import { forgetBringBack, useBringBack } from "./useBringBack";
+import { forgetBringBack, useBringBack, useQuietChecks } from "./useBringBack";
 
 // Pins the link a bring-back sends: the changes the review showed and the reader chose, by name, and nothing at all when
 // there is nothing to name or more than one link carries.
@@ -82,6 +82,44 @@ test("nothing chosen, or more than one link names, sends nothing and leaves the 
     expect([refused, links.length, sent(links[0])?.length]).toEqual([[[], { at: `idle` }], 1, BRING_BACK_CAP]);
 });
 
+// A folder's page holding the window's own checks, ready to be checked or not as `ready` says.
+const mountQuietChecks = (ready: () => boolean): void => {
+    app = createApp({
+        setup: () => {
+            useQuietChecks(ready);
+            return () => null;
+        },
+    });
+    app.mount(document.createElement(`div`));
+};
+// The checks among the links the app heard.
+const checks = (links: readonly string[]): number => links.filter((link) => new URL(link).searchParams.get(`do`) === `changes`).length;
+
+// Past the time a folder settles on screen before its first check (useBringBack.ts ARRIVAL_SETTLE_MS).
+const SETTLED_MS = 2_000;
+
+test("a folder ready to check is checked once it has settled, and coming back to the window within the minute asks nothing more", () => {
+    jest.setSystemTime(1_000_000);
+    activeSandboxId.value = `folder-a`;
+    mountQuietChecks(() => true);
+    const beforeSettling = checks(handed());
+    jest.advanceTimersByTime(SETTLED_MS);
+    const settled = checks(handed());
+    window.dispatchEvent(new Event(`focus`));
+    const soonAfter = checks(handed());
+    expect([beforeSettling, settled, soonAfter]).toEqual([0, 1, 1]);
+    activeSandboxId.value = undefined;
+});
+
+test("a folder not ready to check (its first copy still under way) is never asked about", () => {
+    activeSandboxId.value = `folder-a`;
+    mountQuietChecks(() => false);
+    jest.advanceTimersByTime(SETTLED_MS);
+    window.dispatchEvent(new Event(`focus`));
+    expect(checks(handed())).toBe(0);
+    activeSandboxId.value = undefined;
+});
+
 // The app's answer, as it dispatches one into the window.
 const answer = (detail: unknown): void => {
     window.dispatchEvent(new CustomEvent(`intentic:project`, { detail }));
@@ -101,6 +139,28 @@ test("an answer that lands while the section is off screen is there when it come
     again.undo();
     const links = handed();
     expect(new URL(links.at(-1) ?? ``).searchParams.get(`point`)).toBe(`p-1`);
+});
+
+// Two checks out at once: the window's own on the folder it left, and the reader's on the one it arrived at.
+test("answers go to the folders that asked, in the order they asked", () => {
+    jest.setSystemTime(2_000_000);
+    activeSandboxId.value = `folder-a`;
+    mountQuietChecks(() => true);
+    jest.advanceTimersByTime(SETTLED_MS);
+    handed();
+    activeSandboxId.value = `folder-b`;
+    const section = mountBringBack();
+    section.check();
+    handed();
+    answer({ kind: `changes`, result: { ok: true, direction: `to-sandbox`, changes: CHANGES } });
+    answer({ kind: `changes`, result: { ok: true, direction: `to-sandbox`, changes: [] } });
+    const onB = section.state.value.step;
+    activeSandboxId.value = `folder-a`;
+    expect([onB, section.state.value.step]).toEqual([
+        { at: `checked`, changes: [], truncated: false },
+        { at: `checked`, changes: CHANGES, truncated: false },
+    ]);
+    activeSandboxId.value = undefined;
 });
 
 test("an answer belongs to the folder that asked, even once the window has moved to another", () => {

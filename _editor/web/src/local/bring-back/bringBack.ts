@@ -41,21 +41,38 @@ export interface BringBackState {
     // switch never costs the reader a receipt's Undo.
     readonly switching: boolean;
     readonly switchError: string | undefined;
+    // A check the window asked on its own (useBringBack.ts `useQuietChecks`) is on its way. Never a step: its answer is
+    // drawn only when it finds something, and its failure not at all.
+    readonly quiet: boolean;
 }
 
-export const IDLE: BringBackState = { step: { at: `idle` }, direction: undefined, switching: false, switchError: undefined };
+export const IDLE: BringBackState = { step: { at: `idle` }, direction: undefined, switching: false, switchError: undefined, quiet: false };
 
 const failed = (state: BringBackState, error: string): BringBackState => ({ ...state, step: { at: `failed`, error } });
+
+// What a check finds, as the step it leaves. The reader's own check (the step is `checking`) is always answered. A quiet
+// one leaves alone a copy or restore on its way, and a receipt or a failure with nothing new to show since, so the Undo
+// and the reason stay where the reader left them; it fails without a word, since nobody asked.
+const checkedBy = (state: BringBackState, result: Extract<ProjectAnswer, { kind: `changes` }>[`result`]): BringBackState => {
+    const settled = { ...state, quiet: false };
+    const asked = state.step.at === `checking`;
+    if (!result.ok) {
+        return asked ? failed(settled, result.error) : settled;
+    }
+    const learned = { ...settled, direction: result.direction };
+    const busy = state.step.at === `bringing` || state.step.at === `restoring`;
+    const kept = state.step.at === `brought` || state.step.at === `restored` || state.step.at === `failed`;
+    if (!asked && (busy || (kept && result.changes.length === 0))) {
+        return learned;
+    }
+    return { ...learned, step: { at: `checked`, changes: result.changes, truncated: result.truncated === true } };
+};
 
 /** The state an answer leaves: each kind settles the step that asked for it. */
 export const answered = (state: BringBackState, answer: ProjectAnswer): BringBackState => {
     switch (answer.kind) {
-        case `changes`: {
-            const { result } = answer;
-            return result.ok
-                ? { ...state, direction: result.direction, step: { at: `checked`, changes: result.changes, truncated: result.truncated === true } }
-                : failed(state, result.error);
-        }
+        case `changes`:
+            return checkedBy(state, answer.result);
         case `brought-back`: {
             const { result } = answer;
             return result.ok
@@ -73,7 +90,29 @@ export const answered = (state: BringBackState, answer: ProjectAnswer): BringBac
                 : { ...state, switching: false, switchError: result.error };
         }
         default:
-            return answer.verb === `direction` ? { ...state, switching: false, switchError: answer.error } : failed(state, answer.error);
+            if (answer.verb === `direction`) {
+                return { ...state, switching: false, switchError: answer.error };
+            }
+            return answer.verb === `changes` ? checkedBy(state, { ok: false, error: answer.error }) : failed(state, answer.error);
+    }
+};
+
+/**
+ * Whether the section is drawn at all. Only with something to say: changes waiting to come back, a step the reader set
+ * going or its outcome, or a folder synced both ways, whose way back to copy-first is here. A folder whose sandbox holds
+ * nothing new shows nothing: "Bring back changes" with nothing to bring back read as a fault (2026-10-12).
+ */
+export const sectionShown = (state: BringBackState): boolean => {
+    if (state.direction === `both` || state.switching || state.switchError !== undefined) {
+        return true;
+    }
+    switch (state.step.at) {
+        case `idle`:
+            return false;
+        case `checked`:
+            return state.step.changes.length > 0;
+        default:
+            return true;
     }
 };
 

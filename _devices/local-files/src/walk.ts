@@ -27,6 +27,11 @@ const MAX_CHILDREN = 50_000;
 // Stats in flight at once while reading one folder, so a folder of ten thousand files queues rather than floods.
 const STAT_POOL = 32;
 
+// Folders of one level of the eager walk listed at once. One after another, a level cost the sum of every folder's
+// round trips (its .gitignore, its listing, its stats), which on a disk a virus scanner watches, or a WSL distro's, was
+// the seconds a freshly opened folder showed nothing; at once it costs about its slowest folder's.
+const LIST_POOL = 8;
+
 const NOTHING_LISTED: WorkspaceChildren = { entries: [], hidden: 0 };
 
 interface Entry {
@@ -158,6 +163,19 @@ const draftsOf = (job: TreeJob, scope: IgnoreScope, kept: readonly Entry[], root
         return draft;
     });
 
+// Every folder of one level listed, LIST_POOL at a time, each answer at its folder's place.
+const listLevel = async (level: readonly TreeJob[], root: string): Promise<Awaited<ReturnType<typeof listJob>>[]> => {
+    const listings: Awaited<ReturnType<typeof listJob>>[] = Array.from({ length: level.length });
+    await mapPool(
+        level.map((job, index) => ({ job, index })),
+        LIST_POOL,
+        async ({ job, index }) => {
+            listings[index] = await listJob(job, root);
+        },
+    );
+    return listings;
+};
+
 // The whole folder as far as the budget reaches; a folder that will not fit what is left is deferred whole rather than
 // half listed, and only the root's own cut is counted.
 export const walkTree = async (root: string, maxEntries = MAX_ENTRIES): Promise<WorkspaceTree> => {
@@ -167,9 +185,11 @@ export const walkTree = async (root: string, maxEntries = MAX_ENTRIES): Promise<
     let level: TreeJob[] = [{ abs: root, real: root, rel: ``, scope: createIgnoreScope(walkMatchers()) }];
     while (level.length > 0 && budget > 0) {
         const next: TreeJob[] = [];
-        for (const job of level) {
-            // Breadth first by design: a level lists before the next, under one budget.
-            const listed = await listJob(job, root);
+        // Breadth first by design: a level lists before the next, under one budget. Its folders are read at once and
+        // taken in order, so the budget falls where it would one by one, and so does every folder the next level opens.
+        const listings = await listLevel(level, root);
+        for (const [index, job] of level.entries()) {
+            const listed = listings[index];
             if (listed === undefined) {
                 if (job.owner !== undefined) {
                     job.owner.children = [];

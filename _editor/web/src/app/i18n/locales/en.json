@@ -4168,7 +4168,6 @@
             "check": "Check for changes",
             "checkAgain": "Check again",
             "changes": "{count} change in the sandbox | {count} changes in the sandbox",
-            "noChanges": "No changes",
             "review": "Review",
             "bringing": "Bringing back {count} file… | Bringing back {count} files…",
             "brought": "Brought back {count} file | Brought back {count} files",
@@ -4193,7 +4192,9 @@
             "askAgent": "Ask an agent",
             "askAgentHint": "A conversation about this file",
             "dropFilesToAdd": "Drop files to add them to {name}",
-            "machineSandbox": "This computer's sandbox"
+            "machineSandbox": "This computer's sandbox",
+            "opening": "Opening {name}…",
+            "openingSlow": "Still reading the folder. A big one, or one inside WSL, takes a moment the first time."
         },
         "folderMenu": {
             "switchFolder": "{name}: open another folder",

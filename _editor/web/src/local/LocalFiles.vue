@@ -23,6 +23,7 @@ import { openedPath } from "./appEvents";
 import { useFolderSandbox } from "./folderSandbox";
 import { folderDrawn } from "./folderSwitch";
 import LocalBringBack from "./bring-back/LocalBringBack.vue";
+import { useQuietChecks } from "./bring-back/useBringBack";
 import LocalEmptyFolder from "./LocalEmptyFolder.vue";
 import LocalFolderMenu from "./LocalFolderMenu.vue";
 import { type LocalChord, localChord } from "./localKeys";
@@ -57,9 +58,28 @@ watch(
     },
     { immediate: true },
 );
+// A folder whose listing has not come back yet: the window's connection to the app's sidecar still opening, or the walk
+// still under way. Said as such, never as an empty folder: until the listing is in, nothing is known about what is there.
+const folderLoading = computed(() => face?.file === undefined && !hasSnapshot.value && error.value === undefined);
 // A folder whose listing has come back with nothing to draw. A document opened on its own is never one: its folder is
 // not what the window shows.
-const folderEmpty = computed(() => face?.file === undefined && listingOf(``)?.length === 0 && error.value === undefined);
+const folderEmpty = computed(() => face?.file === undefined && hasSnapshot.value && listingOf(``)?.length === 0 && error.value === undefined);
+// A wait long enough to need its reason: a big folder, or one in a WSL distro, is read for seconds the first time.
+const SLOW_LOAD_MS = 4000;
+const loadingSlow = ref(false);
+let slowTimer: ReturnType<typeof setTimeout> | undefined;
+watch(
+    folderLoading,
+    (loading) => {
+        clearTimeout(slowTimer);
+        loadingSlow.value = false;
+        if (loading) {
+            slowTimer = setTimeout(() => (loadingSlow.value = true), SLOW_LOAD_MS);
+        }
+    },
+    { immediate: true },
+);
+onUnmounted(() => clearTimeout(slowTimer));
 
 const { activeId, activeTab, openFile, openAtLine, openDirectory, selectTab, keepTab } = useWorkspaceTabs();
 // Every close that would lose unsaved edits asks first, the window's and a tab's alike (useUnsavedGuard.ts): the pane
@@ -74,6 +94,9 @@ const leaving = (go: () => void): void => {
     }
     askToClose({ what: `folder`, paths: unsavedPaths(), close: go });
 };
+
+// The outline the tree shows while the folder is read: rows of differing length, so it reads as a listing on its way.
+const TREE_OUTLINE = [`w-24`, `w-32`, `w-20`, `w-40`, `w-28`, `w-36`, `w-16`] as const;
 
 // The breadcrumb and the viewer's actions ride the tab row, as they do in the workspace.
 provide(HOISTED_CONTEXT, true);
@@ -101,6 +124,11 @@ const { rootDragging, onRootDragEnter, onRootDragOver, onRootDragLeave, onRootDr
 const hasSandbox = useFolderSandbox();
 const { machine, folder, ask: askForSandbox, fold } = useLocalProject();
 const sandboxButton = computed(() => folderButtonOf({ hasSandbox: hasSandbox.value, machine: machine.value, folder: folder.value }));
+// What agents changed there, looked for once the folder is in its sandbox (its first copy done), so Bring back appears
+// when there is something to bring back.
+useQuietChecks(
+    () => face !== undefined && face.file === undefined && hasSandbox.value && (folder.value === undefined || folder.value.state === `ready`),
+);
 const building = computed(() => sandboxButton.value.busy);
 const sandboxLabel = computed(() => sandboxButton.value.label);
 const toSandbox = (): void => {
@@ -228,7 +256,7 @@ onUnmounted(() => {
                 <!-- The folder's name, and every other folder and document of this computer behind it (LocalFolderMenu.vue). -->
                 <LocalFolderMenu :leaving="leaving" />
                 <span class="flex-1"></span>
-                <Icon v-if="busy || isLoading" name="spinner" class="text-sm text-muted" spin :aria-label="t(`workspace.words.working`)" />
+                <Icon v-if="busy || isLoading || folderLoading" name="spinner" class="text-sm text-muted" spin :aria-label="t(`workspace.words.working`)" />
                 <!-- The entry picked in the tree, selected in the file manager; with none picked, the folder itself, opened. -->
                 <button
                     type="button"
@@ -309,6 +337,13 @@ onUnmounted(() => {
                     @load-more="searchLoadMore"
                 />
             </div>
+            <!-- The folder's rows, outlined until its listing is in: an unread folder is not an empty one. -->
+            <div v-else-if="folderLoading" class="min-h-0 flex-1 overflow-hidden px-2 py-1.5" aria-hidden="true">
+                <div v-for="width in TREE_OUTLINE" :key="width" class="flex h-6 items-center gap-2 px-1">
+                    <span class="skeleton h-3 w-3 shrink-0 rounded-sm"></span>
+                    <span class="skeleton h-2.5" :class="width"></span>
+                </div>
+            </div>
             <div v-else class="min-h-0 flex-1 overflow-hidden">
                 <WorkspaceTree
                     :tree="tree"
@@ -326,7 +361,7 @@ onUnmounted(() => {
             <LocalBringBack v-if="face !== undefined && face.file === undefined && hasSandbox" />
             <!-- The way from this folder to an agent: this computer's sandbox, its copy kept in sync with it (the app's project.rs). Not for
                  a folder with nothing in it yet, which would hand an agent nothing to work on. -->
-            <div v-if="face !== undefined && face.file === undefined && !folderEmpty" class="shrink-0 border-t border-line p-2">
+            <div v-if="face !== undefined && face.file === undefined && !folderEmpty && !folderLoading" class="shrink-0 border-t border-line p-2">
                 <Button
                     class="w-full"
                     size="small"
@@ -349,10 +384,16 @@ onUnmounted(() => {
             ></div>
         </aside>
         <div class="relative flex min-h-0 min-w-0 flex-1">
-            <EditorPane pane="main" :empty="folderEmpty" @select="selectTab" @keep="keepTab" @close="closeTab">
-                <!-- A folder with nothing in it yet (the one the app starts in, first of all): what it is for, and the ways to fill it. -->
+            <EditorPane pane="main" :empty="folderEmpty || folderLoading" @select="selectTab" @keep="keepTab" @close="closeTab">
+                <!-- A folder with nothing in it yet (the one the app starts in, first of all): what it is for, and the ways to fill it.
+                     Before its listing is in, the folder being opened, by name. -->
                 <template #empty>
-                    <LocalEmptyFolder />
+                    <div v-if="folderLoading" class="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center" role="status">
+                        <Icon name="spinner" spin class="text-lg text-muted" />
+                        <p class="text-sm text-content">{{ t(`local.localFiles.opening`, { name: face?.name ?? `` }) }}</p>
+                        <p v-if="loadingSlow" class="max-w-read-sm text-xs text-subtle">{{ t(`local.localFiles.openingSlow`) }}</p>
+                    </div>
+                    <LocalEmptyFolder v-else />
                 </template>
                 <template #lead>
                     <button
