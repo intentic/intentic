@@ -1,5 +1,6 @@
 import { nextTick, onBeforeUnmount, onMounted, type Ref, watch } from "vue";
 import { commits, FLING, lockAxis, SETTLE, springReaches, springTiming, tick, travelsPerSecond, velocityTracker } from "@intentic/ui/motion";
+import { EDGE_PX } from "../lib/edgeZone";
 import { inNativeShell } from "../workbench/window/capacitor";
 
 // THE WAY BACK, UNDER A THUMB. A phone's drill-down (an agent's chat, a Sandbox page) has its way back in the top-left
@@ -14,8 +15,6 @@ import { inNativeShell } from "../workbench/window/capacitor";
 // under the whole page to keep it. A touchmove can still be refused in the first few pixels, before the browser's own
 // scroll slop, which is where the axis is decided (motion/swipe.ts).
 
-/** How far in from the left edge a touch may start and still be the back gesture: the system's own edge on iOS. */
-export const EDGE_PX = 24;
 // Past this share of the screen a release goes back, before its speed is counted.
 const COMMIT_SHARE = 0.35;
 // A finger that sat still this long before moving is a long press: a selection being extended, never a swipe.

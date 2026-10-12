@@ -182,6 +182,10 @@ const withProviders = (services: Services, connected: readonly string[]): Servic
         cursorStore: unstubbed<Services["cursorStore"]>("cursorStore", {
             credentials: async () => (connected.includes("cursor") ? [{ id: "acct", apiKey: "key", connectedAt: 0 }] : []),
         }),
+        // Devin answers from a stored key too, read the same way.
+        devinStore: unstubbed<Services["devinStore"]>("devinStore", {
+            credentials: async () => (connected.includes("devin") ? [{ id: "acct", apiKey: "key", connectedAt: 0 }] : []),
+        }),
         // No model endpoints configured.
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [] }),
         // Present with nobody signed in: the sweep iterates every provider module, so a missing slice throws.

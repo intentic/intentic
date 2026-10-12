@@ -2,7 +2,7 @@ import { createHash, randomInt } from "node:crypto";
 import { INVENTORY_NAME_MAX, SHORT_CODE_ALPHABET, zoneFromUrl } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
 import type { AppEnv } from "../app-env.js";
-import { remoteIpOf } from "../automations/public-door.js";
+import { remoteIpOf } from "../http/remote-ip.js";
 import type { SyncMode } from "./desktop-sync.js";
 
 // SHORT CODES: what a copy-paste command carries instead of a token. The sandbox mints one beside each device, sync or

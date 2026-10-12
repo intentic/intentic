@@ -1,6 +1,6 @@
 import { effectScope, type EffectScope } from "vue";
-import { type TokenSource, useMintedTokens } from "../useMintedTokens";
-import { forgetOperations } from "../../workbench/operations/operations";
+import { type TokenSource, useMintedTokens } from "./useMintedTokens";
+import { forgetOperations } from "./operations";
 
 afterEach(() => {
     forgetOperations();

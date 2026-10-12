@@ -106,6 +106,9 @@ export const UNSERVED = {
     "POST /ci/webhook/{host}": NOT_THE_EDITORS,
     "POST /system/hosts/pair": NOT_THE_EDITORS,
     "POST /system/hosts/enroll": NOT_THE_EDITORS,
+    // The owner mints a server-connect code for a machine of their own; the install script on that machine redeems it.
+    "POST /system/enroll/code": REAL_MACHINE,
+    "POST /system/redeem/{code}": NOT_THE_EDITORS,
     "GET /system/hosts": NOT_THE_EDITORS,
     "DELETE /system/hosts/{id}": NOT_THE_EDITORS,
     "GET /system/hosts/connect": NOT_THE_EDITORS,

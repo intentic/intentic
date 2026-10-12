@@ -1,0 +1,10 @@
+/* Type-checks the worker's verb routing and its tests, the only part of the site `bun test` runs. */
+{
+    "extends": "../../_tools/tsconfig/tsconfig.astro.json",
+    "compilerOptions": {
+        "types": ["node", "bun", "@intentic/testing/globals"],
+        "noEmit": true
+    },
+    "include": ["./src/lib/worker-verbs.ts", "./src/lib/**/*.test.ts"],
+    "exclude": []
+}

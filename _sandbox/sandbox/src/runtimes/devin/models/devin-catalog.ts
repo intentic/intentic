@@ -80,7 +80,9 @@ export const createDevinCatalog = (deps: DevinCatalogDeps): DevinCatalog => {
             const created = await connection.agent.request(methods.agent.session.new, { cwd: deps.probeDir, mcpServers: [] });
             if (connection.capabilities.sessionCapabilities?.delete != null) {
                 // Nobody resumes a probe, so it leaves Devin's own session list as soon as it has answered.
-                void connection.agent.request(methods.agent.session.delete, { sessionId: created.sessionId }).catch(() => undefined);
+                void connection.agent
+                    .request(methods.agent.session.delete, { sessionId: created.sessionId })
+                    .catch((error: unknown) => deps.store.logger.warn({ err: error }, "devin: could not delete the model probe's session"));
             }
             const models = sessionModelsOf(created.configOptions);
             return models === undefined

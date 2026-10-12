@@ -9,6 +9,7 @@
         "deploy": "wrangler deploy && node scripts/submit-indexnow.mjs",
         "preview": "astro preview",
         "check": "astro check",
+        "typecheck": "tsc -p tsconfig.test.json",
         "test": "node scripts/check-desk-palette.mjs && node scripts/check-alignment.mjs && bun test src/lib",
         "test:compare": "bun --conditions=@intentic/src scripts/check-comparisons.mjs",
         "astro": "astro",

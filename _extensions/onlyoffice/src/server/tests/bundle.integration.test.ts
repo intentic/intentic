@@ -84,10 +84,16 @@ const serving = (body: () => ReadableStream<Uint8Array> | null, status = 200): S
     };
 };
 
+// A stream of the runtime's own, built directly: the DOM preload swaps in jsdom's Blob, which has no stream().
 const bytes =
     (buffer: Buffer): (() => ReadableStream<Uint8Array>) =>
     () =>
-        new Blob([new Uint8Array(buffer)]).stream();
+        new ReadableStream<Uint8Array>({
+            start: (controller) => {
+                controller.enqueue(new Uint8Array(buffer));
+                controller.close();
+            },
+        });
 
 const store = (pin: BundlePin, served: Served, stallMs?: number): BundleStore =>
     new BundleStore({ root, pin, fetch: served.fetch, log: (line) => logged.push(line), stallMs });

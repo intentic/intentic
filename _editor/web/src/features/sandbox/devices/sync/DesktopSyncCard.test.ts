@@ -51,7 +51,7 @@ jest.mock(`../useDevices`, () => ({
         return answer;
     },
 }));
-jest.mock(`../../../capabilities/connect/ScriptSourceSwitch.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+jest.mock(`../../../../components/ScriptSourceSwitch.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 
 const { default: DesktopSyncCard } = await import("./DesktopSyncCard.vue");
 const { forgetOperations } = await import("../../../../workbench/operations/operations");

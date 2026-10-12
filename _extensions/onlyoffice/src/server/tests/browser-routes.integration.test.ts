@@ -153,7 +153,13 @@ describe(`saving the document`, () => {
         const streamed = await call(`/file?s=${session.token}`, {
             method: `PUT`,
             headers: { "if-match": `"10-100"` },
-            body: new Blob([`x`.repeat(LIMIT * 4)]).stream(),
+            // The runtime's own stream: the DOM preload swaps in jsdom's Blob, which has no stream().
+            body: new ReadableStream<Uint8Array>({
+                start: (controller) => {
+                    controller.enqueue(new TextEncoder().encode(`x`.repeat(LIMIT * 4)));
+                    controller.close();
+                },
+            }),
             duplex: `half`,
         } as RequestInit);
         expect(streamed.status).toBe(413);

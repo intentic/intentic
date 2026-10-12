@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { SegmentedControl } from "@intentic/ui";
-import { environment } from "../../../app/environments/environment";
-import { type ScriptSource, scriptSource } from "../../../app/environments/scriptCommand";
+import { environment } from "../app/environments/environment";
+import { type ScriptSource, scriptSource } from "../app/environments/scriptCommand";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 

@@ -5,7 +5,7 @@ import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
 import { dailyBudget } from "../store/daily-budget.js";
 import { rateWindow } from "../store/rate-window.js";
-import { remoteIpOf } from "./public-door.js";
+import { remoteIpOf } from "../http/remote-ip.js";
 import { fireAutomation, PAYLOAD_MAX } from "./scheduler.js";
 
 // POST /automations/:id/fire wakes an event automation from a webhook, authenticated by the door token (`?token=` or

@@ -109,6 +109,9 @@ const viewPromptTip = computed((): Tip => ({
         ...(reach.adds.length > 0
             ? [{ label: t(`sandbox.agentInstructions.promptReachAdds`), value: spokenList(reach.adds) }]
             : []),
+        ...(reach.ignores.length > 0
+            ? [{ label: t(`sandbox.agentInstructions.promptReachIgnores`), value: spokenList(reach.ignores) }]
+            : []),
     ],
 }));
 </script>
@@ -142,6 +145,9 @@ const viewPromptTip = computed((): Tip => ({
                         {{ t(`sandbox.agentInstructions.wholePromptOn`, { replaces: spokenList(reach.replaces) }) }}
                         <template v-if="reach.adds.length > 0">{{
                             t(`sandbox.agentInstructions.onAddedToPrompt`, { adds: spokenList(reach.adds) })
+                        }}</template>
+                        <template v-if="reach.ignores.length > 0">{{
+                            t(`sandbox.agentInstructions.onNotReached`, { ignores: spokenList(reach.ignores) })
                         }}</template>
                     </Notice>
 
