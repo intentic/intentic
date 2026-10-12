@@ -61,7 +61,7 @@ import type { TurnInput } from "../../seams/turn-starter.js";
 import type { DomainEventMap } from "../../seams/domain-events.js";
 import { opt } from "../../opt.js";
 import { credentialsTravel, placeFanOut } from "../../runners/runner-scheduler.js";
-import { runnerSummaries } from "../../runners/runner-peer.js";
+import { freshRunnerSummaries } from "../../runners/runner-peer.js";
 
 // Spawns, steers and answers full agents from inside a turn, on any connected provider; a child is an ordinary
 // conversation on the same turn pump, queued until the box has memory for it. A parked question is the parent's to
@@ -1075,7 +1075,7 @@ const childPlacement = async (
     spec.on === "here" || (await shieldHoldsHere(services))
         ? undefined
         : placeFanOut(
-              await runnerSummaries(services),
+              await freshRunnerSummaries(services),
               { inFlight: services.conversations.inFlightByRunner() },
               {
                   ...(spec.on !== undefined ? { asked: spec.on } : {}),

@@ -46,6 +46,7 @@ import ChatMentionPopover from "../composer/ChatMentionPopover.vue";
 import ChatModelPicker from "../models/ChatModelPicker.vue";
 import ChatModeMenu from "../models/run-settings/ChatModeMenu.vue";
 import ChatPlacementMenu from "./ChatPlacementMenu.vue";
+import ChatFleetSuggestion from "./fleet/ChatFleetSuggestion.vue";
 import ChatPaneNotices from "./ChatPaneNotices.vue";
 import ChatPaneStatus from "./ChatPaneStatus.vue";
 import ChatPersonaMenu from "../personas/ChatPersonaMenu.vue";
@@ -427,7 +428,7 @@ const popovers = useComposerPopovers({
     },
     landing,
 });
-const { syncCaret, activeMention, commandMatches, filesOffered, quickSources, mentionOpen, commandOpen, flashed, pickMention, pickCommand } =
+const { syncCaret, activeMention, commandMatches, filesOffered, quickSources, mentionOpen, commandOpen, flashed, flash, pickMention, pickCommand } =
     popovers;
 const { onKeydown, onInput, composerHint } = useComposerKeys({
     view: paneView,
@@ -540,6 +541,8 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                             <ChatEditNotice />
                             <!-- What the runtime's extensions show while the turn runs: a status line each, gone when it ends (ChatAgentStatus). -->
                             <ChatAgentStatus v-if="!strip" />
+                            <!-- A new chat while this machine is busy and another of the owner's has room: the offer, or the move already made (ChatFleetSuggestion). -->
+                            <ChatFleetSuggestion v-if="!strip" :conversation="conversation" @placed="flash(`placement`)" />
                             <!-- The whole box changes standing when the agent's voice is armed (.composer-voice); being in this mode by accident is the one mistake worth painting. -->
                             <form
                                 ref="composerForm"

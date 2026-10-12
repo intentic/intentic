@@ -7,6 +7,7 @@ import { ModelRoleSchema } from "../models/model-roles.js";
 import { MODEL_SETUP_ID, ModelSetupSchema } from "../models/model-setups.js";
 import { AdmissionPolicySchema, AdmissionRuleSchema } from "./agent.js";
 import { LimitHandoffSchema } from "./providers/handoff.js";
+import { SessionsPlacementSchema } from "./offload.js";
 import { LimitPolicySchema, RetryPolicySchema, RoomPolicySchema } from "./turn-break.js";
 import { ZoneSchema } from "../time/zone.js";
 // Which prompt base the agent runs before this turn composes anything on top: Intentic's own (default), Claude Code's
@@ -500,13 +501,17 @@ export const SandboxSettingsSchema = z.object({
     // the heavy-command rule an agent's command matched (workload/heavy-commands.ts), each naming a runner id. A
     // runner that is offline, outdated or full hands the work back here, which the command's output says. Never pushed
     // to a runner itself (definition/definition.ts), which must not pass work on again.
+    // `sessions`: what a new conversation is told when this machine is busy and a runner has room
+    // (runners/fleet-advice.ts). Suggesting is the default: it costs one line above the composer, and moving a session
+    // without being asked is the owner's choice to make.
     offload: z
         .object({
             commands: z.record(z.string().min(1), z.string().min(1)).default({}),
+            sessions: SessionsPlacementSchema.default("suggest"),
         })
-        .default({ commands: {} })
+        .default({ commands: {}, sessions: "suggest" })
         .describe(
-            "Which heavy work runs on a runner on one of your machines instead of this sandbox: agents' commands by the kind the heavy-command rules sort them into (tests, typechecks, verify…). The code travels as it stands, uncommitted work included; the output streams back, and any file the command changed comes back with it. A machine that is offline, outdated or busy hands the work back to this sandbox, and the output says so.",
+            "Which work runs on a runner on one of your machines instead of this sandbox. `commands`: agents' heavy commands by the kind the heavy-command rules sort them into (tests, typechecks, verify…); the code travels as it stands, uncommitted work included, the output streams back, and any file the command changed comes back with it, while a machine that is offline, outdated or busy hands the work back to this sandbox, and the output says so. `sessions`: what happens to a new conversation while this machine is busy and one of your runners has room: `suggest` offers that machine above the composer, `auto` starts it there unless you keep it here, `off` says nothing.",
         ),
     // A person answering a need is exactly the moment they want the work to go on (docs/architecture/needs.md), unlike a
     // restart nobody watched, so this one is on to begin with.

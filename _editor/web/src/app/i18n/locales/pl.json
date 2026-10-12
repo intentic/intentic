@@ -3798,6 +3798,31 @@
             "suggestedWas": "Sugerowane: {way}.",
             "yourDefault": "Twoje ustawienie domyślne.",
             "notSaved": "Nie udało się zapisać wyboru przekazania."
+        },
+        "fleetAdvice": {
+            "agentsOfSlots": "zajęte {agents} z {slots} miejsca na agentów | zajęte {agents} z {slots} miejsc na agentów | zajęte {agents} z {slots} miejsc na agentów",
+            "keepHere": "Zostaw tutaj",
+            "memoryFree": "{free} wolne",
+            "moved": "Start na {machine}: ta maszyna jest zajęta ({why}).",
+            "movedPlain": "Start na {machine}: ta maszyna jest zajęta.",
+            "notNow": "Nie teraz",
+            "standingBusy": "Zajęta",
+            "standingCalm": "Ma zapas",
+            "standingFull": "Pełna",
+            "startThere": "Uruchom na {machine}",
+            "strainAgents": "działa {count} agent | działa {count} agentów | działa {count} agentów",
+            "strainBoth": "{first} i {second}",
+            "strainCpu": "procesory są w pełni obciążone",
+            "strainMemory": "wolne tylko {free} pamięci",
+            "strainMemoryShort": "brakuje pamięci",
+            "strainMemoryStall": "pamięć się dławi",
+            "suggest": "Ta maszyna jest zajęta: {why}. {machine} ma miejsce na tę sesję.",
+            "suggestPlain": "Ta maszyna jest zajęta. {machine} ma miejsce na tę sesję.",
+            "suggested": "Sugerowana",
+            "unfitAreas": "Twój dostęp jest ograniczony do obszarów, których runner nie potrafi odgrodzić",
+            "unfitCredentials": "Ten model loguje się tylko stąd; model Claude Code może działać tam",
+            "unfitPrivacy": "Tarcza prywatności zatrzymuje nowe sesje na tej maszynie",
+            "unfitUnmeasured": "Jeszcze nie podała swoich zasobów"
         }
     },
     "common": {
@@ -6752,7 +6777,15 @@
             "runsHereUntilBack": "{machine} jest offline, więc to działa tutaj, dopóki nie wróci.",
             "runsOn": "Działa na",
             "sentHere": "Działa tutaj: {kinds}",
-            "title": "Gdzie działa ciężka praca"
+            "title": "Gdzie działa ciężka praca",
+            "sessionsAuto": "Automatycznie",
+            "sessionsAutoDetail": "Nowy czat trafia na maszynę z zapasem, z przyciskiem, by zostawić go tutaj.",
+            "sessionsDetail": "Gdy ten sandbox jest zajęty, a runner na innej z Twoich maszyn ma zapas, nowy czat może wystartować tam. Jego praca wraca tutaj do zatwierdzenia, jak każdego runnera.",
+            "sessionsOff": "Wyłączone",
+            "sessionsOffDetail": "Nic nie jest mówione; maszynę wybierasz sam.",
+            "sessionsSuggest": "Proponuj",
+            "sessionsSuggestDetail": "Linia nad polem wiadomości to proponuje, a decyzja należy do Ciebie.",
+            "sessionsTitle": "Nowe czaty, gdy ta maszyna jest zajęta"
         },
         "usageChart": {
             "n7Days": "7 dni"

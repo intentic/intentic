@@ -1,6 +1,6 @@
 // Pins what a pick in "Where heavy work runs" writes (settings `offload`) and how a runner is offered and named.
 import type { RunnerSummary } from "@intentic/sandbox-contract";
-import { HERE, kindTitle, runnerName, targetOptions, unavailableRunner, withCommandTarget } from "./offloadRows";
+import { HERE, kindTitle, runnerName, sessionsOptions, targetOptions, unavailableRunner, withCommandTarget, withSessions } from "./offloadRows";
 
 const omen: RunnerSummary = { id: `runner-omen`, host: `omen`, online: true, parity: `current` };
 const asleep: RunnerSummary = { id: `runner-rog`, host: `rog`, online: false, parity: `current` };
@@ -20,14 +20,27 @@ describe(`where heavy work runs`, () => {
     });
 
     test(`picking a runner sets that kind alone, and picking this sandbox removes it`, () => {
-        const sent = withCommandTarget({ commands: { vitest: `runner-rog` } }, `bun-test`, `runner-omen`);
-        expect(sent).toEqual({ commands: { vitest: `runner-rog`, "bun-test": `runner-omen` } });
-        expect(withCommandTarget(sent, `vitest`, HERE)).toEqual({ commands: { "bun-test": `runner-omen` } });
+        const sent = withCommandTarget({ commands: { vitest: `runner-rog` }, sessions: `auto` }, `bun-test`, `runner-omen`);
+        expect(sent).toEqual({ commands: { vitest: `runner-rog`, "bun-test": `runner-omen` }, sessions: `auto` });
+        expect(withCommandTarget(sent, `vitest`, HERE)).toEqual({ commands: { "bun-test": `runner-omen` }, sessions: `auto` });
     });
 
     test(`a kind the shipped rules name reads in words, one the owner added reads as its id`, () => {
         expect(kindTitle({ id: `typechecker`, pattern: `tsc` })).toBe(`Typechecks`);
         expect(kindTitle({ id: `my-build`, pattern: `make` })).toBe(`my-build`);
+    });
+
+    // New chats: suggesting first, since it is the default and moves nothing by itself.
+    test(`new chats offer suggest, then auto, then off, and a pick leaves every command's target alone`, () => {
+        expect(sessionsOptions().map(({ value, label }) => [value, label])).toEqual([
+            [`suggest`, `Suggest`],
+            [`auto`, `Automatic`],
+            [`off`, `Off`],
+        ]);
+        expect(withSessions({ commands: { vitest: `runner-rog` }, sessions: `suggest` }, `auto`)).toEqual({
+            commands: { vitest: `runner-rog` },
+            sessions: `auto`,
+        });
     });
 
     test(`a pick naming an offline or vanished runner says the work runs here meanwhile`, () => {

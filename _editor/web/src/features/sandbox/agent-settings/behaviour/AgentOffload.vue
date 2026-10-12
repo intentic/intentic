@@ -7,7 +7,8 @@ import { rpcQuery } from "../../../../client/sandbox/rpcQuery";
 import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
 import { useRunners } from "../../devices/runners/useRunners";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
-import { HERE, kindDetail, kindTitle, targetOptions, unavailableRunner, withCommandTarget } from "./offloadRows";
+import type { SessionsPlacement } from "@intentic/sandbox-contract";
+import { HERE, kindDetail, kindTitle, sessionsOptions, targetOptions, unavailableRunner, withCommandTarget, withSessions } from "./offloadRows";
 
 // "Where heavy work runs" (settings `offload`): each kind of heavy command an agent runs, either here or on a runner on
 // one of your machines. The kinds are the heavy-command rules this sandbox queues by (GET /offload/kinds), so a rule the
@@ -19,9 +20,15 @@ const { query: kindsQuery } = useSandboxQuery(rpcQuery(`offload.kinds`));
 const { runners } = useRunners();
 
 const kinds = computed(() => kindsQuery.data.value?.kinds ?? []);
-const offload = computed(() => settings.value?.offload ?? { commands: {} });
+const offload = computed(() => settings.value?.offload ?? { commands: {}, sessions: `suggest` as const });
 const options = computed(() => targetOptions(runners.value));
 const noRunners = computed(() => runners.value.length === 0);
+
+const setSessions = (sessions: SessionsPlacement | undefined): void => {
+    if (sessions !== undefined) {
+        patch({ offload: withSessions(offload.value, sessions) });
+    }
+};
 
 const setKind = (kind: string, runner: string | undefined): void => {
     if (runner !== undefined) {
@@ -42,6 +49,21 @@ const setKind = (kind: string, runner: string | undefined): void => {
                 >
             </i18n-t>
         </RowNote>
+
+        <!-- New chats, before the commands: the bigger move, and the one a person meets in the composer. -->
+        <Row icon="desktop" :title="t(`sandbox.agentOffload.sessionsTitle`)" :description="t(`sandbox.agentOffload.sessionsDetail`)">
+            <template #control>
+                <Picker
+                    :model-value="offload.sessions"
+                    :options="sessionsOptions()"
+                    :disabled="settings === undefined || noRunners"
+                    class="w-40 justify-between text-xs"
+                    :aria-label="t(`sandbox.agentOffload.sessionsTitle`)"
+                    :header="t(`sandbox.agentOffload.sessionsTitle`)"
+                    @update:model-value="setSessions"
+                />
+            </template>
+        </Row>
 
         <Row v-for="kind in kinds" :key="kind.id" icon="bolt" :title="kindTitle(kind)" :description="kindDetail(kind)">
             <template #control>

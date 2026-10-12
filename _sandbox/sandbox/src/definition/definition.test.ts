@@ -138,7 +138,7 @@ test("settingsDefinition is settings-only: non-defaults in, every other section 
 });
 
 test("a runner is never handed where this sandbox sends its work, and never reads it as drift", async () => {
-    const offload = { commands: { "bun-test": "runner-omen" }, landCheck: "runner-omen" };
+    const offload = { commands: { "bun-test": "runner-omen" }, sessions: "auto" as const, landCheck: "runner-omen" };
     const services = { sandboxSettings: { get: async () => ({ hashlineEdits: true, offload }) } };
     const scoped = await settingsDefinition(services as unknown as Parameters<typeof settingsDefinition>[0]);
     expect(scoped.settings).toEqual({ hashlineEdits: true });

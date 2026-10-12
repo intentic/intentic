@@ -46,6 +46,12 @@ const world = (runners: Record<string, FakeRunner | "offline">) => {
         }),
         logger: unstubbed<OffloadDeps["logger"]>("logger", { warn: () => undefined }),
         heavyCommands: unstubbed<OffloadDeps["heavyCommands"]>("heavyCommands", { read: async () => mergeHeavyRules() }),
+        // The fleet advice's seams, which no case here reaches (runners/fleet-advice.test.ts covers it).
+        conversations: unstubbed<OffloadDeps["conversations"]>("conversations", {}),
+        resources: unstubbed<OffloadDeps["resources"]>("resources", {}),
+        privacyShield: unstubbed<OffloadDeps["privacyShield"]>("privacyShield", {}),
+        sandboxSettings: unstubbed<OffloadDeps["sandboxSettings"]>("sandboxSettings", {}),
+        workspace: unstubbed<OffloadDeps["workspace"]>("workspace", {}),
     };
     return createOffloadRoutes(deps);
 };

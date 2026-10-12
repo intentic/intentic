@@ -1,5 +1,4 @@
-import { mkdir, statfs, writeFile } from "node:fs/promises";
-import { cpus, loadavg, totalmem } from "node:os";
+import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, normalize } from "node:path";
 import { narrate } from "@intentic/base/async";
 import {
@@ -7,7 +6,6 @@ import {
     AgentHarnessSchema,
     AgentProviderSchema,
     type AgentTurn,
-    type RunnerFacts,
     type RunnerSync,
     type RunnerSyncLine,
     type RunnerTurn,
@@ -20,25 +18,13 @@ import { adoptDefinitionSettings } from "../definition/apply-definition.js";
 import { parseDefinitionToml } from "../definition/definition.js";
 import { gitEnv, pushToParent, type RunnerSyncDeps, syncFromParent } from "./runner-sync.js";
 import { createRunnerCommands } from "./runner-command.js";
+import { machineFacts } from "./machine-facts.js";
 import type { RunnerIdentity } from "./runner-identity.js";
 
 // The oRPC server on the socket this runner dialled out (the host router's inversion). Everything here is a thin
 // adapter onto machinery this daemon already has: a turn, its answers and its steers go through the TurnStarter port,
 // the same doors a local turn takes; a sync is stock git against the parent's door. A remote turn behaves like a local
 // one because it is the same code.
-
-// freeDiskMb is read where the workspace lives, which is the disk a turn actually fills.
-const facts = async (workspaceRoot: string): Promise<RunnerFacts> => {
-    // allow(silent-catch): a disk that can't be read reports nothing free, the answer a host should plan around.
-    const disk = await statfs(workspaceRoot).catch(() => undefined);
-    return {
-        cpus: cpus().length,
-        memoryMb: Math.round(totalmem() / 1_048_576),
-        freeDiskMb: disk === undefined ? 0 : Math.round((disk.bavail * disk.bsize) / 1_048_576),
-        // Normalised to core count, so "1" means saturated on any machine size; answers "is it busy right now".
-        load: cpus().length === 0 ? 0 : Math.round(((loadavg()[0] ?? 0) / cpus().length) * 100) / 100,
-    };
-};
 
 // Turns a sync's callback lines into a stream via the shared `narrate` pump; only this wire's terminal `done` frame
 // lives here.
@@ -126,7 +112,8 @@ export const createRunnerService = (services: Services, identity: RunnerIdentity
 
     const os = implement(runnerContract);
     return os.router({
-        describe: os.describe.handler(async () => await facts(services.workspace.root)),
+        // Measured on every ask, by the same ruler the parent measures itself with, so its fleet advice compares like with like.
+        describe: os.describe.handler(async () => await machineFacts(services.workspace.root, { budget: services.resources })),
         ping: os.ping.handler(() => ({ ok: true })),
         syncWorkspace: os.syncWorkspace.handler(({ input }) =>
             narrated((onLine) =>

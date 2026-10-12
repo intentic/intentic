@@ -1,7 +1,15 @@
 import { z } from "zod";
 import { procedure } from "../protocol/route-meta.js";
 import { streamOf } from "../protocol/routes.js";
-import { OffloadFrameSchema, OffloadKindSchema, OffloadRecordSchema, OffloadRunSchema, OffloadTargetSchema } from "../schemas/offload.js";
+import {
+    FleetAdviceInputSchema,
+    FleetAdviceSchema,
+    OffloadFrameSchema,
+    OffloadKindSchema,
+    OffloadRecordSchema,
+    OffloadRunSchema,
+    OffloadTargetSchema,
+} from "../schemas/offload.js";
 import { OkSchema } from "../schemas/shared.js";
 
 // The in-sandbox `offload-run` command drives the first three on the agent token: the Bash hook and the check after
@@ -57,4 +65,16 @@ export const offloadContract = {
             description: "The heavy commands this sandbox sent to runners lately, newest first, with where they ran and how they ended.",
         })
         .output(z.object({ runs: z.array(OffloadRecordSchema) })),
+    // Read by the composer while a new conversation is still a draft (settings `offload.sessions`); measuring a runner
+    // asks it over its link, so a closed composer costs the fleet nothing.
+    placement: procedure
+        .route({
+            method: "GET",
+            path: "/offload/placement",
+            summary: "Which machine a new session should start on",
+            description:
+                "How full this sandbox and each runner on your machines are right now, measured the same way on every one, and the runner a new session should start on instead of here when this machine is busy and another has room. Name the draft's provider and harness: a runner it could not sign in from is never suggested.",
+        })
+        .input(FleetAdviceInputSchema)
+        .output(FleetAdviceSchema),
 };

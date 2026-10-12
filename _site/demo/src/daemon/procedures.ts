@@ -400,6 +400,22 @@ export const procedures = {
             ],
         }),
         runs: () => ({ runs: [] }),
+        // Where a new chat should start: the demo pairs no runner, so this machine is the only one, and it has room.
+        placement: () => ({
+            mode: `suggest` as const,
+            here: {
+                standing: `calm` as const,
+                strain: [],
+                cpus: 8,
+                load: 0.18,
+                memoryFreeMb: 11_264,
+                memoryLimitMb: 16_384,
+                agents: 1,
+                slots: 6,
+                headroom: 0.83,
+            },
+            machines: [],
+        }),
     },
     // A repository's "Run on <device>" dialog. Starting a run refuses: it builds here and starts a program on a real computer.
     runs: {

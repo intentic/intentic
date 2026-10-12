@@ -214,6 +214,8 @@ export const useComposerPopovers = (host: PopoversHost) => {
         mentionOpen,
         commandOpen: computed(() => !mentionOpen.value && commandMatches.value.length > 0 && !popoverDismissed.value),
         flashed,
+        // Lights one control for a moment, for a change made from outside the row (the fleet strip placing the draft).
+        flash,
         // Whether this draft sends as a command: the whole first word against the published names, the same rule the
         // daemon applies on arrival (the popover matches only the typed token).
         commandRun: computed<AgentCommand | undefined>(() => {

@@ -65,6 +65,10 @@ export const spawnServices = (
         }),
         runners: unstubbed<Services["runners"]>("runners", { list: async () => fleet.map((runner) => ({ id: runner.id, card: runner.id })) }),
         runnerHub: unstubbed<Services["runnerHub"]>("runnerHub", {
+            // Connected exactly when the fleet says it is online; a refresh keeps the facts below, as a quiet runner's does.
+            // SAFETY: placement only asks whether a client exists, never calls one, so an empty one stands in for it.
+            client: (id: string) => (fleet.some((runner) => runner.id === id && runner.online) ? ({} as never) : undefined),
+            refresh: async () => undefined,
             state: (id: string) => {
                 const found = fleet.find((runner) => runner.id === id);
                 return found === undefined || !found.online

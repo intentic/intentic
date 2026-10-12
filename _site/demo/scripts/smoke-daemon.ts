@@ -310,6 +310,7 @@ const samplesOf = (
         offload: {
             kinds: undefined,
             runs: undefined,
+            placement: { agent: `claude` },
         },
         runs: {
             targets: undefined,

@@ -3,6 +3,8 @@ import { type OffloadFrame, type OffloadRecord, type OffloadTarget, offloadContr
 import { implement } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
+import { areasOf } from "../auth/principal.js";
+import { type FleetAdviceDeps, fleetAdvice } from "../runners/fleet-advice.js";
 
 /* THIS SANDBOX'S SIDE OF AN OFFLOADED COMMAND (settings `offload`). The in-sandbox `offload-run` command asks whether the
    runner a kind of heavy work goes to can take it, snapshots the tree, then runs the line through here, which relays it
@@ -10,7 +12,7 @@ import type { OrpcContext } from "../app-env.js";
    the Bash hook already put `offload-run --to <runner>` in front of the line from the setting. A runner that cannot take
    it answers with one refusal, and `offload-run` runs the line here instead. */
 
-export type OffloadDeps = Pick<Services, "runners" | "runnerHub" | "logger" | "heavyCommands">;
+export type OffloadDeps = Pick<Services, "runners" | "runnerHub" | "logger" | "heavyCommands"> & FleetAdviceDeps;
 
 // Recent runs the runner card lists; a few dozen is enough to see what went where, and it is all in memory.
 const RECORDS_KEPT = 40;
@@ -106,6 +108,8 @@ export const createOffloadRoutes = (deps: OffloadDeps) => {
             return { ok: true } as const;
         }),
         runs: i.runs.handler(() => ({ runs: records.map((entry) => ({ ...entry })) })),
+        // Which machine a new session should start on; the caller's own area limit decides whether a runner can take it.
+        placement: i.placement.handler(async ({ input, context }) => await fleetAdvice(deps, input, areasOf(context.identity))),
         // The rules the queue applies, less the ones that exempt a line from it (a search, a dev server): those never
         // queue, so they are never heavy work to send anywhere.
         kinds: i.kinds.handler(async () => ({

@@ -8,6 +8,7 @@ import { createPeerRoutes } from "../peers/peer-routes.js";
 import type { PeerStore } from "../peers/peer-store.js";
 import { parseDefinitionToml, settingsDefinition, settingsDrift } from "../definition/definition.js";
 import { runnerParity } from "./runner-parity.js";
+import { refreshRunnerFacts } from "./fleet-facts.js";
 import { runnerEnrollmentsDocument, runnerPairConsumedDocument } from "../peers/enrollment.js";
 
 // A runner is a peer door (peers/): this sandbox's own execution container elsewhere, dialling in with its durable
@@ -121,6 +122,16 @@ export const runnerSummaries = async (services: Services): Promise<RunnerSummary
             ...(drift !== undefined ? { drift } : {}),
         };
     });
+};
+
+// The same list with every online runner's facts re-asked first (fleet-facts.ts), for a caller about to place work by
+// how full each machine is: the hub otherwise still holds what a runner said when it connected.
+export const freshRunnerSummaries = async (services: Services): Promise<RunnerSummary[]> => {
+    await refreshRunnerFacts(
+        services.runnerHub,
+        (await services.runners.list()).map((runner) => runner.id),
+    );
+    return await runnerSummaries(services);
 };
 
 export const runnerPeerRoutes = (services: Services) =>

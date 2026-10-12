@@ -6,6 +6,9 @@ import { placeConversation } from "./pane/composerControls";
 import { type BoxFleet, otherBoxes, subscribe as watchOtherBoxes } from "../../sandbox/live/fleetAcross";
 import { useRunners } from "../../sandbox/devices/runners/useRunners";
 import { useT } from "@intentic/ui/i18n";
+import { useFleetAdvice } from "./fleet/fleetAdvice";
+import { draftFleet } from "./fleet/fleetPlacement";
+import { loadLine, unfitWords } from "./fleet/fleetWords";
 
 // Where this conversation runs — three answers to one question:
 //
@@ -24,6 +27,12 @@ const emit = defineEmits<{ selected: [] }>();
 const { conversation } = defineProps<{ conversation: Conversation }>();
 
 const { runners } = useRunners();
+// How full each machine is right now, and the one a new chat should start on while this one is busy (fleetAdvice.ts):
+// read while the menu is open on a draft, the same query the composer's strip reads.
+const { advice } = useFleetAdvice(() => conversation);
+const machineOf = (id: string) => advice.value?.machines.find((machine) => machine.runner === id);
+const suggested = computed(() => advice.value?.suggestion?.runner);
+const hereLine = computed(() => (advice.value === undefined ? t(`chat.chatPlacementMenu.runsOnMachineWorkspace`) : loadLine(advice.value.here)));
 
 // Other boxes are read only while this menu is open, the switcher popover's own rule: this store polls every
 // sandbox the account owns, so mounting only while watched is exactly what it's for.
@@ -36,14 +45,21 @@ const settled = computed(() => conversation.registered.value);
 
 // The row's line under the name: an outdated runner is still offered and says so — it still runs turns, and
 // updating first vs. running now is the user's call (Devices has the button).
-const detail = (runner: { online: boolean; parity: string; facts?: { cpus: number; load: number } }): string => {
+// With the fleet advice in hand the line is the machine's standing, or why this chat could not start there; without it
+// (a settled conversation, a daemon that predates it) the hello's own figures.
+const detail = (runner: { id: string; online: boolean; parity: string; facts?: { cpus: number; load: number } }): string => {
     if (!runner.online) {
         return t(`chat.chatPlacementMenu.runnerOffline`);
     }
+    const machine = machineOf(runner.id);
     const load =
-        runner.facts === undefined
-            ? t(`chat.chatPlacementMenu.runnerReady`)
-            : t(`chat.chatPlacementMenu.runnerLoad`, { cpus: runner.facts.cpus, load: runner.facts.load.toFixed(2) });
+        machine?.unfit !== undefined
+            ? unfitWords(machine.unfit)
+            : machine?.load !== undefined
+              ? loadLine(machine.load)
+              : runner.facts === undefined
+                ? t(`chat.chatPlacementMenu.runnerReady`)
+                : t(`chat.chatPlacementMenu.runnerLoad`, { cpus: runner.facts.cpus, load: runner.facts.load.toFixed(2) });
     return runner.parity === `outdated` ? `${load} · ${t(`chat.chatPlacementMenu.runnerOutdated`)}` : load;
 };
 
@@ -67,8 +83,10 @@ const placedAt = computed(() => {
         : t(`chat.chatPlacementMenu.placedOnRunner`, { name: pickedRunner.value });
 });
 
+// A pick here is the person's, which no automatic placement moves again (fleetAdvice.ts autoPlacement).
 const place = (at: { box?: string; runner?: string }): void => {
     if (placeConversation(conversation, at)) {
+        draftFleet(conversation).by = `person`;
         emit(`selected`);
     }
 };
@@ -90,7 +108,7 @@ const place = (at: { box?: string; runner?: string }): void => {
             />
             <span class="flex min-w-0 flex-col">
                 <span class="text-sm text-content md:text-xs">{{ t(`shared.thisSandbox`) }}</span>
-                <span class="text-2xs text-subtle">{{ t(`chat.chatPlacementMenu.runsOnMachineWorkspace`) }}</span>
+                <span class="text-2xs text-subtle">{{ hereLine }}</span>
             </span>
         </button>
         <button
@@ -103,8 +121,14 @@ const place = (at: { box?: string; runner?: string }): void => {
             @click="place({ runner: runner.id })"
         >
             <Icon name="desktop" class="mt-0.5 text-xs" :class="pickedRunner === runner.id ? 'text-primary-500' : 'text-subtle'" />
-            <span class="flex min-w-0 flex-col">
-                <span class="text-sm text-content md:text-xs">{{ runner.id }}</span>
+            <span class="flex min-w-0 flex-1 flex-col">
+                <span class="flex items-center gap-1.5">
+                    <span class="text-sm text-content md:text-xs">{{ runner.id }}</span>
+                    <!-- The machine the fleet would start this chat on, said where the person is already choosing. -->
+                    <span v-if="suggested === runner.id && !settled" class="rounded-full bg-primary-500/15 px-1.5 text-2xs font-medium text-link">{{
+                        t(`chat.fleetAdvice.suggested`)
+                    }}</span>
+                </span>
                 <span class="text-2xs text-subtle">{{ detail(runner) }}</span>
             </span>
         </button>

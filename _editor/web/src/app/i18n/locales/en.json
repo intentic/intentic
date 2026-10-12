@@ -3798,6 +3798,31 @@
             "suggestedWas": "Suggested: {way}.",
             "yourDefault": "Your default in Settings.",
             "notSaved": "That hand-off didn't save."
+        },
+        "fleetAdvice": {
+            "agentsOfSlots": "{agents} of {slots} agent slot used | {agents} of {slots} agent slots used",
+            "keepHere": "Keep it here",
+            "memoryFree": "{free} free",
+            "moved": "Starting on {machine}: this machine is busy ({why}).",
+            "movedPlain": "Starting on {machine}: this machine is busy.",
+            "notNow": "Not now",
+            "standingBusy": "Busy",
+            "standingCalm": "Has room",
+            "standingFull": "Full",
+            "startThere": "Start on {machine}",
+            "strainAgents": "{count} agent running | {count} agents running",
+            "strainBoth": "{first} and {second}",
+            "strainCpu": "its CPUs are saturated",
+            "strainMemory": "only {free} of memory free",
+            "strainMemoryShort": "memory is short",
+            "strainMemoryStall": "memory is stalling",
+            "suggest": "This machine is busy: {why}. {machine} has room for this session.",
+            "suggestPlain": "This machine is busy. {machine} has room for this session.",
+            "suggested": "Suggested",
+            "unfitAreas": "Your access is limited to areas a runner can't fence off",
+            "unfitCredentials": "This model signs in from here only; a Claude Code model can run there",
+            "unfitPrivacy": "The privacy shield keeps new sessions on this machine",
+            "unfitUnmeasured": "Hasn't said how big it is yet"
         }
     },
     "common": {
@@ -7319,7 +7344,15 @@
             "runsHereUntilBack": "{machine} is offline, so this runs here until it's back.",
             "runsOn": "Runs on",
             "sentHere": "Runs here: {kinds}",
-            "title": "Where heavy work runs"
+            "title": "Where heavy work runs",
+            "sessionsAuto": "Automatic",
+            "sessionsAutoDetail": "A new chat is placed on the machine with room, with a press to keep it here.",
+            "sessionsDetail": "When this sandbox is busy and a runner on another of your machines has room, a new chat can start there instead. Its work comes back here to land, like any runner's.",
+            "sessionsOff": "Off",
+            "sessionsOffDetail": "Nothing is said; you pick a machine yourself.",
+            "sessionsSuggest": "Suggest",
+            "sessionsSuggestDetail": "A line above the composer offers it, and you decide.",
+            "sessionsTitle": "New chats when this machine is busy"
         },
         "words": {
             "addSandbox": "Add sandbox",

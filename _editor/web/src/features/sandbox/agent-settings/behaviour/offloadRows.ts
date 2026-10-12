@@ -1,4 +1,4 @@
-import type { OffloadKind, RunnerSummary, SandboxSettings } from "@intentic/sandbox-contract";
+import type { OffloadKind, RunnerSummary, SandboxSettings, SessionsPlacement } from "@intentic/sandbox-contract";
 import type { PickerOption } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 
@@ -70,3 +70,14 @@ export const unavailableRunner = (runner: string | undefined, runners: readonly 
     }
     return known.online ? undefined : t(`sandbox.agentOffload.runsHereUntilBack`, { machine: runnerName(known) });
 };
+
+// "New chats when this machine is busy" (settings `offload.sessions`): what the composer does while this sandbox is busy
+// and a runner has room. Suggesting first, since it is the default and the one that moves nothing by itself.
+export const sessionsOptions = (): PickerOption<SessionsPlacement>[] => [
+    { value: `suggest`, label: t(`sandbox.agentOffload.sessionsSuggest`), icon: `sparkles`, description: t(`sandbox.agentOffload.sessionsSuggestDetail`) },
+    { value: `auto`, label: t(`sandbox.agentOffload.sessionsAuto`), icon: `bolt`, description: t(`sandbox.agentOffload.sessionsAutoDetail`) },
+    { value: `off`, label: t(`sandbox.agentOffload.sessionsOff`), icon: `server`, description: t(`sandbox.agentOffload.sessionsOffDetail`) },
+];
+
+// What a pick writes: the answer for new chats, with every command's target left as it was.
+export const withSessions = (offload: Offload, sessions: SessionsPlacement): Offload => ({ ...offload, sessions });

@@ -6,7 +6,7 @@ import { kindTitle } from "../../agent-settings/behaviour/offloadRows";
 // last offloaded run there ended. Empty for a runner nothing is sent to, which then reads as it always did.
 
 // The kinds sent to `runner`, in words.
-export const sentTo = (runner: string, offload: SandboxSettings[`offload`] | undefined, kinds: readonly OffloadKind[]): string[] =>
+export const sentTo = (runner: string, offload: Pick<SandboxSettings[`offload`], `commands`> | undefined, kinds: readonly OffloadKind[]): string[] =>
     offload === undefined
         ? []
         : Object.entries(offload.commands)

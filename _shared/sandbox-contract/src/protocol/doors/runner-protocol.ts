@@ -110,13 +110,22 @@ export type RunnerCredentialRefreshRequest = z.infer<typeof RunnerCredentialRefr
 export const RunnerCredentialRefreshSchema = z.object({ accessToken: z.string().optional() });
 export type RunnerCredentialRefresh = z.infer<typeof RunnerCredentialRefreshSchema>;
 
-// What a runner is, hardware-wise: what the placement picker shows and a future scheduler would weigh.
+// What a runner is, hardware-wise, and how full it is right now: what the placement picker shows and the fleet advice
+// (runners/fleet-advice.ts) weighs. Re-asked on demand rather than only at connect, so the live half stays live.
 export const RunnerFactsSchema = z.object({
     cpus: z.number().int().positive(),
     memoryMb: z.number().int().positive(),
     freeDiskMb: z.number().int().nonnegative(),
     // 0..1 over the last minute; a coarse busy signal for a picker, not a metrics feed.
     load: z.number().nonnegative(),
+    // The runner's own resource budget, the figures its turn door admits by: what is free under its memory limit, and
+    // that limit. Absent from a runner that predates them, which is then sized by `memoryMb` alone.
+    memoryFreeMb: z.number().int().nonnegative().optional(),
+    memoryLimitMb: z.number().int().positive().optional(),
+    // Pressure stall over the last ten seconds, in percent: anything waiting for a CPU, everything waiting on memory.
+    // Absent where the kernel does not report it.
+    cpuPressure: z.number().nonnegative().optional(),
+    memoryStall: z.number().nonnegative().optional(),
 });
 export type RunnerFacts = z.infer<typeof RunnerFactsSchema>;
 
