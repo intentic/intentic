@@ -403,15 +403,25 @@ export const SandboxSettingsSchema = z.object({
         .max(1)
         .default(0)
         .describe("What share of commands to leave untrimmed, so the saving can be measured against a real comparison rather than estimated."),
+    // The list every job runs on until it is given one of its own: one setting for the common case, where most jobs
+    // want the same models, so a new job in the catalog is served the day it ships. Empty by default, which reads
+    // exactly as a sandbox did before this field existed.
+    modelDefault: z
+        .array(ModelPinSchema)
+        .max(10)
+        .default([])
+        .describe(
+            "The models every job runs on unless `modelRoles` gives it a list of its own: commit messages, session titles, the safety judge, pipeline fixes and every other place this sandbox picks a model for you. Tried in order, so one spent account does not take a job down. Nothing is chosen for you: left empty, a one-shot job does not run and a whole session opens on whatever your own chat is set to.",
+        ),
     // One key, not one field per role: a role catalog entry (`model-roles.ts`) makes a new job configurable without a
     // schema change here.
     // `partialRecord`, not `record`: an exhaustive one would force every settings file to list every role, and adding
-    // one would invalidate them all. Absent IS "no list".
+    // one would invalidate them all. Absent IS "follows `modelDefault`"; present and empty is "no models", for one job.
     modelRoles: z
         .partialRecord(ModelRoleSchema, z.array(ModelPinSchema).max(10))
         .default({})
         .describe(
-            "Which models do which job, one ordered list per job: commit messages, session titles, the safety judge, pipeline fixes, and every other place this sandbox picks a model for you. Tried in order, so one spent account does not take a job down. Nothing is chosen for you: a one-shot job with no list does not run, and a whole session with no list opens on whatever your own chat is set to.",
+            "The jobs that do not run on `modelDefault`, each with its own ordered list. A job left out of this follows the default; a job listed with an empty list has no models at all: a one-shot job then does not run, and a whole session opens on whatever your own chat is set to.",
         ),
     // Folded into the router's prompt (agent/prompt/chat-router.ts), never into a turn's own. Capped small on
     // purpose: the reading runs under a 5s deadline, and this text is paid for on every chat that opens on Auto.

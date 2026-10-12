@@ -1,9 +1,9 @@
-// Pins that the on-screen order is what's written back, a knob moved on one entry lands only on that entry, and each
-// row writes only its own job's list, never a shared one. Mounted, since what's tested is the click-through round trip.
+// Pins that the page draws one row per list the jobs actually hold, that a row's edit lands on every job in it and on
+// nothing else, and that moving a job changes that job alone. Mounted, since what's tested is the click-through round
+// trip.
 import "@intentic/testing/dom";
 import {
     humanizeModelId,
-    MODEL_ROLE_BLOCKS,
     MODEL_ROLES,
     type ModelPin,
     type SandboxSettings,
@@ -17,11 +17,14 @@ import * as uiOriginal from "@intentic/ui";
 
 // useDevice reads window.matchMedia at import; environment.ts reads window.env.
 
-// Three representative roles: an ordinary one-shot (`commit-message`), one with an external switch (`safety-judge`),
-// and a session job (`pipeline-fix`); every other row is one of these shapes.
+// Representative jobs: ordinary one-shots (`commit-message`, `session-title`), one with an external switch
+// (`safety-judge`), the one with a second setting (`model-router`), and sessions (`pipeline-fix`, `refactor-run`).
 const COMMIT = `commit-message` as const;
+const TITLE = `session-title` as const;
 const JUDGE = `safety-judge` as const;
+const ROUTER = `model-router` as const;
 const RUN = `pipeline-fix` as const;
+const REFACTOR = `refactor-run` as const;
 
 const entry = (provider: string, model: string, rest: Record<string, unknown> = {}): ModelPin => ({ provider, model, ...rest }) as ModelPin;
 
@@ -64,14 +67,22 @@ jest.mock(`../../../chat/accounts/providerCatalog`, () => ({
 // Stubbed rather than mounted: what's under test is the wiring between a row and its list, not the real catalog. Props
 // are handed over live, so a test can watch an entry change under the open panel.
 let opened:
-    | { readonly open?: boolean; readonly header?: string; readonly pin?: unknown; readonly current?: unknown; readonly knobs?: boolean; readonly taken?: unknown }
+    | {
+          readonly open?: boolean;
+          readonly header?: string;
+          readonly pin?: unknown;
+          readonly current?: unknown;
+          readonly knobs?: boolean;
+          readonly taken?: unknown;
+          readonly helperJobs?: boolean;
+      }
     | undefined;
 let answer: { pick: (pin: unknown) => void; configure: (pin: unknown) => void } | undefined;
 jest.mock(`./ModelPinPicker.vue`, () => ({
     // `__esModule` so the SFC interop reads `.default` the way it would off the real component.
     __esModule: true,
     default: defineComponent({
-        props: { open: Boolean, anchor: Object, header: String, pin: Object, current: Object, knobs: Boolean, taken: Array },
+        props: { open: Boolean, anchor: Object, header: String, pin: Object, current: Object, knobs: Boolean, taken: Array, helperJobs: Boolean },
         emits: [`update:open`, `pick`, `configure`],
         setup(props, { emit }) {
             opened = props;
@@ -85,8 +96,17 @@ jest.mock(`./ModelPinPicker.vue`, () => ({
 // hands it and what it does with a save, not the document surface, which is `@intentic/ui`'s own.
 let doc: { readonly modelValue?: string; readonly stored?: string; readonly maxChars?: number } | undefined;
 let saveDoc: ((text: string) => void) | undefined;
+// The job panel's frame measures its anchor and shuts on a zero-size one, which every element in this DOM is; what is
+// under test is the panel's content and what its choices write, so the frame just draws its slot while open.
 jest.mock(`@intentic/ui`, () => ({
     ...uiOriginal,
+    ResponsiveOverlay: defineComponent({
+        props: { modelValue: Boolean, anchor: Object, header: String, panelClass: String, side: String },
+        emits: [`update:modelValue`],
+        setup(props, { slots }) {
+            return () => (props.modelValue ? h(`div`, { class: `job-panel` }, slots[`default`]?.()) : null);
+        },
+    }),
     MarkdownDocument: defineComponent({
         props: { modelValue: String, stored: String, maxChars: Number, placeholder: String, label: String, editable: Boolean, saving: Boolean },
         emits: [`update:modelValue`, `save`],
@@ -128,43 +148,11 @@ const flush = async (): Promise<void> => {
     await nextTick();
 };
 
-// One block's section, found by its heading; every group-scoped helper below goes through this.
-const group = (host: HTMLElement, label: string): HTMLElement =>
-    [...host.querySelectorAll<HTMLElement>(`section`)].find((section) => section.textContent?.includes(label))!;
-
-// A fresh record has every job agreeing, so groups default to the collapsed view; per-job-row tests must force Advanced
-// rather than rely on the fixture.
-const viewButton = (host: HTMLElement, block: string, label: string): HTMLButtonElement =>
-    [...group(host, block).querySelectorAll<HTMLButtonElement>(`[role="tablist"] button`)].find((button) => button.textContent?.trim() === label)!;
-
-const showJobs = async (host: HTMLElement, ...blocks: string[]): Promise<void> => {
-    for (const label of blocks.length > 0 ? blocks : MODEL_ROLE_BLOCKS.map((block) => block.label)) {
-        viewButton(host, label, `Advanced`).click();
-    }
-    await nextTick();
-};
-
-const showOneList = async (host: HTMLElement, ...blocks: string[]): Promise<void> => {
-    for (const label of blocks.length > 0 ? blocks : MODEL_ROLE_BLOCKS.map((block) => block.label)) {
-        viewButton(host, label, `Simple`).click();
-    }
-    await nextTick();
-};
-
-// Mounted with every group opened out, for tests about one job's own row.
-const mountJobs = async (): Promise<HTMLElement> => {
+const mountPage = async (): Promise<HTMLElement> => {
     const host = mount();
-    await Promise.resolve();
-    await showJobs(host);
+    await flush();
     return host;
 };
-
-// Every "Add a model for …" button, in document order; which exist is how a test tells the two views apart.
-const adders = (host: HTMLElement): string[] =>
-    [...host.querySelectorAll(`button`)].map((button) => button.getAttribute(`aria-label`) ?? ``).filter((label) => label.startsWith(`Add a model`));
-
-// The collapsed row's Add button, worded for the group rather than a job.
-const groupAdder = (block: { label: string }): string => `Add a model for every ${block.label.toLowerCase()} job`;
 
 afterEach(() => {
     app?.unmount();
@@ -179,793 +167,221 @@ afterEach(() => {
     patch.mockClear();
 });
 
-// Reading order off screen: one entry per row, in row order.
-const orderOnScreen = (host: HTMLElement): string[] =>
-    [...host.querySelectorAll(`ol li`)].map((row) => row.querySelector(`span.flex-1`)?.textContent?.trim() ?? ``).filter((text) => text !== ``);
+const labelOf = (role: string): string => MODEL_ROLES.find((spec) => spec.id === role)!.label;
+const ALL = MODEL_ROLES.map((role) => role.label);
 
-// By label, not position: the row's own name is a button too, so "first button in the row" is no longer stable.
-const rowButton = (host: HTMLElement, label: string): HTMLButtonElement =>
-    [...host.querySelectorAll<HTMLButtonElement>(`ol li button`)].find((button) => button.getAttribute(`aria-label`) === label)!;
+// Each row on the page, top to bottom: the jobs it names, and the element itself for scoping a press to it.
+const rows = (host: HTMLElement): HTMLElement[] => [...host.querySelectorAll<HTMLElement>(`section .group`)];
+const jobsOf = (row: HTMLElement): string[] =>
+    [...row.querySelectorAll(`li[id^="model-job-"] button > span:first-of-type`)].map((label) => label.textContent?.trim() ?? ``);
+const layoutOf = (host: HTMLElement): string[][] => rows(host).map(jobsOf);
+const rowWith = (host: HTMLElement, job: string): HTMLElement => rows(host).find((row) => jobsOf(row).includes(job))!;
+const sectionLabels = (host: HTMLElement): string[] =>
+    [...host.querySelectorAll(`section`)].map((section) => section.querySelector(`span`)?.textContent?.trim() ?? ``);
 
-const addButton = (host: HTMLElement, label: string): HTMLButtonElement =>
-    [...host.querySelectorAll<HTMLButtonElement>(`button`)].find((button) => button.getAttribute(`aria-label`) === label)!;
+// Reading order off screen: one entry per model, in list order.
+const orderOn = (scope: HTMLElement): string[] =>
+    [...scope.querySelectorAll(`ol li`)].map((row) => row.querySelector(`span.flex-1`)?.textContent?.trim() ?? ``).filter((text) => text !== ``);
 
-// Job name and its state chip, read structurally: both live in the title with no separating whitespace, so joined text
-// would misparse.
-const chips = (host: HTMLElement): Record<string, string> =>
-    Object.fromEntries(
-        [...host.querySelectorAll(`[class*="font-medium"] > span`)].map((title) => [
-            title.firstElementChild?.textContent?.trim() ?? ``,
-            title.childElementCount > 1 ? (title.lastElementChild?.textContent?.trim() ?? ``) : ``,
-        ]),
-    );
+const button = (scope: HTMLElement, label: string): HTMLButtonElement =>
+    [...scope.querySelectorAll<HTMLButtonElement>(`button`)].find((candidate) => candidate.getAttribute(`aria-label`) === label)!;
 
-// Chip wording for an empty list, by job kind: a one-shot doesn't run at all, a session falls back to the chat's own
-// model.
-const unsetChip = (kind: string): string => (kind === `helper` ? `off` : `chat default`);
+// A button by the words on it, for the row's verbs, which say what they do rather than carry a hidden name.
+const pressed = (scope: HTMLElement, text: string): HTMLButtonElement =>
+    [...scope.querySelectorAll<HTMLButtonElement>(`button`)].find((candidate) => candidate.textContent?.trim() === text)!;
 
-test("draws a row per declared role", async () => {
-    const host = await mountJobs();
+const chip = (host: HTMLElement, job: string): HTMLButtonElement =>
+    [...host.querySelectorAll<HTMLButtonElement>(`li[id^="model-job-"] button`)].find(
+        (candidate) => candidate.querySelector(`span`)?.textContent?.trim() === job,
+    )!;
 
-    const named = chips(host);
-    for (const role of MODEL_ROLES) {
-        expect(Object.keys(named), role.id).toContain(role.label);
-    }
-    for (const role of MODEL_ROLES) {
-        expect(adders(host), role.id).toContain(`Add a model for ${role.label.toLowerCase()}`);
-    }
+// The open job panel's choices, by their first line, and which one is ticked.
+const choices = (): string[] => [...document.querySelectorAll(`.job-panel [role="radio"] span span:first-child`)].map((line) => line.textContent?.trim() ?? ``);
+const ticked = (): string | undefined =>
+    document.querySelector(`.job-panel [role="radio"][aria-checked="true"] span span:first-child`)?.textContent?.trim() ?? undefined;
+const choose = async (label: string): Promise<void> => {
+    [...document.querySelectorAll<HTMLButtonElement>(`.job-panel [role="radio"]`)].find((choice) => choice.querySelector(`span span`)?.textContent?.trim() === label)!.click();
+    await flush();
+};
+const openJob = async (host: HTMLElement, job: string): Promise<void> => {
+    chip(host, job).click();
+    await flush();
+};
+
+const haiku = entry(`claude`, `claude-haiku-4-5`);
+const luna = entry(`codex`, `gpt-5.6`);
+
+/* ROWS ARE THE LISTS THE JOBS HOLD */
+
+test("a fresh sandbox is one row: the default, with every job on it", async () => {
+    const host = await mountPage();
+
+    expect(layoutOf(host)).toEqual([ALL]);
+    expect(sectionLabels(host)).toEqual([`Default models`]);
 });
 
-test("draws one group per declared block, in order, holding exactly that block's rows", async () => {
-    const host = await mountJobs();
+test("jobs holding the same list are one row, however their work is started", async () => {
+    settings.value = {
+        ...settings.value,
+        modelDefault: [haiku],
+        modelRoles: { [RUN]: [luna], [REFACTOR]: [luna], [TITLE]: [luna] },
+    };
+    const host = await mountPage();
 
-    const sections = [...host.querySelectorAll(`section`)];
-    for (const [index, block] of MODEL_ROLE_BLOCKS.entries()) {
-        const section = sections[index];
-        expect(section?.textContent, block.id).toContain(block.label);
-
-        expect(adders(section as HTMLElement), block.id).toEqual(block.roles.map((role) => `Add a model for ${role.label.toLowerCase()}`));
-    }
-
-    // Every section is a block: this page is jobs and nothing else, and a job's own settings ride its row.
-    expect(sections).toHaveLength(MODEL_ROLE_BLOCKS.length);
+    expect(layoutOf(host)).toEqual([ALL.filter((job) => ![RUN, REFACTOR, TITLE].map(labelOf).includes(job)), [labelOf(TITLE), labelOf(RUN), labelOf(REFACTOR)]]);
+    expect(sectionLabels(host)).toEqual([`Default models`, `Separate lists`]);
+    // Each list drawn once, however many jobs hold it.
+    expect(orderOn(rowWith(host, labelOf(RUN)))).toEqual([`CODEX · GPT 5.6 Luna`]);
 });
 
-test("a job's glyph and its tick share one slot", async () => {
-    const host = await mountJobs();
+test("jobs holding the same models in a different order are two rows", async () => {
+    settings.value = { ...settings.value, modelRoles: { [RUN]: [luna, haiku], [REFACTOR]: [haiku, luna] } };
+    const host = await mountPage();
 
-    // PrimeVue wraps the checkbox; the slot is that wrapper's parent.
-    const slot = tickBox(host, `Select commit messages`).closest(`.p-checkbox`)?.parentElement;
-
-    expect(slot?.querySelector(`i`)).not.toBeNull();
-    expect(slot?.querySelector(`.p-checkbox`)?.classList.contains(`hidden`)).toBe(false);
+    expect(layoutOf(host).slice(1)).toEqual([[labelOf(RUN)], [labelOf(REFACTOR)]]);
 });
 
-// Also checks that each block keeps the catalog's own order, so rows can't be silently re-sorted here.
-test("reads in order of reach: one-shots first, then whole sessions", async () => {
-    const host = await mountJobs();
-
-    // Read off Add buttons, not headings: labels are already pinned above, and a title `div` has no stable selector.
-    const order = adders(host);
-    const at = (label: string): number => order.indexOf(label);
-    const roleAt = (kind: string): number[] =>
-        MODEL_ROLES.filter((role) => role.kind === kind).map((role) => at(`Add a model for ${role.label.toLowerCase()}`));
-
-    const helpers = roleAt(`helper`);
-    const runs = roleAt(`run`);
-
-    expect(helpers).not.toContain(-1);
-    expect(runs).not.toContain(-1);
-    expect(Math.max(...helpers)).toBeLessThan(Math.min(...runs));
-    expect(runs).toContain(order.length - 1);
-    expect([...helpers, ...runs]).toEqual([...helpers, ...runs].toSorted((left, right) => left - right));
-});
-
-// Checks both connected fixtures by name, not just one, so a resolver that started guessing again couldn't half-pass.
-test("names no model at all for a one-shot job nobody has set one for", async () => {
-    const host = await mountJobs();
-
-    expect(chips(host)[`Commit messages`]).toBe(`off`);
-    expect(host.textContent).not.toContain(`Claude Haiku 4.5`);
-    expect(host.textContent).not.toContain(`GPT 5.6 Luna`);
-    expect(orderOnScreen(host)).toEqual([]);
-});
-
-test("an unset job states itself in a chip beside its name, not in a paragraph under it", async () => {
-    const host = await mountJobs();
-
-    const stated = chips(host);
-    for (const role of MODEL_ROLES) {
-        expect(stated[role.label], role.id).toBe(unsetChip(role.kind));
-    }
-    expect(host.textContent).not.toContain(`Not set`);
-    expect(host.textContent).not.toContain(`Composer default`);
-});
-
-test("a job with models drops the chip, because its list already says what it will do", async () => {
-    settings.value = { ...settings.value, modelRoles: { [COMMIT]: [entry(`codex`, `gpt-5.6`)] } };
-    const host = await mountJobs();
-
-    expect(chips(host)[`Commit messages`]).toBe(``);
-    expect(chips(host)[`Session titles`]).toBe(unsetChip(`helper`));
-});
-
-test("says nothing about a job until the settings have landed", async () => {
+test("an empty list says what its jobs do without one, once the settings have landed", async () => {
     settings.value = undefined as unknown as SandboxSettings;
-    const host = await mountJobs();
-
-    expect(chips(host)[`Commit messages`]).toBe(``);
-    expect(chips(host)[`Pipeline fixes`]).toBe(``);
-});
-
-test("shows the pinned models in the order the setting holds them", async () => {
-    settings.value = { ...settings.value, modelRoles: { [COMMIT]: [entry(`codex`, `gpt-5.6`), entry(`claude`, `claude-haiku-4-5`)] } };
-    const host = await mountJobs();
-
-    expect(orderOnScreen(host)).toEqual([`CODEX · GPT 5.6 Luna`, `CLAUDE · Claude Haiku 4.5`]);
-});
-
-test("moving one earlier writes the whole new order back", async () => {
-    settings.value = { ...settings.value, modelRoles: { [COMMIT]: [entry(`codex`, `gpt-5.6`), entry(`claude`, `claude-haiku-4-5`)] } };
-    const host = await mountJobs();
-
-    // First row's button is disabled outright, not a no-op that looks live.
-    expect(rowButton(host, `Move CODEX · GPT 5.6 Luna earlier`).disabled).toBe(true);
-    rowButton(host, `Move CLAUDE · Claude Haiku 4.5 earlier`).click();
-
-    expect(patch).toHaveBeenCalledWith({ modelRoles: { [COMMIT]: [entry(`claude`, `claude-haiku-4-5`), entry(`codex`, `gpt-5.6`)] } });
-});
-
-test("removing the last one empties the list, which is how a job gets switched off", async () => {
-    settings.value = { ...settings.value, modelRoles: { [COMMIT]: [entry(`codex`, `gpt-5.6`)] } };
-    const host = await mountJobs();
-
-    rowButton(host, `Remove CODEX · GPT 5.6 Luna`).click();
-
-    expect(patch).toHaveBeenCalledWith({ modelRoles: { [COMMIT]: [] } });
-});
-
-test("keeps a pin whose account went away on screen, and says why it is greyed", async () => {
-    settings.value = { ...settings.value, modelRoles: { [COMMIT]: [entry(`gemini`, `gemini-3-flash-lite`), entry(`claude`, `claude-haiku-4-5`)] } };
-    const host = await mountJobs();
-
-    expect(orderOnScreen(host)).toEqual([`GEMINI · Gemini 3 Flash Lite`, `CLAUDE · Claude Haiku 4.5`]);
-    const disconnected = host.querySelector(`ol li`) as HTMLElement;
-    expect(disconnected?.className).toMatch(/opacity|subtle|disabled/i);
-});
-
-test("the judge row writes its own setting, never another job's", async () => {
-    const host = await mountJobs();
-
-    addButton(host, `Add a model for safety judge`).click();
-    await flush();
-    answer?.pick({ provider: `claude`, model: `claude-haiku-4-5` });
-
-    expect(patch).toHaveBeenCalledWith({ modelRoles: { [JUDGE]: [entry(`claude`, `claude-haiku-4-5`)] } });
-    expect(patch.mock.calls.at(-1)?.[0]?.modelRoles?.[COMMIT]).toBeUndefined();
-});
-
-test("a pinned judge model is drawn as written, and removing it empties its own list", async () => {
-    settings.value = { ...settings.value, modelRoles: { [JUDGE]: [entry(`codex`, `gpt-5.6`)] } };
-    const host = await mountJobs();
-
-    expect(orderOnScreen(host)).toEqual([`CODEX · GPT 5.6 Luna`]);
-
-    rowButton(host, `Remove CODEX · GPT 5.6 Luna`).click();
-    expect(patch).toHaveBeenCalledWith({ modelRoles: { [JUDGE]: [] } });
-});
-
-test("goes inert with the judge, and says where the switch is", async () => {
-    settings.value = { ...settings.value, commandJudge: `off` };
-    const host = await mountJobs();
-
-    expect(addButton(host, `Add a model for safety judge`).disabled).toBe(true);
-    const link = [...host.querySelectorAll<HTMLAnchorElement>(`a[href]`)].find((anchor) => anchor.textContent?.includes(`Turn the judge on`));
-    expect(link?.getAttribute(`href`)).toBe(`/sandbox/agent?section=safety`);
-});
-
-test("the judge row stays live while the judge is merely watching", async () => {
-    // Watch mode still spends a model on every flagged command, so the row must stay pressable.
-    settings.value = { ...settings.value, commandJudge: `watch` };
-    const host = await mountJobs();
-
-    expect(addButton(host, `Add a model for safety judge`).disabled).toBe(false);
-});
-
-test("an agent-run entry names its own tier, and one left at the provider's default names nothing", async () => {
-    settings.value = {
-        ...settings.value,
-        modelRoles: {
-            [RUN]: [
-                { provider: `claude`, model: `claude-haiku-4-5`, effort: `high` },
-                { provider: `codex`, model: `gpt-5.6` },
-            ],
-        },
-    };
-    const host = await mountJobs();
-
-    const rows = [...host.querySelectorAll(`ol li`)].map((row) => row.textContent?.replace(/\s+/g, ` `).trim() ?? ``);
-    expect(rows[0]).toContain(`High`);
-    expect(rows[1]).toContain(`GPT 5.6 Luna`);
-    expect(rows[1]).not.toMatch(/High|Low|thinking/);
-});
-
-test("a tier off the model's own scale is drawn as the one that will actually run", async () => {
-    // Claude rejects `max` with thinking off, so the row must show what will actually run, not the stored pick.
-    settings.value = {
-        ...settings.value,
-        modelRoles: { [RUN]: [{ provider: `claude`, model: `claude-haiku-4-5`, effort: `max`, thinking: false }] },
-    };
-    const host = await mountJobs();
-
-    expect(host.querySelector(`ol li`)?.textContent).toContain(`X-High`);
-    expect(settings.value.modelRoles[RUN]?.[0]?.effort).toBe(`max`);
-});
-
-test("an entry that pinned no thinking keeps the top tier it asked for", async () => {
-    settings.value = { ...settings.value, modelRoles: { [RUN]: [{ provider: `claude`, model: `claude-haiku-4-5`, effort: `max` }] } };
-    const host = await mountJobs();
-
-    expect(host.querySelector(`ol li`)?.textContent).toContain(`Max`);
-});
-
-test("pressing an agent-run row opens the picker over that entry, with its knobs", async () => {
-    settings.value = {
-        ...settings.value,
-        modelRoles: {
-            [RUN]: [
-                { provider: `codex`, model: `gpt-5.6` },
-                { provider: `claude`, model: `claude-haiku-4-5`, effort: `low` },
-            ],
-        },
-    };
-    const host = await mountJobs();
-
-    rowButton(host, `Change CLAUDE · Claude Haiku 4.5`).click();
-    await flush();
-
-    expect(opened?.pin).toEqual({ provider: `claude`, model: `claude-haiku-4-5`, effort: `low` });
-    expect(opened?.knobs).toBe(true);
-    expect(opened?.taken).toEqual([`codex:gpt-5.6`, `claude:claude-haiku-4-5`]);
-});
-
-test("a one-shot row opens the picker with knobs, because its job now honours them", async () => {
-    settings.value = { ...settings.value, modelRoles: { [COMMIT]: [entry(`codex`, `gpt-5.6`)] } };
-    const host = await mountJobs();
-
-    rowButton(host, `Change CODEX · GPT 5.6 Luna`).click();
-    await flush();
-
-    expect(opened?.pin).toEqual({ provider: `codex`, model: `gpt-5.6` });
-    expect(opened?.knobs).toBe(true);
-});
-
-test("a knob moved in the picker lands on that entry alone", async () => {
-    settings.value = {
-        ...settings.value,
-        modelRoles: {
-            [RUN]: [
-                { provider: `codex`, model: `gpt-5.6`, effort: `high` },
-                { provider: `claude`, model: `claude-haiku-4-5` },
-            ],
-        },
-    };
-    const host = await mountJobs();
-    rowButton(host, `Change CLAUDE · Claude Haiku 4.5`).click();
-    await flush();
-
-    answer?.configure({ provider: `claude`, model: `claude-haiku-4-5`, effort: `max`, thinking: true });
-
-    expect(patch).toHaveBeenCalledWith({
-        modelRoles: {
-            [RUN]: [
-                { provider: `codex`, model: `gpt-5.6`, effort: `high` },
-                { provider: `claude`, model: `claude-haiku-4-5`, effort: `max`, thinking: true },
-            ],
-        },
-    });
-    // Confirms the panel stays open and re-reads the entry's new state live.
-    await flush();
-    expect(opened?.pin).toEqual({ provider: `claude`, model: `claude-haiku-4-5`, effort: `max`, thinking: true });
-});
-
-test("re-pointing an entry replaces it where it stands, because its position is the other half of the setting", async () => {
-    settings.value = {
-        ...settings.value,
-        modelRoles: {
-            [RUN]: [
-                { provider: `codex`, model: `gpt-5.6` },
-                { provider: `claude`, model: `claude-haiku-4-5`, effort: `low` },
-            ],
-        },
-    };
-    const host = await mountJobs();
-    rowButton(host, `Change CODEX · GPT 5.6 Luna`).click();
-    await flush();
-
-    answer?.pick({ provider: `claude`, model: `claude-opus-5`, effort: `max` });
-
-    expect(patch).toHaveBeenCalledWith({
-        modelRoles: {
-            [RUN]: [
-                { provider: `claude`, model: `claude-opus-5`, effort: `max` },
-                { provider: `claude`, model: `claude-haiku-4-5`, effort: `low` },
-            ],
-        },
-    });
-});
-
-test("adding appends to the end of the order, and leaves every other job's list standing", async () => {
-    const host = await mountJobs();
-
-    addButton(host, `Add a model for pipeline fixes`).click();
-    await flush();
-    expect(opened?.pin).toBeUndefined();
-    answer?.pick({ provider: `claude`, model: `claude-haiku-4-5`, effort: `high` });
-    expect(patch).toHaveBeenCalledWith({ modelRoles: { [RUN]: [{ provider: `claude`, model: `claude-haiku-4-5`, effort: `high` }] } });
-
-    addButton(host, `Add a model for commit messages`).click();
-    await flush();
-    answer?.pick({ provider: `codex`, model: `gpt-5.6` });
-    expect(patch).toHaveBeenCalledWith({
-        modelRoles: {
-            [RUN]: [{ provider: `claude`, model: `claude-haiku-4-5`, effort: `high` }],
-            [COMMIT]: [entry(`codex`, `gpt-5.6`)],
-        },
-    });
-});
-
-// PrimeVue wraps the checkbox input; the aria-label rides the input itself, which a click must target.
-const tickBox = (host: HTMLElement, label: string): HTMLInputElement =>
-    [...host.querySelectorAll<HTMLInputElement>(`input[type="checkbox"]`)].find((box) => box.getAttribute(`aria-label`) === label)!;
-
-const tick = (host: HTMLElement, label: string): void => {
-    const box = tickBox(host, label);
-    box.checked = true;
-    box.dispatchEvent(new Event(`change`, { bubbles: true }));
-};
-
-// By button text, not a container id: the header is a `<RowGroup>` slot, not a landmark of its own.
-const groupButton = (host: HTMLElement, block: string, label: string): HTMLButtonElement =>
-    [...group(host, block).querySelectorAll<HTMLButtonElement>(`button`)].find((button) => button.textContent?.includes(label))!;
-
-// A group's verb buttons, matched by their text.
-const verbs = (host: HTMLElement, block: string): string[] =>
-    [...group(host, block).querySelectorAll(`button`)]
-        .map((button) => button.textContent?.replace(/\s+/g, ` `).trim() ?? ``)
-        .filter((label) => label.includes(`Set a model for all`) || label.includes(`Clear models`));
-
-// Named via the catalog, not transcribed, so a role moving blocks doesn't go stale here.
-const HELPERS = MODEL_ROLE_BLOCKS[0]!;
-const PRESSED = MODEL_ROLE_BLOCKS[1]!;
-
-// Only the tick and the job's name select a row. The row was once a whole `<label>`, and a press on its description or
-// note ticked a checkbox nobody could see: nine presses on the safety judge's note toggled "1 selected" on and off.
-
-// The job's name, by its text: the first element of the title.
-const nameOf = (host: HTMLElement, label: string): HTMLElement =>
-    [...host.querySelectorAll<HTMLElement>(`[class*="font-medium"] > span > :first-child`)].find((name) => name.textContent?.trim() === label)!;
-// The row's own element, by job name.
-const rowOf = (host: HTMLElement, label: string): HTMLElement => nameOf(host, label).closest(`.group`)!;
-
-// A press as the browser delivers it, default action included: a `<label>` forwards it to its control.
-const press = (target: Element): void => {
-    target.dispatchEvent(new MouseEvent(`click`, { bubbles: true, cancelable: true }));
-};
-
-test("a press on a job's description or note leaves it unticked; its name ticks it", async () => {
-    const host = await mountJobs();
-
-    const row = rowOf(host, `Commit messages`);
-    expect(row.tagName).toBe(`DIV`);
-    expect(row.closest(`label`)).toBeNull();
-
-    // The row's description: the point in the row furthest from the tick box.
-    press(row.querySelector(`p`)!);
-    await nextTick();
-    expect(tickBox(host, `Select commit messages`).checked).toBe(false);
-    expect(verbs(host, HELPERS.label)).toEqual([]);
-
-    // The judge's note, the text actually pressed nine times.
-    const judge = rowOf(host, `Safety judge`);
-    press([...judge.querySelectorAll(`p`)].at(-1)!);
-    await nextTick();
-    expect(tickBox(host, `Select safety judge`).checked).toBe(false);
-
-    // The name is a label for the tick alone.
-    const name = nameOf(host, `Commit messages`);
-    expect([name.tagName, name.getAttribute(`for`)]).toEqual([`LABEL`, tickBox(host, `Select commit messages`).id]);
-});
-
-test("the Add button opens the picker without ticking the job it belongs to", async () => {
-    const host = await mountJobs();
-
-    addButton(host, `Add a model for commit messages`).click();
-    await flush();
-
-    expect(opened?.pin).toBeUndefined();
-    expect(tickBox(host, `Select commit messages`).checked).toBe(false);
-});
-
-test("a press on the pinned list stays in the list rather than ticking the job under it", async () => {
-    settings.value = { ...settings.value, modelRoles: { [COMMIT]: [entry(`codex`, `gpt-5.6`)] } };
-    const host = await mountJobs();
-
-    rowButton(host, `Remove CODEX · GPT 5.6 Luna`).click();
-    await nextTick();
-
-    expect(patch).toHaveBeenCalledWith({ modelRoles: { [COMMIT]: [] } });
-    expect(tickBox(host, `Select commit messages`).checked).toBe(false);
-});
-
-test("no bulk verbs until something is ticked, and then only in that group's header", async () => {
-    const host = await mountJobs();
-
-    expect(verbs(host, HELPERS.label)).toEqual([]);
-    expect(verbs(host, PRESSED.label)).toEqual([]);
-
-    tick(host, `Select commit messages`);
-    await nextTick();
-
-    expect(verbs(host, HELPERS.label)).toEqual([`Set a model for all…`, `Clear models`]);
-    expect(verbs(host, PRESSED.label)).toEqual([]);
-});
-
-test("one pick lands on every ticked job in that group, in one patch, and never on another group's", async () => {
-    // Starts with an existing entry, so the write must be visibly an append, not a replacement.
-    settings.value = { ...settings.value, modelRoles: { [COMMIT]: [entry(`codex`, `gpt-5.6`)] } };
-    const host = await mountJobs();
-
-    tick(host, `Select commit messages`);
-    tick(host, `Select session titles`);
-    // Ticked in a different block, from the helpers' header: must not be written.
-    tick(host, `Select pipeline fixes`);
-    await nextTick();
-    groupButton(host, HELPERS.label, `Set a model for all`).click();
-    await flush();
-    answer?.pick({ provider: `claude`, model: `claude-haiku-4-5` });
-
-    expect(patch).toHaveBeenCalledTimes(1);
-    expect(patch).toHaveBeenCalledWith({
-        modelRoles: {
-            [COMMIT]: [entry(`codex`, `gpt-5.6`), entry(`claude`, `claude-haiku-4-5`)],
-            [`session-title`]: [entry(`claude`, `claude-haiku-4-5`)],
-        },
-    });
-    expect(patch.mock.calls.at(-1)?.[0]?.modelRoles?.[RUN]).toBeUndefined();
-    expect(patch.mock.calls.at(-1)?.[0]?.modelRoles?.[JUDGE]).toBeUndefined();
-});
-
-test("the effort chosen after the model reaches the same entry in every ticked job", async () => {
-    const host = await mountJobs();
-
-    tick(host, `Select commit messages`);
-    tick(host, `Select session titles`);
-    await nextTick();
-    groupButton(host, HELPERS.label, `Set a model for all`).click();
-    await flush();
-    answer?.pick({ provider: `claude`, model: `claude-haiku-4-5` });
-    await flush();
-
-    expect(host.querySelector(`.pin-picker`)).not.toBeNull();
-    expect(opened?.pin).toEqual(entry(`claude`, `claude-haiku-4-5`));
-
-    answer?.configure({ provider: `claude`, model: `claude-haiku-4-5`, effort: `low` });
-
-    expect(patch).toHaveBeenLastCalledWith({
-        modelRoles: {
-            [COMMIT]: [{ provider: `claude`, model: `claude-haiku-4-5`, effort: `low` }],
-            [`session-title`]: [{ provider: `claude`, model: `claude-haiku-4-5`, effort: `low` }],
-        },
-    });
-});
-
-test("picking again supersedes the model the same panel just wrote", async () => {
-    const host = await mountJobs();
-
-    tick(host, `Select commit messages`);
-    await nextTick();
-    groupButton(host, HELPERS.label, `Set a model for all`).click();
-    await flush();
-    answer?.pick({ provider: `claude`, model: `claude-haiku-4-5` });
-    answer?.pick({ provider: `codex`, model: `gpt-5.6` });
-
-    expect(patch).toHaveBeenLastCalledWith({ modelRoles: { [COMMIT]: [entry(`codex`, `gpt-5.6`)] } });
-});
-
-test("clearing the ticked jobs empties their lists, which is how several jobs are switched off at once", async () => {
-    settings.value = {
-        ...settings.value,
-        modelRoles: { [COMMIT]: [entry(`codex`, `gpt-5.6`)], [JUDGE]: [entry(`claude`, `claude-haiku-4-5`)] },
-    };
-    const host = await mountJobs();
-
-    tick(host, `Select commit messages`);
-    await nextTick();
-    groupButton(host, HELPERS.label, `Clear models`).click();
-
-    expect(patch).toHaveBeenCalledWith({ modelRoles: { [COMMIT]: [], [JUDGE]: [entry(`claude`, `claude-haiku-4-5`)] } });
-});
-
-test("a group's master box ticks that block's jobs, and only those", async () => {
-    const host = await mountJobs();
-
-    tick(host, `Select every job under ${HELPERS.label.toLowerCase()}`);
-    await nextTick();
-    groupButton(host, HELPERS.label, `Set a model for all`).click();
-    await flush();
-    answer?.pick({ provider: `claude`, model: `claude-haiku-4-5` });
-
-    const written = patch.mock.calls.at(-1)?.[0]?.modelRoles ?? {};
-    expect(Object.keys(written).toSorted()).toEqual(HELPERS.roles.map((role) => role.id).toSorted());
-});
-
-test("one group's master box does not tick another group's", async () => {
-    const host = await mountJobs();
-
-    tick(host, `Select every job under ${HELPERS.label.toLowerCase()}`);
-    await nextTick();
-
-    expect(verbs(host, PRESSED.label)).toEqual([]);
-    for (const role of PRESSED.roles) {
-        expect(tickBox(host, `Select ${role.label.toLowerCase()}`).checked, role.id).toBe(false);
-    }
-});
-
-// Every job of a block holding the same list: the case the collapsed view opens for.
-const allOf = (block: { readonly roles: readonly { readonly id: string }[] }, pins: ModelPin[]): SandboxSettings[`modelRoles`] =>
-    Object.fromEntries(block.roles.map((role) => [role.id, pins])) as SandboxSettings[`modelRoles`];
-
-test("a group opens as one list while its jobs agree, and offers nothing per job", async () => {
-    const host = mount();
-    await Promise.resolve();
-
-    expect(adders(group(host, HELPERS.label))).toEqual([groupAdder(HELPERS)]);
-    expect(group(host, HELPERS.label).textContent).toContain(`One list for all ${HELPERS.roles.length} jobs`);
-    // Jobs stay named in the group text, since a row writing five settings owes their names.
-    for (const role of HELPERS.roles) {
-        expect(group(host, HELPERS.label).textContent, role.id).toContain(role.label);
-    }
-});
-
-test("one model picked there lands on every job of that block, in one patch, and on no other block's", async () => {
-    const host = mount();
-    await Promise.resolve();
-
-    addButton(host, groupAdder(HELPERS)).click();
-    await flush();
-    answer?.pick({ provider: `claude`, model: `claude-haiku-4-5` });
-
-    expect(patch).toHaveBeenCalledTimes(1);
-    expect(patch).toHaveBeenCalledWith({ modelRoles: allOf(HELPERS, [entry(`claude`, `claude-haiku-4-5`)]) });
-    expect(patch.mock.calls.at(-1)?.[0]?.modelRoles?.[RUN]).toBeUndefined();
-});
-
-test("draws the block's order once, however many jobs are holding it", async () => {
-    settings.value = { ...settings.value, modelRoles: allOf(HELPERS, [entry(`codex`, `gpt-5.6`), entry(`claude`, `claude-haiku-4-5`)]) };
-    const host = mount();
-    await Promise.resolve();
-
-    expect(orderOnScreen(host)).toEqual([`CODEX · GPT 5.6 Luna`, `CLAUDE · Claude Haiku 4.5`]);
-});
-
-test("a change made in the collapsed list gives every job of the block exactly that list", async () => {
-    settings.value = { ...settings.value, modelRoles: allOf(HELPERS, [entry(`codex`, `gpt-5.6`)]) };
-    const host = mount();
-    await Promise.resolve();
-
-    rowButton(host, `Remove CODEX · GPT 5.6 Luna`).click();
-
-    expect(patch).toHaveBeenCalledWith({ modelRoles: allOf(HELPERS, []) });
-});
-
-test("a block whose jobs already differ opens showing them apart, and its neighbours stay as one list", async () => {
-    settings.value = { ...settings.value, modelRoles: { [COMMIT]: [entry(`codex`, `gpt-5.6`)] } };
-    const host = mount();
-    await Promise.resolve();
-
-    expect(adders(group(host, HELPERS.label))).toEqual(HELPERS.roles.map((role) => `Add a model for ${role.label.toLowerCase()}`));
-    expect(adders(group(host, PRESSED.label))).toEqual([groupAdder(PRESSED)]);
-});
-
-test("collapsed over jobs that differ, it shows only what every one of them holds, and says so", async () => {
-    const shared = entry(`codex`, `gpt-5.6`);
-    settings.value = {
-        ...settings.value,
-        modelRoles: { ...allOf(HELPERS, [shared]), [COMMIT]: [shared, entry(`claude`, `claude-haiku-4-5`)] },
-    };
-    const host = mount();
-    await Promise.resolve();
-    await showOneList(host, HELPERS.label);
-
-    expect(orderOnScreen(host)).toEqual([`CODEX · GPT 5.6 Luna`]);
-    expect(chips(host)[`One list for all ${HELPERS.roles.length} jobs`]).toBe(`jobs differ`);
-});
-
-// Knobs no runtime outside Claude reads: `thinking` is a Claude control and `fast` needs the Claude Code loop, so a
-// stored one is a field the turn never looks at. Blocks must be compared as the run reads them, not as written.
-test("jobs differing only by a knob this provider cannot run still open as one list", async () => {
-    settings.value = {
-        ...settings.value,
-        modelRoles: {
-            ...allOf(HELPERS, [entry(`codex`, `gpt-5.6`, { effort: `low` })]),
-            [COMMIT]: [entry(`codex`, `gpt-5.6`, { effort: `low`, thinking: true, fast: false })],
-        },
-    };
-    const host = mount();
-    await Promise.resolve();
-
-    expect(adders(group(host, HELPERS.label))).toEqual([groupAdder(HELPERS)]);
-    expect(orderOnScreen(host)).toEqual([`CODEX · GPT 5.6 Luna`]);
-    expect(group(host, HELPERS.label).textContent).not.toContain(`jobs differ`);
-});
-
-test("a collapsed edit writes those jobs the pin the run reads, not the knobs it ignores", async () => {
-    settings.value = {
-        ...settings.value,
-        modelRoles: allOf(HELPERS, [entry(`codex`, `gpt-5.6`, { effort: `low`, thinking: true, fast: false })]),
-    };
-    const host = mount();
-    await Promise.resolve();
-
-    addButton(host, groupAdder(HELPERS)).click();
-    await flush();
-    answer?.pick({ provider: `claude`, model: `claude-haiku-4-5` });
-
-    expect(patch).toHaveBeenCalledWith({
-        modelRoles: allOf(HELPERS, [entry(`codex`, `gpt-5.6`, { effort: `low` }), entry(`claude`, `claude-haiku-4-5`)]),
-    });
-});
-
-test("collapsing a group takes its ticks with it, and leaves the other groups as they were", async () => {
-    const host = await mountJobs();
-
-    tick(host, `Select commit messages`);
-    await nextTick();
-    expect(verbs(host, HELPERS.label)).toEqual([`Set a model for all…`, `Clear models`]);
-
-    await showOneList(host, HELPERS.label);
-
-    expect(adders(group(host, HELPERS.label))).toEqual([groupAdder(HELPERS)]);
-    expect(adders(group(host, PRESSED.label))).toEqual(PRESSED.roles.map((role) => `Add a model for ${role.label.toLowerCase()}`));
-
-    await showJobs(host, HELPERS.label);
-    expect(tickBox(host, `Select commit messages`).checked).toBe(false);
-    expect(verbs(host, HELPERS.label)).toEqual([]);
-});
-
-// Every helper but the judge holding one list: the state reached by setting live rows while the judge is off.
-const liveHelpers = (pins: ModelPin[]): SandboxSettings[`modelRoles`] =>
-    Object.fromEntries(HELPERS.roles.filter((role) => role.id !== JUDGE).map((role) => [role.id, pins])) as SandboxSettings[`modelRoles`];
-
-test("a block whose only odd job is switched off still opens as one list, and says nothing about differing", async () => {
-    settings.value = { ...settings.value, commandJudge: `off`, modelRoles: liveHelpers([entry(`codex`, `gpt-5.6`)]) };
-    const host = mount();
-    await Promise.resolve();
-
-    expect(adders(group(host, HELPERS.label))).toEqual([groupAdder(HELPERS)]);
-    expect(chips(host)[`One list for all ${HELPERS.roles.length - 1} jobs`]).toBe(``);
-    expect(group(host, HELPERS.label).textContent).not.toContain(`jobs differ`);
-});
-
-test("the collapsed row counts only the jobs it writes", async () => {
-    settings.value = { ...settings.value, commandJudge: `off` };
-    const host = mount();
-    await Promise.resolve();
-
-    const helpers = group(host, HELPERS.label);
-    expect(helpers.textContent).toContain(`One list for all ${HELPERS.roles.length - 1} jobs`);
-});
-
-test("one model picked in the collapsed list reaches every live job and leaves the switched-off one as it was", async () => {
-    settings.value = { ...settings.value, commandJudge: `off`, modelRoles: { [JUDGE]: [entry(`codex`, `gpt-5.6`)] } };
-    const host = mount();
-    await Promise.resolve();
-
-    addButton(host, groupAdder(HELPERS)).click();
-    await flush();
-    answer?.pick({ provider: `claude`, model: `claude-haiku-4-5` });
-
-    const written = patch.mock.calls.at(-1)?.[0]?.modelRoles ?? {};
-    for (const role of HELPERS.roles) {
-        expect(written[role.id], role.id).toEqual(role.id === JUDGE ? [entry(`codex`, `gpt-5.6`)] : [entry(`claude`, `claude-haiku-4-5`)]);
-    }
-});
-
-test("a switched-off job offers no tick, and the group's master box writes without it", async () => {
-    settings.value = { ...settings.value, commandJudge: `off` };
-    const host = await mountJobs();
-
-    expect(tickBox(host, `Select safety judge`)).toBeUndefined();
-
-    tick(host, `Select every job under ${HELPERS.label.toLowerCase()}`);
-    await nextTick();
-    groupButton(host, HELPERS.label, `Set a model for all`).click();
-    await flush();
-    answer?.pick({ provider: `claude`, model: `claude-haiku-4-5` });
-
-    const written = patch.mock.calls.at(-1)?.[0]?.modelRoles ?? {};
-    expect(Object.keys(written).toSorted()).toEqual(
-        HELPERS.roles
-            .map((role) => role.id)
-            .filter((id) => id !== JUDGE)
-            .toSorted(),
-    );
-});
-
-/* THE ONE JOB THAT ALSO TAKES WORDS: Auto reads the owner's preferences alongside the list it may choose from, so they
-   are edited from that job's own row rather than from a section of the page's own. */
-const ROUTER_ROW = MODEL_ROLES.find((role) => role.id === `model-router`)!.label;
-// Every chip on the router's row, in order: the job's own state chip is already one, so the question is what is beside it.
-const chipsOn = (host: HTMLElement, row: string): string[] =>
-    [...rowOf(host, row).querySelectorAll(`.ui-status-pill`)].map((pill) => pill.textContent?.trim() ?? ``);
-// Scoped to the router's row, since being ON that row rather than somewhere on the page is the point.
-const openGuidance = async (host: HTMLElement): Promise<void> => {
-    [...rowOf(host, ROUTER_ROW).querySelectorAll<HTMLButtonElement>(`button`)].find((button) => button.textContent?.trim() === `Guidance`)!.click();
-    await nextTick();
-};
-
-test("the guidance is opened from the router's own row, and handed over as it was saved", async () => {
-    settings.value = { ...settings.value, autoModelGuidance: `Cheap work goes to Haiku.` };
-    const host = await mountJobs();
-
-    // Nothing of it is mounted until asked for: the row carries the setting, the page does not carry a section.
-    expect(doc).toBeUndefined();
-    await openGuidance(host);
-
-    expect(doc?.stored).toBe(`Cheap work goes to Haiku.`);
-    expect(doc?.modelValue).toBe(`Cheap work goes to Haiku.`);
-    // Not transcribed: the cap the page draws is the cap the schema would refuse past.
-    const cap = doc?.maxChars ?? 0;
-    expect(SandboxSettingsSchema.safeParse({ autoModelGuidance: `x`.repeat(cap) }).success).toBe(true);
-    expect(SandboxSettingsSchema.safeParse({ autoModelGuidance: `x`.repeat(cap + 1) }).success).toBe(false);
-});
-
-test("saving the guidance writes the trimmed text, and nothing else on the page with it", async () => {
-    const host = await mountJobs();
-    await openGuidance(host);
-
-    saveDoc?.(`  Leave the work account alone.\n`);
-
-    expect(patch).toHaveBeenLastCalledWith({ autoModelGuidance: `Leave the work account alone.` });
-});
-
-// Written guidance steers every chat that opens on Auto; no model list on this page would show that it exists.
-test("a job holding guidance says so on its row, and says nothing when it holds none", async () => {
-    const empty = await mountJobs();
-    // Its own "off" chip and nothing else: a job with no guidance claims none.
-    expect(chipsOn(empty, ROUTER_ROW)).toEqual([`off`]);
+    const before = await mountPage();
+    expect(before.textContent).not.toContain(`No models`);
     app?.unmount();
     document.body.innerHTML = ``;
 
-    settings.value = { ...settings.value, autoModelGuidance: `Cheap work goes to Haiku.` };
-    const written = await mountJobs();
-    // The chip names the state; the button beside it names what it opens, so the row never says one word twice.
-    expect(chipsOn(written, ROUTER_ROW)).toEqual([`off`, `guided`]);
-    // The chip is this job's alone; a neighbour in the same block says nothing about guidance.
-    expect(chipsOn(written, MODEL_ROLES.find((role) => role.id === COMMIT)!.label)).toEqual([`off`]);
+    settings.value = { ...SandboxSettingsSchema.parse({}), modelRoles: { [RUN]: [], [COMMIT]: [haiku] } };
+    const host = await mountPage();
+    // The default holds one-shots and sessions; the empty separate row holds a session alone.
+    expect(rowWith(host, labelOf(TITLE)).textContent).toContain(`one-shot jobs here don't run`);
+    expect(rowWith(host, labelOf(RUN)).textContent).toContain(`sessions here open on whatever your chat is set to`);
+    expect(rowWith(host, labelOf(COMMIT)).textContent).not.toContain(`No models`);
 });
 
-// "Change in Models" on Safety names the judge's job: the page opens that job's own row, which only Advanced draws.
-test("a link naming a job opens that job's group in Advanced and drops the name from the address", async () => {
-    const scrolled: string[] = [];
-    Element.prototype.scrollIntoView = function (this: Element) {
-        scrolled.push(this.id);
-    };
-    await router.push({ name: `sandbox`, params: { tab: `agent` }, query: { job: JUDGE } });
-    const host = mount();
+test("the default with no job on it says so, and still takes models for the jobs that will come", async () => {
+    settings.value = { ...settings.value, modelRoles: Object.fromEntries(MODEL_ROLES.map((role) => [role.id, [haiku]])) };
+    const host = await mountPage();
+
+    expect(rows(host)[0]?.textContent).toContain(`No job runs on these.`);
+    expect(button(rows(host)[0]!, `Add a default model`).disabled).toBe(false);
+});
+
+/* EDITING A ROW EDITS EVERY JOB IN IT */
+
+test("the default's list is one setting: reordering it writes the default and no job's own list", async () => {
+    settings.value = { ...settings.value, modelDefault: [luna, haiku], modelRoles: { [RUN]: [luna] } };
+    const host = await mountPage();
+
+    const defaults = rows(host)[0]!;
+    expect(orderOn(defaults)).toEqual([`CODEX · GPT 5.6 Luna`, `CLAUDE · Claude Haiku 4.5`]);
+    expect(button(defaults, `Move CODEX · GPT 5.6 Luna earlier`).disabled).toBe(true);
+    button(defaults, `Move CLAUDE · Claude Haiku 4.5 earlier`).click();
+
+    expect(patch).toHaveBeenCalledWith({ modelDefault: [haiku, luna] });
+});
+
+test("a separate row writes its whole list into every job on it, in one patch, and leaves other jobs standing", async () => {
+    settings.value = { ...settings.value, modelRoles: { [RUN]: [luna], [REFACTOR]: [luna], [COMMIT]: [haiku] } };
+    const host = await mountPage();
+
+    button(rowWith(host, labelOf(RUN)), `Add a model for Pipeline fixes, Refactors`).click();
     await flush();
+    answer?.pick(haiku);
+
+    expect(patch).toHaveBeenCalledTimes(1);
+    expect(patch).toHaveBeenCalledWith({ modelRoles: { [RUN]: [luna, haiku], [REFACTOR]: [luna, haiku], [COMMIT]: [haiku] } });
+});
+
+test("emptying a separate row leaves its jobs with no models, rather than handing them to the default", async () => {
+    settings.value = { ...settings.value, modelDefault: [haiku], modelRoles: { [RUN]: [luna], [REFACTOR]: [luna] } };
+    const host = await mountPage();
+
+    button(rowWith(host, labelOf(RUN)), `Remove CODEX · GPT 5.6 Luna`).click();
     await flush();
 
-    const judgeBlock = MODEL_ROLE_BLOCKS.find((block) => block.roles.some((role) => role.id === JUDGE))!;
-    expect(adders(group(host, judgeBlock.label))).toContain(`Add a model for safety judge`);
-    expect(scrolled).toEqual([`model-job-${JUDGE}`]);
-    expect(router.currentRoute.value.query).toEqual({});
+    expect(patch).toHaveBeenCalledWith({ modelRoles: { [RUN]: [], [REFACTOR]: [] } });
+    // Still their own row, now saying what an empty list means.
+    expect(layoutOf(host).slice(1)).toEqual([[labelOf(RUN), labelOf(REFACTOR)]]);
+});
+
+test("keeps a pin whose account went away on screen, and greys it", async () => {
+    settings.value = { ...settings.value, modelDefault: [entry(`gemini`, `gemini-3-flash-lite`), haiku] };
+    const host = await mountPage();
+
+    expect(orderOn(host)).toEqual([`GEMINI · Gemini 3 Flash Lite`, `CLAUDE · Claude Haiku 4.5`]);
+    expect(host.querySelector(`ol li`)?.className).toMatch(/subtle/);
+});
+
+test("an entry names the tier it will run at, and one left at the provider's default names nothing", async () => {
+    settings.value = {
+        ...settings.value,
+        modelDefault: [
+            { provider: `claude`, model: `claude-haiku-4-5`, effort: `max`, thinking: false },
+            { provider: `codex`, model: `gpt-5.6` },
+        ],
+    };
+    const host = await mountPage();
+
+    const lines = [...host.querySelectorAll(`ol li`)].map((row) => row.textContent?.replace(/\s+/g, ` `).trim() ?? ``);
+    // Claude refuses `max` with thinking off, so the row shows what will actually run, not the stored pick.
+    expect(lines[0]).toContain(`X-High`);
+    expect(lines[1]).not.toMatch(/High|Low|thinking/);
+});
+
+test("a knob moved in the picker lands on that entry alone, in every job on the row", async () => {
+    settings.value = { ...settings.value, modelRoles: { [RUN]: [luna, haiku], [REFACTOR]: [luna, haiku] } };
+    const host = await mountPage();
+
+    button(rowWith(host, labelOf(RUN)), `Change CLAUDE · Claude Haiku 4.5`).click();
+    await flush();
+    expect([opened?.pin, opened?.knobs, opened?.taken]).toEqual([haiku, true, [`codex:gpt-5.6`, `claude:claude-haiku-4-5`]]);
+
+    const tuned = { ...haiku, effort: `max`, thinking: true };
+    answer?.configure(tuned);
+
+    expect(patch).toHaveBeenCalledWith({ modelRoles: { [RUN]: [luna, tuned], [REFACTOR]: [luna, tuned] } });
+    // The panel stays open and re-reads the entry's new state live.
+    await flush();
+    expect(opened?.pin).toEqual(tuned);
+});
+
+test("re-pointing an entry replaces it where it stands, because its position is the other half of the setting", async () => {
+    settings.value = { ...settings.value, modelDefault: [luna, haiku] };
+    const host = await mountPage();
+    button(host, `Change CODEX · GPT 5.6 Luna`).click();
+    await flush();
+
+    const opus = entry(`claude`, `claude-opus-5`, { effort: `max` });
+    answer?.pick(opus);
+
+    expect(patch).toHaveBeenCalledWith({ modelDefault: [opus, haiku] });
+});
+
+test("adding to a list ticks its first model and says the new one is a fallback", async () => {
+    settings.value = { ...settings.value, modelDefault: [luna] };
+    const host = await mountPage();
+
+    button(host, `Add a default model`).click();
+    await flush();
+    expect([opened?.header, opened?.current, opened?.pin]).toEqual([`Add a fallback model`, luna, undefined]);
+    expect(host.textContent).not.toContain(`Tried in order`);
+
+    answer?.pick(haiku);
+    await flush();
+    expect(patch).toHaveBeenCalledWith({ modelDefault: [luna, haiku] });
+    expect(host.textContent).toContain(`Tried in order`);
+});
+
+test("adding to an empty list ticks nothing", async () => {
+    const host = await mountPage();
+
+    button(host, `Add a default model`).click();
+    await flush();
+
+    expect([opened?.header, opened?.current]).toEqual([`Add a model`, undefined]);
 });
 
 test("a second press on the trigger that opened the picker closes it", async () => {
-    const host = await mountJobs();
-    const add = addButton(host, `Add a model for commit messages`);
+    const host = await mountPage();
+    const add = button(host, `Add a default model`);
 
     add.click();
     await flush();
@@ -976,27 +392,179 @@ test("a second press on the trigger that opened the picker closes it", async () 
     expect(opened?.open).toBe(false);
 });
 
-// The picker once ticked the chat's own model as "current" on a job that did not run it, and it was picked as one.
-test("adding to a job ticks that job's own model and says the new one is a fallback", async () => {
-    settings.value = { ...settings.value, modelRoles: { [JUDGE]: [entry(`codex`, `gpt-5.6`)] } };
-    const host = await mountJobs();
+test("a model that cannot run a turn is offered only to a list that feeds nothing but one-shot jobs", async () => {
+    settings.value = { ...settings.value, modelRoles: { [COMMIT]: [haiku], [TITLE]: [haiku] } };
+    const host = await mountPage();
 
-    addButton(host, `Add a model for safety judge`).click();
+    button(rowWith(host, labelOf(COMMIT)), `Add a model for Commit messages, Session titles`).click();
     await flush();
-    expect([opened?.header, opened?.current, opened?.pin]).toEqual([`Add a fallback model`, entry(`codex`, `gpt-5.6`), undefined]);
-    expect(host.textContent).not.toContain(`Tried in order`);
+    expect(opened?.helperJobs).toBe(true);
 
-    answer?.pick(entry(`claude`, `claude-haiku-4-5`));
+    button(host, `Add a default model`).click();
     await flush();
-    // Two entries are an order, and the list says so.
-    expect(host.textContent).toContain(`Tried in order`);
+    expect(opened?.helperJobs).toBe(false);
 });
 
-test("adding to a job with no model ticks nothing", async () => {
-    const host = await mountJobs();
+/* MOVING A JOB CHANGES THAT JOB ALONE */
 
-    addButton(host, `Add a model for commit messages`).click();
+test("a job's panel says what it does and ticks the list it runs on", async () => {
+    settings.value = { ...settings.value, modelDefault: [haiku], modelRoles: { [RUN]: [luna], [REFACTOR]: [luna] } };
+    const host = await mountPage();
+
+    await openJob(host, labelOf(RUN));
+
+    expect(document.querySelector(`.job-panel`)?.textContent).toContain(MODEL_ROLES.find((role) => role.id === RUN)!.blurb);
+    expect(choices()).toEqual([`Default models`, `With Refactors`, `Its own models`, `No models`]);
+    expect(ticked()).toBe(`With Refactors`);
+});
+
+test("giving a job its own models copies what it ran, and draws it in a row of its own that does not fold back", async () => {
+    settings.value = { ...settings.value, modelDefault: [haiku] };
+    const host = await mountPage();
+
+    await openJob(host, labelOf(TITLE));
+    await choose(`Its own models`);
+
+    expect(patch).toHaveBeenCalledWith({ modelRoles: { [TITLE]: [haiku] } });
+    expect(layoutOf(host)).toEqual([ALL.filter((job) => job !== labelOf(TITLE)), [labelOf(TITLE)]]);
+    expect(document.querySelector(`.job-panel`)).toBeNull();
+});
+
+test("moving a job onto another row gives it that row's list", async () => {
+    settings.value = { ...settings.value, modelDefault: [haiku], modelRoles: { [RUN]: [luna] } };
+    const host = await mountPage();
+
+    await openJob(host, labelOf(REFACTOR));
+    await choose(`With Pipeline fixes`);
+
+    expect(patch).toHaveBeenCalledWith({ modelRoles: { [RUN]: [luna], [REFACTOR]: [luna] } });
+    expect(layoutOf(host)[1]).toEqual([labelOf(RUN), labelOf(REFACTOR)]);
+});
+
+test("moving a job back to the default drops its own list", async () => {
+    settings.value = { ...settings.value, modelDefault: [haiku], modelRoles: { [RUN]: [luna], [REFACTOR]: [luna] } };
+    const host = await mountPage();
+
+    await openJob(host, labelOf(RUN));
+    await choose(`Default models`);
+
+    expect(patch).toHaveBeenCalledWith({ modelRoles: { [REFACTOR]: [luna] } });
+    expect(rows(host)[0] && jobsOf(rows(host)[0]!)).toContain(labelOf(RUN));
+});
+
+test("no models is a choice for one job, said in the words its kind of job needs", async () => {
+    settings.value = { ...settings.value, modelDefault: [haiku] };
+    const host = await mountPage();
+
+    await openJob(host, labelOf(COMMIT));
+    expect(document.querySelector(`.job-panel`)?.textContent).toContain(`Doesn't run`);
+    await choose(`No models`);
+
+    expect(patch).toHaveBeenCalledWith({ modelRoles: { [COMMIT]: [] } });
+});
+
+test("an empty row is offered as No models, never by the jobs on it, and a job on it is ticked there", async () => {
+    settings.value = { ...settings.value, modelDefault: [haiku], modelRoles: { [JUDGE]: [] } };
+    const host = await mountPage();
+
+    await openJob(host, labelOf(COMMIT));
+    expect(choices()).toEqual([`Default models`, `Its own models`, `No models`]);
+    await choose(`No models`);
+    expect(layoutOf(host)[1]).toEqual([labelOf(COMMIT), labelOf(JUDGE)]);
+
+    await openJob(host, labelOf(JUDGE));
+    // A copy of nothing would be No models again, so it is not offered.
+    expect(choices()).toEqual([`Default models`, `No models`]);
+    expect(ticked()).toBe(`No models`);
+});
+
+test("making a row the default moves its jobs onto it, and leaves the old default's jobs on what they ran", async () => {
+    settings.value = { ...settings.value, modelDefault: [haiku], modelRoles: { [RUN]: [luna], [REFACTOR]: [luna] } };
+    const host = await mountPage();
+    const before = jobsOf(rows(host)[0]!);
+
+    pressed(rowWith(host, labelOf(RUN)), `Make default`).click();
     await flush();
 
-    expect([opened?.header, opened?.current]).toEqual([`Add a model`, undefined]);
+    const written = patch.mock.calls.at(-1)?.[0];
+    expect(written?.modelDefault).toEqual([luna]);
+    expect(Object.keys(written?.modelRoles ?? {})).not.toContain(RUN);
+    expect(Object.values(written?.modelRoles ?? {}).every((pins) => JSON.stringify(pins) === JSON.stringify([haiku]))).toBe(true);
+    expect(layoutOf(host)).toEqual([[labelOf(RUN), labelOf(REFACTOR)], before]);
+});
+
+test("a row can hand all its jobs back to the default in one press", async () => {
+    settings.value = { ...settings.value, modelDefault: [haiku], modelRoles: { [RUN]: [luna], [REFACTOR]: [luna], [COMMIT]: [luna, haiku] } };
+    const host = await mountPage();
+
+    pressed(rowWith(host, labelOf(RUN)), `Back to default`).click();
+
+    expect(patch).toHaveBeenCalledWith({ modelRoles: { [COMMIT]: [luna, haiku] } });
+});
+
+/* WHAT ONE JOB CARRIES BESIDE ITS LIST */
+
+test("with the judge off its chip says it is not in use, and its panel says where the switch is", async () => {
+    settings.value = { ...settings.value, commandJudge: `off` };
+    const host = await mountPage();
+
+    expect(chip(host, labelOf(JUDGE)).textContent).toContain(`not in use`);
+    await openJob(host, labelOf(JUDGE));
+    const link = [...document.querySelectorAll<HTMLAnchorElement>(`.job-panel a[href]`)].find((anchor) => anchor.textContent?.includes(`Turn the judge on`));
+    expect(link?.getAttribute(`href`)).toBe(`/sandbox/agent?section=safety`);
+});
+
+test("with the judge merely watching its chip is like any other", async () => {
+    settings.value = { ...settings.value, commandJudge: `watch` };
+    const host = await mountPage();
+
+    expect(chip(host, labelOf(JUDGE)).textContent).not.toContain(`not in use`);
+});
+
+test("the router's guidance is opened from its panel and handed over as it was saved", async () => {
+    settings.value = { ...settings.value, autoModelGuidance: `Cheap work goes to Haiku.` };
+    const host = await mountPage();
+    expect(doc).toBeUndefined();
+
+    await openJob(host, labelOf(ROUTER));
+    [...document.querySelectorAll<HTMLButtonElement>(`.job-panel button`)].find((candidate) => candidate.textContent?.trim() === `Guidance`)!.click();
+    await flush();
+
+    expect(doc?.stored).toBe(`Cheap work goes to Haiku.`);
+    // Not transcribed: the cap the page draws is the cap the schema would refuse past.
+    const cap = doc?.maxChars ?? 0;
+    expect(SandboxSettingsSchema.safeParse({ autoModelGuidance: `x`.repeat(cap) }).success).toBe(true);
+    expect(SandboxSettingsSchema.safeParse({ autoModelGuidance: `x`.repeat(cap + 1) }).success).toBe(false);
+
+    saveDoc?.(`  Leave the work account alone.\n`);
+    expect(patch).toHaveBeenLastCalledWith({ autoModelGuidance: `Leave the work account alone.` });
+});
+
+// Written guidance steers every chat that opens on Auto; no model list on this page would show that it exists.
+test("the router's chip says it is guided while it holds guidance, and no other chip does", async () => {
+    const empty = await mountPage();
+    expect(chip(empty, labelOf(ROUTER)).textContent).not.toContain(`guided`);
+    app?.unmount();
+    document.body.innerHTML = ``;
+
+    settings.value = { ...settings.value, autoModelGuidance: `Cheap work goes to Haiku.` };
+    const host = await mountPage();
+    expect(chip(host, labelOf(ROUTER)).textContent).toContain(`guided`);
+    expect(chip(host, labelOf(COMMIT)).textContent).not.toContain(`guided`);
+});
+
+// "Change in Models" on Safety names the judge's job: the page lands on its chip, with its panel open.
+test("a link naming a job opens that job's panel and drops the name from the address", async () => {
+    const scrolled: string[] = [];
+    Element.prototype.scrollIntoView = function (this: Element) {
+        scrolled.push(this.closest(`li`)?.id ?? ``);
+    };
+    await router.push({ name: `sandbox`, params: { tab: `agent` }, query: { job: JUDGE } });
+    mount();
+    await flush();
+    await flush();
+
+    expect(scrolled).toEqual([`model-job-${JUDGE}`]);
+    expect(document.querySelector(`.job-panel`)?.textContent).toContain(labelOf(JUDGE));
+    expect(router.currentRoute.value.query).toEqual({});
 });

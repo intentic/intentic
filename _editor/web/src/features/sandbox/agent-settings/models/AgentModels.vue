@@ -1,31 +1,22 @@
 <script setup lang="ts">
-import {
-    AUTO_MODEL_GUIDANCE_MAX,
-    MODEL_ROLE_BLOCKS,
-    MODEL_ROLES,
-    type ModelPin,
-    type ModelRole,
-    type ModelRoleBlockId,
-    type ModelRoleSpec,
-    modelPinKey,
-} from "@intentic/sandbox-contract";
-import { Button, MarkdownDocument, Modal, Notice, RowGroup, SegmentedControl } from "@intentic/ui";
-import Checkbox from "primevue/checkbox";
+import { AUTO_MODEL_GUIDANCE_MAX, type ModelPin, type ModelRole, MODEL_ROLE_IDS } from "@intentic/sandbox-contract";
+import { MarkdownDocument, Modal, Notice, ResponsiveOverlay, RowGroup } from "@intentic/ui";
 import { computed, nextTick, ref, shallowRef, watch } from "vue";
-import { RouterLink, useRoute, useRouter } from "vue-router";
-import { honoredPinKnobs } from "../../../chat/models/run-settings/pickerRunSettings";
+import { useRoute, useRouter } from "vue-router";
 import { useTrimmedDraft } from "../../../../lib/useDraft";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
-import ModelGroupRow from "./ModelGroupRow.vue";
-import { type PinnedList, pinKnobSummary, pinnedList } from "./modelPinList";
+import type { PinnedList } from "./modelPinList";
+import { editPath, followDefault, type JobTarget, type Layout, makeDefault, type ModelPath, modelPaths, moveJob, type PathWrite } from "./modelPaths";
+import ModelJobPanel from "./ModelJobPanel.vue";
+import ModelPathRow from "./ModelPathRow.vue";
 import ModelPinPicker from "./ModelPinPicker.vue";
-import ModelRoleRow from "./ModelRoleRow.vue";
-import { blockLabel } from "./roleWords";
 import { useT } from "@intentic/ui/i18n";
 
-// Every model choice the sandbox makes: one row per job from the catalog (MODEL_ROLE_BLOCKS), grouped by
-// the catalog rather than by hand here. A block's Simple view stores nothing of its own, it reads and writes the same
-// per-job settings as Advanced, so switching views never changes what's saved.
+// Every model choice the sandbox makes, drawn as the lists it actually holds: the default list, which every job runs on
+// until it is given one of its own, then one row per other list with the jobs that share it. A setup where most jobs
+// want the same models is one row; a job that wants something else is pressed and moved, and its row appears. Nothing
+// is stored per row: rows are read off the per-job settings (modelPaths.ts), so no view and no grouping can disagree
+// with what is saved.
 
 const t = useT();
 
@@ -33,442 +24,186 @@ const t = useT();
 const { settings, patch, save, refusal } = useSandboxSettings();
 const loaded = computed(() => settings.value !== undefined);
 
-// The one job on this page that is not answered by a model list alone: Auto also reads what it is told to weigh. It
-// lives on that job's own row rather than in a section of its own, since the catalog's blocks are kind partitions
-// (model-roles.test.ts) and a job's settings belong where its models are.
-// Explicit save, and the schema's own cap (AUTO_MODEL_GUIDANCE_MAX), the one the daemon refuses past. Saved trimmed, so
-// measured trimmed (useTrimmedDraft), or a save that landed would still read "Not saved yet".
-const ROUTER = `model-router`;
+// Which row a job was put in during this visit, so a job just given its own models does not fold back into the row it
+// left while its list is still a copy. Per visit only: the next one reads rows straight off the settings.
+const layout = shallowRef<Layout>(new Map());
+let made = 0;
+const mint = (): string => `n:${++made}`;
+
+const resolved = computed(() => ({ modelRoles: settings.value?.modelRoles ?? {}, modelDefault: settings.value?.modelDefault ?? [] }));
+const paths = computed<readonly ModelPath[]>(() => modelPaths(resolved.value, layout.value));
+const defaultPath = computed(() => paths.value.find((path) => path.isDefault)!);
+const ownPaths = computed(() => paths.value.filter((path) => !path.isDefault));
+
+// Every write goes through here: the layout moves with it, and the patch carries whole `modelRoles` and `modelDefault`
+// values, since the settings route merges only at the top level.
+const commit = (write: PathWrite): void => {
+    layout.value = write.layout;
+    patch(write.fields);
+};
+const pathById = (id: string): ModelPath | undefined => paths.value.find((path) => path.id === id);
+const writePath = (id: string, pins: readonly ModelPin[]): void => {
+    const path = pathById(id);
+    if (path !== undefined) {
+        commit(editPath(resolved.value, layout.value, path, pins));
+    }
+};
+
+// The judge is the one job switchable off elsewhere; while off its chip says so, and it stays movable.
+const judgeOff = computed(() => settings.value?.commandJudge === `off`);
+const inert = (role: ModelRole): boolean => role === `safety-judge` && judgeOff.value;
+
+// The one job on this page not answered by a model list alone: Auto also reads what it is told to weigh. Explicit save,
+// and the schema's own cap (AUTO_MODEL_GUIDANCE_MAX), the one the daemon refuses past. Saved trimmed, so measured
+// trimmed (useTrimmedDraft), or a save that landed would still read "Not saved yet".
 const { draft: guidance, stored: storedGuidance } = useTrimmedDraft(() => settings.value?.autoModelGuidance);
 const guidanceSet = computed(() => (storedGuidance.value ?? ``).trim() !== ``);
+const guided = (role: ModelRole): boolean => role === `model-router` && guidanceSet.value;
 const saveGuidance = (text: string): void => patch({ autoModelGuidance: text.trim() });
-// Written guidance is silent state: it steers every chat that opens on Auto and no model list on this page shows it.
-// The chip says the job's state, not the button's name — the two sit an inch apart and must not read as one word twice.
-const guidanceBadge = computed(() =>
-    guidanceSet.value
-        ? {
-              label: t(`sandbox.agentModels.guided`),
-              hint: { title: t(`sandbox.agentModels.guidanceSet`), note: t(`sandbox.agentModels.autoReadsIt`) },
-          }
-        : undefined,
-);
 const guidanceOpen = ref(false);
 
-// Sends the whole `modelRoles` record every time: the settings patch merges only at the top level, so writing one
-// role's key alone would drop the others. The bulk editor batches several keys through here in one patch.
-const writeRoles = (next: Partial<Record<ModelRole, ModelPin[]>>): void => patch({ modelRoles: { ...settings.value?.modelRoles, ...next } });
+/* ONE JOB'S PANEL, opened from its chip: where it runs, and what it alone carries. */
 
-const listOf = (role: ModelRole): readonly ModelPin[] => settings.value?.modelRoles[role] ?? [];
-
-// A one-shot helper job is the only kind a model that cannot run a turn may be pinned to; a run job is a turn.
-const helperJob = (role: ModelRole): boolean => MODEL_ROLES.some((spec) => spec.id === role && spec.kind === `helper`);
-
-// Built from the catalog: every role stores the same shape (an ordered pin list), so a new role gets a working row for
-// free.
-const editorFor = (role: ModelRole): PinnedList =>
-    pinnedList({
-        read: () => listOf(role),
-        write: (pins) => writeRoles({ [role]: [...pins] }),
-        decode: (pin) => pin,
-        encode: (pin) => pin,
-        detail: pinKnobSummary,
-        knobs: true,
-        helperJobs: helperJob(role),
-    });
-
-// Writes a whole set of roles in one patch, avoiding the top-level-merge race of separate writes; used by both the
-// collapsed list and the selection verbs.
-const acrossRoles = (roles: readonly ModelRole[], listFor: (role: ModelRole) => ModelPin[]): void =>
-    writeRoles(Object.fromEntries(roles.map((role) => [role, listFor(role)])) as Partial<Record<ModelRole, ModelPin[]>>);
-
-// The judge is the one job switchable off elsewhere; while off it must drop out of every group gesture, not just refuse
-// its own row, or a collapsed write could overwrite it and `jobsDiffer` could misfire.
-const JUDGE = `safety-judge`;
-const judgeOff = computed(() => settings.value?.commandJudge === `off`);
-const inert = (role: ModelRole): boolean => role === JUDGE && judgeOff.value;
-
-// Jobs actually reachable right now; what every multi-job gesture (collapsed list, differ check, selection) acts on.
-const live = (ids: readonly ModelRole[]): readonly ModelRole[] => ids.filter((role) => !inert(role));
-const liveRoles = (roles: readonly ModelRoleSpec[]): readonly ModelRoleSpec[] => roles.filter((role) => !inert(role.id));
-
-// Nothing is stored per block: its list is derived from jobs and fanned back out, so Advanced later shows exactly what
-// was written. Identity needs every field to match, not just the model, or a re-point could silently hit a lookalike.
-// Compared as the run would read it (honoredPinKnobs), never as stored: a knob this provider has no control for —
-// `thinking` outside Claude, `fast` outside the Claude Code loop — changes nothing about the turn, so it may not be the
-// reason two jobs read as split or a shared model drops out of the collapsed list.
-const pinIdentity = (pin: ModelPin): string => {
-    const honored = honoredPinKnobs(pin);
-    return [modelPinKey(honored), honored.effort ?? ``, honored.thinking ?? ``, honored.fast ?? ``, honored.harness ?? ``].join(`|`);
+const jobOpen = shallowRef<{ readonly role: ModelRole; readonly anchor: HTMLElement } | undefined>(undefined);
+const openJob = (role: ModelRole, anchor: HTMLElement): void => {
+    // A second press on the chip that opened it closes it; the overlay ignores presses on its own anchor so this can.
+    jobOpen.value = jobOpen.value?.anchor === anchor ? undefined : { role, anchor };
 };
-
-// Intersection, not union: a union would show a model on jobs that don't actually have it, the one lie a collapsed view
-// could tell.
-const sharedPins = (ids: readonly ModelRole[]): readonly ModelPin[] => {
-    const [first, ...rest] = ids.map((role) => listOf(role));
-    if (first === undefined) {
-        return [];
+const move = (target: JobTarget): void => {
+    const job = jobOpen.value;
+    jobOpen.value = undefined;
+    if (job !== undefined) {
+        commit(moveJob(resolved.value, layout.value, paths.value, job.role, target, mint));
     }
-    const others = rest.map((held) => new Set(held.map(pinIdentity)));
-    // Handed back honored, since this list is also what a collapsed edit writes to every job: a knob the run ignores
-    // must not be copied onto jobs that never had it.
-    return first.filter((pin) => others.every((held) => held.has(pinIdentity(pin)))).map(honoredPinKnobs);
+};
+const setJobOpen = (open: boolean): void => {
+    if (!open) {
+        jobOpen.value = undefined;
+    }
+};
+const openGuidance = (): void => {
+    jobOpen.value = undefined;
+    guidanceOpen.value = true;
 };
 
-// Same entries, same order, across the live jobs only; an inert job may not be the reason a block reads as split.
-const jobsDiffer = (ids: readonly ModelRole[]): boolean => new Set(live(ids).map((role) => listOf(role).map(pinIdentity).join(`\n`))).size > 1;
-
-// One editor over a whole block: whatever it becomes is written to every live job of it, in one patch.
-const groupList = (ids: readonly ModelRole[]): PinnedList =>
-    pinnedList({
-        read: () => sharedPins(live(ids)),
-        write: (pins) => acrossRoles(live(ids), () => [...pins]),
-        decode: (pin) => pin,
-        encode: (pin) => pin,
-        detail: pinKnobSummary,
-        knobs: true,
-        helperJobs: ids.every(helperJob),
-    });
-
-// Built once: editors close over the settings ref and stay live; block membership is the catalog's answer.
-const blocks = MODEL_ROLE_BLOCKS.map((block) => {
-    const ids = block.roles.map((role) => role.id) as readonly ModelRole[];
-    return { ...block, ids, rows: block.roles.map((role) => ({ role, list: editorFor(role.id) })), group: groupList(ids) };
-});
-
-// Ordered list, not a Set (also read as a count); per-visit only, never persisted.
-const selected = ref<readonly ModelRole[]>([]);
-const isSelected = (role: ModelRole): boolean => selected.value.includes(role);
-const selectRole = (role: ModelRole, on: boolean): void => {
-    selected.value = on ? [...selected.value.filter((held) => held !== role), role] : selected.value.filter((held) => held !== role);
-};
-
-// The page's one choke point for "which jobs is this gesture about", in the block's own order; drops inert jobs, since
-// a bulk write can't reach a row whose own Add button already refuses presses.
-const selectedIn = (ids: readonly ModelRole[]): readonly ModelRole[] => live(ids).filter((role) => selected.value.includes(role));
-const allSelectedIn = (ids: readonly ModelRole[]): boolean => selectedIn(ids).length === live(ids).length;
-const someSelectedIn = (ids: readonly ModelRole[]): boolean => {
-    const picked = selectedIn(ids).length;
-    return picked > 0 && picked < live(ids).length;
-};
-// Untick drops every id of the block; tick takes only the live ones, so the box can still read `all` when one job is
-// switched off.
-const selectAllIn = (ids: readonly ModelRole[], on: boolean): void => {
-    selected.value = on
-        ? [...selected.value.filter((held) => !ids.includes(held)), ...live(ids)]
-        : selected.value.filter((held) => !ids.includes(held));
-};
-
-// Per-group, not a page toggle: opens Advanced if jobs already disagree (collapsing would hide that), Simple if they
-// agree. Derived once when settings land, not continuously, or a group could refold itself under the cursor.
-type ModelView = `simple` | `advanced`;
-const VIEWS = computed((): readonly { readonly label: string; readonly value: ModelView }[] => [
-    { label: t(`sandbox.agentModels.simple`), value: `simple` },
-    { label: t(`sandbox.agentModels.advanced`), value: `advanced` },
-]);
-
-// Two refs: what settings opened with, and what's chosen since, so a late seed can't undo an early press.
-const openedIn = shallowRef<Partial<Record<ModelRoleBlockId, ModelView>>>({});
-const chosenView = ref<Partial<Record<ModelRoleBlockId, ModelView>>>({});
-watch(
-    loaded,
-    (isLoaded) => {
-        if (isLoaded) {
-            openedIn.value = Object.fromEntries(blocks.map((block) => [block.id, jobsDiffer(block.ids) ? `advanced` : `simple`]));
-        }
-    },
-    { immediate: true },
-);
-const viewOf = (id: ModelRoleBlockId): ModelView => chosenView.value[id] ?? openedIn.value[id] ?? `simple`;
-
-// A link naming a job (`?job=safety-judge`, Safety's "Change in Models") lands on that job's own row: its group opens in
-// Advanced, the only view with a row per job, and the row is scrolled to. Landing on the Simple view's one row for five
-// jobs cost a reader 73 seconds to find the judge. Read once, then dropped, so Back and a later visit start plainly.
+// A link naming a job (`?job=safety-judge`, Safety's "Change in Models") lands on that job: its chip is scrolled to and
+// its panel opened, since the chip is where the job's model is chosen. Read once, then dropped, so Back and a later
+// visit start plainly.
 const route = useRoute();
 const router = useRouter();
-const jobAnchor = (role: ModelRole): string => `model-job-${role}`;
-// Every job on this page with its group, for finding the one a link names; anything else it names is no job.
-const jobs = blocks.flatMap((block) => block.ids.map((role) => ({ role, block })));
 watch(
-    [loaded, () => jobs.find((job) => job.role === route.query[`job`])],
-    async ([isLoaded, job]) => {
-        if (!isLoaded || job === undefined) {
+    [loaded, () => MODEL_ROLE_IDS.find((role) => role === route.query[`job`])],
+    async ([isLoaded, role]) => {
+        if (!isLoaded || role === undefined) {
             return;
         }
-        chosenView.value = { ...chosenView.value, [job.block.id]: `advanced` };
         await nextTick();
-        document.getElementById(jobAnchor(job.role))?.scrollIntoView({ block: `center` });
+        const chip = document.getElementById(`model-job-${role}`)?.querySelector(`button`);
+        if (chip !== null && chip !== undefined) {
+            chip.scrollIntoView({ block: `center` });
+            jobOpen.value = { role, anchor: chip };
+        }
         void router.replace({ query: { ...route.query, job: undefined } });
     },
     { immediate: true },
 );
 
-// Collapsing a group drops its ticks too, or the next Advanced visit would open with rows ticked that nobody chose.
-const setView = (block: { readonly id: ModelRoleBlockId; readonly ids: readonly ModelRole[] }, view: ModelView): void => {
-    chosenView.value = { ...chosenView.value, [block.id]: view };
-    if (view === `simple`) {
-        selectAllIn(block.ids, false);
-    }
-};
+/* THE MODEL PICKER, one for the page, hung off whichever row asked. */
 
-// The bulk panel's written pin so far, if any; lets the picker draw knobs once one exists.
-const bulkPin = shallowRef<ModelPin | undefined>(undefined);
-
-// Taken only if every job in the set already has it; a model held by some but not others still has somewhere to land.
-const sharedTaken = (roles: readonly ModelRole[]): readonly string[] => {
-    const lists = roles.map((role) => listOf(role).map((pin) => modelPinKey(pin)));
-    return lists.length === 0 ? [] : lists.reduce((shared, keys) => shared.filter((key) => keys.includes(key)));
-};
-
-// Upsert, not append, in order:
-// - drops the pin this same panel just wrote, if the entry is being re-pointed
-// - writes through an entry that already names this model, keeping its place
-// - otherwise appends to the end
-const withPin = (list: readonly ModelPin[], pin: ModelPin, replacing: ModelPin | undefined): ModelPin[] => {
-    const key = modelPinKey(pin);
-    const kept =
-        replacing === undefined || modelPinKey(replacing) === key ? list : list.filter((held) => modelPinKey(held) !== modelPinKey(replacing));
-    const at = kept.findIndex((held) => modelPinKey(held) === key);
-    return at === -1 ? [...kept, pin] : kept.map((held, index) => (index === at ? pin : held));
-};
-
-// The model plus every knob set after it, onto every job in the set; `acrossRoles` is the one writer for both this and
-// the collapsed list.
-const applyToRoles = (roles: readonly ModelRole[], pin: ModelPin): void => {
-    const replacing = bulkPin.value;
-    bulkPin.value = pin;
-    acrossRoles(roles, (role) => withPin(listOf(role), pin, replacing));
-};
-
-// A real gesture, not just a destructive one: an empty list means switched off (or handed back to the composer); no
-// confirmation, same as removing a row's last entry.
-const clearRoles = (ids: readonly ModelRole[]): void => acrossRoles(selectedIn(ids), () => []);
-
-// One panel for the page, since a second ask supersedes the first. Its target is abstracted, not a (list, index) pair,
-// so one panel serves both a row's write and the selection's; `pin`/`taken` stay live so a knob change never shows
-// stale.
 interface PickerTarget {
     readonly anchor: HTMLElement;
     readonly header: string;
-    readonly knobs: boolean;
-    // Whether every job the pick lands on is a one-shot helper, where a helper-only model may be picked.
-    readonly helperJobs: boolean;
-    readonly pin: () => ModelPin | undefined;
-    // While adding: the model the job runs on first, which the list ticks; undefined for a job with none, or a selection.
-    readonly current: () => ModelPin | undefined;
-    readonly taken: () => readonly string[];
-    // Answers the panel's question: a model row picked from the list.
-    readonly apply: (pin: ModelPin) => void;
-    // Writes a knob through; differs from `apply` only while adding, where there's no entry yet to configure.
-    readonly configure: (pin: ModelPin) => void;
-    // Whether the panel survives its answer: a row's does not; the selection's does, since more jobs may follow.
-    readonly stayOpen: boolean;
+    readonly list: PinnedList;
+    readonly index: number | undefined;
 }
-
 const editing = shallowRef<PickerTarget | undefined>(undefined);
-const editingPin = computed<ModelPin | undefined>(() => editing.value?.pin());
-const editingCurrent = computed<ModelPin | undefined>(() => editing.value?.current());
-const editingTaken = computed<readonly string[]>(() => editing.value?.taken() ?? []);
+const editingPin = computed<ModelPin | undefined>(() =>
+    editing.value?.index === undefined ? undefined : editing.value.list.entries.value[editing.value.index]?.pin,
+);
+// While adding: the list's first model, which the picker ticks as what these jobs run on now.
+const editingCurrent = computed<ModelPin | undefined>(() =>
+    editing.value === undefined || editing.value.index !== undefined ? undefined : editing.value.list.entries.value[0]?.pin,
+);
 
-// A second press on the trigger that opened the picker closes it. The overlay ignores presses on its own anchor so that
-// this could happen, and nothing did: the picker stayed open under five presses on its trigger.
-const toggled = (anchor: HTMLElement): boolean => {
-    if (editing.value?.anchor !== anchor) {
-        return false;
-    }
-    editing.value = undefined;
-    bulkPin.value = undefined;
-    return true;
-};
-
-// Adding to a job that already has a model adds a fallback, tried only when the ones above it cannot answer; the header
-// says so, since the list otherwise reads as a set rather than an order.
-const openRowPicker = (list: PinnedList, index: number | undefined, anchor: HTMLElement): void => {
-    if (toggled(anchor)) {
+// Adding to a list that already has a model adds a fallback, tried only when the ones above it cannot answer; the
+// header says so, since the list otherwise reads as a set rather than an order.
+const openPicker = (list: PinnedList, index: number | undefined, anchor: HTMLElement): void => {
+    if (editing.value?.anchor === anchor) {
+        editing.value = undefined;
         return;
     }
-    const adding = index === undefined;
-    editing.value = {
-        anchor,
-        header: !adding ? t(`shared.model`) : list.entries.value.length > 0 ? t(`sandbox.agentModels.addFallback`) : t(`sandbox.modelPinPicker.addModel`),
-        knobs: list.knobs,
-        helperJobs: list.helperJobs,
-        pin: () => (index === undefined ? undefined : list.entries.value[index]?.pin),
-        current: () => (adding ? list.entries.value[0]?.pin : undefined),
-        taken: () => list.taken.value,
-        apply: (pin) => list.apply(index, pin),
-        configure: (pin) => {
-            if (index !== undefined) {
-                list.apply(index, pin);
-            }
-        },
-        stayOpen: false,
-    };
+    const header =
+        index !== undefined
+            ? t(`shared.model`)
+            : list.entries.value.length > 0
+              ? t(`sandbox.agentModels.addFallback`)
+              : t(`sandbox.modelPinPicker.addModel`);
+    editing.value = { anchor, header, list, index };
 };
-
-// The set is captured at open, not read live, so the header's count stays honest even if more gets ticked while it's
-// open; ticking more is answered by reopening the panel.
-const openBulkPicker = (anchor: HTMLElement, ids: readonly ModelRole[]): void => {
-    if (toggled(anchor)) {
-        return;
-    }
-    bulkPin.value = undefined;
-    const roles = selectedIn(ids);
-    editing.value = {
-        anchor,
-        // The safeguard against this panel's one mistake: it looks like a single row's, but spends across every job.
-        header: t(`sandbox.agentModels.modelForJobs`, { count: roles.length }, roles.length),
-        knobs: true,
-        helperJobs: roles.every(helperJob),
-        pin: () => bulkPin.value,
-        current: () => undefined,
-        taken: () => sharedTaken(roles),
-        apply: (pin) => applyToRoles(roles, pin),
-        configure: (pin) => applyToRoles(roles, pin),
-        stayOpen: true,
-    };
-};
-
-// The picker emits `pick` then `close`, right for a row but wrong for a `stayOpen` target whose gesture isn't finished
-// at the model pick; the close arriving on the same tick is swallowed once, every other close still lands.
-let swallowClose = false;
-const pick = (pin: ModelPin): void => {
-    const target = editing.value;
-    if (target === undefined) {
-        return;
-    }
-    target.apply(pin);
-    swallowClose = target.stayOpen;
-};
-const configure = (pin: ModelPin): void => editing.value?.configure(pin);
 const setPickerOpen = (open: boolean): void => {
-    if (open) {
-        return;
+    if (!open) {
+        editing.value = undefined;
     }
-    if (swallowClose) {
-        swallowClose = false;
-        return;
-    }
-    editing.value = undefined;
-    bulkPin.value = undefined;
 };
+const pick = (pin: ModelPin): void => editing.value?.list.apply(editing.value.index, pin);
+// A knob changes the entry being edited; while adding there is no entry yet to configure.
+const configure = (pin: ModelPin): void => {
+    if (editing.value?.index !== undefined) {
+        editing.value.list.apply(editing.value.index, pin);
+    }
+};
+
+const rowProps = computed(() => ({ disabled: !loaded.value, loaded: loaded.value, inert, guided, activeJob: jobOpen.value?.role }));
 </script>
 
 <template>
     <!-- `id` so a chat's "Turn it off everywhere" link can land here directly, not at the top of a long settings page. -->
     <div id="models" class="flex flex-col gap-6">
-        <!-- Each catalog block owns its heading and visible model rows. -->
-        <RowGroup v-for="block in blocks" :key="block.id" :label="blockLabel(block)" sticky>
-            <!-- The filter controls the visible model rows. -->
-            <template #info>
-                <SegmentedControl
-                    :model-value="viewOf(block.id)"
-                    :options="VIEWS"
-                    size="xs"
-                    :aria-label="t(`sandbox.agentModels.howToShow`, { toLowerCase: blockLabel(block).toLowerCase() })"
-                    @update:model-value="(view: ModelView) => setView(block, view)"
-                />
-            </template>
-
-            <!-- Per-group, acting on that group alone (a page-wide select-all would span blocks with nothing in common). -->
-            <template #actions>
-                <div v-if="viewOf(block.id) === `advanced`" class="flex flex-wrap items-center gap-2 @max-xl:hidden">
-                    <label class="flex cursor-pointer items-center gap-2 text-2xs text-muted">
-                        <Checkbox
-                            :model-value="allSelectedIn(block.ids)"
-                            :indeterminate="someSelectedIn(block.ids)"
-                            binary
-                            size="small"
-                            :aria-label="t(`sandbox.agentModels.selectEveryJobUnder`, { toLowerCase: blockLabel(block).toLowerCase() })"
-                            @update:model-value="(value: unknown) => selectAllIn(block.ids, value === true)"
-                        />
-                        <span>{{
-                            selectedIn(block.ids).length > 0
-                                ? t(`sandbox.agentModels.selected`, { count: selectedIn(block.ids).length })
-                                : t(`sandbox.agentModels.selectJobs`)
-                        }}</span>
-                    </label>
-                    <!-- Appears only once something's ticked; disabled buttons on every visit would just be furniture. -->
-                    <template v-if="selectedIn(block.ids).length > 0">
-                        <Button
-                            size="small"
-                            :label="t(`sandbox.agentModels.setModelAll`)"
-                            :disabled="!loaded"
-                            @click="(event: MouseEvent) => openBulkPicker(event.currentTarget as HTMLElement, block.ids)"
-                        />
-                        <!-- The other half of the vocabulary: an empty list means off, so this switches several jobs off in one press. -->
-                        <Button
-                            size="small"
-                            tier="quiet" tone="danger"
-                            :label="t(`sandbox.agentModels.clearModels`)"
-                            :disabled="!loaded"
-                            @click="clearRoles(block.ids)"
-                        />
-                    </template>
-                </div>
-            </template>
-
-            <!-- The same per-job setting, read and written a block at a time, not a summary (there are no rows under it). -->
-            <ModelGroupRow
-                v-if="viewOf(block.id) === `simple`"
-                :block="block"
-                :roles="liveRoles(block.roles)"
-                :list="block.group"
-                :differs="jobsDiffer(block.ids)"
-                :disabled="!loaded"
-                :loaded="loaded"
-                @open="(index: number | undefined, anchor: HTMLElement) => openRowPicker(block.group, index, anchor)"
+        <RowGroup :label="t(`sandbox.agentModels.defaultModels`)" :caption="t(`sandbox.agentModels.defaultCaption`)">
+            <ModelPathRow
+                :path="defaultPath"
+                v-bind="rowProps"
+                @write="(pins: readonly ModelPin[]) => writePath(defaultPath.id, pins)"
+                @open="openPicker"
+                @job="openJob"
             />
+        </RowGroup>
 
-            <!-- One row per job, the setting's true shape; `v-for` sits inside `v-else` to avoid combining both directives. -->
-            <template v-else>
-                <ModelRoleRow
-                    v-for="row in block.rows"
-                    :id="jobAnchor(row.role.id)"
-                    :key="row.role.id"
-                    :role="row.role"
-                    :icon="row.role.icon"
-                    :list="row.list"
-                    :badge="row.role.id === ROUTER ? guidanceBadge : undefined"
-                    :selected="isSelected(row.role.id)"
-                    :disabled="!loaded || (row.role.id === JUDGE && judgeOff)"
-                    :loaded="loaded"
-                    @select="(on: boolean) => selectRole(row.role.id, on)"
-                    @open="(index: number | undefined, anchor: HTMLElement) => openRowPicker(row.list, index, anchor)"
-                >
-                    <!-- The router is the one job with a second setting: what it should weigh, in the owner's words. -->
-                    <template v-if="row.role.id === ROUTER" #control>
-                        <Button
-                            size="small"
-                            :tier="guidanceSet ? `boring` : `quiet`"
-                            :label="t(`sandbox.agentModels.guidance`)"
-                            :disabled="!loaded"
-                            @click="guidanceOpen = true"
-                        />
-                    </template>
-
-                    <!-- Only the judge row receives this explanatory slot. -->
-                    <template v-if="row.role.id === JUDGE" #note>
-                        <!-- The judge row explains why its feature may be unavailable. -->
-                        <p v-if="judgeOff" class="text-2xs text-subtle">
-                            {{ t(`sandbox.agentModels.nothingJudgingCommandsAt`) }}
-                            <RouterLink
-                                :to="{ name: `sandbox`, params: { tab: `agent` }, query: { section: `safety` } }"
-                                class="text-link hover:underline"
-                                >{{ t(`sandbox.agentModels.turnJudgeOn`) }}</RouterLink
-                            >
-                            {{ t(`sandbox.agentModels.underSafety`) }}
-                        </p>
-                        <!-- The judge model evaluates untrusted generated input. -->
-                        <p v-else class="text-2xs text-subtle">
-                            {{ t(`sandbox.words.worthBetterModelThan`) }}
-                        </p>
-                    </template>
-                </ModelRoleRow>
-            </template>
+        <!-- Only once a job runs on something else: a fresh sandbox is the one row above, and nothing more to read. -->
+        <RowGroup v-if="ownPaths.length > 0" :label="t(`sandbox.agentModels.ownLists`)" :caption="t(`sandbox.agentModels.ownCaption`)">
+            <ModelPathRow
+                v-for="path in ownPaths"
+                :key="path.id"
+                :path="path"
+                v-bind="rowProps"
+                @write="(pins: readonly ModelPin[]) => writePath(path.id, pins)"
+                @open="openPicker"
+                @job="openJob"
+                @make-default="commit(makeDefault(resolved, layout, paths, path, mint))"
+                @follow-default="commit(followDefault(resolved, layout, path))"
+            />
         </RowGroup>
     </div>
 
-    <!-- The router's second setting, opened from its own row: a document, so it takes the dialog rather than a field
+    <ResponsiveOverlay
+        :model-value="jobOpen !== undefined"
+        :anchor="jobOpen?.anchor"
+        panel-class="w-80"
+        side="bottom"
+        @update:model-value="setJobOpen"
+    >
+        <ModelJobPanel
+            v-if="jobOpen !== undefined"
+            :role="jobOpen.role"
+            :paths="paths"
+            :judge-off="judgeOff"
+            :guidance-set="guidanceSet"
+            @move="move"
+            @guidance="openGuidance"
+        />
+    </ResponsiveOverlay>
+
+    <!-- The router's second setting, opened from its own panel: a document, so it takes the dialog rather than a field
          shell inside a drawer — the same surface the system prompt is written on. -->
     <Modal :open="guidanceOpen" size="lg" :header="t(`sandbox.agentModels.howAutoChooses`)" @update:open="guidanceOpen = $event">
         <!-- A writing surface, not a field: it opens at the height of something you would compose rather than snapping
@@ -495,9 +230,9 @@ const setPickerOpen = (open: boolean): void => {
         :header="editing?.header"
         :pin="editingPin"
         :current="editingCurrent"
-        :knobs="editing?.knobs === true"
-        :helper-jobs="editing?.helperJobs === true"
-        :taken="editingTaken"
+        :knobs="editing?.list.knobs === true"
+        :helper-jobs="editing?.list.helperJobs === true"
+        :taken="editing?.list.taken.value ?? []"
         @update:open="setPickerOpen"
         @pick="pick"
         @configure="configure"

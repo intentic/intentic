@@ -1,37 +1,35 @@
-import { MODEL_ROLE_BLOCKS, MODEL_ROLES, type ModelRoleSpec } from "./model-roles.js";
+import type { ModelPin } from "../schemas/agent.js";
+import { followsDefault, MODEL_ROLES, rolePins } from "./model-roles.js";
 
-// The catalog draws the settings page directly, so its properties (every role in one block) must hold of the table
-// itself, not be remembered by whoever adds a row.
+// The catalog draws the settings page directly, so its properties must hold of the table itself, not be remembered by
+// whoever adds a row; and the default list is a rule every reader shares, so it is pinned here once.
 
-// Typed at its declared width, not the literal tuple: trigger is absent from a helper's type, under test here.
-const roles: readonly ModelRoleSpec[] = MODEL_ROLES;
+const opus: ModelPin = { provider: `claude`, model: `claude-opus-5-5` };
+const haiku: ModelPin = { provider: `claude`, model: `claude-haiku-5-5` };
 
-test("every whole session says what starts it, and it is the block it is drawn in", () => {
-    const blockOf = new Map(MODEL_ROLE_BLOCKS.flatMap((block) => block.roles.map((role) => [role.id, block.id] as const)));
+test("the page reads one-shots first, then whole sessions, in the table's own order", () => {
+    const kinds = MODEL_ROLES.map((role) => role.kind);
 
-    for (const role of roles) {
-        expect(role.kind === `run` ? role.trigger : role.kind, role.id).toBe(blockOf.get(role.id));
-    }
+    expect(kinds.indexOf(`run`)).toBe(kinds.lastIndexOf(`helper`) + 1);
 });
 
-test("a one-shot declares no trigger at all: nothing presses a commit subject into being", () => {
-    for (const helper of roles.filter((role) => role.kind === `helper`)) {
-        expect(Object.keys(helper), helper.id).not.toContain(`trigger`);
-    }
+test("a job with no list of its own runs on the default list", () => {
+    const settings = { modelRoles: {}, modelDefault: [haiku] };
+
+    expect(rolePins(settings, `commit-message`)).toEqual([haiku]);
+    expect(rolePins(settings, `pipeline-fix`)).toEqual([haiku]);
+    expect(followsDefault(settings, `commit-message`)).toBe(true);
 });
 
-test("the blocks hold every role once, in the table's own order", () => {
-    const blocked = MODEL_ROLE_BLOCKS.flatMap((block) => block.roles.map((role) => role.id));
+test("a job's own list wins over the default, and an empty one is how a single job is switched off", () => {
+    const settings = { modelRoles: { "pipeline-fix": [opus], "session-title": [] }, modelDefault: [haiku] };
 
-    expect(blocked.toSorted()).toEqual(MODEL_ROLES.map((role) => role.id).toSorted());
-    // The block order mirrors reach ordering (unpicked jobs, then click-started sessions, then auto-started ones).
-    expect(blocked).toEqual(MODEL_ROLES.map((role) => role.id));
+    expect(rolePins(settings, `pipeline-fix`)).toEqual([opus]);
+    expect(rolePins(settings, `session-title`)).toEqual([]);
+    expect(followsDefault(settings, `session-title`)).toBe(false);
+    expect(rolePins(settings, `commit-message`)).toEqual([haiku]);
 });
 
-test("each block says what it is, so the page keeps no headings of its own", () => {
-    for (const block of MODEL_ROLE_BLOCKS) {
-        expect(block.label, block.id).toMatch(/\S/);
-        // A block with nothing in it would draw a heading over an empty surface.
-        expect(block.roles.length, block.id).toBeGreaterThan(1);
-    }
+test("with no default, a job with no list answers nothing, as it did before there was one", () => {
+    expect(rolePins({ modelRoles: {}, modelDefault: [] }, `loop-verdict`)).toEqual([]);
 });

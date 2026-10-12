@@ -282,6 +282,7 @@ const samplesOf = (
         },
         settings: {
             get: undefined,
+            set: {},
             gettingStarted: undefined,
             setGettingStarted: { hidden: false },
             savings: {},

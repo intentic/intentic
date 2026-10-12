@@ -15,15 +15,23 @@ import { STARTED_AT } from "./roster";
 // The Settings tab's records: the sandbox's settings, the system prompt a conversation opened with, the checks each
 // repository declares, the safety policy, and what the tool-output cleaners saved.
 
-// An empty rule table puts a finished agent in Ready to land, with nothing else deciding otherwise. One role is
-// pinned to a provider with no credential here: a pin is written, not resolved, so "not connected" is a state the
-// settings page has to be able to draw, and the only way to see it is to have one.
+// An empty rule table puts a finished agent in Ready to land, with nothing else deciding otherwise. Models: a default
+// list every job runs on, and two jobs moved onto a list of their own, which is the page's usual shape. That list leads
+// with a provider with no credential here: a pin is written, not resolved, so "not connected" is a state the settings
+// page has to be able to draw, and the only way to see it is to have one.
 export const DEMO_SETTINGS: SandboxHandlerOutput<`settings`, `get`> = {
     rules: [],
     systemPromptMode: `intentic`,
     stableSystemPrompt: true,
     skills: [],
-    modelRoles: { "commit-message": [{ provider: `gemini`, model: `gemini-3-1-pro` }] },
+    modelDefault: [
+        { provider: `claude`, model: `claude-opus-5`, effort: `high` },
+        { provider: `codex`, model: `gpt-5.2-codex` },
+    ],
+    modelRoles: {
+        "commit-message": [{ provider: `gemini`, model: `gemini-3-1-pro` }, { provider: `claude`, model: `claude-haiku-4-5-20251001` }],
+        "session-title": [{ provider: `gemini`, model: `gemini-3-1-pro` }, { provider: `claude`, model: `claude-haiku-4-5-20251001` }],
+    },
     // The two measured mechanisms are on with a holdout running, since their readout is the only place the
     // measurement block is drawn and an off switch hides it entirely.
     iqSearch: true,

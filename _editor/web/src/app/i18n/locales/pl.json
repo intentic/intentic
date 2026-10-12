@@ -4350,24 +4350,38 @@
         },
         "agentModels": {
             "addFallback": "Dodaj model zapasowy",
-            "advanced": "Zaawansowane",
             "autoReadsIt": "Auto je czyta",
-            "clearModels": "Wyczyść modele",
             "guidance": "Wskazówki",
-            "guidanceSet": "Wskazówki ustawione",
             "guided": "kierowany",
             "howAutoChooses": "Jak Auto wybiera",
-            "howToShow": "Jak pokazywać {toLowerCase}",
-            "modelForJobs": "Model dla {count} zadania | Model dla {count} zadań | Model dla {count} zadań",
             "nothingJudgingCommandsAt": "W tej chwili nic nie ocenia poleceń, więc to nie jest w użyciu.",
-            "selectEveryJobUnder": "Zaznacz każde zadanie w kategorii {toLowerCase}",
-            "selectJobs": "Zaznacz zadania",
-            "selected": "Zaznaczono: {count}",
-            "setModelAll": "Ustaw model dla wszystkich…",
-            "simple": "Proste",
             "turnJudgeOn": "Włącz sędziego",
             "underSafety": "w sekcji Bezpieczeństwo.",
-            "whatYoudTellSomebody": "Co powiedziałbyś komuś, kto wybiera model dla nowego czatu: która praca może pójść taniej, którego konta nie ruszać, kiedy sięgnąć po najmocniejszy."
+            "whatYoudTellSomebody": "Co powiedziałbyś komuś, kto wybiera model dla nowego czatu: która praca może pójść taniej, którego konta nie ruszać, kiedy sięgnąć po najmocniejszy.",
+            "defaultModels": "Modele domyślne",
+            "defaultCaption": "Każde zadanie działa na nich, dopóki nie dostanie własnych.",
+            "ownLists": "Osobne listy",
+            "ownCaption": "Zadania przeniesione z listy domyślnej. Zmiana tutaj dotyczy każdego zadania w danym wierszu.",
+            "laterJobs": "Zadania dodane w kolejnych aktualizacjach też zaczynają tutaj.",
+            "jobsOnList": "Zadania na tej liście",
+            "notInUse": "nieużywane",
+            "noJobsOnDefault": "Żadne zadanie nie działa na tych modelach. Każdą listę poniżej można ustawić jako domyślną.",
+            "addModelFor": "Dodaj model dla: {jobs}",
+            "addDefaultModel": "Dodaj model domyślny",
+            "emptyHelpers": "Brak modeli: nic tutaj nie działa, dopóki nie dodasz modelu.",
+            "emptyRuns": "Brak modeli: sesje tutaj otwierają się na modelu ustawionym w czacie.",
+            "emptyMixed": "Brak modeli: jednorazowe zadania tutaj nie działają, a sesje otwierają się na modelu z czatu.",
+            "makeDefault": "Ustaw jako domyślne",
+            "useDefault": "Wróć do domyślnych",
+            "runsOn": "Działa na",
+            "ownModels": "Własne modele",
+            "copyOfNow": "Zaczyna od kopii tego, na czym działa teraz",
+            "noModels": "Brak modeli",
+            "doesntRun": "Nie działa",
+            "chatModel": "Otwiera się na modelu z czatu",
+            "thenMore": "{first} +{count}",
+            "with": "Razem z: {jobs}",
+            "withMore": "Razem z: {jobs} +{count}"
         },
         "agentRecovery": {
             "consecutiveFailuresBeforeAutomation": "Kolejne niepowodzenia, zanim automatyzacja zostanie wyłączona",
@@ -5714,14 +5728,6 @@
             "tooEarly": "Za wcześnie, by ocenić",
             "without": "Bez"
         },
-        "modelGroupRow": {
-            "addModelEveryJob": "Dodaj model do każdego zadania: {toLowerCase}",
-            "editsSetEveryJob": "Zmiana dotyczy wszystkich",
-            "jobsDiffer": "zadania się różnią",
-            "off": "wyłączone",
-            "oneListForAllJobs": "Jedna lista dla {count} zadania | Jedna lista dla wszystkich {count} zadań | Jedna lista dla wszystkich {count} zadań",
-            "overlapOnly": "Tylko część wspólna"
-        },
         "modelPinList": {
             "change": "Zmień {label}",
             "moveEarlier": "Przesuń {label} wcześniej",
@@ -5739,11 +5745,6 @@
         },
         "modelPinPickerBody": {
             "run": "Przebieg {provider}"
-        },
-        "modelRoleRow": {
-            "addModel": "Dodaj model do: {toLowerCase}",
-            "off": "wyłączone",
-            "select": "Wybierz: {toLowerCase}"
         },
         "moveOutPanel": {
             "compareSandboxToml": "Porównaj sandbox.toml",
@@ -6788,17 +6789,13 @@
             "cleaning": "Czyszczenie: {category}"
         },
         "words": {
-            "addModelToEnable": "Dodaj model, by włączyć",
-            "addModelToPin": "Dodaj model, by przypiąć",
             "addSandbox": "Dodaj sandbox",
             "commit": "Commit",
             "filesKeepSyncing": "Pliki dalej się synchronizują",
             "filesOnly": "Tylko pliki",
             "finishSettingUp": "Dokończ konfigurację: {name}",
             "access": "Dostęp",
-            "followsChat": "Jak w czacie",
             "home": "Katalog domowy",
-            "notSet": "Nie ustawiono",
             "offLocalhost": "Poza localhost",
             "ontoLocalhost": "Na localhost",
             "os": "System",
@@ -6852,7 +6849,6 @@
             "onlyTouching": "tylko przy dotykaniu",
             "recentDecisions": "Ostatnie decyzje",
             "worthBetterModelThan": "Wart lepszego modelu niż reszta zadań automatycznych: czyta polecenie jako dane, a w turze, która wchłonęła coś z zewnątrz, ten tekst może argumentować za własnym zatwierdzeniem.",
-            "chatDefault": "domyślny czatu",
             "youreHere": "Jesteś tutaj"
         },
         "updateOutcome": {
@@ -7440,11 +7436,6 @@
             "approvalQueue": {
                 "blurb": "Tura, która publikuje lub wykonuje to, co zatwierdziłeś.",
                 "label": "Kolejka zatwierdzeń"
-            },
-            "blocks": {
-                "helper": "Automatyczni pomocnicy",
-                "pressed": "Przebiegi, które uruchamiasz",
-                "unprompted": "Przebiegi, które uruchamiają się same"
             },
             "commitMessage": {
                 "blurb": "Temat zapisywany, gdy praca agenta zostaje scalona, i notatka o wydaniu pod nim.",

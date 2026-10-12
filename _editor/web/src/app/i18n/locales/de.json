@@ -2294,20 +2294,11 @@
             "reading": "{memory_file} wird gelesen…"
         },
         "agentModels": {
-            "advanced": "Erweitert",
             "autoReadsIt": "Auto liest sie",
-            "clearModels": "Modelle leeren",
             "guidance": "Vorgaben",
-            "guidanceSet": "Vorgaben gesetzt",
             "guided": "geführt",
             "howAutoChooses": "Wie Auto wählt",
-            "howToShow": "Wie {toLowerCase} gezeigt wird",
             "nothingJudgingCommandsAt": "Gerade beurteilt nichts Befehle, das hier ist also nicht in Gebrauch.",
-            "selectEveryJobUnder": "Jeden Job unter {toLowerCase} auswählen",
-            "selectJobs": "Jobs auswählen",
-            "selected": "{count} ausgewählt",
-            "setModelAll": "Ein Modell für alle setzen…",
-            "simple": "Einfach",
             "turnJudgeOn": "Den Richter einschalten",
             "underSafety": "unter „Sicherheit“.",
             "whatYoudTellSomebody": "Was Sie jemandem sagen würden, der das Modell für einen neuen Chat wählt: welche Arbeit günstig laufen darf, welches Konto zu schonen ist, wann das stärkste gefragt ist."
@@ -3131,13 +3122,6 @@
             "tooEarly": "Noch zu früh",
             "without": "Ohne"
         },
-        "modelGroupRow": {
-            "addModelEveryJob": "Ein Modell für jeden {toLowerCase}-Job hinzufügen",
-            "editsSetEveryJob": "Änderung gilt für alle Jobs",
-            "jobsDiffer": "Jobs unterscheiden sich",
-            "off": "aus",
-            "overlapOnly": "Nur Schnittmenge"
-        },
         "modelPinList": {
             "change": "{label} ändern",
             "moveEarlier": "{label} nach vorn schieben",
@@ -3153,11 +3137,6 @@
         },
         "modelPinPickerBody": {
             "run": "{provider}-Lauf"
-        },
-        "modelRoleRow": {
-            "addModel": "Ein Modell für {toLowerCase} hinzufügen",
-            "off": "aus",
-            "select": "{toLowerCase} wählen"
         },
         "moveOutPanel": {
             "compareSandboxToml": "sandbox.toml vergleichen",
@@ -3958,17 +3937,13 @@
             "couldntMeasure": "Der Speicherplatz ließ sich nicht messen"
         },
         "words": {
-            "addModelToEnable": "Modell hinzufügen zum Aktivieren",
-            "addModelToPin": "Modell hinzufügen zum Festlegen",
             "addSandbox": "Sandbox hinzufügen",
             "commit": "Commit",
             "filesKeepSyncing": "Dateien synchronisieren weiter",
             "filesOnly": "Nur Dateien",
             "finishSettingUp": "{name} fertig einrichten",
             "access": "Zugriff",
-            "followsChat": "Folgt dem Chat",
             "home": "Home",
-            "notSet": "Nicht gesetzt",
             "offLocalhost": "Weg von localhost",
             "ontoLocalhost": "Auf localhost",
             "os": "OS",
@@ -4021,7 +3996,6 @@
             "onlyTouching": "nur beim Anfassen von",
             "recentDecisions": "Jüngste Entscheidungen",
             "worthBetterModelThan": "Ein besseres Modell wert als der Rest der automatischen Jobs: es liest den Befehl als Daten, und in einem Zug, der etwas von außen aufgenommen hat, argumentiert dieser Text womöglich für seine eigene Freigabe.",
-            "chatDefault": "Chat-Standard",
             "youreHere": "Sie sind hier"
         },
         "placement": {

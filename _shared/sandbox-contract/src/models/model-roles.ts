@@ -1,15 +1,13 @@
 import { z } from "zod";
+import type { ModelPin } from "../schemas/agent.js";
 
 // Every job that picks a model, one row per job; the unit is the role, not a difficulty tier. Each list is an ordered
-// fallback ladder; empty means the job is off (helper) or falls back to the caller's own chat model (run). Adding a
-// role is one row here, settings, resolver and daemon all read this table.
+// fallback ladder; a job with no list of its own runs on the sandbox's default list (`rolePins`), and an empty answer
+// means the job is off (helper) or falls back to the caller's own chat model (run). Adding a role is one row here,
+// settings, resolver and daemon all read this table.
 
 export const ModelRoleKindSchema = z.enum(["helper", "run"]);
 export type ModelRoleKind = z.infer<typeof ModelRoleKindSchema>;
-
-// Which block a run role sorts into on the settings page: pressed by the owner, or started unprompted; helpers declare
-// none.
-export type ModelRoleTrigger = "pressed" | "unprompted";
 
 // `id` is a bare string here; narrowed to the role union on `ModelRoleSpec` below, since that union derives from this
 // table via `satisfies`.
@@ -20,13 +18,11 @@ interface ModelRoleRow {
     // Must add information beyond the label, not restate it.
     readonly blurb: string;
     readonly kind: ModelRoleKind;
-    /** Required when `kind` is "run"; unset for helpers. */
-    readonly trigger?: ModelRoleTrigger;
     // Icon name from the shared icon set; kept here, not in a separate web-side map keyed by id.
     readonly icon: string;
 }
 
-// Ids are wire-stable (`AgentTurn.runRole`); order matches the settings page's block grouping below.
+// Ids are wire-stable (`AgentTurn.runRole`); order is the settings page's: one-shot helpers first, then whole sessions.
 export const MODEL_ROLES = [
     {
         id: "commit-message",
@@ -81,7 +77,6 @@ export const MODEL_ROLES = [
         label: "Pipeline fixes",
         blurb: "The agent started by Fix on a failed pipeline.",
         kind: "run",
-        trigger: "pressed",
         icon: "wave-pulse",
     },
     {
@@ -89,7 +84,6 @@ export const MODEL_ROLES = [
         label: "Deployment fixes",
         blurb: "The agent started by Fix on a deployment that is down.",
         kind: "run",
-        trigger: "pressed",
         icon: "server",
     },
     {
@@ -97,7 +91,6 @@ export const MODEL_ROLES = [
         label: "Maintenance chores",
         blurb: "A chore run started from the Maintenance board.",
         kind: "run",
-        trigger: "pressed",
         icon: "wrench",
     },
     {
@@ -105,7 +98,6 @@ export const MODEL_ROLES = [
         label: "Refactors",
         blurb: "The agent started from a hotspot or key module on a repository's Health tab.",
         kind: "run",
-        trigger: "pressed",
         icon: "hammer",
     },
     {
@@ -113,7 +105,6 @@ export const MODEL_ROLES = [
         label: "Documentation runs",
         blurb: "A pass over a repo's own documentation.",
         kind: "run",
-        trigger: "pressed",
         icon: "book",
     },
     {
@@ -121,16 +112,13 @@ export const MODEL_ROLES = [
         label: "Acceptance runs",
         blurb: "One session per story in an acceptance fan-out.",
         kind: "run",
-        trigger: "pressed",
         icon: "list-check",
     },
     {
-        // Pressed trigger: the owner's approval click starts this turn; the queue between is just machinery.
         id: "approval-queue",
         label: "Approvals queue",
         blurb: "The turn that publishes or acts on what you approved.",
         kind: "run",
-        trigger: "pressed",
         icon: "check-circle",
     },
     {
@@ -138,7 +126,6 @@ export const MODEL_ROLES = [
         label: "Extension update reviews",
         blurb: "The agent that reads an extension update before it is applied.",
         kind: "run",
-        trigger: "unprompted",
         icon: "box",
     },
     {
@@ -146,7 +133,6 @@ export const MODEL_ROLES = [
         label: "Loop iterations",
         blurb: "Each round of a loop working towards its goal.",
         kind: "run",
-        trigger: "unprompted",
         icon: "repeat",
     },
 ] as const satisfies readonly ModelRoleRow[];
@@ -159,33 +145,14 @@ export const MODEL_ROLE_IDS = MODEL_ROLES.map((role) => role.id) as readonly Mod
 // Enum, not a string: an id outside this table names nothing, so it should fail loudly rather than be ignored.
 export const ModelRoleSchema = z.enum(MODEL_ROLE_IDS as [ModelRole, ...ModelRole[]]);
 
-// Groups MODEL_ROLES for the settings page by kind and trigger; each role belongs to exactly one block, in table order.
-export type ModelRoleBlockId = "helper" | "pressed" | "unprompted";
-
-export interface ModelRoleBlock {
-    readonly id: ModelRoleBlockId;
-    /** Heading shown on the settings page. */
-    readonly label: string;
-    /** Its roles, in MODEL_ROLES order. */
-    readonly roles: readonly ModelRoleSpec[];
+// A job with no list of its own (its key absent from `modelRoles`) runs on the default list; a key that is present wins
+// even when empty, which is how one job is switched off (or handed back to the chat's own model) while the default
+// serves the rest. Every reader goes through here, daemon and browser alike, so the two agree what a job will run on.
+export interface RolePinSettings {
+    readonly modelRoles: Partial<Record<ModelRole, readonly ModelPin[]>>;
+    readonly modelDefault: readonly ModelPin[];
 }
 
-const rolesWhere = (match: (role: ModelRoleSpec) => boolean): readonly ModelRoleSpec[] => MODEL_ROLES.filter((role) => match(role));
+export const followsDefault = (settings: Pick<RolePinSettings, "modelRoles">, role: ModelRole): boolean => settings.modelRoles[role] === undefined;
 
-export const MODEL_ROLE_BLOCKS: readonly ModelRoleBlock[] = [
-    {
-        id: "helper",
-        label: "Automatic helpers",
-        roles: rolesWhere((role) => role.kind === "helper"),
-    },
-    {
-        id: "pressed",
-        label: "Runs you start",
-        roles: rolesWhere((role) => role.kind === "run" && role.trigger === "pressed"),
-    },
-    {
-        id: "unprompted",
-        label: "Runs that start themselves",
-        roles: rolesWhere((role) => role.kind === "run" && role.trigger === "unprompted"),
-    },
-];
+export const rolePins = (settings: RolePinSettings, role: ModelRole): readonly ModelPin[] => settings.modelRoles[role] ?? settings.modelDefault;

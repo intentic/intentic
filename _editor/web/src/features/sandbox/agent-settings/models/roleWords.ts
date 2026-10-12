@@ -1,7 +1,7 @@
-import type { ModelRole, ModelRoleBlock, ModelRoleBlockId, ModelRoleSpec } from "@intentic/sandbox-contract";
+import type { ModelRole, ModelRoleSpec } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
 
-// MODEL_ROLES and MODEL_ROLE_BLOCKS name each job in English, for the daemon and the settings file as much as for the
+// MODEL_ROLES names each job in English, for the daemon and the settings file as much as for the
 // screen. These are the settings page's words for them, keyed by the wire-stable id; roleWords.test.ts holds the
 // English copy equal to the contract's, so a renamed job cannot go on being shown under its old translation.
 
@@ -41,17 +41,9 @@ const BLURBS: Readonly<Record<ModelRole, () => string>> = {
     "loop-iteration": () => t(`sandbox.modelRoles.loopIteration.blurb`),
 };
 
-const BLOCKS: Readonly<Record<ModelRoleBlockId, () => string>> = {
-    helper: () => t(`sandbox.modelRoles.blocks.helper`),
-    pressed: () => t(`sandbox.modelRoles.blocks.pressed`),
-    unprompted: () => t(`sandbox.modelRoles.blocks.unprompted`),
-};
-
 /** The job's name, as its row and every sentence about it say it. */
 export const roleLabel = (role: Pick<ModelRoleSpec, `id`>): string => LABELS[role.id]();
 
 /** The line under the job's name. */
 export const roleBlurb = (role: Pick<ModelRoleSpec, `id`>): string => BLURBS[role.id]();
 
-/** The heading over a block of jobs. */
-export const blockLabel = (block: Pick<ModelRoleBlock, `id`>): string => BLOCKS[block.id]();

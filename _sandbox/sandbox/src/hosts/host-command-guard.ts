@@ -6,6 +6,7 @@ import {
     DeviceScopesSchema,
     hardRuleClasses,
     matchCommand,
+    rolePins,
     type SafetyVerdict,
 } from "@intentic/sandbox-contract";
 import { z } from "zod";
@@ -177,7 +178,7 @@ const hostVerdict = async (
         {
             policy,
             program: input.command,
-            pins: settings.modelRoles[`safety-judge`] ?? [],
+            pins: rolePins(settings, `safety-judge`),
             facts: {
                 consequences: input.consequences,
                 unattended: input.unattended,

@@ -4908,24 +4908,38 @@
         },
         "agentModels": {
             "addFallback": "Add a fallback model",
-            "advanced": "Advanced",
             "autoReadsIt": "Auto reads it",
-            "clearModels": "Clear models",
             "guidance": "Guidance",
-            "guidanceSet": "Guidance set",
             "guided": "guided",
             "howAutoChooses": "How Auto chooses",
-            "howToShow": "How to show {toLowerCase}",
-            "modelForJobs": "Model for {count} job | Model for {count} jobs",
             "nothingJudgingCommandsAt": "Nothing is judging commands at the moment, so this is not in use.",
-            "selectEveryJobUnder": "Select every job under {toLowerCase}",
-            "selectJobs": "Select jobs",
-            "selected": "{count} selected",
-            "setModelAll": "Set a model for all…",
-            "simple": "Simple",
             "turnJudgeOn": "Turn the judge on",
             "underSafety": "under Safety.",
-            "whatYoudTellSomebody": "What you'd tell somebody choosing the model for a new chat: which work can go cheap, which account to leave alone, when to reach for the strongest one."
+            "whatYoudTellSomebody": "What you'd tell somebody choosing the model for a new chat: which work can go cheap, which account to leave alone, when to reach for the strongest one.",
+            "defaultModels": "Default models",
+            "defaultCaption": "Every job runs on these until you give it its own.",
+            "ownLists": "Separate lists",
+            "ownCaption": "Jobs moved off the default. A change here applies to every job in its row.",
+            "laterJobs": "Jobs added in later updates start here too.",
+            "jobsOnList": "Jobs on this list",
+            "notInUse": "not in use",
+            "noJobsOnDefault": "No job runs on these. Any list below can be made the default.",
+            "addModelFor": "Add a model for {jobs}",
+            "addDefaultModel": "Add a default model",
+            "emptyHelpers": "No models: nothing here runs until one is added.",
+            "emptyRuns": "No models: sessions here open on whatever your chat is set to.",
+            "emptyMixed": "No models: one-shot jobs here don't run, and sessions open on your chat's model.",
+            "makeDefault": "Make default",
+            "useDefault": "Back to default",
+            "runsOn": "Runs on",
+            "ownModels": "Its own models",
+            "copyOfNow": "Starts as a copy of what it runs on now",
+            "noModels": "No models",
+            "doesntRun": "Doesn't run",
+            "chatModel": "Opens on your chat's model",
+            "thenMore": "{first} +{count}",
+            "with": "With {jobs}",
+            "withMore": "With {jobs} +{count}"
         },
         "agentRecovery": {
             "consecutiveFailuresBeforeAutomation": "Consecutive failures before an automation is disabled",
@@ -6250,14 +6264,6 @@
             "tooEarly": "Too early to tell",
             "without": "Without"
         },
-        "modelGroupRow": {
-            "addModelEveryJob": "Add a model for every {toLowerCase} job",
-            "editsSetEveryJob": "Edits set every job",
-            "jobsDiffer": "jobs differ",
-            "off": "off",
-            "oneListForAllJobs": "One list for all {count} jobs | One list for all {count} jobs",
-            "overlapOnly": "Overlap only"
-        },
         "modelPinList": {
             "change": "Change {label}",
             "moveEarlier": "Move {label} earlier",
@@ -6275,11 +6281,6 @@
         },
         "modelPinPickerBody": {
             "run": "{provider} run"
-        },
-        "modelRoleRow": {
-            "addModel": "Add a model for {toLowerCase}",
-            "off": "off",
-            "select": "Select {toLowerCase}"
         },
         "moveOutPanel": {
             "compareSandboxToml": "Compare sandbox.toml",
@@ -7355,17 +7356,13 @@
             "title": "Where heavy work runs"
         },
         "words": {
-            "addModelToEnable": "Add a model to enable",
-            "addModelToPin": "Add a model to pin",
             "addSandbox": "Add sandbox",
             "commit": "Commit",
             "filesKeepSyncing": "Files keep syncing",
             "filesOnly": "Files only",
             "finishSettingUp": "Finish setting up {name}",
             "access": "Access",
-            "followsChat": "Follows chat",
             "home": "Home",
-            "notSet": "Not set",
             "offLocalhost": "Off localhost",
             "ontoLocalhost": "Onto localhost",
             "os": "OS",
@@ -7419,7 +7416,6 @@
             "onlyTouching": "only when touching",
             "recentDecisions": "Recent decisions",
             "worthBetterModelThan": "Worth a better model than the rest of the automatic jobs: it reads the command as data, and on a turn that has taken in something from outside, that text may be arguing for its own approval.",
-            "chatDefault": "chat default",
             "youreHere": "You're here"
         },
         "updateOutcome": {
@@ -7998,11 +7994,6 @@
             "approvalQueue": {
                 "blurb": "The turn that publishes or acts on what you approved.",
                 "label": "Approvals queue"
-            },
-            "blocks": {
-                "helper": "Automatic helpers",
-                "pressed": "Runs you start",
-                "unprompted": "Runs that start themselves"
             },
             "commitMessage": {
                 "blurb": "The subject written when an agent's work lands, and the release note under it.",

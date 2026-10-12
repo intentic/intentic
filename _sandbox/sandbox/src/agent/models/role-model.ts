@@ -9,6 +9,7 @@ import {
     NATIVE_PROVIDERS,
     type NativeProvider,
     readyChain,
+    rolePins,
 } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import { endpointConfigOf } from "../../endpoints/local-model.js";
@@ -73,7 +74,7 @@ const modelSources = async (services: Services): Promise<ModelSource[]> => {
 // Whether this role has any models configured, checked against the stored list rather than the resolved chain, for a
 // caller that must never start the walk at all.
 export const roleModelIsSet = async (services: Services, role: ModelRole): Promise<boolean> =>
-    ((await services.sandboxSettings.get()).modelRoles[role] ?? []).length > 0;
+    rolePins(await services.sandboxSettings.get(), role).length > 0;
 
 // A model that was asked and refused, with the reason it gave; carried up because a fully spent chain is a message only
 // this walk can report.
@@ -219,7 +220,7 @@ export const askRoleModel = async <T>(
     assertAgentExecutionContext(execution);
     const onProgress = options.onProgress;
     // An empty list means the job is off; refuse before touching a catalog, unlike accounts that are simply gone.
-    const pinned = options.pins ?? (await services.sandboxSettings.get()).modelRoles[role] ?? [];
+    const pinned = options.pins ?? rolePins(await services.sandboxSettings.get(), role);
     if (pinned.length === 0) {
         throw new RoleModelUnsetError(role);
     }

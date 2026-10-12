@@ -72,11 +72,14 @@ on, not an instruction in the prompt. It is a default, though, and a model chose
 - For a turn that names no model (a Fix, a chore, another job the sandbox starts), the daemon fills it from the
   persona's list first, then from the job's own list, stepping over a model whose account is recorded as spent
   or failing in a row. An automation names its own models, required on the automation itself.
-- The jobs' lists are `modelRoles` in settings, edited on Sandbox ▸ Agent ▸ Jobs: helpers (**Commit messages**,
-  **Session titles**, **Safety judge**, **Loop verdicts**, **New chat routing**) and runs (**Pipeline fixes**,
-  **Deployment fixes**, **Maintenance chores**, **Refactors**, **Documentation runs**, **Acceptance runs**, **Approvals queue**,
-  **Extension update reviews**, **Loop iterations**). A helper with no list does not run; a run with no list
-  opens on a connected provider.
+- The jobs' lists are edited on Sandbox ▸ Agent ▸ Jobs, drawn as one row per list with the jobs that share it.
+  **Default models** (`modelDefault` in settings) is the list every job runs on until it is given its own; a job
+  moved off it gets its own entry in `modelRoles`, and jobs given the same list sit in one row, edited together.
+  Press a job to move it: onto the default, onto another row, onto a list of its own, or onto no models. The jobs
+  are helpers (**Commit messages**, **Session titles**, **Safety judge**, **Loop verdicts**, **Hand-off
+  summaries**, **New chat routing**) and runs (**Pipeline fixes**, **Deployment fixes**, **Maintenance chores**,
+  **Refactors**, **Documentation runs**, **Acceptance runs**, **Approvals queue**, **Extension update reviews**,
+  **Loop iterations**). A helper with no models does not run; a run with no models opens on a connected provider.
 - What is connected at all is Sandbox ▸ Models (`/sandbox/models`): every account, subscription, model on this
   machine and endpoint the sandbox can run on, what needs a person (sign in again, verify, an admin's seat), and the
   one place a model is connected. `/connect` is an old address for it. Connecting is the owner's (a maintainer's);

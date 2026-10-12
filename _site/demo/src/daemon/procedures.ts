@@ -98,6 +98,9 @@ const DEMO_TRIAL: TrialStatusResponse = freshEdition
 // recording but the fresh one is an established sandbox whose owner put the list away long ago, so screenshots of it
 // carry no beginner's ring; `?mode=fresh` is where the list is seen.
 let gettingStarted: GettingStarted = freshEdition ? {} : { hidden: true };
+// The sandbox's settings as this page load has written them: a press on a settings control sticks until a reload, the
+// way it would against a daemon, rather than being put back by the 404 a refused write gets.
+let settingsNow = DEMO_SETTINGS;
 const NO_TRANSLATOR_ACCOUNTS = Object.fromEntries(TRANSLATOR_PROVIDERS.map((provider) => [provider, []])) as unknown as TranslatorAccounts;
 
 const info: Info = { name: deskEdition ? DESK_SANDBOX_NAME : `acme-shop`, version: `demo`, latest: `demo`, updateAvailable: false };
@@ -325,7 +328,11 @@ export const procedures = {
         }),
     },
     settings: {
-        get: () => DEMO_SETTINGS,
+        get: () => settingsNow,
+        set: (settings) => {
+            settingsNow = settings;
+            return { ok: true };
+        },
         gettingStarted: () => gettingStarted,
         setGettingStarted: (choices) => {
             gettingStarted = choices;

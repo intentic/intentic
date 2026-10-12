@@ -2303,20 +2303,11 @@
             "reading": "Leyendo {memory_file}…"
         },
         "agentModels": {
-            "advanced": "Avanzado",
             "autoReadsIt": "Auto las lee",
-            "clearModels": "Vaciar los modelos",
             "guidance": "Indicaciones",
-            "guidanceSet": "Indicaciones fijadas",
             "guided": "guiado",
             "howAutoChooses": "Cómo elige Auto",
-            "howToShow": "Cómo mostrar {toLowerCase}",
             "nothingJudgingCommandsAt": "Ahora mismo nada está juzgando comandos, así que esto no está en uso.",
-            "selectEveryJobUnder": "Seleccionar todas las tareas bajo {toLowerCase}",
-            "selectJobs": "Seleccionar tareas",
-            "selected": "{count} seleccionadas",
-            "setModelAll": "Poner un modelo para todas…",
-            "simple": "Sencillo",
             "turnJudgeOn": "Activar el juez",
             "underSafety": "en Seguridad.",
             "whatYoudTellSomebody": "Lo que le dirías a alguien que elige el modelo para un chat nuevo: qué trabajo puede ir barato, qué cuenta conviene no tocar, cuándo recurrir al más potente."
@@ -3144,13 +3135,6 @@
             "tooEarly": "Aún es pronto",
             "without": "Sin"
         },
-        "modelGroupRow": {
-            "addModelEveryJob": "Añadir un modelo para cada tarea de {toLowerCase}",
-            "editsSetEveryJob": "Cambiar afecta a todos",
-            "jobsDiffer": "las tareas difieren",
-            "off": "desactivado",
-            "overlapOnly": "Solo lo común"
-        },
         "modelPinList": {
             "change": "Cambiar {label}",
             "moveEarlier": "Mover {label} antes",
@@ -3166,11 +3150,6 @@
         },
         "modelPinPickerBody": {
             "run": "Ejecución de {provider}"
-        },
-        "modelRoleRow": {
-            "addModel": "Añadir un modelo para {toLowerCase}",
-            "off": "desactivada",
-            "select": "Seleccionar {toLowerCase}"
         },
         "moveOutPanel": {
             "compareSandboxToml": "Comparar sandbox.toml",
@@ -3973,17 +3952,13 @@
             "couldntMeasure": "No se pudo medir el disco"
         },
         "words": {
-            "addModelToEnable": "Añade un modelo para activar",
-            "addModelToPin": "Añade un modelo para fijar",
             "addSandbox": "Añadir un sandbox",
             "commit": "Commit",
             "filesKeepSyncing": "Los archivos siguen sincronizando",
             "filesOnly": "Solo archivos",
             "finishSettingUp": "Terminar de configurar {name}",
             "access": "Acceso",
-            "followsChat": "Sigue al chat",
             "home": "Carpeta personal",
-            "notSet": "Sin definir",
             "offLocalhost": "Fuera de localhost",
             "ontoLocalhost": "A localhost",
             "os": "SO",
@@ -4037,7 +4012,6 @@
             "onlyTouching": "solo al tocar",
             "recentDecisions": "Decisiones recientes",
             "worthBetterModelThan": "Merece un modelo mejor que el resto de tareas automáticas: lee el comando como datos, y en un turno que ha absorbido algo de fuera, ese texto puede estar argumentando a favor de su propia aprobación.",
-            "chatDefault": "predeterminado del chat",
             "youreHere": "Estás aquí"
         },
         "placement": {

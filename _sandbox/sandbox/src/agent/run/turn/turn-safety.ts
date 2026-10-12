@@ -1,4 +1,4 @@
-import type { ModelPin, SandboxSettings } from "@intentic/sandbox-contract";
+import { type ModelPin, rolePins, type SandboxSettings } from "@intentic/sandbox-contract";
 import type { Services } from "../../../composition.js";
 import type { CommandGuardOptions } from "../../../guard/command-guard.js";
 import { opt } from "../../../opt.js";
@@ -52,7 +52,7 @@ export const withTurnSafety = async (deps: TurnSafetyDeps, input: TurnSafetyInpu
         },
         hooks: {
             ...base.hooks,
-            judge: judgeFor(deps, base.execution, safetyPolicy, settings.modelRoles[`safety-judge`]),
+            judge: judgeFor(deps, base.execution, safetyPolicy, rolePins(settings, `safety-judge`)),
             // The safety log is the owner's record of what the judge decided; a line it could not keep is said out loud.
             logSafety: (entry) => {
                 void deps.safetyLog.record(entry).catch((error: unknown) => deps.logger.warn({ err: error }, "safety log: a judged command was not recorded"));

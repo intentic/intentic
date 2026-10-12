@@ -352,7 +352,6 @@ export const UNSERVED = {
     "secrets.setHosts": UNSIMULATED_WRITE,
     "secrets.setPolicy": UNSIMULATED_WRITE,
     "settings.adoptTimezone": UNSIMULATED_WRITE,
-    "settings.set": UNSIMULATED_WRITE,
     "settings.setAudience": UNSIMULATED_WRITE,
     "share.create": UNSIMULATED_WRITE,
     "share.remove": UNSIMULATED_WRITE,

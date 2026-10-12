@@ -1,4 +1,4 @@
-import { type ModelPin, type ModelRole, NATIVE_PROVIDERS, readyChain } from "@intentic/sandbox-contract";
+import { type ModelPin, type ModelRole, NATIVE_PROVIDERS, readyChain, rolePins } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef } from "vue";
 import { useSandboxSettings } from "../../sandbox/overview/useSandboxSettings";
 import { providerReady } from "../session/access";
@@ -28,13 +28,13 @@ export interface RoleModel {
     readonly label: ComputedRef<string | undefined>;
     // The rest of the chain, for the line describing what happens if the first account is out.
     readonly fallbackLabels: ComputedRef<readonly string[]>;
-    // The stored setting, as the user wrote it. Empty while settings load.
+    // The list the job runs on as the user wrote it: its own, or the default it follows. Empty while settings load.
     readonly pinned: ComputedRef<readonly ModelPin[]>;
 }
 
 export function useRoleModel(role: ModelRole): RoleModel {
     const { settings } = useSandboxSettings();
-    const pinned = computed<readonly ModelPin[]>(() => settings.value?.modelRoles[role] ?? []);
+    const pinned = computed<readonly ModelPin[]>(() => (settings.value === undefined ? [] : rolePins(settings.value, role)));
     // Settings not loaded yet means no answer, not a guess, since a wrong name would flash on every button.
     const chain = computed<readonly ModelPin[]>(() => (settings.value === undefined ? [] : readyChain(roleSources.value, pinned.value)));
     const choice = computed(() => chain.value[0]);
