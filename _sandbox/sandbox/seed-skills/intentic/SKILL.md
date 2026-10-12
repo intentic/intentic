@@ -138,8 +138,8 @@ applies from every conversation's next turn, with no restart.
 /work/refs/                          reference shelf: read, cite by path, never edit
 /work/public/                        outbox: every file in it is on the public internet
 /work/AGENTS.md                      the owner's standing instructions (memory), composed into every turn
-/work/.intentic/config/settings.json this sandbox's agent settings (systemPromptMode, systemPrompt, modelDefault,
-                                     modelRoles, personaRouting, actionRules, skills, subagent limits, rules…)
+/work/.intentic/config/settings.json this sandbox's agent settings (systemPromptMode, systemPrompt, modelSetups,
+                                     roleSetups, personaRouting, actionRules, skills, subagent limits, rules…)
 /work/.intentic/config/              capabilities.json, personas.json (the cards) and personas/<id>/ (each
                                      one's kit: PROMPT.md, skills/), automations.json, workflows.json,
                                      environment.Dockerfile (the owner's overlay), skills/ (their own),

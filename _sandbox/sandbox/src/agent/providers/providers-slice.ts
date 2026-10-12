@@ -1,4 +1,4 @@
-import type { AcpAgentConfig, AgentEvent, ModelPin, NativeProvider, SafetyVerdict } from "@intentic/sandbox-contract";
+import type { AcpAgentConfig, AgentEvent, NativeProvider, SafetyVerdict, SetupLadder } from "@intentic/sandbox-contract";
 import { join } from "node:path";
 import type { Services } from "../../composition.js";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
@@ -41,7 +41,7 @@ export interface ProvidersSlice {
     // filing a browser account, and recomposing the environment overlay.
     readonly judgeCommand: (
         execution: AgentExecutionContext,
-        input: { readonly policy: string; readonly program: string; readonly facts: JudgeFacts; readonly pins: readonly ModelPin[] },
+        input: { readonly policy: string; readonly program: string; readonly facts: JudgeFacts; readonly ladder: SetupLadder },
         signal: AbortSignal,
     ) => Promise<SafetyVerdict>;
     // What each endpoint capability's server publishes, keyed by id; only the server says what it serves.

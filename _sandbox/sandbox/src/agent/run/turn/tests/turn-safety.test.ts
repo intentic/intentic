@@ -1,5 +1,5 @@
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
-import { type ModelPin, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { SandboxSettingsSchema, type SetupLadder } from "@intentic/sandbox-contract";
 import { mergeHeavyRules } from "@intentic/constants/heavy-rules";
 import { unstubbed } from "@intentic/testing";
 import type { Logger } from "pino";
@@ -38,7 +38,7 @@ const baseOf = (over: { readonly isolation?: TurnPlacement; readonly canInstall?
 };
 
 const harness = () => {
-    const judged: { policy: string; program: string; pins: readonly ModelPin[] }[] = [];
+    const judged: { policy: string; program: string; ladder: SetupLadder }[] = [];
     const executions: AgentExecutionContext[] = [];
     const conversationGrants = memoryConversationGrants();
     const deps: TurnSafetyDeps = {
@@ -48,7 +48,7 @@ const harness = () => {
         judgeCommand: async (execution, request) => {
             assertAgentExecutionContext(execution);
             executions.push(execution);
-            judged.push({ policy: request.policy, program: request.program, pins: request.pins });
+            judged.push({ policy: request.policy, program: request.program, ladder: request.ladder });
             return { decision: "allow", sentence: "Fine." };
         },
         logger: unstubbed<Logger>("logger", { warn: () => undefined }),
@@ -68,7 +68,8 @@ test("every runtime's base carries the owner's policy, judge mode, outside wake 
     expect(base.policy).toEqual({ dependencyInstallAllowed: true, safetyPolicy: "# the owner's policy", judging: "watch", outsideWake: "discord" });
     expect(base.hooks.projectInstalls).toMatchObject({ placement: { kind: "shared" }, root: "/work", mode: "ask", canInstall: true });
     await base.hooks.judge?.("rm -rf /", { consequences: [], unattended: false, language: "bash" }, new AbortController().signal);
-    expect(judged).toEqual([{ policy: "# the owner's policy", program: "rm -rf /", pins: [] }]);
+    // Nobody placed the judge on a setup, so it has no models: the snapshot says so rather than borrowing another job's.
+    expect(judged).toEqual([{ policy: "# the owner's policy", program: "rm -rf /", ladder: { kind: "pins", pins: [] } }]);
     expect(executions).toEqual([base.execution]);
     expect(executions[0]).toBe(base.execution);
     expect(await base.tools.heavyCommands?.()).toMatchObject({ queue: true });

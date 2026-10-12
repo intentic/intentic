@@ -7,10 +7,11 @@ import {
     type ModelSource,
     NATIVE_PROVIDERS,
     readyChain,
-    rolePins,
+    roleLadder,
 } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import { failingStreak } from "./role-model-health.js";
+import { ladderPinsNow } from "./role-model.js";
 import { spentRung } from "./role-model-quota.js";
 
 // Resolves which of a `run` role's pinned models this sandbox can actually start; read once before the session starts,
@@ -33,7 +34,7 @@ const readinessSources = async (services: Services): Promise<ModelSource[]> => {
 // Pin this role should open on, or undefined so the caller falls back to its own composer pick; carries the whole pin
 // (effort, harness), not just provider/model.
 export const runRoleModel = async (services: Services, role: ModelRole): Promise<ModelPin | undefined> =>
-    pinnedRunModel(services, rolePins(await services.sandboxSettings.get(), role));
+    pinnedRunModel(services, await ladderPinsNow(services, roleLadder(await services.sandboxSettings.get(), role)));
 
 // Walks any ordered ladder of pins, whoever wrote it (a role, a persona, an automation); readiness and quota are
 // sandbox facts, not the caller's. An empty ladder answers undefined and the caller decides what that means.

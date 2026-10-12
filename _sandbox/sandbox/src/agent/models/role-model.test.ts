@@ -6,6 +6,8 @@ import {
     capabilitiesOf,
     NATIVE_PROVIDERS,
     type NativeProvider,
+    type SetupLadder,
+    setupsFromRoleLists,
 } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
@@ -103,13 +105,16 @@ const ROLE = `commit-message` as const;
 const asPins = (keys: readonly string[]): ModelPin[] =>
     keys.map((key) => ({ provider: key.slice(0, key.indexOf(`:`)), model: key.slice(key.indexOf(`:`) + 1) }));
 
+// A setup written out in full, as a snapshot a caller hands the walk.
+const written = (keys: readonly string[]): SetupLadder => ({ kind: `pins`, pins: asPins(keys) });
+
 const fakeServices = (pinned: readonly string[], spent: readonly string[] = []): Services =>
     unstubbed<Services>(`services`, {
         privacyShield: privacySliceFake().privacyShield,
         providerReadiness: readiness,
         adapters: { for: adapterFor, all: [] },
         sandboxSettings: unstubbed<Services[`sandboxSettings`]>(`sandboxSettings`, {
-            get: async () => ({ modelRoles: { [ROLE]: asPins(pinned) } }) as Awaited<ReturnType<Services[`sandboxSettings`][`get`]>>,
+            get: async () => setupsFromRoleLists({ [ROLE]: asPins(pinned) }) as Awaited<ReturnType<Services[`sandboxSettings`][`get`]>>,
         }),
         capabilities: unstubbed<Services[`capabilities`]>(`capabilities`, { list: async () => [] }),
         // The real modules, so a provider keeping its own allowance reading answers for itself.
@@ -291,9 +296,9 @@ test("spends the list belonging to the role that asked, not another role's", asy
         ...fakeServices([`gemini:gemini-3-flash-lite`]),
         sandboxSettings: unstubbed<Services[`sandboxSettings`]>(`sandboxSettings`, {
             get: async () =>
-                ({
-                    modelRoles: { [ROLE]: asPins([`gemini:gemini-3-flash-lite`]), "safety-judge": asPins([`claude:claude-opus-5`]) },
-                }) as Awaited<ReturnType<Services[`sandboxSettings`][`get`]>>,
+                setupsFromRoleLists({ [ROLE]: asPins([`gemini:gemini-3-flash-lite`]), "safety-judge": asPins([`claude:claude-opus-5`]) }) as Awaited<
+                    ReturnType<Services[`sandboxSettings`][`get`]>
+                >,
         }),
     });
 
@@ -301,18 +306,18 @@ test("spends the list belonging to the role that asked, not another role's", asy
     expect(geminiOneShot).not.toHaveBeenCalled();
 });
 
-test("walks the pins a caller snapshotted instead of re-reading the role's list", async () => {
+test("walks the setup a caller snapshotted instead of re-reading the role's", async () => {
     const answer = await askRoleModel(fakeServices([`gemini:gemini-3-flash-lite`]), execution, ROLE, DRAFT, signal(), {
-        pins: asPins([`claude:claude-opus-5`]),
+        ladder: written([`claude:claude-opus-5`]),
     });
 
     expect(answer.choice).toEqual({ provider: `claude`, model: `claude-opus-5` });
     expect(geminiOneShot).not.toHaveBeenCalled();
 });
 
-// Settings still has `codex:gpt-5.6` for this role, but an empty pins snapshot refuses rather than falling back to it.
-test("refuses on the snapshot it was handed rather than re-reading the role's list", async () => {
-    const thrown = await askRoleModel(fakeServices([`codex:gpt-5.6`]), execution, ROLE, DRAFT, signal(), { pins: [] }).catch((error: unknown) => error);
+// Settings still has `codex:gpt-5.6` for this role, but an emptied snapshot refuses rather than falling back to it.
+test("refuses on the snapshot it was handed rather than re-reading the role's setup", async () => {
+    const thrown = await askRoleModel(fakeServices([`codex:gpt-5.6`]), execution, ROLE, DRAFT, signal(), { ladder: written([]) }).catch((error: unknown) => error);
 
     expect(thrown).toBeInstanceOf(RoleModelUnsetError);
     expect((thrown as Error).message).toBe(`No model is set for this job, so it does not run. Set one in Sandbox ▸ Agent ▸ Models.`);
@@ -603,14 +608,14 @@ test("an unknown window is asked whatever the prompt's size", async () => {
 // A whole chain failing went back to its caller and nowhere else; the commit box failing on Composer had no line to
 // explain it. The walk logs its outcome per role, each rung's refusal included, and folds a repeat into a count.
 test("logs a role's failed chain once with every rung's refusal, a repeat as a count, and the recovery", async () => {
-    const pins = asPins([`codex:gpt-5.6`, `claude:claude-haiku-4-5`]);
+    const pins = written([`codex:gpt-5.6`, `claude:claude-haiku-4-5`]);
     const services = fakeServices([]);
     const ownLines = (): typeof logged => logged.filter((line) => (line.fields as { role?: string }).role === `handoff-summary`);
     oneShot.mockRejectedValue(new Error(`Composer is unavailable right now.`));
-    await expect(askRoleModel(services, execution, `handoff-summary`, DRAFT, signal(), { pins, conversationId: `c-1` })).rejects.toThrow();
+    await expect(askRoleModel(services, execution, `handoff-summary`, DRAFT, signal(), { ladder: pins, conversationId: `c-1` })).rejects.toThrow();
     // Within the gate's hour: the same failure again is a count, not a line.
     jest.setSystemTime(new Date(clock + 60_000));
-    await expect(askRoleModel(services, execution, `handoff-summary`, DRAFT, signal(), { pins })).rejects.toThrow();
+    await expect(askRoleModel(services, execution, `handoff-summary`, DRAFT, signal(), { ladder: pins })).rejects.toThrow();
     expect(ownLines()).toHaveLength(1);
     expect(ownLines()[0]).toMatchObject({
         level: `warn`,
@@ -626,7 +631,7 @@ test("logs a role's failed chain once with every rung's refusal, a repeat as a c
     oneShot.mockReset();
     oneShot.mockResolvedValue(`fix: tree truncation`);
     jest.setSystemTime(new Date(clock + 120_000));
-    await askRoleModel(services, execution, `handoff-summary`, DRAFT, signal(), { pins });
+    await askRoleModel(services, execution, `handoff-summary`, DRAFT, signal(), { ladder: pins });
     expect(ownLines().map((line) => line.message)).toEqual([`role model: handoff-summary failed on every model in its chain`, `role model: handoff-summary answered again, on gpt-5.6`]);
     expect(ownLines()[1]?.fields).toMatchObject({ repeated: 1 });
 });

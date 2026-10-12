@@ -15,6 +15,7 @@ import {
     NATIVE_PROVIDERS,
     withResumeNote,
     withoutResumeNote,
+    setupsFromRoleLists,
 } from "@intentic/sandbox-contract";
 import { waitFor, SETTLES } from "@intentic/testing/bun";
 import { sqliteAgentsStore } from "../../../../conversations/registry/agents-store.js";
@@ -220,7 +221,7 @@ const ranWith = async (
 
 test("a turn carrying a run role takes that role's model, provider and effort", async () => {
     const ran = await ranWith(
-        { modelRoles: { [ROLE]: [{ provider: "codex", model: "gpt-5.6", effort: "high" }] } },
+        setupsFromRoleLists({ [ROLE]: [{ provider: "codex", model: "gpt-5.6", effort: "high" }] }),
         { prompt: "fix CI", conversationId: "ar-fill", runRole: ROLE },
     );
     expect(ran).toMatchObject({ agent: "codex", model: "gpt-5.6", effort: "high" });
@@ -228,7 +229,7 @@ test("a turn carrying a run role takes that role's model, provider and effort", 
 
 test("every knob the pin carries rides onto the turn, and the ones it doesn't stay absent", async () => {
     const ran = await ranWith(
-        { modelRoles: { [ROLE]: [{ provider: "codex", model: "gpt-5.6", effort: "xhigh", thinking: true, harness: "claude-code" }] } },
+        setupsFromRoleLists({ [ROLE]: [{ provider: "codex", model: "gpt-5.6", effort: "xhigh", thinking: true, harness: "claude-code" }] }),
         { prompt: "fix CI", conversationId: "ar-knobs", runRole: ROLE },
     );
     expect(ran).toMatchObject({ agent: "codex", model: "gpt-5.6", effort: "xhigh", thinking: true, harness: "claude-code" });
@@ -237,7 +238,7 @@ test("every knob the pin carries rides onto the turn, and the ones it doesn't st
 
 test("a knob the turn already carries is not overwritten by the pin's", async () => {
     const ran = await ranWith(
-        { modelRoles: { [ROLE]: [{ provider: "codex", model: "gpt-5.6", effort: "low" }] } },
+        setupsFromRoleLists({ [ROLE]: [{ provider: "codex", model: "gpt-5.6", effort: "low" }] }),
         { prompt: "fix CI", conversationId: "ar-knob-kept", runRole: ROLE, effort: "max" },
     );
     expect(ran).toMatchObject({ agent: "codex", model: "gpt-5.6", effort: "max" });
@@ -245,14 +246,12 @@ test("a knob the turn already carries is not overwritten by the pin's", async ()
 
 test("the head of the list wins while its account is connected", async () => {
     const ran = await ranWith(
-        {
-            modelRoles: {
+        setupsFromRoleLists({
                 [ROLE]: [
                     { provider: "codex", model: "gpt-5.6" },
                     { provider: "claude", model: "claude-opus-4-5" },
                 ],
-            },
-        },
+            }),
         { prompt: "fix CI", conversationId: "ar-head", runRole: ROLE },
     );
     expect(ran).toMatchObject({ agent: "codex", model: "gpt-5.6" });
@@ -260,14 +259,12 @@ test("the head of the list wins while its account is connected", async () => {
 
 test("a disconnected head is stepped over, and the entry that answers brings its own knobs", async () => {
     const ran = await ranWith(
-        {
-            modelRoles: {
+        setupsFromRoleLists({
                 [ROLE]: [
                     { provider: "codex", model: "gpt-5.6", effort: "low" },
                     { provider: "claude", model: "claude-opus-4-5", effort: "max" },
                 ],
-            },
-        },
+            }),
         { prompt: "fix CI", conversationId: "ar-fallback", runRole: ROLE },
         ["claude"],
     );
@@ -276,7 +273,7 @@ test("a disconnected head is stepped over, and the entry that answers brings its
 
 test("a list with nothing reachable left leaves the turn unset: it does not reach for a connected account", async () => {
     const ran = await ranWith(
-        { modelRoles: { [ROLE]: [{ provider: "codex", model: "gpt-5.6" }] } },
+        setupsFromRoleLists({ [ROLE]: [{ provider: "codex", model: "gpt-5.6" }] }),
         { prompt: "fix CI", conversationId: "ar-none", runRole: ROLE },
         ["claude", "gemini"],
     );
@@ -287,7 +284,7 @@ test("a list with nothing reachable left leaves the turn unset: it does not reac
 
 test("a turn that names its own model keeps it", async () => {
     const ran = await ranWith(
-        { modelRoles: { [ROLE]: [{ provider: "codex", model: "gpt-5.6" }] } },
+        setupsFromRoleLists({ [ROLE]: [{ provider: "codex", model: "gpt-5.6" }] }),
         { prompt: "walk the story", conversationId: "ar-explicit", runRole: ROLE, agent: "claude", model: "claude-opus-4-5" },
     );
     expect(ran).toMatchObject({ agent: "claude", model: "claude-opus-4-5" });
@@ -322,14 +319,14 @@ const ranAs = async (
 test("the persona's own ladder outranks the role's list, and brings its knobs", async () => {
     const ran = await ranAs(
         [{ id: "backend", capabilities: [], models: [{ provider: "claude", model: "claude-opus-4-5", effort: "max" }] }],
-        { modelRoles: { [ROLE]: [{ provider: "codex", model: "gpt-5.6", effort: "low" }] } },
+        setupsFromRoleLists({ [ROLE]: [{ provider: "codex", model: "gpt-5.6", effort: "low" }] }),
         { prompt: "fix CI", conversationId: "ar-persona", runRole: ROLE, actsAs: "backend" },
     );
     expect(ran).toMatchObject({ agent: "claude", model: "claude-opus-4-5", effort: "max" });
 });
 
 test("a persona with no ladder, or none reachable, leaves the question to the role", async () => {
-    const roles = { modelRoles: { [ROLE]: [{ provider: "codex", model: "gpt-5.6" }] } };
+    const roles = setupsFromRoleLists({ [ROLE]: [{ provider: "codex", model: "gpt-5.6" }] });
     const silent = await ranAs([{ id: "quiet", capabilities: [] }], roles, {
         prompt: "fix CI",
         conversationId: "ar-persona-silent",
@@ -362,7 +359,7 @@ test("a turn that names its own model keeps it over the persona's ladder too", a
 test("a chat naming neither role nor persona is left alone", async () => {
     // Carrying no pin source is what gates this: a chat whose catalog hadn't loaded also sends no model, and no role
     // list may answer for it.
-    const ran = await ranWith({ modelRoles: { [ROLE]: [{ provider: "codex", model: "gpt-5.6" }] } }, { prompt: "hello", conversationId: "ar-chat" });
+    const ran = await ranWith(setupsFromRoleLists({ [ROLE]: [{ provider: "codex", model: "gpt-5.6" }] }), { prompt: "hello", conversationId: "ar-chat" });
     expect(ran.model).toBeUndefined();
     // Nothing chose a provider, so the turn runs on the wire's default, named once where it came in.
     expect(ran.agent).toBe("claude");
@@ -371,7 +368,7 @@ test("a chat naming neither role nor persona is left alone", async () => {
 // Audience and model routing are separate questions: a run somebody pressed and is watching still has nobody at a
 // caret, so the flag may not change which model answers for it.
 test("who is watching does not move the pin: the same role answers either way", async () => {
-    const roles = { modelRoles: { [ROLE]: [{ provider: "codex", model: "gpt-5.6", effort: "high" }] } };
+    const roles = setupsFromRoleLists({ [ROLE]: [{ provider: "codex", model: "gpt-5.6", effort: "high" }] });
     const watched = await ranWith(roles, { prompt: "fix CI", conversationId: "ar-watched", runRole: ROLE });
     const unwatched = await ranWith(roles, { prompt: "fix CI", conversationId: "ar-unwatched", runRole: ROLE, unattended: true });
     expect(watched).toMatchObject({ agent: "codex", model: "gpt-5.6", effort: "high" });
@@ -379,19 +376,19 @@ test("who is watching does not move the pin: the same role answers either way", 
 });
 
 test("an empty agent-run list leaves the turn unset rather than inventing one", async () => {
-    const ran = await ranWith({ modelRoles: { [ROLE]: [] } }, { prompt: "fix CI", conversationId: "ar-unpinned", runRole: ROLE });
+    const ran = await ranWith(setupsFromRoleLists({ [ROLE]: [] }), { prompt: "fix CI", conversationId: "ar-unpinned", runRole: ROLE });
     expect(ran.model).toBeUndefined();
 });
 
 // The row reads "chat default", and a provider nobody connected is no default: a Fix pressed on a sandbox with only
 // another provider connected once opened on Claude and failed at once.
 test("an unpinned run opens on the provider this sandbox has connected, not on one it has not", async () => {
-    const ran = await ranWith({ modelRoles: {} }, { prompt: "fix CI", conversationId: "ar-connected", runRole: ROLE }, ["codex"]);
+    const ran = await ranWith({ roleSetups: {} }, { prompt: "fix CI", conversationId: "ar-connected", runRole: ROLE }, ["codex"]);
     expect([ran.agent, ran.model]).toEqual(["codex", undefined]);
 });
 
 test("an unpinned run keeps the default provider while it is connected", async () => {
-    const ran = await ranWith({ modelRoles: {} }, { prompt: "fix CI", conversationId: "ar-default", runRole: ROLE }, ["gemini", "claude"]);
+    const ran = await ranWith({ roleSetups: {} }, { prompt: "fix CI", conversationId: "ar-default", runRole: ROLE }, ["gemini", "claude"]);
     expect([ran.agent, ran.model]).toEqual(["claude", undefined]);
 });
 

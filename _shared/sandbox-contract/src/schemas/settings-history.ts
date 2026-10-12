@@ -1,5 +1,8 @@
 import { z } from "zod";
 import { at, drop, dropAll, fold, isJsonObject, type JsonObject, mapValue, retype, transform } from "../documents/conversions.js";
+import { type ModelRole, ModelRoleSchema } from "../models/model-roles.js";
+import { setupsFromRoleLists } from "../models/model-setups.js";
+import { ModelPinSchema, type ModelPin } from "./agent.js";
 import type { KeepWarmSettings, RuleSchema } from "./settings.js";
 
 // The conversions the settings shape has had, oldest first: what brings any earlier release's settings to
@@ -76,6 +79,28 @@ const refactorsFromChores = transform(
     (roles): JsonObject => ({ ...roles, "refactor-run": roles["maintenance-chore"] }),
 );
 
+// Setups (2026-10-12): a job no longer holds a model list of its own (`modelRoles`) beside one default list
+// (`modelDefault`); it runs on a named setup it shares with other jobs. Jobs that held the same list share one setup, a
+// list most of whose jobs are suggested a preset becomes that preset, and a job that held none, or an empty one, is on
+// none, which runs it exactly as before: not at all. A list that does not read (a role this version does not know, a malformed pin) is left out rather than refusing
+// the whole file, the same reading the schema gave it.
+const PinList = z.array(ModelPinSchema);
+const holdsRoleLists = (settings: JsonObject): settings is JsonObject => Object.hasOwn(settings, "modelRoles") || Object.hasOwn(settings, "modelDefault");
+const roleListsIntoSetups = transform("folds modelRoles and modelDefault into setups (modelSetups, roleSetups)", holdsRoleLists, (settings): JsonObject => {
+    const { modelRoles, modelDefault, ...rest } = settings;
+    const fallback = PinList.safeParse(modelDefault);
+    const lists: Partial<Record<ModelRole, ModelPin[]>> = {};
+    for (const role of ModelRoleSchema.options) {
+        const own = isJsonObject(modelRoles) ? PinList.safeParse(modelRoles[role]) : undefined;
+        const list = own?.success === true ? own.data : fallback.success && fallback.data.length > 0 ? fallback.data : undefined;
+        if (list !== undefined) {
+            lists[role] = list;
+        }
+    }
+    const { modelSetups, roleSetups } = setupsFromRoleLists(lists);
+    return { ...rest, modelSetups, roleSetups };
+});
+
 export const SETTINGS_HISTORY = [
     // Every setting a release since 2026-08-10 had and this one does not (read off the contract lock's history):
     // retired, so passthrough stops carrying them, a definition naming one still applies, and no later setting may
@@ -126,4 +151,5 @@ export const SETTINGS_HISTORY = [
     // The short guidance form (2026-10-06): it lost its A/B to the full one, which every turn now gets.
     ...dropAll(["leanGuidance", "leanGuidanceHoldout"]),
     at("modelRoles", refactorsFromChores),
+    roleListsIntoSetups,
 ] as const;

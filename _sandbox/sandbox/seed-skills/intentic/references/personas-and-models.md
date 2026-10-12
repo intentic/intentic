@@ -72,12 +72,14 @@ on, not an instruction in the prompt. It is a default, though, and a model chose
 - For a turn that names no model (a Fix, a chore, another job the sandbox starts), the daemon fills it from the
   persona's list first, then from the job's own list, stepping over a model whose account is recorded as spent
   or failing in a row. An automation names its own models, required on the automation itself.
-- The jobs' lists are edited on Sandbox ▸ Agent ▸ Jobs, drawn as one row per list with the jobs that share it.
-  **Default models** (`modelDefault` in settings) is the list every job runs on until it is given its own; a job
-  moved off it gets its own entry in `modelRoles`, and jobs given the same list sit in one row, edited together.
-  Press a job to move it: onto the default, onto another row, onto a list of its own, or onto no models. The jobs
-  are helpers (**Commit messages**, **Session titles**, **Safety judge**, **Loop verdicts**, **Hand-off
-  summaries**, **New chat routing**) and runs (**Pipeline fixes**, **Deployment fixes**, **Maintenance chores**,
+- Which models each job runs on is set on Sandbox ▸ Agent ▸ Jobs, as **setups**: named, ordered lists of models
+  (`modelSetups` in settings) that any number of jobs share. **Low**, **Medium** and **High** are always there,
+  worked out from the connected accounts (each provider's newest model at that level) until someone edits one;
+  the owner can make more. A job runs on the setup it is put on (`roleSetups`); one on none runs on nothing, so a
+  fresh sandbox spends nothing until its jobs are placed. Drag a job onto a setup, or press it and pick one;
+  "Place on suggested setups" puts every unplaced job on the preset suggested for it. The jobs are helpers
+  (**Commit messages**, **Session titles**, **Safety judge**, **Loop verdicts**, **Hand-off summaries**,
+  **New chat routing**) and runs (**Pipeline fixes**, **Deployment fixes**, **Maintenance chores**,
   **Refactors**, **Documentation runs**, **Acceptance runs**, **Approvals queue**, **Extension update reviews**,
   **Loop iterations**). A helper with no models does not run; a run with no models opens on a connected provider.
 - What is connected at all is Sandbox ▸ Models (`/sandbox/models`): every account, subscription, model on this

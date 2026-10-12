@@ -171,7 +171,7 @@ const demanded = sandboxValue(() => new Map<AgentProvider, number>());
 
 // Reads the catalog a label found nothing in, when nothing has read it yet or its last read failed. Only native
 // providers and endpoints publish one; an ACP agent names its own models.
-const demandCatalog = (provider: AgentProvider): void => {
+export const demandCatalog = (provider: AgentProvider): void => {
     const state = providerModelsState.value[provider];
     if (state === `loading` || state === `loaded` || (!NATIVE_PROVIDERS.includes(provider as NativeProvider) && !isEndpointProvider(provider))) {
         return;

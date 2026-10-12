@@ -1,7 +1,7 @@
 // AgentSafetyJudge controls commandJudge's mode; the model applying it is chosen on the Models tab and only
 // named here.
 import "@intentic/testing/dom";
-import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { type SandboxSettings, SandboxSettingsSchema, setupsFromRoleLists } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
@@ -27,6 +27,7 @@ jest.mock(`../../../chat/session/access`, () => ({ providerReady: (provider: str
 jest.mock(`../../../chat/accounts/providerCatalog`, () => ({
     endpointProviders: ref([]),
     providerModels: ref({}),
+    demandCatalog: () => undefined,
     modelOptionsFor: (provider: string) => CATALOGS[provider] ?? [],
     modelLabelFor: (provider: string, model: string) => CATALOGS[provider]?.find((option) => option.value === model)?.label,
     providerDisplayLabel: (provider: string) => provider.toUpperCase(),
@@ -83,13 +84,13 @@ test("moving the switch writes the mode", async () => {
     expect(host.textContent).not.toContain(`nothing is ever held`);
 });
 
-// Which model applies the policy: the account a verdict is billed to, drawn from modelRoles.
+// Which model applies the policy: the account a verdict is billed to, drawn from the judge's setup.
 
 // A sandbox with no models set still runs on the standing rule alone; nothing here should look configured.
 test("says the judge has no model rather than naming one nobody chose", () => {
     const host = mount();
     // Reads the empty list off the schema instead of hardcoding it.
-    expect(SandboxSettingsSchema.parse({}).modelRoles[`safety-judge`]).toBeUndefined();
+    expect(SandboxSettingsSchema.parse({}).roleSetups[`safety-judge`]).toBeUndefined();
     expect(host.textContent).toContain(`No model is set for the judge`);
     expect(host.textContent).toContain(`standing rule alone`);
     // Both providers are connected in this fixture; neither should be named without a pin.
@@ -99,7 +100,7 @@ test("says the judge has no model rather than naming one nobody chose", () => {
 });
 
 test("a model pinned on the Models tab is the one this row names", async () => {
-    settings.value = { ...settings.value, modelRoles: { "safety-judge": [{ provider: `codex`, model: `gpt-5.6` }] } };
+    settings.value = { ...settings.value, ...setupsFromRoleLists({ "safety-judge": [{ provider: `codex`, model: `gpt-5.6` }] }) };
     const host = mount();
     await nextTick();
 
@@ -109,8 +110,8 @@ test("a model pinned on the Models tab is the one this row names", async () => {
     expect(host.textContent).not.toContain(`Claude Haiku 4.5`);
 });
 
-test("reads the safety-judge list rather than another job's", async () => {
-    settings.value = { ...settings.value, modelRoles: { "commit-message": [{ provider: `codex`, model: `gpt-5.6` }] } };
+test("reads the safety judge's setup rather than another job's", async () => {
+    settings.value = { ...settings.value, ...setupsFromRoleLists({ "commit-message": [{ provider: `codex`, model: `gpt-5.6` }] }) };
     const host = mount();
     await nextTick();
 

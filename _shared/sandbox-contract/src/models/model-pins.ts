@@ -1,8 +1,8 @@
 import type { AgentProvider, ModelPin } from "../schemas/agent.js";
 
-// The order to try models in for a role or job (settings.modelRoles), shared by daemon and browser so both agree what a
-// job will spend before it runs. An empty list resolves to nothing for every role: nothing is derived or auto-selected.
-// The caller decides what an empty answer means (a helper is off; a run falls back to the chat's own pick).
+// The order to try models in for a job's setup (model-setups.ts), shared by daemon and browser so both agree what a job
+// will spend before it runs. An empty list resolves to nothing: the caller decides what that means (a helper is off; a
+// run falls back to the chat's own pick).
 
 // One provider's standing in the decision: can a turn go, and what its catalog holds. ACP agents have no rung here (an
 // empty model id), but endpoint/<id> providers must be included, matching the picker's own options.
@@ -11,7 +11,8 @@ export interface ModelSource {
     readonly provider: AgentProvider;
     // Same connection predicate every surface gates on; a nonempty catalog does not imply ready to send.
     readonly ready: boolean;
-    // Nothing here reads this (a pin is verbatim); kept because it's what a source is, and callers still gather it.
+    // The models it can run a turn on, newest-first order not assumed. readyChain never reads it (a pin is verbatim);
+    // a preset setup is worked out from it (model-setups.ts `presetPins`), so a helper-only model is left out.
     readonly models: readonly string[];
 }
 

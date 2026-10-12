@@ -1,4 +1,4 @@
-import type { ModelRole, ModelRoleSpec } from "@intentic/sandbox-contract";
+import type { ModelRole, ModelRoleSpec, PresetSetup } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
 
 // MODEL_ROLES names each job in English, for the daemon and the settings file as much as for the
@@ -47,3 +47,13 @@ export const roleLabel = (role: Pick<ModelRoleSpec, `id`>): string => LABELS[rol
 /** The line under the job's name. */
 export const roleBlurb = (role: Pick<ModelRoleSpec, `id`>): string => BLURBS[role.id]();
 
+
+const PRESET_NAMES = {
+    low: () => t(`sandbox.agentModels.presets.low`),
+    medium: () => t(`sandbox.agentModels.presets.medium`),
+    high: () => t(`sandbox.agentModels.presets.high`),
+} as const satisfies Record<PresetSetup, () => string>;
+
+/** A setup's name as the page says it: the owner's words if they gave any, a preset's own otherwise. */
+export const setupName = (setup: { readonly preset: PresetSetup | undefined; readonly name: string | undefined }): string =>
+    setup.name ?? (setup.preset === undefined ? `` : PRESET_NAMES[setup.preset]());

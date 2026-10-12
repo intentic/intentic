@@ -1,4 +1,4 @@
-import { type ModelPin, rolePins, type SandboxSettings } from "@intentic/sandbox-contract";
+import { roleLadder, type SandboxSettings, type SetupLadder } from "@intentic/sandbox-contract";
 import type { Services } from "../../../composition.js";
 import type { CommandGuardOptions } from "../../../guard/command-guard.js";
 import { opt } from "../../../opt.js";
@@ -17,13 +17,13 @@ export type TurnSafetyDeps = Pick<
     "conversationGrants" | "heavyCommands" | "judgeCommand" | "logger" | "runtimeInstalls" | "safetyLog" | "safetyPolicy" | "workspace"
 >;
 
-// A closure over the judge, the policy text and the owner's model pin rather than any of them directly, because the seam
-// it fills lives in guard/.
+// A closure over the judge, the policy text and the judge's setup rather than any of them directly, because the seam it
+// fills lives in guard/.
 const judgeFor =
-    (deps: Pick<Services, "judgeCommand">, execution: AgentExecutionContext, policy: string, pins: readonly ModelPin[] | undefined): CommandGuardOptions["judge"] =>
+    (deps: Pick<Services, "judgeCommand">, execution: AgentExecutionContext, policy: string, ladder: SetupLadder): CommandGuardOptions["judge"] =>
     (program, facts, signal) =>
-        // An unpinned role stays off; its empty snapshot must not substitute a different model.
-        deps.judgeCommand(execution, { policy, program, facts, pins: pins ?? [] }, signal);
+        // A setup emptied at turn start stays off; its snapshot must not substitute a different model.
+        deps.judgeCommand(execution, { policy, program, facts, ladder }, signal);
 
 // The turn as the safety layers read it: which conversation, and what woke it when the owner did not.
 export interface TurnSafetyInput {
@@ -52,7 +52,7 @@ export const withTurnSafety = async (deps: TurnSafetyDeps, input: TurnSafetyInpu
         },
         hooks: {
             ...base.hooks,
-            judge: judgeFor(deps, base.execution, safetyPolicy, rolePins(settings, `safety-judge`)),
+            judge: judgeFor(deps, base.execution, safetyPolicy, roleLadder(settings, `safety-judge`)),
             // The safety log is the owner's record of what the judge decided; a line it could not keep is said out loud.
             logSafety: (entry) => {
                 void deps.safetyLog.record(entry).catch((error: unknown) => deps.logger.warn({ err: error }, "safety log: a judged command was not recorded"));

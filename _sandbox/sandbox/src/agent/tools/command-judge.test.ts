@@ -17,7 +17,7 @@ jest.mock("../models/role-model.js", () => ({
 }));
 const { judgeAnswer, judgeCommand, judgeIndependentCommand } = await import("./command-judge.js");
 const JUDGE_INPUT: Parameters<typeof judgeCommand>[2] = {
-    policy: "Allow searches.", program: "rg title src", pins: [{ provider: "claude", model: "haiku" }],
+    policy: "Allow searches.", program: "rg title src", ladder: { kind: "pins", pins: [{ provider: "claude", model: "haiku" }] },
     facts: { consequences: [], language: "bash", unattended: false },
 };
 beforeEach(() => {
@@ -148,7 +148,7 @@ test("an independent host judge that is unset never admits or acquires execution
     const admit = jest.spyOn(service, "admit");
     const acquire = jest.spyOn(service, "acquire");
     const services = unstubbed<Services>("services", { agentExecution: service });
-    await expect(judgeIndependentCommand(services, { ...JUDGE_INPUT, pins: [] }, new AbortController().signal)).rejects.toBeInstanceOf(RoleModelUnsetError);
+    await expect(judgeIndependentCommand(services, { ...JUDGE_INPUT, ladder: { kind: "pins", pins: [] } }, new AbortController().signal)).rejects.toBeInstanceOf(RoleModelUnsetError);
     expect(admit).not.toHaveBeenCalled();
     expect(acquire).not.toHaveBeenCalled();
     expect(asked).not.toHaveBeenCalled();

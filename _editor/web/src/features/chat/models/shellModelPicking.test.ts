@@ -1,6 +1,7 @@
 // jsdom: half of what's pinned here happens inside a mounted component (a run button naming its model from a
 // computed), the rest is the same read with no component at all.
 import "@intentic/testing/dom";
+import { type ModelPin, setupsFromRoleLists } from "@intentic/sandbox-contract";
 import { type App, createApp, defineComponent, h, nextTick, ref, watch } from "vue";
 
 // `agentRunChoice(role)` is the standing answer to which model a run-button click spends, kept per job role rather
@@ -69,7 +70,7 @@ test(`re-reading it never adds a second reader of the settings`, async () => {
     const afterFirst = settingsObservers();
     // Mimics the daemon's write, invalidating the computed: five real re-evaluations, not cached renders.
     for (let round = 0; round < 5; round += 1) {
-        queryClient.setQueryData(rpcKey(`settings.get`), { modelRoles: {}, round });
+        queryClient.setQueryData(rpcKey(`settings.get`), { modelSetups: [], roleSetups: {}, round });
         tick.value += 1;
         await nextTick();
     }
@@ -81,14 +82,14 @@ test(`re-reading it never adds a second reader of the settings`, async () => {
 
 // The run button shows the tier that will actually run: a pin with no chosen model takes it whole (turn-resume.ts),
 // but the daemon drops a Max pin with thinking off to `high` before sending (sendableEffort).
-const pinned = (pin: Record<string, unknown>): void => {
+const pinned = (pin: ModelPin): void => {
     // Needs a credentialed account for the pin's provider, or the chain drops it (same as the daemon's resolver).
     providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `acc`, label: `Claude` }] as never };
     providerModels.value = {
         ...providerModels.value,
         claude: [{ label: `Claude Sonnet 4.6`, value: `claude-sonnet-4-6`, efforts: [`low`, `medium`, `high`, `xhigh`, `max`] }],
     };
-    queryClient.setQueryData(rpcKey(`settings.get`), { modelRoles: { [ROLE]: [pin] } });
+    queryClient.setQueryData(rpcKey(`settings.get`), setupsFromRoleLists({ [ROLE]: [pin] }));
 };
 
 test(`the standing choice keeps the pinned top tier, and names it`, () => {
@@ -128,7 +129,7 @@ test(`the standing choice carries the whole pinned entry, not merely the pair an
 // C4: a run starts a conversation of its own, so with nothing pinned it opens on what a NEW chat would, never on
 // whatever the open chat was moved to. Pipelines' Fix sends this along, and a sandbox with no pin runs it.
 test(`with nothing pinned, the standing choice is the model a new chat would open on, not the open chat's`, () => {
-    queryClient.setQueryData(rpcKey(`settings.get`), { modelRoles: {} });
+    queryClient.setQueryData(rpcKey(`settings.get`), { modelSetups: [], roleSetups: {} });
     rememberPick({ provider: `claude`, value: `claude-sonnet-4-6` });
     const open = useChat().active.value.selection;
     open.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `claude-opus-4-6` } });

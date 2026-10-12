@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { defaultGit } from "@intentic/base/git";
-import { type AgentTurn, type ModelPin, NATIVE_PROVIDERS, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { type AgentTurn, type ModelPin, NATIVE_PROVIDERS, SandboxSettingsSchema, setupsFromRoleLists } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { call } from "@orpc/server";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
@@ -93,7 +93,7 @@ const harness = async ({ ready = ["claude"], pinned = [] }: Setup = {}) => {
         // Loopback: no identities, so the caller is the owner.
         auth: undefined,
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
-            get: async () => SandboxSettingsSchema.parse({ modelRoles: { "pipeline-fix": pinned } }),
+            get: async () => SandboxSettingsSchema.parse(setupsFromRoleLists({ "pipeline-fix": pinned })),
         }),
         // SAFETY: one entry per native provider, which is the whole of the record's keys.
         providerReadiness: async () =>

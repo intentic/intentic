@@ -4,7 +4,8 @@ import { STATE_DIR } from "@intentic/constants";
 import { z } from "zod";
 import { CommandJudgeModeSchema, ProjectInstallModeSchema } from "../policy/safety-policy.js";
 import { ModelRoleSchema } from "../models/model-roles.js";
-import { AdmissionPolicySchema, AdmissionRuleSchema, ModelPinSchema } from "./agent.js";
+import { MODEL_SETUP_ID, ModelSetupSchema } from "../models/model-setups.js";
+import { AdmissionPolicySchema, AdmissionRuleSchema } from "./agent.js";
 import { LimitHandoffSchema } from "./providers/handoff.js";
 import { LimitPolicySchema, RetryPolicySchema, RoomPolicySchema } from "./turn-break.js";
 import { ZoneSchema } from "../time/zone.js";
@@ -403,25 +404,22 @@ export const SandboxSettingsSchema = z.object({
         .max(1)
         .default(0)
         .describe("What share of commands to leave untrimmed, so the saving can be measured against a real comparison rather than estimated."),
-    // The list every job runs on until it is given one of its own: one setting for the common case, where most jobs
-    // want the same models, so a new job in the catalog is served the day it ships. Empty by default, which reads
-    // exactly as a sandbox did before this field existed.
-    modelDefault: z
-        .array(ModelPinSchema)
-        .max(10)
+    // The model lists jobs run on, edited once for every job put there (models/model-setups.ts). The three presets need
+    // no entry: absent, each is worked out from what is connected, so a sandbox runs before anyone opens this page.
+    modelSetups: z
+        .array(ModelSetupSchema)
+        .max(20)
         .default([])
         .describe(
-            "The models every job runs on unless `modelRoles` gives it a list of its own: commit messages, session titles, the safety judge, pipeline fixes and every other place this sandbox picks a model for you. Tried in order, so one spent account does not take a job down. Nothing is chosen for you: left empty, a one-shot job does not run and a whole session opens on whatever your own chat is set to.",
+            "The model setups jobs run on: Low, Medium and High, which every sandbox has, and any you make. Each is an ordered list of models, tried in order so one spent account does not take its jobs down. A preset left out of this list, or listed without models, is worked out from the accounts you have connected. A setup runs only the jobs put on it (`roleSetups`).",
         ),
-    // One key, not one field per role: a role catalog entry (`model-roles.ts`) makes a new job configurable without a
-    // schema change here.
     // `partialRecord`, not `record`: an exhaustive one would force every settings file to list every role, and adding
-    // one would invalidate them all. Absent IS "follows `modelDefault`"; present and empty is "no models", for one job.
-    modelRoles: z
-        .partialRecord(ModelRoleSchema, z.array(ModelPinSchema).max(10))
+    // one would invalidate them all. Absent IS "on no setup": nothing runs a job nobody placed.
+    roleSetups: z
+        .partialRecord(ModelRoleSchema, z.string().regex(MODEL_SETUP_ID))
         .default({})
         .describe(
-            "The jobs that do not run on `modelDefault`, each with its own ordered list. A job left out of this follows the default; a job listed with an empty list has no models at all: a one-shot job then does not run, and a whole session opens on whatever your own chat is set to.",
+            "Which setup each job runs on: commit messages, session titles, the safety judge, pipeline fixes and every other place this sandbox picks a model for you. Nothing is chosen for you: a job left out, or on a setup with no models, has none, so a one-shot job does not run and a whole session opens on whatever your own chat is set to.",
         ),
     // Folded into the router's prompt (agent/prompt/chat-router.ts), never into a turn's own. Capped small on
     // purpose: the reading runs under a 5s deadline, and this text is paid for on every chat that opens on Auto.
@@ -586,7 +584,7 @@ export const SandboxSettingsSchema = z.object({
         .default({})
         .describe("What an agent may do out in the world, per kind of action: go ahead, ask first, or never."),
     // Command policy itself lives at .intentic/config/safety.md (edited by the Safety page), not here; this only says
-    // whether the judge runs at all. Which model judges is the `safety-judge` role in `modelRoles`, not a field here.
+    // whether the judge runs at all. Which model judges is the `safety-judge` job's setup (`roleSetups`), not a field here.
     commandJudge: CommandJudgeModeSchema.default("on").describe(
         "Whether a model reads your safety policy before a flagged command runs. Off judges nothing and asks about nothing; Watch judges everything and records it without ever interrupting you, which is how you find out what your policy actually does before you let it stop anything; On lets the verdict decide. Wiping a disk or deleting under /history asks at every setting — that rule is typed rather than judged, and cannot be turned off.",
     ),

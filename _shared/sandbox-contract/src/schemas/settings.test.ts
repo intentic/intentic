@@ -1,4 +1,6 @@
 import { convertDocument } from "../documents/conversions.js";
+import type { ModelRole } from "../models/model-roles.js";
+import { rolePins } from "../models/model-setups.js";
 import { SETTINGS_HISTORY } from "./settings-history.js";
 import { RepoChecksFileSchema, RuleSchema, SandboxSettingsSchema, SandboxSettingsWriteSchema } from "./settings.js";
 
@@ -112,6 +114,13 @@ describe(`the folded keep-warm settings`, () => {
     });
 });
 
+// What a job runs on, read the way every reader reads it, over a sandbox with nothing connected: the setups a stored
+// file converts into are judged by what they make each job run on, not by their shape.
+const runsOn = (stored: unknown, role: ModelRole): readonly unknown[] => {
+    const converted = convertDocument(SETTINGS_HISTORY, `object`, stored, true);
+    return rolePins(SandboxSettingsSchema.parse(converted.value), role, []);
+};
+
 // The pre-push fix's model list went with the fix a refused push used to offer (2026-09-28). A settings file that still
 // names it must read, since an unknown role refuses the whole file, and every other job's list stays as its owner set it.
 describe(`the retired pre-push fix role`, () => {
@@ -119,14 +128,8 @@ describe(`the retired pre-push fix role`, () => {
 
     test(`is dropped from a stored file, leaving every other job's list, and the file reads`, () => {
         const stored = { modelRoles: { "pipeline-fix": [pin], "pre-push-fix": [pin] } };
-        expect(SandboxSettingsSchema.safeParse(stored).success).toBe(false);
-        const converted = convertDocument(SETTINGS_HISTORY, `object`, stored, true);
-        expect(converted.value).toEqual({ modelRoles: { "pipeline-fix": [pin] } });
-        expect(SandboxSettingsSchema.parse(converted.value).modelRoles).toEqual({ "pipeline-fix": [pin] });
-    });
-
-    test(`leaves a file without it alone`, () => {
-        expect(convertDocument(SETTINGS_HISTORY, `object`, { modelRoles: { "pipeline-fix": [pin] } }, true).changes).toEqual([]);
+        expect(SandboxSettingsSchema.safeParse({ roleSetups: { "pre-push-fix": `high` } }).success).toBe(false);
+        expect(runsOn(stored, `pipeline-fix`)).toEqual([pin]);
     });
 });
 
@@ -138,19 +141,62 @@ describe(`the new Refactors job`, () => {
 
     test(`takes the Maintenance chores list in a file from before it, and every other list stays`, () => {
         const stored = { modelRoles: { "maintenance-chore": [opus, sol], "pipeline-fix": [sol] } };
-        const converted = convertDocument(SETTINGS_HISTORY, `object`, stored, true);
-        expect(converted.value).toEqual({ modelRoles: { "maintenance-chore": [opus, sol], "pipeline-fix": [sol], "refactor-run": [opus, sol] } });
-        expect(SandboxSettingsSchema.parse(converted.value).modelRoles[`refactor-run`]).toEqual([opus, sol]);
+        expect(runsOn(stored, `refactor-run`)).toEqual([opus, sol]);
+        expect(runsOn(stored, `pipeline-fix`)).toEqual([sol]);
     });
 
-    test(`leaves a list the owner set, even an emptied one, and a file with no chores list`, () => {
-        for (const modelRoles of [
-            { "maintenance-chore": [opus], "refactor-run": [sol] },
-            { "maintenance-chore": [opus], "refactor-run": [] },
-            { "pipeline-fix": [opus] },
-            { "maintenance-chore": [] },
-        ]) {
-            expect(convertDocument(SETTINGS_HISTORY, `object`, { modelRoles }, true).changes).toEqual([]);
+    test(`leaves a list the owner set, even an emptied one`, () => {
+        expect(runsOn({ modelRoles: { "maintenance-chore": [opus], "refactor-run": [sol] } }, `refactor-run`)).toEqual([sol]);
+        expect(runsOn({ modelRoles: { "maintenance-chore": [opus], "refactor-run": [] } }, `refactor-run`)).toEqual([]);
+    });
+});
+
+// Setups (2026-10-12): per-job lists and the default list become named setups that jobs share.
+describe(`per-job model lists`, () => {
+    const opus = { provider: `claude`, model: `claude-opus-5-5`, effort: `high` };
+    const haiku = { provider: `claude`, model: `claude-haiku-4-5` };
+    const sol = { provider: `codex`, model: `gpt-sol-6.1` };
+
+    test(`become setups that every job runs exactly as before on`, () => {
+        const cases = [
+            [`commit-message`, [haiku]],
+            [`session-title`, [haiku]],
+            [`pipeline-fix`, [opus, sol]],
+            [`refactor-run`, [opus, sol]],
+            [`handoff-summary`, [sol, haiku]],
+            [`safety-judge`, []],
+        ] as const satisfies readonly (readonly [ModelRole, readonly unknown[]])[];
+        for (const [role, pins] of cases) {
+            expect(runsOn({ modelRoles: Object.fromEntries(cases) }, role)).toEqual(pins);
         }
+    });
+
+    test(`share a setup where they held one list, which becomes the preset most of them suit`, () => {
+        const converted = convertDocument(SETTINGS_HISTORY, `object`, { modelRoles: { "commit-message": [haiku], "session-title": [haiku], "pipeline-fix": [opus], "handoff-summary": [sol] } }, true);
+        expect(converted.value).toEqual({
+            modelSetups: [
+                { id: `low`, pins: [haiku] },
+                { id: `setup-1`, name: `Setup 1`, pins: [sol] },
+                { id: `high`, pins: [opus] },
+            ],
+            roleSetups: { "commit-message": `low`, "session-title": `low`, "handoff-summary": `setup-1`, "pipeline-fix": `high` },
+        });
+    });
+
+    test(`carry the default list to every job that had none of its own`, () => {
+        const stored = { modelDefault: [sol], modelRoles: { "pipeline-fix": [opus] } };
+        expect(runsOn(stored, `commit-message`)).toEqual([sol]);
+        expect(runsOn(stored, `loop-iteration`)).toEqual([sol]);
+        expect(runsOn(stored, `pipeline-fix`)).toEqual([opus]);
+    });
+
+    test(`leave a job that never had a list on none, running exactly as before`, () => {
+        const converted = convertDocument(SETTINGS_HISTORY, `object`, { modelRoles: {} }, true);
+        expect(converted.value).toEqual({ modelSetups: [], roleSetups: {} });
+        expect(runsOn({ modelRoles: {} }, `safety-judge`)).toEqual([]);
+    });
+
+    test(`read once, and a file already in setups is left alone`, () => {
+        expect(convertDocument(SETTINGS_HISTORY, `object`, { modelSetups: [{ id: `low`, pins: [haiku] }], roleSetups: {} }, true).changes).toEqual([]);
     });
 });

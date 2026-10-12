@@ -188,6 +188,7 @@ export * from "./models/model-order.js";
 export * from "./models/model-offer.js";
 export * from "./models/model-pins.js";
 export * from "./models/model-roles.js";
+export * from "./models/model-setups.js";
 export * from "./models/plan-pools.js";
 export * from "./text/path-refs.js";
 export * from "./text/archives.js";

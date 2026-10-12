@@ -454,7 +454,7 @@ export const runPickOf = (choice: {
     ...(choice.thinking === undefined ? {} : { thinking: choice.thinking }),
     ...(choice.fast === undefined ? {} : { fast: choice.fast }),
 });
-/* ONE ENTRY OF ONE ROLE'S MODEL LIST (settings.modelRoles): the standing version of the pick above, and not merely which model but HOW it is to be run. */
+/* ONE ENTRY OF ONE SETUP'S MODEL LIST (settings.modelSetups): the standing version of the pick above, and not merely which model but HOW it is to be run. */
 export const ModelPinSchema = z.object({
     provider: AgentProviderSchema.describe("Which provider serves this work."),
     model: z.string().min(1).describe("Which of its models. Both halves, because a model name only means anything to the provider that serves it."),

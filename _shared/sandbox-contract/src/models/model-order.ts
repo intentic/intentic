@@ -147,3 +147,16 @@ export const compareUnrankedModelIds = (left: string, right: string): number => 
 // True only for an id that spells out a level above the quiet end, so an unannotated id is never accused of it.
 // Exported so a settings row can label a pinned thinking variant.
 export const namesThinking = (id: string): boolean => thinkingRankOf(familyOf(id)) > UNSTATED_THINKING;
+
+// Which of three rungs an id stands on: 0 the frontier, 1 the everyday workhorse, 2 the cheap end. A tier word decides
+// where there is one, a release-local ladder (sol, terra, luna) where there is not, and an id with neither is read as
+// the frontier, as the catalog order already leads with it. What the preset setups are worked out from.
+export const modelRungOf = (id: string): number => {
+    const family = familyOf(id);
+    const tier = tierRankOf(family);
+    if (tier !== UNRANKED) {
+        return tier;
+    }
+    const release = releaseTierRankOf(family);
+    return release === UNRANKED ? 0 : release;
+};

@@ -1,11 +1,10 @@
-import type { ModelPin, SafetyDecision, SafetyVerdict } from "@intentic/sandbox-contract";
+import { FENCE, ladderIsEmpty, type SafetyDecision, type SafetyVerdict, type SetupLadder } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import { type AgentExecutionContext, withAgentExecution } from "../../workload/agent-execution.js";
 import { RoleModelUnsetError } from "../../seams/role-model-unset.js";
 import { taintWords } from "../../guard/turn-taint.js";
 import type { RoleAnswer } from "../models/role-answer.js";
 import { askRoleModel } from "../models/role-model.js";
-import { FENCE } from "@intentic/sandbox-contract";
 
 // Whether a command should run, judged by a model against the owner's policy. POLICY and FACTS are trusted
 // Keep the safety boundary outside the model's self-reported intent.
@@ -156,7 +155,7 @@ export const judgeAnswer: RoleAnswer<JudgedReply> = {
 export const judgeCommand = async (
     services: Services,
     execution: AgentExecutionContext,
-    input: { readonly policy: string; readonly program: string; readonly facts: JudgeFacts; readonly pins: readonly ModelPin[] },
+    input: { readonly policy: string; readonly program: string; readonly facts: JudgeFacts; readonly ladder: SetupLadder },
     signal: AbortSignal,
 ): Promise<SafetyVerdict> => {
     const { value } = await askRoleModel(
@@ -165,8 +164,8 @@ export const judgeCommand = async (
         `safety-judge`,
         { prompt: judgePrompt(input.policy, input.program, input.facts), answer: judgeAnswer },
         signal,
-        // Read when the turn was planned, so policy and model are one snapshot; empty means no judge model, refused.
-        { pins: input.pins },
+        // Read when the turn was planned, so policy and setup are one snapshot; an emptied setup is no judge, refused.
+        { ladder: input.ladder },
     );
     return value.verdict;
 };
@@ -178,7 +177,7 @@ export const judgeIndependentCommand = (
     input: Parameters<typeof judgeCommand>[2],
     signal: AbortSignal,
 ): Promise<SafetyVerdict> => {
-    if (input.pins.length === 0) {
+    if (ladderIsEmpty(input.ladder)) {
         return Promise.reject(new RoleModelUnsetError("safety-judge"));
     }
     return withAgentExecution(services.agentExecution, { localCwd: services.workspace.root }, (execution) =>

@@ -8,8 +8,11 @@ import {
     type ModelSource,
     NATIVE_PROVIDERS,
     type NativeProvider,
+    ladderIsEmpty,
+    ladderPins,
     readyChain,
-    rolePins,
+    roleLadder,
+    type SetupLadder,
 } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import { endpointConfigOf } from "../../endpoints/local-model.js";
@@ -24,14 +27,15 @@ import { AgentDomainRefusedError, assertAgentExecutionContext, type AgentExecuti
 import { createRepeatGate } from "../../logs/repeat-gate.js";
 
 // Resolves what a role's chain actually runs on (connected accounts, catalogs, the walk itself); the contract
-// (model-pins.ts) decides the order, this file supplies the facts and executes it. Every ask names its own role and
-// reads that role's list (model-roles.ts) rather than one shared chain.
+// (model-setups.ts, model-pins.ts) decides the setup and the order, this file supplies the facts and executes it. Every
+// ask names its own role and reads that role's setup rather than one shared chain.
 
-// One provider's catalog, from the same table `/providers/{provider}/models` serves. A read failure degrades to an
-// empty list rather than failing the whole resolution.
+// One provider's catalog, from the same table `/providers/{provider}/models` serves, less what cannot run a turn: a
+// preset setup is worked out from it and feeds whole sessions too. A read failure degrades to an empty list rather than
+// failing the whole resolution.
 const catalogOf = async (services: Services, provider: NativeProvider): Promise<readonly string[]> => {
     const catalog = await services.providerCatalogs[provider].models().catch(() => undefined);
-    return catalog?.models.map((model) => model.id) ?? [];
+    return catalog?.models.filter((model) => model.helperOnly === undefined).map((model) => model.id) ?? [];
 };
 
 // Local-model endpoints as sources: ready simply by being installed, so there is no separate credential to check. One
@@ -71,10 +75,15 @@ const modelSources = async (services: Services): Promise<ModelSource[]> => {
     return [...native, ...endpoints];
 };
 
-// Whether this role has any models configured, checked against the stored list rather than the resolved chain, for a
-// caller that must never start the walk at all.
+// What a setup runs on right now: a written list as written, a preset worked out from what is connected. Catalogs are
+// read only for a preset, the one ladder that needs them.
+export const ladderPinsNow = async (services: Services, ladder: SetupLadder): Promise<readonly ModelPin[]> =>
+    ladder.kind === "pins" ? ladder.pins : ladderPins(ladder, await modelSources(services));
+
+// Whether this role has any models to run on, read off its setup rather than the resolved chain, for a caller that must
+// never start the walk at all.
 export const roleModelIsSet = async (services: Services, role: ModelRole): Promise<boolean> =>
-    rolePins(await services.sandboxSettings.get(), role).length > 0;
+    (await ladderPinsNow(services, roleLadder(await services.sandboxSettings.get(), role))).length > 0;
 
 // A model that was asked and refused, with the reason it gave; carried up because a fully spent chain is a message only
 // this walk can report.
@@ -201,8 +210,8 @@ const askRung = (
 // Every refusal (allowance, credential, outage, or a wrong-shaped reply) is stepped over the same way, asking the next
 // rung; a user cancel stops the walk outright.
 export interface RoleModelOptions {
-    // Caller-supplied snapshot of this role's list instead of a fresh read; absent means read settings now.
-    readonly pins?: readonly ModelPin[] | undefined;
+    // Caller-supplied snapshot of this role's setup instead of a fresh read; absent means read settings now.
+    readonly ladder?: SetupLadder | undefined;
     readonly onProgress?: RoleModelProgress | undefined;
     // The conversation the job is for, where it has one (a land's commit subject, a chat's title): a provider the owner
     // let read that conversation reads this job about it too.
@@ -219,12 +228,18 @@ export const askRoleModel = async <T>(
 ): Promise<RoleModelAnswer<T>> => {
     assertAgentExecutionContext(execution);
     const onProgress = options.onProgress;
-    // An empty list means the job is off; refuse before touching a catalog, unlike accounts that are simply gone.
-    const pinned = options.pins ?? rolePins(await services.sandboxSettings.get(), role);
+    // An emptied setup means the job is off; refuse before touching a catalog, unlike accounts that are simply gone. A
+    // preset that nothing connected offers a model for is off the same way.
+    const ladder = options.ladder ?? roleLadder(await services.sandboxSettings.get(), role);
+    if (ladderIsEmpty(ladder)) {
+        throw new RoleModelUnsetError(role);
+    }
+    const sources = await modelSources(services);
+    const pinned = ladderPins(ladder, sources);
     if (pinned.length === 0) {
         throw new RoleModelUnsetError(role);
     }
-    const chain = readyChain(await modelSources(services), pinned);
+    const chain = readyChain(sources, pinned);
     if (chain.length === 0) {
         throw new Error(`Every model set for this job names an account this sandbox no longer has: set one in Sandbox ▸ Agent ▸ Models.`);
     }
