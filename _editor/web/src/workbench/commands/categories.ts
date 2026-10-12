@@ -17,6 +17,8 @@ export const SIDE_PANEL = `Side Panel`;
 export const BROWSERS = `Browsers`;
 export const AGENTS = `Agents`;
 export const ACCOUNT = `Account`;
+/** The project scope (app/projectScope.ts): which repository the whole shell is narrowed to. */
+export const PROJECT = `Project`;
 
 // The constants above are the families' ids (compared, grouped, ranked on); this is what a reader sees, read in the
 // language of the moment. An extension's own family is its manifest's word and passes through.
@@ -42,6 +44,8 @@ export const categoryLabel = (category: string): string => {
             return t(`shared.agents`);
         case ACCOUNT:
             return t(`shared.account`);
+        case PROJECT:
+            return t(`shell.commandCategories.project`);
         default:
             return category;
     }

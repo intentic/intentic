@@ -4640,6 +4640,9 @@
         "statusBar": {
             "portsPublic": "Port {port} public | {count} ports publics",
             "vpn": "VPN"
+        },
+        "useProjectCommands": {
+            "showOnly": "Afficher uniquement {project}"
         }
     },
     "terminal": {
@@ -5673,6 +5676,9 @@
             "discardUnsavedChangesIn": "Jeter les modifications non enregistrées de {count} fichiers ?",
             "closeAnyway": "Fermer quand même",
             "closingTabsDiscardsUnsaved": "Fermer ces onglets jette leurs modifications non enregistrées. C'est irréversible."
+        },
+        "projectFocus": {
+            "showOnly": "Afficher uniquement ce projet"
         }
     },
     "needs": {

@@ -42,6 +42,7 @@ import { useTreeRows } from "./tree/useTreeRows";
 import { useTreeWindow } from "./tree/useTreeWindow";
 import { useEmptyDirs } from "./useEmptyDirs";
 import { useFileNesting } from "./useFileNesting";
+import { type ProjectFocus, projectFocusRows } from "./projectFocus";
 
 // Recursive file tree and file-management surface: verbs act on the whole selection via useWorkspaceTree, with a file
 // standing in for its parent directory as a target. Template and wiring: what the tree draws and what every gesture
@@ -59,6 +60,7 @@ const {
     manageableDirs = new Set<string>(),
     rowActions,
     cover,
+    projectFocus,
     onCover,
     onAsk,
 } = defineProps<{
@@ -78,6 +80,9 @@ const {
     // A file name read in every folder (home/homeCover.ts): the tree lists folders alone, marks the ones holding it, and
     // picks whatever row an arrow lands on, since the page beside it reads that folder's copy.
     cover?: string;
+    // The project scope's rows in the menu (projectFocus.ts), on the one tree that draws the whole workspace: a tree
+    // rooted elsewhere (a local folder, the home) has no projects to narrow to.
+    projectFocus?: ProjectFocus;
     // Two gestures only some hosts answer, so they are handlers rather than events and a row is offered only where one
     // is passed (`@cover`, `@ask`): a row nobody listens to would do nothing. `cover` asks for a file's name to be read
     // in every folder, which needs a page beside the tree to read it; `ask` starts an agent's conversation about a
@@ -140,17 +145,24 @@ const { rules, selecting, inline, edits, deleting, transfer, menu: entryMenu } =
     },
     rowActions: actionsFor,
     ask: onAsk,
-    frame: (target, multi) => ({
-        // A file is the example of the name to read in every folder, as on the home's tiles.
-        head:
-            onCover !== undefined && target?.type === `file` && !multi && !opensAsFolder(target)
-                ? [{ label: t(`workspace.homeCover.showInEveryFolder`, { name: target.name }), icon: `book`, command: () => onCover(target.name) }]
-                : [],
-        tail:
-            store.expanded.value.size > 0
-                ? [{ label: t(`workspace.workspaceTree.collapseFolders`), icon: `collapse-all`, command: store.collapseAll }]
-                : [],
-    }),
+    frame: (target, multi) => {
+        const scope = projectFocus === undefined ? undefined : projectFocusRows(target, multi, projectFocus);
+        return {
+            // A file is the example of the name to read in every folder, as on the home's tiles.
+            head: [
+                ...(scope?.head ?? []),
+                ...(onCover !== undefined && target?.type === `file` && !multi && !opensAsFolder(target)
+                    ? [{ label: t(`workspace.homeCover.showInEveryFolder`, { name: target.name }), icon: `book`, command: () => onCover(target.name) }]
+                    : []),
+            ],
+            tail: [
+                ...(store.expanded.value.size > 0
+                    ? [{ label: t(`workspace.workspaceTree.collapseFolders`), icon: `collapse-all`, command: store.collapseAll }]
+                    : []),
+                ...(scope?.tail ?? []),
+            ],
+        };
+    },
 });
 // Opening a file collapses the selection to it; Ctrl/Shift-click never emit openFile, so a multi-selection survives.
 selecting.follow(selectedPath ?? null);

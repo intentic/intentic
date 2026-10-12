@@ -20,6 +20,7 @@ import { openPanel } from "../features/agents/status-bar/statusBarState";
 import RuntimeChips from "./status-bar/RuntimeChips.vue";
 import { GO_TO } from "../workbench/commands/categories";
 import { useNavigationCommands } from "./commands/useNavigationCommands";
+import { useProjectCommands } from "./commands/useProjectCommands";
 import { commandShortcut, registerCommand } from "../workbench/commands/useCommands";
 import {
     type ActiveExtension,
@@ -529,6 +530,8 @@ const railMarks = (id: string): readonly MarkStep[] => RAIL_MARKS[id] ?? [];
 useShellCommands();
 // One destination per place the shell has: every rail section on the rail or not, every sandbox and settings section.
 useNavigationCommands();
+// The project scope, by keyboard: one command per repository, and the way back to every project while one is open.
+useProjectCommands();
 // The single global-shortcut dispatcher: matches any registered command's keybinding to the keystroke.
 useKeybindings();
 // The extension pages a wallpaper shows behind; painted on the scroller so the picture stays put as the page scrolls.

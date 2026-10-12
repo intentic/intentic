@@ -269,9 +269,9 @@ describe(`rail order`, () => {
     // The top of the column is the scarce thing. Checked on railRank rather than a detected run, since two of
     // the four ids are core shell tiles that contribute no activation.
     it(`keeps the busy permanent run adjacent, with nothing on the rail between them`, () => {
-        // Pick the project, start a turn, read what it did: the loop the rail serves, with the scope that narrows the
-        // rest at its head whenever it is tiled. Approvals/Workflows used to sit between them.
-        expect(railRank(`chat`)).toBe(railRank(`projects`) + 1);
+        // Start a turn, read what it did, look at the files: the loop the rail serves, from the top of the column.
+        // Approvals/Workflows used to sit between them.
+        expect(railRank(`chat`)).toBe(0);
         expect(railRank(`agents`)).toBe(railRank(`chat`) + 1);
         expect(railRank(`workspace`)).toBe(railRank(`agents`) + 1);
     });
@@ -416,7 +416,6 @@ describe(`rail tiles`, () => {
 
     it(`spends permanent tiles on the work loop and nowhere else`, () => {
         // The count is the point: few fit above the fold, with room for what lights up. Another means editing this.
-        // Projects is not among them: a permanent tile above Chat read as the place to start (see the projects rail).
         const permanent = railGroups()
             .flatMap((group) => group.items)
             .filter((item) => item.policy === `always`)
@@ -462,41 +461,29 @@ describe(`what a badge says`, () => {
     });
 });
 
-// The Projects tile: in More until it matters, so the first thing on the rail after setup is the chat, not a second
-// place to begin. Read through the audience preference too, since a maker landed on the dashboard before.
-describe(`the projects rail`, () => {
-    const projectsTile = { id: `projects` };
-    const resting = { pinned: false, active: false };
-
-    it(`keeps Projects off the rail at rest, for a developer and a maker alike`, () => {
+// The project scope has no tile: it is chosen from the file tree and the palette, and a tile for it at the head of the
+// Work band read as a second place to start. Read through the audience preference too, since both tables are banded.
+describe(`the work band`, () => {
+    it(`tiles nothing for the project scope, for a developer and a maker alike`, () => {
         for (const audience of [`developer`, `maker`] as const) {
             useAudience().setAudience(audience);
             try {
-                expect(railPolicy(`projects`)).toBe(`signal`);
+                const ids = railGroupsFor(audience).flatMap((group) => group.items.map((item) => item.id));
+                expect(ids).not.toContain(`projects`);
                 expect(railPolicy(`workspace`)).toBe(`always`);
-                expect(onRail(projectsTile, resting)).toBe(false);
-                expect(tabBarIds()).not.toContain(`projects`);
             } finally {
                 useAudience().setAudience(`developer`);
             }
         }
     });
 
-    it(`tiles Projects when pinned or visited, still at the head of the band`, () => {
-        expect(onRail(projectsTile, { pinned: true, active: false })).toBe(true);
-        expect(onRail(projectsTile, { pinned: false, active: true })).toBe(true);
-        expect(railRank(`chat`)).toBe(railRank(`projects`) + 1);
-    });
-
-    it(`tiles Projects while a project is open, since it is the visible cause of every other tile's narrowing`, () => {
+    it(`keeps an open project from putting any tile on the rail`, () => {
         setProjectScope(`acme-shop`);
         try {
-            expect(onRail(projectsTile, resting)).toBe(true);
-            expect(onRailOnlyByVisit(projectsTile, { pinned: false, active: true })).toBe(false);
+            expect(onRail({ id: `projects` }, { pinned: false, active: false })).toBe(false);
         } finally {
             setProjectScope(undefined);
         }
-        expect(onRail(projectsTile, resting)).toBe(false);
     });
 
     it(`spends the same permanent tiles in both tables`, () => {

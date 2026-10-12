@@ -28,7 +28,7 @@ describe(`routePatternOf`, () => {
         expect(routePatternOf(router, `/workspace/web/src/checkout.ts`)).toBe(`/workspace/:path*`);
         expect(routePatternOf(router, `/workspace`)).toBe(`/workspace/:path*`);
         expect(routePatternOf(router, `/agents/cnv_checkout_stripe`)).toBe(`/agents/:id`);
-        expect(routePatternOf(router, `/ext/projects/acme-shop`)).toBe(`/ext/:ext/:key?`);
+        expect(routePatternOf(router, `/ext/pipelines/acme-shop`)).toBe(`/ext/:ext/:key?`);
         expect(routePatternOf(router, `/invite/tok_secret`)).toBe(`/invite/:token`);
     });
 

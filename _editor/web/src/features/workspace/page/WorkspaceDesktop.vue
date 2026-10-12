@@ -18,6 +18,9 @@ import { usePersonas } from "../../sandbox/personas/usePersonas";
 import { useRepoChecks } from "../../sandbox/environment/useRepoChecks";
 import { lensPersonaId, reachOf, reachTip } from "../directory-ui/personaReach";
 import { workspaceAgent, workspaceDir } from "../../../app/workspaceScope";
+import { projectScope, setProjectScope } from "../../../app/projectScope";
+import { useRepos } from "../explorer/useRepos";
+import { type ProjectFocus, projectIdsOf } from "../explorer/projectFocus";
 import { detectActivations } from "../../../workbench/views/registry";
 import { useMonaco } from "../files/useMonaco";
 import {
@@ -97,6 +100,10 @@ const {
 
 // The tree the explorer draws: the whole workspace, or one folder's contents when rooted there (workspaceDir).
 const scopedTree = computed(() => listingOf(workspaceDir.value) ?? []);
+// The project scope is chosen here, from a repository's own row: the right-click menu narrows to it, the background's
+// widens back (explorer/projectFocus.ts). Every repository the daemon found, not just the open project's.
+const { all: allRepos } = useRepos();
+const projectFocus = computed<ProjectFocus>(() => ({ projects: projectIdsOf(allRepos.value), current: projectScope.value, focus: setProjectScope }));
 keepListed(() => workspaceDir.value);
 const scopedRootHidden = computed(() => hiddenIn(workspaceDir.value));
 const scopedBarren = computed(() =>
@@ -1028,6 +1035,7 @@ const includeTip = computed((): Tip => ({
                         :selected-path="selected"
                         :manageable-dirs="manageableDirs"
                         :row-actions="rowActions"
+                        :project-focus="projectFocus"
                         @open-file="openFile"
                         @open-directory="openDirectory"
                         :cover="cover"

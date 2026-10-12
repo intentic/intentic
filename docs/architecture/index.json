@@ -538,11 +538,6 @@
     {
       "dev": false,
       "from": "_editor/web",
-      "to": "_extensions/projects"
-    },
-    {
-      "dev": false,
-      "from": "_editor/web",
       "to": "_extensions/repo-apps"
     },
     {
@@ -918,31 +913,6 @@
     {
       "dev": true,
       "from": "_extensions/preview",
-      "to": "_tools/tsconfig"
-    },
-    {
-      "dev": false,
-      "from": "_extensions/projects",
-      "to": "_shared/extension-api"
-    },
-    {
-      "dev": false,
-      "from": "_extensions/projects",
-      "to": "_shared/extension-manifest"
-    },
-    {
-      "dev": false,
-      "from": "_extensions/projects",
-      "to": "_shared/extension-ui"
-    },
-    {
-      "dev": true,
-      "from": "_extensions/projects",
-      "to": "_tools/testing"
-    },
-    {
-      "dev": true,
-      "from": "_extensions/projects",
       "to": "_tools/tsconfig"
     },
     {
@@ -3712,41 +3682,6 @@
       "reason": "1 commit has touched this package since its README was written",
       "stale": true,
       "updatedAt": 1791463770000
-    },
-    {
-      "anchors": [
-        {
-          "path": "_extensions/projects/src/extension.ts",
-          "what": "registers the rail view, its monogram and its scope badge."
-        },
-        {
-          "path": "_extensions/projects/src/ProjectsView.vue",
-          "what": "the tile grid and the New project field."
-        },
-        {
-          "path": "_extensions/projects/src/useProjects.ts",
-          "what": "the repository list plus one README read per tile."
-        },
-        {
-          "path": "_extensions/projects/src/projects.ts",
-          "what": "pure helpers: summaryOf, freeProjectName, slugOf, monogramOf."
-        },
-        {
-          "path": "_extensions/projects/src/projects.test.ts",
-          "what": "which README paragraph becomes the summary, by example."
-        }
-      ],
-      "behind": 0,
-      "component": "extensions",
-      "dir": "_extensions/projects",
-      "files": 11,
-      "hasTests": true,
-      "loc": 735,
-      "name": "@intentic/ext-projects",
-      "oneLiner": "The Projects rail view: the workspace's repositories as a dashboard of tiles, one press to open a project or start a new one.",
-      "readmeRev": "7a0727d3261d71f41a280d90678760c31cda878d",
-      "stale": false,
-      "updatedAt": 1791569696000
     },
     {
       "anchors": [

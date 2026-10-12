@@ -4686,6 +4686,9 @@
         "statusBar": {
             "portsPublic": "Port {port} öffentlich | {count} Ports öffentlich",
             "vpn": "VPN"
+        },
+        "useProjectCommands": {
+            "showOnly": "Nur {project} zeigen"
         }
     },
     "terminal": {
@@ -5720,6 +5723,9 @@
             "discardUnsavedChangesIn": "Ungesicherte Änderungen in {count} Dateien verwerfen?",
             "closeAnyway": "Trotzdem schließen",
             "closingTabsDiscardsUnsaved": "Diese Tabs zu schließen verwirft ihre ungesicherten Änderungen. Das lässt sich nicht rückgängig machen."
+        },
+        "projectFocus": {
+            "showOnly": "Nur dieses Projekt zeigen"
         }
     },
     "needs": {

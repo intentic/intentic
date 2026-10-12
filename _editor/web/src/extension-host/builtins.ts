@@ -9,7 +9,6 @@ import * as gitHistory from "@intentic/ext-git-history";
 import * as onlyoffice from "@intentic/ext-onlyoffice";
 import * as pipelines from "@intentic/ext-pipelines";
 import * as preview from "@intentic/ext-preview";
-import * as projects from "@intentic/ext-projects";
 import * as viewers from "@intentic/ext-viewers";
 import * as workflows from "@intentic/ext-workflows";
 
@@ -34,7 +33,6 @@ const modules: readonly BuiltinModule[] = [
     gitHistory,
     onlyoffice,
     preview,
-    projects,
     viewers,
     workflows,
 ];

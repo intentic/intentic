@@ -73,13 +73,12 @@ const SHOWCASE: DemoMode = {
 
 // A different workspace rather than a fullness: documents instead of code, one assistant, the maker's own words. What
 // intentic.dev/desk's screenshots are taken of, and where its "open the live workspace" link lands. The roster is its
-// own (fixture/desk.ts), so `agents` is not a filter here; the two extensions are the maker's home and the viewers that
-// draw a document.
+// own (fixture/desk.ts), so `agents` is not a filter here; the one extension is the viewers that draw a document.
 const DESK: DemoMode = {
     id: `desk`,
     label: `Desk`,
     note: `Documents, not code: one assistant on your files.`,
-    extensions: [`intentic.projects`, `intentic.viewers`],
+    extensions: [`intentic.viewers`],
     teammate: false,
     openChats: true,
     quiet: true,

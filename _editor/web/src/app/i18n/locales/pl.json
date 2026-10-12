@@ -8433,6 +8433,7 @@
         },
         "commandCategories": {
             "goTo": "Przejdź do",
+            "project": "Projekt",
             "sidePanel": "Panel boczny"
         },
         "presence": {
@@ -8462,6 +8463,9 @@
         "statusBar": {
             "portsPublic": "Port {port} publiczny | {count} porty publiczne | {count} portów publicznych",
             "vpn": "VPN"
+        },
+        "useProjectCommands": {
+            "showOnly": "Pokaż tylko {project}"
         }
     },
     "terminal": {
@@ -9921,6 +9925,9 @@
             "noPreview": "Podgląd nie jest dostępny dla tego typu pliku.",
             "tooLarge": "Ten plik jest za duży na podgląd tutaj.",
             "tooLargeSized": "Ten plik ma {size}, to za dużo na podgląd tutaj."
+        },
+        "projectFocus": {
+            "showOnly": "Pokaż tylko ten projekt"
         }
     },
     "needs": {

@@ -23,7 +23,7 @@ flowchart LR
 
 ## Naming
 
-- One npm scope for everything: a package's name is `@intentic/` plus its directory name. Extensions carry an `ext-` prefix in the npm name only (`_extensions/projects` is `@intentic/ext-projects`). [conventions.md](conventions.md) has the rule and the check that enforces it.
+- One npm scope for everything: a package's name is `@intentic/` plus its directory name. Extensions carry an `ext-` prefix in the npm name only (`_extensions/pipelines` is `@intentic/ext-pipelines`). [conventions.md](conventions.md) has the rule and the check that enforces it.
 - Versions stay `0.0.0` in git, except an extension's: its `package.json` carries the version of its `intentic-extension.json`, which the host compares to offer an update. A release stamps the tag's version onto the published set listed in [`_tools/scripts/lib/packages.sh`](../../_tools/scripts/lib/packages.sh) and publishes it to npm in dependency order. Packages marked `private` never leave the repo.
 - Third-party versions come from one strict catalog in `pnpm-workspace.yaml`: a manifest writes `catalog:`, never its own version.
 

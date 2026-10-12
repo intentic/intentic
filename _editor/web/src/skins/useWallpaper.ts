@@ -38,7 +38,7 @@ export function useWallpaper() {
  * The extension views a wallpaper also shows behind (`/ext/<id>`): pages whose cards or grouped rows have solid
  * backgrounds, keeping their content readable while the picture shows around them.
  */
-export const WALLPAPERED_EXTENSIONS: ReadonlySet<string> = new Set([`workflows`, `automations`, `projects`, `pipelines`, `approvals`]);
+export const WALLPAPERED_EXTENSIONS: ReadonlySet<string> = new Set([`workflows`, `automations`, `pipelines`, `approvals`]);
 
 /** The shell's own routes a wallpaper shows behind, for the same reason: Devices draws every machine as a card of its own. */
 export const WALLPAPERED_ROUTES: ReadonlySet<string> = new Set([`devices`]);

@@ -4710,6 +4710,9 @@
         "statusBar": {
             "portsPublic": "Puerto {port} público | {count} puertos públicos",
             "vpn": "VPN"
+        },
+        "useProjectCommands": {
+            "showOnly": "Mostrar solo {project}"
         }
     },
     "terminal": {
@@ -5755,6 +5758,9 @@
             "discardUnsavedChangesIn": "¿Descartar los cambios sin guardar de {count} archivos?",
             "closeAnyway": "Cerrar de todos modos",
             "closingTabsDiscardsUnsaved": "Cerrar estas pestañas descarta sus ediciones sin guardar. Esto no se puede deshacer."
+        },
+        "projectFocus": {
+            "showOnly": "Mostrar solo este proyecto"
         }
     },
     "needs": {

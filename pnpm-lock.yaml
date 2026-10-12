@@ -1454,9 +1454,6 @@ importers:
       '@intentic/ext-preview':
         specifier: workspace:*
         version: link:../../_extensions/preview
-      '@intentic/ext-projects':
-        specifier: workspace:*
-        version: link:../../_extensions/projects
       '@intentic/ext-repo-apps':
         specifier: workspace:*
         version: link:../../_extensions/repo-apps
@@ -1972,40 +1969,6 @@ importers:
       '@intentic/tsconfig':
         specifier: workspace:*
         version: link:../../_tools/tsconfig
-      typescript:
-        specifier: 'catalog:'
-        version: 6.0.3
-      vue:
-        specifier: 'catalog:'
-        version: 3.5.43(typescript@6.0.3)
-      vue-tsc:
-        specifier: 'catalog:'
-        version: 3.3.12(typescript@6.0.3)
-
-  _extensions/projects:
-    dependencies:
-      '@intentic/extension-api':
-        specifier: workspace:*
-        version: link:../../_shared/extension-api
-      '@intentic/extension-manifest':
-        specifier: workspace:*
-        version: link:../../_shared/extension-manifest
-      '@intentic/extension-ui':
-        specifier: workspace:*
-        version: link:../../_shared/extension-ui
-      '@tanstack/vue-query':
-        specifier: 'catalog:'
-        version: 5.104.1(vue@3.5.43(typescript@6.0.3))
-    devDependencies:
-      '@intentic/testing':
-        specifier: workspace:*
-        version: link:../../_tools/testing
-      '@intentic/tsconfig':
-        specifier: workspace:*
-        version: link:../../_tools/tsconfig
-      '@types/bun':
-        specifier: 'catalog:'
-        version: 1.4.2
       typescript:
         specifier: 'catalog:'
         version: 6.0.3

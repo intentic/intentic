@@ -32,7 +32,7 @@ describe(`guestAllowedPath`, () => {
             `/sandbox`,
             `/sandbox/secrets`,
             `/sandbox/accessories`,
-            `/ext/projects`,
+            `/ext/pipelines`,
         ]) {
             expect(guestAllowedPath(path), path).toBe(false);
         }

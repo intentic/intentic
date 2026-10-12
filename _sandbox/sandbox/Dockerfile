@@ -499,7 +499,6 @@ COPY _extensions/activity/intentic-extension.json /opt/extensions/activity/
 COPY _extensions/approvals/intentic-extension.json /opt/extensions/approvals/
 COPY _extensions/automations/intentic-extension.json /opt/extensions/automations/
 COPY _extensions/git-history/intentic-extension.json /opt/extensions/git-history/
-COPY _extensions/projects/intentic-extension.json /opt/extensions/projects/
 COPY _extensions/pipelines/intentic-extension.json /opt/extensions/pipelines/
 COPY _extensions/preview/intentic-extension.json /opt/extensions/preview/
 COPY _extensions/repo-apps/intentic-extension.json /opt/extensions/repo-apps/

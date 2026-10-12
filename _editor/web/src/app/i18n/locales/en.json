@@ -8814,6 +8814,7 @@
         },
         "commandCategories": {
             "goTo": "Go to",
+            "project": "Project",
             "sidePanel": "Side Panel"
         },
         "desktopSignal": {
@@ -9020,6 +9021,9 @@
         "statusBar": {
             "portsPublic": "Port {port} public | {count} ports public",
             "vpn": "VPN"
+        },
+        "useProjectCommands": {
+            "showOnly": "Show only {project}"
         }
     },
     "terminal": {
@@ -10479,6 +10483,9 @@
             "noPreview": "Preview isn't available for this file type.",
             "tooLarge": "This file is too large to preview here.",
             "tooLargeSized": "This file is {size}, too large to preview here."
+        },
+        "projectFocus": {
+            "showOnly": "Show only this project"
         }
     },
     "gettingStarted": {
