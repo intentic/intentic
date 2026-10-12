@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useGettingStarted } from "../features/gettingStarted/useGettingStarted";
 import type { Disposable } from "@intentic/extension-api";
-import { AnchoredOverlay, Avatar, browserOwnsClick, StatusBadge, vAction } from "@intentic/ui";
+import { AnchoredOverlay, Avatar, browserOwnsClick, StatusBadge, useHoverMenu, vAction } from "@intentic/ui";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { ACCOUNT } from "../workbench/commands/categories";
@@ -12,7 +12,9 @@ import { environment } from "../app/environments/environment";
 import { useT } from "@intentic/ui/i18n";
 
 // The rail's bottom account control: an avatar opening a popover with account identity (email, name,
-// plan) and actions (Settings, Sign out). The sandbox switcher lives above; theme lives on /settings. The same control at
+// plan) and actions (Settings, Sign out). It opens as the sandbox logo at the rail's top does (useHoverMenu): resting
+// on it raises the panel, a passing pointer raises nothing, and a press pins it. The rail's two end controls are the
+// same kind of thing, an identity with a short menu under it, so they answer the pointer the same way. The sandbox switcher lives above; theme lives on /settings. The same control at
 // the foot of a desktop window on a folder of this computer (local/LocalShell.vue), drawn and pressed the same: there the
 // account is the one the app reaches for the window (useAccount.ts), and Settings opens in that window.
 
@@ -33,7 +35,10 @@ const accountHint = computed(() => t(`shell.words.account`));
 
 // AnchoredOverlay, not PrimeVue's Popover: shares the one overlay that measures against its anchor's window.
 const trigger = ref<HTMLButtonElement | null>(null);
-const open = ref(false);
+const panel = ref<HTMLElement | null>(null);
+const menu = useHoverMenu(panel);
+const open = menu.open;
+const pressed = menu.pressed;
 const avatarFailed = ref(false);
 
 const avatarImage = computed<string | null>(() => (avatarFailed.value ? null : (user.value?.image ?? null)));
@@ -103,9 +108,9 @@ onUnmounted(() => {
             :class="onSettings ? `border-line text-link` : `border-line text-muted`"
             :aria-label="accountHint"
             :aria-current="onSettings ? 'page' : undefined"
-            v-tooltip.right="accountHint"
+            aria-haspopup="dialog"
             :aria-expanded="open"
-            @click="open = !open"
+            v-on="menu.trigger"
         >
             <img
                 v-if="avatarImage"
@@ -119,9 +124,11 @@ onUnmounted(() => {
         </button>
     </div>
 
-    <!-- Same inset as the sandbox switcher above; the popover's default padding is a content card's, not a menu's. -->
-    <AnchoredOverlay v-model="open" :anchor="trigger ?? undefined" side="right" cross="end" menu>
-        <div class="flex w-60 flex-col p-1">
+    <!-- No tooltip on the avatar: resting there opens this panel, on the side a tooltip would take, and its first row
+         says whose account it is. Same inset as the sandbox switcher above; focus goes back to the avatar only when a
+         press opened it, since a panel the pointer raised never took the keyboard's place. -->
+    <AnchoredOverlay v-model="open" :anchor="trigger ?? undefined" side="right" cross="end" :restore-focus="pressed" menu>
+        <div ref="panel" class="flex w-60 flex-col p-1" v-on="menu.panel">
             <!-- Chip sits beside the name (or email when there is no name), not on its own row below the identity block. -->
             <div class="flex items-center gap-2 px-2 py-1.5">
                 <Avatar :size="28" :src="avatarImage" />
@@ -157,6 +164,7 @@ onUnmounted(() => {
             <button
                 v-if="tour.reopenable.value"
                 type="button"
+                data-menu-row
                 class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs text-content transition-colors hover:bg-content/5"
                 @click="reopenTour"
             >
@@ -165,6 +173,8 @@ onUnmounted(() => {
             </button>
             <RouterLink
                 to="/settings"
+                data-menu-row
+                :data-current="onSettings || undefined"
                 class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs text-content transition-colors hover:bg-content/5"
                 @click="dismiss"
             >
@@ -173,6 +183,7 @@ onUnmounted(() => {
             </RouterLink>
             <button
                 type="button"
+                data-menu-row
                 class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs text-content transition-colors hover:bg-content/5"
                 v-action="logout"
             >
