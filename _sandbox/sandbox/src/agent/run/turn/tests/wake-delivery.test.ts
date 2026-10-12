@@ -1,10 +1,10 @@
 import { fakeTurns } from "../../../../testing.js";
 import { deliverWake, type Wake, type WakeDoors } from "../wake-delivery.js";
 
-// The port's door as a wake meets it, on a conversation whose session is `sess-7`.
+// The port's door as a wake meets it. A wake names no session: the conversation's admission decides it (turn-admission.test.ts).
 const fake = (over: Parameters<typeof fakeTurns>[0] = {}): ReturnType<typeof fakeTurns> & { readonly doors: WakeDoors } => {
     const turns = fakeTurns(over);
-    return Object.assign(turns, { doors: { turns: turns.turns, sessionIdOf: () => "sess-7" } });
+    return Object.assign(turns, { doors: { turns: turns.turns } });
 };
 
 const wake = (over: Partial<Wake> = {}): Wake => ({
@@ -23,7 +23,7 @@ describe("wake delivery", () => {
         expect(doors.started).toEqual([]);
     });
 
-    it("otherwise opens a turn on the conversation's session and routing, born tainted by what it carries", async () => {
+    it("otherwise opens a turn on the conversation's routing, born tainted by what it carries and naming no session of its own", async () => {
         const doors = fake();
         expect(await deliverWake(doors.doors, wake({ outside: "watch-fetch" }))).toEqual({ delivered: "started", run: "run-1" });
         expect(doors.started).toEqual([
@@ -33,7 +33,6 @@ describe("wake delivery", () => {
                 conversationId: "conv-1",
                 prompt: "Watch fired: …",
                 speaker: { kind: "sandbox" },
-                sessionId: "sess-7",
                 outsideWake: "watch-fetch",
             },
         ]);
@@ -66,7 +65,6 @@ describe("wake delivery", () => {
                     conversationId: "conv-1",
                     prompt: "Watch fired: …",
                     speaker: { kind: "sandbox" },
-                    sessionId: "sess-7",
                 },
             },
         ]);

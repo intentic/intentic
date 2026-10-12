@@ -11,6 +11,7 @@ import { type Periodic, SingleFlight, startPeriodic } from "@intentic/base/async
 import { wrapOutsideContent } from "@intentic/base/outside-text";
 import { automationPending, turnFinished } from "../push/notifications.js";
 import { pinnedRunModel } from "../agent/models/run-role-model.js";
+import { sessionFor } from "../agent/providers/accounts/routing.js";
 import type { OutboxSink } from "../webchat/webchat-outbox.js";
 import { type AutomationRecord, consecutiveFailures } from "./automations-store.js";
 import type { ScheduleMark } from "./schedule-coverage.js";
@@ -22,6 +23,7 @@ import { TITLE_MAX } from "../seams/conversation-title.js";
 import { continueConversation, expireAutomation, notifyOwner, type TargetOutcome } from "./watch/fire-targets.js";
 import { checkCondition, conditionOutside } from "./watch/watch-condition.js";
 import { withdrawApprovalPush } from "./held-wake-answers.js";
+import type { ReleasedWake } from "./held-wakes-store.js";
 
 // How much of an event's webhook body reaches the guard's env and the wake prompt.
 export const PAYLOAD_MAX = 64_000;
@@ -550,6 +552,15 @@ const runFire = async (
         const body = wakeBody(automation, capped, late, observed);
         let failure: string | undefined;
         let runtimeSessionId: string | undefined;
+        // Account rides only if every rung agrees on provider, meaningless elsewhere; else best-headroom wins.
+        const account =
+            automation.account !== undefined && (automation.models ?? []).every((rung) => rung.provider === pin.provider) ? automation.account : undefined;
+        // A thread's session resumes only on the runtime and account that minted it, judged on the rung this fire resolved to
+        // (routing.ts): an automation whose ladder moved to another provider since the last message opens a fresh session
+        // seeded from the record, rather than naming one the provider will not hold. A fire whose thread named no session
+        // opens a fresh one, as it always did.
+        const sessionId =
+            resumedSessionId === undefined ? undefined : sessionFor(services, { conversationId, agent: pin.provider, harness: pin.harness, account, sessionId: resumedSessionId });
         // Every fire lands in a conversation; a channel or visitor keeps one active, a schedule wake mints a fresh one.
         const turn: AgentTurn & { conversationId: string } = {
             // STREAM_NOTE is applied here, not folded into `body`, so it belongs to this fire, not the journal entry.
@@ -565,7 +576,7 @@ const runFire = async (
                   ? { outsideWake: observedOutside }
                   : {}),
             // Resumes the provider session on a continuing thread; absent on a first turn or any one-off wake.
-            ...(resumedSessionId !== undefined ? { sessionId: resumedSessionId } : {}),
+            ...opt("sessionId", sessionId),
             ...(allowedTools !== undefined ? { allowedTools: [...allowedTools] } : {}),
             // Every wake runs in its own worktree, unconditionally; `origin` says who spoke, not where the turn runs.
             isolated: true,
@@ -577,10 +588,7 @@ const runFire = async (
                 : {}),
             // Resolved rung spread verbatim, not through turn-resume's fill step, since this turn walked its ladder.
             ...pinFields(pin),
-            // Account rides only if every rung agrees on provider, meaningless elsewhere; else best-headroom wins.
-            ...(automation.account !== undefined && (automation.models ?? []).every((rung) => rung.provider === pin.provider)
-                ? { account: automation.account }
-                : {}),
+            ...opt("account", account),
             // Absence here is deliberate: the resolver reads no pin as no account on an unattended turn, not all.
             ...(actsAs !== undefined ? { actsAs } : {}),
         };
@@ -742,8 +750,9 @@ const heldWakeOptions = (held: AutomationApproval, sink: OutboxSink | undefined)
 });
 
 // Runs a held wake with its snapshot (`cleared: "both"`, guard already ran), then settles its thread so the next
-// message resumes it. Shared by both releases, the approve route and the countdown scan.
-export const runHeldWake = async (services: Services, automation: AutomationRecord, held: AutomationApproval): Promise<void> => {
+// message resumes it. Shared by both releases, the approve route and the countdown scan; it takes only a hold one of them
+// let out of the queue after checking its proof (held-wakes-store.ts, ReleasedWake).
+export const runHeldWake = async (services: Services, automation: AutomationRecord, held: ReleasedWake): Promise<void> => {
     // The visitor's own stream closed when the wake was held, so a Visitor chat answer has nowhere live to go; queue it
     // where their next page load will collect it. Undefined for every other origin, which answers through its gateway.
     const sink = services.outboxStreamFor(held.origin);
@@ -792,6 +801,26 @@ export const nextOneTimeWakeAt = async (services: Services): Promise<number> => 
     const due = (await services.automations.list()).flatMap((automation) =>
         automation.enabled && automation.trigger.kind === "once" ? [automation.trigger.at] : [],
     );
+    return due.length === 0 ? 0 : Math.min(...due);
+};
+
+// The soonest moment a cron fires, for whoever must not restart through it (bootstrap/promised-wakes.ts); 0 when none is
+// armed. Held apart from `nextOneTimeWakeAt` because the two are promises of different weight: a cron that comes due while
+// the machine sleeps is caught up once, late, at the next start, so idle-stop does not stay up for it, but a restart landing
+// on a cron's minute would fire it late for nothing.
+export const nextCronWakeAt = async (services: Services): Promise<number> => {
+    const zone = await sandboxZone(services);
+    const due = (await services.automations.list()).flatMap((automation) =>
+        automation.trigger.kind === "schedule" ? [nextRunOf(automation, zone) ?? 0].filter((at) => at > 0) : [],
+    );
+    return due.length === 0 ? 0 : Math.min(...due);
+};
+
+// The soonest a held wake's countdown ends, for whoever must not sleep through it (bootstrap/promised-wakes.ts); 0 when none
+// counts down. The sandbox told its owner a `holdForSeconds` hold would go ahead by itself, and only its own clock lets it:
+// a hold that waits on a person (`requireApproval`) has no moment and is not counted.
+export const nextCountdownWakeAt = async (services: Services): Promise<number> => {
+    const due = (await services.heldWakes.list()).flatMap((held) => (held.autoRunAt === undefined ? [] : [held.autoRunAt]));
     return due.length === 0 ? 0 : Math.min(...due);
 };
 
@@ -959,6 +988,7 @@ const fleetFor = (services: Services, trigger: Trigger["kind"] | undefined, auto
 // Releases countdown holds past deadline once quiet (heldWakeQuiet); removed before running so it can't re-fire. A
 // retired one-time wake still releases: it was switched off by the very fire now waiting in the queue.
 const releaseCountdownHolds = async (services: Services, now: number): Promise<void> => {
+    // `list` shows a countdown only on a hold the daemon minted, and the release checks it again as it takes the hold out.
     for (const held of await services.heldWakes.list()) {
         if (held.autoRunAt === undefined || held.autoRunAt > now) {
             continue;
@@ -967,12 +997,13 @@ const releaseCountdownHolds = async (services: Services, now: number): Promise<v
         if (!heldWakeQuiet(automation?.trigger.kind, now, fleetFor(services, automation?.trigger.kind, held.autoRunAt))) {
             continue;
         }
-        // Only the release whose remove took the entry runs it: an approval racing this pass has already fired it.
-        if (!(await services.heldWakes.remove(held.id)) || automation === undefined || !resumable(automation)) {
+        // Only the release that takes the entry runs it: an approval racing this pass has already fired it.
+        const released = await services.heldWakes.releaseCountdown(held.id, now);
+        if (released === undefined || automation === undefined || !resumable(automation)) {
             continue;
         }
         void withdrawApprovalPush(services, held.automationId);
-        void runHeldWake(services, automation, held).catch(loggedAs(services, "countdown-released automation run failed", automation.id));
+        void runHeldWake(services, automation, released).catch(loggedAs(services, "countdown-released automation run failed", automation.id));
     }
 };
 

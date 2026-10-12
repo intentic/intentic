@@ -1,5 +1,5 @@
 import type { ApprovalsList, ApprovalSummary } from "@intentic/sandbox-contract";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { host } from "./host";
 
@@ -17,10 +17,7 @@ export function useApprovals() {
     const api = host();
     const queryClient = useQueryClient();
     const spec = approvalsQuery();
-    const { data, error, isLoading } = useQuery({
-        ...spec,
-        enabled: computed(() => api.sandbox.reachable()),
-    });
+    const { query, error } = api.sandbox.query(spec);
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey: spec.queryKey });
 
     const save = useMutation({
@@ -32,14 +29,14 @@ export function useApprovals() {
         onSuccess: invalidate,
     });
 
-    const approvals = computed<ApprovalSummary[]>(() => data.value?.approvals ?? []);
-    const invalid = computed<string[]>(() => data.value?.invalid ?? []);
+    const approvals = computed<ApprovalSummary[]>(() => query.data.value?.approvals ?? []);
+    const invalid = computed<string[]>(() => query.data.value?.invalid ?? []);
 
     return {
         approvals,
         invalid,
-        error: computed(() => error.value?.message),
-        isLoading,
+        error,
+        isLoading: query.isLoading,
         save,
         remove,
     };

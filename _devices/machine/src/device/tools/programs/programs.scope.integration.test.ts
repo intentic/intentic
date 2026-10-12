@@ -37,6 +37,22 @@ test("app_start refuses a deleting command that run_command refuses while 'Run d
     expect(existsSync(victim)).toBe(false);
 });
 
+test("app_start refuses `ic sandbox …` and `docker stop <a sandbox>` while 'Manage sandboxes on this device' is off, as the sandbox tools do", async () => {
+    for (const [program, args] of [
+        ["ic", ["sandbox", "restart", "work"]],
+        ["/home/me/.intentic/bin/ic", ["sandbox", "update"]],
+        ["docker", ["stop", "intentic-sandbox-work"]],
+        ["/bin/sh", ["-c", "ic sandbox rebuild work 3f2a"]],
+    ] as const) {
+        const failure = await startApp({ program, args: [...args] }, shellOnly, SANDBOX).catch((error: unknown) => error);
+        expect(failure, program).toBeInstanceOf(ScopeError);
+        expect(String(failure), program).toContain("Manage sandboxes on this device");
+    }
+    // With it on, the program is started; this machine has no `ic`, which is a failure to start, not a refusal.
+    const failure = await startApp({ program: "ic", args: ["sandbox", "list"] }, { ...shellOnly, sandboxes: "on" }, SANDBOX).catch((error: unknown) => error);
+    expect(failure).not.toBeInstanceOf(ScopeError);
+});
+
 test("app_start still starts an ordinary program with the destructive switch off", async () => {
     const said = await startApp({ program: "true" }, shellOnly, SANDBOX);
     expect(said).toContain("exited with code 0");

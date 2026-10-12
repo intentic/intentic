@@ -1,6 +1,6 @@
 import type { DeviceScopes } from "@intentic/sandbox-contract";
 import { ScopeError } from "../policy.js";
-import { type CommandResult, describeResult, destructiveClasses, runCommand } from "./shell.js";
+import { assertNoSandboxPower, type CommandResult, describeResult, destructiveClasses, runCommand, sandboxPowerIn } from "./shell.js";
 
 // `shell` used to check only WHERE a command would start (cwd, against the roots), never WHAT it would do, so
 // an agent could run `rm -rf ~/projects` and the sandbox's command gate never saw it (it hooks Bash and the JS
@@ -40,6 +40,23 @@ test("a destructive command outside the roots is refused for what it does, not f
 test("turning the switch on lets the same command through", async () => {
     const result = await runCommand({ command: "rm -rf /tmp/intentic-shell-test-absent" }, scopes({ destructive: "on", programs: "off" }));
     expect(result.exitCode).toBe(0);
+});
+
+// The sandbox tools refuse without "Manage sandboxes on this device"; `ic` and `docker` through the shell are the same
+// tools by another door, and are refused before the spawn like a delete is.
+test("a command that manages a sandbox is refused while 'Manage sandboxes on this device' is off, and runs when it is on", async () => {
+    for (const command of ["ic sandbox restart work", "ic sandbox update", "docker stop intentic-sandbox-work"]) {
+        const failure = await runCommand({ command }, scopes()).catch((error: unknown) => error);
+        expect(failure, command).toBeInstanceOf(ScopeError);
+        expect(String(failure), command).toContain("Manage sandboxes on this device");
+    }
+    // Unquoted, an echo is read as the command it spells; switched on, it reaches the shell and prints it.
+    const text = "echo ic sandbox restart work";
+    await expect(runCommand({ command: text }, scopes())).rejects.toThrow(ScopeError);
+    const result = await runCommand({ command: text }, scopes({ sandboxes: "on" }));
+    expect(result.stdout.text.trim()).toBe("ic sandbox restart work");
+    // A mention that runs nothing is not a command.
+    expect((await runCommand({ command: "true # ic sandbox restart work" }, scopes())).exitCode).toBe(0);
 });
 
 // The whole point of one extra switch rather than five: a connected device stays useful with it off.
@@ -128,4 +145,81 @@ test("a command that left something running says its later output is not collect
 
 test("a timed-out command is reported as stopped together with what it started", () => {
     expect(describeResult(ran({ exitCode: null, timedOut: true }), 90_000)).toMatch(/^The command was stopped after 90s, and everything it started with it\./);
+});
+
+// The sandbox tools (manage_sandbox, swap_sandbox, reshape_sandbox, remove_sandbox) each refuse without "Manage
+// sandboxes on this device"; a shell command that does what they do answers to the same switch, for any sandbox on the
+// machine, since this end cannot know which one the caller runs in.
+
+const withSandboxes = (sandboxes: DeviceScopes["sandboxes"]): DeviceScopes => ({
+    shell: "on",
+    write: "off",
+    screen: "on",
+    control: "off",
+    sandboxes,
+    destructive: "off",
+    programs: "off",
+});
+
+const REFUSALS = [
+    "ic sandbox restart work",
+    "ic sandbox stop other",
+    "ic sandbox rm work -y",
+    "ic sandbox rebuild work 3f2a",
+    "ic sandbox update",
+    "ic sandbox rollback work --to 1.315.0",
+    "ic sandbox start work",
+    "ic sandbox prepare work --auto",
+    "ic sandbox reshape work --memory 12g",
+    "& 'C:\\Users\\radar\\.intentic\\bin\\ic.exe' sandbox restart work",
+    "docker stop intentic-sandbox-work",
+    "docker restart intentic-sandbox-work",
+    "docker rm -f intentic-sandbox-other",
+    "docker kill intentic-sandbox-tunnel-abc",
+    "cd /tmp && ic sandbox restart work",
+];
+
+test("each way of managing a sandbox is refused while the switch is off, naming the switch", () => {
+    for (const command of REFUSALS) {
+        expect(() => assertNoSandboxPower(command, withSandboxes("off")), command).toThrow(ScopeError);
+        expect(() => assertNoSandboxPower(command, withSandboxes("off")), command).toThrow(/"Manage sandboxes on this device" is switched off/);
+    }
+});
+
+test("the same commands run once the switch is on", () => {
+    for (const command of REFUSALS) {
+        expect(() => assertNoSandboxPower(command, withSandboxes("on")), command).not.toThrow();
+    }
+});
+
+test("the refusal says what was asked for in ic's own verbs, and how it arrived when it was typed", () => {
+    expect(() => assertNoSandboxPower("ic sandbox restart work && ic sandbox stop other", withSandboxes("off"))).toThrow(
+        /^Refused: this command would manage a sandbox on this device \(restart, stop\), and/,
+    );
+    expect(() => assertNoSandboxPower("ic sandbox restart work\n", withSandboxes("off"), "typed")).toThrow(/^Refused: typed into a terminal, this would manage a sandbox/);
+});
+
+test("what only reads, and docker aimed at anything else, is untouched with the switch off", () => {
+    for (const command of [
+        "ic sandbox list --json",
+        "ic sandbox logs work --tail 50",
+        "ic sandbox doctor work",
+        "docker ps",
+        "docker restart postgres",
+        "docker stop my-app",
+        // Worked out as it runs: this end cannot know what it will be, and does not guess.
+        "docker stop $(docker ps -q)",
+        "echo 'ic sandbox restart work'",
+        "# ic sandbox restart work",
+        "git commit -m 'document docker stop intentic-sandbox-work'",
+    ]) {
+        expect(() => assertNoSandboxPower(command, withSandboxes("off")), command).not.toThrow();
+    }
+});
+
+test("names the commands a shell would run, however many", () => {
+    expect(sandboxPowerIn("ic sandbox restart work; docker stop intentic-sandbox-work").map((hit) => [hit.via, hit.op])).toEqual([
+        ["ic", "restart"],
+        ["docker", "stop"],
+    ]);
 });

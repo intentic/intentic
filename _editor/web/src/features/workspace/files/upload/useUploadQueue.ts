@@ -10,8 +10,8 @@ import { detectProjects, managerFromPackageJson, type ProjectSetup } from "@inte
 import { captureDrop, type DroppedFile, isRootGitPath, walkDrop } from "../../explorer/transfer/dropEntries";
 import { packTar } from "../../explorer/transfer/tarArchive";
 import { useEndpoint } from "../../../../client/endpoint/useEndpoint";
-import { sandboxJson, sandboxUpload } from "../../../../client/sandbox/sandboxClient";
-import { jsonBody } from "../../../../client/sandbox/jsonBody";
+import { sandboxRaw } from "../../../../client/sandbox/sandboxRaw";
+import { sandboxRawUpload } from "../../../../client/sandbox/sandboxRawUpload";
 import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { rpcPrefix } from "../../../../lib/queryKeys";
@@ -365,7 +365,7 @@ const filterUnchanged = async (targetDir: string, entries: readonly DroppedFile[
     }
     try {
         const stats = entries.map((entry) => ({ path: joinPath(targetDir, entry.path), size: entry.file.size, mtime: entry.file.lastModified }));
-        const { skip } = await sandboxJson<{ skip: string[] }>(`/workspace/upload-diff`, { ...jsonBody(`POST`, { files: stats }), signal });
+        const { skip } = await sandboxRaw(`POST /workspace/upload-diff`, { input: { files: stats }, signal });
         if (skip.length === 0) {
             return entries;
         }
@@ -386,7 +386,8 @@ const uploadOneXhr = async (item: QueueFile, signal: AbortSignal): Promise<void>
         last = loaded;
         schedulePublish();
     };
-    await sandboxUpload(`/workspace/upload?path=${encodeURIComponent(item.path)}&mtime=${item.file.lastModified}`, item.file, {
+    await sandboxRawUpload(`POST /workspace/upload`, item.file, {
+        query: { path: item.path, mtime: String(item.file.lastModified) },
         signal,
         onProgress: counted,
     });
@@ -461,7 +462,7 @@ const uploadViaTar = async (items: readonly QueueFile[], signal: AbortSignal): P
         schedulePublish();
     };
     try {
-        await sandboxUpload(`/workspace/upload-archive`, blob, { signal, whole: true, onProgress: progress });
+        await sandboxRawUpload(`POST /workspace/upload-archive`, blob, { signal, whole: true, onProgress: progress });
         progress(blob.size);
         for (const item of items) {
             setStatus(item, `done`);

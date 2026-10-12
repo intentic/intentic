@@ -4,8 +4,9 @@ import { type AgentMount, agentMounts } from "../agent/run/harness/agent-mounts.
 import type { Services } from "../composition.js";
 import { accountGroupOf } from "../capabilities/account-skills.js";
 import { listPersonaSkills, readPersonaSkill } from "../personas/persona-kit.js";
-import { loadedSkillsRoot } from "../store/loaded-skills.js";
+import { loadedSkillsRoot, skillWriterOf } from "../store/loaded-skills.js";
 import { parseSkillFile, scanSkillFolders, SKILL_FILE, skillDocument } from "../skill-file.js";
+import { retiredSkillReason } from "./skill-retirement.js";
 import { bakedSkillNames, bakedSkillText, listOwnSkills, ownSkillDir, ownSkillOn } from "./skills.js";
 
 // Reads everything the agent knows from six sources (baked tools, the owner's store, connections, plugins, extensions,
@@ -19,6 +20,36 @@ import { bakedSkillNames, bakedSkillText, listOwnSkills, ownSkillDir, ownSkillOn
 const FEATURE_SKILLS: Record<string, string> = {
     approvals: "Approvals",
     iq: "Code search",
+};
+
+// Owner labels for a loaded skill the sandbox wrote that nothing above claims: one a release retired (it goes at the next
+// restart), and one a daemon writer stamped whose source is not otherwise named.
+export const RETIRED_OWNER = "Retired by this release, removed at the next restart";
+export const SANDBOX_OWNER = "Sandbox";
+
+// Who a loaded skill nothing above claimed belongs to, in this order: a core feature, a daemon leftover the next boot's
+// retirement pass takes away (settings/skill-retirement.ts), a connection, any other skill a daemon writer stamped, and
+// only then the owner's own drop, the one row removable here.
+const loadedOrigin = (
+    name: string,
+    text: string | undefined,
+    capabilities: readonly Capability[],
+): Pick<SkillSummary, "origin"> & Partial<Pick<SkillSummary, "owner" | "removable">> => {
+    const feature = FEATURE_SKILLS[name];
+    if (feature !== undefined) {
+        return { origin: "builtin", owner: feature };
+    }
+    if (text !== undefined && retiredSkillReason(name, text) !== undefined) {
+        return { origin: "builtin", owner: RETIRED_OWNER };
+    }
+    const provider = capabilityFor(capabilities, name);
+    if (provider !== undefined) {
+        return { origin: "capability", owner: provider.id };
+    }
+    if (text !== undefined && skillWriterOf(text) !== undefined) {
+        return { origin: "builtin", owner: SANDBOX_OWNER };
+    }
+    return { origin: "dropped", removable: true };
 };
 
 // Resolves a loaded skill's directory name to the capability it names, or, for a shared skill (a kind's own cheatsheet,
@@ -100,31 +131,10 @@ export const skillInventory = async (services: Services): Promise<SkillSummary[]
     // the same skill, not a duplicate.
     const claimed = new Set([...own.map((skill) => skill.name), ...bakedSkillNames()]);
     for (const skill of await scanSkillFolders(loadedSkillsRoot(root), read)) {
-        if (claimed.has(skill.name)) {
-            continue;
+        if (!claimed.has(skill.name)) {
+            const text = await read(join(loadedSkillsRoot(root), skill.name, SKILL_FILE));
+            rows.push(summary({ id: skill.name, name: skill.name, description: skill.description, enabled: true, ...loadedOrigin(skill.name, text, capabilities) }));
         }
-        const feature = FEATURE_SKILLS[skill.name];
-        if (feature !== undefined) {
-            rows.push(
-                summary({ id: skill.name, name: skill.name, description: skill.description, origin: "builtin", owner: feature, enabled: true }),
-            );
-            continue;
-        }
-        const provider = capabilityFor(capabilities, skill.name);
-        if (provider !== undefined) {
-            rows.push(
-                summary({
-                    id: skill.name,
-                    name: skill.name,
-                    description: skill.description,
-                    origin: "capability",
-                    owner: provider.id,
-                    enabled: true,
-                }),
-            );
-            continue;
-        }
-        rows.push(summary({ id: skill.name, name: skill.name, description: skill.description, origin: "dropped", enabled: true, removable: true }));
     }
 
     return rows;

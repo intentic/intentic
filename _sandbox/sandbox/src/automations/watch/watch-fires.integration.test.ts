@@ -27,7 +27,7 @@ const fakeServices = (root: string, registry: readonly PersistedAgent[] = []): S
         conversations: unstubbed<Services["conversations"]>("conversations", { liveSessionIds: () => [], sessionIdOf: () => undefined }),
         automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
-        heldWakes: fileHeldWakesStore(join(root, "approvals")),
+        heldWakes: fileHeldWakesStore(join(root, "history")),
         scheduleCoverage: fileScheduleCoverageStore(join(root, "automation-schedule.json")),
         turnJournal: sqliteTurnJournal(openConversationsDb(conversationsDbPath(root))),
         activity: { append: async () => {}, list: async () => [] },
@@ -123,11 +123,16 @@ test("two held wakes of a conversation-target watch, approved together, are deli
     const held = (await services.heldWakes.list()).toSorted((a, b) => a.createdAt - b.createdAt);
     expect(held.map((entry) => entry.observed)).toEqual(["first", "second"]);
 
-    // The owner approves both, as the approve route does: a fresh record, then runHeldWake.
+    // The owner approves both, as the approve route does: the store lets each out on their yes, then runHeldWake.
     const turns = fakeTurns();
     const driven = unstubbed<Services>("services", { ...services, turns: turns.turns as Services["turns"] });
     for (const entry of held) {
-        await runHeldWake(driven, (await services.automations.get("held-resume")) as AutomationRecord, entry);
+        await services.heldWakes.approve(entry.id, "ada@acme.dev");
+        const released = await services.heldWakes.release(entry.id);
+        if (released === undefined) {
+            throw new Error(`the hold ${entry.id} was gone before the owner released it`);
+        }
+        await runHeldWake(driven, (await services.automations.get("held-resume")) as AutomationRecord, released);
         await automationIdle("held-resume");
     }
     expect(turns.started).toHaveLength(2);

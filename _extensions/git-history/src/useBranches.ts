@@ -1,5 +1,5 @@
 import { followCommandRun, type GitBranch, type GitRemoteBranch } from "@intentic/sandbox-contract";
-import { useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useQueryClient } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "./host.js";
 import { t } from "./i18n.js";
@@ -19,10 +19,9 @@ export function useBranches(repo: Ref<string>) {
     const queryClient = useQueryClient();
 
     const branchesKey = computed(() => api.sandbox.readKey(`git.branches`, { repo: repo.value }));
-    const query = useQuery({
+    const { query, error } = api.sandbox.query({
         queryKey: branchesKey,
         queryFn: () => api.sandbox.rpc.git.branches({ repo: repo.value }),
-        enabled: computed(() => api.sandbox.reachable()),
     });
     // Ahead/behind and the checked-out branch move with refs, mostly the agent's doing rather than this switcher's.
     useRefRefresh(repo, [branchesKey]);
@@ -90,7 +89,7 @@ export function useBranches(repo: Ref<string>) {
         groups,
         current,
         loading: query.isFetching,
-        error: computed(() => query.error.value?.message),
+        error,
         busy,
         actionError,
         refresh: (): Promise<unknown> => invalidateRefs(),

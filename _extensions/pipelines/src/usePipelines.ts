@@ -1,6 +1,6 @@
 import { type CiFixParam, type CiFixResponse, type FixResume, isPipelineInFlight, type PipelineRun, runPickOf } from "@intentic/sandbox-contract";
 import type { AgentRunChoice } from "@intentic/extension-ui";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { ciRunsQuery } from "./ciRunsQuery";
 import { host } from "./host";
@@ -45,11 +45,9 @@ export function usePipelines() {
     const queryClient = useQueryClient();
     const spec = ciRunsQuery();
     const queryKey = spec.queryKey;
-    const enabled = computed(() => api.sandbox.reachable());
 
-    const query = useQuery({
+    const { query, error } = api.sandbox.query({
         ...spec,
-        enabled,
         refetchInterval: ({ state }) => runsPollMs(state.data?.runs),
     });
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey });
@@ -77,7 +75,7 @@ export function usePipelines() {
         // Main-line branches failing right now, each with the one fix agent the daemon put on it; absent from a daemon
         // that keeps none, which reads the same as none failing.
         failures: computed(() => query.data.value?.failures ?? []),
-        error: computed(() => query.error.value?.message),
+        error,
         // isPending, not isLoading: true until the first response, including while `enabled` still gates the fetch.
         isPending: query.isPending,
         rerun,

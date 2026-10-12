@@ -105,6 +105,10 @@ flowchart LR
   reboot): the channel record names the swap in flight before anything stops. What happened is written to the
   sandbox's `/history/update-outcome.json` (`outcome.rs`), which its daemon shows the owner. The dogfood `dev` loop
   keeps no probation. `IC_PROBATION_SECONDS` and `IC_WATCH_GRACE_SECONDS` shorten both windows for the nightly drill.
+  The probation's numbers and rule are the contract's `update-probation.ts`, which the platform's watch over hosted
+  sandboxes also uses; `golden/update-probation.json` pins ic to it. `ic sandbox swaps --json` (`swaps.rs`) answers,
+  without Docker, whether each swap's cutover is being done right now (its heartbeat is fresh). The machine agent
+  defers its own restarts and the keeper on that answer rather than reading the records itself.
 - **The ways back.** `rollback` returns to `previous` (pressing it twice goes forward again); up to two older builds
   are kept behind it when the disk allows (on Windows too since 2026-10-05: the free space of the drive Docker Desktop
   keeps its data on is read directly, where the check used to skip), and `ic sandbox versions` lists them for

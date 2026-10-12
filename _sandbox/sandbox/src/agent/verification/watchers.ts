@@ -552,7 +552,6 @@ export const startWatchers = (services: Services, disarmed: (conversationId: str
         logger: services.logger,
         runCheck: watchCheck(services.turnIsolation),
         turns: services.turns,
-        sessionIdOf: (conversationId) => services.conversations.sessionIdOf(conversationId),
         journal: services.watchJournal,
         // The same function that builds a turn's shell env, so a restored check can't drift from an arming turn's.
         envOf: async (conversationId) => shellEnvOf(await turnCliEnv(services, conversationId)),

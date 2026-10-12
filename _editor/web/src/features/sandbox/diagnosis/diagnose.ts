@@ -1,5 +1,5 @@
 import type { HostReport, HostedStatus } from "@intentic/api-contract";
-import type { EdgeVerdict, SandboxVitals } from "@intentic/sandbox-contract";
+import { CRASH_LOOP_RESTARTS, type EdgeVerdict, type SandboxVitals } from "@intentic/sandbox-contract";
 import type { ConnectionFailure } from "../../../client/sandbox/connection";
 
 // WHY A SANDBOX ISN'T ANSWERING, as a pure function of what could be observed while it wasn't. The connection machine
@@ -105,8 +105,8 @@ export const HOSTED_COLD_PATIENCE_MS = 5 * 60_000;
 // The edge lets go of a tunnel whose far side went quiet after 45 s (tunnel `DEAD_AFTER`), so silence this long is no
 // longer a slept computer being let go.
 export const SILENT_PATIENCE_MS = 60_000;
-// A daemon netd restarted this many times in its ten-minute window is not coming back by restarting.
-export const CRASH_LOOP_RESTARTS = 3;
+// A daemon netd restarted this many times in its ten-minute window is not coming back by restarting: the contract's
+// CRASH_LOOP_RESTARTS, which ic's health.rs and the platform's hosted gate hold to the same number.
 // A restart that has not come back in this long is not a restart any more.
 export const RESTARTING_PATIENCE_MS = 2 * 60_000;
 // A report older than the outage by more than this describes another one; the agent may write a moment before this

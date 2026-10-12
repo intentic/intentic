@@ -186,7 +186,6 @@ describe("archiveAgents", () => {
             logger,
             runCheck: async () => ({ exitCode: 1, output: "" }),
             turns: fakeTurns().turns,
-            sessionIdOf: () => undefined,
             journal: memoryWatchJournal(),
             envOf: async () => ({}),
             conversationLive: () => true,

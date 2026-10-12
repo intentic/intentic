@@ -58,7 +58,7 @@ describe("pushedKeys", () => {
     });
 
     it("reaches the reads a pack keys by procedure from a name only its manifest binds", () => {
-        expect(pushedKeys([`approvals`])).toEqual([[`approvals`], [`approvals.list`], [`approvals.hookRequests`]]);
+        expect(pushedKeys([`approvals`])).toEqual([[`approvals`], [`approvals.list`], [`approvals.hookRequests`], [`automations.pendingList`]]);
         expect(pushedKeys([`automation-approvals`])).toEqual([[`automation-approvals`], [`automations.pendingList`]]);
         expect(pushedKeys([`public`])).toEqual([[`public`], [`public.list`]]);
     });

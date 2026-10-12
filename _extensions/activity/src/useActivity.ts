@@ -1,5 +1,5 @@
 import type { ActivityEvent, ActivityStatus } from "@intentic/sandbox-contract";
-import { useInfiniteQuery, useQuery } from "@tanstack/vue-query";
+import { useInfiniteQuery } from "@tanstack/vue-query";
 import { computed, type Ref, watch } from "vue";
 import { sinceOf, type TimeWindow } from "@intentic/extension-ui";
 import { host } from "./host";
@@ -16,6 +16,8 @@ const MAX_PAGES = 4;
 
 export function useActivity(window: Ref<TimeWindow>) {
     const api = host();
+    // A paged read keeps pages rather than the procedure's answer, so it stays on vue-query's own `useInfiniteQuery`, gated
+    // on the sandbox answering by hand; `api.sandbox.query` is for the reads that hold one answer.
     const enabled = computed(() => api.sandbox.reachable());
 
     const feed = useInfiniteQuery({
@@ -29,10 +31,9 @@ export function useActivity(window: Ref<TimeWindow>) {
     // Keyed by its procedure, which the `activity` push and the config-file bindings reach through the host's table of
     // pushed reads; the feed above stays on a name of its own, since an infinite query holds pages rather than the
     // procedure's answer.
-    const status = useQuery({
+    const { query: status, error: statusError } = api.sandbox.query({
         queryKey: api.sandbox.readKey(`activity.status`),
         queryFn: () => api.sandbox.rpc.activity.status(),
-        enabled,
     });
 
     const events = computed<ActivityEvent[]>(() => (feed.data.value?.pages ?? []).flat());
@@ -61,7 +62,7 @@ export function useActivity(window: Ref<TimeWindow>) {
     return {
         events,
         status: computed<ActivityStatus | undefined>(() => status.data.value),
-        error: computed(() => feed.error.value?.message ?? status.error.value?.message),
+        error: computed(() => feed.error.value?.message ?? statusError.value),
         isLoading: computed(() => feed.isLoading.value || status.isLoading.value),
         // True when the window needs more than the page bound allows; the feed is a prefix, and says so.
         truncated: computed(() => !covered.value && pages.value >= MAX_PAGES),

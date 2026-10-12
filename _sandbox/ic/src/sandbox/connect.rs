@@ -16,7 +16,7 @@ use crate::sandbox::{
 use crate::tty;
 use crate::ui;
 use crate::util;
-use crate::util::{bail, kv_lines, slug_from_token, step, Result};
+use crate::util::{bail, kv_lines, slug_from_token, slug_of_hostname, step, Result};
 
 /* Run the AI-agent workspace sandbox on THIS machine and expose it to the browser — connect.sh/.ps1's post-Docker half. */
 
@@ -210,7 +210,8 @@ fn connect(
 
     // Per-sandbox identity, so several sandboxes coexist: the slug is the same key the public hostname uses.
     let slug = if has_public_name {
-        sandbox_hostname.split('.').next().unwrap_or("").to_string()
+        // A hostname with no first label (".x") names nothing: the token's slug stands, never an empty one.
+        slug_of_hostname(&sandbox_hostname).unwrap_or_else(|| slug_from_token(&connect_token))
     } else {
         slug_from_token(&connect_token)
     };

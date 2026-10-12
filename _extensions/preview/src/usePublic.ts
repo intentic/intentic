@@ -1,5 +1,5 @@
 import type { PublicFile, PublishResult } from "@intentic/sandbox-contract";
-import { useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { host } from "./host";
 
@@ -13,10 +13,9 @@ export function usePublic() {
     const queryClient = useQueryClient();
     const queryKey = api.sandbox.readKey(`public.list`);
 
-    const query = useQuery({
+    const { query, error } = api.sandbox.query({
         queryKey,
         queryFn: () => api.sandbox.rpc.public.list(),
-        enabled: computed(() => api.sandbox.reachable()),
     });
 
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey });
@@ -38,7 +37,7 @@ export function usePublic() {
         url: computed(() => query.data.value?.url),
         // Files actually reachable, not merely sitting in the directory.
         servedCount: computed(() => files.value.filter((file) => file.blocked === undefined).length),
-        error: computed(() => query.error.value?.message),
+        error,
         isLoading: query.isLoading,
         publish,
         unpublish,

@@ -24,6 +24,11 @@ export const nextDueAt = (items: readonly ApprovalSummary[], now: number): numbe
     return due.length === 0 ? undefined : Math.min(...due);
 };
 
+// The wake the queue promises, for whoever must not sleep through it (bootstrap/promised-wakes.ts): the soonest approved item,
+// read off the store as the executor's own timer reads it, so the two cannot disagree about when the queue next fires.
+export const nextApprovedAt = async (services: Pick<Services, "approvals">, now: number = Date.now()): Promise<number | undefined> =>
+    nextDueAt((await services.approvals.list()).approvals, now);
+
 export interface ApprovalsExecutor {
     /** Re-read the queue and arm (or disarm) the timer for whatever is soonest. Safe to call on every change. */
     readonly arm: () => Promise<void>;

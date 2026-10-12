@@ -11,7 +11,7 @@ import type { Services } from "../composition.js";
 import { syncEndpointCompat } from "../endpoints/endpoint-translator.js";
 import { mintsEndpointProvider } from "../endpoints/local-model.js";
 import { composeEnvironment } from "../environment/environment.js";
-import { forgetExtensionApproval } from "./extension-approvals.js";
+import { forgetExtensionApproval, revokeExtensionApproval } from "./extension-approvals.js";
 import { displayOf, forgetExtensionDev } from "./extension-dev.js";
 import { forgetExtensionEnablement } from "./extension-enablement.js";
 import { extensionProcessKey, reconcileListenerProcesses } from "./extension-processes.js";
@@ -312,4 +312,23 @@ export const removeExtension = async (
         connections: configured.map((capability) => capability.id),
         rebuildNeeded: composedHash !== undefined && composedHash !== services.config.sandbox.environmentHash,
     };
+};
+
+// Takes the owner's yes to a workspace extension back without touching the extension: it goes back to waiting for a yes,
+// the state it was in before they approved it, and nothing of it runs until they approve it again. Its declared
+// processes stop now, its listener gateways and its backend converge the way switching it off does; its folder, switch,
+// settings and connections stay, so approving it again restores it as it was. Removal is the other way out, and the one
+// that deletes. Whether there was an approval to take back.
+export const unapproveExtension = async (services: Services, id: string): Promise<boolean> => {
+    // Read before the pin goes, since an extension is listed with the ones that run only while it is approved.
+    const running = (await installedExtensions(services)).find((extension) => extension.id === id && extension.source === "workspace");
+    if (!(await revokeExtensionApproval(services.config.historyRoot, id))) {
+        return false;
+    }
+    for (const process of running?.manifest.contributes?.processes ?? []) {
+        services.serviceProcesses.stop(extensionProcessKey(id, process.name));
+    }
+    void reconcileListenerProcesses(services);
+    services.extensionBackend.restart();
+    return true;
 };

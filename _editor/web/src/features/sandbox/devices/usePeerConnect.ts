@@ -1,33 +1,53 @@
-import { ref, shallowRef } from "vue";
-import { onRuntimeChanged } from "../live/runtimeEvents";
-import { sandboxRequest } from "../../../client/sandbox/sandboxClient";
-import { refusalText, SandboxHttpError, wordsOf } from "../../../client/sandbox/sandboxHttpError";
+import type { HostSummary, PeerPairingAnswer, PhoneSummary, WebExtSummary } from "@intentic/sandbox-contract";
+import { messageOr } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
+import { computed, ref } from "vue";
+import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
+import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
+import { queryClient } from "../../../lib/queryPersistence";
+import { PAIRED_BROWSERS, PAIRED_HOSTS, PAIRED_PHONES, type QueryFamily } from "../../../lib/queryKeys";
 
 // Drives Connect for a peer capability (host, browser or phone) sharing one door shape. Connect mints a single-use
-// token bound to this capability; the door pushes a runtime-change event on pairing, so the card updates
-// without a timer. The token is shown once and never stored.
-export interface PeerDoor {
-    // The path segment this door is served under: /system/<slug>, /system/<slug>/pair, /system/<slug>/:id.
-    readonly slug: "hosts" | "webext" | "phones";
-    // The runtime-change domain the daemon announces the door's liveness on.
-    readonly domain: "hosts" | "webext" | "phones";
-    // The key the roster answers under.
-    readonly listKey: "hosts" | "browsers" | "phones";
-    readonly noun: "device" | "browser" | "phone";
+// token bound to this capability; the door pushes a runtime-change event on pairing, which refreshes the roster, so the
+// card updates without a timer. The token is shown once and never stored.
+//
+// The roster is the query cache's: one entry per door and sandbox, read by every dialog, row and badge that names these
+// machines, refreshed by the daemon's push of the door's domain (`hosts`, `webext`, `phones`; RUNTIME_DOMAIN_BINDINGS).
+// A read that fails is said (`rosterNotice`), not left looking like an empty roster.
+interface PeerSummary {
+    readonly id: string;
+    readonly online: boolean;
+}
+
+export interface PeerDoor<Summary extends PeerSummary> {
+    readonly noun: `device` | `browser` | `phone`;
+    // Where the roster is cached.
+    readonly family: QueryFamily;
+    // The door's roster, as the daemon lists it.
+    readonly read: () => Promise<readonly Summary[]>;
+    // Mints the single-use pairing for one id: the token, and the short code the device door adds beside it.
+    readonly pair: (id: string) => Promise<PeerPairingAnswer>;
+    // Drops the enrollment and cuts the socket.
+    readonly revoke: (id: string) => Promise<void>;
 }
 
 // Who may connect one, naming the kind of peer; one sentence per kind so each reads whole in every language.
-const ownerOnly = (noun: PeerDoor[`noun`]): string =>
+const ownerOnly = (noun: PeerDoor<PeerSummary>[`noun`]): string =>
     noun === `device`
         ? t(`sandbox.usePeerConnect.ownerOnlyDevice`)
         : noun === `browser`
           ? t(`sandbox.usePeerConnect.ownerOnlyBrowser`)
           : t(`sandbox.usePeerConnect.ownerOnlyPhone`);
 
-export function usePeerConnect<Summary extends { readonly id: string; readonly online: boolean }>(door: PeerDoor) {
-    // Shallow: the roster is replaced whole on each read; a deep ref would unwrap the generic Summary type.
-    const peers = shallowRef<readonly Summary[]>([]);
+export function usePeerConnect<Summary extends PeerSummary>(door: PeerDoor<Summary>) {
+    const { query, error: readError } = useSandboxQuery({
+        queryKey: door.family.of(),
+        queryFn: async () => [...(await door.read())],
+    });
+    const peers = computed<readonly Summary[]>(() => query.data.value ?? []);
+    // Why the roster could not be read, as a sentence; undefined while it can. The last good roster stays in `peers`.
+    const rosterNotice = computed(() => (readError.value === undefined ? undefined : t(`sandbox.usePeerConnect.rosterUnread`, { reason: readError.value })));
     // The id/token pair the last Connect click minted; cleared on close so a stale command can't be copied.
     const pairId = ref<string | undefined>(undefined);
     const pairToken = ref<string | undefined>(undefined);
@@ -38,16 +58,10 @@ export function usePeerConnect<Summary extends { readonly id: string; readonly o
     const minting = ref(false);
     const error = ref<string | undefined>(undefined);
 
+    // Reads it again now. A dialog that is about to show a single-use token calls this on open, so what it confirms the
+    // pairing against is the roster of this moment and not whatever was cached when the page loaded.
     const refresh = async (): Promise<void> => {
-        try {
-            const response = await sandboxRequest(`/system/${door.slug}`);
-            if (!response.ok) {
-                return;
-            }
-            peers.value = ((await response.json()) as Record<string, Summary[] | undefined>)[door.listKey] ?? [];
-        } catch {
-            // Sandbox not reachable: leave the last known state rather than blanking the card.
-        }
+        await queryClient.invalidateQueries({ queryKey: door.family.of() });
     };
 
     // Maintainer and up server-side (the daemon's operating gate, `ownerDenied`); a click from below that comes back 403
@@ -56,31 +70,21 @@ export function usePeerConnect<Summary extends { readonly id: string; readonly o
         minting.value = true;
         error.value = undefined;
         try {
-            const response = await sandboxRequest(`/system/${door.slug}/pair?id=${encodeURIComponent(id)}`, { method: `POST` });
-            if (!response.ok) {
-                error.value =
-                    response.status === 403 ? ownerOnly(door.noun) : t(`sandbox.usePeerConnect.startFailed`, { status: String(response.status) });
-                return;
-            }
-            const answer = (await response.json()) as { token: string; code?: string; expiresIn?: number };
+            const answer = await door.pair(id);
             pairToken.value = answer.token;
             pairCode.value = answer.code;
             pairExpiresAt.value = answer.expiresIn === undefined ? undefined : Date.now() + answer.expiresIn * 1000;
             pairId.value = id;
+        } catch (caught) {
+            error.value =
+                caught instanceof SandboxHttpError
+                    ? caught.status === 403
+                        ? ownerOnly(door.noun)
+                        : t(`sandbox.usePeerConnect.startFailed`, { status: String(caught.status) })
+                    : messageOr(caught, ``);
         } finally {
             minting.value = false;
         }
-    };
-
-    let unsubscribe: (() => void) | undefined;
-    // One read on open for the state as it already stands, then nothing at all until something moves.
-    const start = (): void => {
-        void refresh();
-        unsubscribe ??= onRuntimeChanged([door.domain], () => void refresh());
-    };
-    const stop = (): void => {
-        unsubscribe?.();
-        unsubscribe = undefined;
     };
 
     const close = (): void => {
@@ -94,19 +98,42 @@ export function usePeerConnect<Summary extends { readonly id: string; readonly o
     // Drops the peer's key and cuts its socket; the capability itself stays, so Connect can be offered again
     // as a fresh pairing, not a resume. A refusal throws: a revoke that didn't take leaves the peer able to connect.
     const revoke = async (id: string): Promise<void> => {
-        const response = await sandboxRequest(`/system/${door.slug}/${encodeURIComponent(id)}`, { method: `DELETE` });
-        await refresh();
-        if (!response.ok) {
-            const said = wordsOf(await response.json().catch(() => undefined));
-            throw new SandboxHttpError(response.status, refusalText(response.status, said), said);
+        try {
+            await door.revoke(id);
+        } finally {
+            await refresh();
         }
     };
 
     const peerFor = (id: string): Summary | undefined => peers.value.find((peer) => peer.id === id);
 
-    return { peers, peerFor, pairId, pairToken, pairCode, pairExpiresAt, minting, error, connect, revoke, refresh, start, stop, close };
+    return { peers, peerFor, rosterNotice, pairId, pairToken, pairCode, pairExpiresAt, minting, error, connect, revoke, refresh, close };
 }
 
-export const HOST_DOOR: PeerDoor = { slug: `hosts`, domain: `hosts`, listKey: `hosts`, noun: `device` };
-export const WEBEXT_DOOR: PeerDoor = { slug: `webext`, domain: `webext`, listKey: `browsers`, noun: `browser` };
-export const PHONE_DOOR: PeerDoor = { slug: `phones`, domain: `phones`, listKey: `phones`, noun: `phone` };
+export const HOST_DOOR: PeerDoor<HostSummary> = {
+    noun: `device`,
+    family: PAIRED_HOSTS,
+    read: async () => (await sandboxRaw(`GET /system/hosts`)).hosts,
+    pair: (id) => sandboxRaw(`POST /system/hosts/pair`, { query: { id } }),
+    revoke: async (id) => {
+        await sandboxRaw(`DELETE /system/hosts/{id}`, { params: { id } });
+    },
+};
+export const WEBEXT_DOOR: PeerDoor<WebExtSummary> = {
+    noun: `browser`,
+    family: PAIRED_BROWSERS,
+    read: async () => (await sandboxRaw(`GET /system/webext`)).browsers,
+    pair: (id) => sandboxRaw(`POST /system/webext/pair`, { query: { id } }),
+    revoke: async (id) => {
+        await sandboxRaw(`DELETE /system/webext/{id}`, { params: { id } });
+    },
+};
+export const PHONE_DOOR: PeerDoor<PhoneSummary> = {
+    noun: `phone`,
+    family: PAIRED_PHONES,
+    read: async () => (await sandboxRaw(`GET /system/phones`)).phones,
+    pair: (id) => sandboxRaw(`POST /system/phones/pair`, { query: { id } }),
+    revoke: async (id) => {
+        await sandboxRaw(`DELETE /system/phones/{id}`, { params: { id } });
+    },
+};

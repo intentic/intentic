@@ -42,20 +42,21 @@ export interface IdleStopProbes {
     // armed watches, which only this daemon can check and wake (bootstrap/working-now.ts, purpose "idle-stop").
     readonly working: () => number;
     readonly terminalActivityAt: () => Promise<number>;
-    // The soonest one-time wake, or 0 for none. Same problem as an armed watch: nothing outside restarts this machine
-    // for a clock, so a moment somebody was promised passes unnoticed while it sleeps. Recurring schedules are left
-    // out on purpose: a cron's missed moment fires once, late, when the daemon next starts (the scheduler's catch-up),
-    // and is not worth a night of billing to be punctual.
-    readonly nextOneTimeWakeAt: () => Promise<number>;
+    // The soonest moment the sandbox promised somebody (bootstrap/promised-wakes.ts: a one-time wake, a scheduled send, a
+    // held turn's reset, an approved post, a held wake's countdown), or 0 for none. Same problem as an armed watch: nothing outside restarts this
+    // machine for a clock, so a moment somebody was promised passes unnoticed while it sleeps. Recurring schedules are
+    // left out on purpose: a cron's missed moment fires once, late, when the daemon next starts (the scheduler's
+    // catch-up), and is not worth a night of billing to be punctual.
+    readonly nextPromisedWakeAt: () => Promise<number>;
 }
 
 // Everything the daemon can answer about itself. What its conversations are doing is not among it: turns, children and
 // watches are held by the conversations' actors, which the composition root holds and supplies, as it does the
-// workspace's own one-time wakes.
+// sandbox's promised wakes.
 export const DEFAULT_PROBES: Omit<IdleStopProbes, "working"> = {
     connected: connectedCount,
     terminalActivityAt: lastTerminalActivity,
-    nextOneTimeWakeAt: () => Promise.resolve(0),
+    nextPromisedWakeAt: () => Promise.resolve(0),
 };
 
 const CHECK_INTERVAL_MS = 60 * 1000;
@@ -77,7 +78,7 @@ export const startIdleStop = (
             quietSince = Date.now();
             return;
         }
-        const [activityAt, wakeAt] = await Promise.all([probes.terminalActivityAt(), probes.nextOneTimeWakeAt()]);
+        const [activityAt, wakeAt] = await Promise.all([probes.terminalActivityAt(), probes.nextPromisedWakeAt()]);
         // Re-checked after the tmux subprocess await, since something could have become busy while it ran; the clock is
         // re-read too, since the window is measured against now, not when the pass started.
         const now = Date.now();

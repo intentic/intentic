@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { SingleFlight } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import { gitAuthHeader } from "@intentic/base/git";
+import { oneLine } from "@intentic/base/one-line";
 import { extensionApiVersion, satisfiesEngines } from "@intentic/extension-api/protocol";
 import { diffPowers, extensionIdOf, type PowersDiff } from "@intentic/extension-manifest";
 import { isShaPinned, OFFICIAL_REGISTRY_URL, type RegistryEntry } from "@intentic/registry";
@@ -445,6 +446,39 @@ let reviewSeq = 0;
 const reviewConversationId = (identity: string): string =>
     `ext-update-${identity.replaceAll(/[^a-zA-Z0-9_-]/gu, "-")}-${Date.now().toString(36)}${(reviewSeq++).toString(36)}`.slice(0, 64);
 
+// How much of a failure the card quotes; the review conversation holds the whole of it.
+const REVIEW_FAILURE_MAX = 240;
+
+// Runs the review through the detached run every conversation's turn takes (`turns.run`), so it routes its model by the
+// `extension-review` role like the rest, and its transcript is recorded for the card's link to open. Resolves to why the
+// agent could not read the update, or undefined once it did.
+const readUpdate = async (services: Services, turn: AgentTurn & { conversationId: string }): Promise<string | undefined> => {
+    const run = services.turns.run(turn);
+    if (run === "busy" || run === "archived") {
+        return run === "busy" ? "a turn was already running on its conversation" : "its conversation was archived";
+    }
+    let failure: string | undefined;
+    for await (const event of run.frames()) {
+        if (event.kind === "error") {
+            failure = event.message;
+        }
+    }
+    return failure;
+};
+
+// A review that could not read the update turns the card back to its owner with the reason, and drops the link claiming
+// an agent already read it; a person can still start one by hand. The conversation keeps the failure in its own record.
+const recordReviewFailure = async (services: Services, target: InstalledTarget, update: ExtensionUpdate, why: string): Promise<void> => {
+    const needsReview = `an agent was asked to read this update and could not: ${oneLine(why, REVIEW_FAILURE_MAX)}`;
+    await patchRecord(services.workspace.root, target.identity, (record) => {
+        if (record.update?.ref !== update.ref) {
+            return record;
+        }
+        const { review: _read, ...kept } = record.update;
+        return { ...record, update: { ...kept, needsReview } };
+    });
+};
+
 const prepareAgentReview = (services: Services, target: InstalledTarget, update: ExtensionUpdate): void => {
     const conversationId = reviewConversationId(target.identity);
     const prompt = updateBrief({
@@ -454,7 +488,7 @@ const prepareAgentReview = (services: Services, target: InstalledTarget, update:
         toRef: update.ref,
         path: update.path ?? target.config.path ?? "",
     });
-    const turn: AgentTurn = {
+    const turn: AgentTurn & { conversationId: string } = {
         prompt,
         conversationId,
         unattended: true,
@@ -469,10 +503,15 @@ const prepareAgentReview = (services: Services, target: InstalledTarget, update:
                 ? { ...record, update: { ...record.update, review: { conversationId, at: new Date().toISOString() } } }
                 : record,
         );
-        for await (const event of services.turns.stream(turn, undefined)) {
-            void event;
+        // A review that throws before its first frame fails the same way one that ends in an error frame does.
+        const failure = await readUpdate(services, turn).catch(errorMessage);
+        if (failure !== undefined) {
+            services.logger.warn({ extension: target.identity, conversationId, failure }, "extension update: agent review failed");
+            await recordReviewFailure(services, target, update, failure);
         }
-    })().catch((error: unknown) => services.logger.warn({ err: error, extension: target.identity }, "extension update: agent review failed"));
+    })().catch((error: unknown) =>
+        services.logger.warn({ err: error, extension: target.identity, conversationId }, "extension update: agent review could not be recorded"),
+    );
 };
 
 // Auto rung's gates, cheapest first: an unverified listing is refused before any clone; the rest come from the preview.

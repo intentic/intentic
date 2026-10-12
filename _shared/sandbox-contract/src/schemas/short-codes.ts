@@ -28,6 +28,17 @@ export const PairingAnswerSchema = z.object({
 });
 export type PairingAnswer = z.infer<typeof PairingAnswerSchema>;
 
+// What POST /system/<door>/pair answers on any peer door (device, browser, phone, runner): the token, and the short code
+// only the device door mints beside it. `expiresIn` is optional on read since a reader meets daemons older than the
+// field; the editor then shows the token without a countdown.
+export const PeerPairingAnswerSchema = PairingAnswerSchema.partial({ code: true, expiresIn: true });
+export type PeerPairingAnswer = z.infer<typeof PeerPairingAnswerSchema>;
+
+// POST /system/sync/pair: the pairing with the mode the daemon granted, which may be less than the one asked for (a
+// member's "sync" comes back "mirror"), and the code that stands for it.
+export const SyncPairAnswerSchema = PeerPairingAnswerSchema.extend({ mode: z.enum(["sync", "mirror"]).optional() });
+export type SyncPairAnswer = z.infer<typeof SyncPairAnswerSchema>;
+
 // POST /system/sync/pair's optional body: the person's chosen local folder and takeover, handed out with the code.
 // It goes to their own sandbox, never the platform.
 export const SyncPairRequestSchema = z.object({

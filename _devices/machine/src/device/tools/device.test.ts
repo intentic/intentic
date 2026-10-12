@@ -186,6 +186,17 @@ test("typing a command that deletes needs the destructive switch, as running it 
     expect(calls).toEqual(["type Please remove the old projects folder.", "type rm -rf ~/projects\n"]);
 });
 
+test("typing a command that manages a sandbox needs the sandboxes switch, as the sandbox tools do", async () => {
+    const { desktop, calls } = fakeDesktop();
+    await expect(act(desktop, { action: "type", text: "ic sandbox restart work\n" }, scopes({ sandboxes: "off" }), indicator())).rejects.toThrow(
+        /Manage sandboxes on this device/,
+    );
+    await expect(act(desktop, { action: "type", text: "docker stop intentic-sandbox-work\n" }, scopes({ sandboxes: "off" }), indicator())).rejects.toThrow(ScopeError);
+    expect(calls).toEqual([]);
+    await act(desktop, { action: "type", text: "ic sandbox restart work\n" }, scopes({ sandboxes: "on" }), indicator());
+    expect(calls).toEqual(["type ic sandbox restart work\n"]);
+});
+
 test("a pointer action can name an element instead of a coordinate, and goes to where it is now", async () => {
     const fake = fakeDesktop();
     const refs = new ElementRefs();

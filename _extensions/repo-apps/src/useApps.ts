@@ -1,5 +1,5 @@
 import type { AppsList, RepoApp, TemplateSummary } from "@intentic/sandbox-contract";
-import { useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useQueryClient } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "./host";
 
@@ -11,17 +11,14 @@ export function useApps(repo: Ref<string>) {
     const api = host();
     const queryClient = useQueryClient();
     const appsKey = computed(() => api.sandbox.readKey(`workspace.appsList`, { repo: repo.value }));
-    const enabled = computed(() => api.sandbox.reachable());
 
-    const query = useQuery({
+    const { query, error } = api.sandbox.query({
         queryKey: appsKey,
         queryFn: () => api.sandbox.rpc.workspace.appsList({ repo: repo.value }),
-        enabled,
     });
-    const templatesQuery = useQuery({
+    const { query: templatesQuery } = api.sandbox.query({
         queryKey: api.sandbox.readKey(`workspace.templates`),
         queryFn: () => api.sandbox.rpc.workspace.templates(),
-        enabled,
     });
 
     const invalidate = async (): Promise<void> => {
@@ -66,7 +63,7 @@ export function useApps(repo: Ref<string>) {
     return {
         apps: computed<RepoApp[]>(() => query.data.value?.apps ?? []),
         templates: computed<TemplateSummary[]>(() => templatesQuery.data.value?.templates ?? []),
-        error: computed(() => (query.error.value ? query.error.value.message : null)),
+        error: computed(() => error.value ?? null),
         isLoading: query.isLoading,
         addApps,
         refresh: invalidate,

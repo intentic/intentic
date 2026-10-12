@@ -1,9 +1,10 @@
-import { createHash, createHmac, randomBytes } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type HostedTier, PAID_TIERS } from "@intentic/constants";
 import { repoRoot } from "@intentic/constants/node";
 import { PrismaClient } from "@intentic/prisma";
+import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 // The e2e stack's shape: origins, credentials, seeded rows, and the Better Auth cookie recipe. global-setup boots
@@ -115,9 +116,9 @@ export const seed = async (): Promise<{ sessionToken: string; sandboxToken: stri
                 name: SEED.sandboxName,
                 ownerId: SEED.userId,
                 token: sandboxToken,
-                tokenDigest: createHash(`sha256`).update(sandboxToken).digest(`hex`),
-                // Must match the API's sandboxIdFromToken (sandbox.routes.ts): a public hostname embeds this 12-hex id.
-                tunnelId: createHash(`sha256`).update(sandboxToken).digest(`hex`).slice(0, 12),
+                tokenDigest: sha256Hex(sandboxToken),
+                // The contract's own digest, the one the API derives: a public hostname embeds this 12-hex id.
+                tunnelId: sandboxIdFromToken(sandboxToken) ?? ``,
                 daemonUrl: DAEMON_URL,
                 lastSeenAt: new Date(),
             },

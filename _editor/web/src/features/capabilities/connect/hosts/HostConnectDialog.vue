@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { type HostSummary, userDistrosOf } from "@intentic/sandbox-contract";
+import { userDistrosOf } from "@intentic/sandbox-contract";
 import { Button, Modal, type NoticeModel, Notice, SegmentedControl, noticeFrom } from "@intentic/ui";
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { useDevices } from "../../../sandbox/devices/useDevices";
 import { HOST_DOOR, usePeerConnect } from "../../../sandbox/devices/usePeerConnect";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
@@ -25,7 +25,7 @@ const t = useT();
 const props = defineProps<{ visible: boolean; id: string; platform: string; permissions: string; unnamed?: boolean }>();
 const emit = defineEmits<{ (event: "update:visible", value: boolean): void; (event: "connected"): void; (event: "renamed", to: string): void }>();
 
-const { peerFor, pairToken, pairCode, pairExpiresAt, minting, error, connect, start, stop, close } = usePeerConnect<HostSummary>(HOST_DOOR);
+const { peerFor, pairToken, pairCode, pairExpiresAt, minting, error, rosterNotice, connect, refresh, close } = usePeerConnect(HOST_DOOR);
 const { daemonUrl } = useSandbox();
 
 // The distros every connected Windows PC lists, read off the fleet already held (no poll): the Linux one-liner can
@@ -128,12 +128,12 @@ watch(
     async (visible) => {
         if (!visible) {
             close();
-            stop();
             return;
         }
         renamedTo.value = undefined;
         renameError.value = undefined;
-        start();
+        // The roster the pairing is confirmed against is read afresh, not taken from what was cached.
+        void refresh();
         await connect(props.id);
     },
 );
@@ -144,8 +144,6 @@ watch(online, (isOnline) => {
         emit(`connected`);
     }
 });
-
-onBeforeUnmount(stop);
 </script>
 
 <template>
@@ -187,6 +185,7 @@ onBeforeUnmount(stop);
             </template>
 
             <Notice v-else-if="error" tone="danger">{{ error }}</Notice>
+            <Notice v-if="rosterNotice" tone="warning">{{ rosterNotice }}</Notice>
 
             <div v-else-if="minting || pairToken === undefined" class="text-muted">
                 {{ t(`capabilities.words.preparingOneTimeConnection`) }}

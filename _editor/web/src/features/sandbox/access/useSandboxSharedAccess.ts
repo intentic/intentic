@@ -1,19 +1,13 @@
 import { computed, watch } from "vue";
-import { SANDBOX_MEMBERS } from "../../../lib/queryKeys";
-import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
+import { useMembers } from "../../../client/sandbox/useMembers";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { activeSandboxId } from "../../../lib/activeSandbox";
-import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 
 // Whether /sandbox/access names more than one person; the agents board's Everyone/Mine row is meaningless alone.
 export function useSandboxSharedAccess() {
     const { active } = useSandbox();
     const isOwner = computed(() => active.value?.role === `owner`);
-    const { query } = useSandboxQuery({
-        queryKey: SANDBOX_MEMBERS.of(),
-        queryFn: () => sandboxRaw(`GET /members`),
-        enabled: computed(() => isOwner.value),
-    });
+    const { query } = useMembers({ enabled: isOwner });
     // The answer once there is one: undefined while the sandbox list or the members read is still on its way.
     const known = computed<boolean | undefined>(() => {
         const role = active.value?.role;

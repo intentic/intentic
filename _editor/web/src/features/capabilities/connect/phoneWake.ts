@@ -1,5 +1,5 @@
 import type { PhoneSummary, PhoneWakeRegistration } from "@intentic/sandbox-contract";
-import { sandboxRequest } from "../../../client/sandbox/sandboxClient";
+import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
 
 // Making a phone wakeable, the editor's half. The sandbox wakes a sleeping phone through the platform's push relay,
 // and registering a phone there needs the owner signed in to the platform, which only this page is. So when the
@@ -27,7 +27,8 @@ export const registerPhoneWake = async (
     phone: Pick<PhoneSummary, `id` | `wake` | `facts`>,
     deps: {
         readonly register?: (token: string) => Promise<{ readonly deviceId: string; readonly secret: string; readonly url: string }>;
-        readonly post?: (path: string, init: RequestInit) => Promise<Response>;
+        // Hands the sandbox the channel; rejects when it refuses or cannot be reached.
+        readonly hand?: (id: string, registration: PhoneWakeRegistration) => Promise<void>;
     } = {},
 ): Promise<WakeOutcome | undefined> => {
     const token = phone.facts?.wake?.fcm;
@@ -40,13 +41,18 @@ export const registerPhoneWake = async (
     } catch (caught) {
         return (caught as { status?: unknown; code?: unknown } | undefined)?.code === `NOT_FOUND` ? `unavailable` : `failed`;
     }
-    const response = await (deps.post ?? sandboxRequest)(`/system/phones/${encodeURIComponent(phone.id)}/wake`, {
-        method: `POST`,
-        headers: { "content-type": `application/json` },
-        body: JSON.stringify(registrationOf(token, grant)),
+    const hand =
+        deps.hand ??
+        (async (id: string, input: PhoneWakeRegistration): Promise<void> => {
+            await sandboxRaw(`POST /system/phones/{id}/wake`, { params: { id }, input });
+        });
+    try {
+        await hand(phone.id, registrationOf(token, grant));
+        return `ready`;
         // allow(silent-catch): a sandbox that cannot be reached leaves the phone as unwakeable as one that refused, which `failed` tells the caller.
-    }).catch(() => undefined);
-    return response?.ok === true ? `ready` : `failed`;
+    } catch {
+        return `failed`;
+    }
 };
 
 // One attempt per phone and token per page load: a failure is shown, not retried in a loop against the platform.

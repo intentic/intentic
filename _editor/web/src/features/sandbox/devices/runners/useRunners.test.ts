@@ -1,5 +1,5 @@
 // The runners list is a daemon read like any other: while the sandbox is out of reach it is not asked at all, rather than
-// every fifteen seconds into a daemon that is down, and it is asked the moment the sandbox answers again.
+// every minute into a daemon that is down, and it is asked the moment the sandbox answers again.
 import "@intentic/testing/dom";
 import { waitFor } from "@intentic/testing/bun";
 import { effectScope, type EffectScope } from "vue";

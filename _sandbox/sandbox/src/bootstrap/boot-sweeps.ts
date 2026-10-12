@@ -1,25 +1,27 @@
+import { startPeriodic } from "@intentic/base/async";
 import { errnoCode, errorMessage } from "@intentic/base/errors";
 import type { Logger } from "pino";
-import { sweepAgedAgents } from "../conversations/registry/archive.js";
 import { archiveVanishedWorktrees } from "../conversations/registry/vanished-worktrees.js";
 import { capabilityCtx } from "../capabilities/capability.js";
 import { unloadIdleLocalModels } from "../capabilities/handlers/localmodel.handler.js";
 import { LOCAL_MODEL_IDLE_MS, LOCAL_MODEL_IDLE_SWEEP_MS } from "../endpoints/local-model-idle.js";
 import { stopCursorRuntimes } from "../runtimes/cursor/cursor-host.js";
 import { QUARANTINE_MS, quarantineRoot } from "../store/conversation-units.js";
-import { logsRoot, pruneLogFiles } from "../logs/log-files.js";
 import { createRepeatGate } from "../logs/repeat-gate.js";
-import { panelKeyOf } from "@intentic/sandbox-contract/session-names";
-import { type ReapPolicy, reapFinishedSessions } from "../terminal/terminal-session.js";
 import { pinTmuxServer, reportTmuxServerNamespace } from "../terminal/tmux-server.js";
-import { sweepAgedState, sweepStateAtBoot } from "../workspace/watch/state-janitor.js";
+import { DAY_MS } from "../system/chore-clock.js";
+import { sweepStateAtBoot } from "../workspace/watch/state-janitor.js";
 import type { BootPhase } from "./boot-phase.js";
 import { startHousekeeping } from "./boot-chores.js";
 
 // Recurring passes over the daemon's own state: none gates anything, every one may fail, each is scoped by role.
-
-const HOURLY_MS = 60 * 60 * 1000;
-const DAY_MS = 24 * HOURLY_MS;
+//
+// ONE CLOCK FOR HOUSEKEEPING (2026-10-12). Whatever runs hourly or slower is a chore on the persistent clock
+// (boot-chores.ts, system/chore-clock.ts), which remembers across restarts when each last ran: the aged-agent archive, the
+// aged state sweep, the log retention and the finished-terminal reap, which used to run at every boot and then on a raw
+// hourly timer, so a sandbox restarting more often than hourly ran them all each time. What stays here either runs once
+// per boot (the scratch and orphan sweeps) or is a minutes-scale watch rather than housekeeping, on `startPeriodic` (which
+// never overlaps its runs and unrefs its timers); a raw `setInterval` is not used for either.
 
 // Archives what lost its checkout for good, then prunes worktree admin and parks off-board branches.
 const sweepVanishedWorktrees = async ({ services }: BootPhase): Promise<void> => {
@@ -58,58 +60,28 @@ const sweepOrphanUnits = async ({ logger, services }: BootPhase): Promise<void> 
     }
 };
 
-// agentRetentionDays 0 disables.
-const sweepAgedArchive = ({ logger, services }: BootPhase): Promise<void> =>
-    services.sandboxSettings
-        .get()
-        .then((settings) => sweepAgedAgents(services, Date.now(), settings.agentRetentionDays * 24 * 60 * 60 * 1000))
-        .then(() => undefined)
-        .catch((error: unknown) => logger.warn({ err: error }, "agents: archive sweep failed"));
-
-// `keep`: a job still queued has only dead panes but isn't finished. agent-* sessions belong to the reaper.
-const reapPolicyOf = ({ services }: BootPhase): ReapPolicy => ({
-    keep: (session: string): boolean => services.terminalRun.running(session),
-    finishedRunAt: (session: string): number | undefined => {
-        const key = panelKeyOf(session);
-        return key === undefined ? undefined : services.processes.runOf(key)?.finishedAt;
-    },
-});
-
 const startRootSweeps = (phase: BootPhase): void => {
-    const { config, logger, role, services, shutdown } = phase;
+    const { logger, role, services, shutdown } = phase;
     if (!role.roots) {
         return;
     }
     void sweepVanishedWorktrees(phase).catch((error: unknown) => logger.warn({ err: error }, "agents: boot worktree sweep failed"));
     void sweepOrphanUnits(phase).catch((error: unknown) => logger.warn({ err: error }, "conversations: boot directory sweep failed"));
-    void sweepAgedArchive(phase);
-    const archiveSweep = setInterval(() => void sweepAgedArchive(phase), HOURLY_MS);
-    archiveSweep.unref();
-    shutdown.push(() => clearInterval(archiveSweep));
     void sweepStateAtBoot(services.workspace.root, logger).catch((error: unknown) => logger.warn({ err: error }, "state janitor: boot sweep failed"));
-    const stateSweep = setInterval(
-        () =>
-            void sweepAgedState(services.workspace.root, Date.now(), logger).catch((error: unknown) =>
-                logger.warn({ err: error }, "state janitor: aged sweep failed"),
-            ),
-        HOURLY_MS,
-    );
-    stateSweep.unref();
-    shutdown.push(() => clearInterval(stateSweep));
     // Must run before any turn: panes inherit this daemon's mounts, and a pre-existing server can't be pinned later. The
     // owner's ssh agent socket only where the tmux server is the container's: a daemon on someone's own machine shares
     // their tmux, and their own agent is theirs.
     const serverEnv = role.container ? { SSH_AUTH_SOCK: services.sshAgent.owner } : {};
     void pinTmuxServer(logger, serverEnv).then(() => reportTmuxServerNamespace(logger));
-    const tmuxReport = setInterval(() => void reportTmuxServerNamespace(logger), 15 * 60 * 1000);
-    tmuxReport.unref();
-    shutdown.push(() => clearInterval(tmuxReport));
-    // Root-scoped: a guest sharing the history root prunes nothing.
-    const pruneLogs = (): Promise<void> =>
-        pruneLogFiles(logsRoot(config.historyRoot)).catch((error: unknown) => logger.warn({ err: error }, "logs: the retention sweep failed"));
-    void pruneLogs();
-    const logsSweep = setInterval(() => void pruneLogs(), HOURLY_MS);
-    shutdown.push(() => clearInterval(logsSweep));
+    // A minutes-scale diagnosis of a server that outlives this daemon, not housekeeping, so not a chore: it has to keep
+    // watching while the sandbox is busy. The first look is the one above, as the server is pinned.
+    shutdown.add(
+        startPeriodic({
+            everyMs: 15 * 60 * 1000,
+            run: () => reportTmuxServerNamespace(logger),
+            onError: (error) => logger.warn({ err: error }, "tmux: the namespace report failed"),
+        }),
+    );
 };
 
 // The idle sweep runs every minute, so a failure it keeps meeting wrote its stack every minute. A process that left
@@ -142,21 +114,18 @@ const startContainerSweeps = (phase: BootPhase): void => {
     if (!role.container) {
         return;
     }
-    const reapPolicy = reapPolicyOf(phase);
-    void reapFinishedSessions(reapPolicy);
-    const sessionSweep = setInterval(() => void reapFinishedSessions(reapPolicy), HOURLY_MS);
-    shutdown.push(() => clearInterval(sessionSweep));
     services.reaper.start();
     void services.reaper.sweep();
-    // Armed whatever this boot started: a model server adopted from a previous daemon idles the same way.
+    // Armed whatever this boot started: a model server adopted from a previous daemon idles the same way. Every minute,
+    // because an idle model gives back its memory within minutes: a clock that looks hourly would hold it for hours.
     const modelCtx = capabilityCtx(services);
     const sweepLog = idleSweepLog(services.logger);
-    const unloadIdle = setInterval(() => {
-        void unloadIdleLocalModels(modelCtx, LOCAL_MODEL_IDLE_MS).then(sweepLog.succeeded, sweepLog.failed);
-    }, LOCAL_MODEL_IDLE_SWEEP_MS);
-    // Must neither keep the daemon alive nor keep it from stopping.
-    unloadIdle.unref();
-    shutdown.push(() => clearInterval(unloadIdle));
+    shutdown.add(
+        startPeriodic({
+            everyMs: LOCAL_MODEL_IDLE_SWEEP_MS,
+            run: () => unloadIdleLocalModels(modelCtx, LOCAL_MODEL_IDLE_MS).then(sweepLog.succeeded, sweepLog.failed),
+        }),
+    );
 };
 
 // Root-scoped like the sweeps: a guest sharing the history root converts nothing.
@@ -173,8 +142,16 @@ export const startBootSweeps = (phase: BootPhase): void => {
     const { logger, services, shutdown } = phase;
     // Detached, so a check can't cause the outage it diagnoses; after the gate, which establishes the state checked.
     void services.invariants.run("boot");
-    const invariantSweep = setInterval(() => void services.invariants.run("sweep"), 300_000);
-    shutdown.push(() => clearInterval(invariantSweep));
+    // Minutes-scale, and a check of what is true now rather than housekeeping, so on its own short loop and not a chore.
+    shutdown.add(
+        startPeriodic({
+            everyMs: 300_000,
+            run: async () => {
+                await services.invariants.run("sweep");
+            },
+            onError: (error) => logger.warn({ err: error }, "invariants: the sweep could not run"),
+        }),
+    );
     shutdown.push(services.events.subscribe("run.settled", () => services.invariants.run("turn-settled")));
 
     // Detached; routes report `indexing` meanwhile.
@@ -183,13 +160,12 @@ export const startBootSweeps = (phase: BootPhase): void => {
     };
     // After the migration, whose every conversion moves the size the index pins a record to.
     void migrateRecords(phase).then(backfillSaid);
-    const saidSweep = setInterval(backfillSaid, 600_000);
-    saidSweep.unref();
-    shutdown.push(() => clearInterval(saidSweep));
+    // Every ten minutes, so a record that grew between presses is searchable within one: a minutes-scale catch-up, not a chore.
+    shutdown.add(startPeriodic({ everyMs: 600_000, run: backfillSaid }));
 
     startRootSweeps(phase);
     startContainerSweeps(phase);
-    // Git maintenance among them, once an hour across restarts rather than at every boot.
+    // The hourly-and-slower passes, and git maintenance among them, once an hour across restarts rather than at every boot.
     startHousekeeping(phase);
     // Registered whether or not this role started it, so every role unwinds cleanly.
     shutdown.push(() => services.reaper.stop());

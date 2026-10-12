@@ -6,10 +6,12 @@ import {
     DeviceScopesSchema,
     hardRuleClasses,
     matchCommand,
+    type ProgramKind,
+    type ProgramReading,
+    programInCall,
     roleLadder,
     type SafetyVerdict,
 } from "@intentic/sandbox-contract";
-import { z } from "zod";
 import { raiseRequest } from "../guard/card-offers.js";
 import { RoleModelUnsetError } from "../seams/role-model-unset.js";
 import type { LiveRun } from "../conversations/actor/conversation-holdings.js";
@@ -37,11 +39,11 @@ const JUDGE_DEADLINE_MS = 10 * 60_000;
 // for the same call.
 const CALL_BUDGET_MS = 45_000;
 
-// The call shapes this gate was built for: a command for the machine's own shell, and one for the shell of an Android
-// phone attached to it, which the machine runs as `adb shell <command>`. File and screen tools carry no program to
-// classify; the input tools that carry text a terminal could run are read below, by typedInCall.
+// Which tools carry a program, and where in their arguments, is the contract's one table (policy/device-programs.ts):
+// a command for the machine's own shell, one for the shell of an attached phone (run there as `adb shell <command>`), a
+// program started with arguments or an application, URL or document opened, and text typed, pasted or set into a field
+// where a terminal could run it. Every other tool (files, screen, browser, sandboxes) carries no program to classify.
 const RUN_COMMAND = "run_command";
-const ANDROID_SHELL = "android_shell";
 
 // Every command here leaves the container, so locus is fixed (mirrors SANDBOX in guard/command-guard.ts).
 const DEVICE: CommandLocus = "device";
@@ -83,7 +85,7 @@ const switchedOff = (machine: string, classes: readonly CommandClass[], typed: b
     `Do not look for another spelling that gets past it.`;
 
 // The device's own grant, read off its capability card; undefined when no card names it (the device decides then).
-const deviceScopesOf = async (services: Services, machine: string) => {
+export const deviceScopesOf = async (services: Pick<Services, "capabilities" | "hosts">, machine: string) => {
     const card = services.hosts.cardFor(machine);
     const capability = (await services.capabilities.list()).find((entry) => entry.kind === "device" && entry.id === card);
     if (capability === undefined) {
@@ -98,55 +100,14 @@ const deviceScopesOf = async (services: Services, machine: string) => {
 const heldAsks = createHeldAsks<HostGateRefusal | undefined>();
 const askKey = (machine: string, command: string): string => `${machine}\u0000${command}`;
 
-// A phone's serial as adb prints one (a USB serial, `ip:port`, an mDNS name), and nothing else: a serial is spliced into
-// the program judged below, where a `#` or a quote in it could make the command after it read as inert.
-const AdbSerialSchema = z.string().regex(/^[\w.:-]+$/);
-
-// The command inside a run_command or android_shell tools/call, or undefined for anything else; a hostile or
-// notification-shaped payload is forwarded to the machine rather than gated, since there'd be nowhere to send a
-// refusal. A phone's command is judged as the program the machine runs for it, `adb shell <command>`: the classifier
-// reads the command where the phone's shell would run it, the card shows what crosses to the phone, and an answer kept
-// for it is never collected by the same words run on the machine itself.
-export const commandInCall = (payload: unknown): string | undefined => {
-    const request = payload as { id?: unknown; method?: unknown; params?: { name?: unknown; arguments?: unknown } };
-    const name = request.params?.name;
-    if (request.id === undefined || request.method !== "tools/call" || (name !== RUN_COMMAND && name !== ANDROID_SHELL)) {
-        return undefined;
-    }
-    const args = request.params?.arguments as Record<string, unknown> | undefined;
-    const command = args?.["command"];
-    if (typeof command !== "string" || command.trim() === "") {
-        return undefined;
-    }
-    if (name === RUN_COMMAND) {
-        return command;
-    }
-    const serial = AdbSerialSchema.safeParse(args?.["serial"]);
-    return `adb ${serial.success ? `-s ${serial.data} ` : ""}shell ${command}`;
-};
-
-/* Text an input tool would put into whatever has the keyboard: typed (`device` type, or `android_act` type into a
-   phone), pasted (`clipboard` write) or set into a field (`ui_act` set_value). Typing into a terminal IS running a
-   command, so this text is judged the same way, by the same classifier: ordinary prose matches nothing and passes at
-   no cost, and `rm -rf ~` typed into a shell is asked about as if run_command had sent it. Read off a call the bridge
-   already parsed (DeviceToolCallSchema). */
-const TypedArgumentsSchema = z.looseObject({ action: z.string().optional(), text: z.string().optional(), value: z.string().optional() });
-
-export const typedInCall = (call: DeviceToolCall): string | undefined => {
-    const parsed = TypedArgumentsSchema.safeParse(call.params.arguments ?? {});
-    if (!parsed.success) {
-        return undefined;
-    }
-    const { action, text, value } = parsed.data;
-    const typed =
-        ((call.params.name === "device" || call.params.name === "android_act") && action === "type") ||
-        (call.params.name === "clipboard" && action === "write")
-            ? text
-            : call.params.name === "ui_act" && action === "set_value"
-              ? value
-              : undefined;
-    return typed === undefined || typed.trim() === "" ? undefined : typed;
-};
+/**
+ * The program a device tool call carries, or undefined for a tool that carries none; a hostile or notification-shaped
+ * payload is forwarded to the machine rather than gated, since there'd be nowhere to send a refusal (the bridge's schema
+ * hands this only calls with an id). Text typed, pasted or set into a field is a program too: typing into a terminal IS
+ * running a command, so it is judged the same way, by the same classifier: ordinary prose matches nothing and passes at
+ * no cost, and `rm -rf ~` typed into a shell is asked about as if run_command had sent it.
+ */
+export const programOf = (call: DeviceToolCall): ProgramReading | undefined => programInCall(call.params.name, call.params.arguments ?? {});
 
 // The judge's verdict and setting used, read live (no turn here to snapshot). Reads the same commandJudge switch as the
 // sandbox gate; off means only that the daemon has no objection, the machine's scopes still decide.
@@ -159,6 +120,8 @@ const hostVerdict = async (
         readonly consequences: readonly string[];
         readonly unattended: boolean;
         readonly outsideSource: string | undefined;
+        // How the judge reads it: a shell command, or the plain launch of an application or document.
+        readonly language: "bash" | "app launch";
     },
 ): Promise<{ readonly verdict: SafetyVerdict; readonly judging: CommandJudgeMode }> => {
     const [policy, settings] = await Promise.all([services.safetyPolicy.text(), services.sandboxSettings.get()]);
@@ -177,7 +140,7 @@ const hostVerdict = async (
             facts: {
                 consequences: input.consequences,
                 unattended: input.unattended,
-                language: "bash",
+                language: input.language,
                 machine: input.machine,
                 ...(input.outsideSource === undefined ? {} : { outsideSource: input.outsideSource }),
             },
@@ -196,6 +159,17 @@ const hostVerdict = async (
     return { verdict, judging };
 };
 
+// How the judge reads a program: a plain launch of an application or document reads as one, so a match on a path it
+// opens does not read as a script.
+const languageOf = (kind: ProgramKind): "bash" | "app launch" => (kind === "app-launch" ? "app launch" : "bash");
+
+// The tool a card names and the words it asks in, by how the call carries its program.
+const toolOfKind = (kind: ProgramKind): string => (kind === "typed" ? "device" : kind === "app-launch" ? "app_start" : RUN_COMMAND);
+const cardTitle = (kind: ProgramKind, machine: string): string =>
+    kind === "typed" ? `Type this on ${machine}?` : kind === "app-launch" ? `Start this on ${machine}?` : `Run this on ${machine}?`;
+const cardDisplayName = (kind: ProgramKind, machine: string): string =>
+    kind === "typed" ? `Type on ${machine}` : kind === "app-launch" ? `Start on ${machine}` : `Run on ${machine}`;
+
 // The call a card asks about, and the moment its verdict was logged at, which is the log entry the answer amends.
 interface DeviceAsk {
     readonly conversationId: string;
@@ -205,8 +179,9 @@ interface DeviceAsk {
     readonly at: number;
     // Asked because of the owner's hard rule, which asks every time whatever stands in the conversation.
     readonly hard: boolean;
-    // Typed into the device rather than run on it: the card says so, since nothing runs until something reads it.
-    readonly typed: boolean;
+    // How the call carries it: typed into the device rather than run on it (the card says so, since nothing runs until
+    // something reads it), run as a command, or started as an application.
+    readonly kind: ProgramKind;
 }
 
 // How a card ended: `answer` is what the call answers (undefined forwards the command, a refusal is what the agent
@@ -230,9 +205,9 @@ const askOwner = async (services: Services, guards: HostGuardDeps, run: LiveRun,
             raised: (requestId) => ({
                 kind: "permission",
                 requestId,
-                toolName: `${ask.machine}__${ask.typed ? "device" : RUN_COMMAND}`,
-                title: ask.typed ? `Type this on ${ask.machine}?` : `Run this on ${ask.machine}?`,
-                displayName: ask.typed ? `Type on ${ask.machine}` : `Run on ${ask.machine}`,
+                toolName: `${ask.machine}__${toolOfKind(ask.kind)}`,
+                title: cardTitle(ask.kind, ask.machine),
+                displayName: cardDisplayName(ask.kind, ask.machine),
                 // No marked spans: the title already says what matters here, that it runs on the machine, not the
                 // container.
                 program: { text: excerptProgram(ask.command), language: "bash", truncated: false, spans: [] },
@@ -270,10 +245,11 @@ const askOwner = async (services: Services, guards: HostGuardDeps, run: LiveRun,
 export const judgeHostCommand = async (
     services: Services,
     guards: HostGuardDeps,
-    input: { readonly machine: string; readonly command: string; readonly conversationId: string | undefined; readonly typed?: boolean },
+    input: { readonly machine: string; readonly command: string; readonly conversationId: string | undefined; readonly kind: ProgramKind },
     budgetMs: number = CALL_BUDGET_MS,
 ): Promise<HostGateRefusal | undefined> => {
     const at = Date.now();
+    const { kind } = input;
     // At `device` locus, paths mean the owner's machine, not an image: /usr, /etc, a Docker volume are real here.
     const matches = matchCommand(input.command, { locus: DEVICE });
     const classes = matches.map((match) => match.commandClass);
@@ -285,7 +261,7 @@ export const judgeHostCommand = async (
     const call = (id: string) => ({
         conversationId: id,
         key: askKey(input.machine, input.command),
-        waiting: () => refusal(stillWaiting(input.machine, input.typed === true)),
+        waiting: () => refusal(stillWaiting(input.machine, kind === "typed")),
         budgetMs,
         arrivedAt: at,
     });
@@ -298,7 +274,7 @@ export const judgeHostCommand = async (
     // first, since a card here could only end in "Allow once" followed by the device refusing anyway.
     const gated = matches.filter((match) => match.live && hardRuleClasses(DEVICE).has(match.commandClass)).map((match) => match.commandClass);
     if (gated.length > 0 && (await deviceScopesOf(services, input.machine))?.destructive === "off") {
-        return refusal(switchedOff(input.machine, gated, input.typed === true));
+        return refusal(switchedOff(input.machine, gated, kind === "typed"));
     }
     const run = conversationId === undefined ? undefined : guards.turnRun(conversationId);
     // Same `live` discipline as the sandbox gate: a command merely mentioning a delete does not count as one.
@@ -314,6 +290,7 @@ export const judgeHostCommand = async (
         consequences: classes.map((commandClass) => COMMAND_CLASS_LABELS[commandClass]),
         unattended,
         outsideSource,
+        language: languageOf(kind),
     });
     // Only "on" lets the verdict decide; "off"/"watch" just log it, and the hard rule can only tighten the result.
     const enforced = judging === "on" ? verdict.decision : "allow";
@@ -356,8 +333,8 @@ export const judgeHostCommand = async (
     record("asked");
     const ask = { conversationId, machine: input.machine, command: input.command, sentence: verdict.sentence, at, hard: hard !== undefined };
     return heldAsks.ask(call(conversationId), {
-        raise: (ended) => askOwner(services, guards, run, ended, { ...ask, typed: input.typed === true }),
-        told: deviceWake(input.machine, input.command, input.typed === true),
+        raise: (ended) => askOwner(services, guards, run, ended, { ...ask, kind }),
+        told: deviceWake(input.machine, input.command, kind === "typed"),
         held: guards.held,
         finished: run.waitUntilFinished(),
     });

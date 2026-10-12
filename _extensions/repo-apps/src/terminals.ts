@@ -1,5 +1,4 @@
 import type { TerminalsList } from "@intentic/sandbox-contract";
-import { useQuery } from "@tanstack/vue-query";
 import { computed, type ComputedRef } from "vue";
 import { host } from "./host";
 
@@ -12,11 +11,10 @@ const fetchTerminals = async (): Promise<TerminalSession[]> => (await host().san
 
 export function useTerminals(): { sessions: ComputedRef<TerminalSession[]> } {
     const api = host();
-    const query = useQuery({
+    const { query } = api.sandbox.query({
         queryKey: api.sandbox.readKey(`system.terminals`),
         queryFn: () => api.sandbox.rpc.system.terminals(),
         select: (list): TerminalSession[] => list.sessions,
-        enabled: computed(() => api.sandbox.reachable()),
     });
     return { sessions: computed(() => query.data.value ?? []) };
 }

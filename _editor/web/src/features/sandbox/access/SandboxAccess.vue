@@ -24,11 +24,9 @@ import {
 import { noticeFrom } from "@intentic/ui/async";
 import { formatDate } from "@intentic/ui/format";
 import { computed, onMounted, ref, watch } from "vue";
-import { sandboxJson } from "../../../client/sandbox/sandboxClient";
 import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
 import { apiClient } from "../../../lib/useApi";
-import { SANDBOX_MEMBERS } from "../../../lib/queryKeys";
-import { queryClient } from "../../../lib/queryPersistence";
+import { grantMember, revokeMember, useMembers } from "../../../client/sandbox/useMembers";
 import { useAuth } from "../../../client/auth/useAuth";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useRole } from "../../../client/sandbox/useRole";
@@ -65,14 +63,8 @@ const isOwner = computed(() => sandbox.active.value?.role === `owner`);
 // inviting and re-grading people stays the owner's (`isOwner`).
 const { canShip } = useRole();
 
+// The platform's invite records: who was invited and how that stands. The daemon's own roster is `grants` below.
 const members = ref<InviteRecord[]>([]);
-// A grant or revoke changes the roster for more than this page: the board's Everyone/Mine row reads the same list
-// through SANDBOX_MEMBERS. A cached read is re-run when something says it changed, never because a view mounted
-// again, so saying so here (part of the write, whether or not this tab is still up) keeps the two surfaces telling
-// the same story.
-const invalidateRoster = (): void => {
-    void queryClient.invalidateQueries({ queryKey: SANDBOX_MEMBERS.of() });
-};
 const email = ref(``);
 // An invite is being written once an address is: the form's scope line waits for that, and a pick it held from a
 // previous invite comes back with the next address rather than standing on the page with nobody to apply to.
@@ -119,11 +111,20 @@ const ownRole = computed((): string => {
 const inviteRole = ref<GrantedRole>(`collaborator`);
 // The areas an invite is fenced to; undefined is the whole workspace, which is what an invite means unnarrowed.
 const inviteAreas = ref<string[] | undefined>(undefined);
-// The daemon's own roster, the one copy that knows a fence; the platform's records above carry the tier only.
-const grants = ref<readonly AccessGrant[]>([]);
+// The daemon's own roster, the one copy that knows a fence; the platform's records above carry the tier only. It is the
+// members cache entry (useMembers), which a grant or revoke here fills with the roster the daemon answers, so this tab
+// holds no copy of its own and the board's Everyone/Mine row reads the same list. Only the owner reads it.
+const { roster, members: grants, error: grantsError } = useMembers({ enabled: isOwner });
 // Why that roster could not be read. While set no row's fence is known, and a grant replaces the whole row, so a
 // re-grade sent now would drop the areas it holds and widen what the member sees: no grant is rewritten until it clears.
-const grantsUnread = ref<NoticeModel>();
+const grantsUnread = computed<NoticeModel | undefined>(() =>
+    grantsError.value === undefined
+        ? undefined
+        : noticeFrom(new Error(grantsError.value), t(`sandbox.sandboxAccess.couldntReadMemberAreas`), { tone: `warning` }),
+);
+// Whether the fences are not known: the roster could not be read, or has not been (a sandbox that is not answering never
+// starts the read). No row is re-graded then, for the same reason.
+const fencesUnknown = computed(() => grantsUnread.value !== undefined || roster.value === undefined);
 // Undefined, not an empty list: a row with no areas reaches the whole workspace, which is what every grant means
 // until somebody narrows it.
 const areasOf = (address: string): readonly string[] | undefined => grants.value.find((grant) => grant.email === address.toLowerCase())?.areas;
@@ -165,11 +166,10 @@ const sendable = (role: GrantedRole, areas: readonly string[] | undefined): bool
 // (the daemon's enforced list, then the platform's record), one at a time, and they live in the operations ledger: the
 // tab opened again mid-write holds its buttons, and the accept link of an invite mail could not deliver is kept until
 // the owner moves on to the next write, since it can only be read here.
-// What a write answers: the platform's roster, the daemon's (whole, so every fence is known again), and for an invite
-// or a resend, how it went out.
+// What a write answers: the platform's roster, and for an invite or a resend, how it went out. The daemon's roster is
+// not among them: it lands in the members cache entry as the daemon answers it.
 interface RosterWrite {
     readonly members?: InviteRecord[];
-    readonly grants?: AccessGrant[];
     readonly delivery?: { readonly link: string; readonly delivery: InviteDelivery; readonly reason?: string };
 }
 // A refusal, and whether the roster on screen may no longer be true: the daemon granted, then the platform refused.
@@ -318,26 +318,10 @@ const load = async (): Promise<void> => {
     // Only this tab's own words: an invite's link kept in the ledger outlives the tab being opened again.
     localNotice.value = undefined;
     try {
-        // Both rosters, since only the daemon's says which cards a guest holds; a daemon that isn't answering leaves the
-        // list up and says the fences are unknown, rather than drawing every row as unfenced.
-        const [invited, granted] = await Promise.all([
-            apiClient.invite.list({ sandboxId: id }),
-            sandboxRaw(`GET /members`).catch((err: unknown): undefined => {
-                grantsUnread.value = noticeFrom(
-                    err,
-                    t(`sandbox.sandboxAccess.couldntReadMemberAreas`),
-                    {
-                        tone: `warning`,
-                    },
-                );
-                return undefined;
-            }),
-        ]);
-        members.value = invited.members;
-        if (granted !== undefined) {
-            grants.value = granted.members;
-            grantsUnread.value = undefined;
-        }
+        // The platform's records only: the daemon's roster, the one that says which cards a guest holds, is its own cache
+        // entry. One that isn't answering leaves the list up and says the fences are unknown (`grantsUnread`), rather
+        // than drawing every row as unfenced.
+        members.value = (await apiClient.invite.list({ sandboxId: id })).members;
     } catch (err) {
         localNotice.value = noticeFrom(err, t(`sandbox.sandboxAccess.couldntLoadAccessList`));
     } finally {
@@ -345,8 +329,9 @@ const load = async (): Promise<void> => {
     }
 };
 
-// A write's answer is the roster as it now stands, put on screen by whichever mount of this tab is up when it lands; a
-// write refused after the daemon granted leaves the screen unsure, so the roster is read again.
+// A write's answer is the platform's roster as it now stands, put on screen by whichever mount of this tab is up when it
+// lands; a write refused after the daemon granted leaves the screen unsure, so the platform's roster is read again (the
+// daemon's is already the cache's).
 watch(
     () => writes.operation.value,
     (now, before) => {
@@ -361,11 +346,6 @@ watch(
         }
         if (now.value?.members !== undefined) {
             members.value = now.value.members;
-        }
-        if (now.value?.grants !== undefined) {
-            grants.value = now.value.grants;
-            // The answer is the whole roster, so every fence is known again.
-            grantsUnread.value = undefined;
         }
     },
 );
@@ -393,10 +373,10 @@ const deliveryNote = (delivery: Exclude<InviteDelivery, "sent">): string =>
     })[delivery];
 
 // Daemon push first, enforced; sandboxRaw throws on non-2xx, so an unenforced grant is never recorded as sent. Its
-// answer is the daemon's whole roster.
-const grantOnDaemon = async (target: string, role: GrantedRole, areas: readonly string[] | undefined, refused: string): Promise<AccessGrant[]> => {
+// answer is the daemon's whole roster, which lands in the members cache entry (useMembers) whole.
+const grantOnDaemon = async (target: string, role: GrantedRole, areas: readonly string[] | undefined, refused: string): Promise<void> => {
     try {
-        return (await sandboxRaw(`POST /members`, { input: grantBody(target, role, areas) })).members;
+        await grantMember(grantBody(target, role, areas));
     } catch (err) {
         throw new DaemonRefused(refused, err);
     }
@@ -417,10 +397,9 @@ const invite = async (): Promise<void> => {
         // The link mail could not carry is read here or nowhere.
         keep: true,
         task: async () => {
-            const granted = await grantOnDaemon(value, role, areas, t(`sandbox.sandboxAccess.couldntGrantAccess`));
+            await grantOnDaemon(value, role, areas, t(`sandbox.sandboxAccess.couldntGrantAccess`));
             const result = await apiClient.invite.create({ sandboxId: id, email: value, role });
-            invalidateRoster();
-            return { members: result.members, grants: granted, delivery: result };
+            return { members: result.members, delivery: result };
         },
     });
     if (outcome?.state === `done`) {
@@ -479,7 +458,7 @@ const revokeSessions = async (): Promise<void> => {
         // The line under the button says it, where the press was.
         quiet: true,
         task: async () => {
-            await sandboxJson<{ ok: boolean }>(`/system/sessions/revoke`, { method: `POST` });
+            await sandboxRaw(`POST /system/sessions/revoke`);
         },
     });
     if (outcome?.state === `done`) {
@@ -495,7 +474,7 @@ const setRole = async (target: string, role: GrantedRole, areas: readonly string
         return false;
     }
     clearNotice();
-    if (grantsUnread.value !== undefined) {
+    if (fencesUnknown.value) {
         localNotice.value = grantsUnread.value;
         return false;
     }
@@ -506,10 +485,9 @@ const setRole = async (target: string, role: GrantedRole, areas: readonly string
         quiet: true,
         task: async () => {
             // Same split as the grant: only the first of the two writes can be a sandbox that isn't answering.
-            const granted = await grantOnDaemon(target, role, areas, t(`sandbox.sandboxAccess.couldntChangeRole`));
+            await grantOnDaemon(target, role, areas, t(`sandbox.sandboxAccess.couldntChangeRole`));
             const result = await apiClient.invite.setRole({ sandboxId: id, email: target, role });
-            invalidateRoster();
-            return { members: result.members, grants: granted };
+            return { members: result.members };
         },
     });
     return outcome?.state === `done`;
@@ -568,12 +546,11 @@ const revoke = async (target: string): Promise<void> => {
         task: async () => {
             // Enforcer drops access first; a rejecting/offline daemon errors instead of leaving access standing.
             try {
-                await sandboxRaw(`DELETE /members`, { input: { email: target } });
+                await revokeMember(target);
             } catch (err) {
                 throw new DaemonRefused(t(`sandbox.sandboxAccess.couldntRevokeAccess`), err);
             }
             const result = await apiClient.invite.revoke({ sandboxId: id, email: target });
-            invalidateRoster();
             return { members: result.members };
         },
     });
@@ -616,7 +593,7 @@ const revoke = async (target: string): Promise<void> => {
                                 :model-value="rowRole(member)"
                                 :options="ROLE_OPTIONS"
                                 variant="ghost"
-                                :disabled="busy || grantsUnread !== undefined"
+                                :disabled="busy || fencesUnknown"
                                 class="shrink-0"
                                 :aria-label="t(`sandbox.sandboxAccess.role`, { email: member.email })"
                                 :header="t(`sandbox.sandboxAccess.role`, { email: member.email })"
@@ -628,7 +605,7 @@ const revoke = async (target: string): Promise<void> => {
                                 :label="t(`sandbox.words.areas`)"
                                 size="small"
                                 tier="quiet"
-                                :disabled="busy || grantsUnread !== undefined"
+                                :disabled="busy || fencesUnknown"
                                 @click="fenceOpen = fenceOpen === member.email ? undefined : member.email"
                             />
                             <Button

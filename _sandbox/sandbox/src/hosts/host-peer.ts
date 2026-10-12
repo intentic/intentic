@@ -13,7 +13,6 @@ import {
     type HostSummary,
     parseHostConnection,
 } from "@intentic/sandbox-contract";
-import { sandboxSlugOf } from "@intentic/sandbox-run";
 import type { ContractRouterClient } from "@orpc/contract";
 import { capabilityCtx } from "../capabilities/capability.js";
 import { deviceHandler } from "../capabilities/handlers/device.handler.js";
@@ -25,14 +24,13 @@ import type { PeerHub } from "../peers/peer-hub.js";
 import { createPeerRoutes } from "../peers/peer-routes.js";
 import type { PeerStore } from "../peers/peer-store.js";
 import { bootstrapEnvironments } from "./environment-bootstrap.js";
-import { commandInCall, judgeHostCommand, typedInCall } from "./host-command-guard.js";
+import { hostCallGate } from "./host-call-gate.js";
 import type { HostGuardDeps } from "./host-guard-deps.js";
-import { DeviceToolCallSchema, judgeHostRestart, restartInCall } from "./host-restart-guard.js";
 
 // The user's own computer as a peer door: @intentic/machine dials in with an enrollment token and serves `deviceContract`
-// over that socket. The grant is the `host` capability's config; a `run_command` is judged against the owner's safety
-// policy before it crosses (host-command-guard.ts), and the setup flow can pre-arm a pairing from the container's env
-// (host-seed.ts).
+// over that socket. The grant is the `host` capability's config; a call that carries a program (`run_command`,
+// `app_start`, `open`, typed text: the contract's one table) is judged against the owner's safety policy before it
+// crosses (host-command-guard.ts), and the setup flow can pre-arm a pairing from the container's env (host-seed.ts).
 
 export type HostClient = ContractRouterClient<typeof deviceContract>;
 // @intentic/machine's build version, so an old binary is visible rather than mysteriously missing a tool.
@@ -209,24 +207,7 @@ export const hostPeerRoutes = (services: Services, guards: HostGuardDeps) =>
             bootstrapEnvironments(services, id, facts);
         },
         // The owner's safety policy, applied here since the bridge is the last thing to see a call while someone can
-        // still be asked. The machine's own scopes remain the floor; a refusal here only stops what the machine might
-        // otherwise have run.
-        beforeCall: async (payload, call) => {
-            // An agent restarting the very sandbox the others run in is held for the owner while they are mid-turn. The
-            // slug is the one docker knows this container by (self-host.ts's ownSlug, not imported: it imports this).
-            const toolCall = DeviceToolCallSchema.safeParse(payload);
-            const restart = toolCall.success ? restartInCall(toolCall.data, sandboxSlugOf(services.config.sandbox.name)) : undefined;
-            if (restart !== undefined) {
-                return judgeHostRestart(services, guards, { machine: call.id, call: restart, conversationId: call.conversationId });
-            }
-            const command = commandInCall(payload);
-            if (command !== undefined) {
-                return judgeHostCommand(services, guards, { machine: call.id, command, conversationId: call.conversationId });
-            }
-            const typed = toolCall.success ? typedInCall(toolCall.data) : undefined;
-            if (typed === undefined) {
-                return undefined;
-            }
-            return judgeHostCommand(services, guards, { machine: call.id, command: typed, conversationId: call.conversationId, typed: true });
-        },
+        // still be asked (host-call-gate.ts). The machine's own scopes remain the floor; a refusal here only stops what
+        // the machine might otherwise have run.
+        beforeCall: hostCallGate(services, guards),
     });

@@ -1,7 +1,9 @@
 import { memoryConversationGrants } from "../personas/conversation-grants.js";
+import { memoryOwnerGrants } from "../personas/owner-grants.js";
 import { createCredentialGrants } from "../secrets/credential-grants.js";
 import { notifyingCredentialGrants } from "../secrets/secrets-slice.js";
-import { revokeGrant, standingGrants } from "./standing-grants.js";
+import { type OwnerApprovals, revokeGrant, standingGrants } from "./standing-grants.js";
+import { standingDeps } from "./standing-grants.testing.js";
 
 // The yeses still standing, as Needs you lists them: one row per conversation, carrying both what its grants widened and
 // what a named person released to it, the most recently widened first; and each one taken back alone.
@@ -10,7 +12,7 @@ const harness = () => {
     let clock = 100;
     const conversationGrants = memoryConversationGrants(() => clock);
     const credentialGrants = createCredentialGrants();
-    return { deps: { conversationGrants, credentialGrants }, tick: (to: number) => (clock = to) };
+    return { deps: standingDeps({ conversationGrants, credentialGrants }), tick: (to: number) => (clock = to) };
 };
 
 test("a conversation's grants and its releases come back as one row, newest change first", async () => {
@@ -37,6 +39,8 @@ test("a conversation's grants and its releases come back as one row, newest chan
             },
             { conversationId: "conv-old", capabilities: [], folders: ["refs/vendor"], shelves: [], installs: false, secrets: [], everything: false, rules: [], by: "ada@acme.dev", updatedAt: 100, releases: [] },
         ],
+        ownerWide: [],
+        unreadable: [],
     });
 });
 
@@ -130,4 +134,72 @@ test("a release, its take-back and its conversation's forgetting are each announ
     releases.forget("conv-2");
     expect(heard).toEqual(["conv-1", "conv-2", "conv-1", "conv-2"]);
     expect(releases.all()).toEqual([]);
+});
+
+// The yeses that name no conversation, beside the per-conversation ones: a command policy line allowed with Always, a hook
+// set the owner approved by its digest, and a workspace extension they approved for its powers. One list, newest first,
+// and one door that takes any of them back.
+const HOOK = { source: "project", event: "PreToolUse", matcher: "Bash", type: "command", run: "./scripts/audit.sh" } as const;
+
+const ownerWideHarness = () => {
+    const base = harness();
+    const ownerGrants = memoryOwnerGrants(() => 300);
+    const hookSets = new Map([["a".repeat(64), { approvedAt: 200, hooks: [HOOK, { ...HOOK, event: "Stop", matcher: undefined, run: "notify" }] }]]);
+    const extensions = new Map([["acme.stripe", { powers: ["Run a process at start", "Call api.stripe.com"], approvedAt: 400 }]]);
+    const approvals: OwnerApprovals = {
+        hookSets: async () => ({ sets: [...hookSets].map(([digest, set]) => ({ digest, ...set })), unreadable: false }),
+        revokeHookSet: async (digest) => hookSets.delete(digest),
+        extensions: async () => ({ extensions: [...extensions].map(([id, extension]) => ({ id, ...extension })), unreadable: false }),
+        revokeExtension: async (id) => extensions.delete(id),
+    };
+    return { ...base, ownerGrants, deps: standingDeps({ ...base.deps, ownerGrants, approvals }), hookSets, extensions };
+};
+
+test("owner-wide yeses are listed newest first, each in words a person can read", async () => {
+    const { deps, ownerGrants } = ownerWideHarness();
+    await ownerGrants.allowCommandPolicy("Deleting build directories under /work is fine.", "ada@acme.dev");
+
+    expect((await standingGrants(deps)).ownerWide).toEqual([
+        { kind: "extension", id: "acme.stripe", powers: ["Run a process at start", "Call api.stripe.com"], at: 400 },
+        { kind: "command-policy", line: "Deleting build directories under /work is fine.", at: 300, by: "ada@acme.dev" },
+        { kind: "hook-set", digest: "a".repeat(64), hooks: ["PreToolUse (Bash): ./scripts/audit.sh", "Stop: notify"], at: 200 },
+    ]);
+});
+
+test("each owner-wide yes is taken back alone, by its own name, and a second time finds nothing", async () => {
+    const { deps, ownerGrants, hookSets, extensions } = ownerWideHarness();
+    await ownerGrants.allowCommandPolicy("First.", undefined);
+    await ownerGrants.allowCommandPolicy("Second.", undefined);
+
+    expect(await revokeGrant(deps, { kind: "command-policy", what: "First." })).toBe(true);
+    expect(await revokeGrant(deps, { kind: "command-policy", what: "First." })).toBe(false);
+    expect((await ownerGrants.read()).commandPolicy.map((grant) => grant.line)).toEqual(["Second."]);
+
+    expect(await revokeGrant(deps, { kind: "hook-set", what: "b".repeat(64) })).toBe(false);
+    expect(await revokeGrant(deps, { kind: "hook-set", what: "a".repeat(64) })).toBe(true);
+    expect(hookSets.size).toBe(0);
+
+    expect(await revokeGrant(deps, { kind: "extension", what: "acme.stripe" })).toBe(true);
+    expect(await revokeGrant(deps, { kind: "extension", what: "acme.stripe" })).toBe(false);
+    expect(extensions.size).toBe(0);
+    expect((await standingGrants(deps)).ownerWide).toEqual([{ kind: "command-policy", line: "Second.", at: 300 }]);
+});
+
+// The same kinds never reach a conversation's grants: a conversation of that name keeps what it holds.
+test("an owner-wide take-back touches no conversation's grants", async () => {
+    const { deps } = ownerWideHarness();
+    await deps.conversationGrants.add("conv-1", { subject: "folder", what: "docs" }, "ada@acme.dev");
+    await revokeGrant(deps, { kind: "extension", what: "acme.stripe" });
+    expect((await standingGrants(deps)).conversations).toMatchObject([{ conversationId: "conv-1", folders: ["docs"] }]);
+});
+
+test("a record this build cannot read is named, and what it would have listed is not", async () => {
+    const { deps } = ownerWideHarness();
+    const approvals: OwnerApprovals = {
+        ...deps.approvals,
+        hookSets: async () => ({ sets: [], unreadable: true }),
+        extensions: async () => ({ extensions: [], unreadable: true }),
+    };
+    const ownerGrants = { ...deps.ownerGrants, read: async () => ({ commandPolicy: [], unreadable: true }) };
+    expect(await standingGrants({ ...deps, approvals, ownerGrants })).toMatchObject({ ownerWide: [], unreadable: ["command-policy", "hook-set", "extension"] });
 });

@@ -1,7 +1,6 @@
 import type { AutomationTemplate, TriggerSource } from "@intentic/sandbox-contract";
 import type { CapabilityFacts } from "@intentic/extension-api";
 import type { IconName } from "@intentic/extension-ui";
-import { useQuery } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { host } from "./host";
 import { t } from "./i18n.js";
@@ -64,14 +63,13 @@ const NO_TEMPLATES: readonly AutomationTemplate[] = [];
 // Read once, not polled: installing, switching or updating a pack restarts the extension host and re-runs this anyway.
 export function useCatalog() {
     const api = host();
-    const query = useQuery({
+    const { query, error } = api.sandbox.query({
         queryKey: api.sandbox.readKey(`automations.catalog`),
         queryFn: () => api.sandbox.rpc.automations.catalog(),
-        enabled: computed(() => api.sandbox.reachable()),
     });
     return {
         sources: computed<readonly TriggerSource[]>(() => query.data.value?.sources ?? NO_SOURCES),
         templates: computed<readonly AutomationTemplate[]>(() => query.data.value?.templates ?? NO_TEMPLATES),
-        error: computed(() => query.error.value?.message),
+        error,
     };
 }

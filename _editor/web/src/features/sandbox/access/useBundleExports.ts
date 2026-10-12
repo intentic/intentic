@@ -1,7 +1,7 @@
-import { BundleExportsSchema } from "@intentic/sandbox-contract";
+import { rawRouteUrl } from "@intentic/sandbox-contract";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
-import { sandboxJson } from "../../../client/sandbox/sandboxClient";
+import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
 import { useEndpoint } from "../../../client/endpoint/useEndpoint";
 import { t } from "@intentic/ui/i18n";
 import { BUNDLE_EXPORTS } from "../../../lib/queryKeys";
@@ -19,7 +19,7 @@ export function useBundleExports() {
     const queryClient = useQueryClient();
     const { query, error } = useSandboxQuery({
         queryKey: BUNDLE_EXPORTS_KEY,
-        queryFn: async () => BundleExportsSchema.parse(await sandboxJson(`/bundles`)),
+        queryFn: () => sandboxRaw(`GET /bundles`),
         refetchInterval: (state) => (state.state.data?.exports.some((entry) => entry.status === `packing`) ? PACKING_POLL_MS : false),
     });
 
@@ -31,12 +31,12 @@ export function useBundleExports() {
     // Starts an export. Resolves once the daemon has named it, not once packing finishes, so the row appears
     // immediately and fills in as bytes land.
     const start = async (secrets: boolean): Promise<void> => {
-        await sandboxJson(`/bundles${secrets ? `?secrets=1` : ``}`, { method: `POST` });
+        await sandboxRaw(`POST /bundles`, { query: secrets ? { secrets: `1` } : undefined });
         await invalidate();
     };
 
     const remove = async (name: string): Promise<void> => {
-        await sandboxJson(`/bundles?name=${encodeURIComponent(name)}`, { method: `DELETE` });
+        await sandboxRaw(`DELETE /bundles`, { query: { name } });
         await invalidate();
     };
 
@@ -46,10 +46,10 @@ export function useBundleExports() {
 // Download URL for a browser to navigate to directly, so bytes stream via its own download manager, not tab memory.
 // The ticket is a short-lived credential scoped to this bundle, since a navigation can't carry a bearer header.
 export const bundleDownloadUrl = async (name: string): Promise<string> => {
-    const { ticket } = await sandboxJson<{ ticket: string }>(`/bundles/ticket?name=${encodeURIComponent(name)}`, { method: `POST` });
+    const { ticket } = await sandboxRaw(`POST /bundles/ticket`, { query: { name } });
     const base = useEndpoint().daemonBase.value;
     if (base === undefined || base === ``) {
         throw new Error(t(`sandbox.useBundleExports.notReachableYet`));
     }
-    return `${base}/bundles/download?${new URLSearchParams({ name, ticket }).toString()}`;
+    return `${base}${rawRouteUrl(`GET /bundles/download`)}?${new URLSearchParams({ name, ticket }).toString()}`;
 };

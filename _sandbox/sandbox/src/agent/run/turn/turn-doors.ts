@@ -1,4 +1,4 @@
-import { type StopResult, type StopTurn, withRuntimeDefaults } from "@intentic/sandbox-contract";
+import type { StopResult, StopTurn } from "@intentic/sandbox-contract";
 import { type LiveRun, liveRunOf } from "../../../conversations/actor/conversation-holdings.js";
 import type { Services } from "../../../composition.js";
 import { opt } from "../../../opt.js";
@@ -7,6 +7,7 @@ import { openingRows, openTurnTranscript, recordTurnTranscript } from "../../../
 import { createAdmission } from "./turn-admission.js";
 import { applyReply, steerComposed } from "./turn-interactions.js";
 import { fireHeldResume, startConversationTurn } from "./turn-resume.js";
+import { onItsSession, routeTurn } from "./turn-routing.js";
 import { startTurnRun } from "./turn-runs.js";
 import { turnPulseOf } from "./turn-pulse.js";
 
@@ -68,8 +69,9 @@ const stopTurn = async (
 };
 
 // `services` is read per call, since the port is composed into the very object it reads. Every turn is routed as it comes
-// in (withRuntimeDefaults): provider and loop named once, never defaulted again downstream. A started turn is routed by
-// startConversationTurn, after its run role or persona has had the chance to name them.
+// in, by the one preamble (routeTurn): its persona or run role has the chance to name provider, model and knobs, then
+// provider and loop are named once, never defaulted again downstream. A turn that names its model or provider keeps it, so
+// one that walked its own ladder (an automation's fire, a runner's dispatched turn) is not re-pinned.
 export const turnDoors = (services: () => Services, body: TurnStarter["stream"]): TurnStarter => {
     const start: TurnStarter["start"] = (turn, options) => startConversationTurn(services(), body, turn, options);
     return {
@@ -77,21 +79,28 @@ export const turnDoors = (services: () => Services, body: TurnStarter["stream"])
         resume: (conversationId, routing) => fireHeldResume(services(), conversationId, routing),
         run: (sent, options) => {
             const daemon = services();
-            const turn = withRuntimeDefaults(sent);
             // Opened before the provider runs, matching the send path's own order.
-            const opened = openTurnTranscript(daemon, turn);
-            const run = startTurnRun(daemon, body, turn, {
+            const opened = openTurnTranscript(daemon, sent);
+            const run = startTurnRun(daemon, body, sent, {
                 journalled: options?.journalled === true,
                 before: opened,
-                opening: (startedAt) => openingRows(turn, daemon.workspace.root, startedAt),
-                transcript: (rows, steerRows) => recordTurnTranscript(daemon, turn, rows, steerRows),
+                // The run is claimed at once, so its starter follows it from its first frame; the run routes the turn
+                // before the provider is asked.
+                route: async (claimed) => {
+                    const routed = await routeTurn(daemon, claimed);
+                    return options?.continuing === true ? onItsSession(daemon, routed) : routed;
+                },
+                opening: (startedAt) => openingRows(sent, daemon.workspace.root, startedAt),
+                transcript: (rows, steerRows) => recordTurnTranscript(daemon, sent, rows, steerRows),
             });
             if (run === "archived") {
-                daemon.logger.info({ conversationId: turn.conversationId }, "run not started: the conversation is archived, and only a person reopens it");
+                daemon.logger.info({ conversationId: sent.conversationId }, "run not started: the conversation is archived, and only a person reopens it");
             }
             return run;
         },
-        stream: (turn, signal) => body(withRuntimeDefaults(turn), signal),
+        async *stream (turn, signal) {
+            yield* body(await routeTurn(services(), turn), signal);
+        },
         steer: (conversationId, steer) => steerComposed(services(), conversationId, steer),
         reply: (reply) => applyReply(services(), reply),
         stop: (target) => stopTurn(services(), target),

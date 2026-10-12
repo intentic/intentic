@@ -3,13 +3,15 @@ import { HISTORY_ROOT } from "@intentic/constants";
 import { errorMessage } from "@intentic/base/errors";
 import { execBounded, runBounded } from "@intentic/base/process";
 import type { Log } from "@intentic/local-agent";
+import type { RestartIntent, RestartSide } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { readMachineConfig } from "../../environments/machine.js";
 import { thisSide } from "../../environments/wsl.js";
 import { pairingSlugs } from "../../sync/swap-pause.js";
 import type { LinkReading } from "../config.js";
 import { type IcRun, lastLine, type Rounds, startRounds } from "./ic-rounds.js";
-import { readChannelSlugs, readSwapRecords, swapsUnderway } from "./swap-records.js";
+import { readSwaps, swapsUnderway } from "./ic-swaps.js";
+import { readChannelSlugs } from "./swap-records.js";
 import { fleet, holdIcFlow, icInFlight, runIc } from "../tools/sandboxes.js";
 import {
     newSleepers,
@@ -328,7 +330,7 @@ export interface KeeperSeams {
     readonly listing: () => Promise<readonly ListedSandbox[]>;
     readonly records: () => Promise<readonly string[]>;
     readonly trashed: () => Promise<readonly string[]>;
-    // The sandboxes a swap is moving right now (ic's cutover records): the probation watch's, never the keeper's.
+    // The sandboxes a swap is moving right now (`ic sandbox swaps`): the probation watch's, never the keeper's.
     readonly swapping: () => Promise<readonly string[]>;
     readonly links: () => readonly LinkView[];
     // The link URLs this agent has reached over loopback (connection.ts).
@@ -347,7 +349,7 @@ export interface KeeperSeams {
     // Which environment of this computer this keeper is (restartIntent's `side`), and how the intent reaches a container;
     // absent, restarts are said without a side and nothing is written into the container.
     readonly side?: () => Promise<RestartSide>;
-    readonly writeIntent?: (container: string, intent: RestartIntent) => Promise<void>;
+    readonly writeIntent?: (container: string, intent: KeeperRestartIntent) => Promise<void>;
 }
 
 interface Wait {
@@ -522,16 +524,15 @@ const noteRun = (state: KeeperState, run: IcRun, asked: string | undefined, log:
    reason, checks). Best-effort and bounded: the restart never waits on it, and ic, which writes one too, may overwrite
    it with its own; the last writer wins. */
 
-export type RestartSide = "wsl" | "windows" | "linux" | "mac";
-
-export interface RestartIntent {
-    readonly at: string;
+// The file's shape is the contract's RestartIntentSchema, which the daemon reads it with and ic's Rust writes it by; this
+// writer is `by: "keeper"`, `action: "restart"`, and always names its host, side and checks. keeper.test.ts holds what it
+// writes to the schema and to the example in the daemon's golden/host-files.json, which ic's host_files.rs is held to too.
+export interface KeeperRestartIntent extends RestartIntent {
     readonly by: "keeper";
     readonly host: string;
     readonly side: RestartSide;
     readonly action: "restart";
-    readonly reason: string;
-    readonly checks: readonly string[];
+    readonly checks: string[];
 }
 
 // The ids of ic's checks by the labels its progress lines say (ic: sandbox/fix/model.rs, `label`), so the intent names
@@ -562,7 +563,7 @@ const triggerText = (trigger: FixTrigger, now: number): string =>
 const RESTARTING = /^Restarting the sandbox\b/;
 
 // The intent for a restart ic announced as `doing`. Pure.
-export const restartIntent = (doing: string, trigger: FixTrigger, side: RestartSide, host: string, now: number): RestartIntent => {
+export const restartIntent = (doing: string, trigger: FixTrigger, side: RestartSide, host: string, now: number): KeeperRestartIntent => {
     const label = /, because ([^:]+):/.exec(doing)?.[1];
     const id = label === undefined ? undefined : IC_CHECK_IDS.get(label);
     return {
@@ -586,7 +587,7 @@ const sideOf = async (): Promise<RestartSide> => {
 };
 
 // Written beside and moved into place, so the daemon never reads half a file. Resolves whatever happens.
-const writeIntentInto = async (container: string, intent: RestartIntent): Promise<void> => {
+const writeIntentInto = async (container: string, intent: KeeperRestartIntent): Promise<void> => {
     // runBounded never throws: a container mid-restart that closes its stdin first is an answer, and the intent is best-effort.
     await runBounded("docker", ["exec", "-i", container, "sh", "-c", `cat > ${RESTART_INTENT_PATH}.tmp && mv -f ${RESTART_INTENT_PATH}.tmp ${RESTART_INTENT_PATH}`], {
         timeoutMs: INTENT_DEADLINE_MS,
@@ -784,7 +785,7 @@ export const machineKeeperSeams = ({ links, loopback, watching }: KeeperWiring):
     listing: async () => (await fleet()).map(({ slug, container, keptElsewhere, asleep }) => ({ slug, container, keptElsewhere, asleep })),
     records: async () => await readChannelSlugs(),
     trashed: readTrashed,
-    swapping: async () => swapsUnderway(await readSwapRecords(), Date.now()),
+    swapping: async () => swapsUnderway(await readSwaps()),
     links,
     loopback,
     watching,
@@ -794,9 +795,8 @@ export const machineKeeperSeams = ({ links, loopback, watching }: KeeperWiring):
        held as one, over every slug it might touch, and rog put off its agent upgrade seven times "while" eight
        sandboxes, one with no container and two in the trash, were "mid-swap". A fix starts or restarts a container at
        most. On POSIX ic outlives an agent restart (a process group of its own); on Windows a restart ends the run, and
-       the next sweep starts it again. The one step of a fix an agent restart must never land in, finishing an
-       interrupted cutover, is written in ic's own cutover record, which every restart already waits for
-       (swap-records.ts). */
+       the next sweep starts it again. A cutover a live ic run is doing, which `ic sandbox swaps` reports, is what
+       every restart waits for (ic-swaps.ts); one whose ic died is finished by the next fix or watch sweep. */
     hold: (slug) => holdIcFlow(slug, KEEPER_HOLD),
     now: Date.now,
     sleepMinutes: async () => sleepMinutesOf(await readMachineConfig()),

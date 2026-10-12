@@ -115,7 +115,7 @@ export const icInFlight: ReadonlySet<string> = flows.slugs;
 
 // The subset of those flows that move a container (every one but a prepare, a shape saved for later and its forget):
 // what an agent restart must not land in the middle of. A separate process's upgrade cannot see this set, and reads
-// ic's own record of the cutover instead (swap-records.ts).
+// ic's own verdict on the cutover instead (`ic sandbox swaps`, ic-swaps.ts).
 const swaps = inFlightMarks();
 export const icSwapsInFlight: ReadonlySet<string> = swaps.slugs;
 

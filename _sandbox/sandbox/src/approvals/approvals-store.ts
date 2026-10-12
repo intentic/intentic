@@ -157,4 +157,4 @@ they go wrong in the same three places. So, whatever the errand:
 // Native to every sandbox like automations; no capability owns this skill.
 // The daemon converges it at boot, keeping the prose current across daemon updates.
 export const ensureApprovalsSkill = (services: Pick<Services, "files" | "workspace">): Promise<void> =>
-    writeLoadedSkill(services.files, services.workspace.root, "approvals", APPROVALS_SKILL);
+    writeLoadedSkill(services.files, services.workspace.root, "approvals", APPROVALS_SKILL, "approvals");

@@ -8,7 +8,7 @@ const probesOf = (over: Partial<IdleStopProbes>): IdleStopProbes => ({
     connected: () => 0,
     working: () => 0,
     terminalActivityAt: () => Promise.resolve(0),
-    nextOneTimeWakeAt: () => Promise.resolve(0),
+    nextPromisedWakeAt: () => Promise.resolve(0),
     ...over,
 });
 
@@ -79,7 +79,7 @@ describe("startIdleStop", () => {
         const stop = jest.fn();
         // Due in three minutes, inside a five-minute window: stopping now is how that wake arrives late.
         const dueAt = Date.now() + 3 * 60 * 1000;
-        const dispose = startIdleStop({ minutes: 5, logger }, probesOf({ nextOneTimeWakeAt: () => Promise.resolve(dueAt) }), stop);
+        const dispose = startIdleStop({ minutes: 5, logger }, probesOf({ nextPromisedWakeAt: () => Promise.resolve(dueAt) }), stop);
         await minutes(6);
         expect(stop).not.toHaveBeenCalled();
         dispose();
@@ -89,7 +89,7 @@ describe("startIdleStop", () => {
         const stop = jest.fn();
         const dispose = startIdleStop(
             { minutes: 5, logger },
-            probesOf({ nextOneTimeWakeAt: () => Promise.resolve(Date.now() + 6 * 3_600_000) }),
+            probesOf({ nextPromisedWakeAt: () => Promise.resolve(Date.now() + 6 * 3_600_000) }),
             stop,
         );
         await minutes(5);
@@ -99,7 +99,7 @@ describe("startIdleStop", () => {
 
     it("nothing on any clock reads as 0, not as a wake due at the epoch", async () => {
         const stop = jest.fn();
-        const dispose = startIdleStop({ minutes: 5, logger }, probesOf({ nextOneTimeWakeAt: () => Promise.resolve(0) }), stop);
+        const dispose = startIdleStop({ minutes: 5, logger }, probesOf({ nextPromisedWakeAt: () => Promise.resolve(0) }), stop);
         await minutes(5);
         expect(stop).toHaveBeenCalledTimes(1);
         dispose();

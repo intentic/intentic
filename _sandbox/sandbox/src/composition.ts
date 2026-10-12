@@ -129,6 +129,7 @@ import { createPrivacySlice, type PrivacySlice } from "./privacy/privacy-slice.j
 import { createNeedsSlice, type NeedsSlice } from "./needs/needs-slice.js";
 import { grantsChanged } from "./needs/standing-grants.js";
 import { type ConversationGrants, conversationGrantsDocument, fileConversationGrants } from "./personas/conversation-grants.js";
+import { commandPolicyLines, fileOwnerGrants, type OwnerGrants, ownerGrantsDocument } from "./personas/owner-grants.js";
 import { createExtensionsSlice, type ExtensionsSlice } from "./extensions/extensions-slice.js";
 import { type AutomationsSlice, createAutomationsSlice, type IntakeMembers } from "./automations/automations-slice.js";
 import { createLoopsSlice, type LoopsSlice, type WorkflowsMembers } from "./loops/loops-slice.js";
@@ -231,6 +232,8 @@ export interface Services
     readonly personas: PersonasStore;
     // What a person allowed one conversation beyond its persona, from a grant need's card; read as its turns are planned.
     readonly conversationGrants: ConversationGrants;
+    // Yeses that name no conversation (a command policy line allowed with Always), kept beside the conversation grants.
+    readonly ownerGrants: OwnerGrants;
     // Named parts of the workspace; every path fence resolves through it, for people and for the turns they start.
     readonly areas: AreasStore;
     // Maintenance evidence: the probe cache the background runner fills, and the ledger of what was done about it.
@@ -476,9 +479,10 @@ const createDaemonMembers = (
         | "processes"
         | "serviceProcesses"
         | "scanPorts"
+        | "ownerGrants"
     > & { readonly manifestHost: ExtensionHost },
 ) => {
-    const { config, logger, workspace, capabilities, conversations, chores, runtimeInstalls, processes, serviceProcesses } = deps;
+    const { config, logger, workspace, capabilities, conversations, chores, runtimeInstalls, processes, serviceProcesses, ownerGrants } = deps;
     // Born converged: main() closes the gate, so a test or host-internal preview build has nothing to wait for.
     const boot = createBootTracker(logger);
     return {
@@ -504,7 +508,11 @@ const createDaemonMembers = (
             logger,
         }),
         approvals: fileApprovalsStore(join(workspace.root, approvalsDocument.path)),
-        safetyPolicy: fileSafetyPolicyStore(statePath(workspace.root, ".intentic/config/safety.md")),
+        // The owner's own file, plus the lines they allowed with Always, which live in ownerGrants and never in the file.
+        safetyPolicy: fileSafetyPolicyStore(
+            statePath(workspace.root, ".intentic/config/safety.md"),
+            commandPolicyLines(ownerGrants, (message) => logger.warn(message)),
+        ),
         safetyLog: fileSafetyLog(join(workspace.root, safetyLogDocument.path)),
         ruleFirings: fileRuleFiringsStore(join(workspace.root, ruleFiringsDocument.path)),
         driftSweep: createDriftSweep({ workspace, runtimeInstalls, conversations, logger }),
@@ -583,6 +591,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
     const conversationGrants = fileConversationGrants(join(authRoot, conversationGrantsDocument.path));
     // A yes a card writes mid-turn moves no need, so the Allowed list hears it from the feed instead.
     conversationGrants.onChange(grantsChanged);
+    // The owner-wide ones (a line allowed with Always on a command card) move the same list.
+    const ownerGrants = fileOwnerGrants(join(authRoot, ownerGrantsDocument.path));
+    ownerGrants.onChange(grantsChanged);
     // A settled card wakes its conversation through the turns composed in this same object, read through `whole`. Made
     // here, before the gates that hold their cards on it (guard/held-asks.ts).
     const heldCards = createHeldCards(heldCardWake(whole, logger));
@@ -686,6 +697,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
         ...extensionsSlice,
         ...createAutomationsSlice({
             workspaceRoot: workspace.root,
+            historyRoot: config.historyRoot,
+            logger,
             archived: (conversationId) => agents.entry(conversationId)?.archivedAt !== undefined,
         }),
         ...createLoopsSlice(workspace.root),
@@ -733,11 +746,13 @@ export const createServices = (config: Config, logger: Logger): Services => {
             runtimeInstalls,
             scanPorts: bridged.scanPorts,
             manifestHost: capabilitiesParts.manifestHost,
+            ownerGrants,
         }),
         trial,
         platformTunnel,
         personas,
         conversationGrants,
+        ownerGrants,
         areas,
         chores,
         invariants,

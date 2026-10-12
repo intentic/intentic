@@ -5,7 +5,9 @@ import { SANDBOX_RECOVERY_DAYS as RECOVERY_DAYS, type SandboxSummary } from "@in
 import {
     AnchoredOverlay,
     browserOwnsClick,
+    Button,
     ConfirmDialog,
+    Modal,
     Notice,
     SandboxLogo,
     StatusBadge,
@@ -377,14 +379,22 @@ const askRollBack = (option: SandboxSummary): void => {
     rollingBack.value = option;
 };
 
-// Drops the account row; with none left, the setup is where the reader goes next.
+// A sandbox that was left on the account but could not be asked to take this person off its own member list, so it still
+// lists them: said until it is dismissed, since the row it would have been said on is gone.
+const stillListed = ref<{ readonly name: string; readonly reason: string }>();
+
+// Drops the account row (a member first leaves the sandbox's own list); with none left, the setup is where the reader
+// goes next.
 const removeRow = async (target: SandboxSummary): Promise<void> => {
     const dropped = sandbox.remove(target.id);
     // remove() drops the row synchronously before its first await, so the empty check is valid here.
     if (sandbox.sandboxes.value.length === 0) {
         void router.push(`/setup`);
     }
-    await dropped;
+    const outcome = await dropped;
+    if (outcome?.grant === `kept`) {
+        stillListed.value = { name: target.name, reason: outcome.reason };
+    }
 };
 
 const confirmRemove = async (): Promise<void> => {
@@ -690,6 +700,18 @@ const confirmRemove = async (): Promise<void> => {
             </RouterLink>
         </div>
     </AnchoredOverlay>
+
+    <Modal
+        :open="stillListed !== undefined"
+        size="sm"
+        :header="t(`sandbox.sandboxSwitcher.leftStillListedHeader`)"
+        :description="stillListed === undefined ? undefined : t(`sandbox.sandboxSwitcher.leftStillListed`, stillListed)"
+        @update:open="(open: boolean) => open || (stillListed = undefined)"
+    >
+        <template #footer>
+            <Button :label="t(`ui.action.done`)" tier="accent" @click="stillListed = undefined" />
+        </template>
+    </Modal>
 
     <ConfirmDialog
         :open="pending !== undefined"

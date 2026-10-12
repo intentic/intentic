@@ -1,7 +1,7 @@
 import type { sandboxContract } from "@intentic/sandbox-contract";
 import type { InferClientInputs } from "@orpc/client";
 import type { ContractRouterClient } from "@orpc/contract";
-import type { Component } from "vue";
+import type { Component, ComputedRef, MaybeRefOrGetter, Ref } from "vue";
 import type { DiffPayload } from "./diff.js";
 import type { Disposable } from "./disposable.js";
 import type { CapabilityFacts, RepoFacts } from "./facts.js";
@@ -114,6 +114,50 @@ export interface HostQuery<T = unknown> {
     readonly queryFn: () => Promise<T>;
     readonly staleTime?: number | undefined;
     readonly gcTime?: number | undefined;
+}
+
+// A daemon read as the host makes its own (`api.sandbox.query`): the spec a view hands over, and what it gets back.
+export interface SandboxQuerySpec<T, Selected = T> {
+    // Scoped by `api.sandbox.readKey(...)` for a contract read, else `api.sandbox.key(...)`, as for `HostQuery`; a ref (a
+    // `computed`) when it depends on one, such as a repository id.
+    readonly queryKey: readonly unknown[] | Ref<readonly unknown[]>;
+    readonly queryFn: () => Promise<T>;
+    // Reshapes the answer for this reader. The cache entry keeps the procedure's whole answer, shared with every other
+    // reader of its key; only this reader's `data` is the reshaped one.
+    readonly select?: ((answer: T) => Selected) | undefined;
+    // A gate beside the sandbox answering, which the host applies itself: a view that is waiting on an id says so here.
+    readonly enabled?: MaybeRefOrGetter<boolean> | undefined;
+    readonly staleTime?: MaybeRefOrGetter<number> | undefined;
+    // How many times a failed read is tried again before it is reported; the host's own default when absent.
+    readonly retry?: boolean | number | undefined;
+    // Milliseconds between reads, or a function of the entry as it stands (`state.data`) for a pace that depends on it.
+    readonly refetchInterval?: MaybeRefOrGetter<number | false> | ((entry: { readonly state: { readonly data: T | undefined } }) => number | false) | undefined;
+}
+
+// The parts of the read a view draws from, every one a ref as in vue-query's own result, which the host hands over whole.
+export interface SandboxQueryState<Selected> {
+    readonly data: Ref<Selected | undefined>;
+    // No answer yet, whether or not one is being asked for (the sandbox may not be answering).
+    readonly isPending: Ref<boolean>;
+    // The first answer is on its way.
+    readonly isLoading: Ref<boolean>;
+    readonly isFetching: Ref<boolean>;
+    readonly isFetched: Ref<boolean>;
+    readonly isError: Ref<boolean>;
+    readonly isSuccess: Ref<boolean>;
+    // When `data` last landed (epoch ms), 0 before the first.
+    readonly dataUpdatedAt: Ref<number>;
+    // The raw failure; `SandboxQueryResult.error` is the same thing in words.
+    readonly error: Ref<Error | null>;
+    // Asks again now; does not wait for the answer.
+    readonly refetch: () => void;
+}
+
+export interface SandboxQueryResult<Selected> {
+    readonly query: SandboxQueryState<Selected>;
+    // Why the read failed, said in words, or undefined. A schema refusing the daemon's answer is the editor and the
+    // sandbox disagreeing about a version, and reads as that, not as the issue list `query.error.message` carries.
+    readonly error: ComputedRef<string | undefined>;
 }
 
 // A view's runtime registration; `id`, `label` and `surface` must match a `contributes.views` entry in
@@ -306,6 +350,12 @@ export interface IntenticApi {
         // Reads through the host's cache from outside a component (e.g. a module-level badge timer);
         // concurrent callers of one key share a request. Gated exactly as `json` is.
         fetch<T>(query: HostQuery<T>): Promise<T>;
+        // A daemon read from inside a component, made the way the shell makes its own: only asked while the sandbox is
+        // answering (so a daemon that is down is not asked at all, and is asked the moment it is back), timed with the
+        // shell's other reads, a failure said in words (`error`), and another sandbox's box addressable by `aimedAt`.
+        // Call it where a component sets up; whatever `queryFn` reaches goes through `request`/`json`/`rpc`, which each
+        // check the manifest. Replaces `useQuery({ ..., enabled: computed(() => api.sandbox.reachable()) })`.
+        query<T, Selected = T>(spec: SandboxQuerySpec<T, Selected>, aimedAt?: MaybeRefOrGetter<string | undefined>): SandboxQueryResult<Selected>;
         // Whether the active sandbox is reachable; reactive when read inside a computed.
         reachable(): boolean;
         // A cache key scoped to the active sandbox, for what is not one contract read (a `json` route, a composite);

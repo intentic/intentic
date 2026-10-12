@@ -105,6 +105,7 @@ jest.mock(`./usePeerConnect`, () => ({
         // No phone is paired here: the board's phone rows read this roster and draw nothing for it.
         peers: ref([]),
         peerFor: () => undefined,
+        rosterNotice: ref(undefined),
         pairToken: ref(`pair_abc`),
         minting: ref(false),
         error: ref(undefined),
@@ -112,8 +113,7 @@ jest.mock(`./usePeerConnect`, () => ({
             pairingsAsked.push(id);
             return Promise.resolve();
         },
-        start: () => {},
-        stop: () => {},
+        refresh: () => Promise.resolve(),
         close: () => {},
     }),
 }));

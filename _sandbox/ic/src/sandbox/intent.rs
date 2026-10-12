@@ -41,6 +41,18 @@ pub enum Action {
 }
 
 impl Action {
+    /// Every action ic leaves, for the test that holds them to the contract's enumeration (host_files.rs).
+    #[cfg(test)]
+    pub(crate) const ALL: [Action; 7] = [
+        Action::Restart,
+        Action::Stop,
+        Action::Update,
+        Action::Swap,
+        Action::Reshape,
+        Action::Recreate,
+        Action::Rebuild,
+    ];
+
     pub fn wire(self) -> &'static str {
         match self {
             Action::Restart => "restart",
@@ -61,11 +73,16 @@ pub fn by_keeper() {
     KEEPER.store(true, Ordering::SeqCst);
 }
 
+/// Who ic says acted: the machine agent's unattended round, or a run of its own. The contract's `RESTART_INITIATORS`
+/// holds both (golden/host-files.json, host_files.rs).
+pub(crate) const BY_KEEPER: &str = "keeper";
+pub(crate) const BY_IC: &str = "ic";
+
 fn by() -> &'static str {
     if KEEPER.load(Ordering::SeqCst) {
-        "keeper"
+        BY_KEEPER
     } else {
-        "ic"
+        BY_IC
     }
 }
 
@@ -103,7 +120,7 @@ impl Drop for Reason {
 }
 
 /// The side of the machine this ic runs on, in the file's words: `windows`, `wsl` (any distro, or WSL unnamed),
-/// `mac`, or `linux`. Pure.
+/// `mac`, or `linux`; the contract's `RESTART_SIDES`, which host_files.rs holds this to. Pure.
 pub fn side_word(platform: &str, env: Option<&str>) -> &'static str {
     match (platform, env) {
         ("windows", _) => "windows",

@@ -137,7 +137,7 @@ describe("the boot's settling of the pauses a restart cut", () => {
             config: { historyRoot: root },
             logger,
             agents: { entry: (id) => entries.get(id) },
-            conversations: { running: (id) => id === "p", sessionIdOf: () => undefined },
+            conversations: { running: (id) => id === "p" },
             turns: {
                 say: async (sent) => {
                     said.push({ conversationId: sent.turn.conversationId, prompt: sent.turn.prompt });

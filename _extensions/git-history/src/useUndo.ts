@@ -1,5 +1,5 @@
 import type { UndoableAction } from "@intentic/sandbox-contract";
-import { useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useQueryClient } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "./host.js";
 import { t } from "./i18n.js";
@@ -30,10 +30,9 @@ export function useUndo(repo: Ref<string>) {
     const queryClient = useQueryClient();
 
     const key = computed(() => api.sandbox.readKey(`git.undoable`, { repo: repo.value }));
-    const query = useQuery({
+    const { query } = api.sandbox.query({
         queryKey: key,
         queryFn: () => api.sandbox.rpc.git.undoable({ repo: repo.value }),
-        enabled: computed(() => api.sandbox.reachable()),
     });
     useRefRefresh(repo, [key]);
 

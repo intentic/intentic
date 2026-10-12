@@ -102,6 +102,7 @@ pnpm checks                                  # all of them; pnpm checks:tidy for
 | [paths](path-literals.mjs) | hand-spelled roots and `../..`-counted ones |
 | [vocabulary](vocabulary.mjs) | a retired word spelled again |
 | [silent-catch](silent-catch.mjs) | a new handler that throws an error away unnarrowed |
+| [daemon-doors](daemon-doors.mjs) | the editor reaching the daemon's JSON routes around `sandboxRaw`: a path spelled to `sandboxJson`/`sandboxRequest`, or a fetch of a `rawRouteUrl` path (ratcheted: `baselines/daemon-doors.json`, empty) |
 | [process-tiers](process-tiers.mjs) | a daemon process started by hand instead of through `runCheck`, `spawnAs` or `@intentic/base/git`'s `exec` (ratcheted: `baselines/process-tiers.json`) |
 | [quote-splices](quote-splices.mjs) | a value spliced into a command between bare quotes instead of through `@intentic/sandbox-run/quote`, or a file carrying secrets to a host that stopped importing it |
 | [home-dir](home-dir.mjs) | `homedir()` in the device agent (`_devices/machine/src`) instead of `homeDir()` from `@intentic/local-agent` |

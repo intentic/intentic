@@ -1,8 +1,9 @@
 import { type Desktop, DesktopError, type Frame, type FrameLog, frameName, toImage, viewFrame, type WindowInfo } from "@intentic/desktop-automation";
 import type { DeviceScopes } from "@intentic/sandbox-contract";
 import { calling, type Indicator, machineIndicator } from "../indicator.js";
-import { assertScope } from "../policy.js";
+import { assertScope, ScopeError } from "../policy.js";
 import { assertTypable } from "./device.js";
+import { assertNoSandboxPower, destructiveClasses, destructiveRefusal } from "./shell.js";
 
 // Operating the machine's applications, as opposed to its pixels: knowing what's on screen and which window
 // typing reaches is the difference between a tool and a blindfolded hand. Scope follows what the action DOES:
@@ -52,6 +53,13 @@ export const openTarget = async (screen: Desktop, target: string, scopes: Device
     if (target === "") {
         throw new DesktopError(`"target" is required: an application name, a file path, or a URL.`);
     }
+    // A target with spaces that is not a URL is split into a program and arguments and spawned: a command by another door,
+    // held to the switches run_command's are.
+    const destructive = destructiveClasses(target);
+    if (destructive.length > 0 && scopes.destructive !== "on") {
+        throw new ScopeError(destructiveRefusal(destructive));
+    }
+    assertNoSandboxPower(target, scopes);
     await screen.launch(target);
     return `Opened ${target}. Give it a moment, then take a screenshot or list the windows to see it.`;
 };

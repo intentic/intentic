@@ -145,6 +145,15 @@ export const CHECKS = [
         about: "the device agent (_devices/machine) reaches the home directory only through homeDir(), which follows a HOME set after startup",
     },
     {
+        id: "daemon-doors",
+        ratchet: true,
+        file: "daemon-doors.mjs",
+        needs: "checkout",
+        gate: "tidy",
+        scoped: true,
+        about: "the editor reaches the daemon's plain-JSON routes through sandboxRaw by key, never a path spelled to sandboxJson or sandboxRequest, nor a fetch of a rawRouteUrl path outside what says why (ratcheted)",
+    },
+    {
         id: "primitive-tiers",
         ratchet: true,
         file: "primitive-tiers.mjs",

@@ -1,5 +1,6 @@
 import { capabilitiesOf, peerMessagePrompt } from "@intentic/sandbox-contract";
 import { parentOfActor } from "../../auth/principal.js";
+import { sessionFor } from "../../agent/providers/accounts/routing.js";
 import type { Services } from "../../composition.js";
 import { conversationTaintSource, PEER_SOURCE, taintWords } from "../../guard/turn-taint.js";
 import { opt } from "../../opt.js";
@@ -161,10 +162,11 @@ export const messageConversation = async (services: Services, from: string | und
             message: `This conversation has started ${TURNS_PER_HOUR} turns on other conversations in the last hour, which is the ceiling. Wait, or ask the owner to carry the message.`,
         };
     }
-    const sessionId = services.conversations.sessionIdOf(entry.id) ?? entry.sessionId;
+    // A turn on the conversation as it runs now, so the session it continues is the conversation's own (routing.ts sessionFor).
+    const profile = conversationProfile(entry);
     const run = await services.turns.start({
-        ...conversationProfile(entry),
-        ...(sessionId === undefined ? {} : { sessionId }),
+        ...profile,
+        ...opt("sessionId", sessionFor(services, { ...profile, conversationId: entry.id })),
         conversationId: entry.id,
         prompt: steer.text,
         // Who asked, in the same vocabulary the registry already uses for a spawned child's starter.

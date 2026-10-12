@@ -12,22 +12,22 @@ import {
     type SandboxShapeWhen,
     hostHoldingPath,
     hostRunningSandbox,
-    SyncStatusSchema,
 } from "@intentic/sandbox-contract";
 import { messageOr } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { computed, type ComputedRef, type Ref } from "vue";
-import { sandboxError, sandboxJson, sandboxRequest } from "../../../client/sandbox/sandboxClient";
+import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
 import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { StreamEndedError, StreamFailedError, untilResult } from "../../../lib/intenticStream";
-import { SYNC_HEALTH } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
+import { useSyncStatus } from "./sync/useSyncStatus";
 
-// Devices the daemon can see, merging both report paths (see hosts/device-reports.ts). Polled on a slow cadence and
-// pushed on the `hosts` domain when a machine's reading actually moves, so state is a snapshot cached by the daemon
-// between polls and an idle tab costs nothing extra.
+// Devices the daemon can see, merging both report paths (see hosts/device-reports.ts). Pushed on the `hosts` domain
+// when a machine's reading actually moves. The poll stays beside the push because the reading is a snapshot the daemon
+// caches between polls and the rows age it against `readAt`, so it is also what re-reads a machine that went quiet
+// without a socket event.
 
 const POLL_MS = 10_000;
 
@@ -265,10 +265,7 @@ export async function runSeveringDeviceCommand(hostId: string, command: DeviceCo
 // Revokes one device's desktop-sync key without touching others' enrollment. Drops it from
 // authorized_keys; the device notices on its next poll and stops mirroring itself.
 export async function revokeSyncDevice(machine: string): Promise<void> {
-    const response = await sandboxRequest(`/system/authorized-key/${encodeURIComponent(machine)}`, { method: `DELETE` });
-    if (!response.ok) {
-        throw await sandboxError(response, { method: `DELETE`, path: `/system/authorized-key/{machine}` });
-    }
+    await sandboxRaw(`DELETE /system/authorized-key/{machine}`, { params: { machine } });
 }
 
 // The connected, online device running a given sandbox slug, if any. The rule itself is the contract's
@@ -288,27 +285,21 @@ export function useHostHolding(slug: () => string | undefined, path: () => strin
     return computed(() => hostHoldingPath(devices.value, slug(), path()));
 }
 
-// Reads /system/sync, not /system/devices, to avoid polling every laptop just to draw a badge.
-const HEALTH_POLL_MS = 60_000;
-
+// Reads /system/sync (useSyncStatus), not /system/devices, to avoid polling every laptop just to draw a badge.
 export function useSyncHealth(): {
     stoppedOn: ComputedRef<string[]>;
     heldPorts: ComputedRef<number[]>;
     syncOffered: ComputedRef<boolean>;
     filesUnsynced: ComputedRef<boolean>;
 } {
-    const { query } = useSandboxQuery({
-        queryKey: SYNC_HEALTH.of(),
-        queryFn: async () => SyncStatusSchema.parse(await sandboxJson(`/system/sync`)),
-        refetchInterval: HEALTH_POLL_MS,
-    });
-    const machines = computed(() => query.data.value?.machines ?? []);
+    const { status } = useSyncStatus();
+    const machines = computed(() => status.value?.machines ?? []);
     return {
         // Whether offering desktop sync is honest here at all; a daemon that cannot say is taken as "no offer".
-        syncOffered: computed(() => query.data.value?.available === true),
+        syncOffered: computed(() => status.value?.available === true),
         // No machine holds a copy of this sandbox's files. Read strictly off `false`: an unread status and a daemon
         // that cannot answer both mean "do not claim there is no copy".
-        filesUnsynced: computed(() => query.data.value?.syncing === false),
+        filesUnsynced: computed(() => status.value?.syncing === false),
         // Machines whose sync watcher has stopped, though other signals still read healthy.
         stoppedOn: computed(() => machines.value.filter((report) => !report.agent.running).map((report) => report.hostname)),
         // ONLY the ports another paired sandbox took, and deliberately not every port that missed localhost. The

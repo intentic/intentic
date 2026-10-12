@@ -17,6 +17,7 @@ export interface TurnGateInput {
     readonly log?: CommandGuardOptions["log"];
     readonly answered?: CommandGuardOptions["answered"];
     readonly remember?: CommandGuardOptions["remember"];
+    readonly rememberFailed?: CommandGuardOptions["rememberFailed"];
     // Nobody is at a composer; told to the judge, while a card still waits for the owner.
     readonly unattended?: boolean;
     // Whether a person has since steered this turn, read per command: somebody typing into it can be asked after all.
@@ -81,6 +82,7 @@ export const createTurnGate = (turn: TurnGateInput): TurnGate => {
             log: turn.log,
             answered: turn.answered,
             remember: turn.remember,
+            rememberFailed: turn.rememberFailed,
             installs: turn.installs,
             onImageInstall: turn.onImageInstall,
         }),

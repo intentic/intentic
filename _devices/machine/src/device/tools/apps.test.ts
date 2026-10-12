@@ -46,6 +46,18 @@ test("focus reports the window it actually landed on", async () => {
     expect(said).toMatch(/Typing now goes here/);
 });
 
+test("opening a target that is a command answers to the switches a command does, a URL or a document does not", async () => {
+    const fake = fakeDesktop();
+    // On Linux a target with spaces is split into a program and arguments and spawned.
+    await expect(openTarget(fake.desktop, "rm -rf /home/me/old", scopes({ destructive: "off" }))).rejects.toThrow(/Run destructive commands/);
+    await expect(openTarget(fake.desktop, "ic sandbox restart work", scopes({ sandboxes: "off" }))).rejects.toThrow(/Manage sandboxes on this device/);
+    expect(fake.calls).toEqual([]);
+    await openTarget(fake.desktop, "https://example.com/docs", scopes({ destructive: "off", sandboxes: "off" }));
+    await openTarget(fake.desktop, "/home/me/report.pdf", scopes({ destructive: "off", sandboxes: "off" }));
+    await openTarget(fake.desktop, "ic sandbox restart work", scopes({ sandboxes: "on" }));
+    expect(fake.calls).toEqual(["launch https://example.com/docs", "launch /home/me/report.pdf", "launch ic sandbox restart work"]);
+});
+
 test("opening starts a process, so it rides the shell grant", async () => {
     const fake = fakeDesktop();
     await expect(openTarget(fake.desktop, "https://example.com", scopes({ shell: "off" }))).rejects.toThrow(/Run commands/);

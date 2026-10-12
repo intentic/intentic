@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { CONTROL_SCOPE_REACH, type ControlScope } from "@intentic/sandbox-contract";
+import { CONTROL_SCOPE_REACH, type ControlScope, type ControlTokenMint, type ControlTokenSummary } from "@intentic/sandbox-contract";
 import { Button, Code, CopyButton, Notice, Picker, type PickerOption, Row, RowGroup, RowNote, StatusBadge, ui } from "@intentic/ui";
 import { formatDate, timeAgo } from "@intentic/ui/format";
 import { computed, ref } from "vue";
 import { useMintedTokens } from "../../../workbench/operations/useMintedTokens";
-import { jsonBody } from "../../../client/sandbox/jsonBody";
-import { sandboxJson } from "../../../client/sandbox/sandboxClient";
+import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useRole } from "../../../client/sandbox/useRole";
 import { useT } from "@intentic/ui/i18n";
@@ -23,16 +22,6 @@ const SCOPES: readonly ControlScope[] = [`read`, `drive`, `land`, `editor`];
 const SNIPPETS: readonly (`curl` | `github` | `acp`)[] = [`curl`, `github`, `acp`];
 const DEFAULT_EXPIRY: Expiry = `90`;
 
-interface ControlToken {
-    readonly id: string;
-    readonly label: string;
-    readonly scope: ControlScope;
-    readonly createdAt: number;
-    readonly createdBy?: string;
-    readonly expiresAt?: number;
-    readonly lastUsedAt?: number;
-}
-
 interface MintRequest {
     readonly label: string;
     readonly scope: ControlScope;
@@ -40,22 +29,24 @@ interface MintRequest {
     readonly expiresAt: number | undefined;
 }
 
-const TOKENS = `/system/control/tokens`;
-
 const { daemonUrl, active } = useSandbox();
 // Unfiltered by scope: hiding tokens minted elsewhere would let a leaked one stay live unnoticed.
 const { tokens, minted, minting, notice, mint, forgetMinted, revoke } = useMintedTokens({
-    list: async () => (await sandboxJson<{ tokens?: ControlToken[] }>(TOKENS)).tokens ?? [],
+    list: async () => (await sandboxRaw(`GET /system/control/tokens`)).tokens,
     mint: async ({ label, scope, expiresAt }: MintRequest) => {
         const named = label.trim();
-        const { token } = await sandboxJson<{ token: string }>(
-            TOKENS,
-            jsonBody(`POST`, { scope, ...(named === `` ? {} : { label: named }), ...(expiresAt === undefined ? {} : { expiresAt }) }),
-        );
+        const input: ControlTokenMint = { scope };
+        if (named !== ``) {
+            input.label = named;
+        }
+        if (expiresAt !== undefined) {
+            input.expiresAt = expiresAt;
+        }
+        const { token } = await sandboxRaw(`POST /system/control/tokens`, { input });
         return { token, label: named === `` ? scope : named, scope };
     },
     revoke: async (id) => {
-        await sandboxJson(`${TOKENS}/${encodeURIComponent(id)}`, { method: `DELETE` });
+        await sandboxRaw(`DELETE /system/control/tokens/{id}`, { params: { id } });
         return undefined;
     },
     owner: () => active.value?.id,
@@ -171,11 +162,11 @@ const shownSnippets = computed(() => {
 
 const now = ref(Date.now());
 
-const expired = (token: ControlToken): boolean => token.expiresAt !== undefined && token.expiresAt <= now.value;
+const expired = (token: ControlTokenSummary): boolean => token.expiresAt !== undefined && token.expiresAt <= now.value;
 
 // One sentence under the label, not facts in the meta column, which doesn't shrink and would squeeze the row at a
 // phone's width. Only "expired" earns the meta column, as a single coloured word.
-const lifetime = (token: ControlToken): string => {
+const lifetime = (token: ControlTokenSummary): string => {
     if (expired(token)) {
         return t(`sandbox.controlTokensSection.expiredOn`, { date: formatDate(token.expiresAt ?? 0) });
     }
@@ -184,12 +175,12 @@ const lifetime = (token: ControlToken): string => {
         : t(`sandbox.controlTokensSection.expiresOn`, { date: formatDate(token.expiresAt) });
 };
 
-const lastUsed = (token: ControlToken): string =>
+const lastUsed = (token: ControlTokenSummary): string =>
     token.lastUsedAt === undefined
         ? t(`sandbox.controlTokensSection.neverUsed`)
         : t(`sandbox.controlTokensSection.usedAgo`, { ago: timeAgo(token.lastUsedAt, { now: now.value, days: true }) });
 
-const describe = (token: ControlToken): string =>
+const describe = (token: ControlTokenSummary): string =>
     [
         `${token.scope} · ${
             token.createdBy === undefined

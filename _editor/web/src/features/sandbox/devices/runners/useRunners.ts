@@ -1,30 +1,33 @@
-import { RunnerSummarySchema, runnerSlug } from "@intentic/sandbox-contract";
+import { runnerSlug } from "@intentic/sandbox-contract";
 import { computed } from "vue";
-import { z } from "zod";
 import { RUNNERS } from "../../../../lib/queryKeys";
-import { sandboxError, sandboxJson, sandboxRequest } from "../../../../client/sandbox/sandboxClient";
+import { sandboxRaw } from "../../../../client/sandbox/sandboxRaw";
 import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
 import { manageDeviceSandbox } from "../useDevices";
 
-// This sandbox's runners: one list read by the Devices view and the
-// composer's placement picker. Polled slowly, since online/busy status rarely needs finer resolution.
-const POLL_MS = 15_000;
+// This sandbox's runners: one list read by the Devices view, the Access tab and the composer's placement picker, under
+// one cache key. The daemon pushes the `runners` domain whenever a runner's socket opens, closes or announces itself
+// (runtime-state.ts), which refreshes it wherever it is shown.
+// The poll that remains is not for that: each runner's `drift` is worked out at read time against THIS sandbox's
+// settings, which no runner event announces, so a settings change would otherwise leave a stale "out of sync" line.
+const DRIFT_POLL_MS = 60_000;
 
-const RunnersSchema = z.object({ runners: z.array(RunnerSummarySchema) });
-
-// Through the daemon-read wrapper: gated on the sandbox being reachable, so a daemon that is down is not asked every
-// fifteen seconds, and timed and failure-mapped like every other read.
+// Through the daemon-read wrapper: gated on the sandbox being reachable, so a daemon that is down is not asked, and
+// timed and failure-mapped like every other read.
 export function useRunners(poll = true) {
-    const { query } = useSandboxQuery({
+    const { query, error } = useSandboxQuery({
         queryKey: RUNNERS.of(),
-        queryFn: async () => RunnersSchema.parse(await sandboxJson(`/system/runners`)),
-        refetchInterval: poll ? POLL_MS : false,
+        queryFn: () => sandboxRaw(`GET /system/runners`),
+        refetchInterval: poll ? DRIFT_POLL_MS : false,
     });
     return {
         runners: computed(() => query.data.value?.runners ?? []),
         // Online runners only; an offline one keeps its row but is not offerable as a destination.
         ready: computed(() => (query.data.value?.runners ?? []).filter((runner) => runner.online)),
         isLoading: query.isLoading,
+        // Whether the list has been read at all, which `runners` being empty cannot say.
+        loaded: computed(() => query.data.value !== undefined),
+        error,
         refetch: () => void query.refetch(),
     };
 }
@@ -45,17 +48,11 @@ export const updateRunner = (hostId: string, name: string, onLine?: (line: strin
 // Drops this runner's enrollment and closes its socket from this side alone, for when the machine itself
 // is gone for good.
 export const forgetRunner = async (id: string): Promise<void> => {
-    const response = await sandboxRequest(`/system/runners/${encodeURIComponent(id)}`, { method: `DELETE` });
-    if (!response.ok) {
-        throw await sandboxError(response);
-    }
+    await sandboxRaw(`DELETE /system/runners/{id}`, { params: { id } });
 };
 
 // Pushes this sandbox's settings onto the runner over its live link, settings only. An overlay change
 // needs a remove-and-re-add instead, since that rebuilds the container. A refusal (an offline runner's 409) throws.
 export const syncRunnerSettings = async (id: string): Promise<void> => {
-    const response = await sandboxRequest(`/system/runners/${encodeURIComponent(id)}/definition/sync`, { method: `POST` });
-    if (!response.ok) {
-        throw await sandboxError(response);
-    }
+    await sandboxRaw(`POST /system/runners/{id}/definition/sync`, { params: { id } });
 };

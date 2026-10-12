@@ -6,7 +6,8 @@ import type { Capability, Persona, SandboxSettings, SkillSummary } from "@intent
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../composition.js";
-import { readSkillText, skillInventory } from "./skill-inventory.js";
+import { readSkillText, RETIRED_OWNER, SANDBOX_OWNER, skillInventory } from "./skill-inventory.js";
+import { stampSkill } from "../store/loaded-skills.js";
 import { personaSkillsRoot, writePersonaSkill } from "../personas/persona-kit.js";
 import { scanSkillFolders, SKILL_FILE } from "../skill-file.js";
 import { reconcileBakedSkills, switchOwnSkill, writeOwnSkill } from "./skills.js";
@@ -327,4 +328,43 @@ test("an id naming nothing reads as absent rather than as an empty skill", async
     expect(await readSkillText(services, "nope")).toBeUndefined();
     expect(await readSkillText(services, "plugin:gone:review")).toBeUndefined();
     expect(await readSkillText(services, "extension:gone:review")).toBeUndefined();
+});
+
+// A daemon leftover is not the owner's drop: listing it as `dropped` offered a Remove button for something the sandbox
+// put there, and read as though the owner had added it.
+test("the retired drafts skill lists as the sandbox's, going at the next restart, not as the owner's removable drop", async () => {
+    const root = mkdtempSync(join(tmpdir(), "inventory-"));
+    await writeSkill(
+        join(root, ".agents", "skills"),
+        "drafts",
+        "Create post drafts for owner approval by writing JSON files into .intentic/config/drafts/. Use whenever asked to prepare, draft, propose, or schedule posts.",
+    );
+
+    const rows = await skillInventory(stubServices(root, [], settingsWith([])));
+    expect(rowFor(rows, "drafts")).toMatchObject({ origin: "builtin", owner: RETIRED_OWNER, removable: false, editable: false, switchable: false });
+});
+
+test("an owner's own drafts skill with text of its own still lists as their drop", async () => {
+    const root = mkdtempSync(join(tmpdir(), "inventory-"));
+    await writeSkill(join(root, ".agents", "skills"), "drafts", "My blog drafts; use when I say draft.");
+
+    const rows = await skillInventory(stubServices(root, [], settingsWith([])));
+    expect(rowFor(rows, "drafts")).toMatchObject({ origin: "dropped", removable: true });
+});
+
+test("a stamped skill no writer claims lists as retired, and one whose writer converges it as the sandbox's", async () => {
+    const root = mkdtempSync(join(tmpdir(), "inventory-"));
+    const loaded = join(root, ".agents", "skills");
+    for (const [name, writer] of [
+        ["old-tool", "baked-tool"],
+        ["github", "cli"],
+    ] as const) {
+        await mkdir(join(loaded, name), { recursive: true });
+        await writeFile(join(loaded, name, SKILL_FILE), stampSkill(`---\nname: ${name}\ndescription: Use for ${name}.\n---\n\nBody.\n`, writer));
+    }
+
+    const rows = await skillInventory(stubServices(root, [], settingsWith([])));
+    expect(rowFor(rows, "old-tool")).toMatchObject({ origin: "builtin", owner: RETIRED_OWNER, removable: false });
+    // A cli skill whose capability entry is gone: the sandbox's, not a drop.
+    expect(rowFor(rows, "github")).toMatchObject({ origin: "builtin", owner: SANDBOX_OWNER, removable: false });
 });

@@ -1,4 +1,3 @@
-import { useQuery } from "@tanstack/vue-query";
 import { computed, type ComputedRef } from "vue";
 import { host } from "./host";
 
@@ -12,10 +11,9 @@ export interface PlatformCatalogEntry {
 /* WHO POSTS IT, from the manifest that owns that fact. */
 export function usePlatformCatalog(): ComputedRef<Map<string, PlatformCatalogEntry>> {
     const api = host();
-    const query = useQuery({
+    const { query } = api.sandbox.query({
         queryKey: api.sandbox.readKey(`extensions.list`),
         queryFn: () => api.sandbox.rpc.extensions.list(),
-        enabled: computed(() => api.sandbox.reachable()),
     });
     return computed(
         () =>

@@ -114,7 +114,12 @@ it(`registers under the given bearer: user handle and exclusions as bytes, the a
                 authenticatorSelection: { residentKey: `required`, requireResidentKey: true, userVerification: `required` },
             }),
         )
-        .mockResolvedValueOnce(json({ passkey: { id: `Bg` }, session: { token: `sess`, expiresAt: 1, email: `o@x.com` } }));
+        .mockResolvedValueOnce(
+            json({
+                passkey: { id: `Bg`, email: `o@x.com`, label: `laptop`, rpId: `app.test`, createdAt: 1, backedUp: false },
+                session: { token: `sess`, expiresAt: 1, email: `o@x.com` },
+            }),
+        );
     create.mockResolvedValue(new FakeCredential(`Bg`, bytes(6), new FakeAttestation(bytes(7), bytes(8))));
 
     const registered = await registerPasskey(TARGET, `google-proof`, `laptop`);
@@ -149,9 +154,10 @@ it(`the daemon's refusal comes back with its status and its own words`, async ()
 });
 
 it(`is offered only where a ceremony can run: WebAuthn present, and the daemon holding a passkey for this origin`, async () => {
-    fetchMock.mockResolvedValueOnce(json({ available: true }));
+    const options = (available: boolean) => json({ rpId: `app.test`, challenge: `AQID`, timeout: 1, userVerification: `required`, allowCredentials: [], available });
+    fetchMock.mockResolvedValueOnce(options(true));
     expect(await passkeyOffered(TARGET)).toBe(true);
-    fetchMock.mockResolvedValueOnce(json({ available: false }));
+    fetchMock.mockResolvedValueOnce(options(false));
     expect(await passkeyOffered(TARGET)).toBe(false);
     // A daemon that predates the route.
     fetchMock.mockResolvedValueOnce(new Response(`not found`, { status: 404 }));

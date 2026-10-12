@@ -174,4 +174,13 @@
 // other; a read keyed by its own name was also refreshed only by the pushes that happened to use that name. A read keyed
 // by its procedure shares the host's entry and every push for it. Additive: `key` is unchanged for what is not one
 // contract read.
-export const extensionApiVersion = "2.27.0";
+// 2.28.0 adds `api.sandbox.query(spec)`: a daemon read made the way the shell makes its own, so an extension need not
+// rebuild its half by hand. Roughly thirty reads across eight packs had each written `useQuery({ ..., enabled:
+// computed(() => api.sandbox.reachable()) })`, which asks the daemon only while it answers but is otherwise bare: it is
+// not timed with the shell's reads, it shows `error.value?.message` (on a version mismatch between the editor and the
+// sandbox, raw schema-issue JSON, where the shell says which side is behind), and it cannot be aimed at another sandbox.
+// The host runs the one wrapper the shell reads through, not a second copy of it, so the three stay as they are there.
+// Additive: `useQuery` with the same options still works, and an extension that never calls it is unchanged. A pack that
+// calls it declares `engines.intentic` ^2.28.0, since an older host has no `query` to call. The recorded surface grows
+// the member, and the typed spec and result (`SandboxQuerySpec`, `SandboxQueryResult`) are types, which no grain records.
+export const extensionApiVersion = "2.28.0";

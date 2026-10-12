@@ -4588,7 +4588,21 @@
             "takingBack": "Revoking: {what}",
             "takingBackAll": "Revoking everything {title} was allowed",
             "couldNotTakeBack": "Could not revoke it.",
-            "untitled": "Unknown conversation"
+            "untitled": "Unknown conversation",
+            "allowedBy": "allowed by {who}, {when}",
+            "ownerWideTitle": "Sandbox-wide permissions",
+            "ownerWideCaption": "What every conversation may do, not only one",
+            "ownerWideWhen": "Revoking applies from the next turn: a hook set is asked about again then, and an extension waits for your yes again without anything of it being deleted.",
+            "commandPolicy": "Safety policy: {what}",
+            "hookSet": "Claude Code hooks may run: {what}",
+            "extension": "Extension {what} may run",
+            "extensionPowers": "approved to: {what}",
+            "unreadable": "Some of what you allowed could not be read, so none of it stands until the file is fixed: {what}.",
+            "kind": {
+                "commandPolicy": "command policy lines",
+                "hookSet": "hook sets",
+                "extension": "extensions"
+            }
         },
         "environment": {
             "approveOne": "Approving adds these steps for {tool} alone; anything else waiting stays for its own card.",
@@ -5228,6 +5242,7 @@
             "triage": "Triage:"
         },
         "agentSafetyPolicy": {
+            "alwaysLinesElsewhere": "Lines you allowed with Always on a permission card are kept apart from this text: they apply in every conversation, and are listed, and taken back, under Access, Sandbox-wide permissions.",
             "couldntSave": "Couldn't save the policy",
             "ownTextIn": "Your own text, in",
             "safetyPolicy": "Safety policy",
@@ -5491,6 +5506,7 @@
             "checkingSync": "Checking whether this sandbox can sync with a device…",
             "chooseFolderOnDevice": "Choose a folder on this device",
             "collaboratorMirrorSandboxsDev": "As a collaborator, you can mirror the sandbox's dev servers onto your own localhost for live previews. No files are synced beyond what the workspace already shows.",
+            "couldntCheckSync": "Couldn't check whether this sandbox can sync ({reason}).",
             "desktopSyncNeedsSsh": "Desktop sync needs an SSH way into this sandbox. Sandboxes we connect for you don't have one yet, but one behind your own domain does.",
             "device": "device.",
             "deviceThatGetsPorts": "the device that should get the ports",
@@ -5828,6 +5844,7 @@
             "startingOnDevice": "Starting on that device…",
             "syncSettings": "Sync settings",
             "syncing": "Syncing…",
+            "unread": "Couldn't read this sandbox's runners ({reason}).",
             "updating": "Updating runner {name}"
         },
         "discoverCard": {
@@ -6845,6 +6862,8 @@
             "leaveLoseAccessSandbox": "Leave \"{name}\"? You lose access; the sandbox keeps running.",
             "leaveSandbox": "Leave sandbox?",
             "leavesWithIt": "These go with it, and a new sandbox starts without them:",
+            "leftStillListed": "You left \"{name}\" on your account, but it could not be reached to take you off its own member list, so it still lists you until its owner removes you under Access. ({reason})",
+            "leftStillListedHeader": "Left, but still listed",
             "needsYou": "Needs you",
             "notAnswering": "Not answering",
             "removeAccount2": "Remove from account?",
@@ -7959,10 +7978,14 @@
             "vpnFailed": "The VPN could not connect.",
             "vpnRefused": "Could not connect the VPN ({status})."
         },
+        "leaveSandbox": {
+            "unreachable": "The sandbox could not be reached."
+        },
         "usePeerConnect": {
             "ownerOnlyBrowser": "Only the sandbox's owner or a maintainer can connect a browser.",
             "ownerOnlyDevice": "Only the sandbox's owner or a maintainer can connect a device.",
             "ownerOnlyPhone": "Only the sandbox's owner or a maintainer can connect a phone.",
+            "rosterUnread": "Couldn't check which machines are connected ({reason}).",
             "startFailed": "Couldn't start the connection ({status})."
         },
         "useSelfResources": {

@@ -1,0 +1,104 @@
+{
+  "about": "ic's channel records (the text it writes under its home) and, for each, the swap row `ic sandbox swaps --json` answers at `now`: null when the record names no swap. `ic` owns the rule (probation.rs cutover_in_progress: a cutover is in progress while its own heartbeat, else its start, is under staleMs old); the device agent's fallback for an ic without the command is held to the same rows. Tested in Rust (ic/src/sandbox/swaps.rs) and TS (devices/machine swap-records.test.ts, the contract's device-swaps.test.ts).",
+  "slug": "work",
+  "heartbeatSecs": 15,
+  "staleMs": 90000,
+  "cases": [
+    {
+      "name": "a cutover that began a moment ago, with no heartbeat yet, is in progress",
+      "record": "channel=stable\ncurrent=img:2\nswap_phase=cutover\nswap_at=1000000\nswap_verb=update\n",
+      "now": 1030000,
+      "swap": { "slug": "work", "phase": "cutover", "at": 1000000, "cutoverInProgress": true }
+    },
+    {
+      "name": "one millisecond short of the stale age it is still in progress",
+      "record": "swap_phase=cutover\nswap_at=1000000\n",
+      "now": 1089999,
+      "swap": { "slug": "work", "phase": "cutover", "at": 1000000, "cutoverInProgress": true }
+    },
+    {
+      "name": "at exactly the stale age it is interrupted",
+      "record": "swap_phase=cutover\nswap_at=1000000\n",
+      "now": 1090000,
+      "swap": { "slug": "work", "phase": "cutover", "at": 1000000, "cutoverInProgress": false }
+    },
+    {
+      "name": "a cutover with no heartbeat, left for half an hour (an ic killed mid-swap), is interrupted",
+      "record": "swap_phase=cutover\nswap_at=1000000\n",
+      "now": 2800000,
+      "swap": { "slug": "work", "phase": "cutover", "at": 1000000, "cutoverInProgress": false }
+    },
+    {
+      "name": "a fresh heartbeat keeps a long cutover in progress",
+      "record": "swap_phase=cutover\nswap_at=1000000\nswap_alive=5000000\n",
+      "now": 5060000,
+      "swap": { "slug": "work", "phase": "cutover", "at": 1000000, "alive": 5000000, "cutoverInProgress": true }
+    },
+    {
+      "name": "a heartbeat that stopped makes a recent cutover interrupted: the heartbeat, not the start, is what counts",
+      "record": "swap_phase=cutover\nswap_at=5000000\nswap_alive=5010000\n",
+      "now": 5100000,
+      "swap": { "slug": "work", "phase": "cutover", "at": 5000000, "alive": 5010000, "cutoverInProgress": false }
+    },
+    {
+      "name": "one millisecond short of a stale heartbeat it is still in progress",
+      "record": "swap_phase=cutover\nswap_at=5000000\nswap_alive=5010000\n",
+      "now": 5099999,
+      "swap": { "slug": "work", "phase": "cutover", "at": 5000000, "alive": 5010000, "cutoverInProgress": true }
+    },
+    {
+      "name": "a stamp from the future (a clock that moved back) reads as just now",
+      "record": "swap_phase=cutover\nswap_at=9000000\n",
+      "now": 1000000,
+      "swap": { "slug": "work", "phase": "cutover", "at": 9000000, "cutoverInProgress": true }
+    },
+    {
+      "name": "a heartbeat of nought is a heartbeat from 1970, not an absent one",
+      "record": "swap_phase=cutover\nswap_at=1000000\nswap_alive=0\n",
+      "now": 1010000,
+      "swap": { "slug": "work", "phase": "cutover", "at": 1000000, "alive": 0, "cutoverInProgress": false }
+    },
+    {
+      "name": "a heartbeat that is not a number is no heartbeat: the start is judged",
+      "record": "swap_phase=cutover\nswap_at=1000000\nswap_alive=soon\n",
+      "now": 1010000,
+      "swap": { "slug": "work", "phase": "cutover", "at": 1000000, "cutoverInProgress": true }
+    },
+    {
+      "name": "a probation is never a cutover in progress, however recent, and names when it ends",
+      "record": "swap_phase=probation\nswap_at=1000000\nprobation_until=87400000\nswap_alive=1000500\n",
+      "now": 1001000,
+      "swap": { "slug": "work", "phase": "probation", "at": 1000000, "alive": 1000500, "probationUntil": 87400000, "cutoverInProgress": false }
+    },
+    {
+      "name": "the last occurrence of a key wins, and a CRLF record reads like an LF one",
+      "record": "swap_phase=probation\r\nswap_phase=cutover\r\nswap_at=1000000\r\nswap_at=2000000\r\n",
+      "now": 2030000,
+      "swap": { "slug": "work", "phase": "cutover", "at": 2000000, "cutoverInProgress": true }
+    },
+    {
+      "name": "a phase with no start time is no swap",
+      "record": "channel=stable\nswap_phase=cutover\n",
+      "now": 1000000,
+      "swap": null
+    },
+    {
+      "name": "a start time that is not a number is no swap",
+      "record": "swap_phase=cutover\nswap_at=soon\n",
+      "now": 1000000,
+      "swap": null
+    },
+    {
+      "name": "a phase this ic does not know is no swap",
+      "record": "swap_phase=elsewhere\nswap_at=1000000\n",
+      "now": 1000500,
+      "swap": null
+    },
+    {
+      "name": "a record with no swap keys is no swap",
+      "record": "channel=stable\ncurrent=img:1\nprevious=img:0\n",
+      "now": 1000000,
+      "swap": null
+    }
+  ]
+}

@@ -6,7 +6,8 @@ import { logsRoot } from "../logs/log-files.js";
 import { WORK_SIGNAL_PATH, workSignalBody } from "../workload/work-signal.js";
 import { bootFailureDocument } from "./boot/boot-failure.js";
 import { type ExitMarker, MARKER_FILE } from "./boot/restarts/boot-marker.js";
-import { RESTART_INTENT_FILE, type RestartIntent } from "./boot/restarts/restart-record.js";
+import { RESTART_ACTIONS, RESTART_INITIATORS, RESTART_SIDES, RestartIntentSchema } from "@intentic/sandbox-contract";
+import { RESTART_INTENT_FILE } from "./boot/restarts/restart-record.js";
 import { restartResumeDocument } from "./restart-resume.js";
 import { updateOutcomeDocument, updatePreparingDocument } from "./updates/staged-update.js";
 
@@ -44,10 +45,13 @@ const files = {
         example: { pid: 41, startTimeTicks: 1_208_311, state: "running", startedAt: AT } satisfies ExitMarker,
     },
     // Whoever is about to stop or restart the sandbox (ic, the device keeper, the desktop app, the daemon) writes it
-    // first, and the next boot files it with how the previous run ended (restart-record.ts).
+    // first, and the next boot files it with how the previous run ended (restart-record.ts). The contract's
+    // RestartIntentSchema is its one shape: the example is parsed by it, and the words a writer may use (who acts, what
+    // it does, which side it runs on) are the contract's, which ic's host_files.rs and the keeper's test hold their
+    // writers to.
     restartIntent: {
         path: join(logsRoot(HISTORY_ROOT), RESTART_INTENT_FILE),
-        example: {
+        example: RestartIntentSchema.parse({
             at: new Date(AT).toISOString(),
             by: "keeper",
             host: "rog",
@@ -55,7 +59,10 @@ const files = {
             action: "restart",
             reason: "the sandbox's /health stopped answering",
             checks: ["health"],
-        } satisfies RestartIntent,
+        }),
+        initiators: RESTART_INITIATORS,
+        actions: RESTART_ACTIONS,
+        sides: RESTART_SIDES,
     },
     // How much a restart would cut, which ic asks before a restart it would make unasked.
     workSignal: {

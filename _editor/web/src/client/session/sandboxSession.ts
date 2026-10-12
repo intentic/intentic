@@ -453,6 +453,8 @@ if (channel !== undefined) {
 
 const removalRequest = async (sandbox: SandboxSummary, base: string, bearer: string): Promise<Response> => {
     const route = sandbox.role === `owner` ? (`POST /system/access/disable` as const) : (`DELETE /members/self` as const);
+    // allow(daemon-doors): aimed at the address of a sandbox that is not the active one, with that sandbox's own bearer, so
+    // the active session and target the client carries would be the wrong ones.
     return fetch(`${base.replace(/\/$/, ``)}${rawRouteUrl(route)}`, {
         method: route.slice(0, route.indexOf(` `)),
         // A member's row carries no connect token, and the daemon it reaches is bound already: nothing to send.
@@ -461,6 +463,8 @@ const removalRequest = async (sandbox: SandboxSummary, base: string, bearer: str
     });
 };
 
+// Takes this identity off one sandbox's own list: an owner's door is closed, a member's grant is given up. Throws when the
+// daemon could not be asked or refused. The leave action and an account's deletion both end here.
 const retireSandboxAccess = async (sandbox: SandboxSummary): Promise<void> => {
     // No address ever assigned means no daemon ever had browser access to retire.
     const base = sandbox.daemonUrl;
@@ -515,7 +519,17 @@ const sessionExpiresAt = computed<number | undefined>(() => {
 });
 
 export function useSandboxSession() {
-    return { presentedEmail, sessionExpiresAt, getSessionToken, rejectSessionToken, adoptSession, invalidateSession, clearSessions, retireAccountAccess };
+    return {
+        presentedEmail,
+        sessionExpiresAt,
+        getSessionToken,
+        rejectSessionToken,
+        adoptSession,
+        invalidateSession,
+        clearSessions,
+        retireAccountAccess,
+        retireSandboxAccess,
+    };
 }
 
 // One session store and channel per window: a hot-reloaded copy would mint into an instance nothing reads.

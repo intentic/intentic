@@ -227,6 +227,11 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
         portability: "identity",
         note: "Approve again from Approvals anything that was approved and had not run yet.",
     },
+    // The wakes automations hold for a person, one file each (the daemon's automations/held-wakes-store.ts): daemon-minted, so
+    // kept where no turn writes. They travel with the workspace as they always did; a countdown hold arrives waiting for a
+    // person, since the key that signed it stays behind.
+    { path: "automation-holds/", portability: "carry" },
+    { path: "automation-holds.key", portability: "identity", note: "A held wake that was counting down arrives waiting for your yes instead." },
     { path: "local-cert/", portability: "identity" },
 
     /* ---- the state engine's own bookkeeping (the daemon's store/evolution/state-journal.ts) ---- */

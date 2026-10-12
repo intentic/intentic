@@ -42,6 +42,7 @@ const refused = computed<NoticeModel | undefined>(() =>
             </template>
         </MarkdownDocument>
 
+        <RowNote variant="block">{{ t(`sandbox.agentSafetyPolicy.alwaysLinesElsewhere`) }}</RowNote>
         <RowNote v-if="error !== undefined" variant="block"
             ><Notice tone="danger" class="text-2xs">{{ error }}</Notice></RowNote
         >

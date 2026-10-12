@@ -1,0 +1,56 @@
+import { nextBookedSendAt } from "../agent/run/turn/turn-resume.js";
+import { nextApprovedAt } from "../approvals/approvals-executor.js";
+import { nextCountdownWakeAt, nextCronWakeAt, nextOneTimeWakeAt } from "../automations/scheduler.js";
+import type { Services } from "../composition.js";
+
+// WHAT THE SANDBOX PROMISED FOR LATER, ONE LIST (2026-10-12). Four clocks in this daemon each start something on a moment
+// somebody was promised: the automations tick (a one-time wake, a cron, a held wake's countdown), the held-turn pass and the conversations' bookings
+// (a person's scheduled send, a spent allowance's resend at its reset), and the approvals executor (an approved post at its
+// date). Two places summed them by hand, idle-stop's and the automatic update's, and the approvals executor was in neither,
+// so a sandbox could stop for idleness minutes before an approved post was due and post it whenever somebody next visited.
+// A clock that promises a moment is added HERE, with a reader its own module owns, and both consumers see it.
+//
+// Armed watches (agent/verification/watchers.ts) are not on this list: a watch has no moment, it polls, so it is work in
+// flight rather than a promise (bootstrap/working-now.ts holds the machine for as long as one is armed).
+
+// - idle-stop: the machine stops until somebody visits, so a wake due within its window keeps it up (system/idle-stop.ts).
+// - restart: this container restarts for an automatic update, and waits for a quiet moment before a promised one.
+export type WakePurpose = "idle-stop" | "restart";
+
+export interface PromisedWake {
+    readonly name: string;
+    // Which questions this wake answers. A difference between purposes is stated here, in one place, so it is a decision.
+    readonly holds: readonly WakePurpose[];
+    // The moment of the soonest one (ms), or undefined for none.
+    readonly nextAt: (services: Services) => Promise<number | undefined>;
+}
+
+const BOTH: readonly WakePurpose[] = ["idle-stop", "restart"];
+
+// The readers that answer 0 for none (the automations' and the bookings') are read as the numbers they are.
+const instant = async (read: Promise<number>): Promise<number | undefined> => {
+    const at = await read;
+    return at > 0 ? at : undefined;
+};
+
+export const PROMISED_WAKES: readonly PromisedWake[] = [
+    { name: "a one-time automation", holds: BOTH, nextAt: (services) => instant(nextOneTimeWakeAt(services)) },
+    {
+        name: "a scheduled message, or a held turn booked for its allowance's reset",
+        holds: BOTH,
+        nextAt: (services) => instant(nextBookedSendAt(services)),
+    },
+    { name: "an approved post or action", holds: BOTH, nextAt: (services) => nextApprovedAt(services) },
+    { name: "a held automation wake counting down", holds: BOTH, nextAt: (services) => instant(nextCountdownWakeAt(services)) },
+    // Not for idle-stop: a cron that comes due while the machine sleeps is caught up once, late, at the next start, and an
+    // always-awake machine to keep a nightly chore punctual costs more than the chore is worth. A restart landing on its
+    // minute would fire it late for nothing, so the automatic update waits it out.
+    { name: "a cron automation", holds: ["restart"], nextAt: (services) => instant(nextCronWakeAt(services)) },
+];
+
+/** The soonest moment of `purpose` anything promised (ms), or undefined when nothing is. */
+export const nextPromisedWake = async (services: Services, purpose: WakePurpose): Promise<number | undefined> => {
+    const asked = PROMISED_WAKES.filter((wake) => wake.holds.includes(purpose));
+    const moments = (await Promise.all(asked.map((wake) => wake.nextAt(services)))).filter((at): at is number => at !== undefined);
+    return moments.length === 0 ? undefined : Math.min(...moments);
+};

@@ -9,13 +9,13 @@ import { computed, createApp, h, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import { installI18n } from "@intentic/ui/i18n";
 
-// The composable reads only the sandbox's address and a minted pairing token; everything else in the command is
-// built here.
-jest.mock(`../../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ daemonUrl: ref(`https://sandbox-abc.intentic.dev`) }) }));
+// The composable reads only the sandbox's address and a minted pairing token (and, for the roster read, that the sandbox is
+// answering); everything else in the command is built here.
+jest.mock(`../../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ daemonUrl: ref(`https://sandbox-abc.intentic.dev`), reachable: ref(true) }) }));
 // The roster a test connects a machine into; the pair route answers a token regardless.
 const roster = ref<unknown[]>([]);
 jest.mock(`../../../../client/sandbox/sandboxClient`, () => ({
-    sandboxRequest: jest.fn(async () => ({ ok: true, json: async () => ({ token: `pair-token`, hosts: roster.value }) })),
+    sandboxJson: jest.fn(async (path: string) => (path.startsWith(`/system/hosts/pair`) ? { token: `pair-token`, expiresIn: 600 } : { hosts: roster.value })),
 }));
 // Taking the hostname is a rename, which is the capabilities composable's; this spies on the call rather than on the wire.
 const renamed = jest.fn(async (_: { id: string; to: string }) => ({}));

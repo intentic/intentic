@@ -1,5 +1,5 @@
 import type { GitOperation } from "@intentic/sandbox-contract";
-import { useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useQueryClient } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "./host.js";
 import { t } from "./i18n.js";
@@ -15,10 +15,9 @@ export function useOperation(repo: Ref<string>) {
     const queryClient = useQueryClient();
 
     const key = computed(() => api.sandbox.readKey(`git.operation`, { repo: repo.value }));
-    const query = useQuery({
+    const { query } = api.sandbox.query({
         queryKey: key,
         queryFn: () => api.sandbox.rpc.git.operation({ repo: repo.value }),
-        enabled: computed(() => api.sandbox.reachable()),
     });
     useRefRefresh(repo, [key]);
 

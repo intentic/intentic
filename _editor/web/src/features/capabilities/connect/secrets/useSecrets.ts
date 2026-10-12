@@ -2,11 +2,11 @@ import type { CredentialGate, CredentialGateKind, SecretInventoryEntry, Credenti
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { devFillSet } from "../../../setup/devFill";
-import { sandboxRaw } from "../../../../client/sandbox/sandboxRaw";
 import { SandboxHttpError } from "../../../../client/sandbox/sandboxHttpError";
 import { rpcQuery } from "../../../../client/sandbox/rpcQuery";
 import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
-import { rpcKey, SANDBOX_MEMBERS } from "../../../../lib/queryKeys";
+import { rpcKey } from "../../../../lib/queryKeys";
+import { useMembers } from "../../../../client/sandbox/useMembers";
 import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
 import { useSandboxSession } from "../../../../client/session/sandboxSession";
 
@@ -81,10 +81,7 @@ export function useCredentialGates() {
     // An unwritten policy answers an empty list; anything else is a real error, surfaced rather than drawing a sandbox
     // with no gates.
     const { query: gatesQuery } = useSandboxQuery(rpcQuery(`secrets.gates`));
-    const { query: rosterQuery } = useSandboxQuery({
-        queryKey: SANDBOX_MEMBERS.of(),
-        queryFn: () => sandboxRaw(`GET /members`),
-    });
+    const { roster } = useMembers();
     const { presentedEmail } = useSandboxSession();
     const invalidate = (): void => void queryClient.invalidateQueries({ queryKey: rpcKey(`secrets.gates`) });
     const setGate = useMutation({
@@ -95,7 +92,7 @@ export function useCredentialGates() {
         mutationFn: (subject: string) => sandboxRpc.secrets.removeGate({ subject }),
         onSuccess: invalidate,
     });
-    const owner = computed<string | undefined>(() => rosterQuery.data.value?.owner);
+    const owner = computed<string | undefined>(() => roster.value?.owner);
     return {
         gates: computed<CredentialGate[]>(() => gatesQuery.data.value?.gates ?? []),
         gateFor: (subject: string): CredentialGate | undefined => (gatesQuery.data.value?.gates ?? []).find((gate) => gate.subject === subject),
@@ -103,8 +100,8 @@ export function useCredentialGates() {
         // also
         // on the members file must not appear twice.
         approverChoices: computed<string[]>(() => {
-            const roster = rosterQuery.data.value;
-            return [...new Set([...(roster?.owner === undefined ? [] : [roster.owner]), ...(roster?.members ?? []).map((member) => member.email)])];
+            const listed = roster.value;
+            return [...new Set([...(listed?.owner === undefined ? [] : [listed.owner]), ...(listed?.members ?? []).map((member) => member.email)])];
         }),
         // Compared lowercased: the roster normalizes on write, but a Google claim may preserve case.
         isOwner: computed<boolean>(() => {

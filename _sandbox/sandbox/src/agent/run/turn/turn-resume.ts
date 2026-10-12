@@ -1,7 +1,6 @@
 import {
     type AgentEvent,
     type AgentReply,
-    type ModelPin,
     type AgentTurn,
     type ParkedRequest,
     breakArmed,
@@ -33,13 +32,12 @@ import type { Services } from "../../../composition.js";
 import { openingRows, openTurnTranscript, recordInterruptedTurn, recordTurnTranscript } from "../../../sessions/turn-transcript.js";
 import { POST_PLAN_MODE } from "../agent.js";
 import { formatAnswers } from "../../tools/question-answers.js";
-import { personaRunModel, runRoleModel, unpinnedRunProvider } from "../../models/run-role-model.js";
 import { outageRetryDue, outageRetryFired } from "../../providers/provider-health.js";
-import { type Routing, routingFor } from "../../providers/accounts/routing.js";
+import { type Routing, routingFor, sessionFor } from "../../providers/accounts/routing.js";
 import { consumeEntry, type JournalEntry, type JournalledTurn, parkedRestoreSpent, resumeBars, spendAttempt } from "./turn-journal.js";
 import type { StartedRun, StartOptions, TurnInput, TurnStarter } from "../../../seams/turn-starter.js";
 import { refusedBegin } from "../placement/turn-placement.js";
-import { sessionFor } from "./turn-admission.js";
+import { routeTurn } from "./turn-routing.js";
 import { type RunOptions, startTurnRun, type TurnRun } from "./turn-runs.js";
 import type { BeginRefusal } from "../../../conversations/actor/conversation-decide.js";
 import type { Booked } from "../../../conversations/actor/conversation-actors.js";
@@ -320,37 +318,6 @@ const resumedTurn = (
     };
 };
 
-// Resolved once, before journaling, so a restart keeps the model it started on rather than a changed setting. The
-// persona's ladder is asked before the role's; if neither answers, the turn keeps no pin.
-// Each knob fills only where the turn is silent about it, since these can arrive independently of the model (a surface
-// may pin effort but leave the model to the setting). One table, so this list and the settings-row footer agree.
-const PIN_KNOBS = ["effort", "thinking", "fast", "harness"] as const;
-
-const pinnedKnobs = (turn: AgentTurn, pin: ModelPin): Partial<AgentTurn> =>
-    Object.fromEntries(
-        PIN_KNOBS.filter((knob) => turn[knob] === undefined && pin[knob] !== undefined && pin[knob] !== "").map((knob) => [knob, pin[knob]]),
-    );
-
-// The pin answers for a turn nobody picked a model for, whoever is watching it: `runRole` and `actsAs` are the only
-// things that can answer, so an ordinary chat carrying neither is left alone by that alone. Whether anyone is watching
-// (`unattended`) is a separate question and not one this pin may read.
-const withRoleModel = async <T extends AgentTurn>(services: Services, turn: T): Promise<T> => {
-    // Naming either model or agent already answers this: the pin carries a provider with its model, so filling over a
-    // chosen agent would move it to a different provider (breaking an intentional cross-provider race).
-    if (turn.model !== undefined || turn.agent !== undefined) {
-        return turn;
-    }
-    const pinned =
-        (await personaRunModel(services, turn.actsAs)) ?? (turn.runRole === undefined ? undefined : await runRoleModel(services, turn.runRole));
-    if (pinned === undefined) {
-        // A job the sandbox started with no pin runs on a provider that can serve it, never on one nobody connected.
-        const fallback = turn.runRole === undefined ? undefined : await unpinnedRunProvider(services);
-        return fallback === undefined ? turn : { ...turn, agent: fallback };
-    }
-    // The pin's provider must travel with its model: a model id is only meaningful to the provider that vends it.
-    return { ...turn, agent: pinned.provider, model: pinned.model, ...pinnedKnobs(turn, pinned) };
-};
-
 // The one path every detached turn starts through, so the announcements and the journal entry live here once, not at
 // each call site; `body` is the turn itself. A refusal names why no run was made.
 export const startConversationTurn = async (
@@ -361,7 +328,7 @@ export const startConversationTurn = async (
 ): Promise<TurnRun | BeginRefusal> => {
     // Routed on the way in (idempotent): the one path every detached turn starts through names its provider and loop,
     // after the run role or persona pin had the chance to, since a pin fills only what the turn left unnamed.
-    const turn = withRuntimeDefaults(await withRoleModel(services, sent));
+    const turn = await routeTurn(services, sent);
     const { conversationId, prompt } = turn;
     // The record is copied now; the pump waits for it before invoking the provider.
     const transcriptOpen = openTurnTranscript(services, turn);

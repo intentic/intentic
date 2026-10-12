@@ -2,7 +2,7 @@ import type { CapabilityFacts, Disposable, ExtensionContext, IntenticApi, Picked
 import { extensionApiVersion, flattenQuery, mergeQuery } from "@intentic/extension-api";
 import { extensionIdOf, sandboxRouteAllowed } from "@intentic/extension-manifest";
 import { useDevice, useTheme } from "@intentic/ui";
-import { type AgentHarness, type AgentProvider, type ExtensionSummary, sandboxRequestFor } from "@intentic/sandbox-contract";
+import { type AgentHarness, type AgentProvider, type ExtensionSummary, rawRouteUrl, sandboxRequestFor } from "@intentic/sandbox-contract";
 import { watch } from "vue";
 import { projectScope, setProjectScope, withinScope } from "../app/projectScope";
 import { useAudience } from "../app/useAudience";
@@ -18,7 +18,9 @@ import { registerCommand, executeCommand } from "../workbench/commands/useComman
 import { extensionSettingsStore } from "../features/extensions/useExtensionSettings";
 import { queryClient } from "../lib/queryPersistence";
 import { sandboxJson, sandboxRequest } from "../client/sandbox/sandboxClient";
+import { sandboxRaw } from "../client/sandbox/sandboxRaw";
 import { gatedSandboxRpc, sandboxRpc } from "../client/sandbox/sandboxRpc";
+import { useSandboxQuery } from "../client/sandbox/useSandboxQuery";
 import { useTerminalPanel } from "../features/terminal/useTerminalPanel";
 import { sandboxKey } from "../lib/activeSandbox";
 import { rpcKey } from "../lib/queryKeys";
@@ -41,6 +43,11 @@ import { uuid } from "../lib/uuid";
 
 // The host's implementation of IntenticApi, one instance per activated extension. Every registration is gated on the
 // approved manifest's declarations; all are tracked on context.subscriptions so deactivation can unwind them.
+
+// `api.sandbox.query`: the wrapper the shell reads through, run as it is rather than copied, so an extension's read is
+// gated on the sandbox answering, timed with the shell's reads and its failure said in words by the same code. Checked
+// by the same rule as `fetch`: the manifest is consulted by whatever `queryFn` calls.
+const hostQuery: IntenticApi[`sandbox`][`query`] = (spec, aimedAt) => useSandboxQuery({ ...spec }, aimedAt);
 
 // The live workspace facts, bound by useExtensionHost from the panels/capabilities composables as accessor functions.
 export interface HostBindings {
@@ -357,6 +364,7 @@ export const createExtensionApi = (
             // No guard of its own: whatever `queryFn` reaches for goes through `request`/`json`/`rpc`, which each check
             // the manifest.
             fetch: (query) => queryClient.fetchQuery({ ...query, queryKey: [...query.queryKey] }),
+            query: hostQuery,
             reachable: () => useSandbox().reachable.value === true,
             key: (...parts) => sandboxKey(...parts),
             // The shell's own key for the read, so a view and the shell share one entry and the daemon's pushes for the
@@ -433,9 +441,8 @@ export const createExtensionApi = (
                 }
             },
             write: async (path, body) => {
-                const route = `/workspace/upload?path=${encodeURIComponent(path)}`;
-                guardSandbox(route, { method: `POST` });
-                await sandboxRequest(route, { method: `POST`, body });
+                guardSandbox(`${rawRouteUrl(`POST /workspace/upload`)}?path=${encodeURIComponent(path)}`, { method: `POST` });
+                await sandboxRaw(`POST /workspace/upload`, { query: { path }, input: body });
             },
         },
         processes: {

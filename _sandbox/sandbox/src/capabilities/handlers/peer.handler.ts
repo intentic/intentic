@@ -64,7 +64,7 @@ export const peerHandler = <Scopes extends { readonly platform: string }>(spec: 
         if (skill === undefined) {
             throw new Error(`the extension declaring "${scopes.platform}" has no readable skill pack: reinstall it`);
         }
-        await writeLoadedSkill(ctx.files, ctx.workspace.root, id, skill);
+        await writeLoadedSkill(ctx.files, ctx.workspace.root, id, skill, "peer");
         if (!(await spec.store(ctx).enrolled(id))) {
             yield { kind: "log", message: spec.added(id) };
             return;

@@ -1,5 +1,5 @@
 import type { GitCommitDiff, StashEntry } from "@intentic/sandbox-contract";
-import { useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useQueryClient } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "./host.js";
 import { t } from "./i18n.js";
@@ -15,10 +15,9 @@ export function useStashes(repo: Ref<string>) {
     const queryClient = useQueryClient();
 
     const key = computed(() => api.sandbox.readKey(`git.stashes`, { repo: repo.value }));
-    const query = useQuery({
+    const { query } = api.sandbox.query({
         queryKey: key,
         queryFn: () => api.sandbox.rpc.git.stashes({ repo: repo.value }),
-        enabled: computed(() => api.sandbox.reachable()),
     });
     // `refs/stash` is an ordinary ref, so stashing in a terminal arrives on the same push as a commit.
     useRefRefresh(repo, [key]);

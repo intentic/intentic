@@ -93,7 +93,8 @@
         "cancelItem": "Anuluj {item}",
         "startItem": "Uruchom {item}",
         "approveItem": "Zatwierdź {item}",
-        "invalidFiles": "Nie dało się odczytać {count} pliku, więc nie zostanie uruchomiony: | Nie dało się odczytać {count} plików, więc nie zostaną uruchomione: | Nie dało się odczytać {count} plików, więc nie zostaną uruchomione:"
+        "invalidFiles": "Nie dało się odczytać {count} pliku, więc nie zostanie uruchomiony: | Nie dało się odczytać {count} plików, więc nie zostaną uruchomione: | Nie dało się odczytać {count} plików, więc nie zostaną uruchomione:",
+        "unreadableHeldWakes": "Nie dało się odczytać {count} wstrzymanej automatyzacji, więc nie można jej zwolnić: | Nie dało się odczytać {count} wstrzymanych automatyzacji, więc nie można ich zwolnić: | Nie dało się odczytać {count} wstrzymanych automatyzacji, więc nie można ich zwolnić:"
     },
     "extension": {
         "approvals": "Zatwierdzenia"

@@ -1,10 +1,8 @@
 import { hostRunningSandbox } from "@intentic/sandbox-contract";
 import { ORIGIN_HOST } from "@intentic/sandbox-run";
 import { fileRestartResume } from "../system/restart-resume.js";
-import { nextBookedSendAt } from "../agent/run/turn/turn-resume.js";
-import { nextOneTimeWakeAt, nextRunOf } from "../automations/scheduler.js";
-import { sandboxZone } from "../automations/schedule-zone.js";
 import type { BootPhase } from "./boot-phase.js";
+import { nextPromisedWake } from "./promised-wakes.js";
 import { workingNames } from "./working-now.js";
 import type { Services } from "../composition.js";
 import { containerFacts } from "../environment/environment.js";
@@ -26,16 +24,10 @@ import { latestVersion } from "../system/updates/version-check.js";
 // machine (the platform moves its image), a checkout-built base (an update would replace what the checkout built), a dev
 // build, or a container no machine knows by name.
 
-// The soonest moment the sandbox promised somebody: an automation's next run (a cron's too, unlike idle-stop: a restart
-// landing on its minute would fire it late for nothing), a scheduled message and a held turn booked for its reset.
-const soonestDue = async (services: Services): Promise<number> => {
-    const zone = await sandboxZone(services);
-    const crons = (await services.automations.list()).flatMap((automation) =>
-        automation.trigger.kind === "schedule" ? [nextRunOf(automation, zone) ?? 0].filter((at) => at > 0) : [],
-    );
-    const moments = [await nextOneTimeWakeAt(services), await nextBookedSendAt(services), ...crons].filter((at) => at > 0);
-    return moments.length === 0 ? 0 : Math.min(...moments);
-};
+// The soonest moment the sandbox promised somebody (promised-wakes.ts): an automation's next run, a cron's too, unlike
+// idle-stop (a restart landing on its minute would fire it late for nothing), a scheduled message, a held turn booked for
+// its reset, an approved post and a held wake's countdown.
+const soonestDue = async (services: Services): Promise<number> => (await nextPromisedWake(services, "restart")) ?? 0;
 
 const activityOf = async (services: Services): Promise<AutoUpdateActivity> => {
     const [terminalAt, dueAt] = await Promise.all([lastTerminalActivity(), soonestDue(services)]);

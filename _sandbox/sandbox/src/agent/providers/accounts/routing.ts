@@ -1,4 +1,5 @@
 import { type AgentHarness, type AgentProvider, DEFAULT_HARNESS, DEFAULT_PROVIDER } from "@intentic/sandbox-contract";
+import type { Services } from "../../../composition.js";
 
 // Which account a conversation's turn runs on, in one place. The conversation's profile (`provider`, `harness`,
 // `account`, and the session minted on them) is the one truth; a turn, a press, a wake or a queued batch only states
@@ -51,4 +52,26 @@ export const routingFor = (profile: RoutingProfile | undefined, intent: RoutingI
         account,
         continues: profile !== undefined && profile.provider === provider && profile.harness === harness && account === profile.account,
     };
+};
+
+/**
+ * The provider session a turn continues, decided here and nowhere else: on a conversation the daemon holds, its own
+ * session, and only on the runtime and account that minted it (`routingFor(...).continues`); otherwise none, and the turn
+ * opens a fresh session seeded from the record. A `sessionId` a client sent is no say in it: an older editor sends one it
+ * worked out itself, which this ignores. Only a conversation not on record yet takes the one it names, since a past
+ * session resumed from the history menu has no record.
+ *
+ * Asked of the routing the turn will RUN on, so a turn whose provider is chosen after the caller builds it (a persona's
+ * or a run role's pin, turn-routing.ts) is judged on that one, not on the default it would have had. A caller that cannot
+ * wait for the pin asks the door to decide (`continuing`, turn-doors.ts).
+ */
+export const sessionFor = (
+    services: Pick<Services, "agents" | "conversations">,
+    routing: RoutingIntent & { readonly conversationId: string; readonly sessionId?: string | undefined },
+): string | undefined => {
+    const entry = services.agents.entry(routing.conversationId);
+    if (entry === undefined) {
+        return routing.sessionId;
+    }
+    return routingFor(entry.profile, routing).continues ? services.conversations.sessionIdOf(routing.conversationId) : undefined;
 };

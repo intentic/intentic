@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { type PhoneSummary, phonePairingCode, phonePairingLink } from "@intentic/sandbox-contract";
+import { phonePairingCode, phonePairingLink } from "@intentic/sandbox-contract";
 import { Button, Code, Modal, Notice, useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { renderSVG } from "uqr";
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { PHONE_DOOR, usePeerConnect } from "../../sandbox/devices/usePeerConnect";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { registerWakeOnce, type WakeOutcome } from "./phoneWake";
@@ -18,7 +18,7 @@ const t = useT();
 const props = defineProps<{ visible: boolean; id: string; install: string; permissions: string }>();
 const emit = defineEmits<{ (event: "update:visible", value: boolean): void; (event: "connected"): void }>();
 
-const { peerFor, pairToken, minting, error, connect, start, stop, close } = usePeerConnect<PhoneSummary>(PHONE_DOOR);
+const { peerFor, pairToken, minting, error, rosterNotice, connect, refresh, close } = usePeerConnect(PHONE_DOOR);
 const { daemonUrl } = useSandbox();
 const { mobile } = useDevice();
 
@@ -53,10 +53,10 @@ watch(
         if (!visible) {
             showCode.value = false;
             close();
-            stop();
             return;
         }
-        start();
+        // The roster the pairing is confirmed against is read afresh, not taken from what was cached.
+        void refresh();
         await connect(props.id);
     },
 );
@@ -66,8 +66,6 @@ watch(online, (isOnline) => {
         emit(`connected`);
     }
 });
-
-onBeforeUnmount(stop);
 </script>
 
 <template>
@@ -95,6 +93,7 @@ onBeforeUnmount(stop);
             </Notice>
 
             <Notice v-else-if="error" tone="danger">{{ error }}</Notice>
+            <Notice v-if="rosterNotice" tone="warning">{{ rosterNotice }}</Notice>
 
             <div v-else-if="minting || link === ``" class="text-muted">
                 {{ t(`capabilities.words.preparingOneTimeConnection`) }}

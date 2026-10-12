@@ -16,7 +16,7 @@ import { sleep } from "@intentic/base/async";
 import { COMMAND_CLASS_LABELS, type DeviceScopes } from "@intentic/sandbox-contract";
 import { calling, type Indicator, machineIndicator } from "../indicator.js";
 import { assertScope, ScopeError } from "../policy.js";
-import { destructiveClasses } from "./shell.js";
+import { assertNoSandboxPower, destructiveClasses } from "./shell.js";
 
 // GUI work for what has no command-line way in. The mechanics live in @intentic/desktop-automation (`perform`
 // carries an action out, view.ts reads its coordinates); this file decides whether an action is allowed: `screenshot`
@@ -52,6 +52,8 @@ export const assertNotLockout = (combo: string): void => {
    classifier reads as destructive needs the same "Run destructive commands" switch run_command does: without this,
    `device type "rm -rf ~\n"` is the spelling that gets past it. Ordinary prose matches nothing and costs nothing. */
 export const assertTypable = (text: string, scopes: DeviceScopes): void => {
+    // And `ic sandbox restart work` typed is the sandbox tools by another door, held to their switch.
+    assertNoSandboxPower(text, scopes, "typed");
     if (scopes.destructive === "on") {
         return;
     }

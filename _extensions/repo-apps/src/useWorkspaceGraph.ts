@@ -1,5 +1,4 @@
 import type { PackageModules, WorkspaceComponent, WorkspaceDepEdge, WorkspacePackage } from "@intentic/sandbox-contract";
-import { useQuery } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "./host";
 
@@ -8,16 +7,15 @@ import { host } from "./host";
 
 export function useWorkspaceGraph(repo: Ref<string>) {
     const api = host();
-    const query = useQuery({
+    const { query, error } = api.sandbox.query({
         queryKey: computed(() => api.sandbox.readKey(`workspace.packageGraph`, { repo: repo.value })),
         queryFn: () => api.sandbox.rpc.workspace.packageGraph({ repo: repo.value }),
-        enabled: computed(() => api.sandbox.reachable()),
     });
     return {
         packages: computed<WorkspacePackage[]>(() => query.data.value?.packages ?? []),
         edges: computed<WorkspaceDepEdge[]>(() => query.data.value?.edges ?? []),
         components: computed<WorkspaceComponent[]>(() => query.data.value?.components ?? []),
-        error: computed(() => query.error.value?.message),
+        error,
         isLoading: query.isLoading,
     };
 }
@@ -26,14 +24,14 @@ export function useWorkspaceGraph(repo: Ref<string>) {
    a package is named. */
 export function usePackageModules(repo: Ref<string>, name: Ref<string | undefined>) {
     const api = host();
-    const query = useQuery({
+    const { query, error } = api.sandbox.query({
         queryKey: computed(() => api.sandbox.readKey(`workspace.packageModules`, { repo: repo.value, package: name.value ?? `` })),
         queryFn: () => api.sandbox.rpc.workspace.packageModules({ repo: repo.value, package: name.value ?? `` }),
-        enabled: computed(() => api.sandbox.reachable() && name.value !== undefined),
+        enabled: computed(() => name.value !== undefined),
     });
     return {
         modules: computed<PackageModules | undefined>(() => query.data.value),
-        error: computed(() => query.error.value?.message),
+        error,
         isLoading: query.isLoading,
     };
 }

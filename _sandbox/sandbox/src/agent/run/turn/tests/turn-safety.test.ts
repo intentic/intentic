@@ -6,6 +6,7 @@ import type { Logger } from "pino";
 import { parkedCards } from "../../../../conversations/actor/parked-cards.js";
 import type { TurnPlacement } from "../../../../conversations/worktrees/isolation.js";
 import { memoryConversationGrants } from "../../../../personas/conversation-grants.js";
+import { memoryOwnerGrants } from "../../../../personas/owner-grants.js";
 import { memoryFleet } from "../../../../testing.js";
 import type { TurnBase } from "../../../providers/agent-request.js";
 import { type TurnSafetyDeps, withTurnSafety } from "../turn-safety.js";
@@ -41,6 +42,8 @@ const harness = () => {
     const judged: { policy: string; program: string; ladder: SetupLadder }[] = [];
     const executions: AgentExecutionContext[] = [];
     const conversationGrants = memoryConversationGrants();
+    const ownerGrants = memoryOwnerGrants();
+    const warned: unknown[][] = [];
     const deps: TurnSafetyDeps = {
         conversationGrants,
         // The shipped table, as a sandbox with no overrides reads it.
@@ -51,13 +54,14 @@ const harness = () => {
             judged.push({ policy: request.policy, program: request.program, ladder: request.ladder });
             return { decision: "allow", sentence: "Fine." };
         },
-        logger: unstubbed<Logger>("logger", { warn: () => undefined }),
+        logger: unstubbed<Logger>("logger", { warn: (...args: unknown[]) => void warned.push(args) }),
+        ownerGrants,
         runtimeInstalls: unstubbed("runtimeInstalls", { record: async () => undefined }),
         safetyLog: unstubbed("safetyLog", { record: async () => undefined, answered: async () => undefined }),
-        safetyPolicy: unstubbed("safetyPolicy", { text: async () => "# the owner's policy", append: async () => undefined }),
+        safetyPolicy: unstubbed("safetyPolicy", { text: async () => "# the owner's policy" }),
         workspace: unstubbed<TurnSafetyDeps["workspace"]>("workspace", { root: WORKSPACE_ROOT }),
     };
-    return { deps, judged, executions, conversationGrants };
+    return { deps, judged, executions, conversationGrants, ownerGrants, warned };
 };
 
 test("every runtime's base carries the owner's policy, judge mode, outside wake and install rule", async () => {
@@ -112,4 +116,25 @@ test("the install rule's grant is the conversation's kept one, and a turn with n
     expect(await conversationGrants.installsAllowed("c1")).toBe(true);
     const unowned = await withTurnSafety(deps, {}, baseOf(), SandboxSettingsSchema.parse({}));
     expect(unowned.hooks.projectInstalls?.grants).toBeUndefined();
+});
+
+// The command gate's Always button: the line is an owner-wide grant, kept off the workspace and listed under Access, and
+// it names whoever pressed it. It is never appended to the policy file the judge's text is read from.
+test("a line accepted with Always on a command card is kept as an owner-wide grant, naming who accepted it", async () => {
+    const { deps, ownerGrants } = harness();
+    const base = await withTurnSafety(deps, { conversationId: "c1" }, baseOf(), SandboxSettingsSchema.parse({}));
+    await base.hooks.rememberSafety?.("Deleting build directories under /work is fine.", "ada@acme.dev");
+    expect((await ownerGrants.read()).commandPolicy).toMatchObject([{ line: "Deleting build directories under /work is fine.", by: "ada@acme.dev" }]);
+});
+
+test("a line that could not be kept is warned about by name, and the grant store's failure reaches whoever called", async () => {
+    const { deps, warned } = harness();
+    const base = await withTurnSafety(deps, { conversationId: "c1" }, baseOf(), SandboxSettingsSchema.parse({}));
+    base.hooks.rememberSafetyFailed?.("Deleting build directories under /work is fine.", "owner-grants.json could not be read");
+    expect(warned).toEqual([
+        [
+            { line: "Deleting build directories under /work is fine.", reason: "owner-grants.json could not be read" },
+            "owner grants: a line allowed with Always on a command card was not kept, so the judge will ask again",
+        ],
+    ]);
 });

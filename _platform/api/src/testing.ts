@@ -62,6 +62,8 @@ export interface FakeGateRow {
     previousEnvironmentHash: string | null;
     unprovenImage: string | null;
     skippedDigest: string | null;
+    probationSince: Date | null;
+    probationStrikes: number;
 }
 
 /* THE ROWS THE STATE GATE READS AND WRITES, in memory: `row` starts as given and takes every update, which `updates`
@@ -76,6 +78,8 @@ export const fakeGateRecord = (row: Partial<FakeGateRow> = {}, checksIn = true) 
         previousEnvironmentHash: null,
         unprovenImage: null,
         skippedDigest: null,
+        probationSince: null,
+        probationStrikes: 0,
         ...row,
     };
     const updates: Prisma.HostedMachineUpdateInput[] = [];

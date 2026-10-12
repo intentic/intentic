@@ -1,5 +1,5 @@
 import type { LoopDesign } from "@intentic/sandbox-contract";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { host } from "./host";
 
@@ -13,11 +13,10 @@ export function useLoopDesigns() {
     const queryKey = api.sandbox.readKey(`loops.designs`);
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey });
 
-    const query = useQuery({
+    const { query, error } = api.sandbox.query({
         queryKey,
         queryFn: () => api.sandbox.rpc.loops.designs(),
         select: (answer): LoopDesign[] => answer.designs,
-        enabled: computed(() => api.sandbox.reachable()),
     });
 
     const save = useMutation({
@@ -29,7 +28,7 @@ export function useLoopDesigns() {
         onSuccess: invalidate,
     });
 
-    return { loops: computed<LoopDesign[]>(() => query.data.value ?? []), error: computed(() => query.error.value?.message), save, remove };
+    return { loops: computed<LoopDesign[]>(() => query.data.value ?? []), error, save, remove };
 }
 
 // Mints an id from the name: lower-cased, punctuation collapsed to dashes. A name with nothing left (emoji, CJK) falls

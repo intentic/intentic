@@ -1,11 +1,13 @@
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { type FakeFly, installFakeFly } from "@intentic/testing/fly-fake";
+import { CRASH_LOOP_RESTARTS } from "@intentic/sandbox-contract";
 import type { Config } from "../../../config.js";
 import { healthAnswer, machineAnswers, NO_HEALTH } from "../../../testing.js";
 import {
     awaitDaemon,
     baselineOf,
     crashLoopOf,
+    crashLoopRestartsOf,
     DAEMON_HEALTH_COMMAND,
     DAEMON_VITALS_COMMAND,
     DAEMON_VITALS_FILE_COMMAND,
@@ -68,6 +70,14 @@ describe(`reading netd's vitals for a crash loop`, () => {
         // An older sandbox's Node answering the path, or anything that is not netd's answer.
         expect(crashLoopOf(`<html>not found</html>`)).toBe(undefined);
         expect(crashLoopOf(JSON.stringify({ restarts: 3 }))).toBe(undefined);
+    });
+
+    // The probation watch (../hosted-probation.ts) says it in ic's words, so it reads the count and not this sentence.
+    it(`reads the restart count of a daemon that keeps crashing, at the contract's threshold`, () => {
+        expect(crashLoopRestartsOf(vitals(`restarting`, CRASH_LOOP_RESTARTS))).toBe(3);
+        expect(crashLoopRestartsOf(vitals(`restarting`, CRASH_LOOP_RESTARTS - 1))).toBeUndefined();
+        expect(crashLoopRestartsOf(vitals(`up`, 9))).toBeUndefined();
+        expect(crashLoopRestartsOf(`not json`)).toBeUndefined();
     });
 });
 

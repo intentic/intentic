@@ -37,7 +37,7 @@ const worldOf = (running: readonly string[], over: { readonly orchestrator?: Par
     return Object.assign(turns, {
         deps: {
             agents: { entry: (id: string) => entries.get(id) },
-            conversations: { running: (id: string) => running.includes(id), sessionIdOf: () => "orchestrator-session" },
+            conversations: { running: (id: string) => running.includes(id) },
             turns: turns.turns,
             logger: unstubbed<ChildNewsDeps["logger"]>("logger", { info: () => {}, warn: () => {} }),
         },

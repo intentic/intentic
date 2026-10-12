@@ -34,7 +34,7 @@ const fakeServices = (root: string, registry: readonly PersistedAgent[] = [], pu
         conversations: unstubbed<Services["conversations"]>("conversations", { liveSessionIds: () => [], sessionIdOf: () => undefined }),
         automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
-        heldWakes: fileHeldWakesStore(join(root, "approvals")),
+        heldWakes: fileHeldWakesStore(join(root, "history")),
         scheduleCoverage: fileScheduleCoverageStore(join(root, "automation-schedule.json")),
         turnJournal: sqliteTurnJournal(openConversationsDb(conversationsDbPath(root))),
         activity: { append: async () => {}, list: async () => [] },

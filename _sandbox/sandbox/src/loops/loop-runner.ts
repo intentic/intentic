@@ -59,12 +59,17 @@ interface IterationOutcome {
 
 // Runs through the detached turn-run pump a composer's turn uses, so /agent/attach can watch it, reduced to the four values
 // the loop needs; `archived` when the conversation was filed away between iterations, which only a person reopens.
-const runIteration = async (services: Services, loop: Loop, turn: AgentTurn & { conversationId: string }): Promise<IterationOutcome | "archived"> => {
+const runIteration = async (
+    services: Services,
+    loop: Loop,
+    turn: AgentTurn & { conversationId: string },
+    continuing: boolean,
+): Promise<IterationOutcome | "archived"> => {
     const report: string[] = [];
     let usage: UsageFrame | undefined;
     let sessionId: string | undefined;
     let failure: string | undefined;
-    const run = services.turns.run(turn);
+    const run = services.turns.run(turn, continuing ? { continuing } : undefined);
     if (run === "archived") {
         return run;
     }
@@ -147,8 +152,11 @@ export const runLoop = async (services: Services, record: LoopRecord): Promise<L
     let iteration = record.iterations.length;
     let spentUsd = record.iterations.reduce((total, entry) => total + (entry.costUsd ?? 0), 0);
     let stalls = 0;
-    // Session to resume in `continue` mode; staying undefined in `fresh` mode is what makes it fresh.
-    let sessionId = record.context === "continue" ? services.conversations.sessionIdOf(conversationId) : undefined;
+    // `continue` mode carries on in the conversation's own session where the runtime its job routes to minted it, which the door
+    // decides once that routing is known (routing.ts sessionFor); `fresh` never does. The session the last iteration reported is
+    // kept only for a conversation not on record, which the door takes at its word.
+    const continuing = record.context === "continue";
+    let sessionId: string | undefined;
     // Kept across iterations: an exhausted loop's last iteration is often the one that produced the least.
     let report = "";
     let document: LoopDocument | undefined;
@@ -183,13 +191,13 @@ export const runLoop = async (services: Services, record: LoopRecord): Promise<L
                 ...(record.worktreeBase !== undefined ? { worktreeBase: record.worktreeBase } : {}),
                 ...(record.autoLand !== undefined ? { autoLand: record.autoLand } : {}),
             };
-            const outcome = await runIteration(services, record, turn);
+            const outcome = await runIteration(services, record, turn, continuing);
             if (outcome === "archived") {
                 ended = { state: "stopped", detail: "The conversation was archived, so the loop stopped." };
                 break;
             }
             report = outcome.report;
-            if (record.context === "continue") {
+            if (continuing) {
                 sessionId = outcome.sessionId ?? sessionId;
             }
             const after = await treeDigest(tree);

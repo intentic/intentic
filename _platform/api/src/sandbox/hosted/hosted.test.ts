@@ -1274,6 +1274,27 @@ describe(`rollbackHosted`, () => {
         expect(row).toMatchObject({ previousImage: PINNED, skippedDigest: `sha256:${`a`.repeat(64)}` });
     });
 
+    // The probation watch's way back (hosted-probation.ts): the version it puts back is not handed a probation of its own.
+    it(`puts no probation on the version it goes back to when asked, and ends the one standing`, async () => {
+        const fly = configuredFly(currentTunnelEnv());
+        machineIn(fly).config = { image: TODAY, env: currentTunnelEnv() };
+        const { record, row } = fakeGateRecord({ previousImage: PINNED, probationSince: new Date(0), probationStrikes: 2 });
+        await rollbackHosted(config(), wakeArgs(), { ...WAKE_TARGET, ...row }, logger, record, { probation: false });
+        expect(finalConfigOf(fly).image).toBe(PINNED);
+        expect(row).toMatchObject({ previousImage: TODAY, probationSince: null, probationStrikes: 0 });
+    });
+
+    it(`refuses, touching nothing, rather than waits for a change holding the machine when asked not to wait`, async () => {
+        const fly = configuredFly(currentTunnelEnv());
+        const { record, row } = fakeGateRecord({ previousImage: PINNED });
+        const held = Promise.withResolvers<void>();
+        const other = fakeHostedAppLock(config(), WAKE_TARGET.appName, true, async () => held.promise);
+        await expect(rollbackHosted(config(), wakeArgs(), { ...WAKE_TARGET, ...row }, logger, record, { busy: `refuse` })).rejects.toBeInstanceOf(HostedMachineBusy);
+        held.resolve();
+        await other;
+        expect(updatesIn(fly)).toHaveLength(0);
+    });
+
     it(`refuses when the row keeps no earlier image, and touches nothing`, async () => {
         const fly = configuredFly(currentTunnelEnv());
         await expect(rollbackHosted(config(), wakeArgs(), WAKE_TARGET, logger, fakeGateRecord().record)).rejects.toBeInstanceOf(HostedNothingKept);
@@ -1864,6 +1885,9 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
                 environmentHash: null,
                 baseImage: null,
                 baseDigest: null,
+                // The new image is on probation from the moment its daemon was seen to come up (hosted-probation.ts).
+                probationSince: expect.any(Date),
+                probationStrikes: 0,
             },
         });
         // Restart replaces the config too, so it must observe the machine running rather than merely asking it to.
@@ -1988,6 +2012,9 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
                 environmentHash: null,
                 baseImage: null,
                 baseDigest: null,
+                // The owner's press puts the image it goes back to on probation like any change that took.
+                probationSince: expect.any(Date),
+                probationStrikes: 0,
             },
         });
         expect(update).toHaveBeenCalledWith(

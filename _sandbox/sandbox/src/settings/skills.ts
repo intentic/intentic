@@ -102,7 +102,7 @@ export const ownSkillOn = async (services: SkillSeams, name: string): Promise<bo
 // Writes or removes the loaded copy of a stored skill; the stored copy is never touched, so off keeps the text.
 export const switchOwnSkill = async (services: SkillSeams, skill: OwnSkill, on: boolean): Promise<void> => {
     if (on) {
-        await writeLoadedSkill(services.files, services.workspace.root, skill.name, skillDocument(skill.name, skill.description, skill.body));
+        await writeLoadedSkill(services.files, services.workspace.root, skill.name, skillDocument(skill.name, skill.description, skill.body), "owner");
         return;
     }
     await removeLoadedSkill(services.files, services.workspace.root, skill.name);
@@ -113,7 +113,7 @@ export const switchOwnSkill = async (services: SkillSeams, skill: OwnSkill, on: 
 export const reconcileBakedSkills = async (services: SkillSeams, enabled: readonly string[]): Promise<void> => {
     for (const [name, body] of Object.entries(SKILLS)) {
         if (enabled.includes(name)) {
-            await writeLoadedSkill(services.files, services.workspace.root, name, body);
+            await writeLoadedSkill(services.files, services.workspace.root, name, body, "baked-tool");
             continue;
         }
         await removeLoadedSkill(services.files, services.workspace.root, name);

@@ -100,7 +100,7 @@ export const sshHandler: CapabilityHandler = {
             const identityFile = await keyPlacement(ctx, id, ssh.privateKey);
             await writeSshHost(id, { host: ssh.host, user: ssh.user, port: ssh.port, identityFile });
         }
-        await writeLoadedSkill(ctx.files, ctx.workspace.root, "ssh", SSH_SKILL);
+        await writeLoadedSkill(ctx.files, ctx.workspace.root, "ssh", SSH_SKILL, "ssh");
         yield { kind: "log", message: `Connected ${id}. The agent can reach it next turn via \`ssh ${id}\`.` };
     },
     status: async (_ctx, id) =>

@@ -72,7 +72,7 @@ export const sweepStateAtBoot = async (workspaceRoot: string, log: Logger): Prom
     await sweepAgedState(workspaceRoot, Date.now(), log);
 };
 
-// The recurring half; cheap enough to ride the hourly timer agent sweeps already use.
+// The recurring half; cheap enough to run hourly, as a chore on the housekeeping clock (bootstrap/boot-chores.ts).
 export const sweepAgedState = async (workspaceRoot: string, now: number, log: Logger): Promise<void> => {
     await sweepAgedCaptures(statePath(workspaceRoot, ".intentic/records/artifacts/", "browser"), now, log);
     await createWorkspaceTrash(statePath(workspaceRoot, ".intentic/local/trash/")).sweep(now);

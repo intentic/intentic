@@ -6,6 +6,9 @@ stubGlobal(`localStorage`, { getItem: () => null, setItem: () => {}, removeItem:
 jest.mock("../../../lib/useApi", () => ({
     apiClient: { sandbox: { list: jest.fn(), delete: jest.fn(), leave: jest.fn(), hostedProvision: jest.fn(), hostedRelease: jest.fn() } },
 }));
+// The leave action, which a member's removal goes through (loaded when one happens): its own suite pins what it does.
+const leaveSandbox = jest.fn();
+jest.mock("../leaveSandbox", () => ({ leaveSandbox: (...args: unknown[]) => leaveSandbox(...args) }));
 const { apiClient } = await import("../../../lib/useApi");
 const listMock = mocked(apiClient.sandbox.list);
 const { queryClient } = await import("../../../lib/queryPersistence");
@@ -142,6 +145,49 @@ describe(`useSandbox list/mutation race`, () => {
         listMock.mockResolvedValue({ sandboxes: [a] });
         await sandbox.refresh();
         expect(sandbox.sandboxes.value).toEqual([a]);
+    });
+});
+
+describe(`removing a sandbox from the account`, () => {
+    it(`has a member leave through the leave action, and says how the sandbox's own side went`, async () => {
+        const sandbox = useSandbox();
+        const a = summary(`a`);
+        const shared = { ...summary(`b`), role: `collaborator` as const };
+        listMock.mockResolvedValue({ sandboxes: [a, shared] });
+        await sandbox.refresh();
+        leaveSandbox.mockResolvedValue({ grant: `kept`, reason: `offline` });
+
+        expect(await sandbox.remove(shared.id)).toEqual({ grant: `kept`, reason: `offline` });
+
+        expect(leaveSandbox).toHaveBeenCalledWith(shared);
+        expect(apiClient.sandbox.delete).not.toHaveBeenCalled();
+        expect(sandbox.sandboxes.value).toEqual([a]);
+    });
+
+    it(`has an owner delete the row, with no leave to make`, async () => {
+        const sandbox = useSandbox();
+        const mine = summary(`a`);
+        listMock.mockResolvedValue({ sandboxes: [mine] });
+        await sandbox.refresh();
+        mocked(apiClient.sandbox.delete).mockResolvedValue({ ok: true });
+
+        expect(await sandbox.remove(mine.id)).toBeUndefined();
+
+        expect(apiClient.sandbox.delete).toHaveBeenCalledWith({ sandboxId: mine.id });
+        expect(leaveSandbox).not.toHaveBeenCalled();
+    });
+
+    it(`puts the row back when the leave fails, and passes the failure on`, async () => {
+        const sandbox = useSandbox();
+        const a = summary(`a`);
+        const shared = { ...summary(`b`), role: `viewer` as const };
+        listMock.mockResolvedValue({ sandboxes: [a, shared] });
+        await sandbox.refresh();
+        leaveSandbox.mockRejectedValue(new Error(`platform refused`));
+
+        await expect(sandbox.remove(shared.id)).rejects.toThrow(`platform refused`);
+
+        expect(sandbox.sandboxes.value).toEqual([a, shared]);
     });
 });
 

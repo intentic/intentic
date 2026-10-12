@@ -43,13 +43,17 @@ const fakeServices = (
             ids: () => registry.map((entry) => entry.id),
             entry: (id) => registry.find((entry) => entry.id === id),
         }),
-        conversations: unstubbed<Services["conversations"]>("conversations", { liveSessionIds: () => live }),
+        conversations: unstubbed<Services["conversations"]>("conversations", {
+            liveSessionIds: () => live,
+            // A conversation on record keeps the session its last turn reported, as the registry does.
+            sessionIdOf: (id) => registry.find((entry) => entry.id === id)?.sessionId,
+        }),
         automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
         // Guard defaults off from `{}`, the production default, unless a test opts in.
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
             get: async () => SandboxSettingsSchema.parse(settings),
         }),
-        heldWakes: fileHeldWakesStore(join(root, "approvals")),
+        heldWakes: fileHeldWakesStore(join(root, "history")),
         scheduleCoverage: fileScheduleCoverageStore(join(root, "automation-schedule.json")),
         turnJournal: sqliteTurnJournal(openConversationsDb(conversationsDbPath(root))),
         activity: { append: async () => {}, list: async () => [] },
@@ -1092,4 +1096,65 @@ test("a journalled fire keeps its lane, thread and session, and the re-fire rest
     await waitFor(() => expect(turns).toHaveLength(1), SETTLES);
     expect(turns[0]).toMatchObject({ conversationId: "a-front-door-1", sessionId: "sess-1", actsAs: "guest" });
     await waitFor(async () => expect((await threads.get(thread, 60_000, Date.now()))?.sessionId).toBe("sess-2"), SETTLES);
+});
+
+// A thread's session is a hint the thread kept after its last message; the session decision is the conversation's own
+// (routing.ts), judged on the rung this fire resolves to, so a ladder that moved to another provider opens a fresh session
+// seeded from the record rather than naming one the new provider does not hold.
+const threadedFire = async (rung: { readonly provider: "claude" | "codex"; readonly model: string }, entry: PersistedAgent): Promise<AgentTurn> => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")), {}, [], [entry]);
+    await services.automations.upsert(automationConfig("front-door", { trigger: { kind: "event" }, models: [rung] }));
+    const turns: AgentTurn[] = [];
+    await fireAutomation(drivenBy(services, fakeWake([], [{ kind: "done" }], turns)), await saved(services, "front-door"), {
+        payload: "hi",
+        conversationId: entry.id,
+        sessionId: "sess-thread",
+    });
+    const [turn] = turns;
+    if (turn === undefined) {
+        throw new Error("the fire ran no turn");
+    }
+    return turn;
+};
+
+const onCodex = (overrides: Partial<PersistedAgent> = {}): PersistedAgent =>
+    conversationEntry({ id: "a-front-door-1", profile: { provider: "codex", harness: "native" }, sessionId: "sess-codex", ...overrides });
+
+test("a thread resumes the conversation's own session when the fire runs on the provider that minted it", async () => {
+    const turn = await threadedFire({ provider: "codex", model: "gpt-5.6" }, onCodex());
+    expect([turn.agent, turn.sessionId]).toEqual(["codex", "sess-codex"]);
+});
+
+test("a thread whose ladder moved to another provider opens a fresh session, not the old one's", async () => {
+    const turn = await threadedFire({ provider: "claude", model: "claude-sonnet-4-6" }, onCodex());
+    expect([turn.agent, turn.sessionId]).toEqual(["claude", undefined]);
+});
+
+test("a thread resumes on the account that served it, and a pin naming another account opens a fresh session", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")), {}, [], [onCodex({ profile: { provider: "codex", harness: "native", account: "work" } })]);
+    const turns: AgentTurn[] = [];
+    for (const account of ["work", "personal"]) {
+        await services.automations.upsert(automationConfig("front-door", { trigger: { kind: "event" }, models: [{ provider: "codex", model: "gpt-5.6" }], account }));
+        await fireAutomation(drivenBy(services, fakeWake([], [{ kind: "done" }], turns)), await saved(services, "front-door"), {
+            payload: "hi",
+            conversationId: "a-front-door-1",
+            sessionId: "sess-thread",
+        });
+    }
+    expect(turns.map((turn) => [turn.account, turn.sessionId])).toEqual([
+        ["work", "sess-codex"],
+        ["personal", undefined],
+    ]);
+});
+
+test("a conversation not on record yet takes the session its thread names", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
+    await services.automations.upsert(automationConfig("front-door", { trigger: { kind: "event" } }));
+    const turns: AgentTurn[] = [];
+    await fireAutomation(drivenBy(services, fakeWake([], [{ kind: "done" }], turns)), await saved(services, "front-door"), {
+        payload: "hi",
+        conversationId: "a-front-door-2",
+        sessionId: "sess-thread",
+    });
+    expect(turns[0]?.sessionId).toBe("sess-thread");
 });

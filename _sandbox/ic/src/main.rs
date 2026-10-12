@@ -318,6 +318,13 @@ enum SandboxCommand {
         #[arg(long)]
         json: bool,
     },
+    /// Every swap in flight or on probation on this device, and whether each cutover is being done right now (read-only;
+    /// answers without Docker, which is what the machine agent needs while deferring its own restarts)
+    Swaps {
+        /// One line of JSON, an array with a row per swap (the machine agent reads this)
+        #[arg(long)]
+        json: bool,
+    },
     /// What this sandbox runs and every version it can go back to without a download (read-only)
     Versions {
         /// The sandbox (omit when this device runs exactly one)
@@ -843,6 +850,7 @@ fn main() {
                 }
                 sandbox::probation::run(slug, json)
             }
+            SandboxCommand::Swaps { json } => sandbox::swaps::run(json),
             SandboxCommand::Versions { slug, json } => sandbox::versions::run(slug, json),
             SandboxCommand::Backup { slug, auto, json } => sandbox::backup::run(slug, auto, json),
             SandboxCommand::Backups { slug, json } => sandbox::backup::list(slug, json),
@@ -1935,6 +1943,12 @@ mod tests {
                     slug: None,
                     json: true
                 })
+            })
+        ));
+        assert!(matches!(
+            parse(&["sandbox", "swaps", "--json"]),
+            Ok(Cli {
+                command: Command::Sandbox(SandboxCommand::Swaps { json: true })
             })
         ));
         assert!(matches!(

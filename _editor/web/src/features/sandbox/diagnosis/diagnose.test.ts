@@ -1,8 +1,7 @@
 import type { HostReport } from "@intentic/api-contract";
-import type { SandboxVitals } from "@intentic/sandbox-contract";
+import { CRASH_LOOP_RESTARTS, type SandboxVitals } from "@intentic/sandbox-contract";
 import {
     ASLEEP_WAKE_PATIENCE_MS,
-    CRASH_LOOP_RESTARTS,
     diagnose,
     type DiagnosisInput,
     type Evidence,

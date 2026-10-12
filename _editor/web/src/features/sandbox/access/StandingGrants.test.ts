@@ -14,6 +14,9 @@ const revoked: GrantRevoke[] = [];
 jest.mock(`./useStandingGrants`, () => ({
     useStandingGrants: () => ({
         conversations: standing,
+        // The yeses that name no conversation have a group of their own (SandboxAccess.test.ts covers it); none here.
+        ownerWide: ref([]),
+        unreadable: ref([]),
         error: ref(undefined),
         revoke: {
             mutateAsync: async (grant: GrantRevoke) => {

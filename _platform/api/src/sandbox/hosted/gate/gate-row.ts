@@ -64,6 +64,11 @@ export const keptVersionsOf = async (record: HostedGateRecord | undefined): Prom
     };
 };
 
+/* THE POST-SWITCH PROBATION, as the row keeps it (hosted-probation.ts): written in the same update that names the version
+ * a change moved to, so the row never says one image is on probation while the machine holds another. */
+export const probationBegins = (at: Date): Prisma.HostedMachineUpdateInput => ({ probationSince: at, probationStrikes: 0 });
+export const PROBATION_ENDS: Prisma.HostedMachineUpdateInput = { probationSince: null, probationStrikes: 0 };
+
 // The columns for a machine now holding `image` with these facts: the row names an image only for an overlay.
 export const imageColumns = (image: string, facts: HostedImageFacts): Prisma.HostedMachineUpdateInput => ({
     image: facts.environmentHash === null ? null : image,

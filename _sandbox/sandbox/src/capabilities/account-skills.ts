@@ -2,7 +2,7 @@ import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { BrowserConfig, Capability, IdentityConfig } from "@intentic/sandbox-contract";
 import { accountSkillLine, browserToolsNote, identitiesSkill, rosterSummary } from "./browser-skill.js";
-import { loadedSkillFile, loadedSkillsRoot, removeLoadedSkill, writeLoadedSkill } from "../store/loaded-skills.js";
+import { loadedSkillFile, loadedSkillsRoot, removeLoadedSkill, skillWriterOf, stampSkill, writeLoadedSkill } from "../store/loaded-skills.js";
 import type { CapabilityCtx } from "./capability.js";
 import { contributionKey, contributionRegistry, hostOf } from "./contributions.js";
 import { extensionRead } from "./extension-dirs.js";
@@ -10,10 +10,9 @@ import { extensionRead } from "./extension-dirs.js";
 // One skill per kind, not per account: `identities` lists every identity as a roster line, each site group renders
 // once.
 // Whole set rebuilt on every apply/remove/rename; routes pass a pending delta since apply runs before the upsert.
-// Staleness swept by marker, not memory: every written skill carries ACCOUNT_SKILL_MARKER; unmarked files are
-// untouched.
-
-const ACCOUNT_SKILL_MARKER = "<!-- managed by the sandbox: derived from the connected accounts; edits are overwritten -->";
+// Staleness swept by marker, not memory: every skill this writes is stamped as the `account` writer's
+// (store/loaded-skills.ts, which still reads the stamp account skills carried before every writer had one); unstamped
+// files, and other writers' skills, are untouched.
 
 const IDENTITIES_SKILL = "identities";
 // Entry with no site of its own (open-account.ts GENERIC); the only platform grouped by host instead of slug.
@@ -65,15 +64,9 @@ const effectiveEntries = async (ctx: CapabilityCtx, delta?: AccountSkillDelta): 
 };
 
 // Frontmatter surgery on the rendered pack: sets the group's name (one skill per group, not per entry instance), stamps
-// the marker, and appends account ids to the description via rosterSummary (paid every call, unlike the roster block).
+// the writer, and appends account ids to the description via rosterSummary (paid every call, unlike the roster block).
 const stampGroupSkill = (source: string, name: string, ids: readonly string[]): string =>
-    source
-        .replace(/^name: .*$/m, `name: ${name}`)
-        .replace(/^(description: .*)$/m, `$1 Connected accounts: ${rosterSummary(ids)}.`)
-        .replace(/^---\n([\s\S]*?)\n---\n/, (frontmatter) => `${frontmatter}\n${ACCOUNT_SKILL_MARKER}\n`);
-
-const stampIdentitiesSkill = (source: string): string =>
-    source.replace(/^---\n([\s\S]*?)\n---\n/, (frontmatter) => `${frontmatter}\n${ACCOUNT_SKILL_MARKER}\n`);
+    stampSkill(source.replace(/^name: .*$/m, `name: ${name}`).replace(/^(description: .*)$/m, `$1 Connected accounts: ${rosterSummary(ids)}.`), "account");
 
 // Renders one site group's skill for all its accounts: substitutes ${tools}, ${accounts} (roster block) and ${site}.
 // Undefined when the pack's file is missing (a rotted install), which apply turns into a failed add.
@@ -104,14 +97,14 @@ const renderGroupSkill = async (
     );
 };
 
-// Every marked skill in the loaded folder, the sweep's candidates; names read like loaded-skills.ts, content through
+// Every skill in the loaded folder stamped as this writer's, the sweep's candidates; names read like loaded-skills.ts, content through
 // the files seam.
 const markedSkillNames = async (ctx: CapabilityCtx): Promise<string[]> => {
     const entries = await readdir(loadedSkillsRoot(ctx.workspace.root), { withFileTypes: true }).catch(() => []);
     const marked: string[] = [];
     for (const entry of entries.filter((candidate) => candidate.isDirectory())) {
         const text = await ctx.files.read(loadedSkillFile(ctx.workspace.root, entry.name));
-        if (text !== undefined && text.includes(ACCOUNT_SKILL_MARKER)) {
+        if (text !== undefined && skillWriterOf(text) === "account") {
             marked.push(entry.name);
         }
     }
@@ -128,7 +121,7 @@ export const convergeAccountSkills = async (ctx: CapabilityCtx, delta?: AccountS
 
     const desired = new Map<string, string>();
     if (identityEntries.length > 0) {
-        desired.set(IDENTITIES_SKILL, stampIdentitiesSkill(identitiesSkill(identityEntries)));
+        desired.set(IDENTITIES_SKILL, stampSkill(identitiesSkill(identityEntries), "account"));
     }
     interface SkillGroup {
         readonly group: { readonly name: string; readonly site: string };
@@ -157,7 +150,7 @@ export const convergeAccountSkills = async (ctx: CapabilityCtx, delta?: AccountS
     }
     for (const [name, text] of desired) {
         if ((await ctx.files.read(loadedSkillFile(ctx.workspace.root, name))) !== text) {
-            await writeLoadedSkill(ctx.files, ctx.workspace.root, name, text);
+            await writeLoadedSkill(ctx.files, ctx.workspace.root, name, text, "account");
         }
     }
 };

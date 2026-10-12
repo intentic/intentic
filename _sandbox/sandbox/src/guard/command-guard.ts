@@ -1,4 +1,5 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
+import { errorMessage } from "@intentic/base/errors";
 import {
     type AgentEvent,
     COMMAND_CLASS_LABELS,
@@ -64,8 +65,13 @@ export interface CommandGuardOptions {
     readonly answered?: ((at: number, answer: SafetyLogEntry["answer"], outcome: SafetyLogEntry["outcome"]) => void) | undefined;
     // Which owner computer this judges for, absent for the sandbox itself; selects the matching policy half.
     readonly machine?: string | undefined;
-    // Appends a line the owner accepted (the Always button) to their policy; absent offers no Always button.
-    readonly remember?: ((line: string) => Promise<void>) | undefined;
+    // Keeps a line the owner accepted (the Always button) as an owner-wide grant, `by` the verified email of whoever
+    // pressed it; absent offers no Always button. Awaited before the command goes on, so a restart right after the yes
+    // cannot ask again; a rejection means it was not kept.
+    readonly remember?: ((line: string, by: string | undefined) => Promise<void>) | undefined;
+    // Told when `remember` rejected, with the line it was asked to keep and why it was not. The command already has its
+    // yes and still runs; the line that did not stick is the owner's loss, which whoever wired this says out loud.
+    readonly rememberFailed?: ((line: string, reason: string) => void) | undefined;
     // The turn's project-install rule (agent/providers/project-installs.ts): a shell command that installs a project's
     // dependencies is decided here, ahead of the safety tiers, so Claude Code's hook, Codex's approval request and
     // Cursor's shell hook all meet the same answer. Absent for a gate with no turn behind it (a device, a watch).
@@ -218,6 +224,20 @@ const JUDGE_OFF = `The safety judge is turned off, so this was decided by the st
 // Same posture again: judge is on but no model is set for it, a choice rather than a fault.
 const JUDGE_UNSET = `No model is set for the safety judge, so this was decided by the standing rule alone.`;
 
+// Keeps the line an Always answer accepted, when the judge proposed one and this gate has somewhere to put it. The yes to
+// the command stands whether or not the line sticks, so a failure is reported to the one who wired the callback instead of
+// failing a command the owner just allowed.
+const keepLine = async (options: CommandGuardOptions, line: string | undefined, by: string | undefined): Promise<void> => {
+    if (line === undefined || options.remember === undefined) {
+        return;
+    }
+    try {
+        await options.remember(line, by);
+    } catch (error) {
+        options.rememberFailed?.(line, errorMessage(error));
+    }
+};
+
 export const createCommandGuard = (options: CommandGuardOptions): CommandGuard => {
     // Programs the user has already said yes to this turn, keyed by exact text so a yes means only this command.
     const granted = new Set<string>();
@@ -363,7 +383,7 @@ export const createCommandGuard = (options: CommandGuardOptions): CommandGuard =
                 ? { alwaysLabel: `Always: ${verdict.policyLine}` }
                 : {}),
         };
-        const { reply, resolved } = await wait(options.signal);
+        const { reply, resolved, caller } = await wait(options.signal);
         // Every parked card owes the stream its resolution frame, for a replayed transcript and an honest wait
         // time.
         yield resolved;
@@ -380,9 +400,8 @@ export const createCommandGuard = (options: CommandGuardOptions): CommandGuard =
         }
         options.answered?.(at, "allowed", "allowed");
         granted.add(program);
-        if (reply.decision === "always" && hard === undefined && verdict.policyLine !== undefined) {
-            // Not awaited and failures are swallowed: the command already ran, so a write failure shouldn't matter.
-            void options.remember?.(verdict.policyLine).catch(() => undefined);
+        if (reply.decision === "always" && hard === undefined) {
+            await keepLine(options, verdict.policyLine, caller?.email);
         }
         return ALLOWED;
     }

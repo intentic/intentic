@@ -32,7 +32,7 @@ import type { EnvironmentSources } from "./seams/environment-sources.js";
 import type { Said, Steer, TurnInput, TurnStarter } from "./seams/turn-starter.js";
 import { opt } from "./opt.js";
 import { type NeedsStore, needsStoreOver } from "./needs/needs-store.js";
-import type { NeedsFile } from "@intentic/sandbox-contract";
+import { NATIVE_PROVIDERS, type NeedsFile, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 
 // Test-support seams specific to this daemon; the generic stand-in for a wide interface is `unstubbed` in
 // @intentic/testing. Excluded from the build but type-checked via tsconfig.test.json, alongside every *.test.ts.
@@ -200,6 +200,19 @@ export const fleetStoreOver = (db: ConversationsDb, units: Pick<ConversationUnit
 // Opens a turn on a conversation the way the daemon does: the `begin` event, answered once the entry's write has landed.
 export const beginTurn = (conversations: Pick<ConversationActors, "send">, turn: BeginTurn, now: number): Promise<BeginOutcome> =>
     conversations.send(turn.conversationId, { kind: "begin", turn }, now).settled;
+
+// The seams a routed turn reads to find its model (agent/run/turn/turn-routing.ts: a run role's pin, a persona's ladder, the
+// provider a job with no pin opens on) for a suite that drives the real turn doors with a turn naming a run role or a
+// persona, and pins nothing: settings at their defaults, no provider connected (so the turn keeps the wire's default), no
+// endpoint, no persona, an empty turn ledger. A suite that pins a model builds its own settings over these.
+export const unpinnedRouting = (): Pick<Services, "sandboxSettings" | "providerReadiness" | "capabilities" | "personas" | "usage"> => ({
+    sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
+    // SAFETY: every native provider is named, and the readiness record holds exactly those keys.
+    providerReadiness: async () => Object.fromEntries(NATIVE_PROVIDERS.map((provider) => [provider, false])) as Awaited<ReturnType<Services["providerReadiness"]>>,
+    capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [] }),
+    personas: unstubbed<Services["personas"]>("personas", { get: async () => undefined, list: async () => [] }),
+    usage: unstubbed<Services["usage"]>("usage", { turns: async () => [] }),
+});
 
 // A landed-presence probe that never finds anything missing, and so never names anyone: the one stand-in for suites
 // whose land never reaches git (landed-presence.integration.test.ts derives the real one).

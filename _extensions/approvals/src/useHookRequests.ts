@@ -1,6 +1,6 @@
 import { type HookRequest, type HookRequests, roleAtLeast } from "@intentic/sandbox-contract";
 import type { HostQuery } from "@intentic/extension-api";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { host } from "./host";
 
@@ -22,10 +22,10 @@ export function useHookRequests() {
     const api = host();
     const queryClient = useQueryClient();
     const spec = hookRequestsQuery();
-    const { data, error } = useQuery({
+    const { query, error } = api.sandbox.query({
         ...spec,
         // Floored at maintainer daemon-side: below it the read is refused, so it isn't asked.
-        enabled: computed(() => api.sandbox.reachable() && roleAtLeast(api.sandbox.role(), `maintainer`)),
+        enabled: computed(() => roleAtLeast(api.sandbox.role(), `maintainer`)),
     });
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey: spec.queryKey });
 
@@ -39,9 +39,9 @@ export function useHookRequests() {
     });
 
     return {
-        hookSets: computed<HookRequest[]>(() => data.value?.requests ?? []),
-        ledgerUnreadable: computed(() => data.value?.ledgerUnreadable === true),
-        error: computed(() => error.value?.message),
+        hookSets: computed<HookRequest[]>(() => query.data.value?.requests ?? []),
+        ledgerUnreadable: computed(() => query.data.value?.ledgerUnreadable === true),
+        error,
         approve,
         dismiss,
     };

@@ -3,7 +3,7 @@ import { t } from "@intentic/ui/i18n";
 import { reactive, type Ref, ref } from "vue";
 import { collectDroppedFiles } from "../../workspace/explorer/transfer/dropEntries";
 import { forgetMedia, type MediaKind, rememberMedia } from "./attachmentPreviews";
-import { sandboxUpload } from "../../../client/sandbox/sandboxClient";
+import { sandboxRawUpload } from "../../../client/sandbox/sandboxRawUpload";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import type { ChatAttachment } from "../transcript/transcript";
 import { uuid } from "../../../lib/uuid";
@@ -79,7 +79,8 @@ export const useChatAttachments = (composer: {
             rememberMedia(entry.path, media.kind, media.url);
         }
         composer.attachments.value = [...composer.attachments.value, entry];
-        sandboxUpload(`/workspace/upload?path=${encodeURIComponent(entry.path)}`, file, {
+        sandboxRawUpload(`POST /workspace/upload`, file, {
+            query: { path: entry.path },
             signal: controller.signal,
             ...(composer.at.value === undefined ? {} : { at: composer.at.value }),
             onProgress: (loaded) => {

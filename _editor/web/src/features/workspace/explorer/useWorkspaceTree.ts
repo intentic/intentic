@@ -4,7 +4,8 @@ import { mapPool } from "@intentic/base/async";
 import { useQueryClient } from "@tanstack/vue-query";
 import { sandboxRef, sandboxScopeGuard, sandboxValue } from "@intentic/extension-api";
 import { computed, watch } from "vue";
-import { sandboxBlob, sandboxJson } from "../../../client/sandbox/sandboxClient";
+import { sandboxBlob } from "../../../client/sandbox/sandboxClient";
+import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
 import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { opensAsFolder } from "../files/archiveEntries";
@@ -182,10 +183,10 @@ export function useWorkspaceTree() {
     // Fires the tree refetch without awaiting it, so callers can markSaved before the file-watch echo races it into a
     // false "changed on disk". `baseHash` 409s the save if the file changed since it was read; omitted for creates.
     const uploadText = (path: string, text: string, baseHash?: string): Promise<{ ok: true }> =>
-        sandboxJson<{ ok: true }>(`/workspace/upload?path=${encodeURIComponent(path)}`, {
-            method: `POST`,
+        sandboxRaw(`POST /workspace/upload`, {
+            query: { path },
             headers: baseHash === undefined ? undefined : { "x-intentic-base-hash": baseHash },
-            body: text,
+            input: text,
         });
     // An editor save: the row is already real, so nothing provisional is involved.
     const saveText = async (path: string, text: string, baseHash?: string): Promise<void> => {

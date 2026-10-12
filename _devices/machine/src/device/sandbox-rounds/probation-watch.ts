@@ -1,7 +1,8 @@
 import type { Log } from "@intentic/local-agent";
 import { z } from "zod";
 import { type IcRun, lastLine, newRoundState, type RoundState, type Rounds, runRound, startRounds, ticksToSkip } from "./ic-rounds.js";
-import { readSwapRecords, type SwapRecord } from "./swap-records.js";
+import { readSwaps } from "./ic-swaps.js";
+import type { SwapRecord } from "./swap-records.js";
 import { icInFlight, runIc } from "../tools/sandboxes.js";
 
 // THE PROBATION WATCH: `ic sandbox watch` finishes or undoes a swap that was interrupted (the agent restarted, the
@@ -118,7 +119,7 @@ export const startProbationWatch = (log: Log, { sweeps }: { readonly sweeps: boo
         async () =>
             await runWatchRound(
                 state,
-                await readSwapRecords(),
+                await readSwaps(),
                 async (slug) => await runIc(watchArgs(slug), () => undefined),
                 log,
                 { now: Date.now(), sweeps },

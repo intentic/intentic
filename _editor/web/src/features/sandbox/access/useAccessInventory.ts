@@ -1,13 +1,15 @@
-import { RunnerSummarySchema } from "@intentic/sandbox-contract";
-import { onMounted, ref } from "vue";
-import { z } from "zod";
-import { sandboxJson } from "../../../client/sandbox/sandboxClient";
-import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
+import { computed } from "vue";
+import { rpcQuery } from "../../../client/sandbox/rpcQuery";
+import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
+import { useRunners } from "../devices/runners/useRunners";
 
 // Counts every machine door into the sandbox besides a person or control token (webhooks, workflow gates, CI hooks,
-// paired machines),
-// for the Access tab's "what still has a way in" question. Reads and counts only; each list is best-effort, unknown
-// rather than failing the tab.
+// paired machines), for the Access tab's "what still has a way in" question. Reads and counts only; each count is
+// best-effort, unknown rather than failing the tab.
+//
+// Every count is a narrowed view (`select`) of a cache entry that is already the procedure's own and that the daemon's
+// pushes keep fresh (automations.list, workflows.list, ci.runs, system.devices, and the runners list), so this tab
+// shares the reads the boards and the Devices view hold instead of asking the daemon again each time it opens.
 
 export interface AccessInventory {
     // Event automations, each reachable at /automations/{id}/fire with its own token.
@@ -20,62 +22,40 @@ export interface AccessInventory {
     readonly paired?: { readonly devices: number; readonly runners: number };
 }
 
-const RunnersSchema = z.object({ runners: z.array(RunnerSummarySchema) });
-
-// What one read counts, or undefined when it could not be read at all.
-const countOf = async <T, C>(read: () => Promise<T>, pick: (answer: T) => C): Promise<C | undefined> => {
-    try {
-        return pick(await read());
-    } catch {
-        return undefined;
-    }
-};
-
 export function useAccessInventory() {
-    const inventory = ref<AccessInventory>({});
-    const loading = ref(true);
+    const webhooks = useSandboxQuery({
+        ...rpcQuery(`automations.list`),
+        select: ({ automations }) => automations.filter((automation) => automation.trigger.kind === `event`).length,
+    });
+    const gates = useSandboxQuery({
+        ...rpcQuery(`workflows.list`),
+        select: ({ workflows }) => workflows.filter((workflow) => workflow.gate !== undefined).length,
+    });
+    const ci = useSandboxQuery({
+        ...rpcQuery(`ci.runs`),
+        select: ({ repos }) => ({ total: repos.length, hooked: repos.filter((repo) => repo.hookWarning === undefined).length }),
+    });
+    const devices = useSandboxQuery({ ...rpcQuery(`system.devices`), select: (answer) => answer.devices.length });
+    // Not polled from here: the Devices view that polls it, and the daemon's push, keep it fresh.
+    const runners = useRunners(false);
 
-    const load = async (): Promise<void> => {
-        const [webhooks, gates, ciRepos, devices, runners] = await Promise.all([
-            countOf(
-                () => sandboxRpc.automations.list(),
-                ({ automations }) => automations.filter((automation) => automation.trigger.kind === `event`).length,
-            ),
-            countOf(
-                () => sandboxRpc.workflows.list(),
-                ({ workflows }) => workflows.filter((workflow) => workflow.gate !== undefined).length,
-            ),
-            countOf(
-                () => sandboxRpc.ci.runs(),
-                ({ repos }) => ({ total: repos.length, hooked: repos.filter((repo) => repo.hookWarning === undefined).length }),
-            ),
-            countOf(
-                () => sandboxRpc.system.devices(),
-                (answer) => answer.devices.length,
-            ),
-            countOf(
-                async () => RunnersSchema.parse(await sandboxJson(`/system/runners`)),
-                (answer) => answer.runners.length,
-            ),
-        ]);
+    const inventory = computed<AccessInventory>(() => {
         const counted: { -readonly [K in keyof AccessInventory]: AccessInventory[K] } = {};
-        if (webhooks !== undefined) {
-            counted.webhooks = webhooks;
+        if (webhooks.query.data.value !== undefined) {
+            counted.webhooks = webhooks.query.data.value;
         }
-        if (gates !== undefined) {
-            counted.gates = gates;
+        if (gates.query.data.value !== undefined) {
+            counted.gates = gates.query.data.value;
         }
-        if (ciRepos !== undefined) {
-            counted.ciRepos = ciRepos;
+        if (ci.query.data.value !== undefined) {
+            counted.ciRepos = ci.query.data.value;
         }
-        if (devices !== undefined && runners !== undefined) {
-            counted.paired = { devices, runners };
+        if (devices.query.data.value !== undefined && runners.loaded.value) {
+            counted.paired = { devices: devices.query.data.value, runners: runners.runners.value.length };
         }
-        inventory.value = counted;
-        loading.value = false;
-    };
-
-    onMounted(() => void load());
-
-    return { inventory, loading, reload: load };
+        return counted;
+    });
+    // A read that has not started (the sandbox is not answering) is not loading: its door reads "not readable right now".
+    const loading = computed(() => [webhooks, gates, ci, devices].some(({ query }) => query.isLoading.value) || runners.isLoading.value);
+    return { inventory, loading };
 }

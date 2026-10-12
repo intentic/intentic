@@ -12,6 +12,7 @@ import { startHostedCanary } from "./sandbox/hosted/hosted-canary.js";
 import { startHostedCleanup } from "./sandbox/hosted/hosted-cleanup.js";
 import { startHostedHealth } from "./sandbox/hosted/hosted-health.js";
 import { startHostedMeter } from "./sandbox/hosted/hosted-meter.js";
+import { startHostedProbation } from "./sandbox/hosted/hosted-probation.js";
 import { checkHostedPlanPrices, hostedPlanEnabled } from "./sandbox/hosted/plan/hosted-plan.js";
 import { startHostedPool } from "./sandbox/hosted/hosted-pool.js";
 import { bootIdentityOf, watchPlatformIdentity } from "./sandbox/recovery.js";
@@ -82,6 +83,8 @@ startHostedMeter(prisma, config, logger);
 startHostedAbuse(prisma, config, logger);
 // Watches the hosted lane against Fly and says so when they disagree; read-only (hosted-health.ts).
 startHostedHealth(prisma, config, logger);
+// Looks at every machine whose new image is on its day of probation and puts the earlier image back when it keeps failing (hosted-probation.ts).
+startHostedProbation(prisma, config, logger);
 // Provisions a sandbox end to end and waits for its daemon, off unless HOSTED_CANARY_MINUTES is set.
 startHostedCanary(prisma, config, logger);
 // Orders and renews the edge's certificate, off unless INGRESS_PLATFORM_TOKEN is set (edge-certificate.ts).

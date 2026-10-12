@@ -382,6 +382,9 @@ const handoffNoteFor = async (
 
 // The session to resume, or none if the runtime no longer holds it, which opens a fresh session seeded from the record
 // instead. A store that can't be probed is trusted, not doubted.
+// Only a backstop: which session a turn continues is decided before it gets here, on the runtime and account that minted it
+// (agent/providers/accounts/routing.ts sessionFor). What this probe catches is a session that decision rightly named and the
+// runtime has since lost (a pruned store, a recreated container), never one named for the wrong provider.
 const sessionToResume = async (services: Services, input: RoutedTurn, execution: AgentExecutionContext): Promise<string | undefined> => {
     const { sessionId } = input;
     if (sessionId === undefined) {

@@ -5,6 +5,7 @@ import type { AgentEvent } from "@intentic/sandbox-contract";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { createHeldCards } from "../../guard/held-cards.js";
 import { revokeGrant, standingGrants } from "../../needs/standing-grants.js";
+import { standingDeps } from "../../needs/standing-grants.testing.js";
 import { type ConversationGrants, fileConversationGrants } from "../../personas/conversation-grants.js";
 import { createCredentialGrants } from "../../secrets/credential-grants.js";
 import { memoryFleet } from "../../testing.js";
@@ -91,7 +92,7 @@ test("an 'allow requests like this' survives a restart, is listed, and taken bac
     expect(second.prompts.passed("conv-2", "github", RULE)).toBe(false);
     expect(second.prompts.passed("conv-1", "linear", RULE)).toBe(false);
 
-    const deps = { conversationGrants: grants, credentialGrants: createCredentialGrants() };
+    const deps = standingDeps({ conversationGrants: grants, credentialGrants: createCredentialGrants() });
     expect((await standingGrants(deps)).conversations[0]?.rules).toEqual([
         { capability: "github", rule: RULE, said: "POST api.github.com/repos/acme/app/issues with GitHub" },
     ]);

@@ -6,59 +6,49 @@ import { DEFAULT_SAFETY_POLICY, type SafetyPolicy } from "@intentic/sandbox-cont
 // The owner's safety policy on disk (.intentic/config/safety.md); the judge reads it before a flagged command. A text
 // file, not a manifest: it travels verbatim, with no shape to validate. `custom` reflects whether the file exists, not
 // a diff against the shipped default.
+//
+// What the judge reads is that file PLUS the lines the owner allowed with Always on permission cards. Those are owner-wide
+// grants (personas/owner-grants.ts), kept off the workspace, listed and taken back under Access, and rendered here, after
+// the owner's own text, in a form that depends on nothing but the lines. They are never written into the file: an agent
+// edits it as freely as its owner, so a yes kept there was a yes anyone could add or erase.
 
 export interface SafetyPolicyStore {
-    // The policy as the judge will read it: the file, or the shipped default when nobody has written one.
+    // The owner's own policy as the Safety page shows and edits it: the file, or the shipped default when nobody has
+    // written one. Without the lines allowed on cards.
     readonly get: () => Promise<SafetyPolicy>;
-    // Text only; the judge's prompt has no use for provenance.
+    // Text only, as the judge will read it: the owner's policy followed by the lines allowed on cards. The judge's prompt
+    // has no use for provenance.
     readonly text: () => Promise<string>;
     readonly set: (text: string) => Promise<void>;
-    // Adds one line under its own heading, never the last section, so it cannot land under an unrelated one. Appends to
-    // the shipped default when no file exists, keeping the rest of the default intact.
-    readonly append: (line: string) => Promise<void>;
 }
 
-// Heading and blurb `append` writes under, once, the first time a policy gets a card-added line.
-const ADDED_HEADING = `## Added from permission cards`;
-const ADDED_NOTE = `Lines you accepted on a card, newest last. Edit or delete them like anything else here.`;
+// The heading and blurb the lines allowed on cards are rendered under, after the owner's text.
+export const GRANTED_HEADING = `## Allowed with Always on permission cards`;
+const GRANTED_NOTE = `Lines the owner allowed with Always on a card, oldest first. They hold in every conversation until the owner takes one back under Access.`;
 
-// Ensures the text ends with exactly one newline, so an append cannot merge onto the last line.
+// The legacy heading and blurb a release before the owner-wide grants appended card-accepted lines under, into the
+// owner's own file. Read only by the step that carries them out (safety-policy-grants.ts).
+export const LEGACY_ADDED_HEADING = `## Added from permission cards`;
+export const LEGACY_ADDED_NOTE = `Lines you accepted on a card, newest last. Edit or delete them like anything else here.`;
+
+// Ensures the text ends with exactly one newline, so what follows cannot merge onto the last line.
 const terminated = (text: string): string => (text.endsWith(`\n`) ? text : `${text}\n`);
 
-// Inserts a line under the added-lines heading (creating it if missing), never at the end of the file, so it lands in
-// the section it is addressed to. Repeated appends land on that section's last line, stacking instead of drifting apart
-// with blank lines.
-export const withAddedLine = (text: string, line: string): string => {
-    const bullet = `- ${line.trim()}`;
-    const body = terminated(text);
-    const at = body.indexOf(ADDED_HEADING);
-    if (at === -1) {
-        return `${body}\n${ADDED_HEADING}\n\n${ADDED_NOTE}\n\n${bullet}\n`;
-    }
-    const after = at + ADDED_HEADING.length;
-    const next = body.indexOf(`\n## `, after);
-    const end = next === -1 ? body.length : next + 1;
-    const section = body.slice(at, end).replace(/\n+$/u, ``);
-    return `${body.slice(0, at)}${section}\n${bullet}\n${next === -1 ? `` : `\n${body.slice(end)}`}`;
-};
+// The owner's policy with the allowed lines after it, or the policy untouched when none were allowed. Depends on the
+// lines and their order alone, so two readings of the same grants are the same text.
+export const withGrantedLines = (policy: string, lines: readonly string[]): string =>
+    lines.length === 0 ? policy : `${terminated(policy)}\n${GRANTED_HEADING}\n\n${GRANTED_NOTE}\n\n${lines.map((line) => `- ${line}`).join(`\n`)}\n`;
 
-export const fileSafetyPolicyStore = (path: string): SafetyPolicyStore => {
+export const fileSafetyPolicyStore = (path: string, granted: () => Promise<readonly string[]> = async () => []): SafetyPolicyStore => {
     const read = async (): Promise<SafetyPolicy> => {
-        // Only absence is the default: an owner's file that cannot be read must not be judged by, or appended over as,
-        // the shipped text.
+        // Only absence is the default: an owner's file that cannot be read must not be judged by as the shipped text.
         const text = await readFile(path, "utf8").catch(undefinedIfMissing);
         // An empty file is a policy (ask about nothing beyond the hard rule), not the absence of one.
         return text === undefined ? { text: DEFAULT_SAFETY_POLICY, custom: false } : { text, custom: true };
     };
     return {
         get: read,
-        text: async () => (await read()).text,
+        text: async () => withGrantedLines((await read()).text, await granted()),
         set: (text) => queueOnFile(path, () => writeFileAtomic(path, terminated(text))),
-        // Read and write on the file's queue: two cards accepted at once must both land.
-        append: (line) =>
-            queueOnFile(path, async () => {
-                const { text } = await read();
-                await writeFileAtomic(path, withAddedLine(text, line));
-            }),
     };
 };

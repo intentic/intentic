@@ -1,16 +1,23 @@
+import "@intentic/testing/dom";
 import { waitFor } from "@intentic/testing/bun";
 import type { SpeechStatus } from "@intentic/sandbox-contract";
 import { SandboxHttpError } from "../../../../client/sandbox/sandboxHttpError";
 
 // Pins the composer's wire to the speech engine: whatever is said before a transport answers is kept and replayed, the
 // live stream frames phrases as the contract says and reports back what the daemon says, a daemon without the stream
-// gets one WAV per phrase once its model is on disk, and a socket lost mid-phrase costs that phrase, not the session.
+// gets one WAV per phrase once its model is on disk, and a socket lost mid-phrase costs that phrase, not the session. The
+// stream is a live socket, so it is pinged and dialled again after a drop; the clock below runs it in milliseconds.
 
 jest.mock(`../../../sandbox/session/wsTicket`, () => ({ socketUrl: async () => undefined }));
 jest.mock(`../../../../client/sandbox/sandboxClient`, () => ({ sandboxJson: () => Promise.reject(new Error(`unmocked`)) }));
 
 const { openSpeechLink } = await import(`./speechLink`);
 type Events = Parameters<typeof openSpeechLink>[1];
+type SpeechLinkDeps = NonNullable<Parameters<typeof openSpeechLink>[2]>;
+
+// Short enough that a redial happens inside a test, long enough that nothing fires between two lines of one. The ping is
+// slow, so a frame list a test compares is the message's own on a busy machine too; the ping test below runs its own.
+const FAST = { pingMs: 60_000, retryMs: 10, maxRetryMs: 20, stableMs: 10_000, staleMs: 10_000 };
 
 const READY: SpeechStatus = { provisioned: true, model: `ready`, engine: `parakeet`, loaded: true };
 
@@ -34,7 +41,11 @@ class FakeSocket extends EventTarget {
     send(data: unknown): void {
         this.sent.push(typeof data === `string` ? JSON.parse(data) : (data as ArrayBuffer).byteLength);
     }
+    // Closing a socket that is already closed says nothing more, as in a browser.
     close(): void {
+        if (this.readyState === WebSocket.CLOSED) {
+            return;
+        }
         this.readyState = WebSocket.CLOSED;
         this.dispatchEvent(new Event(`close`));
     }
@@ -42,14 +53,21 @@ class FakeSocket extends EventTarget {
         this.readyState = WebSocket.OPEN;
         this.dispatchEvent(new Event(`open`));
     }
+    // An upgrade the daemon refused: the browser reports the error and then the close.
     refuse(): void {
         this.readyState = WebSocket.CLOSED;
         this.dispatchEvent(new Event(`error`));
+        this.dispatchEvent(new Event(`close`));
     }
     say(message: unknown): void {
         this.dispatchEvent(new MessageEvent(`message`, { data: JSON.stringify(message) }));
     }
 }
+
+// SAFETY: FakeSocket carries every member of WebSocket the link touches: send, close, readyState, binaryType and the events.
+const asSocket = (socket: FakeSocket): WebSocket => socket as unknown as WebSocket;
+// SAFETY: a test's stand-in for the raw door answers only the routes its test asks it, each as that route's schema would parse it.
+const asRaw = (seam: object): SpeechLinkDeps[`raw`] => seam as SpeechLinkDeps[`raw`];
 
 const samples = (count: number): Float32Array => new Float32Array(count).fill(0.1);
 
@@ -58,12 +76,13 @@ describe(`on the live stream`, () => {
         const sockets: FakeSocket[] = [];
         const { said, events } = recorder();
         const link = openSpeechLink(`pl-PL`, events, {
+            timing: FAST,
             socketUrl: async (path, extra) => `ws://daemon${path}?lang=${extra[`lang`]}`,
             openSocket: (url) => {
                 expect(url).toBe(`ws://daemon/speech/stream?lang=pl-PL`);
                 const socket = new FakeSocket();
                 sockets.push(socket);
-                return socket as unknown as WebSocket;
+                return asSocket(socket);
             },
         });
         // Spoken while the socket was still dialing.
@@ -100,10 +119,11 @@ describe(`on the live stream`, () => {
         const { said, events } = recorder();
         let dialed = false;
         openSpeechLink(`en`, events, {
+            timing: FAST,
             socketUrl: async () => `ws://daemon`,
             openSocket: () => {
                 dialed = true;
-                return socket as unknown as WebSocket;
+                return asSocket(socket);
             },
         });
         await waitFor(() => expect(dialed).toBe(true));
@@ -117,12 +137,13 @@ describe(`on the live stream`, () => {
         const sockets: FakeSocket[] = [];
         const { said, events } = recorder();
         const link = openSpeechLink(`en`, events, {
+            timing: FAST,
             socketUrl: async () => `ws://daemon`,
             openSocket: () => {
                 const socket = new FakeSocket();
                 sockets.push(socket);
                 queueMicrotask(() => socket.open());
-                return socket as unknown as WebSocket;
+                return asSocket(socket);
             },
         });
         await waitFor(() => expect(said).toContainEqual([`transport`, `stream`]));
@@ -143,6 +164,69 @@ describe(`on the live stream`, () => {
     });
 });
 
+describe(`as a live socket`, () => {
+    it(`pings the open stream, which the daemon ignores, so an idle tunnel is not left to drop it`, async () => {
+        const socket = new FakeSocket();
+        const { said, events } = recorder();
+        const link = openSpeechLink(`en`, events, {
+            timing: { ...FAST, pingMs: 40 },
+            socketUrl: async () => `ws://daemon`,
+            openSocket: () => {
+                queueMicrotask(() => socket.open());
+                return asSocket(socket);
+            },
+        });
+        await waitFor(() => expect(said).toContainEqual([`transport`, `stream`]));
+        await waitFor(() => expect(socket.sent).toContainEqual({ type: `ping` }));
+        link.close();
+    });
+
+    it(`dials again after a drop on its own, with nobody speaking, and holds what is said meanwhile`, async () => {
+        const sockets: FakeSocket[] = [];
+        const { said, events } = recorder();
+        const link = openSpeechLink(`en`, events, {
+            timing: FAST,
+            socketUrl: async () => `ws://daemon`,
+            openSocket: () => {
+                const socket = new FakeSocket();
+                sockets.push(socket);
+                // The first connection is a daemon restarting: the second one is not ready until a moment later.
+                setTimeout(() => socket.open(), sockets.length === 1 ? 0 : 30);
+                return asSocket(socket);
+            },
+        });
+        await waitFor(() => expect(said.filter(([kind]) => kind === `transport`)).toHaveLength(1));
+        sockets[0]!.close();
+        // Said while no socket is open: kept for the one being dialled.
+        link.begin(5, samples(10));
+        link.end(5, samples(10));
+        await waitFor(() => expect(said.filter(([kind]) => kind === `transport`)).toHaveLength(2));
+        expect(sockets).toHaveLength(2);
+        expect(sockets[1]!.sent).toEqual([{ type: `begin`, id: 5 }, 20, { type: `end`, id: 5, keep: 10 }]);
+        link.close();
+    });
+
+    it(`lets the socket go with the link, so one still being dialled never opens afterwards`, async () => {
+        const sockets: FakeSocket[] = [];
+        const { said, events } = recorder();
+        const link = openSpeechLink(`en`, events, {
+            timing: FAST,
+            socketUrl: async () => `ws://daemon`,
+            openSocket: () => {
+                const socket = new FakeSocket();
+                sockets.push(socket);
+                return asSocket(socket);
+            },
+        });
+        await waitFor(() => expect(sockets).toHaveLength(1));
+        link.close();
+        sockets[0]!.open();
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        expect(said).not.toContainEqual([`transport`, `stream`]);
+        expect(sockets).toHaveLength(1);
+    });
+});
+
 describe(`on a daemon without the stream`, () => {
     it(`polls the model while it downloads, then posts each phrase spoken meanwhile as a WAV, in order`, async () => {
         const statuses: SpeechStatus[] = [
@@ -151,27 +235,28 @@ describe(`on a daemon without the stream`, () => {
             READY,
         ];
         const posted: number[] = [];
-        const sandboxJson = jest.fn(async (path: string, init?: RequestInit): Promise<unknown> => {
-            if (path.startsWith(`/speech/status?lang=pl`)) {
+        const raw = jest.fn(async (key: string, call?: { readonly query?: { readonly lang?: string }; readonly input?: unknown }): Promise<unknown> => {
+            if (key === `GET /speech/status` && call?.query?.lang === `pl`) {
                 return statuses.shift() ?? READY;
             }
-            if (path.startsWith(`/speech/transcribe?lang=pl`) && init?.method === `POST`) {
-                const wav = init.body as ArrayBuffer;
+            if (key === `POST /speech/transcribe` && call?.query?.lang === `pl`) {
+                const wav = call.input as ArrayBuffer;
                 posted.push((wav.byteLength - 44) / 2);
                 return { text: `phrase of ${(wav.byteLength - 44) / 2}` };
             }
-            throw new Error(`unexpected ${path}`);
+            throw new Error(`unexpected ${key}`);
         });
         const { said, events } = recorder();
         // A refused upgrade is a daemon with no stream route.
         const socket = new FakeSocket();
         const link = openSpeechLink(`pl`, events, {
+            timing: FAST,
             socketUrl: async () => `ws://daemon`,
             openSocket: () => {
                 queueMicrotask(() => socket.refuse());
-                return socket as unknown as WebSocket;
+                return asSocket(socket);
             },
-            sandboxJson: sandboxJson as never,
+            raw: asRaw(raw),
             pollMs: 5,
         });
         link.begin(0, samples(100));
@@ -194,8 +279,8 @@ describe(`on a daemon without the stream`, () => {
 
     it(`keeps a phrase the daemon says is early (409) and posts it once the model is back`, async () => {
         let transcribes = 0;
-        const sandboxJson = jest.fn(async (path: string): Promise<unknown> => {
-            if (path.startsWith(`/speech/status`)) {
+        const raw = jest.fn(async (key: string): Promise<unknown> => {
+            if (key === `GET /speech/status`) {
                 return READY;
             }
             transcribes += 1;
@@ -205,7 +290,7 @@ describe(`on a daemon without the stream`, () => {
             return { text: `kept` };
         });
         const { said, events } = recorder();
-        const link = openSpeechLink(`en`, events, { sandboxJson: sandboxJson as never, pollMs: 5 });
+        const link = openSpeechLink(`en`, events, { raw: asRaw(raw), pollMs: 5 });
         link.begin(0, samples(10));
         link.end(0, samples(10));
         await waitFor(() => expect(said).toContainEqual([`final`, 0, `kept`]));
@@ -215,11 +300,11 @@ describe(`on a daemon without the stream`, () => {
 
     it(`reads a daemon without speech routes as unavailable, and one without a runtime as unprovisioned`, async () => {
         const missing = recorder();
-        openSpeechLink(`en`, missing.events, { sandboxJson: (() => Promise.reject(new SandboxHttpError(404, `Not Found`))) as never });
+        openSpeechLink(`en`, missing.events, { raw: asRaw(() => Promise.reject(new SandboxHttpError(404, `Not Found`))) });
         await waitFor(() => expect(missing.said).toContainEqual([`failed`, undefined, `unavailable`]));
 
         const bare = recorder();
-        openSpeechLink(`en`, bare.events, { sandboxJson: (async () => ({ provisioned: false, model: `absent` })) as never });
+        openSpeechLink(`en`, bare.events, { raw: asRaw(async () => ({ provisioned: false, model: `absent` })) });
         await waitFor(() => expect(bare.said).toContainEqual([`failed`, undefined, `unprovisioned`]));
     });
 });

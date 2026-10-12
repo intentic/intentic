@@ -1,7 +1,7 @@
 import { errorMessage } from "@intentic/base/errors";
 import type { Log } from "@intentic/local-agent";
-import { DEV_VERSION, isNewer } from "@intentic/sandbox-contract";
-import { readSwapRecords, type SwapRecord, swapsUnderway } from "../device/sandbox-rounds/swap-records.js";
+import { DEV_VERSION, type DeviceSwap, isNewer } from "@intentic/sandbox-contract";
+import { readSwaps, swapsUnderway } from "../device/sandbox-rounds/ic-swaps.js";
 import { icSwapsInFlight } from "../device/tools/sandboxes.js";
 import { installedBuild } from "../installed.js";
 import { publishedVersion } from "../release.js";
@@ -56,10 +56,8 @@ export const autoUpgradeDecision = (reading: AutoUpgradeReading): { readonly lev
 };
 
 // The sandboxes an upgrade now would restart this agent under: a swap this process is running, or one any process here
-// is mid-cutover on by ic's own record. The upgrade's restart can wait minutes; a parked container cannot.
-export const upgradeHeldBy = (swapping: ReadonlySet<string>, records: readonly SwapRecord[], now: number): string[] => [
-    ...new Set([...swapping, ...swapsUnderway(records, now)]),
-];
+// is mid-cutover on by ic's own verdict (`ic sandbox swaps`). The upgrade's restart can wait minutes; a parked container cannot.
+export const upgradeHeldBy = (swapping: ReadonlySet<string>, swaps: readonly DeviceSwap[]): string[] => [...new Set([...swapping, ...swapsUnderway(swaps)])];
 
 export interface AutoUpgrade {
     readonly stop: () => void;
@@ -78,7 +76,7 @@ export const startAutoUpgrade = (log: Log): AutoUpgrade => {
         }
     };
     const tick = async (): Promise<void> => {
-        const swapping = upgradeHeldBy(icSwapsInFlight, await readSwapRecords(), Date.now());
+        const swapping = upgradeHeldBy(icSwapsInFlight, await readSwaps());
         if (swapping.length > 0) {
             log(
                 `auto-upgrade: put off while ${swapping.join(", ")} ${swapping.length === 1 ? "is" : "are"} mid-swap; looking again in ${DEFERRED_MS / 60_000} minutes.`,

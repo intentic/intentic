@@ -24,7 +24,6 @@ jest.mock("../../../client/sandbox/sandboxClient", () => ({
 import { queryClient } from "../../../lib/queryPersistence";
 import { viewsOnScreen } from "../../../testing/viewsOnScreen";
 import { onRefsChanged, onReposChanged } from "../../../workbench/workspace-events/repoEvents";
-import { onRuntimeChanged } from "./runtimeEvents";
 import { derivedEpochOf, workspaceChangeMark } from "../../workspace/changes/live/useWorkspaceLive";
 import { applySystemEvent } from "./systemEvents";
 
@@ -69,6 +68,18 @@ it(`hands a new repository set to extensions as well as refreshing the panels`, 
     expect(heard).toEqual([[`root`, `web`, `cloned`]]);
 });
 
+// A pairing, a socket opening or closing and a sync key all announce `hosts`; the rosters and the sync state read from
+// them are cache entries now, so the frame reaches them the way it reaches every other pushed read.
+it(`refreshes a device's roster, the fleet and the sync state from one hosts frame`, () => {
+    applySystemEvent({ kind: `runtimeChanged`, domains: [`hosts`] }, SANDBOX);
+    expect(invalidated).toEqual([[`capabilities`], [`capabilities.list`], [`devices`], [`system.devices`], [`hosts`], [`sync-health`]]);
+});
+
+it(`refreshes the browser, phone and runner rosters on their own domains`, () => {
+    applySystemEvent({ kind: `runtimeChanged`, domains: [`webext`, `phones`, `runners`] }, SANDBOX);
+    expect(invalidated).toEqual([[`capabilities`], [`capabilities.list`], [`webext`], [`phones`], [`runners`]]);
+});
+
 it(`asks nothing of a domain this build does not know`, () => {
     // A daemon newer than the browser. Refreshing what we understand beats discarding the frame.
     applySystemEvent({ kind: `runtimeChanged`, domains: [`something-later`] }, SANDBOX);
@@ -93,6 +104,12 @@ it(`re-asks every runtime-bound view on a new connection, once each`, async () =
         `browsers`,
         `subagents`,
         `capabilities`,
+        // The paired-machine rosters and the sync state, which dialogs and badges read as cache entries.
+        `hosts`,
+        `webext`,
+        `phones`,
+        `runners`,
+        `sync-health`,
         `system.terminals`,
         `panels.list`,
         `workspace.appsList`,
@@ -114,8 +131,6 @@ it(`re-asks every runtime-bound view on a new connection, once each`, async () =
 
 
 it(`reannounces every push-only channel after a disconnected gap`, () => {
-    const runtime = jest.fn();
-    const stopRuntime = onRuntimeChanged([`hosts`, `future-domain`], runtime);
     const refs = jest.fn();
     const repos = jest.fn();
     const stopRefs = onRefsChanged(refs);
@@ -124,13 +139,11 @@ it(`reannounces every push-only channel after a disconnected gap`, () => {
     const mark = workspaceChangeMark();
     try {
         applySystemEvent({ kind: `hello`, workspaceId: `ws-a`, routes: [], build: `0.0.0:1`, boot: undefined }, SANDBOX);
-        expect(runtime).toHaveBeenCalledTimes(1);
         expect(refs).toHaveBeenCalledWith([]);
         expect(repos).toHaveBeenCalledWith([]);
         expect(derivedEpochOf(`rendered.pdf`)).toBeGreaterThan(before);
         expect(workspaceChangeMark()).toBe(mark + 1);
     } finally {
-        stopRuntime();
         stopRefs.dispose();
         stopRepos.dispose();
     }

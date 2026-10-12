@@ -12,14 +12,16 @@ const { reachable } = useSandbox();
 
 // When `aimedAt` names another sandbox, the active daemon's reachability is irrelevant: the read is simply
 // issued for that box. A ref/getter, since the aim can change under a mounted panel.
-export function useSandboxQuery<T>(options: UseQueryOptions<T>, aimedAt?: MaybeRefOrGetter<string | undefined>) {
+// `select` narrows what the cache holds to what a reader wants (a count out of a list): the entry stays the procedure's
+// own, shared with every other reader of it, and only this reader's `data` is the narrowed one.
+export function useSandboxQuery<T, Selected = T>(options: UseQueryOptions<T, Error, Selected>, aimedAt?: MaybeRefOrGetter<string | undefined>) {
     const resolved = toValue(options);
     // Every daemon-backed read is timed here rather than at each call site, so none can skip it. `queryKey`'s first
     // element groups the table entry; the rest of the key varies per call and isn't part of the op name.
     const key = String(toValue(resolved.queryKey)?.[0] ?? `unknown`);
     // Only wrapped when it's a real function; vue-query also accepts `skipToken` here to mean "don't run".
     const fetcher = resolved.queryFn;
-    const query = useQuery<T>(
+    const query = useQuery<T, Error, Selected>(
         {
             ...resolved,
             ...(typeof fetcher === `function`

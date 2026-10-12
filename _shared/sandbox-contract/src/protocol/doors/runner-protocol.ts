@@ -154,6 +154,13 @@ export const RunnerSummarySchema = z.object({
     drift: z.array(NeedsActionSchema).optional(),
 });
 export type RunnerSummary = z.infer<typeof RunnerSummarySchema>;
+// GET /system/runners: every enrolled runner, the one list the Devices view, the placement picker and the Access tab read.
+export const RunnersListSchema = z.object({ runners: z.array(RunnerSummarySchema) });
+export type RunnersList = z.infer<typeof RunnersListSchema>;
+// What a runner answers when it takes a definition (`applyDefinition`), and POST /system/runners/{id}/definition/sync
+// relays: the settings it now runs.
+export const RunnerDefinitionAppliedSchema = z.object({ settings: z.array(z.string()) });
+export type RunnerDefinitionApplied = z.infer<typeof RunnerDefinitionAppliedSchema>;
 
 // A workspace sync, narrated line by line as it happens (first contact clones whole repos). `op`: `pull` brings the
 // runner's checkout current before a turn, `push` returns the branch after; `repos` is the parent's own record, since

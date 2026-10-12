@@ -17,6 +17,7 @@ jest.mock(`./useDesktopSync`, () => ({
     useDesktopSync: () => ({
         canOperate,
         available,
+        statusError: ref(undefined),
         folder: ref(`~/intentic/work`),
         defaultFolder: ref(`~/intentic/work`),
         pairToken,
@@ -29,8 +30,6 @@ jest.mock(`./useDesktopSync`, () => ({
         desktopLink: ref(undefined),
         enable,
         forget: () => {},
-        start: () => {},
-        stop: () => {},
     }),
 }));
 

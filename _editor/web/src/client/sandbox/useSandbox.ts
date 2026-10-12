@@ -13,6 +13,7 @@ import { applyConnectionSignal, type ConnectionSignal, type ConnectionState, ini
 import { daemonReady } from "./useDaemonBoot";
 import { forgetAddress } from "../directory/deviceDirectory";
 import { directMode } from "../directory/directState";
+import type { LeaveOutcome } from "./leaveSandbox";
 
 // Browser's view of the user's sandboxes, as a module singleton. The registry (sandbox.list) is the source of
 // truth for each daemon's URL/lastSeenAt; `reachable` stays browser-owned since only this browser knows if it
@@ -211,21 +212,30 @@ const attach = async (id: string, url: string): Promise<void> => {
     persistActive(updated.id);
 };
 
-// Removes a sandbox from this account: owners drop the row and its tunnel, members drop their grant. Local
-// containers keep running.
-const remove = async (id: string): Promise<void> => {
+// Removes a sandbox from this account: an owner drops the row and its tunnel, a member leaves (leaveSandbox: the
+// sandbox's own member list first, then the row), and says how the sandbox's side went. Local containers keep running.
+const remove = async (id: string): Promise<LeaveOutcome | undefined> => {
     const previous = queryClient.getQueryData<SandboxSummary[]>(SANDBOX_LIST_KEY);
     const target = previous?.find((sandbox) => sandbox.id === id);
     if (target === undefined) {
-        return;
+        return undefined;
     }
+    let left: LeaveOutcome | undefined;
     // Drops the row optimistically, inside the call and before its first await, so the switcher's synchronous check sees
     // it gone this tick; a failed removal restores the pre-drop rows, `removing` cleared first so the row can come back.
     removing.add(id);
     const removal = optimisticUpdate<SandboxSummary[], unknown>(
         SANDBOX_LIST_KEY,
         (live) => live.filter((sandbox) => sandbox.id !== id),
-        () => (target.role === `owner` ? apiClient.sandbox.delete({ sandboxId: id }) : apiClient.sandbox.leave({ sandboxId: id })),
+        async () => {
+            if (target.role === `owner`) {
+                await apiClient.sandbox.delete({ sandboxId: id });
+                return;
+            }
+            // Loaded here and not at the top: the leave goes through the session client, which imports this module's
+            // neighbours, so a static import would close a cycle (the editor-boundaries check names it).
+            left = await (await import(`./leaveSandbox`)).leaveSandbox(target);
+        },
         { onRollback: () => removing.delete(id), client: queryClient },
     );
     if (activeSandboxId.value === id) {
@@ -237,6 +247,7 @@ const remove = async (id: string): Promise<void> => {
     if (target.daemonUrl !== null) {
         forgetAddress(target.daemonUrl);
     }
+    return left;
 };
 
 export function useSandbox() {

@@ -106,6 +106,10 @@ const policyOf = (c: Context<AppEnv>): RouteMeta => sandboxRouteFor(c.req.method
 // split one route into thousands of callers.
 export const gitCallerOfRequest = (method: string, path: string): string => `http ${sandboxRouteFor(method, path)?.name ?? "unrouted"}`;
 
+// What the device gates ask when an agent would restart the sandbox it runs in: everything a restart would cut, leaving
+// out the caller's own turn (hosts/host-guard-deps.ts). The one answer to "is it busy?" is bootstrap/working-now.ts.
+const restartWorkOf = (services: Services) => (except: string | undefined) => workingNames(services, "restart", except);
+
 // The path the router will actually match: oRPC normalizes a trailing slash before dispatch, so a grant that matches a
 // path itself must check the same normalized path. A root path stays `/`, repeated slashes collapse.
 const routedPath = (path: string): string => path.replace(/\/+$/u, "") || "/";
@@ -539,6 +543,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         cards: cardDeps(services),
         held: services.heldCards,
         turnRun: (conversationId) => turnRunOf(services.conversations, conversationId),
+        working: restartWorkOf(services),
         judge: (input, signal) => judgeIndependentCommand(services, input, signal),
     });
     const webextRoutes = webextPeerRoutes(services);

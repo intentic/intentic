@@ -2,12 +2,12 @@ import { mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_SAFETY_POLICY } from "@intentic/sandbox-contract";
-import { fileSafetyPolicyStore, withAddedLine } from "./safety-policy-store.js";
+import { fileSafetyPolicyStore, GRANTED_HEADING, withGrantedLines } from "./safety-policy-store.js";
 
-const store = async () => {
+const store = async (granted: () => Promise<readonly string[]> = async () => []) => {
     const dir = await mkdtemp(join(tmpdir(), "safety-"));
     const path = join(dir, "safety.md");
-    return { path, policy: fileSafetyPolicyStore(path) };
+    return { path, policy: fileSafetyPolicyStore(path, granted) };
 };
 
 // Absent is not unconfigured: the shipped text describes the posture a workspace already has, so the judge reads a real
@@ -33,12 +33,12 @@ test("an emptied file is the owner's own policy, not a fallback to the default",
 });
 
 // Only absence means the shipped default: an owner's policy that is there but cannot be read would otherwise be judged
-// by the default's rules, and an Always click would write the default over it.
+// by the default's rules.
 test("a policy that exists but cannot be read is an error, never the shipped default", async () => {
     const { path, policy } = await store();
     await mkdir(path);
     await expect(policy.get()).rejects.toThrow("EISDIR");
-    await expect(policy.append(`Deleting build directories under /work is fine.`)).rejects.toThrow("EISDIR");
+    await expect(policy.text()).rejects.toThrow("EISDIR");
     expect((await stat(path)).isDirectory()).toBe(true);
 });
 
@@ -52,52 +52,50 @@ test("a save is newline-terminated exactly once", async () => {
     expect(await readFile(path, "utf8")).toBe(`One line.\n`);
 });
 
-// The card's Always button, end to end: appends to the shipped text when there's no file yet, since clicking a card
-// button isn't asking to throw away the default posture.
-test("appending to a workspace with no file keeps the default and adds the line under it", async () => {
-    const { policy } = await store();
-    await policy.append(`Deleting build directories under /work is fine.`);
-    const { text, custom } = await policy.get();
-    expect(custom).toBe(true);
-    expect(text).toContain(DEFAULT_SAFETY_POLICY.trimEnd());
-    expect(text).toContain(`- Deleting build directories under /work is fine.`);
+// The card's Always button no longer touches this file: the lines it allowed are owner-wide grants (personas/owner-grants.ts)
+// the judge reads after the owner's own text. The Safety page still shows, and saves, only what the owner wrote.
+test("the judge reads the owner's text followed by the allowed lines, and the page's reading has none of them", async () => {
+    const { path, policy } = await store(async () => [`Deleting build directories under /work is fine.`, `Pushing to a scratch branch is fine.`]);
+    await policy.set(`Ask me before anything.`);
+
+    const judged = await policy.text();
+    expect(judged).toBe(
+        [
+            `Ask me before anything.`,
+            ``,
+            GRANTED_HEADING,
+            ``,
+            `Lines the owner allowed with Always on a card, oldest first. They hold in every conversation until the owner takes one back under Access.`,
+            ``,
+            `- Deleting build directories under /work is fine.`,
+            `- Pushing to a scratch branch is fine.`,
+            ``,
+        ].join(`\n`),
+    );
+    expect(await policy.get()).toEqual({ text: `Ask me before anything.\n`, custom: true });
+    expect(await readFile(path, `utf8`)).toBe(`Ask me before anything.\n`);
 });
 
-test("a second line joins the first instead of starting a second section", async () => {
-    const { policy } = await store();
-    await policy.append(`First thing.`);
-    await policy.append(`Second thing.`);
-    const { text } = await policy.get();
-    expect(text.match(/## Added from permission cards/gu)).toHaveLength(1);
-    expect(text.indexOf(`- First thing.`)).toBeLessThan(text.indexOf(`- Second thing.`));
+test("with no file the allowed lines follow the shipped default, which the page keeps showing as the default", async () => {
+    const { policy } = await store(async () => [`Deleting build directories under /work is fine.`]);
+    const judged = await policy.text();
+    expect(judged.startsWith(DEFAULT_SAFETY_POLICY.trimEnd())).toBe(true);
+    expect(judged).toContain(`- Deleting build directories under /work is fine.`);
+    expect(await policy.get()).toEqual({ text: DEFAULT_SAFETY_POLICY, custom: false });
 });
 
-// Placed by section, not simply appended: sections address different subjects (the disposable container vs. the owner's
-// own laptop), so a sandbox line landing under "On my devices" would read as a rule about the laptop, not a mistake.
-test("a line lands in its own section even when another section was written after it", () => {
-    const policy = [
-        `## In this sandbox`,
-        ``,
-        `Ordinary work is fine.`,
-        ``,
-        `## Added from permission cards`,
-        ``,
-        `- First.`,
-        ``,
-        `## On my devices`,
-        ``,
-        `Ask before anything.`,
-        ``,
-    ].join(`\n`);
-    const next = withAddedLine(policy, `Second.`);
-    expect(next.indexOf(`- Second.`)).toBeGreaterThan(next.indexOf(`- First.`));
-    expect(next.indexOf(`- Second.`)).toBeLessThan(next.indexOf(`## On my devices`));
-    // The section it was NOT meant for is untouched.
-    expect(next).toContain(`## On my devices\n\nAsk before anything.`);
+test("no allowed line leaves the policy exactly as written, and the same lines always render the same text", () => {
+    expect(withGrantedLines(`## In this sandbox\n\nOrdinary work is fine.\n`, [])).toBe(`## In this sandbox\n\nOrdinary work is fine.\n`);
+    expect(withGrantedLines(`One line.`, [`A.`, `B.`])).toBe(withGrantedLines(`One line.`, [`A.`, `B.`]));
+    // A policy without its final newline still ends its last line before the heading starts.
+    expect(withGrantedLines(`One line.`, [`A.`]).startsWith(`One line.\n\n${GRANTED_HEADING}`)).toBe(true);
 });
 
-test("the heading and its note are written once, on the first line added", () => {
-    const first = withAddedLine(`## In this sandbox\n\nOrdinary work is fine.\n`, `A thing.`);
-    expect(first).toContain(`## Added from permission cards`);
-    expect(withAddedLine(first, `Another.`).match(/## Added from permission cards/gu)).toHaveLength(1);
+// A grants file this build cannot read is the grants store's to say (personas/owner-grants.ts: it reads as none and warns);
+// a reading that fails outright is never turned into a policy with some lines missing.
+test("a failed reading of the allowed lines is an error, never a quiet policy without them", async () => {
+    const { policy } = await store(async () => {
+        throw new Error("disk is gone");
+    });
+    await expect(policy.text()).rejects.toThrow("disk is gone");
 });

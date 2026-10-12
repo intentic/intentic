@@ -1,10 +1,10 @@
-import { type PasskeysList, PasskeysListSchema, type RegistrationOptionsJSON } from "@intentic/sandbox-contract";
+import type { PasskeysList } from "@intentic/sandbox-contract";
 import { type NoticeModel, noticeFrom } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { computed, ref, watch } from "vue";
-import { jsonBody } from "../../../client/sandbox/jsonBody";
-import { browserSupportsPasskeys, createPasskey, type PasskeyRegistered } from "../../../client/session/passkeySignIn";
-import { sandboxJson } from "../../../client/sandbox/sandboxClient";
+import { browserSupportsPasskeys, createPasskey } from "../../../client/session/passkeySignIn";
+import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
+import { readFailure } from "../../../client/sandbox/useDaemonRoutes";
 import { useSandboxSession } from "../../../client/session/sandboxSession";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useOperation } from "../../../workbench/operations/operations";
@@ -36,18 +36,15 @@ export function usePasskeys() {
     const unread = ref<NoticeModel | undefined>(undefined);
 
     // A list that cannot be read, or one in a shape this page does not know, reads as no passkeys rather than a broken
-    // tab; one that cannot be read says so (`unread`).
+    // tab, and says so (`unread`): the rule's state is then unknown, never drawn as off.
     const refresh = async (): Promise<void> => {
-        let body: unknown;
         try {
-            body = await sandboxJson<unknown>(`/system/passkeys`);
+            list.value = await sandboxRaw(`GET /system/passkeys`);
+            unread.value = undefined;
         } catch (caught) {
             list.value = EMPTY;
-            unread.value = noticeFrom(caught, t(`sandbox.passkeysSection.couldntReadPasskeys`));
-            return;
+            unread.value = noticeFrom(new Error(readFailure(caught)), t(`sandbox.passkeysSection.couldntReadPasskeys`));
         }
-        unread.value = undefined;
-        list.value = PasskeysListSchema.safeParse(body).data ?? EMPTY;
     };
 
     watch(
@@ -70,13 +67,10 @@ export function usePasskeys() {
             failed: t(`sandbox.passkeysSection.couldntAddPasskey`),
             quiet: true,
             task: async () => {
-                const options = await sandboxJson<RegistrationOptionsJSON>(`/system/passkeys/register/options`, jsonBody(`POST`, {}));
+                const options = await sandboxRaw(`POST /system/passkeys/register/options`);
                 const response = await createPasskey(options);
                 const trimmed = label.trim();
-                const registered = await sandboxJson<PasskeyRegistered>(
-                    `/system/passkeys/register`,
-                    jsonBody(`POST`, { response, ...(trimmed === `` ? {} : { label: trimmed }) }),
-                );
+                const registered = await sandboxRaw(`POST /system/passkeys/register`, { input: trimmed === `` ? { response } : { response, label: trimmed } });
                 // The upgraded session is kept, so switching the rule on right after does not ask for the passkey again.
                 const sandboxId = active.value?.id;
                 if (registered.session !== undefined && sandboxId !== undefined) {
@@ -91,7 +85,7 @@ export function usePasskeys() {
     const remove = async (id: string): Promise<void> => {
         removeNotice.value = undefined;
         try {
-            await sandboxJson(`/system/passkeys/${encodeURIComponent(id)}`, { method: `DELETE` });
+            await sandboxRaw(`DELETE /system/passkeys/{id}`, { params: { id } });
         } catch (caught) {
             removeNotice.value = noticeFrom(caught, t(`sandbox.passkeysSection.couldntRemovePasskey`));
         }
@@ -110,7 +104,7 @@ export function usePasskeys() {
             keep: required,
             quiet: !required,
             task: async () => {
-                const result = await sandboxJson<{ required: boolean; codes?: string[] }>(`/system/passkeys/policy`, jsonBody(`POST`, { required }));
+                const result = await sandboxRaw(`POST /system/passkeys/policy`, { input: { required } });
                 await refresh();
                 return result.codes;
             },
@@ -127,7 +121,7 @@ export function usePasskeys() {
             failed: t(`sandbox.passkeysSection.couldntMintCodes`),
             keep: true,
             task: async () => {
-                const minted = (await sandboxJson<{ codes: string[] }>(`/system/passkeys/recovery`, jsonBody(`POST`, {}))).codes;
+                const minted = (await sandboxRaw(`POST /system/passkeys/recovery`)).codes;
                 await refresh();
                 return minted;
             },

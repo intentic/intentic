@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
-import { type AgentEvent, type AgentTurn, LOOP_DIR, SandboxSettingsSchema, type Workflow } from "@intentic/sandbox-contract";
+import { type AgentEvent, type AgentTurn, LOOP_DIR, type Workflow } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { Hono } from "hono";
 import { memoryDoorTokens } from "../auth/tokens/door-tokens.js";
@@ -13,7 +13,7 @@ import { createGateRoute, settledWithin } from "./gate.routes.js";
 import { PAYLOAD_MAX } from "../automations/scheduler.js";
 import { fileWorkflowRunsStore, fileWorkflowsStore } from "./workflows-store.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
-import { drivenBy, memoryFleet } from "../testing.js";
+import { drivenBy, memoryFleet, unpinnedRouting } from "../testing.js";
 import { createDomainEvents } from "../seams/domain-events.js";
 
 // Gate route end to end: an identity-less runner posts, waits, and is told whether to ship. Each test uses its own
@@ -25,22 +25,26 @@ const REPOS = [{ repo: "root", base: "1111111111111111111111111111111111111111" 
 const DOORS = memoryDoorTokens();
 const token = (id: string): Promise<string> => DOORS.ensure("gate", id);
 
-const fakeServices = (root: string): Services =>
-    unstubbed<Services>("services", {
+const fakeServices = (root: string): Services => {
+    const fleet = memoryFleet();
+    return unstubbed<Services>("services", {
+        // A step's turn names its run role, so the door looks for the model that role pins; none does here.
+        ...unpinnedRouting(),
         loops: fileLoopsStore(join(root, "loops.json")),
         workflows: fileWorkflowsStore(join(root, "workflows.json")),
-        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         workflowRuns: fileWorkflowRunsStore(join(root, "workflow-runs.json")),
         doorTokens: DOORS,
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         // Real actors, since the runner stops a turn through them; none is ever registered here.
-        conversations: memoryFleet().conversations,
+        agents: fleet.agents,
+        conversations: fleet.conversations,
         // Heard by nobody: what reacts to a settled run is composition's to subscribe.
         events: createDomainEvents(() => {}),
         agentWorktrees: unstubbed<Services["agentWorktrees"]>("agentWorktrees", { conversationDir: () => root, snapshot: async () => REPOS }),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { append: async () => {} }),
         logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {}, info: () => {} }),
     });
+};
 
 const gated = (id: string, over: Partial<Workflow> = {}): Workflow => ({
     id,

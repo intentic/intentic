@@ -1,3 +1,7 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { repoRoot } from "@intentic/constants/node";
+import { RESTART_ACTIONS, RESTART_INITIATORS, RESTART_SIDES, RestartIntentSchema } from "@intentic/sandbox-contract";
 import { fakeKeeper, fixRun, linkView } from "../../testing.js";
 import type { IcRun } from "../tools/sandboxes.js";
 import {
@@ -12,8 +16,9 @@ import {
     type KeeperState,
     newKeeperState,
     readFixRun,
-    type RestartIntent,
+    type KeeperRestartIntent,
     restartIntent,
+    RESTART_INTENT_PATH,
     runKeeperRound,
     trashedFrom,
     UNREACHABLE_AFTER_MS,
@@ -620,11 +625,11 @@ test("a restart ic announces is logged with ic's finding, the keeper's own evide
     fake.records = [SLUG];
     fake.listing = [{ slug: SLUG, container: "intentic-0123" }];
     fake.links = [linkView(URL, NOW - 10 * MIN)];
-    const written: [string, RestartIntent][] = [];
+    const written: [string, KeeperRestartIntent][] = [];
     const seams = {
         ...fake.seams,
         side: async () => await Promise.resolve("wsl" as const),
-        writeIntent: async (container: string, intent: RestartIntent) => void written.push([container, intent]),
+        writeIntent: async (container: string, intent: KeeperRestartIntent) => void written.push([container, intent]),
     };
     fake.answer = async (slug) =>
         await Promise.resolve(
@@ -661,4 +666,39 @@ test("an intent from an older ic's bare line still says why the keeper ran, and 
         reason: "Restarting the sandbox; asked by the keeper's periodic sweep",
         checks: [],
     });
+});
+
+/* THE INTENT THE KEEPER LEAVES IN THE CONTAINER is the contract's RestartIntentSchema, which the daemon reads it with and
+   ic's Rust writes it by. The daemon's golden/host-files.json holds the schema's example and its words, and ic's
+   host_files.rs is held to the same entry; the keeper, which is TypeScript of its own, is held here. */
+// SAFETY: the golden is this repository's own file; the assertions below fail on any field it lacks.
+const GOLDEN_INTENT = (
+    JSON.parse(readFileSync(join(repoRoot(import.meta.url), "_sandbox/sandbox/golden/host-files.json"), "utf8")) as {
+        readonly restartIntent: {
+            readonly path: string;
+            readonly example: Record<string, unknown>;
+            readonly initiators: string[];
+            readonly actions: string[];
+            readonly sides: string[];
+        };
+    }
+).restartIntent;
+
+test("the keeper writes the file where the daemon reads it, and in the contract's words", () => {
+    expect(RESTART_INTENT_PATH).toBe(GOLDEN_INTENT.path);
+    expect(GOLDEN_INTENT.initiators).toEqual([...RESTART_INITIATORS]);
+    expect(GOLDEN_INTENT.actions).toEqual([...RESTART_ACTIONS]);
+    expect(GOLDEN_INTENT.sides).toEqual([...RESTART_SIDES]);
+});
+
+test.each(["wsl", "windows", "linux", "mac"] as const)("what the keeper writes from the %s side is an intent the contract's schema accepts, field for field", (side) => {
+    for (const trigger of [{ kind: "sweep" }, { kind: "link", since: NOW - 10 * MIN }, { kind: "link", since: undefined }] as const) {
+        const written = restartIntent("Restarting the sandbox, because Daemon health: the daemon does not answer /health.", trigger, side, "rog", NOW);
+        expect(RestartIntentSchema.parse(JSON.parse(JSON.stringify(written)))).toEqual(written);
+    }
+});
+
+test("the keeper's intent has exactly the fields the golden example has, and the example is one the schema accepts", () => {
+    const written = restartIntent("Restarting the sandbox", { kind: "link", since: undefined }, "wsl", "rog", NOW);
+    expect(Object.keys(written).toSorted()).toEqual(Object.keys(RestartIntentSchema.parse(GOLDEN_INTENT.example)).toSorted());
 });

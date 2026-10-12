@@ -40,6 +40,15 @@ describe(`staleRuntimeQueryKeys`, () => {
     it(`re-reads the Allowed list when a card's yes is written or taken back, which no file push carries`, () => {
         expect(staleRuntimeQueryKeys([`grants`])).toEqual([[`grants`]]);
     });
+
+    it(`re-reads each paired-machine roster on its own door's push, and the sync state on a device's`, () => {
+        // The dialogs and rows that name a machine read one roster each (the editor's PAIRED_* and RUNNERS families), so a
+        // socket opening or closing, or a sync key enrolled, moves exactly the keys that show it.
+        expect(staleRuntimeQueryKeys([`hosts`])).toEqual([[`capabilities`], [`devices`], [`hosts`], [`sync-health`]]);
+        expect(staleRuntimeQueryKeys([`webext`])).toEqual([[`capabilities`], [`webext`]]);
+        expect(staleRuntimeQueryKeys([`phones`])).toEqual([[`capabilities`], [`phones`]]);
+        expect(staleRuntimeQueryKeys([`runners`])).toEqual([[`runners`]]);
+    });
 });
 
 describe(`RUNTIME_DOMAIN_BINDINGS`, () => {

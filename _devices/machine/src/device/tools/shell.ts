@@ -1,7 +1,17 @@
 import type { ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { homeDir } from "@intentic/local-agent";
-import { COMMAND_CLASS_LABELS, type CommandClass, type DeviceScopes, matchCommand, hardRuleClasses } from "@intentic/sandbox-contract";
+import {
+    COMMAND_CLASS_LABELS,
+    type CommandClass,
+    type DeviceScopes,
+    hardRuleClasses,
+    managesSandbox,
+    matchCommand,
+    type SandboxPowerCommand,
+    sandboxPowerCommands,
+} from "@intentic/sandbox-contract";
+import { SANDBOX_CONTAINER_PREFIX } from "@intentic/sandbox-run";
 import { type CollectedOutput, runBounded, stopProcessTree } from "@intentic/base/process";
 import { assertPath, assertScope, rootsOf, ScopeError } from "../policy.js";
 import { crossInterpreter, type Interpreter, POWERSHELL_FLAGS, targetOf } from "../../environments/crossing.js";
@@ -126,6 +136,36 @@ export const destructiveClasses = (command: string): CommandClass[] =>
         .filter((match) => match.live && GATED_CLASSES.has(match.commandClass))
         .map((match) => match.commandClass);
 
+// A SHELL COMMAND THAT MANAGES A SANDBOX ANSWERS TO THE SAME SWITCH AS THE TOOLS THAT DO (2026-10-12). `manage_sandbox`,
+// `swap_sandbox`, `reshape_sandbox` and `remove_sandbox` each refuse without "Manage sandboxes on this device", but
+// `run_command ic sandbox restart work` reached the same `ic` through the shell and asked nothing of it. Every door that
+// carries a program (run_command, app_start, open, typed text) now reads its command line here. Which sandbox it names
+// is not asked: this machine does not know which one the caller runs in, and the switch is for all of them. Only where a
+// shell would run it, so a sentence that quotes the command is not refused.
+
+/** The commands in `commandLine` that manage a sandbox, whichever sandbox, that a shell would run. */
+export const sandboxPowerIn = (commandLine: string): SandboxPowerCommand[] =>
+    sandboxPowerCommands(commandLine).filter((hit) => hit.live && managesSandbox(hit, SANDBOX_CONTAINER_PREFIX));
+
+// What the refusal says the command asks for, in `ic sandbox`'s own verbs.
+const doingOf = (hits: readonly SandboxPowerCommand[]): string => [...new Set(hits.map((hit) => hit.op))].join(", ");
+
+/**
+ * Throws the refusal unless "Manage sandboxes on this device" is on, for a command that restarts, stops, updates,
+ * removes or otherwise manages a sandbox on this device. `how` is how the command reached here, for the sentence.
+ */
+export const assertNoSandboxPower = (commandLine: string, scopes: DeviceScopes, how: "command" | "typed" = "command"): void => {
+    const hits = sandboxPowerIn(commandLine);
+    if (hits.length === 0 || scopes.sandboxes === "on") {
+        return;
+    }
+    throw new ScopeError(
+        `Refused: ${how === "typed" ? "typed into a terminal, this" : "this command"} would manage a sandbox on this device (${doingOf(hits)}), and "Manage sandboxes on this device" is switched off for it. ` +
+            `That switch decides whether anything may stop, restart, update or remove a sandbox here, however it is spelled: the device's own tools, \`ic sandbox …\`, or \`docker\`. ` +
+            `Turn it on in its capability card to allow this.`,
+    );
+};
+
 // This environment's own interpreter. The working directory is inside the roots like any other path: a command is a
 // file operation with extra steps.
 const nativeInterpreter = async (script: string, cwd: string | undefined, scopes: DeviceScopes): Promise<Interpreter> => {
@@ -149,6 +189,8 @@ export const runCommand = async (
     if (destructive.length > 0 && scopes.destructive !== "on") {
         throw new ScopeError(destructiveRefusal(destructive));
     }
+    // `ic sandbox restart …` and `docker stop <a sandbox>` are the sandbox tools by another door, and answer to their switch.
+    assertNoSandboxPower(input.command, scopes);
     const target = targetOf(input.in);
     const interpreter =
         target.kind === "native"

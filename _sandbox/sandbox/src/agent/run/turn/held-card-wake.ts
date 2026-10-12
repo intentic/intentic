@@ -10,7 +10,7 @@ import { deliverWake } from "./wake-delivery.js";
 const SOURCE = "device-card";
 
 export const heldCardWake =
-    (whole: () => Pick<Services, "agents" | "turns" | "conversations">, logger: Pick<Logger, "warn">): HeldCardWake =>
+    (whole: () => Pick<Services, "agents" | "turns">, logger: Pick<Logger, "warn">): HeldCardWake =>
     async (conversationId, prompt) => {
         const services = whole();
         const entry = services.agents.entry(conversationId);
@@ -20,7 +20,7 @@ export const heldCardWake =
         }
         try {
             const receipt = await deliverWake(
-                { turns: services.turns, sessionIdOf: (id) => services.conversations.sessionIdOf(id) },
+                { turns: services.turns },
                 { conversationId, prompt, voice: "sandbox", source: SOURCE, profile: conversationProfile(entry) },
             );
             if (!("delivered" in receipt)) {

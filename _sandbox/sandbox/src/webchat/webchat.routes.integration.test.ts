@@ -33,7 +33,7 @@ const ORIGIN = "https://site.example";
 const fakeServices = (root: string, appends: ActivityEvent[], archived: ReadonlySet<string>): Services => {
     const services: Services = unstubbed<Services>("services", {
         automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
-        heldWakes: fileHeldWakesStore(join(root, "approvals")),
+        heldWakes: fileHeldWakesStore(join(root, "history")),
         threadSessions: fileThreadSessionsStore(join(root, "thread-sessions.json"), (conversationId) => archived.has(conversationId)),
         agents: unstubbed<Services["agents"]>("agents", {
             entry: (id: string) => (archived.has(id) ? conversationEntry({ id, archivedAt: 1 }) : undefined),
@@ -170,10 +170,16 @@ test("an approved wake's reply reaches the visitor's next poll, not just the fle
 
     const [held] = await services.heldWakes.list();
     const automation = await services.automations.get("wc-approved");
+    // As the approve route lets it out: on the owner's yes, which the store checks before the wake runs.
+    await services.heldWakes.approve(held?.id ?? "", "ada@acme.dev");
+    const released = await services.heldWakes.release(held?.id ?? "");
+    if (released === undefined) {
+        throw new Error("the held wake was gone before the owner released it");
+    }
     await runHeldWake(
         drivenBy(services, fakeWake([], [{ kind: "delta", text: "we had a look: " }, { kind: "delta", text: "it is fixed" }, { kind: "done" }])),
         automation as NonNullable<typeof automation>,
-        held as NonNullable<typeof held>,
+        released,
     );
 
     const collected = (await (await collect(app, "wc-approved", "visitor-9")).json()) as { replies: { seq: number; text: string }[]; cursor: number };

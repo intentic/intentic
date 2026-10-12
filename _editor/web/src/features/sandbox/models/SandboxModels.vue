@@ -6,15 +6,13 @@ import {
     type KeyedProvider,
     type NativeProvider,
     type ProviderKey,
-    ProviderKeysAppliedSchema,
-    ProviderKeysSchema,
     providerSpec,
 } from "@intentic/sandbox-contract";
 import { Button, Icon, Notice, type NoticeModel, Row, RowGroup } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, onMounted, ref, useId, useTemplateRef, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { sandboxJson } from "../../../client/sandbox/sandboxClient";
+import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
 import { useRole } from "../../../client/sandbox/useRole";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { foundToOffer } from "../../../lib/foundOnComputer";
@@ -354,7 +352,7 @@ const addedHere = ref<ReadonlySet<string>>(new Set());
 const keyRows = computed(() => offeredKeys(keys.value, addedHere.value));
 const readKeys = async (): Promise<void> => {
     // allow(silent-catch): a list that could not be read offers nothing, which is what the section shows for none.
-    keys.value = ProviderKeysSchema.parse(await sandboxJson(`/arrivals/keys`).catch(() => ({ keys: [] }))).keys;
+    keys.value = (await sandboxRaw(`GET /arrivals/keys`).catch(() => ({ keys: [] }))).keys;
 };
 // Copying a key in is kept in the operations ledger rather than here: it writes the key and the endpoint and re-reads the
 // connections whether or not this page stays open, and coming back mid-copy has to show it under way, or why it failed.
@@ -372,13 +370,7 @@ const addKey = async (key: ProviderKey): Promise<void> => {
         quiet: true,
         failed: t(`connect.connect.foundKeyFailed`),
         task: async () => {
-            const applied = ProviderKeysAppliedSchema.parse(
-                await sandboxJson(`/arrivals/keys/apply`, {
-                    method: `POST`,
-                    headers: { "content-type": `application/json` },
-                    body: JSON.stringify({ ids: [key.id] }),
-                }),
-            );
+            const applied = await sandboxRaw(`POST /arrivals/keys/apply`, { input: { ids: [key.id] } });
             const failure = applied.failed[0];
             if (failure !== undefined) {
                 throw new Error(failure.error);

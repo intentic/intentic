@@ -5,15 +5,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { gitCheckout, gitClone, gitFullHead, gitHead } from "@intentic/base/git";
+import type { AgentEvent, AgentTurn, ExtensionUpdate } from "@intentic/sandbox-contract";
+import { unstubbed } from "@intentic/testing";
+import { SETTLES, waitFor } from "@intentic/testing/bun";
 import { createApp } from "../app.js";
 import { extensionDir, extensionsRoot } from "../capabilities/extension-dirs.js";
 import { previousDir } from "../capabilities/git-checkout.js";
 import { clientFor } from "../harness/route-client.testing.js";
 import { fakeFiles } from "../workspace/workspace-slice.testing.js";
-import { services } from "../harness/route-services.testing.js";
+import { type ServiceOverrides, services } from "../harness/route-services.testing.js";
 import { memoryCapabilitiesStore } from "../capabilities/capabilities-slice.testing.js";
 import { makeWorkspaceDir, moveWorkspacePath, readWorkspaceFile, removeWorkspacePath } from "../workspace/files/workspace-files.js";
 import { workspacePaths } from "../workspace/workspace.js";
+import type { Services } from "../composition.js";
 import { readExtensionEnablement } from "./extension-enablement.js";
 import { checkExtensionUpdates, readExtensionUpdateState, writeUpdatePolicy } from "./extension-updates.js";
 
@@ -69,7 +73,12 @@ const registryRepo = async (author: { url: string }, sha: string, entry: object 
 
 // Workspace with v1 installed the way the capability handler leaves it: a checkout pinned at the sha. `configRef`
 // stands for a capabilities.json whose ref was edited by hand, which moves no checkout.
-const installedWorkspace = async (author: { url: string; v1: string }, registry: string, configRef: string = author.v1) => {
+const installedWorkspace = async (
+    author: { url: string; v1: string },
+    registry: string,
+    configRef: string = author.v1,
+    extra: ServiceOverrides = {},
+) => {
     const workspace = workspacePaths(mkdtempSync(join(tmpdir(), "ext-updates-")));
     await mkdir(extensionsRoot(workspace.root), { recursive: true });
     await exec("git", ["clone", "-q", author.url, extensionDir(workspace.root, "demo")]);
@@ -80,6 +89,7 @@ const installedWorkspace = async (author: { url: string; v1: string }, registry:
         // Real git/files verbs, not stubs: this suite is about clones, swaps and heads against the fixtures above.
         git: { clone: gitClone, checkout: gitCheckout, head: gitHead, fullHead: gitFullHead },
         files: fakeFiles({ read: readWorkspaceFile, mkdir: makeWorkspaceDir, remove: removeWorkspacePath, move: moveWorkspacePath }),
+        ...extra,
     });
     return { workspace, svc, client: clientFor(createApp(svc)) };
 };
@@ -211,4 +221,56 @@ test("an unreachable registry keeps the previous records: offline never reads as
     // The pass fails naming the registry, so an owner's "check now" can't answer as all-clear.
     await expect(checkExtensionUpdates(svc)).rejects.toThrow(`could not reach ${registry} (`);
     expect((await readExtensionUpdateState(workspace.root)).extensions["acme.demo"]?.update?.ref).toBe(author.v2);
+});
+
+// The agent rung's review is a turn the daemon starts on its own, so it goes through the run door every such turn takes
+// (routed by its `extension-review` role, its transcript recorded) rather than a stream nobody reads.
+const reviewing = (frames: readonly AgentEvent[] | Error) => {
+    const started: AgentTurn[] = [];
+    const turns = unstubbed<Services["turns"]>("turns", {
+        run: (turn: AgentTurn) => {
+            started.push(turn);
+            if (frames instanceof Error) {
+                throw frames;
+            }
+            return { id: "run-review", async *frames () { yield* frames; } };
+        },
+    });
+    return { turns, started };
+};
+
+const reviewedUpdate = async (turns: Services["turns"], settled: (update: ExtensionUpdate | undefined) => void): Promise<void> => {
+    const author = await authorRepo();
+    const registry = await registryRepo(author, author.v2);
+    const { workspace, svc } = await installedWorkspace(author, registry, author.v1, { turns });
+    await writeUpdatePolicy(workspace.root, "acme.demo", { updates: "agent" });
+    await checkExtensionUpdates(svc);
+    await waitFor(async () => settled((await readExtensionUpdateState(workspace.root)).extensions["acme.demo"]?.update), SETTLES);
+};
+
+test("the agent rung reads the update on the extension-review role and links the conversation that holds what it found", async () => {
+    const { turns, started } = reviewing([{ kind: "delta", text: "Safe to take." }, { kind: "done" }]);
+    await reviewedUpdate(turns, (update) => {
+        expect(update?.review).toEqual({ conversationId: expect.stringMatching(/^ext-update-acme-demo-/u), at: expect.any(String) });
+        expect(update?.review?.conversationId).toBe(started[0]?.conversationId);
+        expect(update?.needsReview).toBeUndefined();
+    });
+    expect(started).toHaveLength(1);
+    expect(started[0]).toMatchObject({ runRole: "extension-review", unattended: true, isolated: true, conversationId: expect.stringMatching(/^ext-update-acme-demo-/u) });
+});
+
+test("a review that ends in an error hands the card back to its owner with the reason, and no link to a review that read nothing", async () => {
+    const { turns } = reviewing([{ kind: "error", message: "No AI provider is connected to this sandbox." }, { kind: "done" }]);
+    await reviewedUpdate(turns, (update) => {
+        expect(update?.needsReview).toBe("an agent was asked to read this update and could not: No AI provider is connected to this sandbox.");
+        expect(update?.review).toBeUndefined();
+    });
+});
+
+test("a review that cannot even start says why on the card the same way", async () => {
+    const { turns } = reviewing(new Error("settings could not be read"));
+    await reviewedUpdate(turns, (update) => {
+        expect(update?.needsReview).toBe("an agent was asked to read this update and could not: settings could not be read");
+        expect(update?.review).toBeUndefined();
+    });
 });

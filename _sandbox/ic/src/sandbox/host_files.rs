@@ -39,40 +39,26 @@ fn every_path_ic_reads_or_writes_is_the_one_the_daemon_uses() {
     assert_eq!(files["workSignal"]["path"], chain::WORK_SIGNAL);
 }
 
-/// The restart intent (intent.rs), held to the daemon's definition once the daemon's golden file names it: the daemon
-/// side that reads it lands beside this, and until its entry is in the golden file there is nothing to hold ic to.
+/// The restart intent (intent.rs), held to the contract's RestartIntentSchema through the daemon's golden file: the path, an
+/// example ic's body reproduces field for field, and the words (who acts, what it does, which side it runs on) every writer
+/// of the file shares. The device keeper's writer is held to the same entry by its own test.
 #[test]
-fn the_restart_intent_ic_writes_is_the_daemons_example() {
+fn the_restart_intent_ic_writes_is_the_contracts_example() {
     let files = json(HOST_FILES);
-    let Some(entry) = files.get("restartIntent") else {
-        return;
-    };
+    let entry = &files["restartIntent"];
     assert_eq!(entry["path"], intent::FILE);
-    let Some(example) = entry.get("example") else {
-        return;
-    };
+    let example = &entry["example"];
     let text = |field: &str| example[field].as_str().expect("a string field");
     let checks: Vec<String> = example["checks"]
         .as_array()
-        .map(|checks| {
-            checks
-                .iter()
-                .filter_map(|check| check.as_str().map(str::to_string))
-                .collect()
-        })
-        .unwrap_or_default();
-    let action = [
-        intent::Action::Restart,
-        intent::Action::Stop,
-        intent::Action::Update,
-        intent::Action::Swap,
-        intent::Action::Reshape,
-        intent::Action::Recreate,
-        intent::Action::Rebuild,
-    ]
-    .into_iter()
-    .find(|action| action.wire() == text("action"))
-    .expect("an action ic writes");
+        .expect("the example names checks")
+        .iter()
+        .map(|check| check.as_str().expect("a check").to_string())
+        .collect();
+    let action = intent::Action::ALL
+        .into_iter()
+        .find(|action| action.wire() == text("action"))
+        .expect("an action ic writes");
     let body = intent::body(
         action,
         text("reason"),
@@ -83,6 +69,46 @@ fn the_restart_intent_ic_writes_is_the_daemons_example() {
     );
     let at = crate::sandbox::fix::clock::rfc3339_ms(text("at")).expect("an ISO moment");
     assert_eq!(&json(&inside::stamp(&body.to_string(), at)), example);
+}
+
+#[test]
+fn every_word_ic_puts_in_a_restart_intent_is_one_the_contract_enumerates() {
+    let files = json(HOST_FILES);
+    let entry = &files["restartIntent"];
+    let words = |field: &str| -> Vec<String> {
+        entry[field]
+            .as_array()
+            .unwrap_or_else(|| panic!("the golden enumerates {field}"))
+            .iter()
+            .map(|word| word.as_str().expect("a word").to_string())
+            .collect()
+    };
+    let (initiators, actions, sides) = (words("initiators"), words("actions"), words("sides"));
+    for who in [intent::BY_IC, intent::BY_KEEPER] {
+        assert!(initiators.iter().any(|word| word == who), "{who}");
+    }
+    for action in intent::Action::ALL {
+        assert!(
+            actions.iter().any(|word| word == action.wire()),
+            "{}",
+            action.wire()
+        );
+    }
+    // Every side the platform and environment names ic can run on, as the file says it.
+    for (platform, env) in [
+        ("windows", None),
+        ("linux", Some("macos")),
+        ("linux", Some("linux")),
+        ("linux", Some("archlinux")),
+        ("linux", None),
+        ("macos", None),
+    ] {
+        let side = intent::side_word(platform, env);
+        assert!(
+            sides.iter().any(|word| word == side),
+            "{platform} {env:?} -> {side}"
+        );
+    }
 }
 
 #[test]

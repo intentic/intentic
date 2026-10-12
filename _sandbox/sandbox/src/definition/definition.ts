@@ -140,7 +140,7 @@ export const DEFINITION_WORKSPACE: readonly { readonly path: string; readonly no
     {
         // Via the state table's type; a compiler-checked path cannot drift from WORKSPACE_STATE_FILES.
         path: stateRelPath(".intentic/config/safety.md"),
-        note: "Arrives as the file it is, and governs the target from its first turn: read what it says before cloning a workspace you did not write.",
+        note: "Arrives as the file it is, and governs the target from its first turn: read what it says before cloning a workspace you did not write. The lines allowed with Always on permission cards are not in it: they are the owner's own grants, kept off the workspace, and do not travel.",
     },
 ];
 

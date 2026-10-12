@@ -4,7 +4,7 @@ import { open } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { insideRel } from "@intentic/base/contained";
 import { errnoCode } from "@intentic/base/errors";
-import type { ApprovalSummary } from "@intentic/sandbox-contract";
+import type { ApprovalSummary, AutomationApproval } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openApprovalLedger } from "../store/open-document.js";
@@ -67,24 +67,34 @@ const mediaFingerprint = async (workspaceRoot: string, path: string): Promise<st
     }
 };
 
-// What the item will do, as one digest: its fields but the bookkeeping, keys sorted and absent ones dropped (an
-// undefined key is an absent one once written), and each media file's bytes in the order the post lists them.
-export const approvalDigest = async (workspaceRoot: string, item: ApprovalSummary): Promise<string> => {
+// What a thing will do, as one digest: its fields but the ones named in `skip`, keys sorted and absent ones dropped (an
+// undefined key is an absent one once written), and any media file's bytes in the order they are listed. One spelling for
+// every kind of yes that pins itself to what it covers, so two kinds cannot disagree about what "changed" means.
+export const fieldsDigest = (item: ApprovalSummary | AutomationApproval, skip: ReadonlySet<string>, media: readonly string[] = []): string => {
     const fields = Object.entries(item)
-        .filter(([key, value]) => !BOOKKEEPING.has(key) && value !== undefined)
+        .filter(([key, value]) => !skip.has(key) && value !== undefined)
         .toSorted(([left], [right]) => (left < right ? -1 : 1));
-    const media = item.kind === "post" ? await Promise.all((item.media ?? []).map((path) => mediaFingerprint(workspaceRoot, path))) : [];
     return createHash("sha256").update(JSON.stringify({ fields, media })).digest("hex");
+};
+
+// What the item will do, as one digest: its fields but the bookkeeping, keys sorted and absent ones dropped, and each
+// media file's bytes in the order the post lists them.
+export const approvalDigest = async (workspaceRoot: string, item: ApprovalSummary): Promise<string> =>
+    fieldsDigest(item, BOOKKEEPING, item.kind === "post" ? await Promise.all((item.media ?? []).map((path) => mediaFingerprint(workspaceRoot, path))) : []);
+
+// Pins the owner's yes to `key` as it stands, whatever kind of thing the key names (an item in the queue by its id, a held
+// wake by `wake:<id>`). Written only by a route that has already checked a person gave it.
+export const recordDecision = async (historyRoot: string, key: string, digest: string, approver: string | undefined, now = Date.now()): Promise<void> => {
+    const pin = { digest, approvedAt: now, ...(approver === undefined ? {} : { approver }) };
+    await ledgerOf(historyRoot).update((approved) => ({ ...approved, [key]: pin }));
 };
 
 // Pins the owner's yes to the item exactly as it is about to be written. The route records it before writing the
 // file, so whoever reads the file as approved already finds its yes.
-export const recordApproval = async (roots: ApprovalRoots, item: ApprovalSummary, approver: string | undefined, now = Date.now()): Promise<void> => {
-    const pin = { digest: await approvalDigest(roots.workspaceRoot, item), approvedAt: now, ...(approver === undefined ? {} : { approver }) };
-    await ledgerOf(roots.historyRoot).update((approved) => ({ ...approved, [item.id]: pin }));
-};
+export const recordApproval = async (roots: ApprovalRoots, item: ApprovalSummary, approver: string | undefined, now = Date.now()): Promise<void> =>
+    recordDecision(roots.historyRoot, item.id, await approvalDigest(roots.workspaceRoot, item), approver, now);
 
-// Drops the yes for these items: a rejection, an item put back in review, or the executor spending it as it starts.
+// Drops the yes for these keys: a rejection, an item put back in review, or whoever acts on it spending it as it starts.
 export const forgetApprovals = async (historyRoot: string, ids: readonly string[]): Promise<void> => {
     await ledgerOf(historyRoot).update((approved) => {
         if (!ids.some((id) => Object.hasOwn(approved, id))) {
@@ -94,7 +104,7 @@ export const forgetApprovals = async (historyRoot: string, ids: readonly string[
     });
 };
 
-// Where an item marked approved stands against the ledger: approved as it is now, never approved, changed since its
+// Where a thing marked approved stands against the ledger: approved as it is now, never approved, changed since its
 // yes, or not knowable because the ledger cannot be read.
 export type ApprovalStanding = "approved" | "unapproved" | "changed" | "unreadable";
 
@@ -110,4 +120,17 @@ export const approvalStandings = async (roots: ApprovalRoots): Promise<(item: Ap
         }
         return approved[item.id]?.digest === (await approvalDigest(roots.workspaceRoot, item)) ? "approved" : "changed";
     };
+};
+
+// The standing of one key against the digest of what it covers now: the same three answers, for a yes that is not an item
+// in the queue.
+export const decisionStanding = async (historyRoot: string, key: string, digest: string): Promise<ApprovalStanding> => {
+    const { approved, unreadable } = await ledgerOf(historyRoot).read();
+    if (unreadable) {
+        return "unreadable";
+    }
+    if (!Object.hasOwn(approved, key)) {
+        return "unapproved";
+    }
+    return approved[key]?.digest === digest ? "approved" : "changed";
 };

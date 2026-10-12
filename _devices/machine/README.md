@@ -44,7 +44,11 @@ flowchart LR
   typed with `android_act` like the desktop's, before either crosses.
 - The sandbox tools are thin callers of `ic` ([`tools/sandboxes.ts`](src/device/tools/sandboxes.ts)): the listing is
   `ic sandbox list --json` passed through, and start, stop, restart, the swaps, `set-shape`, `forget-shape` and the
-  logs are ic's own verbs, argv spelled by the contract (`icShapeArgs`, `icPowerArgs`). `diagnose_sandbox` is
+  logs are ic's own verbs, argv spelled by the contract (`icShapeArgs`, `icPowerArgs`). The "Manage sandboxes"
+  switch also covers the same verbs sent another way: `ic sandbox …` or `docker stop|kill|restart|rm` on a sandbox
+  container through `run_command`, `app_start`, `open` or typed text is refused while it is off
+  (`assertNoSandboxPower` in [`tools/shell.ts`](src/device/tools/shell.ts), recognised by the contract's
+  `sandboxPowerCommands`). `diagnose_sandbox` is
   `ic sandbox doctor <slug> --json`, read-only and gated like the logs (`shell` or `sandboxes`), so an agent in another
   sandbox can find out why one on this device is unreachable; it skips the listing, which cannot answer while Docker is
   down, and refuses a slug ic would read as a flag. The shape reaches ic as the
@@ -539,9 +543,12 @@ whose it is.
 - **A swap is never cut short by this agent.** `ic` runs in a process group of its own on POSIX, keeps its pipes, and
   is never killed when the link or request that asked for it goes away. The one run it ever stops is the keeper's
   `sandbox fix` past its deadline (below), which is not a swap. Every restart of the agent (the auto-upgrade
-  tick, `upgrade`, `run`, the browser's Update and Restart) waits while any channel record in this environment's ic
-  home (`INTENTIC_HOME`, else `~/.intentic`) says `swap_phase=cutover` with `swap_at` in the last 30 minutes, or while
-  this process runs a flow that moves a container ([`device/sandbox-rounds/swap-records.ts`](src/device/sandbox-rounds/swap-records.ts)); the tick
+  tick, `upgrade`, `run`, the browser's Update and Restart) waits while `ic sandbox swaps --json` says a cutover is in
+  progress, or while this process runs a flow that moves a container
+  ([`device/sandbox-rounds/ic-swaps.ts`](src/device/sandbox-rounds/ic-swaps.ts)). The verdict is ic's own, heartbeat
+  and all, and the command answers without Docker. An older ic that lacks it is read by a fallback that applies the
+  same rule from the shared `swap-verdicts.json` fixture, marked `COMPAT(ic-swaps)`. The keeper skips a sandbox on the
+  same answer. The agent no longer reads ic's records itself. The tick
   looks again in five minutes, a command waits and says so. A keeper's fix is not such a flow (see [The keeper](#the-keeper)).
 - **The probation watch** ([`device/sandbox-rounds/probation-watch.ts`](src/device/sandbox-rounds/probation-watch.ts)) runs
   `ic sandbox watch <slug> --json` every minute for each sandbox whose record names a `swap_phase`, and

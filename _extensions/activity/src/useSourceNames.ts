@@ -1,4 +1,3 @@
-import { useQuery } from "@tanstack/vue-query";
 import { computed, type ComputedRef, type InjectionKey } from "vue";
 import { DIRECT, SCHEDULE } from "./episodes";
 import { host } from "./host";
@@ -9,10 +8,9 @@ import { t } from "./i18n";
 // extension. The keys no extension owns (you, a schedule, the core's web chat) take this extension's translated words.
 export function useSourceNames(): ComputedRef<ReadonlyMap<string, string>> {
     const api = host();
-    const query = useQuery({
+    const { query } = api.sandbox.query({
         queryKey: api.sandbox.readKey(`extensions.list`),
         queryFn: () => api.sandbox.rpc.extensions.list(),
-        enabled: computed(() => api.sandbox.reachable()),
     });
     return computed(() => {
         const names = new Map<string, string>([

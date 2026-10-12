@@ -21,6 +21,12 @@ that touches the sandbox finishes what an interrupted one left. The same look fi
 (Ctrl-C, a closed SSH session, an agent restart, a reboot): the record says a cutover was in flight, and what is on
 docker says how far it got. */
 
+/* THE POLICY NUMBERS AND THE RULE BELOW ARE THE CONTRACT'S TOO. Hosted sandboxes (Fly) have no ic beside them: the
+platform's api watches a new image there by the same rule (`judgeProbation`, `probationStep` and `UPDATE_PROBATION` in
+_shared/sandbox-contract/src/state/update-probation.ts). ic owns it; golden/update-probation.json holds each number and
+each case, and the tests at the foot of this file build every one. A number changes here, there and in the golden
+together. */
+
 /// How long the parked container is kept after a swap. `IC_PROBATION_SECONDS` shortens it for the nightly drill.
 const PROBATION_SECS: u64 = 24 * 60 * 60;
 /// How long a new version may stay not-ready, unreachable or silent before that counts against it. Longer than any
@@ -45,11 +51,14 @@ pub const DAEMON_EXIT_FILE: &str = "/history/logs/daemon-exit.json";
 /// How often an ic run doing a cutover says it is alive, and how long without that before its cutover counts as
 /// interrupted. The gap is several beats wide: a heartbeat is a record write and a `docker cp`, and a busy machine is
 /// allowed to be slow at both.
-const HEARTBEAT_SECS: u64 = 15;
-const STALE_MS: u64 = 90_000;
+pub(crate) const HEARTBEAT_SECS: u64 = 15;
+pub(crate) const STALE_MS: u64 = 90_000;
 
 /// Whether a cutover the record names is being done right now by a live ic run (its own heartbeat is fresh), which
 /// nothing else may finish or undo under it. A record with no heartbeat is judged by when the cutover began. Pure.
+///
+/// The ONE rule: other processes on this computer (the machine agent's restarts, upgrades and keeper) ask `ic sandbox
+/// swaps --json` (swaps.rs) for this verdict instead of reading the record and judging it themselves.
 pub fn cutover_in_progress(swap: &Swap, now: u64) -> bool {
     swap.phase == Phase::Cutover && now.saturating_sub(swap.alive.unwrap_or(swap.at)) < STALE_MS
 }
@@ -263,6 +272,41 @@ pub fn judge(look: &Look, swap: &Swap, now: u64, grace_ms: u64) -> Verdict {
         }
     }
     Verdict::Healthy
+}
+
+/// What the watch does with a verdict.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Step {
+    /// Go back to the parked version.
+    RollBack(String),
+    /// Keep watching, with the strikes as they now stand (and the reason, when this look was a strike).
+    Watch {
+        strikes: u32,
+        reason: Option<String>,
+    },
+    /// The probation is over and the new version stays.
+    Keep,
+}
+
+/// The decision over a verdict, the strikes so far and whether the probation has run out. Pure.
+pub fn step(verdict: Verdict, strikes: u32, over: bool) -> Step {
+    match verdict {
+        Verdict::Fail(reason) => Step::RollBack(reason),
+        Verdict::Strike(reason) if strikes + 1 >= STRIKES => Step::RollBack(reason),
+        Verdict::Strike(reason) => Step::Watch {
+            strikes: strikes + 1,
+            reason: Some(reason),
+        },
+        Verdict::Healthy | Verdict::Pending if over => Step::Keep,
+        Verdict::Healthy => Step::Watch {
+            strikes: 0,
+            reason: None,
+        },
+        Verdict::Pending => Step::Watch {
+            strikes,
+            reason: None,
+        },
+    }
 }
 
 /// One look at `container`, through docker alone: its state, its `/health`, and the boot failure its daemon left.
@@ -632,45 +676,23 @@ fn judge_probation(
     };
     let verdict = judge(&seen, &tracked, now, grace_ms());
     let over = tracked.until.is_some_and(|until| now >= until);
-    match verdict {
-        Verdict::Fail(reason) => {
+    match step(verdict, tracked.strikes, over) {
+        Step::RollBack(reason) => {
             undo(slug, record, &tracked, Kind::RolledBack, &reason)?;
             Ok(Report::new(slug, "rolled-back", Some(reason)))
         }
-        Verdict::Strike(reason) if tracked.strikes + 1 >= STRIKES => {
-            undo(slug, record, &tracked, Kind::RolledBack, &reason)?;
-            Ok(Report::new(slug, "rolled-back", Some(reason)))
-        }
-        Verdict::Strike(reason) => {
-            write_swap(
-                slug,
-                record,
-                Swap {
-                    strikes: tracked.strikes + 1,
-                    ..tracked
-                },
-            )?;
-            Ok(Report::new(slug, "watching", Some(reason)))
-        }
-        Verdict::Healthy | Verdict::Pending if over => {
+        Step::Keep => {
             keep(slug, record, &tracked)?;
             Ok(Report::new(slug, "kept", None))
         }
-        Verdict::Healthy => {
-            let settled = Swap {
-                strikes: 0,
-                ..tracked
-            };
+        Step::Watch { strikes, reason } => {
+            // Written only when something moved: a strike always does, a healthy look when strikes were standing, a
+            // pending one when the restart count it noticed changed.
+            let settled = Swap { strikes, ..tracked };
             if settled != *swap {
                 write_swap(slug, record, settled)?;
             }
-            Ok(Report::new(slug, "watching", None))
-        }
-        Verdict::Pending => {
-            if tracked != *swap {
-                write_swap(slug, record, tracked)?;
-            }
-            Ok(Report::new(slug, "watching", None))
+            Ok(Report::new(slug, "watching", reason))
         }
     }
 }
@@ -1227,6 +1249,126 @@ mod tests {
         assert!(!cutover_in_progress(&beating, 400_000));
         // A probation is never a cutover in progress, however recent.
         assert!(!cutover_in_progress(&swap(1_000, None), 1_001));
+    }
+
+    /* THE POLICY AND THE RULE ARE THE CONTRACT'S TOO: golden/update-probation.json, which the platform's hosted watch
+    applies through `judgeProbation` (the contract's state/update-probation.ts, tested against the same file). */
+    const POLICY: &str =
+        include_str!("../../../../_shared/sandbox-contract/golden/update-probation.json");
+
+    fn policy() -> Value {
+        serde_json::from_str(POLICY).expect("JSON")
+    }
+
+    fn string_of(value: &Value) -> Option<String> {
+        value.as_str().map(str::to_string)
+    }
+
+    /// A look from the golden's `base` with a case's `look` laid over it.
+    fn look_of(policy: &Value, over: &Value) -> Look {
+        let mut merged = policy["base"].as_object().expect("base").clone();
+        for (key, value) in over.as_object().expect("look") {
+            merged.insert(key.clone(), value.clone());
+        }
+        let field = |name: &str| merged.get(name).cloned().unwrap_or(Value::Null);
+        Look {
+            running: field("running").as_bool().expect("running"),
+            restarting: field("restarting").as_bool().expect("restarting"),
+            restarts: field("restarts").as_u64().expect("restarts"),
+            answered: field("answered").as_bool().expect("answered"),
+            ready: field("ready").as_bool(),
+            journal: string_of(&field("journal")),
+            reach: string_of(&field("reach")),
+            boot_failure: string_of(&field("bootFailure")),
+            daemon_started: None,
+            daemon_restarts: field("daemonRestarts").as_u64().expect("daemonRestarts") as u32,
+            crash_loop: string_of(&field("crashLoop")),
+            held: field("held").as_bool().expect("held"),
+        }
+    }
+
+    fn verdict_of(value: &Value) -> Verdict {
+        let reason = || string_of(&value["reason"]).expect("reason");
+        match value["kind"].as_str().expect("kind") {
+            "healthy" => Verdict::Healthy,
+            "pending" => Verdict::Pending,
+            "strike" => Verdict::Strike(reason()),
+            "fail" => Verdict::Fail(reason()),
+            other => panic!("a verdict the golden should not name: {other}"),
+        }
+    }
+
+    #[test]
+    fn the_contracts_policy_numbers_are_the_ones_ic_runs_by() {
+        let policy = policy();
+        let numbers = &policy["policy"];
+        assert_eq!(numbers["watchMs"].as_u64(), Some(PROBATION_SECS * 1000));
+        assert_eq!(numbers["graceMs"].as_u64(), Some(GRACE_SECS * 1000));
+        assert_eq!(numbers["journalMs"].as_u64(), Some(JOURNAL_SECS * 1000));
+        assert_eq!(numbers["strikes"].as_u64(), Some(STRIKES as u64));
+        assert_eq!(
+            numbers["keptBuilds"].as_u64(),
+            Some(record::MAX_KEPT as u64)
+        );
+        assert_eq!(
+            numbers["crashLoopRestarts"].as_u64(),
+            Some(CRASH_LOOP_RESTARTS as u64)
+        );
+        assert_eq!(RESTARTS, CRASH_LOOP_RESTARTS as u64);
+        assert_eq!(DAEMON_RESTARTS, CRASH_LOOP_RESTARTS);
+    }
+
+    #[test]
+    fn every_look_in_the_contracts_cases_is_judged_as_the_golden_says() {
+        let policy = policy();
+        let cases = policy["judge"].as_array().expect("judge cases");
+        assert!(cases.len() >= 25, "the file holds the cases it should");
+        for case in cases {
+            let look = look_of(&policy, &case["look"]);
+            let swap = Swap {
+                reach: string_of(&case["swap"]["reach"]),
+                ..swap(case["swap"]["at"].as_u64().expect("at"), None)
+            };
+            let grace = case["graceMs"]
+                .as_u64()
+                .unwrap_or(policy["policy"]["graceMs"].as_u64().expect("graceMs"));
+            assert_eq!(
+                judge(&look, &swap, case["now"].as_u64().expect("now"), grace),
+                verdict_of(&case["verdict"]),
+                "{}",
+                case["name"]
+            );
+        }
+    }
+
+    #[test]
+    fn every_step_in_the_contracts_cases_is_decided_as_the_golden_says() {
+        let policy = policy();
+        let cases = policy["steps"].as_array().expect("step cases");
+        assert!(cases.len() >= 10, "the file holds the cases it should");
+        for case in cases {
+            let expected = &case["step"];
+            let reason = string_of(&expected["reason"]);
+            let want = match expected["action"].as_str().expect("action") {
+                "roll-back" => Step::RollBack(reason.expect("reason")),
+                "watch" => Step::Watch {
+                    strikes: expected["strikes"].as_u64().expect("strikes") as u32,
+                    reason,
+                },
+                "keep" => Step::Keep,
+                other => panic!("a step the golden should not name: {other}"),
+            };
+            assert_eq!(
+                step(
+                    verdict_of(&case["verdict"]),
+                    case["strikes"].as_u64().expect("strikes") as u32,
+                    case["over"].as_bool().expect("over")
+                ),
+                want,
+                "{}",
+                case["name"]
+            );
+        }
     }
 
     #[test]

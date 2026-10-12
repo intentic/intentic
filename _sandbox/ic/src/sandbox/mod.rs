@@ -29,6 +29,7 @@ pub mod side;
 pub mod sleep;
 pub mod staged;
 pub mod storage;
+pub mod swaps;
 pub mod tidy;
 pub mod trash;
 pub mod versions;

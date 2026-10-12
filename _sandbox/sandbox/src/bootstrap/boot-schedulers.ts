@@ -21,7 +21,7 @@ import { subscribeUnwatchedWrites, subscribeWorkspaceChanges } from "../workspac
 // What a child's report reads off the daemon: the doors a wake goes through, the child's and parent's entries, how a
 // killed runtime reads, and where the child's work went.
 const childReportDeps = (services: BootPhase["services"], logger: BootPhase["logger"]): ChildReportDeps => ({
-    doors: { turns: services.turns, sessionIdOf: (conversationId) => services.conversations.sessionIdOf(conversationId) },
+    doors: { turns: services.turns },
     logger,
     conversations: services.conversations,
     entryOf: (conversationId) => {

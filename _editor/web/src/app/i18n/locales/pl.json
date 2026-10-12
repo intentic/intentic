@@ -4716,6 +4716,7 @@
             "triage": "Segregacja:"
         },
         "agentSafetyPolicy": {
+            "alwaysLinesElsewhere": "Linie, na które zezwoliłeś przyciskiem Zawsze na karcie uprawnień, są trzymane osobno od tego tekstu: obowiązują w każdej rozmowie i są wypisane, i odbierane, w Dostępie, w sekcji Uprawnienia w całym sandboksie.",
             "couldntSave": "Nie udało się zapisać polityki bezpieczeństwa",
             "ownTextIn": "Twój własny tekst, w",
             "safetyPolicy": "Polityka bezpieczeństwa",
@@ -4979,6 +4980,7 @@
             "checkingSync": "Sprawdzam, czy ten sandbox może synchronizować się z urządzeniem…",
             "chooseFolderOnDevice": "Wybierz folder na tym urządzeniu",
             "collaboratorMirrorSandboxsDev": "Jako współpracownik możesz odbijać serwery deweloperskie sandboxa na własny localhost, żeby mieć podglądy na żywo. Żadne pliki nie są synchronizowane ponad to, co przestrzeń robocza już pokazuje.",
+            "couldntCheckSync": "Nie udało się sprawdzić, czy ten sandbox może synchronizować ({reason}).",
             "desktopSyncNeedsSsh": "Synchronizacja z pulpitem potrzebuje drogi SSH do tego sandboxa. Sandboxy, które podłączamy za Ciebie, jeszcze jej nie mają, ale taki za Twoją własną domeną — ma.",
             "device": ".",
             "deviceThatGetsPorts": "urządzenie, które ma dostać porty",
@@ -5338,6 +5340,7 @@
             "startingOnDevice": "Uruchamianie na tamtym urządzeniu…",
             "syncSettings": "Ustawienia synchronizacji",
             "syncing": "Synchronizowanie…",
+            "unread": "Nie udało się odczytać runnerów tego sandboxa ({reason}).",
             "updating": "Aktualizowanie runnera {name}"
         },
         "discoverCard": {
@@ -6402,6 +6405,8 @@
             "leaveLoseAccessSandbox": "Opuścić „{name}”? Tracisz dostęp; sandbox działa dalej.",
             "leaveSandbox": "Opuścić sandbox?",
             "leavesWithIt": "Odchodzi razem z nim, a nowy sandbox zacznie bez tego:",
+            "leftStillListed": "Opuszczono „{name}” na twoim koncie, ale nie udało się z nim połączyć, żeby usunąć cię z jego własnej listy członków, więc nadal cię wymienia, dopóki właściciel nie usunie cię w zakładce Dostęp. ({reason})",
+            "leftStillListedHeader": "Opuszczono, ale nadal na liście",
             "needsYou": "Czeka na ciebie",
             "notAnswering": "Nie odpowiada",
             "removeAccount2": "Usunąć z konta?",
@@ -7447,10 +7452,14 @@
             "vpnFailed": "Nie udało się nawiązać połączenia VPN.",
             "vpnRefused": "Nie udało się połączyć VPN ({status})."
         },
+        "leaveSandbox": {
+            "unreachable": "Nie udało się połączyć z sandboxem."
+        },
         "usePeerConnect": {
             "ownerOnlyBrowser": "Przeglądarkę może podłączyć tylko właściciel sandboxa lub opiekun.",
             "ownerOnlyDevice": "Urządzenie może podłączyć tylko właściciel sandboxa lub opiekun.",
             "ownerOnlyPhone": "Telefon może podłączyć tylko właściciel sandboxa lub opiekun.",
+            "rosterUnread": "Nie udało się sprawdzić, które maszyny są podłączone ({reason}).",
             "startFailed": "Nie udało się rozpocząć połączenia ({status})."
         },
         "useSelfResources": {
@@ -10069,7 +10078,21 @@
             "takingBack": "Unieważnianie: {what}",
             "takingBackAll": "Unieważnianie wszystkich uprawnień rozmowy {title}",
             "couldNotTakeBack": "Nie udało się tego unieważnić.",
-            "untitled": "Nieznana rozmowa"
+            "untitled": "Nieznana rozmowa",
+            "allowedBy": "zgoda od {who}, {when}",
+            "ownerWideTitle": "Uprawnienia w całym sandboksie",
+            "ownerWideCaption": "Co może każda rozmowa, nie tylko jedna",
+            "ownerWideWhen": "Unieważnienie działa od następnej tury: zestaw hooków dostanie wtedy ponowne pytanie, a rozszerzenie znów czeka na twoją zgodę, bez usuwania czegokolwiek z niego.",
+            "commandPolicy": "Polityka bezpieczeństwa: {what}",
+            "hookSet": "Hooki Claude Code mogą działać: {what}",
+            "extension": "Rozszerzenie {what} może działać",
+            "extensionPowers": "zatwierdzone do: {what}",
+            "unreadable": "Nie dało się odczytać części tego, na co pozwoliłeś, więc nic z tego nie obowiązuje, dopóki plik nie zostanie naprawiony: {what}.",
+            "kind": {
+                "commandPolicy": "linie polityki poleceń",
+                "hookSet": "zestawy hooków",
+                "extension": "rozszerzenia"
+            }
         },
         "environment": {
             "approveOne": "Zatwierdzenie dodaje te kroki tylko dla {tool}; wszystko inne, co czeka, zostaje na swojej karcie.",

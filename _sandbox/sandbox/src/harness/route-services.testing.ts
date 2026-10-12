@@ -29,6 +29,7 @@ import { mintedSliceFake } from "../runtimes/minted/minted-provider.testing.js";
 import { privacySliceFake } from "../privacy/privacy-slice.testing.js";
 import { secretsSliceFake } from "../secrets/secrets-slice.testing.js";
 import { memoryConversationGrants } from "../personas/conversation-grants.js";
+import { memoryOwnerGrants } from "../personas/owner-grants.js";
 import { createDomainEvents } from "../seams/domain-events.js";
 import { sessionsSliceFake } from "../sessions/sessions-slice.testing.js";
 import { createAnnouncer } from "../system/boot/announce.js";
@@ -87,6 +88,8 @@ const inertOwnMembers = () =>
         // No conversation widened past its persona until a suite answers a grant need; in memory, since every planned
         // turn reads it.
         conversationGrants: memoryConversationGrants(),
+        // No line allowed with Always on a command card, in memory for the same reason.
+        ownerGrants: memoryOwnerGrants(),
         // Inert: archive/discard hard-stop on every press; a route suite has no tmux, processes or browsers to reap.
         reaper: { start: () => {}, stop: () => {}, sweep: async () => {}, reapConversation: async () => {}, metrics: () => ({}) },
     }) satisfies Partial<Services>;

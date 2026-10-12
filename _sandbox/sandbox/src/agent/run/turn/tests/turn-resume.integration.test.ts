@@ -37,9 +37,8 @@ import { PROVIDER_MODULES } from "../../../../runtimes/runtime-table.js";
 import { type JournalledTurn, MAX_PARKED_RESTORES, sqliteTurnJournal, type TurnJournal } from "../turn-journal.js";
 import { turnRunOf } from "../../../../conversations/actor/conversation-holdings.js";
 import { createDomainEvents } from "../../../../seams/domain-events.js";
-import type { Said, TurnInput, TurnStarter } from "../../../../seams/turn-starter.js";
+import type { Said, StartedRun, TurnInput, TurnStarter } from "../../../../seams/turn-starter.js";
 import type { BeginRefusal } from "../../../../conversations/actor/conversation-decide.js";
-import type { TurnRun } from "../turn-runs.js";
 import { createTurnResumeScheduler, fireHeldResume, type HeldTurn, resumeInterruptedTurns, startConversationTurn } from "../turn-resume.js";
 import { parkedCards } from "../../../../conversations/actor/parked-cards.js";
 import { opt } from "../../../../opt.js";
@@ -121,7 +120,7 @@ const fakeWake = (prompts: string[], events: AgentEvent[] = [{ kind: "done" }]):
     };
 
 // The run a start made, for a case whose start must not be refused.
-const made = (run: TurnRun | BeginRefusal): TurnRun => {
+const made = <R extends StartedRun>(run: R | BeginRefusal): R => {
     if (typeof run === "string") {
         throw new Error(`the start was refused: ${run}`);
     }
@@ -391,6 +390,179 @@ test("an unpinned run opens on the provider this sandbox has connected, not on o
 test("an unpinned run keeps the default provider while it is connected", async () => {
     const ran = await ranWith({ roleSetups: {} }, { prompt: "fix CI", conversationId: "ar-default", runRole: ROLE }, ["gemini", "claude"]);
     expect([ran.agent, ran.model]).toEqual(["claude", undefined]);
+});
+
+// The three doors a subsystem starts a turn through (turn-doors.ts) route a turn the same way, so a role's pin binds the
+// loop iteration and the extension review as it binds a fix press. `run` and `stream` once defaulted the provider and
+// stopped there, which left both roles' settings rows doing nothing.
+type DoorName = "start" | "run" | "stream";
+const DOORS: readonly DoorName[] = ["start", "run", "stream"];
+
+const throughDoors = async (
+    settings: Partial<SandboxSettings>,
+    turn: AgentTurn,
+    connected: readonly string[] = ["claude", "codex", "gemini"],
+    cards: readonly Persona[] = [],
+): Promise<Record<DoorName, AgentTurn>> => {
+    const services = withPersonas(withProviders(fakeServices(mkdtempSync(join(tmpdir(), "door-routing-"))), connected), cards);
+    await services.sandboxSettings.set({ ...SandboxSettingsSchema.parse({}), ...settings });
+    const seen = new Map<string, AgentTurn>();
+    const doors = drivenBy(services, async function* (input) {
+        seen.set(input.conversationId ?? "", input);
+        yield { kind: "done" };
+    }).turns;
+    // Each is followed to its end, so the body has seen the turn.
+    await Array.fromAsync(made(await doors.start({ ...turn, conversationId: "door-start" })).frames());
+    await Array.fromAsync(made(doors.run({ ...turn, conversationId: "door-run" })).frames());
+    await Array.fromAsync(doors.stream({ ...turn, conversationId: "door-stream" }, undefined));
+    return { start: seen.get("door-start")!, run: seen.get("door-run")!, stream: seen.get("door-stream")! };
+};
+
+const pinnedOf = (turn: AgentTurn): readonly unknown[] => [turn.agent, turn.model, turn.effort, turn.harness];
+
+test("every door gives a turn naming a run role the model that role pins, with its knobs", async () => {
+    const settings = setupsFromRoleLists({ "loop-iteration": [{ provider: "codex", model: "gpt-5.6", effort: "high", harness: "claude-code" }] });
+    const ran = await throughDoors(settings, { prompt: "next iteration", runRole: "loop-iteration", unattended: true });
+    for (const door of DOORS) {
+        expect([door, pinnedOf(ran[door])]).toEqual([door, ["codex", "gpt-5.6", "high", "claude-code"]]);
+    }
+});
+
+test("every door gives a persona's own ladder precedence over the run role's list", async () => {
+    const ran = await throughDoors(
+        setupsFromRoleLists({ "extension-review": [{ provider: "codex", model: "gpt-5.6" }] }),
+        { prompt: "read the diff", runRole: "extension-review", actsAs: "backend" },
+        undefined,
+        [{ id: "backend", capabilities: [], models: [{ provider: "claude", model: "claude-opus-4-5", effort: "max" }] }],
+    );
+    for (const door of DOORS) {
+        expect([door, pinnedOf(ran[door])]).toEqual([door, ["claude", "claude-opus-4-5", "max", "native"]]);
+    }
+});
+
+// With only a non-default provider connected, a role with no pin of its own once opened on Claude and failed at once;
+// the review of an extension update was one such job, started through `stream`.
+test("every door opens an unpinned run role on the provider this sandbox has connected", async () => {
+    const ran = await throughDoors({ roleSetups: {} }, { prompt: "read the diff", runRole: "extension-review", unattended: true }, ["codex"]);
+    for (const door of DOORS) {
+        expect([door, ran[door].agent, ran[door].model]).toEqual([door, "codex", undefined]);
+    }
+});
+
+// An automation's fire walks its own model ladder and a runner's dispatched turn names what the parent chose; naming
+// either one is the answer, and no role or persona pin moves it, on any door.
+test("every door leaves a turn that already names its model or provider as it came", async () => {
+    const settings = setupsFromRoleLists({ "loop-iteration": [{ provider: "codex", model: "gpt-5.6", effort: "high" }] });
+    const cards: readonly Persona[] = [{ id: "backend", capabilities: [], models: [{ provider: "claude", model: "claude-opus-4-5" }] }];
+    const named: readonly [string, AgentTurn][] = [
+        ["a walked ladder's rung", { prompt: "go", runRole: "loop-iteration", actsAs: "backend", agent: "gemini", model: "gemini-3-pro", effort: "low" }],
+        ["a dispatched provider and loop", { prompt: "go", runRole: "loop-iteration", actsAs: "backend", agent: "gemini", harness: "native" }],
+        ["a model alone", { prompt: "go", runRole: "loop-iteration", actsAs: "backend", model: "gemini-3-pro" }],
+    ];
+    for (const [label, turn] of named) {
+        const ran = await throughDoors(settings, turn, undefined, cards);
+        for (const door of DOORS) {
+            expect([label, door, ran[door].agent, ran[door].model, ran[door].effort]).toEqual([
+                label,
+                door,
+                turn.agent ?? "claude",
+                turn.model,
+                turn.effort,
+            ]);
+        }
+    }
+});
+
+// The run door answers at once, as its callers read the run's frames from the instant it returns (a loop, a spawned child);
+// the model is routed by the run itself, before its provider is asked.
+test("the run door claims the conversation before routing, and its starter still sees the first frame", async () => {
+    const services = withProviders(fakeServices(mkdtempSync(join(tmpdir(), "door-claim-"))), ["codex"]);
+    await services.sandboxSettings.set({
+        ...SandboxSettingsSchema.parse({}),
+        ...setupsFromRoleLists({ "loop-iteration": [{ provider: "codex", model: "gpt-5.6" }] }),
+    });
+    const seen: AgentTurn[] = [];
+    const doors = drivenBy(services, async function* (input) {
+        seen.push(input);
+        yield { kind: "delta", text: "first words" };
+        yield { kind: "done" };
+    }).turns;
+    const turn = { prompt: "next iteration", conversationId: "door-claim", runRole: "loop-iteration" } as const;
+
+    const run = made(doors.run(turn));
+    const frames = Array.fromAsync(run.frames());
+    expect(doors.run(turn)).toBe("busy");
+
+    expect(await frames).toEqual([{ kind: "delta", text: "first words" }, { kind: "done" }]);
+    expect(seen.map((input) => [input.agent, input.model])).toEqual([["codex", "gpt-5.6"]]);
+});
+
+test("a turn whose routing cannot be read fails as that turn, on the run door and on the stream door", async () => {
+    const base = withProviders(fakeServices(mkdtempSync(join(tmpdir(), "door-unroutable-"))), ["codex"]);
+    const services: Services = {
+        ...base,
+        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
+            get: async () => {
+                throw new Error("settings unreadable");
+            },
+        }),
+    };
+    const ran: string[] = [];
+    const doors = drivenBy(services, async function* (input) {
+        ran.push(input.prompt);
+        yield { kind: "done" };
+    }).turns;
+    const turn = { prompt: "next iteration", runRole: "loop-iteration", conversationId: "door-unroutable" } as const;
+
+    const frames = await Array.fromAsync(made(doors.run(turn)).frames());
+    expect(frames).toEqual([{ kind: "error", message: "settings unreadable" }, { kind: "done" }]);
+    await expect(Array.fromAsync(doors.stream({ ...turn, conversationId: "door-unroutable-stream" }, undefined))).rejects.toThrow("settings unreadable");
+    expect(ran).toEqual([]);
+});
+
+// A loop that carries on in its conversation's session asks the door to decide it, since the provider its job routes to is
+// known only once the door has routed it: a role pin can move the turn off the provider the conversation last ran on.
+const continuingThroughRun = async (rung: { readonly provider: "claude" | "codex"; readonly model: string }, options?: { readonly continuing: true }) => {
+    const base = withProviders(fakeServices(mkdtempSync(join(tmpdir(), "door-continuing-"))), ["claude", "codex"]);
+    const services: Services = {
+        ...base,
+        agents: unstubbed<Services["agents"]>("agents", {
+            entry: (id: string) => conversationEntry({ id, profile: { provider: "codex", harness: "native" } }),
+        }),
+        conversations: { ...base.conversations, sessionIdOf: () => "sess-codex" },
+    };
+    await services.sandboxSettings.set({ ...SandboxSettingsSchema.parse({}), ...setupsFromRoleLists({ "loop-iteration": [rung] }) });
+    const seen: AgentTurn[] = [];
+    const doors = drivenBy(services, async function* (input) {
+        seen.push(input);
+        yield { kind: "done" };
+    }).turns;
+    await Array.fromAsync(
+        made(doors.run({ prompt: "next iteration", conversationId: "door-continuing", runRole: "loop-iteration", sessionId: "sess-named" }, options)).frames(),
+    );
+    return seen[0];
+};
+
+test("the run door, asked to continue, carries on in the conversation's session where the pinned model is on the provider that minted it", async () => {
+    const turn = await continuingThroughRun({ provider: "codex", model: "gpt-5.6" }, { continuing: true });
+    expect([turn?.agent, turn?.sessionId]).toEqual(["codex", "sess-codex"]);
+});
+
+test("the run door, asked to continue, opens a fresh session where the pinned model moved the turn to another provider", async () => {
+    const turn = await continuingThroughRun({ provider: "claude", model: "claude-opus-4-5" }, { continuing: true });
+    expect([turn?.agent, turn?.sessionId]).toEqual(["claude", undefined]);
+});
+
+test("the run door leaves the session a turn names alone unless asked to continue", async () => {
+    const turn = await continuingThroughRun({ provider: "claude", model: "claude-opus-4-5" });
+    expect([turn?.agent, turn?.sessionId]).toEqual(["claude", "sess-named"]);
+});
+
+test("every door leaves a turn naming neither role nor persona on the wire's defaults", async () => {
+    const ran = await throughDoors(setupsFromRoleLists({ "loop-iteration": [{ provider: "codex", model: "gpt-5.6" }] }), { prompt: "hello" });
+    for (const door of DOORS) {
+        expect([door, ran[door].agent, ran[door].model, ran[door].harness]).toEqual([door, "claude", undefined, "native"]);
+    }
 });
 
 // A token rotation retires every in-flight turn's snapshotted credential at once, failing them with `401 OAuth access
@@ -745,7 +917,7 @@ const journalServices = async (root: string, autoResumeOnRestart = true): Promis
         ...fakeServices(root),
         turnJournal: journalOver(root),
         automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
-        heldWakes: fileHeldWakesStore(join(root, "approvals")),
+        heldWakes: fileHeldWakesStore(join(root, "history")),
         activity: { append: async () => {}, list: async () => [] },
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         // The provider's session store holds nothing to recover, so an interrupted turn records from its prompt.

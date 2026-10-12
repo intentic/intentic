@@ -1,24 +1,22 @@
 <!-- The owner's phones on the Devices board: whether the agent can reach each now, and the way to its card. -->
 <script setup lang="ts">
-import type { PhoneSummary } from "@intentic/sandbox-contract";
-import { BrandMark, Row, RowGroup, StatusBadge } from "@intentic/ui";
+import { BrandMark, Notice, Row, RowGroup, StatusBadge } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { computed, onBeforeUnmount, onMounted } from "vue";
+import { computed } from "vue";
 import { capabilityRoute } from "../deviceLinks";
 import { PHONE_DOOR, usePeerConnect } from "../usePeerConnect";
 import { phoneRowOf, phoneStateWord } from "./phoneRows";
 
 const t = useT();
 
-// The phone roster, read once on open and again whenever a phone connects or drops; never polled.
-const { peers, start, stop } = usePeerConnect<PhoneSummary>(PHONE_DOOR);
-onMounted(start);
-onBeforeUnmount(stop);
+// The phone roster: the shared cache entry, read on open and again whenever a phone connects or drops; never polled.
+const { peers, rosterNotice } = usePeerConnect(PHONE_DOOR);
 
 const rows = computed(() => peers.value.map(phoneRowOf));
 </script>
 
 <template>
+    <Notice v-if="rosterNotice" tone="warning">{{ rosterNotice }}</Notice>
     <RowGroup v-if="rows.length > 0" :label="t(`sandbox.phoneRows.phones`)">
         <Row v-for="row in rows" :key="row.id">
             <template #title>

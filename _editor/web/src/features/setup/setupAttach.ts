@@ -51,6 +51,7 @@ export const probeDaemon = async (args: {
     // Token for the daemon's first-bind gate; omitted, a tokenless daemon binds the first identity.
     readonly connectToken?: string;
 }): Promise<AttachOutcome> => {
+    // allow(daemon-doors): the sandbox's own address, probed before it is registered, so no session or route drift to ask.
     const health = await probeFetch(`${args.daemonUrl}${rawRouteUrl(`GET /health`)}`);
     if (typeof health === `string`) {
         return { kind: health };
@@ -68,6 +69,7 @@ export const probeDaemon = async (args: {
     }
     // Any read behind the session check proves the bearer; this one is the sandbox's own address being probed, before it is
     // registered, so it goes by plain fetch with the path from the route table.
+    // allow(daemon-doors): same address, same moment: the bearer it carries is the one being proved.
     const authorized = await probeFetch(`${args.daemonUrl}${rawRouteUrl(`GET /environment`)}`, { headers });
     if (typeof authorized === `string`) {
         return { kind: authorized };

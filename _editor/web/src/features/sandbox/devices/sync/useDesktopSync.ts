@@ -1,16 +1,14 @@
-import { invalidatePushedQueries } from "../../../../lib/pushInvalidation";
-import { roleAtLeast, type SyncStatus, syncFolder } from "@intentic/sandbox-contract";
-import { useQueryClient } from "@tanstack/vue-query";
+import { roleAtLeast, syncFolder } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
 import { t } from "@intentic/ui/i18n";
 import { desktopSyncLink } from "../../../../app/environments/desktop";
 import type { CommandOs, NoticeModel } from "@intentic/ui";
 import { bashCommand, oneLiner, oneLinerHost, psCommand } from "../../../../app/environments/scriptCommand";
-import { onRuntimeChanged } from "../../live/runtimeEvents";
-import { rpcKey } from "../../../../lib/queryKeys";
-import { sandboxRequest } from "../../../../client/sandbox/sandboxClient";
+import { SandboxHttpError } from "../../../../client/sandbox/sandboxHttpError";
+import { sandboxRaw } from "../../../../client/sandbox/sandboxRaw";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { useOperation } from "../../../../workbench/operations/operations";
+import { useSyncStatus } from "./useSyncStatus";
 
 // Mints a device pairing and renders the one-liner that spends it (single-use, redeemed once to enroll an SSH
 // key). Mode reflects what the daemon granted, never what was requested. Everything else about an existing
@@ -44,15 +42,16 @@ export const mintSyncPairing = async (mode: SyncMode, ask: SyncPairAsk = {}): Pr
     // the mint. The sandbox refuses an empty one, so a cleared field is left out rather than sent.
     const { syncDir, ...rest } = ask;
     const sent: SyncPairAsk = syncDir === undefined || syncDir.trim() === `` ? rest : { ...rest, syncDir };
-    const response = await sandboxRequest(`/system/sync/pair${mode === `mirror` ? `?mode=mirror` : ``}`, {
-        method: `POST`,
-        headers: { "content-type": `application/json` },
-        body: JSON.stringify(mode === `mirror` ? {} : sent),
-    });
-    if (!response.ok) {
-        throw new Error(t(`sandbox.useDesktopSync.startFailed`, { status: String(response.status) }));
+    let body;
+    try {
+        const mirror = mode === `mirror`;
+        body = await sandboxRaw(`POST /system/sync/pair`, { query: mirror ? { mode: `mirror` } : undefined, input: mirror ? {} : sent });
+    } catch (caught) {
+        if (caught instanceof SandboxHttpError) {
+            throw new Error(t(`sandbox.useDesktopSync.startFailed`, { status: String(caught.status) }), { cause: caught });
+        }
+        throw caught;
     }
-    const body = (await response.json()) as { token: string; mode?: SyncMode; code?: string; expiresIn?: number };
     return {
         token: body.token,
         mode: body.mode ?? `sync`,
@@ -83,10 +82,17 @@ export function useDesktopSync() {
 
     const canOperate = computed(() => roleAtLeast(active.value?.role ?? `owner`, `maintainer`));
 
-    // Whether this sandbox can do desktop sync at all; read from the daemon rather than assumed, since an old
-    // daemon that can't answer shouldn't offer sync. Unknown until it answers: starting at "no" put the sentence that
-    // sync is impossible here on screen first, then offered sync a moment later.
-    const available = ref<boolean | undefined>(undefined);
+    // Whether this sandbox can do desktop sync at all; read from the daemon (the one status read, useSyncStatus) rather
+    // than assumed, since an old daemon that can't answer shouldn't offer sync. Unknown until it answers: starting at
+    // "no" put the sentence that sync is impossible here on screen first, then offered sync a moment later. An answer
+    // that isn't one (an old daemon's 404) is a no; only silence leaves it unknown.
+    const { status, failure, error: statusError } = useSyncStatus();
+    const available = computed<boolean | undefined>(() => {
+        if (status.value !== undefined) {
+            return status.value.available === true;
+        }
+        return failure.value instanceof SandboxHttpError ? false : undefined;
+    });
     // The pairing from the last Enable click, with the one it replaces carried as progress while a renewal is minted,
     // so the command stays on screen through Renew instead of blinking back to Enable.
     const pairing = useOperation<HeldPairing, NoticeModel, HeldPairing | undefined>(PAIRING);
@@ -197,46 +203,11 @@ export function useDesktopSync() {
         });
     };
 
-    const client = useQueryClient();
-    let unsubscribe: (() => void) | undefined;
-    const stop = (): void => {
-        unsubscribe?.();
-        unsubscribe = undefined;
-    };
-    const refresh = async (): Promise<void> => {
-        try {
-            const response = await sandboxRequest(`/system/sync`);
-            // An answer that isn't one (an old daemon's 404) is a no; only silence leaves it unknown.
-            if (!response.ok) {
-                available.value = false;
-                return;
-            }
-            available.value = ((await response.json()) as Partial<SyncStatus>).available === true;
-        } catch {
-            // Sandbox not reachable yet; leave the last known state.
-        }
-    };
-    // Subscribes only while a one-liner is live, since that's the one window an enrollment can appear out-of-band.
-    // Refreshes the Devices list, not this card: the card has nothing left to re-read once it has minted.
-    // Immediate, since a card opened onto a pairing still held is in that window from its first moment.
-    watch(
-        pairToken,
-        (token) => {
-            stop();
-            if (token !== undefined) {
-                unsubscribe = onRuntimeChanged([`hosts`], () => void invalidatePushedQueries(client, { queryKey: rpcKey(`system.devices`) }));
-            }
-        },
-        { immediate: true },
-    );
-    // One-shot read of whether sync is available; the Devices list above handles steady polling.
-    const start = (): void => {
-        void refresh();
-    };
-
     return {
         canOperate,
         available,
+        // Why the status could not be read, in words, while there is none to go by.
+        statusError,
         folder,
         defaultFolder,
         pairToken,
@@ -249,7 +220,5 @@ export function useDesktopSync() {
         desktopLink,
         enable,
         forget,
-        start,
-        stop,
     };
 }

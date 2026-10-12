@@ -1,5 +1,5 @@
 import { type AgentSummary, CI_FIX_PREFIX } from "@intentic/sandbox-contract";
-import { useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useQueryClient } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "../host";
 
@@ -24,9 +24,9 @@ export function useCiFixes(enabled: Ref<boolean>) {
     const queryClient = useQueryClient();
     const queryKey = computed(() => api.sandbox.readKey(`agents.list`));
 
-    const query = useQuery({
+    const { query } = api.sandbox.query({
         queryKey,
-        enabled: computed(() => api.sandbox.reachable() && enabled.value),
+        enabled,
         // The fleet's own entry, the shell's roster read included, so a fix started here shows on the board at once.
         queryFn: () => api.sandbox.rpc.agents.list(),
         select: (answer): AgentSummary[] => answer.agents,

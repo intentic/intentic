@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import type { HostSummary, PhoneSummary, WebExtSummary } from "@intentic/sandbox-contract";
 import {
     BrandMark,
     Button,
@@ -85,9 +84,9 @@ const { rows: processRows, busy: processBusy, start: startProcess, stop: stopPro
 const { devices: fleet, readAt: fleetReadAt, refetch: refetchFleet } = useDevices({ poll: false });
 const { mobile } = useDevice();
 // Devices (host-kind), browsers (webext-kind) and phones (phone-kind) of the user's own, each paired through its own door.
-const hosts = usePeerConnect<HostSummary>(HOST_DOOR);
-const browsers = usePeerConnect<WebExtSummary>(WEBEXT_DOOR);
-const phones = usePeerConnect<PhoneSummary>(PHONE_DOOR);
+const hosts = usePeerConnect(HOST_DOOR);
+const browsers = usePeerConnect(WEBEXT_DOOR);
+const phones = usePeerConnect(PHONE_DOOR);
 const { peerFor: hostFor } = hosts;
 const { peerFor: browserFor } = browsers;
 const { peerFor: phoneFor } = phones;
@@ -188,13 +187,7 @@ const topError = computed<NoticeModel | undefined>(() => {
     return { tone: `danger`, title: t(`capabilities.capabilities.couldntListCapabilities`), detail: listError.value };
 });
 
-// One roster read while this page is open, so a device can say "online" with no dialog open; only a live pairing polls.
-onMounted(hosts.start);
-onBeforeUnmount(hosts.stop);
-onMounted(browsers.start);
-onBeforeUnmount(browsers.stop);
-onMounted(phones.start);
-onBeforeUnmount(phones.stop);
+// The three rosters are live cache entries while this page is open, so a device can say "online" with no dialog open.
 // A phone whose push token rotated, or that paired while no dialog was open, is made wakeable again from here: only a
 // page signed in to the platform can register it with the push relay.
 watch(phones.peers, (listed) => {

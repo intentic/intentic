@@ -2,7 +2,7 @@
 import type { Device } from "@intentic/sandbox-contract";
 import { Button, ui, Notice, type NoticeModel } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, ref } from "vue";
 import { runDeviceCommand, useDevices } from "../useDevices";
 import { useOperations } from "../../../../workbench/operations/operations";
 import { useDesktopSync } from "./useDesktopSync";
@@ -20,6 +20,7 @@ const t = useT();
 const {
     canOperate,
     available,
+    statusError,
     folder,
     pairToken,
     pairMode,
@@ -31,8 +32,6 @@ const {
     desktopLink,
     enable,
     forget,
-    start,
-    stop,
 } = useDesktopSync();
 
 // Whether a device holds file sync, read off the already-fetched devices list (same query, no extra poll).
@@ -119,8 +118,6 @@ const startMirror = (): void => {
 // "What stays on your device" disclosure: collapsed by default.
 const showFootprint = ref(false);
 
-onMounted(start);
-onUnmounted(stop);
 </script>
 
 <template>
@@ -293,6 +290,9 @@ onUnmounted(stop);
             </template>
 
             <!-- Asked and not yet answered: neither the offer nor the refusal, which used to show first and then be contradicted. -->
+            <p v-else-if="available === undefined && statusError !== undefined" class="text-2xs text-danger">
+                {{ t(`sandbox.desktopSyncCard.couldntCheckSync`, { reason: statusError }) }}
+            </p>
             <p v-else-if="available === undefined" class="text-2xs text-subtle">{{ t(`sandbox.desktopSyncCard.checkingSync`) }}</p>
 
             <!-- No SSH way in on a loopback/preview sandbox or one behind intentic's own tunnels (web traffic only): sync has nothing to ride. -->

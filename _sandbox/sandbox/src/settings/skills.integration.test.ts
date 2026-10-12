@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
+import { stampSkill } from "../store/loaded-skills.js";
 import {
     LSP_SKILL,
     listOwnSkills,
@@ -38,7 +39,8 @@ test("reconcile writes a baked tool when named and removes it when absent from t
     const skillPath = join(root, ".agents", "skills", "lsp", "SKILL.md");
 
     await reconcileBakedSkills(services, ["lsp"]);
-    expect(await readFile(skillPath, "utf8")).toBe(LSP_SKILL);
+    // Stamped as the baked-tool writer's, so a release that drops the tool can retire it (settings/skill-retirement.ts).
+    expect(await readFile(skillPath, "utf8")).toBe(stampSkill(LSP_SKILL, "baked-tool"));
 
     await reconcileBakedSkills(services, []);
     await expect(stat(skillPath)).rejects.toThrow();

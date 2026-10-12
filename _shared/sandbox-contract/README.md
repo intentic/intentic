@@ -20,7 +20,8 @@ flowchart LR
   `RAW_ROUTES`. One that answers plain JSON (`/members`, `/environment`, `/engines`, `/definition`) has its input and
   answer schemas in `RAW_JSON_ROUTES` under the same key, which the editor's `sandboxRaw` fetches by and parses with;
   any other caller builds the path with `rawRouteUrl` (or `procedurePath` for a procedure it calls without oRPC's
-  client), so no route is spelled a second time.
+  client), so no route is spelled a second time. A route whose body is bytes (a file, a WAV, a tar) is marked `bytes`,
+  and its caller passes a Blob, an ArrayBuffer or a string.
 - Four contracts run the other way. `deviceContract`, `webextContract`, `phoneContract` and `runnerContract` are served
   by a user's machine, the browser extension, the phone app and a runner over the socket each one opens, with the
   daemon as the client. The phone's is carried as plain JSON-RPC (`src/protocol/doors/phone-protocol.ts`), since its far end is
@@ -41,6 +42,12 @@ flowchart LR
   `blocked` with its `fix` · `unknown`), and `SPENT_UTILIZATION` is the only spent line. The daemon runs it for every
   picker and publishes it as `state` on each account row. The editor reads that field and never judges a row itself: a
   row without it (a daemon from before v1.313) reads as `unknown`, and the editor says the sandbox needs an update.
+- So are the rules the daemon and a device must agree on about the owner's machine. `DEVICE_PROGRAM_TOOLS` in
+  `src/policy/device-programs.ts` says which device tools carry a program and how to read it, and
+  `sandboxPowerCommands` in `src/policy/sandbox-power.ts` recognises a command that starts, stops or replaces a
+  sandbox. The rules `ic`'s Rust must agree with are here too, each pinned to it by a golden file under `golden/`:
+  the update probation policy (`src/state/update-probation.ts`), the one shape of `restart-intent.json`
+  (`src/schemas/restart-intent.ts`), and the answer of `ic sandbox swaps --json` (`src/schemas/device-swaps.ts`).
 - What a credential looks like is decided here too: `CREDENTIAL_ISSUERS` in `src/policy/credential-material.ts` (each
   issuer's prefix and token body, as data) and `SECRET_REFERENCE` in `src/schemas/needs.ts` (the `{{secret:name}}`
   pattern, non-global, so each site that scans derives its own `/g` copy). The terminal output filter

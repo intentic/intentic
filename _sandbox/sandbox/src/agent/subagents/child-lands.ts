@@ -13,7 +13,7 @@ import { deliverWake } from "../run/turn/wake-delivery.js";
 // Who started a conversation and on what it runs, whether its parent has a live turn, and the door words go through.
 export interface ChildNewsDeps {
     readonly agents: Pick<Services["agents"], "entry">;
-    readonly conversations: Pick<Services["conversations"], "running" | "sessionIdOf">;
+    readonly conversations: Pick<Services["conversations"], "running">;
     readonly turns: Pick<Services["turns"], "say">;
     readonly logger: Pick<Services["logger"], "info" | "warn">;
 }
@@ -54,7 +54,7 @@ const tell = async (deps: ChildNewsDeps, parent: string, prompt: string): Promis
     }
     try {
         const receipt = await deliverWake(
-            { turns: deps.turns, sessionIdOf: (conversationId) => deps.conversations.sessionIdOf(conversationId) },
+            { turns: deps.turns },
             { conversationId: parent, prompt, voice: "sandbox", source: SOURCE, profile: conversationProfile(entry) },
         );
         if ("invalid" in receipt || "why" in receipt) {

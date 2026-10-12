@@ -72,7 +72,6 @@ const harnessOf = (over: Partial<Pick<Harness, "check" | "env" | "journal">> = {
             return Promise.resolve(harness.check);
         },
         turns: harness.doors.turns,
-        sessionIdOf: () => "session-9",
         journal: harness.journal,
         envOf: () => Promise.resolve(harness.env),
         conversationLive: (conversationId) => harness.live.has(conversationId),
@@ -127,7 +126,8 @@ describe("watchers", () => {
         expect(harness.doors.started).toHaveLength(1);
         const wake = harness.doors.started[0] as AgentTurn & { conversationId: string };
         expect(wake.conversationId).toBe("conv-1");
-        expect(wake.sessionId).toBe("session-9");
+        // A wake names no session: the conversation's admission decides it on the routing the conversation has by then.
+        expect(wake).not.toHaveProperty("sessionId");
         expect(wake.prompt).toContain("CI run 316 on intentic/intentic");
         expect(wake.prompt).toContain("conclusion: success");
         expect(wake.prompt).not.toMatch(/timed out/i);

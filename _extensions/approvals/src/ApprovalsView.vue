@@ -60,7 +60,7 @@ const agentsLink = appLink(host().href(`/agents`), () => host().navigate(`/agent
 // owed: broken, needs review, about to happen, scheduled, done.
 
 const { approvals, invalid, isLoading, error: listError, save, remove } = useApprovals();
-const { held, error: heldError, approve: approveWake, reject: rejectWake } = useHeldWakes();
+const { held, unreadable: unreadableWakes, error: heldError, approve: approveWake, reject: rejectWake } = useHeldWakes();
 const { hookSets, ledgerUnreadable, error: hooksError, approve: approveHooks, dismiss: dismissHooks } = useHookRequests();
 // Only drawn once the wait has earned it; a warm queue answers within the reveal delay.
 const outline = useLoadingReveal(
@@ -396,6 +396,11 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
             <Notice v-if="invalid.length > 0" tone="warning">
                 {{ t(`approvalsView.invalidFiles`, { count: invalid.length }, invalid.length) }}
                 <span class="font-mono">{{ invalid.join(", ") }}</span>
+            </Notice>
+            <!-- A held wake the sandbox cannot read never runs; said, so it is not mistaken for one that was never held. -->
+            <Notice v-if="unreadableWakes.length > 0" tone="warning">
+                {{ t(`approvalsView.unreadableHeldWakes`, { count: unreadableWakes.length }, unreadableWakes.length) }}
+                <span class="font-mono">{{ unreadableWakes.join(", ") }}</span>
             </Notice>
         </template>
 

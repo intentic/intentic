@@ -356,6 +356,13 @@ model HostedMachine {
     previousEnvironmentHash String?
     unprovenImage           String?
     skippedDigest           String?
+    /* THE POST-SWITCH PROBATION (api gate/hosted-probation.ts): when the gate last saw a new image's daemon come up, and
+     * how many looks since have found it failing in a row. Null while no image is on probation. The watch looks at the
+     * machine for `UPDATE_PROBATION.watchMs` after that, and puts `previousImage` back when it keeps failing: the same
+     * rule `ic sandbox watch` applies to a sandbox it swapped (the contract's state/update-probation.ts). An automatic
+     * rollback, an expired window or a machine with no `previousImage` to go back to clears both. */
+    probationSince   DateTime?
+    probationStrikes Int      @default(0)
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
 

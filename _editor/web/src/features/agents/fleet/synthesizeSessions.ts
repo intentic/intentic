@@ -5,7 +5,7 @@ import { track } from "../../../app/analytics";
 import type { TabFacts } from "../../chat/tabs/tabFacts";
 import { summonChat } from "../../chat/run/summon";
 import { chatStrip } from "../../chat/panel/useChat-strip";
-import { sandboxUpload } from "../../../client/sandbox/sandboxClient";
+import { sandboxRawUpload } from "../../../client/sandbox/sandboxRawUpload";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { revealConversation } from "./agentActions";
 import { composeSession } from "./sessionSuggestion";
@@ -204,10 +204,9 @@ export const synthesizeSessions = async (): Promise<SynthesisAsk> => {
         try {
             await Promise.all(
                 attachments.map((attachment) =>
-                    sandboxUpload(
-                        `/workspace/upload?path=${encodeURIComponent(attachment.path)}`,
-                        new Blob([attachment.markdown], { type: `text/markdown` }),
-                    ),
+                    sandboxRawUpload(`POST /workspace/upload`, new Blob([attachment.markdown], { type: `text/markdown` }), {
+                        query: { path: attachment.path },
+                    }),
                 ),
             );
         } catch {

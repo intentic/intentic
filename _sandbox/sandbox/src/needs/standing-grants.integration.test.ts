@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { fileConversationGrants } from "../personas/conversation-grants.js";
 import { createCredentialGrants } from "../secrets/credential-grants.js";
 import { revokeGrant, standingGrants } from "./standing-grants.js";
+import { standingDeps } from "./standing-grants.testing.js";
 
 // A credential gateway card's "Allow requests like this with <name> in this conversation" is a person's yes like any
 // other: kept on disk, so a restart does not ask again, listed where it can be taken back, and gone with its conversation.
@@ -19,7 +20,7 @@ test("a rule's pass outlasts the store that heard it, is listed, and taken back 
 
     // A fresh store over the same file is how a restart reads it.
     const after = fileConversationGrants(path, () => 200);
-    const deps = { conversationGrants: after, credentialGrants: createCredentialGrants() };
+    const deps = standingDeps({ conversationGrants: after, credentialGrants: createCredentialGrants() });
     expect(await after.ruleAllowed("conv-1", "github", github.rule)).toBe(true);
     // The same rule under another capability, or another conversation, was never allowed.
     expect(await after.ruleAllowed("conv-1", "linear", github.rule)).toBe(false);

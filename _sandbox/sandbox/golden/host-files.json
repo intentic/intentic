@@ -41,7 +41,29 @@
       "checks": [
         "health"
       ]
-    }
+    },
+    "initiators": [
+      "owner",
+      "daemon",
+      "ic",
+      "keeper",
+      "desktop"
+    ],
+    "actions": [
+      "restart",
+      "stop",
+      "update",
+      "swap",
+      "reshape",
+      "recreate",
+      "rebuild"
+    ],
+    "sides": [
+      "wsl",
+      "windows",
+      "linux",
+      "mac"
+    ]
   },
   "workSignal": {
     "path": "/run/intentic/work.json",

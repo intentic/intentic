@@ -333,6 +333,38 @@ export const ConversationGrantSchema = z.object({
 });
 export type ConversationGrant = z.infer<typeof ConversationGrantSchema>;
 
+// A yes that names no conversation: it applies to the whole sandbox, so it is listed beside the per-conversation ones and
+// taken back from the same place (docs/architecture/needs.md). Each is kept off the workspace, where no agent writes.
+export const OWNER_GRANT_KINDS = ["command-policy", "hook-set", "extension"] as const;
+export const OwnerGrantKindSchema = z.enum(OWNER_GRANT_KINDS);
+export type OwnerGrantKind = z.infer<typeof OwnerGrantKindSchema>;
+
+export const OwnerGrantSchema = z.discriminatedUnion("kind", [
+    // A permission card's "Always: <line>" on a command: the line joins the owner's policy for the safety judge, in every
+    // conversation, until somebody takes it back.
+    z.object({
+        kind: z.literal("command-policy"),
+        line: z.string().describe("The policy line the judge reads, exactly as it was accepted on the card."),
+        at: z.number().describe("When it was allowed, in milliseconds."),
+        by: z.string().optional().describe("Who allowed it, off the verified reply."),
+    }),
+    // A set of Claude Code hooks approved by its digest (guard/hook-approvals.ts): turns run its hooks until it is taken back.
+    z.object({
+        kind: z.literal("hook-set"),
+        digest: z.string().describe("The set's fingerprint, what taking it back names."),
+        hooks: z.array(z.string()).describe("Each hook in the set in the daemon's words: when it runs and what it runs."),
+        at: z.number().describe("When it was approved, in milliseconds."),
+    }),
+    // A workspace extension approved for the powers it declared then (extensions/extension-approvals.ts).
+    z.object({
+        kind: z.literal("extension"),
+        id: z.string().describe("The extension, by its publisher.name id."),
+        powers: z.array(z.string()).describe("What it was approved to do, one power per entry."),
+        at: z.number().describe("When it was approved, in milliseconds."),
+    }),
+]);
+export type OwnerGrant = z.infer<typeof OwnerGrantSchema>;
+
 // Every yes still standing, by conversation: what its grants widened past its persona or area, and which gated
 // credentials a named person released to it. Reviewed and taken back from Needs you.
 export const StandingGrantsSchema = z.object({
@@ -353,10 +385,18 @@ export const StandingGrantsSchema = z.object({
                 .describe("Gated credentials released to it, until somebody takes one back."),
         }),
     ),
+    ownerWide: z
+        .array(OwnerGrantSchema)
+        .default([])
+        .describe("Yeses that name no conversation: command policy lines allowed with Always, approved hook sets, approved workspace extensions."),
+    unreadable: z
+        .array(OwnerGrantKindSchema)
+        .default([])
+        .describe("Kinds of owner-wide yes whose record this build could not read: none of that kind stands, and none is listed, until the file is fixed."),
 });
 export type StandingGrants = z.infer<typeof StandingGrantsSchema>;
 
-export const GrantRevokeSchema = z.object({
+export const ConversationGrantRevokeSchema = z.object({
     conversationId: z.string(),
     kind: z
         .enum(["capability", "folder", "shelf", "release", "install", "secret", "everything", "rule"])
@@ -368,6 +408,16 @@ export const GrantRevokeSchema = z.object({
         .describe("The capability id, folder, shelf, released credential or secret it named, or the rule's identity; empty for installs and everything."),
     capability: z.string().optional().describe("For a rule, the capability whose rule it is; a rule's identity alone does not say."),
 });
+export type ConversationGrantRevoke = z.infer<typeof ConversationGrantRevokeSchema>;
+
+// Taking back a yes that names no conversation: the kind says which list, `what` which entry of it.
+export const OwnerGrantRevokeSchema = z.object({
+    kind: OwnerGrantKindSchema.describe("Which kind of owner-wide yes: a command policy line, an approved hook set, or an approved extension."),
+    what: z.string().min(1).describe("The policy line, the hook set's digest, or the extension's id."),
+});
+export type OwnerGrantRevoke = z.infer<typeof OwnerGrantRevokeSchema>;
+
+export const GrantRevokeSchema = z.union([ConversationGrantRevokeSchema, OwnerGrantRevokeSchema]);
 export type GrantRevoke = z.infer<typeof GrantRevokeSchema>;
 
 // The file the needs store keeps: every open need and the recent closed ones, by id.

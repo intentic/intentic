@@ -78,10 +78,14 @@ export const automationsSliceFake = (archived: ArchivedConversation) =>
         automations: memoryAutomationsStore(),
         // No held wakes: agents.list projects them as `held`, and no suite here holds one.
         heldWakes: {
+            read: async () => ({ wakes: [], unreadable: [] }),
             list: async () => [],
             get: async () => undefined,
             add: async (approval) => ({ ...approval, id: "held-1" }),
             remove: async () => false,
+            approve: async () => false,
+            release: async () => undefined,
+            releaseCountdown: async () => undefined,
         },
         // In-memory: every inbound fire resolves its conversation through this; suites only need consistent answers.
         threadSessions: memoryThreadSessionsStore(archived),

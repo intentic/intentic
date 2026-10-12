@@ -1,5 +1,7 @@
-import type { SandboxDefinition } from "@intentic/sandbox-contract";
-import { definitionDiff, DefinitionFormatError, emitDefinitionToml, parseDefinitionToml, settingsDefinition, settingsDrift, unreadableDefinition } from "./definition.js";
+import { type SandboxDefinition, stateFileFor, WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract";
+import { join } from "node:path";
+import { ownerGrantsDocument } from "../personas/owner-grants.js";
+import { DEFINITION_SOURCES, DEFINITION_WORKSPACE, definitionDiff, DefinitionFormatError, emitDefinitionToml, parseDefinitionToml, settingsDefinition, settingsDrift, unreadableDefinition } from "./definition.js";
 
 // Round-trip promises: emit then parse is byte-identical, emission is deterministic, and a bad document fails naming
 // the field.
@@ -199,4 +201,16 @@ describe("a definition from an earlier release", () => {
             'this definition was written by intentic 9.0.0, newer than this sandbox (1.400.0); update the sandbox to apply it (settings: Unrecognized key: "warpDrive")',
         );
     });
+});
+
+// A yes the owner gave is theirs, not the workspace's: the lines they allowed with Always sit under the auth root, which no
+// export carries, so a definition applied elsewhere (or a clone of this workspace) governs its target by the owner's own
+// safety.md and never by lines a different person allowed on a different sandbox's cards.
+test("the owner-wide grants are not part of any definition, and the auth root they sit in is never exported", () => {
+    const named = [...DEFINITION_SOURCES, ...DEFINITION_WORKSPACE.map((entry) => entry.path)];
+    expect(named.filter((path) => path.includes(ownerGrantsDocument.path))).toEqual([]);
+    expect(stateFileFor(join(".intentic/secrets/auth/", ownerGrantsDocument.path), WORKSPACE_STATE_FILES)?.portability).toBe("secret");
+    // The policy file is carried as the owner wrote it, and says what it does not hold.
+    const safety = DEFINITION_WORKSPACE.find((entry) => entry.path === ".intentic/config/safety.md");
+    expect(safety?.note).toContain("lines allowed with Always");
 });

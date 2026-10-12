@@ -43,7 +43,7 @@ const hookSet = (digest: string, over: Partial<HookRequest> = {}): HookRequest =
 });
 
 // `hooks` absent reads as a reader below maintainer, whom the daemon refuses: the badge must not count what it can't read.
-const fakeHost = (approvals: ApprovalsList, held: AutomationApproval[], hooks?: HookRequests) => {
+const fakeHost = (approvals: ApprovalsList, held: AutomationApproval[], hooks?: HookRequests, unreadableWakes: string[] = []) => {
     const procedures: string[] = [];
     const views: ViewRegistration[] = [];
     const api = {
@@ -64,7 +64,7 @@ const fakeHost = (approvals: ApprovalsList, held: AutomationApproval[], hooks?: 
                 automations: {
                     pendingList: async () => {
                         procedures.push(`automations.pendingList`);
-                        return { approvals: held };
+                        return { approvals: held, unreadable: unreadableWakes };
                     },
                 },
             },
@@ -130,8 +130,16 @@ describe(`what the queue owes`, () => {
         bindHost(api);
         const query = heldWakesQuery();
         expect(query.queryKey).toEqual([`automations.pendingList`, `box`]);
-        await expect(query.queryFn()).resolves.toEqual({ approvals: [] });
+        await expect(query.queryFn()).resolves.toEqual({ approvals: [], unreadable: [] });
         expect(procedures).toEqual([`automations.pendingList`]);
+    });
+
+    // A file in the queue the daemon cannot read is a wake that never runs; the same entry carries its name to the page, which
+    // says so, instead of the wake simply not being there.
+    it(`carries the files the daemon could not read in the same entry as the wakes it could`, async () => {
+        const { api } = fakeHost({ approvals: [], invalid: [] }, [wake(`a`)], undefined, [`torn.json`]);
+        bindHost(api);
+        await expect(heldWakesQuery().queryFn()).resolves.toEqual({ approvals: [wake(`a`)], unreadable: [`torn.json`] });
     });
 });
 

@@ -233,6 +233,9 @@ export type PasskeysList = z.infer<typeof PasskeysListSchema>;
 
 export const PasskeyPolicySchema = z.object({ required: z.boolean() });
 export type PasskeyPolicy = z.infer<typeof PasskeyPolicySchema>;
+// POST /system/passkeys/policy: switching the rule on answers with the recovery codes, off with none.
+export const PasskeyPolicyAnswerSchema = PasskeyPolicySchema.extend({ codes: z.array(z.string()).optional() });
+export type PasskeyPolicyAnswer = z.infer<typeof PasskeyPolicyAnswerSchema>;
 
 // Shown exactly once: the daemon keeps only their hashes.
 export const RecoveryCodesSchema = z.object({ codes: z.array(z.string()) });
@@ -318,6 +321,26 @@ export interface AuthenticationOptionsJSON {
     // pressing it can succeed.
     readonly available: boolean;
 }
+
+// The two interfaces above read off the wire with the one check a body needs before the browser's own parser takes it
+// (`parseCreationOptionsFromJSON` rejects the rest): an object with a challenge. Typed, not parsed field by field, since
+// only the daemon writes them.
+const WithChallengeSchema = z.object({ challenge: z.string() });
+const optionsWithChallenge = <Options extends { readonly challenge: string }>() => z.custom<Options>((value) => WithChallengeSchema.safeParse(value).success);
+export const RegistrationOptionsSchema = optionsWithChallenge<RegistrationOptionsJSON>();
+export const AuthenticationOptionsSchema = optionsWithChallenge<AuthenticationOptionsJSON>();
+
+// POST /system/passkeys/register: the passkey as listed, and the session upgraded on the spot when the bearer that
+// registered held no passkey yet (the same proof, now carrying one).
+export const PasskeyRegisteredSchema = z.object({
+    passkey: PasskeySummarySchema,
+    session: DaemonSessionSchema.optional(),
+});
+export type PasskeyRegistered = z.infer<typeof PasskeyRegisteredSchema>;
+
+// POST /system/session/recover: the session the recovery code bought, and how many codes are left unspent.
+export const SessionRecoveredSchema = DaemonSessionSchema.extend({ remaining: z.number() });
+export type SessionRecovered = z.infer<typeof SessionRecoveredSchema>;
 
 // Whether this sandbox's public address answers, probed by the box itself; the same shape as `announce` beside it, so
 // `ic sandbox doctor` and the setup wizard can name whichever link broke.

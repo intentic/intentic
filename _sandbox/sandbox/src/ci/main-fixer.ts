@@ -396,7 +396,7 @@ const sendOn = async (
     const receipt = await orElse(
         services,
         deliverWake(
-            { turns: services.turns, sessionIdOf: (conversationId) => services.conversations.sessionIdOf(conversationId) },
+            { turns: services.turns },
             {
                 conversationId: fixer,
                 prompt: followUp(project, streak, branch, runId, parked, reason),

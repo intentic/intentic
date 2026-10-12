@@ -14,7 +14,6 @@ import {
     ToggleSwitch,
     vAction,
 } from "@intentic/extension-ui";
-import { useQuery } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
 import { glyph } from "./catalog";
 import { nextIn, since } from "./cronSchedule";
@@ -76,10 +75,9 @@ const {
 
 // Personas this sandbox can wear, for the picker below; read here since the list is the same for every automation.
 // Names only: a card's connection status belongs on the Personas page, not here.
-const personaList = useQuery({
+const { query: personaList } = host().sandbox.query({
     queryKey: host().sandbox.readKey(`personas.list`),
     queryFn: () => host().sandbox.rpc.personas.list(),
-    enabled: computed(() => host().sandbox.reachable()),
 });
 const personas = computed<readonly PickerOption[]>(() =>
     (personaList.data.value?.personas ?? [])

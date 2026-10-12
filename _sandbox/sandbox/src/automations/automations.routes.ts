@@ -3,6 +3,7 @@ import { implement, ORPCError } from "@orpc/server";
 import { rm } from "node:fs/promises";
 import { doorChange, listedDoorToken } from "../auth/tokens/door-tokens.js";
 import { operatorHere } from "../auth/operator.js";
+import { requireMaintainer } from "../auth/owner-gates.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { reconcileListenerProcesses } from "../extensions/extension-processes.js";
@@ -11,6 +12,7 @@ import { doorOf, refuseInvalidAutomation, refusePastEnd, refusePastMoment, saveA
 import type { AutomationRecord } from "./automations-store.js";
 import { sandboxZone } from "./schedule-zone.js";
 import { declineHeldWake, withdrawApprovalPush } from "./held-wake-answers.js";
+import { HeldWakeNotApproved } from "./held-wakes-store.js";
 import { fireAutomation, nextRunOf, runHeldWake } from "./scheduler.js";
 import { ManifestUnreadableError } from "../store/json-file.js";
 import { guardStateFile, sourceEnv } from "./watch/watch-condition.js";
@@ -121,26 +123,33 @@ export const createAutomationsRoutes = (services: Services) => {
             );
             return { ok: true } as const;
         }),
-        pendingList: i.pendingList.handler(async () => ({ approvals: await services.heldWakes.list() })),
+        // The readable holds, and the names of any file in the queue this build cannot read: reported, never dropped.
+        pendingList: i.pendingList.handler(async () => {
+            const { wakes, unreadable } = await services.heldWakes.read();
+            return { approvals: wakes, unreadable };
+        }),
         // Approve a held wake: run it now with its snapshotted payload (the guard already ran when it was held); then
-        // drop the queue entry.
+        // drop the queue entry. The owner's yes is recorded against the hold before it leaves and checked as it does
+        // (held-wakes-store.ts), and only a person's session gives it: a program approving its own wake is the very thing
+        // the hold exists to stop.
         // Detached like the /fire webhook: the turn outlives this request.
-        approve: i.approve.handler(async ({ input }) => {
-            const pending = await services.heldWakes.get(input.id).catch((error: unknown) => {
-                // A hold this build cannot read is never run on a guess at what it snapshotted; the message names the file.
-                if (error instanceof ManifestUnreadableError) {
-                    throw new ORPCError("CONFLICT", { message: error.message });
-                }
-                throw error;
-            });
+        approve: i.approve.handler(async ({ input, context }) => {
+            await requireMaintainer(services, context.headers, "only the owner or a maintainer, signed in, can release a held wake; a program's token cannot");
+            const pending = await services.heldWakes
+                .approve(input.id, context.identity?.email)
+                .then((found) => (found ? services.heldWakes.release(input.id) : undefined))
+                .catch((error: unknown) => {
+                    // A hold this build cannot read is never run on a guess at what it snapshotted; the message names the file.
+                    if (error instanceof ManifestUnreadableError || error instanceof HeldWakeNotApproved) {
+                        throw new ORPCError("CONFLICT", { message: error.message });
+                    }
+                    throw error;
+                });
+            // Only the caller whose release took the entry runs it: a second approval, or the countdown release, already did.
             if (pending === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "no pending approval with that id" });
             }
             const automation = await services.automations.get(pending.automationId);
-            // Only the caller whose remove took the entry runs it: a second approval, or the countdown release, already did.
-            if (!(await services.heldWakes.remove(input.id))) {
-                throw new ORPCError("NOT_FOUND", { message: "that approval was already released" });
-            }
             // The ask is answered, so it comes off the lock screen whatever happens next.
             void withdrawApprovalPush(services, pending.automationId);
             if (automation === undefined) {

@@ -1,19 +1,13 @@
-import { nextOneTimeWakeAt } from "../automations/scheduler.js";
 import type { ReachPosture } from "../system/listeners/reach-posture.js";
 import { DEFAULT_PROBES, startIdleStop } from "../system/idle-stop.js";
 import { fileRestartResume } from "../system/restart-resume.js";
 import type { BootPhase } from "./boot-phase.js";
+import { nextPromisedWake } from "./promised-wakes.js";
 import { workingNow } from "./working-now.js";
-import { nextBookedSendAt } from "../agent/run/turn/turn-resume.js";
 
-// The sooner of two wakes, either 0 for none.
-const sooner = (a: number, b: number): number => (a === 0 ? b : b === 0 ? a : Math.min(a, b));
-
-// The soonest moment this sandbox promised somebody, 0 for none: a one-time automation, a person's scheduled send, and a
-// held turn booked to go again when its allowance reopens, since the sandbox's own clock is all that lets any of them go.
-// What a stop for idleness must not sleep through.
-export const nextPromisedWakeAt = async (services: BootPhase["services"]): Promise<number> =>
-    sooner(await nextOneTimeWakeAt(services), await nextBookedSendAt(services));
+// The soonest moment this sandbox promised somebody that a stop for idleness must not sleep through, 0 for none: one list
+// (promised-wakes.ts), shared with the automatic update's.
+export const nextPromisedWakeAt = async (services: BootPhase["services"]): Promise<number> => (await nextPromisedWake(services, "idle-stop")) ?? 0;
 
 // Container role only: a guest daemon or a local folder speaks for nobody.
 export const startPlatformPresence = ({ config, logger, role, services, shutdown }: BootPhase, reach: ReachPosture): void => {
@@ -31,7 +25,7 @@ export const startPlatformPresence = ({ config, logger, role, services, shutdown
                 {
                     ...DEFAULT_PROBES,
                     working: () => workingNow(services, "idle-stop").length,
-                    nextOneTimeWakeAt: () => nextPromisedWakeAt(services),
+                    nextPromisedWakeAt: () => nextPromisedWakeAt(services),
                 },
                 // Named as the initiator before the SIGTERM main.ts answers, so the stop and the next boot say why.
                 () => {

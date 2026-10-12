@@ -1,0 +1,618 @@
+{
+  "about": "The policy an update is held to after it took, and the cases of its rule, hand-written from ic's Rust (probation.rs judge, step and constants). ic's Rust test and the contract's TS test (state/update-probation.test.ts) build every one; the platform's hosted probation watch (api gate/hosted-probation.ts) applies the same rule through the contract. A look is `base` with the case's `look` laid over it; times are epoch milliseconds.",
+  "policy": {
+    "watchMs": 86400000,
+    "graceMs": 600000,
+    "journalMs": 900000,
+    "strikes": 3,
+    "keptBuilds": 2,
+    "crashLoopRestarts": 3
+  },
+  "base": {
+    "running": true,
+    "restarting": false,
+    "restarts": 0,
+    "answered": true,
+    "ready": true,
+    "journal": "none",
+    "reach": "reachable",
+    "bootFailure": null,
+    "daemonRestarts": 0,
+    "crashLoop": null,
+    "held": false
+  },
+  "judge": [
+    {
+      "name": "a healthy new version is healthy the moment it is looked at",
+      "look": {},
+      "swap": {
+        "at": 0,
+        "reach": "reachable"
+      },
+      "now": 1,
+      "verdict": {
+        "kind": "healthy"
+      }
+    },
+    {
+      "name": "and ten hours later",
+      "look": {},
+      "swap": {
+        "at": 0,
+        "reach": "reachable"
+      },
+      "now": 36000000,
+      "verdict": {
+        "kind": "healthy"
+      }
+    },
+    {
+      "name": "a daemon still starting inside the grace is waited for",
+      "look": {
+        "ready": false
+      },
+      "swap": {
+        "at": 0,
+        "reach": "reachable"
+      },
+      "now": 300000,
+      "verdict": {
+        "kind": "pending"
+      }
+    },
+    {
+      "name": "and held against it once the grace is over",
+      "look": {
+        "ready": false
+      },
+      "swap": {
+        "at": 0,
+        "reach": "reachable"
+      },
+      "now": 660000,
+      "verdict": {
+        "kind": "strike",
+        "reason": "the new version never finished starting up"
+      }
+    },
+    {
+      "name": "a daemon that does not answer inside the grace is waited for",
+      "look": {
+        "answered": false,
+        "ready": null,
+        "journal": null,
+        "reach": null
+      },
+      "swap": {
+        "at": 0,
+        "reach": "reachable"
+      },
+      "now": 300000,
+      "verdict": {
+        "kind": "pending"
+      }
+    },
+    {
+      "name": "and held against it once the grace is over",
+      "look": {
+        "answered": false,
+        "ready": null,
+        "journal": null,
+        "reach": null
+      },
+      "swap": {
+        "at": 0,
+        "reach": "reachable"
+      },
+      "now": 660000,
+      "verdict": {
+        "kind": "strike",
+        "reason": "the new version's daemon is not answering"
+      }
+    },
+    {
+      "name": "the grace ends exactly at its length: one millisecond short is still inside it",
+      "look": {
+        "answered": false
+      },
+      "swap": {
+        "at": 0,
+        "reach": "reachable"
+      },
+      "now": 599999,
+      "verdict": {
+        "kind": "pending"
+      }
+    },
+    {
+      "name": "and at it the silence counts",
+      "look": {
+        "answered": false
+      },
+      "swap": {
+        "at": 0,
+        "reach": "reachable"
+      },
+      "now": 600000,
+      "verdict": {
+        "kind": "strike",
+        "reason": "the new version's daemon is not answering"
+      }
+    },
+    {
+      "name": "a container that keeps restarting is a crash loop at once",
+      "look": {
+        "running": false,
+        "restarts": 3,
+        "answered": false
+      },
+      "swap": {
+        "at": 0,
+        "reach": "reachable"
+      },
+      "now": 60000,
+      "verdict": {
+        "kind": "fail",
+        "reason": "the new version kept crashing (3 restarts)"
+      }
+    },
+    {
+      "name": "a container that stopped once is a strike, not yet a loop",
+      "look": {
+        "running": false,
+        "restarts": 1,
+        "answered": false
+      },
+      "swap": {
+        "at": 0,
+        "reach": "reachable"
+      },
+      "now": 60000,
+      "verdict": {
+        "kind": "strike",
+        "reason": "the new version's container is not running"
+      }
+    },
+    {
+      "name": "a container on its way back up is not running yet",
+      "look": {
+        "restarting": true,
+        "restarts": 2
+      },
+      "swap": {
+        "at": 0,
+        "reach": "reachable"
+      },
+      "now": 60000,
+      "verdict": {
+        "kind": "strike",
+        "reason": "the new version's container is not running"
+      }
+    },
+    {
+      "name": "a failed state conversion goes back at once",
+      "look": {
+        "journal": "failed"
+      },
+      "swap": {
+        "at": 0,
+        "reach": "reachable"
+      },
+      "now": 60000,
+      "verdict": {
+        "kind": "fail",
+        "reason": "the new version could not convert this sandbox's stored files; it put them back as they were"
+      }
+    },
+    {
+      "name": "a boot the daemon recorded as failed goes back at once",
+      "look": {
+        "bootFailure": "SQLITE_CORRUPT",
+        "answered": false
+      },
+      "swap": {
+        "at": 0,
+        "reach": "reachable"
+      },
+      "now": 60000,
+      "verdict": {
+        "kind": "fail",
+        "reason": "the new version could not start: SQLITE_CORRUPT"
+      }
+    },
+    {
+      "name": "a daemon that keeps starting again inside a running container is a crash loop",
+      "look": {
+        "daemonRestarts": 3
+      },
+      "swap": {
+        "at": 0,
+        "reach": "reachable"
+      },
+      "now": 120000,
+      "verdict": {
+        "kind": "fail",
+        "reason": "the new version's daemon kept crashing (3 restarts)"
+      }
+    },
+    {
+      "name": "two such restarts are not yet",
+      "look": {
+        "daemonRestarts": 2
+      },
+      "swap": {
+        "at": 0,
+        "reach": "reachable"
+      },
+      "now": 120000,
+      "verdict": {
+        "kind": "healthy"
+      }
+    },
+    {
+      "name": "netd's word that the daemon keeps crashing is enough inside the grace",
+      "look": {
+        "answered": false,
+        "crashLoop": "netd restarted it 3 times in the last ten minutes, and it is down again"
+      },
+      "swap": {
+        "at": 0,
+        "reach": "reachable"
+      },
+      "now": 60000,
+      "verdict": {
+        "kind": "fail",
+        "reason": "the new version's daemon kept crashing: netd restarted it 3 times in the last ten minutes, and it is down again"
+      }
+    },
+    {
+      "name": "a sandbox its owner stopped is waited for, hours into the probation",
+      "look": {
+        "running": false,
+        "held": true,
+        "answered": false
+      },
+      "swap": {
+        "at": 0,
+        "reach": "reachable"
+      },
+      "now": 18000000,
+      "verdict": {
+        "kind": "pending"
+      }
+    },
+    {
+      "name": "not even a recorded boot failure sends a held stopped one back",
+      "look": {
+        "running": false,
+        "held": true,
+        "bootFailure": "boom"
+      },
+      "swap": {
+        "at": 0,
+        "reach": null
+      },
+      "now": 18000000,
+      "verdict": {
+        "kind": "pending"
+      }
+    },
+    {
+      "name": "a container nobody stopped that is not running is still held against it",
+      "look": {
+        "running": false,
+        "held": false
+      },
+      "swap": {
+        "at": 0,
+        "reach": null
+      },
+      "now": 18000000,
+      "verdict": {
+        "kind": "strike",
+        "reason": "the new version's container is not running"
+      }
+    },
+    {
+      "name": "a held sandbox that is running is judged like any other",
+      "look": {
+        "held": true
+      },
+      "swap": {
+        "at": 0,
+        "reach": "reachable"
+      },
+      "now": 18000000,
+      "verdict": {
+        "kind": "healthy"
+      }
+    },
+    {
+      "name": "an open journal inside fifteen minutes is a boot still converting",
+      "look": {
+        "journal": "open"
+      },
+      "swap": {
+        "at": 0,
+        "reach": null
+      },
+      "now": 840000,
+      "verdict": {
+        "kind": "pending"
+      }
+    },
+    {
+      "name": "an open journal at fifteen minutes is a boot that will not finish",
+      "look": {
+        "journal": "open"
+      },
+      "swap": {
+        "at": 0,
+        "reach": null
+      },
+      "now": 900000,
+      "verdict": {
+        "kind": "strike",
+        "reason": "the new version is still converting stored files after 15 minutes"
+      }
+    },
+    {
+      "name": "a tunnel lost inside the grace is waited for",
+      "look": {
+        "reach": "unreachable"
+      },
+      "swap": {
+        "at": 0,
+        "reach": "reachable"
+      },
+      "now": 300000,
+      "verdict": {
+        "kind": "pending"
+      }
+    },
+    {
+      "name": "a tunnel lost past the grace is held against the version",
+      "look": {
+        "reach": "unreachable"
+      },
+      "swap": {
+        "at": 0,
+        "reach": "reachable"
+      },
+      "now": 660000,
+      "verdict": {
+        "kind": "strike",
+        "reason": "the new version cannot be reached through its tunnel"
+      }
+    },
+    {
+      "name": "a tunnel the old version did not have is not required of the new one",
+      "look": {
+        "reach": "unreachable"
+      },
+      "swap": {
+        "at": 0,
+        "reach": "unreachable"
+      },
+      "now": 660000,
+      "verdict": {
+        "kind": "healthy"
+      }
+    },
+    {
+      "name": "nor one the old version had no word on",
+      "look": {
+        "reach": "unreachable"
+      },
+      "swap": {
+        "at": 0,
+        "reach": null
+      },
+      "now": 660000,
+      "verdict": {
+        "kind": "healthy"
+      }
+    },
+    {
+      "name": "a daemon too old to probe its own tunnel is not held to one",
+      "look": {
+        "reach": null
+      },
+      "swap": {
+        "at": 0,
+        "reach": "reachable"
+      },
+      "now": 660000,
+      "verdict": {
+        "kind": "healthy"
+      }
+    },
+    {
+      "name": "a tunnel still being checked inside the grace and five minutes is waited for",
+      "look": {
+        "reach": "checking"
+      },
+      "swap": {
+        "at": 0,
+        "reach": "reachable"
+      },
+      "now": 840000,
+      "verdict": {
+        "kind": "pending"
+      }
+    },
+    {
+      "name": "and one that never came up is held against the version",
+      "look": {
+        "reach": "checking"
+      },
+      "swap": {
+        "at": 0,
+        "reach": "reachable"
+      },
+      "now": 900000,
+      "verdict": {
+        "kind": "strike",
+        "reason": "the new version's tunnel never came up"
+      }
+    },
+    {
+      "name": "a clock that reads earlier than the swap began judges it as just begun",
+      "look": {
+        "answered": false
+      },
+      "swap": {
+        "at": 300000,
+        "reach": "reachable"
+      },
+      "now": 0,
+      "verdict": {
+        "kind": "pending"
+      }
+    },
+    {
+      "name": "the grace is the caller's to shorten",
+      "look": {
+        "answered": false
+      },
+      "swap": {
+        "at": 0,
+        "reach": "reachable"
+      },
+      "now": 180000,
+      "graceMs": 120000,
+      "verdict": {
+        "kind": "strike",
+        "reason": "the new version's daemon is not answering"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "name": "a failure goes back at once",
+      "verdict": {
+        "kind": "fail",
+        "reason": "boom"
+      },
+      "strikes": 0,
+      "over": false,
+      "step": {
+        "action": "roll-back",
+        "reason": "boom"
+      }
+    },
+    {
+      "name": "and goes back when the probation is over too",
+      "verdict": {
+        "kind": "fail",
+        "reason": "boom"
+      },
+      "strikes": 0,
+      "over": true,
+      "step": {
+        "action": "roll-back",
+        "reason": "boom"
+      }
+    },
+    {
+      "name": "a first strike is watched",
+      "verdict": {
+        "kind": "strike",
+        "reason": "slow"
+      },
+      "strikes": 0,
+      "over": false,
+      "step": {
+        "action": "watch",
+        "strikes": 1,
+        "reason": "slow"
+      }
+    },
+    {
+      "name": "so is a second",
+      "verdict": {
+        "kind": "strike",
+        "reason": "slow"
+      },
+      "strikes": 1,
+      "over": false,
+      "step": {
+        "action": "watch",
+        "strikes": 2,
+        "reason": "slow"
+      }
+    },
+    {
+      "name": "the third in a row goes back",
+      "verdict": {
+        "kind": "strike",
+        "reason": "slow"
+      },
+      "strikes": 2,
+      "over": false,
+      "step": {
+        "action": "roll-back",
+        "reason": "slow"
+      }
+    },
+    {
+      "name": "and goes back when the probation is over too",
+      "verdict": {
+        "kind": "strike",
+        "reason": "slow"
+      },
+      "strikes": 2,
+      "over": true,
+      "step": {
+        "action": "roll-back",
+        "reason": "slow"
+      }
+    },
+    {
+      "name": "a healthy look starts the strikes over",
+      "verdict": {
+        "kind": "healthy"
+      },
+      "strikes": 2,
+      "over": false,
+      "step": {
+        "action": "watch",
+        "strikes": 0
+      }
+    },
+    {
+      "name": "a pending look leaves them as they were",
+      "verdict": {
+        "kind": "pending"
+      },
+      "strikes": 2,
+      "over": false,
+      "step": {
+        "action": "watch",
+        "strikes": 2
+      }
+    },
+    {
+      "name": "a healthy look at the end keeps the new version",
+      "verdict": {
+        "kind": "healthy"
+      },
+      "strikes": 1,
+      "over": true,
+      "step": {
+        "action": "keep"
+      }
+    },
+    {
+      "name": "so does a pending one",
+      "verdict": {
+        "kind": "pending"
+      },
+      "strikes": 2,
+      "over": true,
+      "step": {
+        "action": "keep"
+      }
+    }
+  ]
+}

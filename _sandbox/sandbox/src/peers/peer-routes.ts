@@ -37,16 +37,19 @@ const PROTOCOL_ERROR = 1002;
 // Standard WebSocket "going away", as the hub's heartbeat closes with: a peer that stopped answering, redialled as usual.
 const PEER_GONE_QUIET = 1001;
 
+// A gate on a tool call before it crosses to the peer: a refusal returns as a tool result the model reads.
+export type PeerCallGate = (
+    payload: unknown,
+    call: { readonly id: string; readonly conversationId: string | undefined },
+) => Promise<{ readonly refusal: string } | undefined>;
+
 export interface PeerRouteDeps<Client extends PeerClient<Facts, Scopes>, Announced, Facts, Scopes, Extra> {
     readonly store: PeerStore<Extra>;
     readonly hub: PeerHub<Client, Announced, Facts, Scopes>;
     // Every enrolled peer plus what the hub knows now; must distinguish never-connected from connected-but-away.
     readonly summaries: () => Promise<readonly unknown[]>;
     // Refusal returns as a tool result, not an error, so the model reads it; the peer's own scopes stay the floor.
-    readonly beforeCall?: (
-        payload: unknown,
-        call: { readonly id: string; readonly conversationId: string | undefined },
-    ) => Promise<{ readonly refusal: string } | undefined>;
+    readonly beforeCall?: PeerCallGate;
     // A peer came up and said what it is. Fire-and-forget by contract: the hosts door uses it to put an agent in the
     // rest of that computer, and a connect must not wait on a download.
     readonly onConnected?: (id: string, facts: Facts) => void;

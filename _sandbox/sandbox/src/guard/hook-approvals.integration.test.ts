@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sandboxRouteFor } from "@intentic/sandbox-contract";
-import { approveHookSet, dismissHookSet, gateSettingsHooks, type HookGate, hookRequests } from "./hook-approvals.js";
+import { approvedHookSets, approveHookSet, dismissHookSet, gateSettingsHooks, type HookGate, hookRequests, revokeHookSet } from "./hook-approvals.js";
 import type { ModuleReader } from "./plugin-modules.js";
 import type { HookPlace } from "./settings-hooks.js";
 
@@ -131,6 +131,71 @@ describe("gateSettingsHooks", () => {
 
         expect(await approveHookSet(historyRoot, digestOf(current))).toBe(true);
         expect((await gateSettingsHooks(historyRoot, place, undefined, unread)).held).toBe(false);
+    });
+});
+
+// What the owner approved is as visible as what waits, and as easy to take back: the Access tab's What you have allowed.
+describe("an approved hook set", () => {
+    test("is listed with what it runs, newest first, and its approval is the only thing that leaves the Approvals queue", async () => {
+        const { historyRoot, place, writeHooks } = await setup();
+        await writeHooks("./old.sh");
+        const old = await gateSettingsHooks(historyRoot, place, undefined, unread, 1000);
+        await approveHookSet(historyRoot, digestOf(old), 1500);
+        await writeHooks("./new.sh");
+        const current = await gateSettingsHooks(historyRoot, place, undefined, unread, 2000);
+        await approveHookSet(historyRoot, digestOf(current), 2500);
+
+        expect(await approvedHookSets(historyRoot)).toEqual({
+            unreadable: false,
+            sets: [
+                { digest: digestOf(current), approvedAt: 2500, hooks: [{ source: "project", event: "PreToolUse", matcher: "Bash", type: "command", run: "./new.sh" }] },
+                { digest: digestOf(old), approvedAt: 1500, hooks: [{ source: "project", event: "PreToolUse", matcher: "Bash", type: "command", run: "./old.sh" }] },
+            ],
+        });
+        expect((await hookRequests(historyRoot)).requests).toEqual([]);
+    });
+
+    test("taken back, the set is held again and the first turn to find it files a fresh request", async () => {
+        const { historyRoot, place, writeHooks } = await setup();
+        await writeHooks("./guard.sh");
+        const found = await gateSettingsHooks(historyRoot, place, undefined, unread, 1000);
+        await approveHookSet(historyRoot, digestOf(found), 1500);
+        expect((await gateSettingsHooks(historyRoot, place, undefined, unread)).held).toBe(false);
+
+        expect(await revokeHookSet(historyRoot, digestOf(found))).toBe(true);
+        expect((await approvedHookSets(historyRoot)).sets).toEqual([]);
+        expect((await hookRequests(historyRoot)).requests).toEqual([]);
+
+        expect((await gateSettingsHooks(historyRoot, place, "conv-2", unread, 3000)).held).toBe(true);
+        expect((await hookRequests(historyRoot)).requests).toMatchObject([{ digest: digestOf(found), seenAt: 3000, conversationId: "conv-2" }]);
+    });
+
+    test("taking back one set leaves the others approved, and a digest nobody approved is nothing to take back", async () => {
+        const { historyRoot, place, writeHooks } = await setup();
+        await writeHooks("./a.sh");
+        const first = await gateSettingsHooks(historyRoot, place, undefined, unread);
+        await approveHookSet(historyRoot, digestOf(first));
+        await writeHooks("./b.sh");
+        const second = await gateSettingsHooks(historyRoot, place, undefined, unread);
+        await approveHookSet(historyRoot, digestOf(second));
+
+        expect(await revokeHookSet(historyRoot, "a".repeat(64))).toBe(false);
+        expect(await revokeHookSet(historyRoot, digestOf(first))).toBe(true);
+        expect(await revokeHookSet(historyRoot, digestOf(first))).toBe(false);
+        expect((await approvedHookSets(historyRoot)).sets.map((set) => set.digest)).toEqual([digestOf(second)]);
+        expect((await gateSettingsHooks(historyRoot, place, undefined, unread)).held).toBe(false);
+    });
+
+    test("a ledger this build cannot read lists nothing and says so, and taking a set back never writes over it", async () => {
+        const { historyRoot, place, writeHooks } = await setup();
+        await writeHooks("./guard.sh");
+        const found = await gateSettingsHooks(historyRoot, place, undefined, unread);
+        await approveHookSet(historyRoot, digestOf(found));
+        await writeFile(join(historyRoot, "hook-approvals.json"), "{ not json");
+
+        expect(await approvedHookSets(historyRoot)).toEqual({ sets: [], unreadable: true });
+        expect(await revokeHookSet(historyRoot, digestOf(found))).toBe(false);
+        expect(await readFile(join(historyRoot, "hook-approvals.json"), "utf8")).toBe("{ not json");
     });
 });
 

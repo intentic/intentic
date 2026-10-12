@@ -54,7 +54,7 @@ export type TurnInput = AgentTurn & {
     readonly postures?: { readonly limit?: LimitPolicy; readonly autoLand?: boolean };
 };
 
-// A turn as the engine takes it: provider and loop named, by the port it came in through (withRuntimeDefaults), so
+// A turn as the engine takes it: provider and loop named, by the port it came in through (routeTurn), so
 // nothing past the door defaults them again.
 export type RoutedTurn<T extends TurnInput = TurnInput> = T & { readonly agent: AgentProvider; readonly harness: AgentHarness };
 
@@ -120,6 +120,10 @@ export interface StartOptions {
 export interface DetachedRunOptions {
     // Held in the turn journal, so a container recreate resumes it at the next boot like any turn `start` begins.
     readonly journalled?: boolean;
+    // The turn carries on in its conversation's own session where that session was minted on the runtime and account the turn
+    // routes to (routing.ts `sessionFor`), decided once the turn's model is routed, and opens a fresh one where it was not.
+    // What the turn names is then only for a conversation not on record yet. Absent, the turn names its session itself.
+    readonly continuing?: boolean;
 }
 
 export interface TurnStarter {
@@ -131,11 +135,14 @@ export interface TurnStarter {
     // or its start was refused.
     readonly resume: (conversationId: string, routing?: ResumeRouting) => Promise<StartedRun | undefined>;
     // A detached run its starter reads, recorded to the conversation but neither pinned nor announced, and started at once
-    // so its starter follows it from its first frame. Unjournalled unless `journalled`: a loop keeps those books itself
-    // (its run is marked so, and the journal invariant does not count it); a spawned child's turn is journalled, since
-    // its parent keeps waiting on it across a container recreate.
+    // so its starter follows it from its first frame (the run routes its model itself, before the provider is asked).
+    // Unjournalled unless `journalled`: a loop keeps those books itself (its run is marked so, and the journal invariant
+    // does not count it); a spawned child's turn is journalled, since its parent keeps waiting on it across a container
+    // recreate.
     readonly run: (turn: TurnInput & { readonly conversationId: string }, options?: DetachedRunOptions) => StartedRun | BeginRefusal;
-    // The turn itself, for a caller folding its own frames (an automation's fire, a runner's dispatched turn).
+    // The turn itself, for a caller folding its own frames (an automation's fire, a runner's dispatched turn). Routed like
+    // the other two doors (a persona or run role names a model the turn left unnamed), and left alone where it already
+    // names one, which a caller that walked its own model ladder does.
     readonly stream: (turn: TurnInput, signal: AbortSignal | undefined) => AsyncGenerator<AgentEvent>;
     // Words into the live turn: `invalid` names a reference escaping the workspace, false means no steerable turn.
     readonly steer: (conversationId: string, steer: Steer) => Promise<boolean | { readonly invalid: string }>;

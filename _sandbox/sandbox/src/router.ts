@@ -36,6 +36,8 @@ import { createNetdiskRoutes } from "./netdisk/netdisk.routes.js";
 import { createPushRoutes } from "./push/push.routes.js";
 import { createSecretsRoutes } from "./secrets/secrets.routes.js";
 import { createNeedsRoutes } from "./needs/needs.routes.js";
+import { unapproveExtension } from "./extensions/extension-removal.js";
+import { ownerApprovals } from "./needs/standing-grants.js";
 import { provenanceOf, visibleTo } from "./auth/fleet-scope.js";
 import { providerSecretEntries } from "./agent/providers/provider-registry.js";
 import { createSessionsRoutes } from "./sessions/sessions.routes.js";
@@ -105,7 +107,12 @@ export const createRouter = (services: Services): SandboxRouter => ({
     // A need is as visible as the conversation that raised it.
     needs: createNeedsRoutes({
         needs: services.needs,
-        grants: { conversationGrants: services.conversationGrants, credentialGrants: services.credentialGrants },
+        grants: {
+            conversationGrants: services.conversationGrants,
+            credentialGrants: services.credentialGrants,
+            ownerGrants: services.ownerGrants,
+            approvals: ownerApprovals(services.config.historyRoot, (id) => unapproveExtension(services, id)),
+        },
         visible: (caller, conversationId) => {
             const entry = services.agents.entry(conversationId);
             return entry === undefined || visibleTo(caller, provenanceOf(entry));

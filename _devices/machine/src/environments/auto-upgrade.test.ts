@@ -65,15 +65,16 @@ describe("a release this machine rolled back from", () => {
 
 describe("upgradeHeldBy", () => {
     // Restarting the agent between parking a container and starting its replacement is what left sandboxes down.
-    it("names every sandbox mid-swap, from this process's own flows and from ic's records alike, once each", () => {
-        const records = [
-            { slug: "work", phase: "cutover", at: NOW - 60_000 },
-            { slug: "old", phase: "cutover", at: NOW - 2 * HOUR },
-            { slug: "proving", phase: "probation", at: NOW - 60_000 },
+    it("names every sandbox ic says is mid-swap, with this process's own flows, once each", () => {
+        // ic's verdicts (`ic sandbox swaps`), not the agent's: a cutover whose ic died is interrupted, however recent its start.
+        const swaps = [
+            { slug: "work", phase: "cutover", at: NOW - 60_000, cutoverInProgress: true },
+            { slug: "dead", phase: "cutover", at: NOW - 60_000, cutoverInProgress: false },
+            { slug: "proving", phase: "probation", at: NOW - 60_000, cutoverInProgress: false },
         ];
-        expect(upgradeHeldBy(new Set(["work", "mine"]), records, NOW)).toEqual(["work", "mine"]);
-        expect(upgradeHeldBy(new Set(), records, NOW)).toEqual(["work"]);
-        expect(upgradeHeldBy(new Set(), [], NOW)).toEqual([]);
+        expect(upgradeHeldBy(new Set(["work", "mine"]), swaps)).toEqual(["work", "mine"]);
+        expect(upgradeHeldBy(new Set(), swaps)).toEqual(["work"]);
+        expect(upgradeHeldBy(new Set(), [])).toEqual([]);
     });
 });
 

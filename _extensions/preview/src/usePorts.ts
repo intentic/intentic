@@ -1,5 +1,5 @@
 import type { PortSummary } from "@intentic/sandbox-contract";
-import { useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { host } from "./host";
 
@@ -12,10 +12,9 @@ export function usePorts() {
     const queryClient = useQueryClient();
     const queryKey = api.sandbox.readKey(`ports.list`);
 
-    const query = useQuery({
+    const { query, error } = api.sandbox.query({
         queryKey,
         queryFn: () => api.sandbox.rpc.ports.list(),
-        enabled: computed(() => api.sandbox.reachable()),
     });
 
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey });
@@ -32,7 +31,7 @@ export function usePorts() {
 
     return {
         ports: computed<PortSummary[]>(() => query.data.value?.ports ?? []),
-        error: computed(() => query.error.value?.message),
+        error,
         isLoading: query.isLoading,
         forward,
         unforward,

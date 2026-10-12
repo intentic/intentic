@@ -39,21 +39,18 @@ describe(`daemon shutdown`, () => {
         expect(enumerated).toEqual([]);
     });
 
-    // An uncleared interval keeps the event loop alive by itself, turning a clean exit into a hang; every timer a boot
-    // phase names must go through the store. An unnamed one is unref'd by construction and holds nothing.
-    it(`clears every interval a boot phase starts through the store`, () => {
+    // A raw interval is the shape that grew eight sweeps in one file, each with its own cadence, its own run at every boot
+    // and its own teardown (2026-10-12). Housekeeping is a chore on the persistent clock (system/chore-clock.ts), and a watch
+    // that must look every few minutes is `startPeriodic`, which never overlaps its runs and unrefs its timers; either is
+    // registered with the store, so none holds the event loop open on a clean exit.
+    it(`starts no raw interval in any boot phase`, () => {
         const phases = bootPhases();
         expect(
             phases.map(({ path }) => path),
             "main.ts is itself a boot phase",
         ).toContain("main.ts");
 
-        const started = phases.flatMap(({ path, source }) =>
-            [...source.matchAll(/const (\w+) = [^\n]*\bsetInterval\(/g)].map((match) => ({ path, source, name: match[1] as string })),
-        );
-        expect(started.length, "the boot phases should still be starting intervals — if not, drop this guard").toBeGreaterThan(0);
-
-        const unregistered = started.filter(({ source, name }) => !source.includes(`shutdown.push(() => clearInterval(${name}))`));
-        expect(unregistered.map(({ path, name }) => `${path}:${name}`)).toEqual([]);
+        const raw = phases.flatMap(({ path, source }) => [...source.matchAll(/\bsetInterval\(/g)].map(() => path));
+        expect(raw).toEqual([]);
     });
 });

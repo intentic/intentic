@@ -1,5 +1,4 @@
 import { type CiJobsResponse, isPipelineInFlight, type PipelineJob, type PipelineRun } from "@intentic/sandbox-contract";
-import { useQuery } from "@tanstack/vue-query";
 import { computed, type Ref, watch } from "vue";
 import { host } from "./host";
 
@@ -19,10 +18,10 @@ export function useRunJobs(run: Ref<PipelineRun | undefined>) {
     const queryKey = computed(() =>
         run.value === undefined ? api.sandbox.readKey(`ci.jobs`) : api.sandbox.readKey(`ci.jobs`, { repo: run.value.repo, runId: run.value.runId }),
     );
-    const enabled = computed(() => run.value !== undefined && api.sandbox.reachable());
+    const enabled = computed(() => run.value !== undefined);
     const inFlight = computed(() => run.value !== undefined && isPipelineInFlight(run.value.status));
 
-    const query = useQuery({
+    const { query, error } = api.sandbox.query({
         queryKey,
         queryFn: (): Promise<CiJobsResponse> => {
             const r = run.value!;
@@ -43,6 +42,6 @@ export function useRunJobs(run: Ref<PipelineRun | undefined>) {
     return {
         jobs: computed((): PipelineJob[] => query.data.value?.jobs ?? []),
         isLoading: query.isLoading,
-        error: computed(() => query.error.value?.message),
+        error,
     };
 }

@@ -435,7 +435,7 @@ export const AutomationSchema = z.object({
     enabled: z.boolean().describe("Whether it fires at all."),
 });
 export type Automation = z.infer<typeof AutomationSchema>;
-// A wake held for owner approval (.intentic/records/approvals/<id>.json); snapshots the trigger payload so an approved
+// A wake held for owner approval (automation-holds/<id>.json on the history volume); snapshots the trigger payload so an approved
 // run replays exactly what fired, even across a daemon restart.
 export const AutomationApprovalSchema = z.object({
     id: entryId.describe("This waiting item's own id, which approving and rejecting take."),
@@ -476,7 +476,7 @@ export const AutomationApprovalSchema = z.object({
         .number()
         .optional()
         .describe(
-            "When it goes ahead on its own, in milliseconds, for a hold that is only a delay. Absent for one that genuinely waits on a person.",
+            "When it goes ahead on its own, in milliseconds, for a hold that is only a delay. Absent for one that genuinely waits on a person, and for one the sandbox did not itself queue, which only a person releases.",
         ),
 });
 export type AutomationApproval = z.infer<typeof AutomationApprovalSchema>;
@@ -484,7 +484,14 @@ export type AutomationApproval = z.infer<typeof AutomationApprovalSchema>;
 // Whether a held wake waits on a person. A countdown hold (`autoRunAt`) releases itself, so counting it would ask the
 // owner about something already about to happen on its own.
 export const awaitsOwner = (wake: Pick<AutomationApproval, "autoRunAt">): boolean => wake.autoRunAt === undefined;
-export const AutomationApprovalsListSchema = z.object({ approvals: z.array(AutomationApprovalSchema).describe("Everything waiting for a yes.") });
+export const AutomationApprovalsListSchema = z.object({
+    approvals: z.array(AutomationApprovalSchema).describe("Everything waiting for a yes."),
+    // Reported, never dropped: a file in the queue the sandbox cannot read would otherwise be a hold that never runs and never says why.
+    unreadable: z
+        .array(z.string())
+        .default([])
+        .describe("Files in the queue this sandbox could not read, by name. Each is a held wake that cannot be released until it is fixed or removed."),
+});
 export const AutomationApprovalIdParamSchema = z.object({ id: z.string().describe("Which waiting item.") });
 export const AutomationRunSchema = z.object({
     at: z.number(),

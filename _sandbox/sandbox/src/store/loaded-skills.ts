@@ -1,6 +1,7 @@
-import { lstat, mkdir, readdir, readFile, readlink, rm, symlink } from "node:fs/promises";
+import { cp, lstat, mkdir, readdir, readFile, readlink, rename, rm, symlink } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import { keyedLock } from "@intentic/base/async";
+import { errnoCode, undefinedIfMissing } from "@intentic/base/errors";
 import type { Services } from "../composition.js";
 import { scanSkillFolders, SKILL_FILE, skillFolderNames } from "../skill-file.js";
 
@@ -98,10 +99,64 @@ const converging = keyedLock<string>();
 
 const queueConverge = (root: string): Promise<void> => converging(root, async () => await converge(root));
 
-// Writes one loaded skill, then converges its loader projection; a runtime without a loader reads the canonical set via
-// `loadedSkillCatalogNote` on its next conversation.
-export const writeLoadedSkill = async (files: SkillFiles, root: string, name: string, text: string): Promise<void> => {
-    await files.write(loadedSkillFile(root, name), text);
+// WHO WROTE A LOADED SKILL (2026-10-12). Every daemon writer names itself, and its id is stamped into the file, so a
+// later release can tell its own leftovers from the owner's files: a skill no current writer claims is removed at boot
+// (settings/skill-retirement.ts), one without a stamp never is. The owner's own skill copy is the owner's text and stays
+// unstamped. Adding a writer means adding its id here, and the claim table in skill-retirement.ts is keyed by this
+// union, so the typecheck refuses a writer that has not said which names it keeps. Retiring a writer moves its id to
+// RETIRED_SKILL_WRITERS there.
+export const DAEMON_SKILL_WRITERS = ["approvals", "baked-tool", "account", "cli", "peer", "ssh", "tunnel"] as const;
+export type DaemonSkillWriter = (typeof DAEMON_SKILL_WRITERS)[number];
+export type SkillWriter = DaemonSkillWriter | "owner";
+
+const markerOf = (writer: string): string => `<!-- intentic:skill-writer=${writer} · written by the sandbox; edits here are overwritten -->`;
+const MARKER_LINE = /^<!-- intentic:skill-writer=([a-z0-9-]+) [^\n]*-->$/m;
+// Account skills were stamped with this before every writer was (until 2026-10-12); still read as the account writer's.
+export const LEGACY_ACCOUNT_SKILL_MARKER = "<!-- managed by the sandbox: derived from the connected accounts; edits are overwritten -->";
+const FRONTMATTER = /^---\n[\s\S]*?\n---\n/;
+
+// The daemon writer a loaded skill's text names, or undefined for an unstamped (owner-authored) file.
+export const skillWriterOf = (text: string): string | undefined => {
+    const stamped = MARKER_LINE.exec(text)?.[1];
+    if (stamped !== undefined) {
+        return stamped;
+    }
+    return text.includes(LEGACY_ACCOUNT_SKILL_MARKER) ? "account" : undefined;
+};
+
+// The text with any writer stamp taken out, exactly undoing `stampSkill`: the stamp's line, and the blank line it was
+// put under.
+const isStampLine = (line: string): boolean => MARKER_LINE.test(line) || line === LEGACY_ACCOUNT_SKILL_MARKER;
+const unstamped = (text: string): string => {
+    const lines = text.split("\n");
+    const kept: string[] = [];
+    for (const line of lines) {
+        if (!isStampLine(line)) {
+            kept.push(line);
+            continue;
+        }
+        if (kept.length > 0 && kept.at(-1) === "") {
+            kept.pop();
+        }
+    }
+    return kept.join("\n");
+};
+
+// The text as `writer` lands it: the stamp on its own line under the frontmatter (above everything without one).
+// Idempotent, and a re-stamp replaces the writer rather than adding a second line; the owner's text passes unchanged.
+export const stampSkill = (text: string, writer: SkillWriter): string => {
+    if (writer === "owner") {
+        return text;
+    }
+    const bare = unstamped(text);
+    const marker = markerOf(writer);
+    return FRONTMATTER.test(bare) ? bare.replace(FRONTMATTER, (frontmatter) => `${frontmatter}\n${marker}\n`) : `${marker}\n${bare}`;
+};
+
+// Writes one loaded skill stamped with its writer, then converges its loader projection; a runtime without a loader
+// reads the canonical set via `loadedSkillCatalogNote` on its next conversation.
+export const writeLoadedSkill = async (files: SkillFiles, root: string, name: string, text: string, writer: SkillWriter): Promise<void> => {
+    await files.write(loadedSkillFile(root, name), stampSkill(text, writer));
     await queueConverge(root);
 };
 
@@ -109,9 +164,41 @@ export const writeLoadedSkill = async (files: SkillFiles, root: string, name: st
 // runtime offers this skill" holds as soon as the promise resolves.
 export const removeLoadedSkill = async (files: SkillFiles, root: string, name: string): Promise<void> => {
     await files.remove(loadedSkillDir(root, name));
+    await dropClaudeLink(root, name);
+};
+
+const dropClaudeLink = async (root: string, name: string): Promise<void> => {
     const link = claudeSkillLink(root, name);
     if ((await lstat(link).catch(() => undefined))?.isSymbolicLink() === true && isManagedLink(await readlink(link).catch(() => undefined))) {
         await rm(link, { force: true });
     }
     await queueConverge(root);
+};
+
+// A rename, or a copy and erase when the workspace and the history volume are different filesystems.
+const relocate = async (from: string, to: string): Promise<void> => {
+    try {
+        await rename(from, to);
+    } catch (failure) {
+        if (errnoCode(failure) !== "EXDEV") {
+            throw failure;
+        }
+        await cp(from, to, { recursive: true, preserveTimestamps: true, verbatimSymlinks: true });
+        await rm(from, { recursive: true, force: true });
+    }
+};
+
+// Sets one loaded skill aside in the history volume's trash instead of erasing it (convergence rule 5), named
+// `skill-<name>-<ms>` like every entry set aside there, so the trash sweep empties it after its while; answers where
+// it went, or undefined when nothing was there. Its Claude link goes with it, as with `removeLoadedSkill`.
+export const trashLoadedSkill = async (root: string, historyRoot: string, name: string, now: number = Date.now()): Promise<string | undefined> => {
+    const dir = loadedSkillDir(root, name);
+    if ((await lstat(dir).catch(undefinedIfMissing)) === undefined) {
+        return undefined;
+    }
+    const target = join(historyRoot, "trash", `skill-${name}-${String(now)}`);
+    await mkdir(dirname(target), { recursive: true });
+    await relocate(dir, target);
+    await dropClaudeLink(root, name);
+    return target;
 };

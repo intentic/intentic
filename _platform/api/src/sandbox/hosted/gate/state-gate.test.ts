@@ -531,7 +531,40 @@ describe(`what the machine's row keeps`, () => {
         fly.commands.answer = machineAnswers({});
         const { record, updates } = fakeGateRecord({ skippedDigest: `sha256:${`e`.repeat(64)}` });
         await switchHostedImage(config, MACHINE, target(), { start: true, logger, record });
-        expect(updates).toEqual([{ previousImage: OLD, previousEnvironmentHash: null, unprovenImage: null, skippedDigest: null }]);
+        // And the new image is on probation from the moment its daemon was seen to come up (hosted-probation.ts).
+        expect(updates).toEqual([
+            { previousImage: OLD, previousEnvironmentHash: null, unprovenImage: null, skippedDigest: null, probationSince: expect.any(Date), probationStrikes: 0 },
+        ]);
+    });
+
+    it(`puts the image on probation from the moment its daemon was seen to come up, with no strike behind it`, async () => {
+        const fly = seeded(`stopped`);
+        fly.commands.answer = machineAnswers({});
+        const { record, row } = fakeGateRecord({ probationStrikes: 2 });
+        const before = Date.now();
+        await switchHostedImage(config, MACHINE, target(), { start: true, logger, record });
+        expect(row.probationSince?.getTime()).toBeGreaterThanOrEqual(before);
+        expect(row.probationSince?.getTime()).toBeLessThanOrEqual(Date.now());
+        expect(row.probationStrikes).toBe(0);
+    });
+
+    // The watch's own way back: the version it puts back has no earlier one to be handed on to, and two failing versions
+    // would be sent to each other for ever.
+    it(`puts no probation on a change that asks for none, and ends the one standing`, async () => {
+        const fly = seeded(`stopped`);
+        fly.commands.answer = machineAnswers({});
+        const standing = new Date(Date.now() - 3_600_000);
+        const { record, row } = fakeGateRecord({ probationSince: standing, probationStrikes: 2 });
+        await switchHostedImage(config, MACHINE, target(), { start: true, logger, record, probation: false });
+        expect(row).toMatchObject({ previousImage: OLD, probationSince: null, probationStrikes: 0 });
+    });
+
+    // The image replaced was another's probation, and the new one has not been seen to come up.
+    it(`ends the probation standing when a change leaves the new image on trial`, async () => {
+        seeded(`stopped`);
+        const { record, row } = fakeGateRecord({ probationSince: new Date(Date.now() - 3_600_000), probationStrikes: 1 });
+        await switchHostedImage(config, MACHINE, target(), { start: false, logger, record });
+        expect(row).toMatchObject({ unprovenImage: NEW, probationSince: null, probationStrikes: 0 });
     });
 
     it(`writes the target's overlay facts beside the image, and keeps the recipe the replaced overlay carried`, async () => {
@@ -560,7 +593,7 @@ describe(`what the machine's row keeps`, () => {
         const fly = seeded(`stopped`);
         const { record, updates } = fakeGateRecord();
         await switchHostedImage(config, MACHINE, target(), { start: false, logger, record });
-        expect(updates).toEqual([{ previousImage: OLD, previousEnvironmentHash: null, unprovenImage: NEW, skippedDigest: null }]);
+        expect(updates).toEqual([{ previousImage: OLD, previousEnvironmentHash: null, unprovenImage: NEW, skippedDigest: null, probationSince: null, probationStrikes: 0 }]);
         expect(stateOf(fly)).toBe(`stopped`);
         // Nothing was started, so nothing was asked of a daemon.
         expect(fly.called(`POST`, `/machines/m1/exec`)).toHaveLength(1);
@@ -601,7 +634,8 @@ describe(`an image on trial`, () => {
         const { record, updates } = fakeGateRecord({ unprovenImage: NEW, previousImage: OLD });
         await startOnTrial(config, MACHINE, { record, logger });
         expect(stateOf(fly)).toBe(`started`);
-        expect(updates).toEqual([{ previousImage: OLD, previousEnvironmentHash: null, unprovenImage: null }]);
+        // Proven now, so on probation from now.
+        expect(updates).toEqual([{ previousImage: OLD, previousEnvironmentHash: null, unprovenImage: null, probationSince: expect.any(Date), probationStrikes: 0 }]);
     });
 
     it(`goes back to the kept version, composed around this machine's config, when its daemon does not come up`, async () => {

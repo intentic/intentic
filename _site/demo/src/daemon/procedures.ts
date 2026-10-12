@@ -447,7 +447,7 @@ export const procedures = {
         catalog: () => automationCatalog(),
         // A source's check, answered from the fixture: the demo reaches no registry, GitHub or page.
         check: ({ source }) => checkDemoSource(source),
-        pendingList: () => ({ approvals: automationApprovals(Date.now()) }),
+        pendingList: () => ({ approvals: automationApprovals(Date.now()), unreadable: [] }),
         upsert: (automation) => okAfter(() => saveAutomation(Date.now(), automation)),
         remove: ({ id }) => okAfter(() => deleteAutomation(Date.now(), id)),
         run: () => refuse(`This is the demo workspace: firing an automation runs a real turn against real systems.`),

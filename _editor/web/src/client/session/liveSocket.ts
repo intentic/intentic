@@ -264,11 +264,13 @@ export interface SocketFrames {
     readonly binary: (data: ArrayBuffer) => void;
 }
 
-// A browser WebSocket to `url` as a live channel; only the current channel's frames reach `frames`.
+// A browser WebSocket to `url` as a live channel; only the current channel's frames reach `frames`. A message goes out as
+// JSON, and bytes (an ArrayBuffer) as they are, for a socket that carries audio beside its messages. `dial` opens the
+// socket, for a caller that must be handed one it can drive.
 export const webSocketChannel =
-    <Out extends object>(frames: SocketFrames) =>
+    <Out extends object>(frames: SocketFrames, dial: (url: string) => WebSocket = (url) => new WebSocket(url)) =>
     (url: string, link: LiveLink): LiveChannel<Out> => {
-        const ws = new WebSocket(url);
+        const ws = dial(url);
         ws.binaryType = `arraybuffer`;
         ws.addEventListener(`open`, () => link.opened());
         ws.addEventListener(`message`, (event: MessageEvent<unknown>) => {
@@ -287,7 +289,7 @@ export const webSocketChannel =
         return {
             send: (message) => {
                 if (ready()) {
-                    ws.send(JSON.stringify(message));
+                    ws.send(message instanceof ArrayBuffer ? message : JSON.stringify(message));
                 }
             },
             close: () => ws.close(),

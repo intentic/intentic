@@ -320,7 +320,6 @@ describe("background job adoption", () => {
             return Promise.resolve(finished ? { exitCode: 0, output: "exit 0\nbuilt" } : { exitCode: 1, output: "" });
         },
         turns: doors.turns,
-        sessionIdOf: () => undefined,
         journal: memoryWatchJournal(),
         envOf: () => Promise.resolve({}),
         conversationLive: () => true,

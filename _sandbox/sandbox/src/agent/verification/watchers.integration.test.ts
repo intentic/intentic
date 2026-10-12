@@ -28,7 +28,6 @@ beforeEach(() => {
             return Promise.resolve(check);
         },
         turns: doors.turns,
-        sessionIdOf: () => undefined,
         journal: memoryWatchJournal(),
         envOf: () => Promise.resolve({}),
         conversationLive: () => true,

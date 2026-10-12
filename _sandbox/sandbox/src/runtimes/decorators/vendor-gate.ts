@@ -18,6 +18,7 @@ export const vendorTurnGate = ({ spec, policy, hooks, signal }: Pick<AgentReques
         ...opt("log", hooks.logSafety),
         ...opt("answered", hooks.safetyAnswered),
         ...opt("remember", hooks.rememberSafety),
+        ...opt("rememberFailed", hooks.rememberSafetyFailed),
         ...opt("steered", hooks.steered),
         ...opt("installs", hooks.projectInstalls),
         ...opt("onImageInstall", hooks.onImageInstall),

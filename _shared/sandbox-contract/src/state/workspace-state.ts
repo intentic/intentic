@@ -209,10 +209,13 @@ const STATE_FILES = [
         why: "A guard's own scratch file; the daemon never reads it and nothing in the browser renders it.",
         portability: "carry",
     },
+    // Where releases before 2026-10-12 kept the wakes automations held for a person. They now sit on the history volume
+    // (`automation-holds/`, history-state.ts), off the workspace every turn writes, and nothing reads this directory; a
+    // build that read it is only ever rolled back to. Declared still, since the extension that listed them binds it.
     {
         path: ".intentic/records/approvals/",
         invalidates: [],
-        why: "Declared by the intentic.approvals extension's contributes.files (the page that lists held wakes), `automation-approvals` is its query key, not core's.",
+        why: "Where releases before 2026-10-12 kept the wakes automations held for a person; they now sit on the history volume, and nothing reads this copy. The intentic.approvals extension's contributes.files still binds it, with `automation-approvals` as its query key, not core's.",
         portability: "carry",
     },
     // Bug-report inbox, one file per fingerprint (daemon's issues-store), rendered by intentic.issues. `carry`: a fact

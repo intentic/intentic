@@ -14,6 +14,8 @@ export function useFailureHistory(runs: Ref<readonly PipelineRun[]>) {
     const terminal = computed(() => runs.value.filter((run) => run.status === `failed` || run.status === `success`));
     const failedRuns = computed(() => terminal.value.filter((run) => run.status === `failed`));
 
+    // A list of reads whose length follows the runs on screen: `api.sandbox.query` is one read per call, so this one keeps the
+    // gate on the sandbox answering by hand.
     const queries = useQueries({
         queries: computed(() =>
             failedRuns.value.map((run) => ({

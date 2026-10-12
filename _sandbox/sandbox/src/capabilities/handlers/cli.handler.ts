@@ -146,7 +146,7 @@ export const cliHandler: CapabilityHandler = {
             skill = skill.replaceAll(`$${key}`, `$${key}_${suffix}`);
         }
         skill = withGatewayNote(skill, connector.spec, cliConfig, suffix);
-        await writeLoadedSkill(ctx.files, ctx.workspace.root, id, skill);
+        await writeLoadedSkill(ctx.files, ctx.workspace.root, id, skill, "cli");
         // Hook runs visibly in the job session only when it shells out; its return value is a non-fatal warning.
         const hook = CORE_CONNECTOR_HOOKS[provider];
         const session = capabilityJobSession(id);

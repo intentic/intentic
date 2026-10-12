@@ -37,7 +37,7 @@ const doorsOf = (
     const turns = fakeTurns({ live: over.live === true, archived: over.parentArchived === true, ...opt("busy", over.busy) });
     return Object.assign(turns, {
         deps: {
-            doors: { turns: turns.turns, sessionIdOf: () => "parent-session" },
+            doors: { turns: turns.turns },
             logger,
             conversations: actors,
             entryOf: (conversationId: string) => entries[conversationId],
@@ -79,7 +79,7 @@ describe("a spawned child's report", () => {
         await reportChildTurn(doors.deps, settledOf());
         expect(doors.started).toHaveLength(1);
         const wake = doors.started[0];
-        expect(wake).toMatchObject({ conversationId: "parent-1", sessionId: "parent-session", agent: "claude", model: "opus" });
+        expect(wake).toMatchObject({ conversationId: "parent-1", agent: "claude", model: "opus" });
         expect(agentWordsOf(wake?.prompt ?? "")).toMatchObject({ kind: "child", from: "sub-1", title: "Port the tests" });
         expect(wake?.prompt).toContain("Ported all 12 tests; they pass.");
     });

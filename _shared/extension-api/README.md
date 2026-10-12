@@ -52,6 +52,9 @@ flowchart LR
   keyed `personas`, one storing the answer and one a bare list, and whichever filled the entry broke the other). The
   editor's `queryKeys.guard.test.ts` reads the in-repo packs for a contract read under a hand-picked name. A paged
   (infinite) read is the exception: its entry holds pages, not the answer, so it keeps a name of its own.
+- A view reads the daemon through `api.sandbox.query(spec)` (2.28.0), which is the shell's own `useSandboxQuery`. It
+  asks only while the sandbox answers, is timed with the shell's reads, and reports a schema refusal as version drift
+  in `error` rather than raw validation output. A paged or multi-query read still uses vue-query directly.
 - Helpers every extension needs live here too: sandbox-scoped module state (`sandboxRef`, cleared on every sandbox
   switch), background polling for rail badges, `sandboxLedger` (whose writes reject rather than overwrite a file they
   could not read), `sandboxDocument` (a file of the extension's own read through the `conversions` its shape has had,

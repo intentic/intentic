@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { WEBEXT_PAIR_MESSAGE, WEBEXT_PAIRED_MESSAGE, type WebExtSummary, webextPairingCode } from "@intentic/sandbox-contract";
+import { WEBEXT_PAIR_MESSAGE, WEBEXT_PAIRED_MESSAGE, webextPairingCode } from "@intentic/sandbox-contract";
 import { Button, Code, Modal, Notice } from "@intentic/ui";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { usePeerConnect, WEBEXT_DOOR } from "../../sandbox/devices/usePeerConnect";
@@ -17,7 +17,7 @@ const t = useT();
 const props = defineProps<{ visible: boolean; id: string; install: string; permissions: string }>();
 const emit = defineEmits<{ (event: "update:visible", value: boolean): void; (event: "connected"): void }>();
 
-const { peerFor, pairToken, minting, error, connect, start, stop, close } = usePeerConnect<WebExtSummary>(WEBEXT_DOOR);
+const { peerFor, pairToken, minting, error, rosterNotice, connect, refresh, close } = usePeerConnect(WEBEXT_DOOR);
 const { daemonUrl } = useSandbox();
 
 const browser = computed(() => peerFor(props.id));
@@ -64,10 +64,10 @@ watch(
         if (!visible) {
             forgetOffer();
             close();
-            stop();
             return;
         }
-        start();
+        // The roster the pairing is confirmed against is read afresh, not taken from what was cached.
+        void refresh();
         await connect(props.id);
         offer();
     },
@@ -80,10 +80,7 @@ watch(online, (isOnline) => {
     }
 });
 
-onBeforeUnmount(() => {
-    forgetOffer();
-    stop();
-});
+onBeforeUnmount(forgetOffer);
 </script>
 
 <template>
@@ -100,6 +97,7 @@ onBeforeUnmount(() => {
             </Notice>
 
             <Notice v-else-if="error" tone="danger">{{ error }}</Notice>
+            <Notice v-if="rosterNotice" tone="warning">{{ rosterNotice }}</Notice>
 
             <div v-else-if="minting || code === ``" class="text-muted">
                 {{ t(`capabilities.words.preparingOneTimeConnection`) }}

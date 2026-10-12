@@ -1,17 +1,19 @@
 import { type AutomationApproval, awaitsOwner } from "@intentic/sandbox-contract";
 import type { HostQuery } from "@intentic/extension-api";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { host } from "./host";
 
 interface HeldWakes {
     readonly approvals: AutomationApproval[];
+    // Files in the queue the sandbox could not read: held wakes that cannot run until they are fixed or removed.
+    readonly unreadable?: string[];
 }
 
-// A held automation wake (requireApproval or holdForSeconds, parked in .intentic/records/approvals/), a separate store
-// from agent approvals since it's daemon-minted and consumed on release. No `staleTime`: the manifest's
-// `automation-approvals` name reaches this read through the host's table of pushed reads the moment a wake is held,
-// approved or rejected. The entry holds the procedure's whole answer; the view takes the list out in `select`.
+// A held automation wake (requireApproval or holdForSeconds, parked on the sandbox's history volume, off the workspace),
+// a separate store from agent approvals since it's daemon-minted and consumed on release. No `staleTime`: the daemon's
+// `approvals` push reaches this read through the host's table of pushed reads the moment a wake is held, approved or
+// rejected. The entry holds the procedure's whole answer; the view takes the list out in `select`.
 export const heldWakesQuery = (): HostQuery<HeldWakes> => {
     const api = host();
     return {
@@ -27,10 +29,9 @@ export function useHeldWakes() {
     const api = host();
     const queryClient = useQueryClient();
     const spec = heldWakesQuery();
-    const { data, error, isLoading } = useQuery({
+    const { query, error } = api.sandbox.query({
         ...spec,
-        select: (list: HeldWakes): AutomationApproval[] => list.approvals,
-        enabled: computed(() => api.sandbox.reachable()),
+        select: (list: HeldWakes): HeldWakes => list,
     });
     // Releasing a wake also shows up on the Automations page, so that read is invalidated by its procedure, not owned,
     // since this module only knows it went stale.
@@ -49,9 +50,10 @@ export function useHeldWakes() {
     });
 
     return {
-        held: computed<AutomationApproval[]>(() => data.value ?? []),
-        error: computed(() => error.value?.message),
-        isLoading,
+        held: computed<AutomationApproval[]>(() => query.data.value?.approvals ?? []),
+        unreadable: computed<string[]>(() => query.data.value?.unreadable ?? []),
+        error,
+        isLoading: query.isLoading,
         approve,
         reject,
     };

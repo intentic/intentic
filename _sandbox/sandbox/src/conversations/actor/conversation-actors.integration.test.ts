@@ -297,7 +297,6 @@ const walk = async (seed: number, steps: number): Promise<number> => {
         runCheck: async () => ({ exitCode: check.exitCode, output: "" }),
         // No turn is live to steer, and a wake's fresh turn always starts.
         turns: fakeTurns().turns,
-        sessionIdOf: () => undefined,
         journal: watchJournal,
         envOf: async () => ({}),
         conversationLive: (conversationId) => current.agents.entry(conversationId) !== undefined,

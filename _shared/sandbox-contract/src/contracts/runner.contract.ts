@@ -2,7 +2,15 @@ import { oc } from "@orpc/contract";
 import { streamOf } from "../protocol/routes.js";
 import { z } from "zod";
 import { AgentEventSchema } from "../events/agent-events.js";
-import { RunnerCommandFrameSchema, RunnerCommandSchema, RunnerFactsSchema, RunnerSyncLineSchema, RunnerSyncSchema, RunnerTurnSchema } from "../protocol/doors/runner-protocol.js";
+import {
+    RunnerCommandFrameSchema,
+    RunnerCommandSchema,
+    RunnerDefinitionAppliedSchema,
+    RunnerFactsSchema,
+    RunnerSyncLineSchema,
+    RunnerSyncSchema,
+    RunnerTurnSchema,
+} from "../protocol/doors/runner-protocol.js";
 import { EditorContextSchema } from "../schemas/agent.js";
 import { AgentReplySchema } from "../schemas/providers/plan-limits.js";
 import { OkSchema } from "../schemas/shared.js";
@@ -32,7 +40,7 @@ export const runnerContract = {
         )
         .output(z.object({ applied: z.boolean(), invalid: z.string().optional() })),
     // REPLACE semantics: a key the definition omits returns to its default, unlike the owner apply's merge-beside.
-    applyDefinition: oc.input(z.object({ toml: z.string() })).output(z.object({ settings: z.array(z.string()) })),
+    applyDefinition: oc.input(z.object({ toml: z.string() })).output(RunnerDefinitionAppliedSchema),
     // Stop the running turn; the parent's stop button reaching through.
     interrupt: oc.input(RunnerTurnSchema.pick({ conversationId: true })).output(OkSchema),
     // One shell line the parent offloaded (settings `offload`), run against a snapshot of the parent's tree; its output

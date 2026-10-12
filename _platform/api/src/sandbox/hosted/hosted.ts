@@ -828,6 +828,10 @@ export const rollbackHosted = async (
     hosted: HostedRollbackTarget,
     logger?: Logger,
     record?: HostedGateRecord,
+    // The owner's press leaves both unset. The post-switch probation watch (gate/hosted-probation.ts) goes back by this
+    // same path, with no probation of its own for the version it puts back and without waiting for a change that holds
+    // the machine, which it asks again of next tick.
+    { probation, busy }: { readonly probation?: boolean; readonly busy?: `wait` | `refuse` } = {},
 ): Promise<void> => {
     const back = hosted.previousImage ?? null;
     if (back === null) {
@@ -846,6 +850,8 @@ export const rollbackHosted = async (
         facts: { environmentHash, baseImage: null, baseDigest: null },
         skip,
         words: ROLLBACK_WORDS,
+        probation,
+        busy,
         logger,
     });
 };

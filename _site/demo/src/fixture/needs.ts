@@ -1,4 +1,4 @@
-import type { GrantRevoke, Need, NeedAnswer, StandingGrants } from "@intentic/sandbox-contract";
+import type { ConversationGrantRevoke, GrantRevoke, Need, NeedAnswer, StandingGrants } from "@intentic/sandbox-contract";
 import { demoQuiet, freshEdition } from "../mode";
 import { AWAITING_AGENT_ID, FEATURED_AGENT_ID } from "./fleet";
 
@@ -138,6 +138,8 @@ export const provideDemoSecret = (id: string): Need =>
 // everything here.
 // Taking one back moves this store.
 let grants: StandingGrants[`conversations`] | undefined;
+// Beside them, the yes that names no conversation: a line the owner allowed with Always on a command card.
+let ownerWide: StandingGrants[`ownerWide`] | undefined;
 
 export const demoGrants = (now: number = Date.now()): StandingGrants => {
     grants ??= [
@@ -168,12 +170,13 @@ export const demoGrants = (now: number = Date.now()): StandingGrants => {
             releases: [],
         },
     ];
-    return { conversations: grants };
+    ownerWide ??= [{ kind: `command-policy`, line: `Deleting build directories under /work is fine.`, at: now - minutes(120), by: `demo@intentic.dev` }];
+    return { conversations: grants, ownerWide, unreadable: [] };
 };
 
 type DemoGrantRow = StandingGrants[`conversations`][number];
 
-const withoutGrant = (conversation: DemoGrantRow, grant: GrantRevoke): DemoGrantRow => {
+const withoutGrant = (conversation: DemoGrantRow, grant: ConversationGrantRevoke): DemoGrantRow => {
     if (grant.kind === `install`) {
         return { ...conversation, installs: false };
     }
@@ -190,7 +193,15 @@ const withoutGrant = (conversation: DemoGrantRow, grant: GrantRevoke): DemoGrant
     return { ...conversation, [field]: conversation[field].filter((what: string) => what !== grant.what) };
 };
 
+// What taking an owner-wide yes back names: the policy line, the hook set's digest, the extension's id.
+const ownerWhat = (owned: StandingGrants[`ownerWide`][number]): string =>
+    owned.kind === `command-policy` ? owned.line : owned.kind === `hook-set` ? owned.digest : owned.id;
+
 export const revokeDemoGrant = (grant: GrantRevoke): void => {
+    if (!(`conversationId` in grant)) {
+        ownerWide = demoGrants().ownerWide.filter((owned) => owned.kind !== grant.kind || ownerWhat(owned) !== grant.what);
+        return;
+    }
     grants = demoGrants()
         .conversations.map((conversation) => (conversation.conversationId === grant.conversationId ? withoutGrant(conversation, grant) : conversation))
         .filter(

@@ -66,6 +66,10 @@ export const SpeechStatusSchema = z.object({
 });
 export type SpeechStatus = z.infer<typeof SpeechStatusSchema>;
 
+// POST /speech/transcribe: one phrase as WAV in, its words out; empty when it held none.
+export const SpeechTranscriptSchema = z.object({ text: z.string() });
+export type SpeechTranscript = z.infer<typeof SpeechTranscriptSchema>;
+
 // GET /speech/stream, a WebSocket: the composer cuts the microphone into phrases itself (its silence segmenter) and
 // streams each one as it is spoken. A text frame `begin` opens phrase `id`; binary frames that follow are its audio,
 // 16 kHz mono s16le; `end` closes it, keeping its first `keep` samples (the trailing pause trimmed off); `drop`

@@ -36,3 +36,30 @@ export const CONTROL_SCOPE_REACH: readonly ControlScopeReach[] = [
         note: "Separate because the usual arrangement is a program that works and a person who decides.",
     },
 ];
+
+// One control token as the roster lists it: everything but the secret, which the daemon keeps only as a hash.
+export const ControlTokenSummarySchema = z.object({
+    id: z.string(),
+    label: z.string(),
+    scope: ControlScopeSchema,
+    createdAt: z.number(),
+    // The owner or maintainer who minted it, so the roster says whose decision each token was.
+    createdBy: z.string().optional(),
+    // Epoch ms after which the token is refused; absent means it lives until revoked.
+    expiresAt: z.number().optional(),
+    // Epoch ms of the last authorized request, coarse on purpose; absent means never used.
+    lastUsedAt: z.number().optional(),
+});
+export type ControlTokenSummary = z.infer<typeof ControlTokenSummarySchema>;
+export const ControlTokensListSchema = z.object({ tokens: z.array(ControlTokenSummarySchema) });
+
+// POST /system/control/tokens: scope is required, never defaulted; expiry is optional and absent means never.
+export const ControlTokenMintSchema = z.object({
+    scope: ControlScopeSchema,
+    label: z.string().optional(),
+    expiresAt: z.number().optional(),
+});
+export type ControlTokenMint = z.infer<typeof ControlTokenMintSchema>;
+// The raw token, shown exactly once.
+export const ControlTokenMintedSchema = z.object({ id: z.string(), token: z.string() });
+export type ControlTokenMinted = z.infer<typeof ControlTokenMintedSchema>;

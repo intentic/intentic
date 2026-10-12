@@ -1,4 +1,4 @@
-import { routingFor } from "../../providers/accounts/routing.js";
+import { sessionFor } from "../../providers/accounts/routing.js";
 import { randomUUID } from "node:crypto";
 import { keyedLock } from "@intentic/base/async";
 import { ATTACHMENT_LIMIT, MENTION_LIMIT, type MessageReceipt, profileOf, withRuntimeDefaults } from "@intentic/sandbox-contract";
@@ -125,9 +125,11 @@ const onCurrentRouting = (services: Services, turn: Turn): Turn => {
     if (entry === undefined) {
         return turn;
     }
-    const { agent: _agent, harness: _harness, account: _account, model: _model, effort: _effort, thinking: _thinking, fast: _fast, ...own } = turn;
+    const { agent: _agent, harness: _harness, account: _account, model: _model, effort: _effort, thinking: _thinking, fast: _fast, sessionId: asked, ...own } = turn;
     const { agent, harness, model, effort, thinking, fast } = conversationProfile(entry);
-    return { ...own, ...profileOf({ agent, harness, model, effort, thinking, fast }) };
+    const routed = { ...own, ...profileOf({ agent, harness, model, effort, thinking, fast }) };
+    // The session is the conversation's own, decided on the routing it now has (sessionFor); the sender's is no say in it.
+    return { ...routed, ...opt("sessionId", sessionFor(services, { ...routed, sessionId: asked })) };
 };
 
 // What goes before anything waiting: a recovery the daemon runs by itself, or a rewind restoring files.
@@ -287,18 +289,6 @@ export const together = (items: readonly QueuedItem[]): readonly QueuedItem[] =>
     return items.slice(0, end === -1 ? items.length : end);
 };
 
-// The session a person's turn goes on in, decided here and nowhere else: on a conversation the daemon holds, its own
-// session, only on the runtime and account that minted it, by the one routing rule (agent/providers/accounts/routing.ts).
-// A `sessionId` a client sent is no say in it; an older editor sends one it worked out itself, which this ignores. Only
-// a conversation not on record yet takes the one it names: a past session resumed from the history menu has no record.
-export const sessionFor = (services: Pick<Services, "agents" | "conversations">, routing: Pick<Turn, "conversationId" | "agent" | "harness" | "account" | "sessionId">): string | undefined => {
-    const entry = services.agents.entry(routing.conversationId);
-    if (entry === undefined) {
-        return routing.sessionId;
-    }
-    return routingFor(entry.profile, routing).continues ? services.conversations.sessionIdOf(routing.conversationId) : undefined;
-};
-
 // A person's turn as its sender asked for it, but on the session the daemon decides (sessionFor), never one it was sent.
 const personTurn = (services: Services, turn: Turn): Turn => {
     const { sessionId: _asked, ...rest } = turn;
@@ -312,10 +302,8 @@ const turnOf = (services: Services, batch: readonly QueuedItem[]): Turn => {
     if (last === undefined || batch[0] === undefined) {
         throw new Error("a turn needs at least one message");
     }
-    const { conversationId } = last.turn;
     if (last.voice !== "person") {
-        const { sessionId: _asked, ...wake } = onCurrentRouting(services, requestOf(last));
-        return { ...wake, ...opt("sessionId", services.conversations.sessionIdOf(conversationId)) };
+        return onCurrentRouting(services, requestOf(last));
     }
     const { prompt: _p, attachments: _a, mentions: _m, editorContext: _e, messageId: _i, sessionId: asked, ...routing } = requestOf(last);
     const attachments = batch.flatMap((item) => item.turn.attachments ?? []);

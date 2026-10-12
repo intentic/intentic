@@ -1,5 +1,5 @@
 import type { SharedConversation } from "@intentic/sandbox-contract";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { host } from "./host";
 
@@ -12,10 +12,9 @@ export function useShares() {
     const queryClient = useQueryClient();
     const queryKey = api.sandbox.readKey(`share.list`);
 
-    const query = useQuery({
+    const { query, error } = api.sandbox.query({
         queryKey,
         queryFn: () => api.sandbox.rpc.share.list(),
-        enabled: computed(() => api.sandbox.reachable()),
     });
 
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey });
@@ -31,7 +30,7 @@ export function useShares() {
 
     return {
         shares: computed<SharedConversation[]>(() => query.data.value?.shares ?? []),
-        error: computed(() => query.error.value?.message),
+        error,
         isLoading: query.isLoading,
         update,
         remove,

@@ -1,7 +1,7 @@
 // Access tab's rendered text after an invite: which of its two writes (daemon grant, platform record/email) failed, and
 // refusal vs silence, must all read differently on screen.
 import "@intentic/testing/dom";
-import type { MemberRole, StandingGrants } from "@intentic/sandbox-contract";
+import type { MemberRole, OwnerGrant, OwnerGrantKind, StandingGrants } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
@@ -15,7 +15,23 @@ type StandingConversation = StandingGrants["conversations"][number];
 
 // Import chain touches the API client and a media query (UI barrel's useDevice) at module eval; hence jsdom.
 
-const sandboxJson = jest.fn(async (..._args: unknown[]): Promise<unknown> => ({ members: [] }));
+// What the daemon answers a read nobody in the test cares about: the empty version of each answer the tab parses with the
+// route's own schema, so an unanswered read is a quiet section and not a refusal of its shape.
+const quiet = (path: unknown) => {
+    switch (path) {
+        case `/system/passkeys`:
+            return { passkeys: [], required: false };
+        case `/system/control/tokens`:
+            return { tokens: [] };
+        case `/system/sessions/revoke`:
+            return { ok: true };
+        case `/system/runners`:
+            return { runners: [] };
+        default:
+            return { members: [] };
+    }
+};
+const sandboxJson = jest.fn(async (...args: unknown[]): Promise<unknown> => quiet(args[0]));
 jest.mock(`../../../client/sandbox/sandboxClient`, () => ({ sandboxJson: (...args: unknown[]) => sandboxJson(...(args as [])) }));
 // The door inventory's reads (automations, workflows, CI, devices) fail unless a test answers them, so a door counts as
 // unknown by default; runners ride sandboxJson, whose default answer does not parse as a runner list.
@@ -52,6 +68,8 @@ jest.mock(`../../../client/sandbox/useSandbox`, () => ({
         active: computed(() => ({ name: `radarsu-mig`, role: role.value })),
         activeSandboxId: ref(`s1`),
         daemonUrl: ref(`https://sandbox-abc.example.test`),
+        // The sandbox answers: the roster and the door counts are cache reads, asked only of a sandbox that does.
+        reachable: ref(true),
     }),
 }));
 jest.mock(`../overview/useSandboxOutline`, () => ({ useSandboxOutline: () => false }));
@@ -74,10 +92,19 @@ jest.mock(`../../../client/session/sandboxSession`, () => ({ useSandboxSession: 
 // What conversations were allowed past their persona: none unless a test lists one. Its take-back is a vue-query
 // mutation, and this page mounts without a query client.
 const standing = ref<readonly StandingConversation[]>([]);
-jest.mock(`./useStandingGrants`, () => ({ useStandingGrants: () => ({ conversations: standing, error: ref(undefined), revoke: { mutateAsync: jest.fn() } }) }));
+// Beside them the yeses that name no conversation, and the kinds of those this sandbox could not read.
+const ownerWide = ref<readonly OwnerGrant[]>([]);
+const unreadable = ref<readonly OwnerGrantKind[]>([]);
+const takeBackGrant = jest.fn(async (..._args: unknown[]): Promise<void> => undefined);
+jest.mock(`./useStandingGrants`, () => ({
+    useStandingGrants: () => ({ conversations: standing, ownerWide, unreadable, error: ref(undefined), revoke: { mutateAsync: (...args: unknown[]) => takeBackGrant(...args) } }),
+}));
 
 const { default: SandboxAccess } = await import("./SandboxAccess.vue");
 const { forgetOperations } = await import("../../../workbench/operations/operations");
+const { queryClient } = await import("../../../lib/queryPersistence");
+// A read that fails is shown at once rather than after the retries a browser would give it.
+queryClient.setDefaultOptions({ queries: { ...queryClient.getDefaultOptions().queries, retry: false } });
 
 let app: App | undefined;
 const mount = (): void => {
@@ -136,7 +163,8 @@ const daemonMembers = jest.fn((): unknown[] => []);
 
 afterEach(() => {
     sandboxJson.mockReset();
-    sandboxJson.mockResolvedValue({ members: [] });
+    sandboxJson.mockImplementation(async (...args: unknown[]) => quiet(args[0]));
+    queryClient.clear();
     for (const read of Object.values(doorReads)) {
         read.mockReset();
         read.mockImplementation(unread);
@@ -150,6 +178,9 @@ afterEach(() => {
     list.mockResolvedValue({ members: [] });
     sessionExpiresAt.value = Date.parse(`2026-09-24T12:00:00.000Z`);
     standing.value = [];
+    ownerWide.value = [];
+    unreadable.value = [];
+    takeBackGrant.mockReset();
     app?.unmount();
     app = undefined;
     forgetOperations();
@@ -290,7 +321,7 @@ it(`mints an API token as the owner and shows it once with its snippet`, async (
                 ],
             };
         }
-        return { members: [], automations: [], workflows: [], repos: [] };
+        return quiet(path);
     });
     mount();
     await waitFor(() => expect(shown()).toContain(`nightly CI`));
@@ -321,7 +352,7 @@ it(`holds a member's move to guest until its fence reaches an assistant, then gr
     const member = (tier: string): unknown => ({ email: `guest@example.com`, role: tier, status: `accepted`, invitedAt: `2026-08-18T00:00:00.000Z` });
     list.mockResolvedValue({ members: [member(`collaborator`)] });
     setRole.mockResolvedValue({ members: [member(`guest`)] });
-    sandboxJson.mockImplementation(async (path: unknown) => (path === `/members` ? { members: daemonMembers() } : { members: [] }));
+    sandboxJson.mockImplementation(async (path: unknown) => (path === `/members` ? { members: daemonMembers() } : quiet(path)));
     mount();
     await settle();
 
@@ -352,7 +383,7 @@ it(`holds a member's move to guest until its fence reaches an assistant, then gr
 it(`will not grant a guest fenced where no assistant works, and says what would fix it`, async () => {
     const member = (tier: string): unknown => ({ email: `guest@example.com`, role: tier, status: `accepted`, invitedAt: `2026-08-18T00:00:00.000Z` });
     list.mockResolvedValue({ members: [member(`collaborator`)] });
-    sandboxJson.mockImplementation(async (path: unknown) => (path === `/members` ? { members: daemonMembers() } : { members: [] }));
+    sandboxJson.mockImplementation(async (path: unknown) => (path === `/members` ? { members: daemonMembers() } : quiet(path)));
     mount();
     await settle();
 
@@ -373,7 +404,7 @@ it(`grants an area on an existing row, at the tier that row already holds`, asyn
     const member = (tier: string): unknown => ({ email: `guest@example.com`, role: tier, status: `accepted`, invitedAt: `2026-08-18T00:00:00.000Z` });
     list.mockResolvedValue({ members: [member(`collaborator`)] });
     setRole.mockResolvedValue({ members: [member(`collaborator`)] });
-    sandboxJson.mockImplementation(async (path: unknown) => (path === `/members` ? { members: daemonMembers() } : { members: [] }));
+    sandboxJson.mockImplementation(async (path: unknown) => (path === `/members` ? { members: daemonMembers() } : quiet(path)));
     mount();
     await settle();
 
@@ -472,7 +503,7 @@ it(`rewrites no grant while it cannot read which areas each member holds`, async
         if (path === `/members` && init === undefined) {
             throw new Error(`Request failed (503).`);
         }
-        return { members: [] };
+        return quiet(path);
     });
     mount();
     await settle();
@@ -518,7 +549,7 @@ it(`leaves out the other ways in when no door is in use`, async () => {
     doorReads.workflows.mockResolvedValue({ workflows: [] });
     doorReads.ci.mockResolvedValue({ repos: [], runs: [] });
     doorReads.devices.mockResolvedValue({ devices: [] });
-    sandboxJson.mockImplementation(async (path: unknown) => (path === `/system/runners` ? { runners: [] } : { members: [] }));
+    sandboxJson.mockImplementation(async (path: unknown) => quiet(path));
     mount();
     await settle();
 
@@ -532,7 +563,7 @@ it(`lists only the doors in use, with paired machines counted`, async () => {
     doorReads.automations.mockResolvedValue({ automations: [] });
     doorReads.ci.mockResolvedValue({ repos: [], runs: [] });
     doorReads.devices.mockResolvedValue({ devices: [{ key: `laptop`, label: `laptop` }, { key: `desk`, label: `desk` }] });
-    sandboxJson.mockImplementation(async (path: unknown) => (path === `/system/runners` ? { runners: [] } : { members: [] }));
+    sandboxJson.mockImplementation(async (path: unknown) => quiet(path));
     mount();
     await settle();
 
@@ -562,4 +593,50 @@ it(`lists what conversations were allowed past their persona, each with Revoke`,
     expect(shown()).toContain(`Conversation permissions`);
     expect(shown()).toContain(`May use github, which its persona leaves out`);
     expect(buttonLabelled(`Revoke`)?.disabled).toBe(false);
+});
+
+// The yeses that name no conversation sit above the conversations, in a group of their own: a policy line allowed with
+// Always, an approved hook set, an approved extension. Each is revoked by what names it, the policy line itself, the
+// set's digest, the extension's id.
+it(`lists the owner-wide yeses above the conversations, and takes each back by its own name`, async () => {
+    const digest = `a`.repeat(64);
+    ownerWide.value = [
+        { kind: `extension`, id: `acme.toolbox`, powers: [`runs a backend bundle inside the daemon's extension host`], at: Date.now() - 60_000 },
+        { kind: `command-policy`, line: `Deleting build directories under /work is fine.`, at: Date.now() - 120_000, by: `ada@acme.dev` },
+        { kind: `hook-set`, digest, hooks: [`PreToolUse (Bash): ./guard.sh`], at: Date.now() - 180_000 },
+    ];
+    standing.value = [{ conversationId: `c1`, capabilities: [`github`], folders: [], shelves: [], installs: false, secrets: [], everything: false, rules: [], releases: [] }];
+    mount();
+    await settle();
+
+    expect(shown()).toContain(`Sandbox-wide permissions`);
+    expect(shown()).toContain(`Conversation permissions`);
+    expect(shown()).toContain(`Safety policy: Deleting build directories under /work is fine.`);
+    expect(shown()).toContain(`allowed by ada@acme.dev`);
+    expect(shown()).toContain(`Claude Code hooks may run: PreToolUse (Bash): ./guard.sh`);
+    expect(shown()).toContain(`Extension acme.toolbox may run`);
+    expect(shown()).toContain(`approved to: runs a backend bundle inside the daemon's extension host`);
+    // The conversation's own yes is still there, after them.
+    expect(shown().indexOf(`May use github, which its persona leaves out`)).toBeGreaterThan(shown().indexOf(`Extension acme.toolbox may run`));
+
+    const revokes = [...document.body.querySelectorAll(`button`)].filter((button) => button.textContent?.trim() === `Revoke`);
+    expect(revokes).toHaveLength(4);
+    for (const button of revokes.slice(0, 3)) {
+        button.click();
+        await settle();
+    }
+    expect(takeBackGrant.mock.calls).toEqual([
+        [{ kind: `extension`, what: `acme.toolbox` }],
+        [{ kind: `command-policy`, what: `Deleting build directories under /work is fine.` }],
+        [{ kind: `hook-set`, what: digest }],
+    ]);
+});
+
+it(`says which owner-wide records could not be read, and draws the list for them alone`, async () => {
+    unreadable.value = [`hook-set`, `extension`];
+    mount();
+    await settle();
+    expect(shown()).toContain(`Sandbox-wide permissions`);
+    expect(shown()).not.toContain(`Conversation permissions`);
+    expect(shown()).toContain(`none of it stands until the file is fixed: hook sets, extensions.`);
 });

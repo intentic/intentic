@@ -1,5 +1,8 @@
-import { conversationEntry } from "../../testing.js";
-import { messageTaint } from "./fleet-message.js";
+import { unstubbed } from "@intentic/testing";
+import type { Services } from "../../composition.js";
+import type { TurnInput } from "../../seams/turn-starter.js";
+import { beginTurn, conversationEntry, memoryFleet } from "../../testing.js";
+import { messageConversation, messageTaint } from "./fleet-message.js";
 
 // What a message makes of the turn it lands in. A stranger's words taint it; the target's own family's words taint it
 // only when they carry outside content from the sender's own turn, or come from a runtime nothing gates.
@@ -49,4 +52,30 @@ test("a family member whose own turn read outside content passes it on, saying w
 
 test("a family member on a runtime with no permission rules of its own is never clean", () => {
     expect(messageTaint(taintOf(), "blind", "root")).toBe("a message from `blind`, which runs on pi, a runtime with no permission rules of its own");
+});
+
+// A message that opens a turn on the target continues the target's own session, on the routing it runs on now: the
+// session decision is the one every turn the daemon starts takes (routing.ts sessionFor).
+test("a message that opens a turn on its target continues the target's session on the target's own provider", async () => {
+    const fleet = memoryFleet();
+    await fleet.agents.init();
+    await beginTurn(fleet.conversations, { conversationId: "target", isolated: false, prompt: "earlier", profile: { agent: "codex", harness: "native" } }, 1);
+    fleet.conversations.send("target", { kind: "frame", frame: { kind: "session", sessionId: "sess-codex" } });
+    await fleet.conversations.send("target", { kind: "settle" }, 2).settled;
+    const started: TurnInput[] = [];
+    const services = unstubbed<Services>("services", {
+        agents: fleet.agents,
+        conversations: fleet.conversations,
+        turns: unstubbed<Services["turns"]>("turns", {
+            steer: async () => false,
+            start: async (turn: TurnInput) => {
+                started.push(turn);
+                return { id: "run-1", async *frames () {} };
+            },
+        }),
+        logger: unstubbed<Services["logger"]>("logger", { info: () => {} }),
+    });
+
+    expect(await messageConversation(services, "sender", "target", "ready when you are")).toMatchObject({ ok: true, to: "target", delivery: "turn" });
+    expect(started.map((turn) => [turn.conversationId, turn.agent, turn.sessionId])).toEqual([["target", "codex", "sess-codex"]]);
 });

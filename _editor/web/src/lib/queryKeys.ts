@@ -33,14 +33,19 @@ export const agentReviewPrefixes: readonly (readonly string[])[] = AGENT_REVIEW.
 // The contract reads each name the daemon pushes stands for (WORKSPACE_STATE_FILES, RUNTIME_DOMAIN_BINDINGS, an
 // extension's `contributes.files`, runtime paths joined by `/`), since the daemon's tables name cache entries and a read
 // is filed under its route name, the shell's and an extension's `api.sandbox.readKey(...)` alike.
+// A raw read that no procedure stands for (the paired-machine rosters, the sync state, the runners list: the families
+// below) needs no entry here. It is filed under the pushed path itself (`hosts`, `webext`, `phones`, `runners`,
+// `sync-health`), which `pushedKeys` returns first, so the daemon's push of the domain reaches it and everything else
+// that path names.
 const PUSHED_READS: Readonly<Record<string, readonly ProcedureName[]>> = {
     // The activity extension's status card: the daemon's activity domain, and the config files its manifest names.
     "activity-status": [`activity.status`],
     // A dev server starting or stopping: each monorepo's app list.
     apps: [`workspace.appsList`],
-    // The approvals queue, by its directory's write or the daemon's own domain; hook sets ride it, living off /work.
-    approvals: [`approvals.list`, `approvals.hookRequests`],
-    // A held automation wake parked, approved or rejected.
+    // The approvals queue, by its directory's write or the daemon's own domain; hook sets and held automation wakes ride it,
+    // living off /work.
+    approvals: [`approvals.list`, `approvals.hookRequests`, `automations.pendingList`],
+    // A held automation wake parked, approved or rejected, by the file binding releases before 2026-10-12 pushed on.
     "automation-approvals": [`automations.pendingList`],
     areas: [`areas.list`],
     // The automations extension's manifest names its own files by this.
@@ -142,8 +147,15 @@ export const DEPLOYMENTS = family(`deployments`);
 export const ENGINES = family(`engines`);
 export const ENVIRONMENT = family(`environment`);
 export const ENVIRONMENT_CONTENTS = family(`environment-contents`);
-// This sandbox's runners: the machines it can hand a conversation to.
+// The machines paired with this sandbox, one roster each, read by every dialog, row and badge that names them. These
+// are raw reads (`sandboxRaw`), not contract procedures, so their keys are the families' own, and the daemon's push of
+// the matching domain (RUNTIME_DOMAIN_BINDINGS: `hosts`, `webext`, `phones`, `runners`) refreshes whichever are on screen.
+export const PAIRED_HOSTS = family(`hosts`);
+export const PAIRED_BROWSERS = family(`webext`);
+export const PAIRED_PHONES = family(`phones`);
+// The machines it can hand a conversation to.
 export const RUNNERS = family(`runners`);
 export const REGISTRY = family(`registry`);
 export const SANDBOX_MEMBERS = family(`members`);
+// Desktop sync's sandbox-level state (GET /system/sync): the one read behind the sync badges and the Add device card.
 export const SYNC_HEALTH = family(`sync-health`);

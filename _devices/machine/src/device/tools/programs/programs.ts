@@ -7,9 +7,9 @@ import { writeFileAtomic } from "@intentic/base/fs";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import { execBounded } from "@intentic/base/process";
 import type { Desktop, WindowInfo } from "@intentic/desktop-automation";
-import type { DeviceScopes } from "@intentic/sandbox-contract";
+import { commandLineOf, type DeviceScopes } from "@intentic/sandbox-contract";
 import { assertPath, assertScope, ScopeError } from "../../policy.js";
-import { destructiveClasses, destructiveRefusal } from "../shell.js";
+import { assertNoSandboxPower, destructiveClasses, destructiveRefusal } from "../shell.js";
 import { inRuns, listArtifacts, sandboxRunsDir } from "./artifacts.js";
 import { isolatedExit, startScript, stopWindowsSandbox, windowsSandboxExe, windowsSandboxMissing, windowsSandboxRunning, wsbConfig } from "./isolated.js";
 
@@ -244,19 +244,17 @@ const startablesIn = async (dir: string): Promise<string[]> => {
 
 const idFor = (name: string): string => `${name.replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 40) || "app"}-${randomBytes(3).toString("hex")}`;
 
-// The program and its arguments as the one command line they amount to, for the classifier run_command's commands go
-// through: the program by the name it is known by (`rm`, `powershell`), each argument quoted only where a shell would
-// need it, so the line reads the way a person would type it.
-const commandLineOf = (program: string, args: readonly string[]): string =>
-    [basename(program).replace(/\.exe$/i, ""), ...args.map((arg) => (arg === "" || /[\s'"|;&<>()$`\\]/.test(arg) ? (arg.includes("'") ? `"${arg}"` : `'${arg}'`) : arg))].join(" ");
-
 // A program already on this machine started with these arguments is a command by another door, so it answers to the
-// same "Run destructive commands" switch run_command does: `rm -rf ~/x`, or a shell handed one, is refused alike.
-const assertNotDestructive = (program: string, args: readonly string[], scopes: DeviceScopes): void => {
-    const destructive = destructiveClasses(commandLineOf(program, args));
+// same switches run_command does, reading the same command line (the contract's one table of what carries a program):
+// "Run destructive commands" for `rm -rf ~/x`, or a shell handed one, and "Manage sandboxes on this device" for
+// `ic sandbox restart work`.
+const assertAsCommand = (program: string, args: readonly string[], scopes: DeviceScopes): void => {
+    const commandLine = commandLineOf(program, args);
+    const destructive = destructiveClasses(commandLine);
     if (destructive.length > 0 && scopes.destructive !== "on") {
         throw new ScopeError(destructiveRefusal(destructive));
     }
+    assertNoSandboxPower(commandLine, scopes);
 };
 
 // The program as given resolved to a path where it is one, and the switch that covers starting it.
@@ -264,7 +262,7 @@ const judgeProgram = async (program: string, args: readonly string[], scopes: De
     if (!isAbsolute(program)) {
         // A bare name (`notepad`) is a program already on this machine, found on its PATH: a command's business.
         assertScope(scopes, "shell");
-        assertNotDestructive(program, args, scopes);
+        assertAsCommand(program, args, scopes);
         return program;
     }
     const path = resolve(program);
@@ -272,7 +270,7 @@ const judgeProgram = async (program: string, args: readonly string[], scopes: De
     assertScope(scopes, pushed ? "programs" : "shell");
     // A build this sandbox pushed is its own to run as it likes; any other program is a command like run_command's.
     if (!pushed) {
-        assertNotDestructive(path, args, scopes);
+        assertAsCommand(path, args, scopes);
     }
     const stats = await stat(path).catch(undefinedIfMissing);
     if (stats === undefined) {

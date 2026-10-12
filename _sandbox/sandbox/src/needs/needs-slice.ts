@@ -189,7 +189,7 @@ export const createNeedsSlice = ({ workspaceRoot, logger, whole }: NeedsSliceDep
                 return undefined;
             }
             const receipt = await deliverWake(
-                { turns: services.turns, sessionIdOf: (id) => services.conversations.sessionIdOf(id) },
+                { turns: services.turns },
                 { conversationId, prompt, voice: "sandbox", source: "needs", profile: conversationProfile(entry) },
             );
             if (!("delivered" in receipt)) {

@@ -9,6 +9,7 @@ use crate::util::{Fail, Result};
 
 /// How many rollback targets a sandbox keeps BEYOND `previous`: older builds `ic sandbox rollback --to` can reach
 /// without a download. Each is a whole image, so the swap drops them when the disk runs short (see recreate.rs).
+/// The contract's `UPDATE_PROBATION.keptBuilds` is this number (pinned by golden/update-probation.json, probation.rs).
 pub const MAX_KEPT: usize = 2;
 
 /// One image a rollback can return to: a pinned local tag and what the image said it was when it was pinned.

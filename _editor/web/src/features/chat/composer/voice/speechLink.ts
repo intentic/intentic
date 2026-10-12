@@ -1,7 +1,8 @@
 import { sleep } from "@intentic/base/async";
-import { SpeechServerMessageSchema, type SpeechStatus } from "@intentic/sandbox-contract";
-import { sandboxJson } from "../../../../client/sandbox/sandboxClient";
+import { type SpeechClientMessage, SpeechServerMessageSchema, type SpeechStatus } from "@intentic/sandbox-contract";
 import { SandboxHttpError } from "../../../../client/sandbox/sandboxHttpError";
+import { sandboxRaw } from "../../../../client/sandbox/sandboxRaw";
+import { liveSocket, type LiveTiming, webSocketChannel } from "../../../../client/session/liveSocket";
 import { socketUrl } from "../../../sandbox/session/wsTicket";
 import { pcm16Of, wavOf16k } from "./voiceAudio";
 
@@ -10,7 +11,8 @@ import { pcm16Of, wavOf16k } from "./voiceAudio";
 // mid-phrase and the model's readiness is pushed; on a daemon older than the stream it is one WAV per ended phrase
 // (POST /speech/transcribe), with readiness polled. Which one is decided while the person already speaks: everything
 // said before the socket answers is held and replayed into whichever transport takes it, so nothing is lost to the
-// choice.
+// choice. The stream is a live socket (liveSocket.ts): pinged, and dialled again on a short ladder when it drops, so a
+// daemon restarting under a long dictation costs only the phrases in flight.
 
 export type SpeechTransport = `stream` | `http`;
 
@@ -56,95 +58,59 @@ interface Transport {
 export interface SpeechLinkDeps {
     readonly socketUrl: (path: string, extra: Record<string, string>) => Promise<string | undefined>;
     readonly openSocket: (url: string) => WebSocket;
-    readonly sandboxJson: typeof sandboxJson;
+    readonly raw: typeof sandboxRaw;
     readonly pollMs: number;
+    // The live socket's clock. Someone is speaking while it redials, so its first rung is short.
+    readonly timing: Partial<LiveTiming>;
 }
 
 const DEFAULT_DEPS: SpeechLinkDeps = {
     socketUrl,
     openSocket: (url) => new WebSocket(url),
-    sandboxJson,
+    raw: sandboxRaw,
     pollMs: 2500,
+    timing: { retryMs: 250, maxRetryMs: 8000 },
 };
 
-// The live stream: the daemon hears, guesses and reports; this only frames what the segmenter says.
-const streamTransport = (socket: WebSocket, events: SpeechLinkEvents, onLost: (inFlight: readonly number[]) => void): Transport => {
-    const inFlight = new Set<number>();
-    socket.binaryType = `arraybuffer`;
-    socket.addEventListener(`message`, (event: MessageEvent) => {
-        if (typeof event.data !== `string`) {
-            return;
-        }
-        let parsed: unknown;
-        try {
-            parsed = JSON.parse(event.data);
+// What goes out on the stream: the protocol's messages as JSON, and a phrase's audio as the bytes themselves.
+type StreamOut = SpeechClientMessage | ArrayBuffer;
+
+// What the daemon says on the stream, one text frame at a time. A frame that is not JSON, or not one of its messages, is
+// ignored.
+const heard = (text: string, events: SpeechLinkEvents, inFlight: Set<number>): void => {
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(text);
         // allow(silent-catch): A frame that is not JSON is not one of the daemon's messages, and is ignored like one that fails the schema.
-        } catch {
+    } catch {
+        return;
+    }
+    const message = SpeechServerMessageSchema.safeParse(parsed);
+    if (!message.success) {
+        return;
+    }
+    const said = message.data;
+    switch (said.type) {
+        case `status`:
+            events.status(said.status);
+            if (!said.status.provisioned) {
+                events.failed(undefined, `unprovisioned`);
+            }
             return;
-        }
-        const message = SpeechServerMessageSchema.safeParse(parsed);
-        if (!message.success) {
+        case `partial`:
+            events.partial(said.id, said.text);
             return;
-        }
-        const said = message.data;
-        switch (said.type) {
-            case `status`:
-                events.status(said.status);
-                if (!said.status.provisioned) {
-                    events.failed(undefined, `unprovisioned`);
-                }
-                return;
-            case `partial`:
-                events.partial(said.id, said.text);
-                return;
-            case `final`:
+        case `final`:
+            inFlight.delete(said.id);
+            events.final(said.id, said.text, said.decodeMs);
+            return;
+        case `error`:
+            if (said.id !== undefined) {
                 inFlight.delete(said.id);
-                events.final(said.id, said.text, said.decodeMs);
-                return;
-            case `error`:
-                if (said.id !== undefined) {
-                    inFlight.delete(said.id);
-                }
-                events.failed(said.id, `phrase`);
-                return;
-        }
-    });
-    let closing = false;
-    socket.addEventListener(`close`, () => {
-        if (!closing) {
-            onLost([...inFlight]);
-        }
-    });
-    return {
-        apply: (op) => {
-            if (socket.readyState !== WebSocket.OPEN) {
-                if (op.kind === `end`) {
-                    events.failed(op.id, `phrase`);
-                }
-                return;
             }
-            switch (op.kind) {
-                case `begin`:
-                    socket.send(JSON.stringify({ type: `begin`, id: op.id }));
-                    socket.send(pcm16Of(op.samples));
-                    return;
-                case `audio`:
-                    socket.send(pcm16Of(op.samples));
-                    return;
-                case `end`:
-                    inFlight.add(op.id);
-                    socket.send(JSON.stringify({ type: `end`, id: op.id, keep: op.samples.length }));
-                    return;
-                case `drop`:
-                    socket.send(JSON.stringify({ type: `drop`, id: op.id }));
-                    return;
-            }
-        },
-        close: () => {
-            closing = true;
-            socket.close();
-        },
-    };
+            events.failed(said.id, `phrase`);
+            return;
+    }
 };
 
 // A daemon without the stream: each ended phrase as one WAV, posted in order once the model is on disk, and the model's
@@ -157,7 +123,6 @@ const httpTransport = (lang: string, events: SpeechLinkEvents, deps: SpeechLinkD
     let ready = false;
     let polling = false;
     let draining = false;
-    const query = `lang=${encodeURIComponent(lang)}`;
 
     const poll = async (): Promise<void> => {
         if (polling) {
@@ -166,7 +131,7 @@ const httpTransport = (lang: string, events: SpeechLinkEvents, deps: SpeechLinkD
         polling = true;
         try {
             while (!signal.aborted && !ready) {
-                const status = await deps.sandboxJson<SpeechStatus>(`/speech/status?${query}`, { signal });
+                const status = await deps.raw(`GET /speech/status`, { query: { lang }, signal });
                 if (signal.aborted) {
                     return;
                 }
@@ -204,11 +169,7 @@ const httpTransport = (lang: string, events: SpeechLinkEvents, deps: SpeechLinkD
                 }
                 try {
                     const startedAt = Date.now();
-                    const { text } = await deps.sandboxJson<{ text: string }>(`/speech/transcribe?${query}`, {
-                        method: `POST`,
-                        body: wavOf16k(next.samples),
-                        signal,
-                    });
+                    const { text } = await deps.raw(`POST /speech/transcribe`, { query: { lang }, input: wavOf16k(next.samples), signal });
                     queue.shift();
                     events.final(next.id, text, Date.now() - startedAt);
                 } catch (cause) {
@@ -267,6 +228,12 @@ export const openSpeechLink = (lang: string, events: SpeechLinkEvents, overrides
     // The phrases the current transport saw begin: one begun on a socket since lost cannot be finished on the next, so
     // its end is a lost phrase rather than a wait for a final that never comes.
     const begun = new Set<number>();
+    // The phrases ended on the stream and not yet answered.
+    const inFlight = new Set<number>();
+    // Whether the dial in hand got as far as opening: a socket that never opens is a daemon with no stream route, and one
+    // that opened and dropped is a restart to ride out.
+    let up = false;
+    let onHttp = false;
 
     const forward = (to: Transport, op: Op): void => {
         if (op.kind === `begin`) {
@@ -295,52 +262,73 @@ export const openSpeechLink = (lang: string, events: SpeechLinkEvents, overrides
         }
     };
 
-    const fallBack = (): void => settle(httpTransport(lang, events, deps), `http`);
-
-    // A socket that dies after it was up (a daemon restart) costs only the phrases in flight on it; the next phrase dials
-    // again.
-    const dial = async (): Promise<void> => {
+    // The stream: the daemon hears, guesses and reports; this only frames what the segmenter says.
+    const live = liveSocket<string, StreamOut>({
         // allow(silent-catch): A socket address that cannot be had is the undefined below, which falls back to posting each phrase over HTTP.
-        const url = await deps.socketUrl(`/speech/stream`, { lang }).catch(() => undefined);
-        if (closed) {
-            return;
-        }
-        if (url === undefined) {
-            fallBack();
-            return;
-        }
-        let socket: WebSocket;
-        try {
-            socket = deps.openSocket(url);
-        } catch {
-            fallBack();
-            return;
-        }
-        const opened = await new Promise<boolean>((resolve) => {
-            socket.addEventListener(`open`, () => resolve(true), { once: true });
-            socket.addEventListener(`error`, () => resolve(false), { once: true });
-            socket.addEventListener(`close`, () => resolve(false), { once: true });
-        });
-        if (!opened) {
-            // An upgrade the daemon refused: no stream route there, so its WAV door.
-            fallBack();
-            return;
-        }
-        settle(
-            streamTransport(socket, events, (inFlight) => {
-                for (const id of inFlight) {
-                    events.failed(id, `phrase`);
+        mint: () => deps.socketUrl(`/speech/stream`, { lang }).catch(() => undefined),
+        open: webSocketChannel<StreamOut>({ text: (text) => heard(text, events, inFlight), binary: () => undefined }, deps.openSocket),
+        onOpen: () => {
+            up = true;
+            settle(stream, `stream`);
+        },
+        onUnreachable: () => fallBack(),
+        onDrop: () => {
+            if (!up) {
+                // An upgrade the daemon refused: no stream route there, so its WAV door.
+                fallBack();
+                return;
+            }
+            // A socket that dies after it was up (a daemon restart) costs only the phrases in flight; the next phrase waits
+            // for the socket dialled in its place.
+            up = false;
+            for (const id of inFlight) {
+                events.failed(id, `phrase`);
+            }
+            inFlight.clear();
+            transport = undefined;
+        },
+        // The speech route answers no ping, so silence says nothing about it.
+        staleCheck: `once-ponged`,
+        timing: deps.timing,
+    });
+
+    const stream: Transport = {
+        apply: (op) => {
+            if (!live.isOpen()) {
+                if (op.kind === `end`) {
+                    events.failed(op.id, `phrase`);
                 }
-                transport = undefined;
-                if (!closed) {
-                    void dial();
-                }
-            }),
-            `stream`,
-        );
+                return;
+            }
+            switch (op.kind) {
+                case `begin`:
+                    live.send({ type: `begin`, id: op.id });
+                    live.send(pcm16Of(op.samples));
+                    return;
+                case `audio`:
+                    live.send(pcm16Of(op.samples));
+                    return;
+                case `end`:
+                    inFlight.add(op.id);
+                    live.send({ type: `end`, id: op.id, keep: op.samples.length });
+                    return;
+                case `drop`:
+                    live.send({ type: `drop`, id: op.id });
+                    return;
+            }
+        },
+        close: () => live.dispose(),
     };
 
-    void dial();
+    const fallBack = (): void => {
+        live.end();
+        if (!onHttp) {
+            onHttp = true;
+            settle(httpTransport(lang, events, deps), `http`);
+        }
+    };
+
+    live.connect();
 
     const apply = (op: Op): void => {
         if (closed) {
@@ -363,11 +351,13 @@ export const openSpeechLink = (lang: string, events: SpeechLinkEvents, overrides
             held.length = 0;
             transport?.close();
             transport = undefined;
+            // Whichever transport was chosen, the socket is let go with the link: one still dialling must not open later.
+            live.dispose();
         },
     };
 };
 
 /** Fetch and load the model for this language ahead of the press, where the daemon knows how; quietly nothing elsewhere. */
-export const prepareSpeech = (lang: string, ask: typeof sandboxJson = sandboxJson): Promise<SpeechStatus | undefined> =>
+export const prepareSpeech = (lang: string, ask: typeof sandboxRaw = sandboxRaw): Promise<SpeechStatus | undefined> =>
     // allow(silent-catch): Preparing ahead is only a head start; a refusal leaves the first press to load the model itself.
-    ask<SpeechStatus>(`/speech/prepare?lang=${encodeURIComponent(lang)}`, { method: `POST` }).catch(() => undefined);
+    ask(`POST /speech/prepare`, { query: { lang } }).catch(() => undefined);

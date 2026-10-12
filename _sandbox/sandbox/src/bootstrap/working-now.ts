@@ -49,15 +49,20 @@ export interface WorkSnapshot {
     readonly watches: number;
 }
 
-export const snapshotOf = ({ agents, conversations }: WorkingNowDeps): WorkSnapshot => {
+// `except` leaves out one conversation's own work: its turn, and its record if it is itself a spawned subagent. A caller
+// asking whether a restart would cut anyone is the one agent that has already chosen to be cut, so the card that asks
+// the owner names the others (hosts/host-restart-guard.ts).
+export const snapshotOf = ({ agents, conversations }: WorkingNowDeps, except?: string): WorkSnapshot => {
     const named = agents.list().map((agent) => ({ id: agent.id, name: agent.title ?? agent.id }));
     return {
-        turns: named.filter(({ id }) => turnLive(conversations, id)).map(({ name }) => name),
+        turns: named.filter(({ id }) => id !== except && turnLive(conversations, id)).map(({ name }) => name),
         lands: named.filter(({ id }) => conversations.landing(id)).map(({ name }) => name),
-        subagents: listSubagentSessions(conversations).map((session) => ({
-            status: session.status,
-            name: session.description ?? session.agentType ?? "a subagent",
-        })),
+        subagents: listSubagentSessions(conversations)
+            .filter((session) => session.id !== except)
+            .map((session) => ({
+                status: session.status,
+                name: session.description ?? session.agentType ?? "a subagent",
+            })),
         workflows: runningWorkflows().map((run) => run.name),
         watches: armedWatcherCount(),
     };
@@ -82,7 +87,9 @@ export const workOf = (snapshot: WorkSnapshot, purpose: WorkPurpose): WorkItem[]
 };
 
 /** What is mid-flight that `purpose` must wait for, each item once per thing (a turn that is also landing is two). */
-export const workingNow = (deps: WorkingNowDeps, purpose: WorkPurpose): WorkItem[] => workOf(snapshotOf(deps), purpose);
+export const workingNow = (deps: WorkingNowDeps, purpose: WorkPurpose, except?: string): WorkItem[] => workOf(snapshotOf(deps, except), purpose);
 
 /** The same, by name, each name once: what a card or a countdown says it is waiting on. */
-export const workingNames = (deps: WorkingNowDeps, purpose: WorkPurpose): string[] => [...new Set(workingNow(deps, purpose).map((item) => item.name))];
+export const workingNames = (deps: WorkingNowDeps, purpose: WorkPurpose, except?: string): string[] => [
+    ...new Set(workingNow(deps, purpose, except).map((item) => item.name)),
+];

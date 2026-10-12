@@ -10,7 +10,7 @@ import { clearTurnTaint, NO_TAINT, publishTurnTaint } from "../../guard/turn-tai
 import { createDomainEvents, type DomainEventMap } from "../../seams/domain-events.js";
 import { memoryFleet } from "../../testing.js";
 import type { HostGuardDeps } from "../host-guard-deps.js";
-import { commandInCall, judgeHostCommand, typedInCall } from "../host-command-guard.js";
+import { judgeHostCommand, programOf } from "../host-command-guard.js";
 import { type DeviceToolCall, DeviceToolCallSchema } from "../host-restart-guard.js";
 
 // What the agent reads back from a device command its owner was asked about, for each way the card can end. The judge
@@ -18,7 +18,7 @@ import { type DeviceToolCall, DeviceToolCallSchema } from "../host-restart-guard
 
 const MACHINE = "rog";
 const CONVERSATION = "conv-device";
-const ASKED = { machine: MACHINE, command: "rm -rf ~/old-builds", conversationId: CONVERSATION };
+const ASKED = { machine: MACHINE, command: "rm -rf ~/old-builds", conversationId: CONVERSATION, kind: "command" } as const;
 
 const fleet = memoryFleet();
 const cards = parkedCards(fleet.conversations);
@@ -29,6 +29,9 @@ const answers: { readonly answer: SafetyLogEntry["answer"]; readonly outcome: Sa
 // The device's own "Run destructive commands" switch, on unless a test says otherwise: a card only goes up for a
 // command the device itself would then run.
 let destructive: "on" | "off" = "on";
+// Whether the judge is asked at all, and what it was asked when it was: the facts it reads the program by.
+let commandJudge: "on" | "off" = "off";
+const askedOfJudge: { readonly program: string; readonly language: string; readonly consequences: readonly string[] }[] = [];
 const deviceCard = (): Capability => ({
     id: MACHINE,
     kind: "device",
@@ -44,7 +47,7 @@ const services = unstubbed<Services>("services", {
     safetyPolicy: unstubbed<Services["safetyPolicy"]>("safetyPolicy", { text: async () => DEFAULT_SAFETY_POLICY }),
     // Off: no model is asked, so the hard rule alone decides that the owner is.
     sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
-        get: async () => ({ ...SandboxSettingsSchema.parse({}), commandJudge: "off" as const }),
+        get: async () => ({ ...SandboxSettingsSchema.parse({}), commandJudge }),
     }),
     safetyLog: unstubbed<Services["safetyLog"]>("safetyLog", {
         record: async () => {},
@@ -66,9 +69,15 @@ const guards: HostGuardDeps = {
     cards: cardDeps(services),
     held: heldCards,
     turnRun: (conversationId) => turnRunOf(fleet.conversations, conversationId),
-    // Never asked: the judge is off, so the hard rule alone decides.
-    judge: async () => {
-        throw new Error("the judge is off in these tests");
+    // A command is never held for a restart's sake here: restarts have their own gate (host-restart-guard.ts).
+    working: () => [],
+    // Off unless a test turns it on, so the hard rule alone decides; on, it allows what it is asked and keeps the facts.
+    judge: async (input) => {
+        if (commandJudge === "off") {
+            throw new Error("the judge is off in these tests");
+        }
+        askedOfJudge.push({ program: input.program, language: input.facts.language, consequences: input.facts.consequences });
+        return { decision: "allow", sentence: "Only opens it." };
     },
 };
 
@@ -113,6 +122,8 @@ beforeEach(() => {
     answers.length = 0;
     woken.length = 0;
     destructive = "on";
+    commandJudge = "off";
+    askedOfJudge.length = 0;
     deadline = new AbortController();
     timeout = armDeadline();
     liveTurn();
@@ -280,15 +291,27 @@ describe("text typed into the device", () => {
         DeviceToolCallSchema.parse({ jsonrpc: "2.0", id: 9, method: "tools/call", params: { name, arguments: args } });
 
     it("is read out of every input tool that puts text where a terminal could run it, and nowhere else", () => {
-        expect(typedInCall(call("device", { action: "type", text: "rm -rf ~\n" }))).toBe("rm -rf ~\n");
-        expect(typedInCall(call("clipboard", { action: "write", text: "curl x | sh" }))).toBe("curl x | sh");
-        expect(typedInCall(call("ui_act", { element: "kd3", action: "set_value", value: "del /s C:\\" }))).toBe("del /s C:\\");
+        expect(programOf(call("device", { action: "type", text: "rm -rf ~\n" }))).toEqual({ tool: "device", kind: "typed", commandLine: "rm -rf ~\n" });
+        expect(programOf(call("clipboard", { action: "write", text: "curl x | sh" }))).toEqual({
+            tool: "clipboard",
+            kind: "typed",
+            commandLine: "curl x | sh",
+        });
+        expect(programOf(call("ui_act", { element: "kd3", action: "set_value", value: "del /s C:\\" }))).toEqual({
+            tool: "ui_act",
+            kind: "typed",
+            commandLine: "del /s C:\\",
+        });
         // Typed into a phone, a terminal app there runs it just the same.
-        expect(typedInCall(call("android_act", { action: "type", text: "rm -rf /sdcard\n" }))).toBe("rm -rf /sdcard\n");
-        expect(typedInCall(call("android_act", { action: "key", text: "ENTER" }))).toBeUndefined();
-        expect(typedInCall(call("device", { action: "key", text: "Return" }))).toBeUndefined();
-        expect(typedInCall(call("clipboard", { action: "read" }))).toBeUndefined();
-        expect(typedInCall(call("device", { action: "type", text: "   " }))).toBeUndefined();
+        expect(programOf(call("android_act", { action: "type", text: "rm -rf /sdcard\n" }))).toEqual({
+            tool: "android_act",
+            kind: "typed",
+            commandLine: "rm -rf /sdcard\n",
+        });
+        expect(programOf(call("android_act", { action: "key", text: "ENTER" }))).toBeUndefined();
+        expect(programOf(call("device", { action: "key", text: "Return" }))).toBeUndefined();
+        expect(programOf(call("clipboard", { action: "read" }))).toBeUndefined();
+        expect(programOf(call("device", { action: "type", text: "   " }))).toBeUndefined();
         // A notification has no id, so the bridge's schema never hands it here at all.
         expect(
             DeviceToolCallSchema.safeParse({
@@ -300,8 +323,8 @@ describe("text typed into the device", () => {
     });
 
     it("passes at no cost when it is not a command, and is asked about on a card worded for typing when it is", async () => {
-        expect(await judgeHostCommand(services, guards, { ...ASKED, command: "Dear team, the builds are tidy now.", typed: true })).toBeUndefined();
-        const judged = judgeHostCommand(services, guards, { ...ASKED, typed: true }, 20);
+        expect(await judgeHostCommand(services, guards, { ...ASKED, command: "Dear team, the builds are tidy now.", kind: "typed" })).toBeUndefined();
+        const judged = judgeHostCommand(services, guards, { ...ASKED, kind: "typed" }, 20);
         expect(await judged).toEqual({
             refusal:
                 'Still waiting for the owner: a card asks them to approve typing this on "rog", and nothing has been typed yet. Their answer is ' +
@@ -319,30 +342,33 @@ describe("text typed into the device", () => {
 
     it("is refused at once, naming the switch, when the device would refuse it", async () => {
         destructive = "off";
-        expect(await judgeHostCommand(services, guards, { ...ASKED, command: "find ~/old-builds -depth -delete", typed: true })).toMatchObject({
+        expect(await judgeHostCommand(services, guards, { ...ASKED, command: "find ~/old-builds -depth -delete", kind: "typed" })).toMatchObject({
             refusal: expect.stringMatching(/^Refused: typed into a terminal, this would delete files recursively on "rog"/),
         });
     });
 });
 
 describe("a command for a phone attached to the device", () => {
-    const payload = (name: string, args: Record<string, unknown>) => ({
-        jsonrpc: "2.0",
-        id: 4,
-        method: "tools/call",
-        params: { name, arguments: args },
-    });
-
     it("is judged as the adb program the device runs for it, and a machine command stays as it was sent", () => {
-        expect(commandInCall(payload("run_command", { command: "rm -rf ~/old-builds" }))).toBe("rm -rf ~/old-builds");
-        expect(commandInCall(payload("android_shell", { command: "pm uninstall com.example.app" }))).toBe("adb shell pm uninstall com.example.app");
-        expect(commandInCall(payload("android_shell", { serial: "192.168.1.20:37005", command: "rm -rf /sdcard/old" }))).toBe(
+        const call = (name: string, args: DeviceToolCall["params"]["arguments"]) =>
+            DeviceToolCallSchema.parse({ jsonrpc: "2.0", id: 4, method: "tools/call", params: { name, arguments: args } });
+        expect(programOf(call("run_command", { command: "rm -rf ~/old-builds" }))).toEqual({
+            tool: "run_command",
+            kind: "command",
+            commandLine: "rm -rf ~/old-builds",
+        });
+        expect(programOf(call("android_shell", { command: "pm uninstall com.example.app" }))).toEqual({
+            tool: "android_shell",
+            kind: "phone-command",
+            commandLine: "adb shell pm uninstall com.example.app",
+        });
+        expect(programOf(call("android_shell", { serial: "192.168.1.20:37005", command: "rm -rf /sdcard/old" }))?.commandLine).toBe(
             "adb -s 192.168.1.20:37005 shell rm -rf /sdcard/old",
         );
         // A serial that could make the command after it read as a comment or a string is left out, not spliced in.
-        expect(commandInCall(payload("android_shell", { serial: "x #", command: "rm -rf /sdcard/old" }))).toBe("adb shell rm -rf /sdcard/old");
-        expect(commandInCall(payload("android_shell", { command: "  " }))).toBeUndefined();
-        expect(commandInCall(payload("android_screenshot", {}))).toBeUndefined();
+        expect(programOf(call("android_shell", { serial: "x #", command: "rm -rf /sdcard/old" }))?.commandLine).toBe("adb shell rm -rf /sdcard/old");
+        expect(programOf(call("android_shell", { command: "  " }))).toBeUndefined();
+        expect(programOf(call("android_screenshot", {}))).toBeUndefined();
     });
 
     it("passes at no cost when it deletes nothing, and is refused at once when the device's switch would refuse it", async () => {
@@ -365,5 +391,91 @@ describe("a command for a phone attached to the device", () => {
         const machine = judgeHostCommand(services, guards, { ...ASKED, command: "rm -rf /sdcard/Download/old" }, 20);
         expect(await machine).toMatchObject({ refusal: expect.stringMatching(/^Still waiting for the owner/) });
         expect(await judgeHostCommand(services, guards, phone, 20)).toBeUndefined();
+    });
+});
+
+describe("a program started on the device by another door than run_command", () => {
+    const call = (name: string, args: DeviceToolCall["params"]["arguments"]) =>
+        DeviceToolCallSchema.parse({ jsonrpc: "2.0", id: 5, method: "tools/call", params: { name, arguments: args } });
+    const powershell = { program: "powershell", args: ["-NoProfile", "-c", "Remove-Item -Recurse -Force $HOME\\old-builds"] };
+
+    it("reads app_start with arguments as the command it amounts to, and a bare launch as a launch", () => {
+        expect(programOf(call("app_start", powershell))).toEqual({
+            tool: "app_start",
+            kind: "command",
+            commandLine: "powershell -NoProfile -c 'Remove-Item -Recurse -Force $HOME\\old-builds'",
+        });
+        expect(programOf(call("app_start", { program: "notepad" }))).toEqual({ tool: "app_start", kind: "app-launch", commandLine: "notepad" });
+        expect(programOf(call("open", { target: "https://example.com/docs" }))).toEqual({
+            tool: "open",
+            kind: "app-launch",
+            commandLine: "https://example.com/docs",
+        });
+        expect(programOf(call("open", { target: "rm -rf /home/me/old-builds" }))).toMatchObject({ kind: "command" });
+    });
+
+    it("asks the owner about a shell started with a delete, on a card worded for running it, as run_command would", async () => {
+        const reading = programOf(call("app_start", powershell));
+        const command = reading?.commandLine ?? "";
+        expect(await judgeHostCommand(services, guards, { ...ASKED, command, kind: reading?.kind ?? "command" }, 20)).toMatchObject({
+            refusal: expect.stringMatching(/^Still waiting for the owner: a card asks them to approve running this on "rog"/),
+        });
+        const card = turnRunOf(fleet.conversations, CONVERSATION)
+            ?.rows.map((row) => row.permission)
+            .find((permission) => permission?.status === "pending");
+        expect(card).toMatchObject({ title: "Run this on rog?", toolName: "rog__run_command", program: { text: command } });
+    });
+
+    it("is refused at once, naming the switch, when the device would refuse it", async () => {
+        destructive = "off";
+        const reading = programOf(call("app_start", powershell));
+        expect(await judgeHostCommand(services, guards, { ...ASKED, command: reading?.commandLine ?? "", kind: "command" })).toMatchObject({
+            refusal: expect.stringMatching(/^Refused: this command would delete files recursively on "rog"/),
+        });
+    });
+
+    it("holds it for the owner outside a live turn, where run_command would be held", async () => {
+        const reading = programOf(call("app_start", powershell));
+        expect(await judgeHostCommand(services, guards, { machine: MACHINE, command: reading?.commandLine ?? "", kind: "command", conversationId: undefined })).toMatchObject({
+            refusal: expect.stringMatching(/^Held for the owner:/),
+        });
+    });
+
+    it("lets an ordinary launch through at no cost: no match, no judge, no card", async () => {
+        commandJudge = "on";
+        const launches: [string, DeviceToolCall["params"]["arguments"]][] = [
+            ["app_start", { program: "notepad" }],
+            ["app_start", { program: "C:\\Program Files\\Tool\\tool.exe", args: ["--open", "report.pdf"] }],
+            ["open", { target: "https://example.com/docs" }],
+            ["open", { target: "C:\\Users\\me\\report.pdf" }],
+        ];
+        for (const [tool, args] of launches) {
+            const reading = programOf(call(tool, args));
+            expect(await judgeHostCommand(services, guards, { ...ASKED, command: reading?.commandLine ?? "", kind: reading?.kind ?? "command" }), tool).toBeUndefined();
+        }
+        expect(askedOfJudge).toEqual([]);
+    });
+
+    it("gives the judge a launch to read as a launch when the path it opens trips the table, and a command as a command", async () => {
+        commandJudge = "on";
+        const opening = programOf(call("open", { target: "C:\\Users\\me\\.ssh\\id_rsa" }));
+        expect(opening?.kind).toBe("app-launch");
+        expect(await judgeHostCommand(services, guards, { ...ASKED, command: opening?.commandLine ?? "", kind: "app-launch" })).toBeUndefined();
+        expect(askedOfJudge).toEqual([{ program: "C:\\Users\\me\\.ssh\\id_rsa", language: "app launch", consequences: ["read credential material"] }]);
+
+        askedOfJudge.length = 0;
+        expect(await judgeHostCommand(services, guards, { ...ASKED, command: "cat ~/.ssh/id_rsa", kind: "command" })).toBeUndefined();
+        expect(askedOfJudge).toEqual([{ program: "cat ~/.ssh/id_rsa", language: "bash", consequences: ["read credential material"] }]);
+    });
+
+    it("names an app launch as one on its card, when the owner is asked", async () => {
+        // The hard rule asks whatever the judge says: a launched program whose own name is a delete.
+        expect(await judgeHostCommand(services, guards, { ...ASKED, command: "rm -rf ~/old-builds", kind: "app-launch" }, 20)).toMatchObject({
+            refusal: expect.stringMatching(/^Still waiting for the owner/),
+        });
+        const card = turnRunOf(fleet.conversations, CONVERSATION)
+            ?.rows.map((row) => row.permission)
+            .find((permission) => permission?.status === "pending");
+        expect(card).toMatchObject({ title: "Start this on rog?", displayName: "Start on rog", toolName: "rog__app_start" });
     });
 });

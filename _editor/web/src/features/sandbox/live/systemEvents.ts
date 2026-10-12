@@ -16,7 +16,6 @@ import { throttleTrailing } from "../../../lib/throttleTrailing";
 import { setPresenceUsers } from "../../../workbench/presence/usePresence";
 import { landingNow } from "../../workspace/changes/landing";
 import { applyTreeChanged, markDerivedChanged, markWorkspaceChanged, worktreeMovedRecently } from "../../workspace/changes/live/useWorkspaceLive";
-import { emitRuntimeChanged } from "./runtimeEvents";
 import { daemonRebuilt, dropSandboxLocalState, sandboxQueryPredicate, workspaceReplaced } from "./systemEventRouting";
 import { setDaemonBoot } from "../../../client/sandbox/useDaemonBoot";
 import { setDaemonRoutes } from "../../../client/sandbox/useDaemonRoutes";
@@ -58,7 +57,7 @@ const reconnectChannels = {
     accountUsage: undefined,
     providerRefusal: undefined,
     agents: undefined,
-    runtimeChanged: () => emitRuntimeChanged([]),
+    runtimeChanged: undefined,
     reposChanged: () => emitReposChanged([]),
     refsChanged: () => emitRefsChanged([]),
     derivedChanged: () => markDerivedChanged([]),
@@ -175,9 +174,6 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
             for (const key of staleRuntimeQueryKeys(event.domains).flatMap(pushedKeys)) {
                 void invalidatePushedQueries(queryClient, { queryKey: key });
             }
-            // Same frame, announced for readers that hold plain refs instead of queries (pairing cards), so they need
-            // no poll.
-            emitRuntimeChanged(event.domains);
             return;
         case `reposChanged`:
             // Watcher never sees `.git` paths, so no workspaceChanged batch covers this; the daemon diffs its own repo

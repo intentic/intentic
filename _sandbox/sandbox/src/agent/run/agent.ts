@@ -520,6 +520,7 @@ const baseOptions = (
                     log: request.hooks.logSafety,
                     answered: request.hooks.safetyAnswered,
                     remember: request.hooks.rememberSafety,
+                    rememberFailed: request.hooks.rememberSafetyFailed,
                     // The same install rule and ledger every runtime's gate is built with (vendor-gate.ts).
                     installs: request.hooks.projectInstalls,
                     onImageInstall: request.hooks.onImageInstall,

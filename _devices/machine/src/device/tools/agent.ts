@@ -5,7 +5,7 @@ import type { DeviceAgentOp } from "@intentic/sandbox-contract";
 import { agentLogPath } from "../../config.js";
 import { installedBuild } from "../../installed.js";
 import { machineLauncher } from "../../resident/supervision.js";
-import { CUTOVER_HOLDS_MS } from "../sandbox-rounds/swap-records.js";
+import { SWAP_WAIT_MAX_MS } from "../sandbox-rounds/swap-records.js";
 import { icSwapsInFlight } from "./sandboxes.js";
 
 // Updates or restarts this device's own agent, asked for from the browser. Both operations stop the process
@@ -60,14 +60,14 @@ const settled: Record<DeviceAgentOp, string> = {
 // The ops that end in this agent restarting.
 const RESTARTS: ReadonlySet<DeviceAgentOp> = new Set<DeviceAgentOp>(["upgrade", "restart"]);
 
-// A swap this process is running, which the detached command cannot see (it reads ic's records of a cutover, in
+// A swap this process is running, which the detached command cannot see (it asks ic about cutovers, in
 // supervision.ts): the restart waits for it here, so this agent never stops under an ic it started.
 const waitOutOwnSwaps = async (onLine: (line: string) => void): Promise<void> => {
     if (icSwapsInFlight.size === 0) {
         return;
     }
     onLine(`Waiting for ${[...icSwapsInFlight].join(", ")} to finish first: restarting this agent in the middle of a swap could leave that sandbox down.`);
-    await pollUntil(() => icSwapsInFlight.size === 0, { intervalMs: 1_000, timeoutMs: CUTOVER_HOLDS_MS });
+    await pollUntil(() => icSwapsInFlight.size === 0, { intervalMs: 1_000, timeoutMs: SWAP_WAIT_MAX_MS });
 };
 
 export const runAgentOp = async (op: DeviceAgentOp, onLine: (line: string) => void): Promise<string> => {

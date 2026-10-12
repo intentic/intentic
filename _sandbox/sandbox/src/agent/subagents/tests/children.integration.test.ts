@@ -1856,7 +1856,7 @@ describe("a child whose allowance runs out", () => {
         const parentTurns = fakeTurns();
         await reportChildTurn(
             {
-                doors: { turns: parentTurns.turns, sessionIdOf: () => undefined },
+                doors: { turns: parentTurns.turns },
                 logger: services.logger,
                 conversations: fleet.conversations,
                 entryOf: (conversationId) => {

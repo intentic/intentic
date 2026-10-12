@@ -1,11 +1,10 @@
 import { join } from "node:path";
-import type { DeviceFlowLine } from "@intentic/sandbox-contract";
+import type { DeviceFlowLine, RestartIntent } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { logsRoot } from "../seams/logs-root.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDocument } from "../store/open-document.js";
 import { writeRestartIntent } from "./boot/restarts/boot-marker.js";
-import type { RestartIntent } from "./boot/restarts/restart-record.js";
 
 // A RESTART THE OWNER STARTED AND ASKED TO PICK UP AFTER. With autoResumeOnRestart off, a turn a restart cuts is recorded
 // as interrupted and waits for a message, and after a rebuild the owner started with four agents mid-turn they sat

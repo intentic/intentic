@@ -72,7 +72,7 @@ export const tunnelHandler = <Config>(spec: TunnelKind<Config>): CapabilityHandl
         const driver = spec.driverOf(config);
         // Persist first: the manifest entry puts the fragment into the overlay before the client is installed.
         await driver.write(id, config);
-        await writeLoadedSkill(ctx.files, ctx.workspace.root, spec.skill.name, spec.skill.text);
+        await writeLoadedSkill(ctx.files, ctx.workspace.root, spec.skill.name, spec.skill.text, "tunnel");
         // Re-applying must never leave the old instance running: take it down, then bring it back below if wanted.
         await spec.down(entry);
         if (!spec.wanted(config)) {

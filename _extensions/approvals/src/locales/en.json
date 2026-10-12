@@ -93,7 +93,8 @@
         "cancelItem": "Cancel {item}",
         "startItem": "Start {item}",
         "approveItem": "Approve {item}",
-        "invalidFiles": "{count} file couldn't be read and won't run: | {count} files couldn't be read and won't run:"
+        "invalidFiles": "{count} file couldn't be read and won't run: | {count} files couldn't be read and won't run:",
+        "unreadableHeldWakes": "{count} held automation couldn't be read and can't be released: | {count} held automations couldn't be read and can't be released:"
     },
     "extension": {
         "approvals": "Approvals"

@@ -42,7 +42,7 @@ const fakeServices = (root: string, appends: ActivityEvent[] = []): Services =>
         extensionBackend: unstubbed<Services["extensionBackend"]>("extensionBackend", { verifyExtensionToken: (presented) => GRANTS[presented] }),
         automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
-        heldWakes: fileHeldWakesStore(join(root, "approvals")),
+        heldWakes: fileHeldWakesStore(join(root, "history")),
         capabilities: fileCapabilitiesStore(join(root, "capabilities.json")),
         threadSessions: fileThreadSessionsStore(join(root, "thread-sessions.json"), () => false),
         senders: fileSendersStore(join(root, "senders.json")),

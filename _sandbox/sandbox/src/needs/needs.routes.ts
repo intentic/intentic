@@ -3,7 +3,7 @@ import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../app-env.js";
 import type { Caller } from "../auth/auth.js";
 import { NeedRefusal, type Needs } from "./needs.js";
-import { revokeGrant, standingGrants, type StandingGrantsDeps } from "./standing-grants.js";
+import { isOwnerRevoke, revokeGrant, standingGrants, type StandingGrantsDeps } from "./standing-grants.js";
 
 // The needs door (docs/architecture/needs.md): the agent's CLIs raise and withdraw on the agent token, naming their
 // conversation by the header every agent CLI sends; a person lists and answers what they may see of the fleet.
@@ -68,10 +68,17 @@ export const createNeedsRoutes = ({ needs, grants, visible }: NeedsRoutesDeps) =
         }),
         // As visible as the conversations they widened, like the needs that made them.
         grants: i.grants.handler(async ({ context }) => {
-            const { conversations } = await standingGrants(grants);
-            return { conversations: conversations.filter((conversation) => visible(context.identity, conversation.conversationId)) };
+            const { conversations, ...ownerWide } = await standingGrants(grants);
+            return { conversations: conversations.filter((conversation) => visible(context.identity, conversation.conversationId)), ...ownerWide };
         }),
         revokeGrant: i.revokeGrant.handler(async ({ input, context }) => {
+            // An owner-wide yes names no conversation, so there is no fleet to be hidden from: the route's floor is the gate.
+            if (isOwnerRevoke(input)) {
+                if (!(await revokeGrant(grants, input))) {
+                    throw new ORPCError("NOT_FOUND", { message: `Nothing like that is allowed: "${input.what}" is not one of the standing ${input.kind} yeses.` });
+                }
+                return { ok: true } as const;
+            }
             if (!visible(context.identity, input.conversationId) || !(await revokeGrant(grants, input))) {
                 throw new ORPCError("NOT_FOUND", { message: `Nothing like that is allowed to this conversation: "${input.what}" is not one of its ${input.kind} grants.` });
             }

@@ -13,7 +13,18 @@ import { execMachine, type FlyExecAnswer, type FlyMachineCurrent, getMachineConf
 import { withHostedAppLock } from "../hosted-app-lock.js";
 import { ENV_PROJECT_DIR } from "../hosted-project.js";
 import { awaitDaemon, baselineOf, type DaemonVerdict } from "./daemon-health.js";
-import { checkInSince, type HostedGateRecord, type HostedImageFacts, imageColumns, type KeptImage, type KeptVersions, keptVersionsOf, writeKept } from "./gate-row.js";
+import {
+    checkInSince,
+    type HostedGateRecord,
+    type HostedImageFacts,
+    imageColumns,
+    type KeptImage,
+    type KeptVersions,
+    keptVersionsOf,
+    PROBATION_ENDS,
+    probationBegins,
+    writeKept,
+} from "./gate-row.js";
 import { startAfterUpdate } from "./start-after-update.js";
 
 /* A HOSTED IMAGE CHANGE ASKS THE TARGET IMAGE FIRST, WAITS FOR ITS DAEMON AFTER, AND PUTS THE MACHINE BACK WHEN EITHER
@@ -307,6 +318,10 @@ export interface HostedSwitchOptions {
     // absent, a change of digest clears the one kept.
     readonly skip?: string | null | undefined;
     readonly words?: HostedChangeWords | undefined;
+    // Whether an image that came up is put on probation (hosted-probation.ts): the default. The watch's own way back is
+    // not, since the version it puts back has no earlier one to be sent to in turn, and two failing versions would be
+    // handed to each other for ever.
+    readonly probation?: boolean | undefined;
     readonly logger?: Logger | undefined;
 }
 
@@ -389,6 +404,20 @@ interface Versions {
     readonly lastGood: Version;
 }
 
+/* WHAT A CHANGE DOES TO THE PROBATION. An image seen to come up, with a version kept to go back to, is on probation from
+ * now (hosted-probation.ts); one that has not been seen to come up is judged by its next start, and an earlier image's
+ * probation is not its own; so is a change that kept no way back or is not to be watched. */
+const probationOf = (
+    hasWayBack: boolean,
+    change: { readonly onTrial: boolean; readonly moved: boolean },
+    options: HostedSwitchOptions,
+): Prisma.HostedMachineUpdateInput => {
+    if (change.onTrial) {
+        return change.moved ? PROBATION_ENDS : {};
+    }
+    return hasWayBack && options.probation !== false ? probationBegins(new Date()) : PROBATION_ENDS;
+};
+
 /* THE ROW ONCE THE MACHINE HOLDS `target`, running and seen healthy, or ON TRIAL. The way back is the last version seen
  * good, unless the target is that very version (the owner going back while the image held was on trial), when it is
  * the one left. A way back that is not pinned is no way back: a tag would re-resolve to whatever it names by then. */
@@ -408,6 +437,7 @@ const noteChange = async (target: string, versions: Versions, change: { readonly
     if (options.facts !== undefined) {
         Object.assign(data, imageColumns(target, options.facts));
     }
+    Object.assign(data, probationOf(previousImage !== null, change, options));
     await writeKept(options.record, data, options.logger);
 };
 

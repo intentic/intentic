@@ -1,6 +1,6 @@
 import { rmSync } from "node:fs";
 import { join } from "node:path";
-import { z } from "zod";
+import { type ReadRestartIntent, ReadRestartIntentSchema, type RestartAction as ContractRestartAction } from "@intentic/sandbox-contract";
 import { opt } from "../../../opt.js";
 import { readJsonMarkerSync } from "../../../store/plain-files/json-marker.js";
 
@@ -20,39 +20,21 @@ export const RESTARTS_KEPT = 500;
 // never restarted must not be blamed for an unrelated restart hours later (as restart-resume.ts's ask).
 export const INTENT_STANDS_MS = 2 * 60 * 60_000;
 
-export type RestartInitiator = "owner" | "daemon" | "ic" | "keeper" | "desktop";
-export type RestartAction = "restart" | "stop" | "update" | "swap" | "reshape" | "recreate" | "rebuild";
+// What a writer puts in RESTART_INTENT_FILE is the contract's RestartIntentSchema: the daemon, ic and the device keeper write
+// it from three languages, and one schema enumerates who may act and what they may do. A writer here is held to it
+// (boot-marker.ts writeRestartIntent); the golden/host-files.json pins ic's and the keeper's.
 
-// What a writer puts in RESTART_INTENT_FILE. Pinned with the device keeper's and ic's writers, which are TypeScript and
-// Rust of their own, so the shape is spelled out field by field rather than derived.
-export interface RestartIntent {
-    // ISO time it was written, right before the stop it announces.
-    readonly at: string;
-    readonly by: RestartInitiator;
-    // The machine the initiator runs on, and which side of it.
-    readonly host?: string;
-    readonly side?: "wsl" | "windows" | "linux" | "mac";
-    readonly action: RestartAction;
-    readonly reason: string;
-    // For a keeper's repair: the health checks that failed and made it act.
-    readonly checks?: readonly string[];
-}
+// Read leniently: a writer newer than this daemon may name an initiator, an action or a side it does not know, and that
+// intent still says more than none (the contract's ReadRestartIntentSchema). Only `at` is held to its meaning, since
+// freshness is decided on it.
+export type ReadIntent = ReadRestartIntent;
 
-// Read leniently: a writer newer than this daemon may name an initiator or action it does not know, and that intent
-// still says more than none. Only `at` is held to its meaning, since freshness is decided on it.
-const IntentOnDisk = z.object({
-    at: z.string().refine((at) => Number.isFinite(Date.parse(at))),
-    by: z.string().min(1),
-    host: z.string().optional(),
-    side: z.string().optional(),
-    action: z.string().min(1),
-    reason: z.string(),
-    checks: z.array(z.string()).optional(),
-});
-export type ReadIntent = z.infer<typeof IntentOnDisk>;
+// What the daemon's own stops and a device op's restart name themselves by (daemon-stop.ts, hosts/devices.routes.ts): the
+// contract's words, so a new action is added once.
+export type RestartAction = ContractRestartAction;
 
 // An intent that is missing, torn or unreadable explains no stop, and the boot reads it as none.
-export const readRestartIntent = (logsDir: string): ReadIntent | undefined => readJsonMarkerSync(join(logsDir, RESTART_INTENT_FILE), IntentOnDisk);
+export const readRestartIntent = (logsDir: string): ReadIntent | undefined => readJsonMarkerSync(join(logsDir, RESTART_INTENT_FILE), ReadRestartIntentSchema);
 
 export const removeRestartIntent = (logsDir: string): void => {
     rmSync(join(logsDir, RESTART_INTENT_FILE), { force: true });

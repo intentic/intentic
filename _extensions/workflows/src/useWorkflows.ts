@@ -1,5 +1,5 @@
 import type { DoorToken, Workflow, WorkflowRun, WorkflowSaved, WorkflowSummary } from "@intentic/sandbox-contract";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { host } from "./host";
 import { workflowRunsQuery } from "./runsQuery";
@@ -15,15 +15,13 @@ export function useWorkflows() {
     // Shared with the rail badge's poll; whichever asks first fills the entry the other paints from.
     const runs = workflowRunsQuery();
     const runsKey = runs.queryKey;
-    const enabled = computed(() => api.sandbox.reachable());
 
-    const query = useQuery({
+    const { query, error } = api.sandbox.query({
         queryKey,
         queryFn: () => api.sandbox.rpc.workflows.list(),
         select: (answer): WorkflowSummary[] => answer.workflows,
-        enabled,
     });
-    const runsQuery = useQuery({ ...runs, enabled, select: (answer): WorkflowRun[] => answer.runs });
+    const { query: runsQuery, error: runsError } = api.sandbox.query({ ...runs, select: (answer): WorkflowRun[] => answer.runs });
 
     const invalidate = async (): Promise<void> => {
         await queryClient.invalidateQueries({ queryKey });
@@ -60,7 +58,7 @@ export function useWorkflows() {
         runs: computed<WorkflowRun[]>(() => runsQuery.data.value ?? []),
         // Whether the ledger has actually loaded, since an empty `runs` means both that and still-loading.
         runsLoaded: runsQuery.isSuccess,
-        error: computed(() => query.error.value?.message ?? runsQuery.error.value?.message),
+        error: computed(() => error.value ?? runsError.value),
         isLoading: query.isLoading,
         save,
         rotateGateToken,

@@ -21,8 +21,10 @@ pub const HEALTH_URL: &str = concat!(daemon_origin!(), "/health");
 /// answers it before it would wait for Node.
 const VITALS_URL: &str = concat!(daemon_origin!(), "/system/vitals");
 
-/// Restarts that make a crash loop, the editor's own threshold (diagnose.ts CRASH_LOOP_RESTARTS), whoever counts them:
-/// netd restarting a crashed daemon inside a container that stays up, or Docker restarting the container. Docker's
+/// Restarts that make a crash loop, whoever counts them: netd restarting a crashed daemon inside a container that
+/// stays up, or Docker restarting the container. The contract's `CRASH_LOOP_RESTARTS`
+/// (_shared/sandbox-contract/src/state/update-probation.ts) is this number, which the platform's hosted gate and the
+/// editor's diagnose.ts import; golden/update-probation.json holds the two together (the test in probation.rs). Docker's
 /// restart count never sees the first kind: netd stays up, and so does the container, whatever its PID 1 (docker's
 /// tini under `--init` locally, netd itself on a hosted machine, Fly's init on Fly).
 pub const CRASH_LOOP_RESTARTS: u32 = 3;

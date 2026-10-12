@@ -33,6 +33,7 @@ import { prepareTmuxServer } from "../terminal/tmux-server.js";
 import type { RunnerModeEnv } from "../runners/runner-mode.js";
 import { seedStarterSite } from "../scaffold/starter-site.js";
 import { linkClaudeState } from "../sessions/session-store.js";
+import { retireSkills } from "../settings/skill-retirement.js";
 import { reconcileBakedSkills } from "../settings/skills.js";
 import type { BootPhase } from "./boot-phase.js";
 import { convergeProjectNote } from "./projects/project-note.js";
@@ -122,10 +123,26 @@ const seedDefinition = async ({ config, logger, services, runnerEnv }: BootRun):
     logger.info({ report }, "sandbox definition seeded; its needsAction list is the owner's arrival checklist");
 };
 
-// The approvals skill and the baked-tool skills settings name, before the baseline commit; an owner's own skill file is
-// never created or deleted here.
-const convergeSkills = async ({ logger, services }: BootRun): Promise<void> => {
+// The approvals skill and the baked-tool skills settings name, then the skills a release retired (to the trash), before
+// the baseline commit; an owner's own skill file is never created or deleted here.
+const convergeSkills = async (run: BootRun): Promise<void> => {
+    const { logger, services } = run;
     await ensureApprovalsSkill(services).catch((error: unknown) => logger.warn({ err: error }, "approvals skill not converged"));
+    await reconcileSkills(run);
+    try {
+        const pass = await retireSkills(services, run.config.historyRoot);
+        if (pass.trashed.length > 0 || pass.skipped.length > 0) {
+            logger.info(
+                { trashed: pass.trashed, kept: pass.kept, skipped: pass.skipped },
+                "skills: retired daemon skills moved to the trash; skipped ones were left as they are",
+            );
+        }
+    } catch (error) {
+        logger.warn({ err: error }, "skills: the retired-skill pass could not list the loaded skills, nothing was removed");
+    }
+};
+
+const reconcileSkills = async ({ logger, services }: BootRun): Promise<void> => {
     try {
         const { settings, unreadable } = await services.sandboxSettings.load();
         // Defaults standing in for an unreadable file are nobody's choice, so they switch no tool.

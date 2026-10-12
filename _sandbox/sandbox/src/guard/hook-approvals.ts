@@ -6,6 +6,7 @@ import {
     HookPluginSchema,
     type HookRequests,
     HookScriptSchema,
+    type SettingsHook,
     SettingsHookSchema,
     type TurnNote,
 } from "@intentic/sandbox-contract";
@@ -138,6 +139,35 @@ export const hookRequests = async (historyRoot: string): Promise<HookRequests> =
     return { requests, ...(ledger.unreadable ? { ledgerUnreadable: true } : {}) };
 };
 
+// The sets the owner approved and that still stand, newest first, for the list where a yes is taken back (the Access tab's
+// Sandbox-wide permissions). An unreadable ledger approves nothing, so it reads as no sets, and `unreadable` says why.
+export const approvedHookSets = async (
+    historyRoot: string,
+): Promise<{ readonly sets: readonly { readonly digest: string; readonly approvedAt: number; readonly hooks: readonly SettingsHook[] }[]; readonly unreadable: boolean }> => {
+    const { approved: pins, unreadable } = await ledgerOf(historyRoot).read();
+    const sets = Object.entries(pins)
+        .map(([digest, pin]) => ({ digest, approvedAt: pin.approvedAt, hooks: pin.hooks }))
+        .toSorted((left, right) => right.approvedAt - left.approvedAt);
+    return { sets, unreadable };
+};
+
+// Takes the approval back: from the next turn this exact set is unapproved again, and the first turn to find it asks
+// afresh. Whether there was a set approved by that digest to take back.
+export const revokeHookSet = async (historyRoot: string, digest: string): Promise<boolean> => {
+    let found = false;
+    await ledgerOf(historyRoot).update((pins) => {
+        if (!Object.hasOwn(pins, digest)) {
+            return pins;
+        }
+        found = true;
+        return Object.fromEntries(Object.entries(pins).filter(([pinned]) => pinned !== digest));
+    });
+    if (found) {
+        publishRuntimeChange("approvals", "grants");
+    }
+    return found;
+};
+
 // Pins a set a turn found; false when no turn found one by that digest, so a digest is never approved unseen.
 export const approveHookSet = async (historyRoot: string, digest: string, now = Date.now()): Promise<boolean> => {
     const request = (await requestsOf(historyRoot).read()).requests[digest];
@@ -146,7 +176,8 @@ export const approveHookSet = async (historyRoot: string, digest: string, now = 
     }
     await ledgerOf(historyRoot).update((pins) => ({ ...pins, [digest]: { approvedAt: now, hooks: request.hooks } }));
     await requestsOf(historyRoot).update(({ requests: { [digest]: _approved, ...rest } }) => ({ requests: rest }));
-    publishRuntimeChange("approvals");
+    // The set now stands among the yeses the owner can take back as well.
+    publishRuntimeChange("approvals", "grants");
     return true;
 };
 

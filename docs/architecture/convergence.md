@@ -49,7 +49,11 @@ flowchart LR
 4. **Converge on a level, not an event.** Clean-ups run as standing passes that list the live system, not only at
    start or once behind a marker:
    - the device agent's upkeep pass, every 6 hours ([`upkeep/`](../../_devices/machine/src/upkeep));
-   - the daemon's persistent chore clock ([`boot-chores.ts`](../../_sandbox/sandbox/src/bootstrap/boot-chores.ts));
+   - the daemon's persistent chore clock ([`boot-chores.ts`](../../_sandbox/sandbox/src/bootstrap/boot-chores.ts)),
+     which also holds the retention passes (aged agents, aged state, logs, finished terminals);
+   - the daemon's boot pass over `.agents/skills/`, which sets aside a skill a release retired
+     ([`skill-retirement.ts`](../../_sandbox/sandbox/src/settings/skill-retirement.ts)) and leaves one it cannot read
+     or attribute;
    - the platform's daily sweeps, including the app-shape check;
    - the deploy engine's daily drift check.
 5. **Every store has a retention**, and goes through a trash first wherever a person might want it back:

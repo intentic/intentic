@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { diffPowerMaps, type ExtensionManifest, powersOf, type PowersDiff } from "@intentic/extension-manifest";
 import { z } from "zod";
+import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openApprovalLedger } from "../store/open-document.js";
 
@@ -52,6 +53,8 @@ export const approveExtension = async (historyRoot: string, id: string, manifest
     const powers = powersOf(manifest);
     const pin = { digest: digestOf(powers), powers: Object.fromEntries(powers), approvedAt: now };
     await ledgerOf(historyRoot).update((approved) => ({ ...approved, [id]: pin }));
+    // It now stands among the yeses the owner can take back (needs/standing-grants.ts).
+    publishRuntimeChange("grants");
 };
 
 // A removed extension written again later asks again, whatever it declares.
@@ -63,4 +66,35 @@ export const forgetExtensionApproval = async (historyRoot: string, id: string): 
         const { [id]: _forgotten, ...rest } = approved;
         return rest;
     });
+    publishRuntimeChange("grants");
+};
+
+// The extensions the owner approved and that still stand, newest first, for the list where a yes is taken back (the Access
+// tab's Sandbox-wide permissions): each with the powers it was approved for, in the sentences the approval card showed. An
+// unreadable ledger approves nothing, so it reads as no extensions, and `unreadable` says why.
+export const approvedExtensions = async (
+    historyRoot: string,
+): Promise<{ readonly extensions: readonly { readonly id: string; readonly powers: readonly string[]; readonly approvedAt: number }[]; readonly unreadable: boolean }> => {
+    const { approved, unreadable } = await ledgerOf(historyRoot).read();
+    const extensions = Object.entries(approved)
+        .map(([id, pin]) => ({ id, powers: Object.values(pin.powers), approvedAt: pin.approvedAt }))
+        .toSorted((left, right) => right.approvedAt - left.approvedAt);
+    return { extensions, unreadable };
+};
+
+// Whether there was an approval to take back. The extension's folder is untouched: it goes back to waiting for a yes,
+// exactly as it stood before it was approved.
+export const revokeExtensionApproval = async (historyRoot: string, id: string): Promise<boolean> => {
+    let found = false;
+    await ledgerOf(historyRoot).update((approved) => {
+        if (!Object.hasOwn(approved, id)) {
+            return approved;
+        }
+        found = true;
+        return Object.fromEntries(Object.entries(approved).filter(([pinned]) => pinned !== id));
+    });
+    if (found) {
+        publishRuntimeChange("grants");
+    }
+    return found;
 };

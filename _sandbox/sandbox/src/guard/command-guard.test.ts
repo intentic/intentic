@@ -37,8 +37,11 @@ interface Harness {
     readonly logged: SafetyLogEntry[];
     // Every set of facts the judge was handed.
     readonly seen: { program: string; facts: JudgeFacts }[];
-    // Lines accepted on a card and appended to the owner's policy.
+    // Lines accepted on a card and kept as owner-wide grants, with who accepted each (the verified reply's email).
     readonly remembered: string[];
+    readonly rememberedBy: (string | undefined)[];
+    // Lines `remember` could not keep, with why.
+    readonly notKept: { line: string; reason: string }[];
     readonly abort: () => void;
 }
 
@@ -49,6 +52,8 @@ const harness = (options: Partial<CommandGuardOptions> = {}): Harness => {
     const logged: SafetyLogEntry[] = [];
     const seen: { program: string; facts: JudgeFacts }[] = [];
     const remembered: string[] = [];
+    const rememberedBy: (string | undefined)[] = [];
+    const notKept: { line: string; reason: string }[] = [];
     const controller = new AbortController();
     const judge = options.judge;
     const matchers = commandGateHooks({
@@ -68,9 +73,11 @@ const harness = (options: Partial<CommandGuardOptions> = {}): Harness => {
                 Object.assign(entry, { answer, outcome });
             }
         },
-        remember: async (line) => {
+        remember: async (line, by) => {
             remembered.push(line);
+            rememberedBy.push(by);
         },
+        rememberFailed: (line, reason) => notKept.push({ line, reason }),
         ...options,
         // Wraps rather than replaces `judge`, so every test records facts without opting in.
         ...(judge === undefined
@@ -94,6 +101,8 @@ const harness = (options: Partial<CommandGuardOptions> = {}): Harness => {
         logged,
         seen,
         remembered,
+        rememberedBy,
+        notKept,
         abort: () => controller.abort(),
         run: (command) =>
             hookFor("Bash")({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command } }, undefined, {
@@ -603,17 +612,67 @@ describe("command gate: what an answer remembers", () => {
         expect(gate.events.filter((event) => event.kind === "permission")).toHaveLength(2);
     });
 
-    // The Always button edits the policy; its label is the exact line that would be written.
-    test("the card offers the judge's proposed line as the always label, and accepting it appends it", async () => {
+    // The Always button keeps an owner-wide grant; its label is the exact line that would be kept.
+    test("the card offers the judge's proposed line as the always label, and accepting it keeps it, naming who accepted it", async () => {
         const gate = harness({ judge: always("ask", `Deletes the build directory.`, `Deleting build directories under /work is fine.`) });
         const pending = gate.run("rm -rf build");
         await settled();
         const card = cardOf(gate.events);
         expect(card.alwaysLabel).toContain("Deleting build directories under /work is fine.");
-        cards.resolve({ kind: "permission", requestId: card.requestId, decision: "always" });
+        cards.resolve({ kind: "permission", requestId: card.requestId, decision: "always" }, { email: "ada@acme.dev", role: "maintainer" });
         await pending;
-        await settled();
         expect(gate.remembered).toEqual(["Deleting build directories under /work is fine."]);
+        expect(gate.rememberedBy).toEqual(["ada@acme.dev"]);
+    });
+
+    // The line is kept before the command goes on: a restart right after the yes must not ask the owner again, which a
+    // write the command did not wait for could not promise.
+    test("the line is kept before the command is let through, not after", async () => {
+        const order: string[] = [];
+        const gate = harness({
+            judge: always("ask", `Deletes the build directory.`, `Deleting build directories under /work is fine.`),
+            remember: async () => {
+                await settled();
+                order.push("kept");
+            },
+        });
+        const pending = gate.run("rm -rf build").then((out) => {
+            order.push("allowed");
+            return out;
+        });
+        await settled();
+        cards.resolve({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "always" });
+        expect(await pending).toEqual({});
+        expect(order).toEqual(["kept", "allowed"]);
+    });
+
+    // The command already has the owner's yes and runs; the line that did not stick is said, naming it.
+    test("a line that cannot be kept is reported with its reason and does not stop the command the owner just allowed", async () => {
+        const gate = harness({
+            judge: always("ask", `Deletes the build directory.`, `Deleting build directories under /work is fine.`),
+            remember: async () => {
+                throw new Error("owner-grants.json could not be read");
+            },
+        });
+        const pending = gate.run("rm -rf build");
+        await settled();
+        cards.resolve({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "always" });
+        expect(await pending).toEqual({});
+        expect(gate.notKept).toEqual([{ line: "Deleting build directories under /work is fine.", reason: "owner-grants.json could not be read" }]);
+    });
+
+    test("an allow-once keeps nothing, and a decline keeps nothing", async () => {
+        const gate = harness({ judge: always("ask", `Deletes the build directory.`, `Deleting build directories under /work is fine.`) });
+        const once = gate.run("rm -rf build");
+        await settled();
+        cards.resolve({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "once" });
+        await once;
+        const declined = gate.run("rm -rf dist");
+        await settled();
+        cards.resolve({ kind: "permission", requestId: gate.events.filter((event) => event.kind === "permission")[1]?.requestId ?? "", decision: "deny" });
+        await declined;
+        expect(gate.remembered).toEqual([]);
+        expect(gate.notKept).toEqual([]);
     });
 
     // No Always button when the judge proposed no line to write; it must never silently mean "just this turn".

@@ -87,6 +87,15 @@ pub fn slug_from_token(token: &str) -> String {
     sha256_hex(token.as_bytes())[..12].to_string()
 }
 
+/// The slug a hostname names a sandbox by: its first label, lowercased as DNS reads it; None for an empty label. What
+/// `ic sandbox connect` names a container by when the platform gave the sandbox a public hostname, and what the
+/// launcher and the machine agent address it by (sandbox-run's `slugOfHostname`): one rule, the same vectors in
+/// names.fixture.json. Pure.
+pub fn slug_of_hostname(hostname: &str) -> Option<String> {
+    let label = hostname.split('.').next().unwrap_or("").to_lowercase();
+    (!label.is_empty()).then_some(label)
+}
+
 /// `YYYYmmdd-HHMMSS` (UTC) for log-file names. Hand-derived from the epoch (Howard Hinnant's
 /// civil-from-days) rather than pulling a date crate for one filename; UTC on purpose — the name only has
 /// to sort and be readable, and local-offset lookup is the part of every date crate that grows platform hair.
@@ -193,11 +202,47 @@ pub fn normalize_host_name(raw: &str) -> String {
 mod tests {
     use super::*;
 
+    /// The run contract's own record of these digests and slugs (`@intentic/sandbox-run`'s names.fixture.json), which the
+    /// contract's `sandboxIdFromToken`, the browser's `sandboxIdOfToken` and `slugOfHostname` are held to as well.
+    const SHARED: &str = include_str!("../../../_shared/sandbox-run/src/names.fixture.json");
+
+    fn shared() -> serde_json::Value {
+        serde_json::from_str(SHARED).expect("JSON")
+    }
+
     #[test]
     fn slug_matches_the_scripts_derivation() {
         // printf '%s' token | sha256sum | cut -c1-12
         assert_eq!(slug_from_token("token"), "3c469e9d6c58");
         assert_eq!(slug_from_token("token").len(), 12);
+    }
+
+    #[test]
+    fn the_slug_of_every_token_in_the_shared_record_is_the_one_the_other_languages_derive() {
+        let shared = shared();
+        let vectors = shared["sandboxIds"]["vectors"].as_array().expect("vectors");
+        assert!(vectors.len() >= 4, "the record holds the vectors it should");
+        for vector in vectors {
+            let token = vector["token"].as_str().expect("token");
+            assert_eq!(slug_from_token(token), vector["id"].as_str().expect("id"));
+        }
+    }
+
+    #[test]
+    fn the_slug_of_every_hostname_in_the_shared_record_is_the_one_the_launcher_addresses_it_by() {
+        let shared = shared();
+        let vectors = shared["hostnameSlugs"]["vectors"]
+            .as_array()
+            .expect("vectors");
+        assert!(vectors.len() >= 5, "the record holds the vectors it should");
+        for vector in vectors {
+            let hostname = vector["hostname"].as_str().expect("hostname");
+            assert_eq!(
+                slug_of_hostname(hostname).as_deref(),
+                vector["slug"].as_str(),
+                "{hostname}"
+            );
+        }
     }
 
     #[test]

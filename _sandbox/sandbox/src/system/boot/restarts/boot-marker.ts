@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import { writeFileAtomicSync } from "@intentic/base/fs";
+import { type RestartIntent, RestartIntentSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import type { Logger } from "pino";
 import { opt } from "../../../opt.js";
@@ -16,7 +17,6 @@ import {
     readRestartIntent,
     removeRestartIntent,
     RESTART_INTENT_FILE,
-    type RestartIntent,
     type RestartRecord,
     RESTARTS_FILE,
     RESTARTS_KEPT,
@@ -223,10 +223,15 @@ export const claimBootMarker = (
     };
 };
 
-/** Writes the intent, replacing any earlier one; synchronous, as a stop may follow at once. */
+/**
+ * Writes the intent, replacing any earlier one; synchronous, as a stop may follow at once. Held to the contract's
+ * RestartIntentSchema on the way out, so a writer that names an initiator or an action the readers do not have fails
+ * here, naming it, instead of leaving a file the next boot reads as someone unknown.
+ */
 export const writeRestartIntent = (logsDir: string, intent: Omit<RestartIntent, "at"> & { readonly at?: string }): void => {
+    const body = RestartIntentSchema.parse({ ...intent, at: intent.at ?? new Date().toISOString() });
     mkdirSync(logsDir, { recursive: true });
-    writeFileAtomicSync(join(logsDir, RESTART_INTENT_FILE), `${JSON.stringify({ ...intent, at: intent.at ?? new Date().toISOString() })}\n`);
+    writeFileAtomicSync(join(logsDir, RESTART_INTENT_FILE), `${JSON.stringify(body)}\n`);
 };
 
 /**

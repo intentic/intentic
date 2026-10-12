@@ -27,7 +27,7 @@ import { candidateBases, createDaemonBases, type DaemonBases, type Dialed, diale
 import { answeredGone, goneStep, SandboxGoneError } from "./gone.js";
 import { checkContainers, checkKeptHere, type FateSeams, sandboxAnswered, sandboxSaidGone } from "./gone-watch.js";
 import { retireSandbox } from "./retire.js";
-import { readSwapRecords } from "../device/sandbox-rounds/swap-records.js";
+import { readSwaps } from "../device/sandbox-rounds/ic-swaps.js";
 import { type PublishedPorts, publishedPortsReader } from "./docker-ports.js";
 import { realBridgeExec, runGitBridge } from "./git-bridge.js";
 import {
@@ -870,7 +870,7 @@ const holdSyncDuringSwaps = async (
     unreachable: ReadonlyMap<string, Unreachable>,
     say: Log,
 ): Promise<ReadonlySet<string>> => {
-    const records = await readSwapRecords();
+    const records = await readSwaps();
     const now = Date.now();
     const held = new Set<string>();
     for (const pairing of pairings) {

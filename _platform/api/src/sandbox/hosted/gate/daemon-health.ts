@@ -1,5 +1,5 @@
 import { setTimeout as delay } from "node:timers/promises";
-import { type DaemonHealthReading, DaemonHealthReadingSchema, parseVitals, VITALS_FILE, VITALS_PATH } from "@intentic/sandbox-contract";
+import { CRASH_LOOP_RESTARTS, type DaemonHealthReading, DaemonHealthReadingSchema, parseVitals, VITALS_FILE, VITALS_PATH } from "@intentic/sandbox-contract";
 import type { Config } from "../../../config.js";
 import { MINUTE_MS } from "../../../durations.js";
 import { execMachine, type FlyMachineDetail, getMachineDetail } from "../fly/fly.js";
@@ -37,8 +37,6 @@ export const DAEMON_HEALTH_COMMAND = [`/usr/bin/curl`, `-sf`, `--max-time`, `5`,
 // reached it. A daemon that never did leaves netd listening on nothing, and the file netd keeps them in is read instead.
 export const DAEMON_VITALS_COMMAND = [`/usr/bin/curl`, `-sf`, `--max-time`, `5`, `http://localhost:8787${VITALS_PATH}`] as const;
 export const DAEMON_VITALS_FILE_COMMAND = [`/bin/cat`, VITALS_FILE] as const;
-// Restarts that make a crash loop: the editor's (diagnose.ts CRASH_LOOP_RESTARTS) and ic's (health.rs) both.
-const CRASH_LOOP_RESTARTS = 3;
 const HEALTH_EXEC_SECONDS = 10;
 export const HEALTH_POLL_MS = 2_000;
 export const READY_BUDGET_MS = 3 * MINUTE_MS;
@@ -73,8 +71,10 @@ export const readDaemonHealth = (stdout: string): DaemonHealthAnswer | undefined
     };
 };
 
-// Why one answer of the vitals reads as a daemon that keeps crashing, or undefined: down now, after three restarts.
-export const crashLoopOf = (stdout: string): string | undefined => {
+// How many times netd restarted its daemon in ten minutes when one answer of the vitals reads as a daemon that keeps
+// crashing, or undefined: down now, after as many restarts as make a crash loop (the contract's CRASH_LOOP_RESTARTS, which
+// ic's health.rs and the editor's diagnose.ts hold to the same number).
+export const crashLoopRestartsOf = (stdout: string): number | undefined => {
     let body: Parameters<typeof parseVitals>[0];
     try {
         body = JSON.parse(stdout);
@@ -83,9 +83,15 @@ export const crashLoopOf = (stdout: string): string | undefined => {
         return undefined;
     }
     const vitals = parseVitals(body);
-    return vitals !== undefined && vitals.node !== `up` && vitals.restarts >= CRASH_LOOP_RESTARTS
-        ? `its daemon kept crashing: netd restarted it ${vitals.restarts} times in ten minutes`
-        : undefined;
+    return vitals !== undefined && vitals.node !== `up` && vitals.restarts >= CRASH_LOOP_RESTARTS ? vitals.restarts : undefined;
+};
+
+const crashLoopWords = (restarts: number): string => `its daemon kept crashing: netd restarted it ${restarts} times in ten minutes`;
+
+// Why one answer of the vitals reads as a daemon that keeps crashing, or undefined.
+export const crashLoopOf = (stdout: string): string | undefined => {
+    const restarts = crashLoopRestartsOf(stdout);
+    return restarts === undefined ? undefined : crashLoopWords(restarts);
 };
 
 export type DaemonVerdict =
@@ -93,7 +99,7 @@ export type DaemonVerdict =
     | { readonly kind: `down`; readonly reason: string }
     | { readonly kind: `interrupted`; readonly reason: string };
 
-interface DaemonMachine {
+export interface DaemonMachine {
     readonly appName: string;
     readonly machineId: string;
 }
@@ -148,7 +154,7 @@ const endOf = (baseline: DaemonBaseline, detail: FlyMachineDetail): DaemonVerdic
 };
 
 // Asks the daemon once; undefined when nothing readable answered (a refused exec, curl's failure, a netd answering 503).
-const askHealth = async (config: Config, machine: DaemonMachine): Promise<DaemonHealthAnswer | undefined> => {
+export const askHealth = async (config: Config, machine: DaemonMachine): Promise<DaemonHealthAnswer | undefined> => {
     // allow(silent-catch): an exec Fly refuses is one more poll with no answer; the budget decides what silence means
     const answer = await execMachine(config.hosted.flyApiToken, machine.appName, machine.machineId, DAEMON_HEALTH_COMMAND, HEALTH_EXEC_SECONDS).catch(
         () => undefined,
@@ -165,10 +171,15 @@ const execOut = async (config: Config, machine: DaemonMachine, command: readonly
 
 // Asks netd whether the daemon keeps crashing, on its address and else in its file; undefined when it does not, or
 // nothing readable answered (a netd from before the file, listening on nothing).
-const askCrashLoop = async (config: Config, machine: DaemonMachine): Promise<string | undefined> => {
+export const askCrashLoopRestarts = async (config: Config, machine: DaemonMachine): Promise<number | undefined> => {
     const answered = await execOut(config, machine, DAEMON_VITALS_COMMAND);
     const vitals = answered ?? (await execOut(config, machine, DAEMON_VITALS_FILE_COMMAND));
-    return vitals === undefined ? undefined : crashLoopOf(vitals);
+    return vitals === undefined ? undefined : crashLoopRestartsOf(vitals);
+};
+
+const askCrashLoop = async (config: Config, machine: DaemonMachine): Promise<string | undefined> => {
+    const restarts = await askCrashLoopRestarts(config, machine);
+    return restarts === undefined ? undefined : crashLoopWords(restarts);
 };
 
 // One look at the machine and its daemon; a verdict when this look decides one.

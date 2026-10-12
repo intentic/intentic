@@ -22,12 +22,14 @@ import { drivenBy } from "../testing.js";
 // held-wakes queue and push; `unstubbed` keeps the fake small.
 const fakeServices = (root: string): Services =>
     unstubbed<Services>("services", {
+        // No conversation here is on record, so a thread resumes the session it kept (routing.ts sessionFor).
+        agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),
         automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         capabilities: fileCapabilitiesStore(join(root, "capabilities.json")),
         threadSessions: fileThreadSessionsStore(join(root, "thread-sessions.json"), () => false),
         senders: fileSendersStore(join(root, "senders.json")),
-        heldWakes: fileHeldWakesStore(join(root, "approvals")),
+        heldWakes: fileHeldWakesStore(join(root, "history")),
         pushSender: unstubbed<Services["pushSender"]>("pushSender", { notifyIfAway: async () => ({ delivered: 0, failed: 0 }) }),
         turnJournal: sqliteTurnJournal(openConversationsDb(conversationsDbPath(root))),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),

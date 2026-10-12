@@ -3,7 +3,7 @@ import { readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { agentHome } from "@intentic/local-agent";
-import type { DeviceScopes } from "@intentic/sandbox-contract";
+import { DEVICE_PROGRAM_TOOLS, type DeviceScopes } from "@intentic/sandbox-contract";
 import { handleMcpMessage } from "./mcp.js";
 
 const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
@@ -35,6 +35,32 @@ test("initialize advertises tools and identifies the agent", async () => {
     };
     expect(response.result.capabilities).toHaveProperty("tools");
     expect(response.result.serverInfo.name).toBe("intentic-machine");
+});
+
+// The contract's one table of which tools carry a program (policy/device-programs.ts) is what the daemon's gate and this
+// machine's own switches both read. A tool added here that can run something has to be added there, or it is a door the
+// gate does not know: this names every tool that can do harm and says where it is judged.
+test("every tool that carries a program is in the contract's table, and the table names only tools this device serves", async () => {
+    // SAFETY: tools/list always answers { result: { tools } }, each tool with the annotations toolAnnotations gives it.
+    const response = (await handleMcpMessage({ jsonrpc: "2.0", id: 2, method: "tools/list" }, scopes())) as {
+        result: { tools: { name: string; annotations: { destructiveHint: boolean } }[] };
+    };
+    const served = new Set(response.result.tools.map((tool) => tool.name));
+    const carried = DEVICE_PROGRAM_TOOLS.map((carrier) => carrier.tool);
+    expect(carried.filter((name) => !served.has(name))).toEqual([]);
+
+    // Destructive tools that carry no program, each with why: a new destructive tool that is in neither list fails here.
+    const carryNone = new Map([
+        ["write_file", "its content is written to a file, not run"],
+        ["browser_click", "acts inside a web page"],
+        ["browser_fill", "acts inside a web page"],
+        ["browser_key", "acts inside a web page"],
+        ["android_install", "installs an APK the owner's phone asks to confirm"],
+        ["remove_sandbox", "names a sandbox slug and goes to ic; its own switch and the daemon's restart gate decide"],
+    ]);
+    const destructive = response.result.tools.filter((tool) => tool.annotations.destructiveHint).map((tool) => tool.name);
+    expect(destructive.filter((name) => !carried.includes(name) && !carryNone.has(name))).toEqual([]);
+    expect([...carryNone.keys()].filter((name) => !destructive.includes(name))).toEqual([]);
 });
 
 test("tools/list is the machine's whole surface, and there is no delete", async () => {

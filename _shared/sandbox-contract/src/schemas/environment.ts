@@ -216,3 +216,7 @@ export const BundleExportSchema = z.object({
 });
 export type BundleExport = z.infer<typeof BundleExportSchema>;
 export const BundleExportsSchema = z.object({ exports: z.array(BundleExportSchema) });
+// POST /bundles names the export it started, which fills in as it packs.
+export const BundleStartedSchema = z.object({ name: z.string() });
+// POST /bundles/ticket: the short-lived credential a download navigation carries, since it cannot send a bearer header.
+export const BundleTicketSchema = z.object({ ticket: z.string(), expiresAt: z.number() });

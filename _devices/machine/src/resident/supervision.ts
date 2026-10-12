@@ -16,7 +16,8 @@ import { recordStopped } from "../agent-trial.js";
 import { MACHINE_AUTOSTART } from "../autostart/autostart.js";
 import { runLogPath, runPidPath } from "../config.js";
 import { linkStatePath } from "../device/config.js";
-import { CUTOVER_HOLDS_MS, readSwapRecords, swapsUnderway } from "../device/sandbox-rounds/swap-records.js";
+import { readSwaps, swapsUnderway } from "../device/sandbox-rounds/ic-swaps.js";
+import { SWAP_WAIT_MAX_MS } from "../device/sandbox-rounds/swap-records.js";
 import { attachToWindows, WINDOWS_SUPERVISOR } from "../environments/machine.js";
 import { mirrorHeartbeatPath } from "../sync/config.js";
 import { recordStopFor } from "./last-exit.js";
@@ -124,21 +125,22 @@ export const startResident = async (log: Log): Promise<void> => {
 // How often a restart held by a swap looks again.
 const SWAP_POLL_MS = 5_000;
 
-// A restart of this agent waits out every sandbox mid-cutover here, by ic's own record, whichever process started the
-// swap: stopping the agent between parking a container and starting its replacement is what left sandboxes down. Bounded
-// by how long a cutover record counts at all; past that it is an interruption, and the probation watch settles it.
+// A restart of this agent waits out every sandbox mid-cutover here, by ic's own verdict (`ic sandbox swaps`), whichever
+// process started the swap: stopping the agent between parking a container and starting its replacement is what left
+// sandboxes down. ic calls a cutover interrupted once its heartbeat has been silent for 90 seconds, and then it is no
+// reason to wait: the probation watch settles it. The wait is bounded all the same, for a swap that never ends.
 export const waitOutSwaps = async (log: Log): Promise<void> => {
     let said = "";
     await pollUntil(
         async () => {
-            const swapping = swapsUnderway(await readSwapRecords(), Date.now()).join(", ");
+            const swapping = swapsUnderway(await readSwaps()).join(", ");
             if (swapping !== "" && swapping !== said) {
                 log(`Waiting for ${swapping} to finish swapping before the agent restarts…`);
             }
             said = swapping;
             return swapping === "";
         },
-        { intervalMs: SWAP_POLL_MS, timeoutMs: CUTOVER_HOLDS_MS },
+        { intervalMs: SWAP_POLL_MS, timeoutMs: SWAP_WAIT_MAX_MS },
     );
 };
 

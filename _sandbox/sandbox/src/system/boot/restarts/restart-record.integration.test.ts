@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { appendRestart } from "./boot-marker.js";
+import { appendRestart, writeRestartIntent } from "./boot-marker.js";
 import {
     describePreviousRun,
     type EndedRun,
@@ -85,6 +85,19 @@ test("an intent on disk is read leniently but must carry a real time", () => {
     expect(readRestartIntent(dir)).toBeUndefined();
     writeFileSync(join(dir, RESTART_INTENT_FILE), "{torn");
     expect(readRestartIntent(dir)).toBeUndefined();
+});
+
+// The daemon writes it through the contract's RestartIntentSchema (the same one ic's and the keeper's writers are held to,
+// golden/host-files.json), so what it leaves is always a file the next boot reads back to the field.
+test("an intent the daemon writes is the contract's, and reads back; a word the contract lacks is refused before anything is written", () => {
+    const dir = mkdtempSync(join(tmpdir(), "restart-intent-"));
+    writeRestartIntent(dir, { by: "daemon", action: "stop", reason: "idle-stop: nobody connected", at: iso(NOW) });
+    expect(readRestartIntent(dir)).toEqual({ at: iso(NOW), by: "daemon", action: "stop", reason: "idle-stop: nobody connected" });
+    // SAFETY: the casts are the point: a caller the compiler would stop, held by the contract's schema at runtime too.
+    expect(() => writeRestartIntent(dir, { by: "netd", action: "kill", reason: "stuck", at: iso(NOW) } as never)).toThrow();
+    expect(() => writeRestartIntent(dir, { by: "owner", action: "restart", reason: "x", at: "yesterday" })).toThrow();
+    // The refused writes left the earlier file as it was.
+    expect(readRestartIntent(dir)).toMatchObject({ by: "daemon", action: "stop" });
 });
 
 test("restarts.jsonl keeps the newest 500 records", () => {

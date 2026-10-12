@@ -13,5 +13,32 @@
     "portBands": {
         "daemonLoopback": { "base": 28000, "span": 4000 },
         "syncSsh": { "base": 24000, "span": 4000 }
+    },
+    "sandboxIds": {
+        "about": "sha256 of the connect token as UTF-8, as hex, first 12 characters: the id every public hostname embeds, and the slug ic names a sandbox's container by when it has no public name. The contract's sandboxIdFromToken, sandbox-run's sandboxIdOfToken (Web Crypto) and ic's slug_from_token (util.rs) are each held to these. An empty token has no id in TS (undefined); ic refuses an empty CONNECT_TOKEN.",
+        "vectors": [
+            { "token": "token", "id": "3c469e9d6c58" },
+            { "token": "connect-token-one", "id": "ceec11462653" },
+            { "token": "a:b", "id": "6783a31eabf6" },
+            { "token": "tök€n-é 日本", "id": "b95e944e48c7" }
+        ]
+    },
+    "hostSshIds": {
+        "about": "sha256 of `<connect token>:<host name>` as UTF-8, first 12 hex: a deploy server's tunnel id (the contract's hostSshIdFromToken). connect-host.ps1 digests the same input the same way when a code's answer carries no HOST_ID. No PowerShell runs in the suites, so a test of the contract reads that script's source for the salted input and the cut; these vectors pin the TS half to the digest.",
+        "vectors": [
+            { "token": "token", "hostName": "web-1", "id": "ecddc8235644" },
+            { "token": "connect-token-one", "hostName": "db", "id": "28c5c2752bdd" },
+            { "token": "tök€n-é 日本", "hostName": "laptop-é", "id": "4fa5f43fa8c6" }
+        ]
+    },
+    "hostnameSlugs": {
+        "about": "The slug a hostname names a sandbox by: its first label, lowercased as DNS reads it, and none for an empty label. sandbox-run's slugOfHostname (TS) and ic's slug_of_hostname (util.rs, which connect.rs names a container by) are each held to these.",
+        "vectors": [
+            { "hostname": "sandbox-3c469e9d6c58.sbx.intentic.dev", "slug": "sandbox-3c469e9d6c58" },
+            { "hostname": "My-Box.example.com", "slug": "my-box" },
+            { "hostname": "bare", "slug": "bare" },
+            { "hostname": "", "slug": null },
+            { "hostname": ".x", "slug": null }
+        ]
     }
 }

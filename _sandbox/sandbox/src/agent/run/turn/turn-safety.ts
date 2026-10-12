@@ -14,7 +14,7 @@ import { installGrantsOf, installPlacementOf, PROJECT_INSTALL_RULE } from "../..
 
 export type TurnSafetyDeps = Pick<
     Services,
-    "conversationGrants" | "heavyCommands" | "judgeCommand" | "logger" | "runtimeInstalls" | "safetyLog" | "safetyPolicy" | "workspace"
+    "conversationGrants" | "heavyCommands" | "judgeCommand" | "logger" | "ownerGrants" | "runtimeInstalls" | "safetyLog" | "safetyPolicy" | "workspace"
 >;
 
 // A closure over the judge, the policy text and the judge's setup rather than any of them directly, because the seam it
@@ -62,7 +62,14 @@ export const withTurnSafety = async (deps: TurnSafetyDeps, input: TurnSafetyInpu
                     .answered(at, answer, outcome)
                     .catch((error: unknown) => deps.logger.warn({ err: error }, "safety log: the owner's answer was not recorded"));
             },
-            rememberSafety: (line) => deps.safetyPolicy.append(line),
+            // "Always" on a command card is an owner-wide grant, kept off the workspace and listed under Access: it joins the
+            // judge's policy from the next turn on, in every conversation, until the owner takes it back.
+            rememberSafety: async (line, by) => {
+                await deps.ownerGrants.allowCommandPolicy(line, by);
+            },
+            // The command already ran on the owner's yes; the line that did not stick is said, naming it.
+            rememberSafetyFailed: (line, reason) =>
+                deps.logger.warn({ line, reason }, "owner grants: a line allowed with Always on a command card was not kept, so the judge will ask again"),
             // Every image-scoped install attempt, appended best-effort to the runtime-install ledger; a second distinct
             // session installing the same tool is what earns an auto-drafted overlay step.
             onImageInstall: (installs, command) => {

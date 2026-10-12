@@ -37,7 +37,7 @@ const doors = computed(
     () => new Map(machine.environments.flatMap((row): [string, DeviceRow][] => (row.device.hostId === undefined ? [] : [[row.device.hostId, row]]))),
 );
 
-const { runners, refetch } = useRunners();
+const { runners, refetch, error: unread } = useRunners();
 
 // The work this sandbox sends each runner (settings `offload`) and how its last offloaded run ended.
 const { settings } = useSandboxSettings();
@@ -217,6 +217,11 @@ const add = async (): Promise<void> => {
             <Button size="small" :label="t(`ui.action.create`)" :disabled="asked === `` || nameError !== undefined" @click="add()" />
             <Button size="small" tier="quiet" :label="t(`ui.action.cancel`)" @click="adding = false" />
             <span v-if="nameError" class="text-2xs text-danger">{{ nameError }}</span>
+        </RowNote>
+
+        <!-- A list that could not be read is said, not drawn as a machine with no runners. -->
+        <RowNote v-if="unread !== undefined" variant="block">
+            <span class="text-2xs text-danger">{{ t(`sandbox.deviceRunners.unread`, { reason: unread }) }}</span>
         </RowNote>
 
         <ul v-if="mine.length > 0" class="flex flex-col">

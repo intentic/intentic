@@ -37,11 +37,13 @@ const RUNTIME_DOMAINS = [
     // Daemon-held; changes continuously (tokens, tool uses), so it's rate-limited rather than pushed per mutation.
     { domain: "subagents", invalidates: [["subagents"]] },
 
-    // Machines on the other end of a socket (devices, browsers, runners); "online" is the socket itself, never sampled.
-    // hosts/webext land on capabilities since a pairing card's state is literally the hub's online answer. `hosts` also
-    // carries a device reading that landed too late for the reader waiting on it (hosts/device-reports.ts).
-    { domain: "hosts", invalidates: [["capabilities"], ["devices"]] },
-    { domain: "webext", invalidates: [["capabilities"]] },
+    // Machines on the other end of a socket (devices, browsers, phones, runners); "online" is the socket itself, never
+    // sampled. hosts/webext/phones land on capabilities since a pairing card's state is literally the hub's online answer,
+    // and each on the roster its dialogs and rows read (`hosts`, `webext`, `phones`; the editor's PAIRED_* families).
+    // `hosts` also carries a device reading that landed too late for the reader waiting on it (hosts/device-reports.ts),
+    // and a desktop-sync enrollment made or revoked, which is what moves `sync-health` (GET /system/sync).
+    { domain: "hosts", invalidates: [["capabilities"], ["devices"], ["hosts"], ["sync-health"]] },
+    { domain: "webext", invalidates: [["capabilities"], ["webext"]] },
     { domain: "phones", invalidates: [["capabilities"], ["phones"]] },
     { domain: "runners", invalidates: [["runners"]] },
 

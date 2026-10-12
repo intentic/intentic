@@ -21,10 +21,10 @@ export interface Wake {
     readonly messageId?: string;
 }
 
-// The port's door a wake takes, and where it reads the session a turn of its own continues.
+// The port's door a wake takes. A wake names no session: the conversation's admission decides it, on the routing the
+// conversation has when the wake goes out, which a sender armed or queued earlier cannot know (turn-admission.ts).
 export interface WakeDoors {
     readonly turns: Pick<TurnStarter, "say">;
-    readonly sessionIdOf: (conversationId: string) => string | undefined;
 }
 
 /** Hands the wake to its conversation, answered with where it went; one that waits goes once the conversation is free. */
@@ -39,6 +39,5 @@ export const deliverWake = (doors: WakeDoors, wake: Wake): Promise<MessageReceip
             ...opt("errand", wake.errand),
             ...opt("messageId", wake.messageId),
             ...opt("speaker", wake.voice === "sandbox" ? { kind: "sandbox" as const, ...opt("source", wake.source) } : undefined),
-            ...opt("sessionId", doors.sessionIdOf(wake.conversationId)),
         },
     });

@@ -321,6 +321,11 @@ export interface RunOptions {
     readonly transcript?: (rows: readonly TranscriptRow[], steerRows: readonly number[]) => Promise<unknown>;
     // Side-channel prep that must precede the provider; its failure may cost persistence, never the turn itself.
     readonly before?: Promise<unknown>;
+    // Names the provider, model and knobs the turn's persona or run role pins (turn-routing.ts), asked of the turn as it was
+    // sent after the run is claimed, so the door still answers at once and its starter reads the frames from the first one. The pump waits for
+    // it; the provider runs the routed turn, and a journalled run's entry is written again with it. A failure to route is
+    // the turn's own failure. Absent, the turn is already as it will run.
+    readonly route?: (turn: TurnInput & { readonly conversationId: string }) => Promise<RoutedTurn & { readonly conversationId: string }>;
     // How many boots already re-ran this turn, so a resume that dies again isn't resumed a third time; starts at 0.
     readonly attempts?: number;
     // Keeps a turn turned away at the door when no sender keeps its words: the refusal goes out marked held, so its
@@ -398,10 +403,10 @@ export function startTurnRun(
     deps: RunDeps,
     turnFn: TurnStarter["stream"],
     sent: TurnInput & { readonly conversationId: string },
-    { observer, journalled = false, opening, continues, transcript, before, attempts = 0, holdTurnedAway }: RunOptions = {},
+    { observer, journalled = false, opening, continues, transcript, before, route, attempts = 0, holdTurnedAway }: RunOptions = {},
 ): TurnRun | BeginRefusal {
     // Routed on the way in (idempotent), for a caller that starts a run without the port.
-    const input: RoutedTurn & { readonly conversationId: string } = withRuntimeDefaults(sent);
+    let input: RoutedTurn & { readonly conversationId: string } = withRuntimeDefaults(sent);
     if (deps.conversations.archived(input.conversationId)) {
         return "archived";
     }
@@ -412,13 +417,12 @@ export function startTurnRun(
     const run = continues === undefined ? newRun(opening) : new TurnRun(continues.rows, continues.startedAt, continues.id);
     run.journalled = journalled;
     runs.hold(input.conversationId, input.conversationId, run);
-    const provider = input.agent;
     deps.logger?.info(
         {
             conversationId: input.conversationId,
             run: run.id,
             startedBy: startedByOf(input, continues !== undefined),
-            provider,
+            provider: input.agent,
             harness: input.harness,
             ...opt("model", input.model === "" ? undefined : input.model),
             ...opt("account", input.account),
@@ -466,6 +470,26 @@ export function startTurnRun(
             // allow(silent-catch): an observer's own throw is its problem; the run it watches carries on.
         }
     };
+    // Asks `route` for the turn the provider runs, once the run is claimed. A turn it moved to another provider or model is
+    // said so in the log, and a journalled run's entry is written again with whatever it changed, so a restart resumes the
+    // model and session it started on.
+    const routed = async (): Promise<void> => {
+        if (route === undefined) {
+            return;
+        }
+        const accepted = input;
+        // The turn as it was sent: the defaults `accepted` carries would read as a provider the turn chose.
+        input = await route(sent);
+        if (input.agent !== accepted.agent || input.model !== accepted.model) {
+            deps.logger?.info(
+                { conversationId: input.conversationId, run: run.id, provider: input.agent, ...opt("model", input.model === "" ? undefined : input.model) },
+                "turn routed",
+            );
+        }
+        if (input.agent !== accepted.agent || input.model !== accepted.model || input.sessionId !== accepted.sessionId) {
+            journalEntry();
+        }
+    };
     // Held before it is folded, so the fold keeps the message a refusal at the door would otherwise take back.
     const kept = (frame: AgentEvent): AgentEvent => {
         if (holdTurnedAway === undefined || !run.turnedAway(frame)) {
@@ -482,11 +506,12 @@ export function startTurnRun(
         let stopped = false;
         try {
             await before;
+            await routed();
             for await (const frame of turnFn(input, undefined)) {
                 const event = kept(frame);
                 // Every provider republishes its slash commands each turn; cache the latest (agent-commands.ts).
                 if (event.kind === "commands") {
-                    recordCommands(provider, event.items);
+                    recordCommands(input.agent, event.items);
                 }
                 // Frames that park the turn on the user; they keep the run's fetch open, so it still looks live.
                 if (isParkKind(event.kind)) {

@@ -1,18 +1,15 @@
 <script setup lang="ts">
-import {
-    ArrivalHostsSchema,
-    ArrivalPlanSchema,
-    ArrivalReportSchema,
-    type ArrivalHost,
-    type ArrivalPlan,
-    type ArrivalReport,
-    type AssistantSource,
+import type {
+    ArrivalHost,
+    ArrivalPlan,
+    ArrivalReport,
+    AssistantSource,
 } from "@intentic/sandbox-contract";
 import { Button, Code, NoticeStack, Row, RowGroup, StatusBadge, ui, vAction } from "@intentic/ui";
 import Checkbox from "primevue/checkbox";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, onMounted, ref, watch } from "vue";
-import { sandboxJson } from "../../../client/sandbox/sandboxClient";
+import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useOperation } from "../../../workbench/operations/operations";
 import { helpTopics, SOURCE_GUIDES } from "../overview/assistantGuide";
@@ -75,7 +72,7 @@ const probe = async (): Promise<void> => {
     }
     probing.value = true;
     try {
-        hosts.value = ArrivalHostsSchema.parse(await sandboxJson(`/arrivals/hosts`).catch(() => ({ hosts: [] }))).hosts;
+        hosts.value = (await sandboxRaw(`GET /arrivals/hosts`).catch(() => ({ hosts: [] }))).hosts;
     } finally {
         probing.value = false;
     }
@@ -98,25 +95,21 @@ const sourceLabel = (source: ArrivalPlan["source"]): string =>
     })[source];
 
 // A new plan starts a new arrival, so the last one's report is put away with it. Kept until applied or discarded.
-const readPlan = async (failed: string, read: () => Promise<unknown>): Promise<void> => {
+const readPlan = async (failed: string, read: () => Promise<ArrivalPlan>): Promise<void> => {
     applyOp.dismiss();
     discardOp.dismiss();
     await planOp.run({
         what: t(`sandbox.arrivalPanel.readingWhatWouldLand`),
         failed,
         keep: true,
-        task: async () => ArrivalPlanSchema.parse(await read()),
+        task: read,
     });
 };
 
 // The zero-packing path: the daemon walks the machine's own folder over the socket it already holds.
 const readFromHost = (host: ArrivalHost): Promise<void> =>
     readPlan(t(`sandbox.arrivalPanel.couldntReadSetupFromDevice`), () =>
-        sandboxJson(`/arrivals/scan`, {
-            method: `POST`,
-            headers: { "content-type": `application/json` },
-            body: JSON.stringify({ host: host.id }),
-        }),
+        sandboxRaw(`POST /arrivals/scan`, { input: { host: host.id } }),
     );
 
 const chooseFile = ref<HTMLInputElement>();
@@ -128,9 +121,7 @@ const readFile = async (event: Event): Promise<void> => {
         return;
     }
     // Streamed as one body, like the folder-drop route; a huge bundle never passes through this tab's memory.
-    await readPlan(t(`sandbox.arrivalPanel.couldntReadFile`), () =>
-        sandboxJson(`/arrivals/plan`, { method: `POST`, body: file, duplex: `half` } as RequestInit),
-    );
+    await readPlan(t(`sandbox.arrivalPanel.couldntReadFile`), () => sandboxRaw(`POST /arrivals/plan`, { input: file }));
 };
 
 const tickedCount = computed(() => Object.values(ticked.value).filter(Boolean).length);
@@ -149,13 +140,7 @@ const apply = async (): Promise<void> => {
         failed: t(`sandbox.arrivalPanel.couldntBringIn`),
         keep: true,
         task: async () => {
-            const arrived = ArrivalReportSchema.parse(
-                await sandboxJson(`/arrivals/apply`, {
-                    method: `POST`,
-                    headers: { "content-type": `application/json` },
-                    body: JSON.stringify({ token: held.token, items, includeSecrets }),
-                }),
-            );
+            const arrived = await sandboxRaw(`POST /arrivals/apply`, { input: { token: held.token, items, includeSecrets } });
             // The plan is spent: its token was the daemon's, and the arrival it described has happened.
             planOp.dismiss();
             return { report: arrived, adopted: await adoptPresentation(arrived.presentation) };
@@ -200,7 +185,7 @@ const cancel = async (): Promise<void> => {
         failed: t(`sandbox.arrivalPanel.couldntDiscardPlan`),
         quiet: true,
         task: async () => {
-            await sandboxJson(`/arrivals`, { method: `DELETE` });
+            await sandboxRaw(`DELETE /arrivals`);
             planOp.dismiss();
             applyOp.dismiss();
         },

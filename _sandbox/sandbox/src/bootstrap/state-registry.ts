@@ -16,7 +16,7 @@ import { passkeysDocument } from "../auth/passkeys/passkey-store.js";
 import { controlTokensDocument } from "../auth/tokens/control-tokens.js";
 import { doorTokensDocument } from "../auth/tokens/door-tokens.js";
 import { automationRunsDocument, automationWatchDocument, automationsDocument, automationsRelocationStep } from "../automations/automations-store.js";
-import { heldWakesDocument } from "../automations/held-wakes-store.js";
+import { heldWakesDocument, heldWakesOffWorkspaceStep } from "../automations/held-wakes-store.js";
 import { scheduleCoverageDocument } from "../automations/schedule-coverage.js";
 import { sendersDocument } from "../automations/senders-store.js";
 import { browserPasskeysDocument } from "../browser/tools/passkeys.js";
@@ -48,7 +48,9 @@ import { syncEnrollmentsDocument } from "../peers/desktop-sync.js";
 import { hostEnrollmentsDocument, hostPairConsumedDocument, phoneEnrollmentsDocument, phonePairConsumedDocument, runnerEnrollmentsDocument, runnerPairConsumedDocument, syncPairConsumedDocument, webextEnrollmentsDocument, webextPairConsumedDocument } from "../peers/enrollment.js";
 import { peerToolsDocument } from "../peers/peer-tool-memory.js";
 import { conversationGrantsDocument } from "../personas/conversation-grants.js";
+import { ownerGrantsDocument } from "../personas/owner-grants.js";
 import { personasDocument } from "../personas/personas-store.js";
+import { safetyCardLinesStep } from "../personas/safety-card-lines.js";
 import { phoneWakeDocument } from "../phones/phone-wake.js";
 import { bundleManifestDocument } from "../portability/bundle-arrival.js";
 import { privacyLedgerDocument } from "../privacy/privacy-ledger.js";
@@ -158,6 +160,7 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     webextPairConsumedDocument,
     peerToolsDocument,
     conversationGrantsDocument,
+    ownerGrantsDocument,
     personasDocument,
     phoneWakeDocument,
     bundleManifestDocument,
@@ -213,4 +216,4 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
 
 // By id, not by the order modules happened to load in: the plan must not depend on an import graph.
 export const stateSteps = (): readonly StructuralStep[] =>
-    [identityOffWorkspaceStep, passkeysOffWorkspaceStep, automationsRelocationStep, pre1308ImportStep, conversationsSchemaStep, landCheckLeftoversStep, pushChecksLeftoversStep, stateRegroupStep, workflowGateTokensStep].toSorted((a, b) => a.id.localeCompare(b.id));
+    [identityOffWorkspaceStep, passkeysOffWorkspaceStep, automationsRelocationStep, heldWakesOffWorkspaceStep, pre1308ImportStep, safetyCardLinesStep, conversationsSchemaStep, landCheckLeftoversStep, pushChecksLeftoversStep, stateRegroupStep, workflowGateTokensStep].toSorted((a, b) => a.id.localeCompare(b.id));

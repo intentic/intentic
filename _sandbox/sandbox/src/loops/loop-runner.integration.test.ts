@@ -10,26 +10,31 @@ import type { Services } from "../composition.js";
 import { fileLoopsStore } from "./loops-store.js";
 import { loopRunning, resumeLoops, runLoop } from "./loop-runner.js";
 import { restartResume } from "../agent/run/turn/restart-resume-policy.js";
-import { drivenBy, memoryFleet } from "../testing.js";
+import { drivenBy, memoryFleet, unpinnedRouting } from "../testing.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
 import { createDomainEvents } from "../seams/domain-events.js";
 
 // Tests every way the loop stops. Tree is a git-less temp dir, so treeDigest always returns the same empty digest: the
 // stall detector is live by default unless a test writes into a repo.
 
-const fakeServices = (root: string): Services =>
-    unstubbed<Services>("services", {
+const fakeServices = (root: string): Services => {
+    const fleet = memoryFleet();
+    return unstubbed<Services>("services", {
+        // A loop's turn names its run role, so the door looks for the model that role pins; none does here.
+        ...unpinnedRouting(),
         loops: fileLoopsStore(join(root, "loops.json")),
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         // Real actors, since the runner stops a turn through them and publishes the loop's card to them; none is ever
-        // registered here.
-        conversations: memoryFleet().conversations,
+        // registered here, so a conversation of a loop is not on record and its `continue` takes the session it reported.
+        agents: fleet.agents,
+        conversations: fleet.conversations,
         // Heard by nobody: what reacts to a settled run is composition's to subscribe.
         events: createDomainEvents(() => {}),
         agentWorktrees: unstubbed<Services["agentWorktrees"]>("agentWorktrees", { conversationDir: () => root }),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { append: async () => {} }),
         logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {}, info: () => {} }),
     });
+};
 
 // Turn that ends immediately, recording the prompt it was given; `events` lets a test add usage or an error.
 const fakeTurn = (prompts: string[], events: AgentEvent[] = [{ kind: "done" }]): TurnStarter["stream"] =>

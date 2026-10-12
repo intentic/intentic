@@ -404,7 +404,7 @@ const askParent = async (
     }
     try {
         const receipt = await deliverWake(
-            { turns: services.turns, sessionIdOf: (conversationId) => services.conversations.sessionIdOf(conversationId) },
+            { turns: services.turns },
             {
                 conversationId: kid.parent,
                 prompt: questionWords(childId, kid.spec, questions),

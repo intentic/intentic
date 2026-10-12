@@ -108,6 +108,9 @@ export const ArrivalHostSchema = z.object({
 export type ArrivalHost = z.infer<typeof ArrivalHostSchema>;
 export const ArrivalHostsSchema = z.object({ hosts: z.array(ArrivalHostSchema) });
 
+// DELETE /arrivals: whether there was a held plan to put away.
+export const ArrivalAbandonedSchema = z.object({ ok: z.boolean() });
+
 // Reads a setup off a connected device instead of an upload; answers with a plan exactly like the upload door does.
 export const ArrivalScanSchema = z.object({ host: z.string().min(1) });
 export type ArrivalScan = z.infer<typeof ArrivalScanSchema>;

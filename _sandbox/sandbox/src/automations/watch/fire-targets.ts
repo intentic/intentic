@@ -56,7 +56,7 @@ export const continueConversation = async (
     }
     const now = Date.now();
     const receipt = await deliverWake(
-        { turns: services.turns, sessionIdOf: (id) => services.conversations.sessionIdOf(id) },
+        { turns: services.turns },
         {
             conversationId,
             prompt: conversationWake(automation, outcome, observed.text, now),

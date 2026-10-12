@@ -536,7 +536,8 @@ describe(`the builder's report`, () => {
         expect(applied.image).toBe(`registry.fly.io/intentic-sbx-abc@${DIGEST}`);
         expect(applied.env[`SANDBOX_ENVIRONMENT_HASH`]).toBe(HASH);
         // What the machine now holds, written by the gate in one update: the overlay's facts, the stock image it replaced as
-        // the way back, and the overlay ON TRIAL, since nothing has started it yet; its next wake judges it.
+        // the way back, and the overlay ON TRIAL, since nothing has started it yet; its next wake judges it. The switch also
+        // resets the post-update probation: no watch started yet, no strikes counted against the new image.
         expect(prisma.hostedMachine.update).toHaveBeenCalledWith({
             where: { id: `h1` },
             data: {
@@ -548,6 +549,8 @@ describe(`the builder's report`, () => {
                 previousEnvironmentHash: null,
                 unprovenImage: `registry.fly.io/intentic-sbx-abc@${DIGEST}`,
                 skippedDigest: null,
+                probationSince: null,
+                probationStrikes: 0,
             },
         });
         expect(fly.machines.get(`m1`)?.state).toBe(`stopped`);

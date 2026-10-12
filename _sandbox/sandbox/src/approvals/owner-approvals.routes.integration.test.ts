@@ -11,12 +11,13 @@ import { clientFor, proven } from "../harness/route-client.testing.js";
 import { services } from "../harness/route-services.testing.js";
 import { testConfig } from "../testing.js";
 import { workspacePaths } from "../workspace/workspace.js";
+import { fileHeldWakesStore } from "../automations/held-wakes-store.js";
 import { approvalStandings } from "./approval-decisions.js";
 import { approvalsExecutorFor, createApprovalsExecutor } from "./approvals-executor.js";
 import { approvalsDocument, fileApprovalsStore } from "./approvals-store.js";
 
 // The approvals an agent must never give itself, over the daemon's HTTP surface with auth on: a workspace hook set, a
-// workspace extension, and an item in the approvals queue. Every credential a program in the sandbox can hold is
+// workspace extension, an item in the approvals queue, and a wake an automation holds for a person. Every credential a program in the sandbox can hold is
 // refused; the owner's session is not.
 
 const OWNER = "owner-session";
@@ -159,4 +160,45 @@ test("a queue item runs on the yes the owner's session records, never on one a f
     expect(settled.get("planted")).toMatchObject({ status: "failed" });
     // Spent as it started: the item put back to approved by hand finds no yes left.
     expect(await (await approvalStandings({ historyRoot, workspaceRoot: workspace.root }))({ ...errand, status: "approved" })).toBe("unapproved");
+});
+
+test("a held wake is let out by the owner's session alone, on a yes recorded against it and spent with it", async () => {
+    const workspace = workspacePaths(mkdtempSync(join(tmpdir(), "owner-approvals-wake-")));
+    const historyRoot = mkdtempSync(join(tmpdir(), "owner-approvals-wake-history-"));
+    const heldWakes = fileHeldWakesStore(historyRoot);
+    const held = await heldWakes.add({ automationId: "inbox", payload: "ping", createdAt: 1 });
+    // A file a turn could only have put there by hand, in the one place it can still reach.
+    await writeFile(join(historyRoot, "automation-holds", "torn.json"), "{ not json");
+    const app = createApp(
+        services({
+            workspace,
+            heldWakes,
+            config: { ...testConfig, historyRoot },
+            auth: {
+                authorize: async (bearer) => {
+                    if (bearer !== OWNER) {
+                        throw new Error("no bearer");
+                    }
+                    return proven("owner@example.com", "owner");
+                },
+            },
+        }),
+    );
+    const approve = `/automations/pending/${held.id}/approve`;
+
+    for (const [headers, refused] of [[{ "x-intentic-panel": "panel-secret" }, 403], [{ "x-intentic-agent": "agent-secret" }, 403], [{}, 401]] as const) {
+        expect([headers, (await post(app, approve, headers)).status]).toEqual([headers, refused]);
+    }
+    expect(await heldWakes.list()).toEqual([held]);
+
+    // The owner's list names what it cannot read, and still lists what it can.
+    const owner = clientFor(app, { bearer: OWNER });
+    expect(await owner.automations.pendingList()).toEqual({ approvals: [held], unreadable: ["torn.json"] });
+
+    // Their yes lets it out and goes with it. The automation it was held for is not in this daemon, so nothing runs.
+    const released = await post(app, approve, { authorization: `Bearer ${OWNER}` });
+    expect(released.status).toBe(404);
+    expect(await heldWakes.list()).toEqual([]);
+    expect((await owner.automations.pendingList()).approvals).toEqual([]);
+    expect(await post(app, approve, { authorization: `Bearer ${OWNER}` }).then((response) => response.status)).toBe(404);
 });

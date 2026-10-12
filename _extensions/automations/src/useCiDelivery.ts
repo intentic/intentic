@@ -1,5 +1,4 @@
 import { CI_POLL_INTERVAL_MS, type CiRepo } from "@intentic/sandbox-contract";
-import { useQuery } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "./host";
 import { t } from "./i18n.js";
@@ -54,12 +53,12 @@ const describe = (repos: readonly CiRepo[], repoFilter: string): CiDelivery => {
 // trigger.
 export function useCiDelivery(active: Ref<boolean>, repo: Ref<string>) {
     const api = host();
-    const query = useQuery({
+    const { query } = api.sandbox.query({
         // The CI board's own entry, refreshed by the daemon's CI push, rather than a second copy of the same read.
         queryKey: api.sandbox.readKey(`ci.runs`),
         queryFn: () => api.sandbox.rpc.ci.runs(),
         select: (answer): CiRepo[] => answer.repos,
-        enabled: computed(() => active.value && api.sandbox.reachable()),
+        enabled: active,
     });
     return {
         // Undefined until the first answer lands, rather than guessing `none` and reading as broken.

@@ -1,4 +1,3 @@
-import { useQuery } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "./host";
 
@@ -47,10 +46,9 @@ export const testProjects = (tree: readonly TreeEntry[], repo: string): string[]
 
 export function useTests(repo: Ref<string>) {
     const api = host();
-    const treeQuery = useQuery({
+    const { query: treeQuery, error: treeError } = api.sandbox.query({
         queryKey: api.sandbox.readKey(`workspace.tree`, {}),
         queryFn: () => api.sandbox.rpc.workspace.tree({}),
-        enabled: computed(() => api.sandbox.reachable()),
     });
     const projects = computed(() => testProjects((treeQuery.data.value?.tree ?? []) as readonly TreeEntry[], repo.value));
     // Kicks off each dir's test run in a one-shot tmux session (panel-<repo>--<session>); pair with
@@ -60,7 +58,7 @@ export function useTests(repo: Ref<string>) {
     };
     return {
         projects,
-        error: computed(() => (treeQuery.error.value ? treeQuery.error.value.message : null)),
+        error: computed(() => treeError.value ?? null),
         isLoading: treeQuery.isLoading,
         runTests,
     };

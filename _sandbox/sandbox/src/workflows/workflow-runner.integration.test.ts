@@ -10,27 +10,33 @@ import { fileLoopsStore } from "../loops/loops-store.js";
 import { fileWorkflowRunsStore, fileWorkflowsStore } from "./workflows-store.js";
 import { abandonRun, openRun, resumeWorkflowExecution, runWorkflow, stopWorkflowRun, workflowRunning } from "./workflow-runner.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
-import { drivenBy, memoryFleet } from "../testing.js";
+import { drivenBy, memoryFleet, unpinnedRouting } from "../testing.js";
 import { createDomainEvents } from "../seams/domain-events.js";
 import { restartResume } from "../agent/run/turn/restart-resume-policy.js";
 
 // Scheduler's graph behavior end to end: the seam between steps, not a step's own loop (tested elsewhere). The tree has
 // no git, so `treeDigest` never changes and the stall detector is live: every step needs its own reason to stop.
 
-const fakeServices = (root: string): Services =>
-    unstubbed<Services>("services", {
+const fakeServices = (root: string): Services => {
+    const fleet = memoryFleet();
+    return unstubbed<Services>("services", {
+        // A step's turn names its run role, so the door looks for the model that role pins; none does here.
+        ...unpinnedRouting(),
         loops: fileLoopsStore(join(root, "loops.json")),
         workflows: fileWorkflowsStore(join(root, "workflows.json")),
         workflowRuns: fileWorkflowRunsStore(join(root, "workflow-runs.json")),
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
-        // Real actors, since the runner stops a turn through them; none is ever registered here.
-        conversations: memoryFleet().conversations,
+        // Real actors, since the runner stops a turn through them; none is ever registered here, so a `continue` step takes
+        // the session its last iteration reported.
+        agents: fleet.agents,
+        conversations: fleet.conversations,
         // Heard by nobody: what reacts to a settled run is composition's to subscribe.
         events: createDomainEvents(() => {}),
         agentWorktrees: unstubbed<Services["agentWorktrees"]>("agentWorktrees", { conversationDir: () => root }),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { append: async () => {} }),
         logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {}, info: () => {} }),
     });
+};
 
 const step = (id: string, over: Partial<WorkflowStep> = {}): WorkflowStep => ({
     id,
