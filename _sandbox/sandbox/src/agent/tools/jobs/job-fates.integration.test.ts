@@ -11,6 +11,7 @@ import { memoryFleet } from "../../../testing.js";
 import { bashTmuxHooks } from "../agent-terminals.js";
 import {
     type BackgroundJob,
+    endJobTheCliStopped,
     jobStatusPath,
     keepBackgroundJob,
     noteJobShell,
@@ -162,39 +163,44 @@ describe("a job's fate, from what its turn did", () => {
     const none = new Set<number>();
 
     it("hands over whatever the agent kept, reached or not, listening or not", () => {
-        expect(jobFate({ kept: true, ports: [5173], targets: ["curl -s localhost:5173"], handed: none, waiting: false })).toBe("handed");
-        expect(jobFate({ kept: true, ports: [5173], targets: [], handed: none, waiting: false })).toBe("handed");
-        expect(jobFate({ kept: true, ports: [], targets: [], handed: none, waiting: false })).toBe("handed");
+        expect(jobFate({ kept: true, ports: [5173], targets: ["curl -s localhost:5173"], handed: none, reachedBefore: none, waiting: false })).toBe("handed");
+        expect(jobFate({ kept: true, ports: [5173], targets: [], handed: none, reachedBefore: none, waiting: false })).toBe("handed");
+        expect(jobFate({ kept: true, ports: [], targets: [], handed: none, reachedBefore: none, waiting: false })).toBe("handed");
     });
 
     it("waits on anything unkept that listens on nothing", () => {
-        expect(jobFate({ kept: false, ports: [], targets: ["curl localhost:5173"], handed: none, waiting: false })).toBe("awaited");
+        expect(jobFate({ kept: false, ports: [], targets: ["curl localhost:5173"], handed: none, reachedBefore: none, waiting: false })).toBe("awaited");
     });
 
     it("stops an unkept server the turn reached", () => {
-        expect(jobFate({ kept: false, ports: [47_148], targets: ["http://127.0.0.1:47148/demo/kit"], handed: none, waiting: false })).toBe("stopped");
-        expect(jobFate({ kept: false, ports: [5173], targets: ["curl -s http://[::1]:5173/"], handed: none, waiting: false })).toBe("stopped");
+        expect(jobFate({ kept: false, ports: [47_148], targets: ["http://127.0.0.1:47148/demo/kit"], handed: none, reachedBefore: none, waiting: false })).toBe("stopped");
+        expect(jobFate({ kept: false, ports: [5173], targets: ["curl -s http://[::1]:5173/"], handed: none, reachedBefore: none, waiting: false })).toBe("stopped");
     });
 
     it("leaves an unkept listener the turn never reached awaited: a test suite's own server, mid-run", () => {
-        expect(jobFate({ kept: false, ports: [34_567], targets: ["pnpm test"], handed: none, waiting: false })).toBe("awaited");
+        expect(jobFate({ kept: false, ports: [34_567], targets: ["pnpm test"], handed: none, reachedBefore: none, waiting: false })).toBe("awaited");
     });
 
     it("does not read a longer port, or a starting command's flag, as the port", () => {
-        expect(jobFate({ kept: false, ports: [5173], targets: ["pnpm dev --port 5173", "curl localhost:51730"], handed: none, waiting: false })).toBe("awaited");
+        expect(jobFate({ kept: false, ports: [5173], targets: ["pnpm dev --port 5173", "curl localhost:51730"], handed: none, reachedBefore: none, waiting: false })).toBe("awaited");
+    });
+
+    it("stops an unkept server on a port an earlier turn of the conversation reached: its preview, restarted", () => {
+        expect(jobFate({ kept: false, ports: [47_148], targets: ["pnpm test"], handed: none, reachedBefore: new Set([47_148]), waiting: false })).toBe("stopped");
+        expect(jobFate({ kept: false, ports: [34_567], targets: [], handed: none, reachedBefore: new Set([47_148]), waiting: false })).toBe("awaited");
     });
 
     it("keeps a port this conversation already handed over, restarted and not kept again", () => {
-        expect(jobFate({ kept: false, ports: [5173], targets: ["curl localhost:5173"], handed: new Set([5173]), waiting: false })).toBe("handed");
+        expect(jobFate({ kept: false, ports: [5173], targets: ["curl localhost:5173"], handed: new Set([5173]), reachedBefore: none, waiting: false })).toBe("handed");
     });
 
     it("stops one sitting at a prompt that nobody kept, since no agent is left to answer it", () => {
-        expect(jobFate({ kept: false, ports: [], targets: [], handed: none, waiting: true })).toBe("stopped");
-        expect(jobFate({ kept: false, ports: [], targets: [], handed: none, waiting: false })).toBe("awaited");
+        expect(jobFate({ kept: false, ports: [], targets: [], handed: none, reachedBefore: none, waiting: true })).toBe("stopped");
+        expect(jobFate({ kept: false, ports: [], targets: [], handed: none, reachedBefore: none, waiting: false })).toBe("awaited");
     });
 
     it("still hands over one the agent kept for the person, prompt or not: answering it is theirs", () => {
-        expect(jobFate({ kept: true, ports: [], targets: [], handed: none, waiting: true })).toBe("handed");
+        expect(jobFate({ kept: true, ports: [], targets: [], handed: none, reachedBefore: none, waiting: true })).toBe("handed");
     });
 });
 
@@ -238,6 +244,40 @@ describe("a turn's ending, over a real job", () => {
         expect(readFileSync(jobStatusPath(job), "utf8").trim()).toBe("143");
         expect(card("conv-fate-stop", job.id)).toMatchObject({ stoppedBy: "turn", exitCode: 143 });
         expect(settledBackgroundJobs(actors, "conv-fate-stop")).toEqual({ running: [], unseen: [] });
+    });
+
+    // 2026-10-12: the turn looked at its demo server only through Playwright code, whose URL rides the call's input and no
+    // target, and the server was left awaited behind a six-hour watch.
+    it("stops a server the turn reached only through a call's input, such as Playwright code", async () => {
+        const { job, leader } = await running("conv-fate-code");
+        const code: TranscriptRow = {
+            role: "assistant",
+            text: "",
+            tools: [
+                {
+                    id: "call-code",
+                    name: "Browser run code unsafe",
+                    category: "execute",
+                    status: "completed",
+                    input: JSON.stringify({ code: "async (page) => { await page.goto('http://127.0.0.1:47148/demo/sandbox'); }" }),
+                },
+            ],
+        };
+        turnWith("conv-fate-code", [code, said("All dialogs are on one design now.")]);
+        await resolveTurnJobs(listening(leader, 47_148), "conv-fate-code");
+        expect(card("conv-fate-code", job.id)?.stoppedBy).toBe("turn");
+        expect(settledBackgroundJobs(actors, "conv-fate-code").running).toEqual([]);
+    });
+
+    // 2026-10-09: a conflict turn restarted the demo server an earlier turn had looked at, never opened it again, and left
+    // it awaited.
+    it("stops a server restarted on the port an earlier turn reached, though this turn never opened it", async () => {
+        turnWith("conv-fate-again", [called("http://127.0.0.1:47148/demo/kit"), said("Looks right.")], "run-first");
+        await resolveTurnJobs(listening(0, 47_148), "conv-fate-again");
+        const { job, leader } = await running("conv-fate-again", "exec sleep 60", "tu-restart");
+        turnWith("conv-fate-again", [said("Rebase is clean.")], "run-second");
+        await resolveTurnJobs(listening(leader, 47_148), "conv-fate-again");
+        expect(card("conv-fate-again", job.id)?.stoppedBy).toBe("turn");
     });
 
     // The review's four replies: three hand a server over and one does not, and no reading of the words told them apart.
@@ -352,6 +392,37 @@ describe("the agent's own TaskStop", () => {
             "t",
             { signal: new AbortController().signal },
         );
+        expect(existsSync(jobStatusPath(job))).toBe(false);
+    });
+});
+
+// 2026-10-12: the CLI "stopped" a demo server at its background time limit and told the agent so, while the pane served on
+// for 29 more minutes and a six-hour watch held the conversation's land.
+describe("a stop the CLI made by itself", () => {
+    it("ends the job for real, so what the agent was told is true", async () => {
+        const { job } = await running("conv-cli-stop", "exec sleep 60", "tu-cli-stop");
+        noteJobShell(actors, "tu-cli-stop", "bclistop1");
+        expect(await endJobTheCliStopped(actors, "bclistop1")).toBe(true);
+        await ended(job);
+        expect(card("conv-cli-stop", job.id)).toMatchObject({ stoppedBy: "agent", exitCode: 143 });
+        // Nothing left for the turn's ending to judge, so nothing for a watch to wait on.
+        expect(settledBackgroundJobs(actors, "conv-cli-stop").running).toEqual([]);
+    });
+
+    it("leaves a job the agent kept for the person running: it is theirs", async () => {
+        const { job } = await running("conv-cli-stop-kept", "exec sleep 60", "tu-cli-kept");
+        noteJobShell(actors, "tu-cli-kept", "bclikept1");
+        expect(keepBackgroundJob(actors, "conv-cli-stop-kept", "bclikept1", "dev server")).toBe("kept");
+        expect(endJobTheCliStopped(actors, "bclikept1")).toBeUndefined();
+        expect(existsSync(jobStatusPath(job))).toBe(false);
+    });
+
+    it("leaves a job an ending already judged alone, and an id it does not hold", async () => {
+        const { job } = await running("conv-cli-stop-judged", "exec sleep 60", "tu-cli-judged");
+        noteJobShell(actors, "tu-cli-judged", "bclijudged1");
+        settledBackgroundJobs(actors, "conv-cli-stop-judged");
+        expect(endJobTheCliStopped(actors, "bclijudged1")).toBeUndefined();
+        expect(endJobTheCliStopped(actors, "b-nobody")).toBeUndefined();
         expect(existsSync(jobStatusPath(job))).toBe(false);
     });
 });

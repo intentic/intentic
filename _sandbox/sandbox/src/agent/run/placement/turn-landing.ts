@@ -2,6 +2,7 @@ import type { AgentEvent, Rule, WorkspaceEvent } from "@intentic/sandbox-contrac
 import { landAgent, landFailureOf, type LandOutcome, reportLockfileFailures } from "../../../conversations/land/land.js";
 import { intoOf, type LandTarget, landTargetOf, type Upstream, upstreamOf, underLeases } from "../../../conversations/land/land-target.js";
 import { landingPaths } from "../../../conversations/land/landing-paths.js";
+import { noteLandHeldForWake } from "../../../conversations/land/wake-held.js";
 import { versionCommitsSettled } from "../../../conversations/land/version-landed.js";
 import { type IsolatedAgent, isIsolated } from "../../../conversations/registry/agents-store.js";
 import type { Services } from "../../../composition.js";
@@ -110,7 +111,7 @@ export const keepLandFailure = async (deps: Pick<Services, "agents" | "logger">,
     }
 };
 
-const performLandingWrites = (deps: Pick<Services, "activity" | "ruleFirings" | "logger">, conversationId: string, writes: readonly LandingWrite[]): void => {
+export const performLandingWrites = (deps: Pick<Services, "activity" | "ruleFirings" | "logger">, conversationId: string, writes: readonly LandingWrite[]): void => {
     for (const write of writes) {
         if (write.kind === "fired") {
             void deps.ruleFirings.stamp(write.rule, Date.now()).catch((error: unknown) => deps.logger.warn({ err: error }, "rule firing stamp failed"));
@@ -222,11 +223,25 @@ export const settleParentBooks = async (
 // What lands with no rule to ask: a child's work into its parent, as the parent's in-process subagents' edits go there.
 const UNRULED: LandingDecision = { mode: "check", writes: [] };
 
-// What the sandbox's landing rules say of work reaching the owner's tree by its own land.
-const ruledDecision = async (deps: LandingDeps, turn: LandingTurn, finished: IsolatedAgent, books: LandBooks): Promise<LandingDecision> => {
+/**
+ * Whether a finished turn's work lands by itself, going where `target` says: what the sandbox's landing rules say of work
+ * reaching the owner's tree, `autoLand` being the turn's own answer (the conversation's posture where it gave none); a
+ * child's work into its parent's checkout asks no rule. The one decision a turn's close and a land its wake held
+ * (wake-held-land.ts) both make.
+ */
+export const decideLanding = async (
+    deps: Pick<Services, "sandboxSettings" | "agentWorktrees" | "logger">,
+    target: LandTarget,
+    finished: IsolatedAgent,
+    autoLand: boolean | undefined,
+    span: LandBooks["span"],
+): Promise<LandingDecision> => {
+    if (target.kind !== "main" || !target.ruled) {
+        return UNRULED;
+    }
     const { rules } = await deps.sandboxSettings.get();
-    const facts = await landingFacts(deps, rules, finished, books.span);
-    return landingDecision(rules, facts, turn.autoLand ?? finished.postures.autoLand);
+    const facts = await landingFacts(deps, rules, finished, span);
+    return landingDecision(rules, facts, autoLand ?? finished.postures.autoLand);
 };
 
 // Lands a clean turn, or runs the same pass in `measure` where it is held; nothing at all for a failed or stopped one,
@@ -234,13 +249,18 @@ const ruledDecision = async (deps: LandingDeps, turn: LandingTurn, finished: Iso
 export async function* landTurn(deps: LandingDeps, hooks: LandingHooks, turn: LandingTurn, books: LandBooks): AsyncGenerator<AgentEvent> {
     const id = turn.conversationId;
     const finished = deps.agents.entry(id);
-    if (turn.failed || turn.aborted || turn.awaitingWake || finished === undefined || !isIsolated(finished)) {
+    const isolated = finished !== undefined && isIsolated(finished);
+    // A clean turn that ended to wait on its own wake skips its land, kept for if that wake goes away without firing
+    // (wake-held-land.ts); any other ending clears what an earlier one kept.
+    const heldForWake = !turn.failed && !turn.aborted && turn.awaitingWake && isolated;
+    noteLandHeldForWake(deps.conversations, id, heldForWake ? { autoLand: turn.autoLand } : undefined);
+    if (turn.failed || turn.aborted || turn.awaitingWake || !isolated) {
         return;
     }
     // Before the decision, so a path a fixer wrote is one the rules read, and before the lease, so the land commits it.
     await hooks.fix(books.span);
     const target = await landTargetOf(deps, finished);
-    const decision = target.kind === "main" && target.ruled ? await ruledDecision(deps, turn, finished, books) : UNRULED;
+    const decision = await decideLanding(deps, target, finished, turn.autoLand, books.span);
     // Under the land lease, so a manual land pressed meanwhile queues rather than rebasing under this one; and under the
     // parent's too where the work goes into its checkout. A land that breaks still fails the turn, and stays on the card
     // after the next turn clears that failure, until a land goes through.

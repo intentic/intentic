@@ -3,6 +3,7 @@ import { childLandingWords, reportChildLanded } from "../agent/subagents/child-l
 import { type ChildReportDeps, reportChildTurn } from "../agent/subagents/child-report.js";
 import { adoptChildTurn, childKillNote } from "../agent/subagents/children.js";
 import { createProjectDelivery, type ProjectDeliveryDeps } from "../conversations/land/project-delivery.js";
+import { landHeldForWake } from "../conversations/land/wake-held-land.js";
 import { conversationProfile } from "../conversations/registry/agents-store.js";
 import { startWatchers } from "../agent/verification/watchers.js";
 import { approvalsExecutorFor } from "../approvals/approvals-executor.js";
@@ -34,6 +35,12 @@ const childReportDeps = (services: BootPhase["services"], logger: BootPhase["log
     killNote: (childId, failure) => childKillNote(services, childId, failure),
     landingOf: (childId) => childLandingWords(services.agents, childId),
 });
+
+// A wake disarmed before it fired: the land its conversation's last close skipped for it runs now, if still due.
+const landWhenWakeGoes =
+    (services: BootPhase["services"]) =>
+    (conversationId: string): void =>
+        void landHeldForWake(services, conversationId);
 
 // What following the remote reads off the daemon (git/remote/follow-origin.ts): the switch, and whether a turn is
 // working in the main tree, whose files must not move under it.
@@ -85,8 +92,9 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
     }
 
     // Stop clears timers only; the watch journal survives for the next boot to restore. What a turn left running is
-    // judged and handed to a watch by the turn's own close (agent/run/placement/turn-close.ts), which needs this bound.
-    shutdown.push(startWatchers(services));
+    // judged and handed to a watch by the turn's own close (agent/run/placement/turn-close.ts), which needs this bound. A
+    // wake stopped before it fired lets the land its close skipped run after all (wake-held-land.ts).
+    shutdown.push(startWatchers(services, landWhenWakeGoes(services)));
 
     // A spawned child's settled turn is its parent's news, delivered like a wake unless a parked `wait` took it.
     const childReports = childReportDeps(services, logger);

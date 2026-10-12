@@ -554,6 +554,28 @@ export const noteJobNotice = (actors: Holders, shellId: string): void => {
     }
 };
 
+/**
+ * From a `task_notification` saying the CLI stopped a job by itself: the call's own background time limit, or memory
+ * running short. Its stop only signals tmux-run, which under `-b` survives that very signal (it is also how the turn's
+ * CLI exits), so the pane ran on while the agent was told the command had stopped: on 2026-10-12 a demo server the CLI
+ * "stopped after reaching its background time limit" was still serving 29 minutes later, and the six-hour watch its
+ * turn's ending handed it to held that conversation's land the whole time. The job is ended for real here, so what the
+ * agent was told is true. Only a job its turn has not judged yet and nobody kept: one left to the person is theirs, and
+ * one already awaited or stopped has its fate. Answers the stop, for a caller that waits on it; undefined when there is
+ * nothing to stop.
+ */
+export const endJobTheCliStopped = (actors: Actors, shellId: string): Promise<boolean> | undefined => {
+    const record = actors
+        .holdings(JOBS)
+        .entries()
+        .map(([, candidate]) => candidate)
+        .find((candidate) => candidate.shellId === shellId);
+    if (record === undefined || record.fate !== undefined || record.kept !== undefined || jobFinished(record.job)) {
+        return undefined;
+    }
+    return stopBackgroundJob(actors, record.job, "agent");
+};
+
 /** A main-thread model request reads every completion notice queued before it. */
 export const noteModelRequest = (actors: Holders, conversationId: string): void => {
     for (const record of actors.holdings(JOBS).of(conversationId)) {

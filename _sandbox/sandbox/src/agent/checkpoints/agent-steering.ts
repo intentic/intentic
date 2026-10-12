@@ -34,6 +34,11 @@ export class SteeringQueue implements AsyncIterable<string> {
         this.wake?.();
     }
 
+    // Whether the turn's input has ended: what the CLI does after that is winding down, not the turn's own doing.
+    get ended(): boolean {
+        return this.closed;
+    }
+
     async *[Symbol.asyncIterator](): AsyncGenerator<string> {
         for (;;) {
             const next = this.buffer.shift();

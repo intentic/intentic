@@ -89,15 +89,21 @@ whose steps are named in `agent/run/placement/turn-close.ts`:
    the person with the `keep` tool, or one on a port the conversation already handed over, keeps running for them. A
    server the turn reached and nobody kept is stopped with it, and so is a job sitting at a prompt
    (`agent/tools/jobs/input-wait.ts`: blocked reading its terminal with nothing moving), since no agent is left to
-   answer it; anything else is awaited. The closing reply's words decide nothing. (2026-10-04: awaiting such a job armed
-   a six-hour watch that held the land behind a question nobody would answer.)
+   answer it; anything else is awaited. A call reaches a server by what it was given: its target, or the input of a call
+   that has none (Playwright code that goes to the page), and a port an earlier turn of the conversation reached counts
+   too. The closing reply's words decide nothing. (2026-10-04: awaiting such a job armed a six-hour watch that held the
+   land behind a question nobody would answer.) A job the CLI says it stopped mid-turn (the call's background time
+   limit, memory running short) was ended for real as the stop arrived (`endJobTheCliStopped`), since the CLI's own
+   stop only signals `tmux-run`, which outlives it.
 3. **Arm wakes.** Each awaited job, and each finished one whose exit the model never read, is handed to a watch
    (`background-adoption.ts`). Whether the conversation now runs again by itself is read from what it holds:
    `awaitingWake` (`conversations/actor/conversation-state.ts`: an armed watch, or the sandbox's or an agent's words
    waiting in a queue nothing holds). Status, `fixStance` and the card read that one reading
    (`AgentSummary.awaitingWake`); nothing predicts it from job records.
 4. **Land**, a clean turn only (`turn-landing.ts`). Nothing lands while the conversation awaits a wake, since the wake
-   is the turn that finishes the work. Otherwise the repository's own machine fixers run in the worktree on what the
+   is the turn that finishes the work; the skipped land is kept (`conversations/land/wake-held.ts`), and when that wake
+   is disarmed without firing (a person stops the job or the watch), it runs after all, deciding as the close would
+   have and landing as a press does (`conversations/land/wake-held-land.ts`). Otherwise the repository's own machine fixers run in the worktree on what the
    turn changed (`conversations/land/worktree-fixers.ts`, `_tools/scripts/verify/fixers.mjs` where the repository
    ships it), so what they write rides this land. Then the rules decide, and it lands under the lease. Nothing runs
    them on the main tree afterwards. With the owner's version rule standing, the land's claim is then committed

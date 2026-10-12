@@ -43,6 +43,8 @@ interface Harness {
     journal: WatchJournal;
     // The daemon's actors, which hold the watches and the card they publish; a restart gets fresh ones.
     readonly conversations: ConversationActors;
+    // Each conversation a stop disarmed watches of, as the runtime told the land a wake held (wake-held-land.ts).
+    readonly disarmed: string[];
     stop: () => void;
 }
 
@@ -57,6 +59,7 @@ const harnessOf = (over: Partial<Pick<Harness, "check" | "env" | "journal">> = {
         live: new Set(["conv-1", "conv-2", "conv-3"]),
         journal: memoryWatchJournal(),
         conversations: memoryFleet().conversations,
+        disarmed: [],
         stop: () => undefined,
         ...over,
     };
@@ -74,6 +77,7 @@ const harnessOf = (over: Partial<Pick<Harness, "check" | "env" | "journal">> = {
         envOf: () => Promise.resolve(harness.env),
         conversationLive: (conversationId) => harness.live.has(conversationId),
         conversations: harness.conversations,
+        disarmed: (conversationId) => void harness.disarmed.push(conversationId),
     };
     harness.stop = startWatcherRuntime(runtime);
     return harness;
@@ -154,6 +158,25 @@ describe("watchers", () => {
         await advanceTimersByTimeAsync(120_000);
         expect(harness.doors.started).toHaveLength(0);
         expect(harness.doors.steers).toHaveLength(0);
+    });
+
+    // What lets the land a turn's close skipped for this wake run after all: told for a stop, never for a firing, whose
+    // wake's turn lands its own work.
+    it("tells of a stop that disarmed watches, once per stop, and never of a firing", async () => {
+        const outcome = await armWatcher(specOf());
+        await cancelWatcher("conv-1", outcome.kind === "armed" ? outcome.id : "");
+        expect(harness.disarmed).toEqual(["conv-1"]);
+        await armWatcher(specOf({ note: "CI" }));
+        await armWatcher(specOf({ note: "deploy" }));
+        await cancelWatchersFor("conv-1");
+        expect(harness.disarmed).toEqual(["conv-1", "conv-1"]);
+        await cancelWatchersFor("conv-1");
+        expect(await cancelWatcher("conv-1", "watch-none")).toBe(false);
+        await armWatcher(specOf({ conversationId: "conv-2" }));
+        harness.check = { exitCode: 0, output: "done" };
+        await advanceTimersByTimeAsync(10_000);
+        expect(harness.doors.started).toHaveLength(1);
+        expect(harness.disarmed).toEqual(["conv-1", "conv-1"]);
     });
 
     it("only the arming conversation may stop a watch", async () => {

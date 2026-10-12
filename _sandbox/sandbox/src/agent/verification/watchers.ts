@@ -89,6 +89,9 @@ export interface WatcherRuntime extends WakeDoors {
     readonly conversationLive: (conversationId: string) => boolean;
     // Where each conversation's watches are held, and its card told of them.
     readonly conversations: Pick<ConversationActors, "holdings" | "send">;
+    // Told once a stop (the agent's, a person's, a job's) disarmed a conversation's watches without any firing: the land
+    // its last close skipped for that wake may be due now (wake-held-land.ts). Never a firing, whose wake's turn lands.
+    readonly disarmed?: (conversationId: string) => void;
 }
 
 let runtime: WatcherRuntime | undefined;
@@ -135,6 +138,7 @@ export const cancelWatcher = async (conversationId: string, id: string): Promise
         return false;
     }
     await discard(live, record);
+    live.disarmed?.(conversationId);
     return true;
 };
 
@@ -149,6 +153,9 @@ export const cancelWatchersFor = async (conversationId: string): Promise<number>
     const own = live.conversations.holdings(WATCHES).of(conversationId);
     for (const record of own) {
         await discard(live, record);
+    }
+    if (own.length > 0) {
+        live.disarmed?.(conversationId);
     }
     return own.length;
 };
@@ -540,7 +547,7 @@ export const startWatcherRuntime = (live: WatcherRuntime): (() => void) => {
     };
 };
 
-export const startWatchers = (services: Services): (() => void) =>
+export const startWatchers = (services: Services, disarmed: (conversationId: string) => void): (() => void) =>
     startWatcherRuntime({
         logger: services.logger,
         runCheck: watchCheck(services.turnIsolation),
@@ -552,4 +559,5 @@ export const startWatchers = (services: Services): (() => void) =>
         // Archive disarms its own watches, so an archived conversation's entry is one still being delivered.
         conversationLive: (conversationId) => services.agents.entry(conversationId) !== undefined,
         conversations: services.conversations,
+        disarmed,
     });

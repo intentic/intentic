@@ -1945,6 +1945,58 @@ test("a background command whose notice arrived after the model's last request i
     job.remove();
 });
 
+// The CLI's own stop of a background command (its time limit, memory running short) only signals tmux-run, which
+// outlives it: mid-turn, the sandbox ends the job for real, so what the agent is told is true.
+const cliStop = (toolUseId: string, taskId: string) => [
+    { type: "system", subtype: "task_started", session_id: "s", task_id: taskId, tool_use_id: toolUseId, task_type: "local_bash", description: "pnpm dev" },
+    { type: "system", subtype: "task_notification", session_id: "s", task_id: taskId, tool_use_id: toolUseId, status: "stopped", summary: "pnpm dev" },
+];
+
+// The job's exit status once the stop the fold set off has written it, waited out briefly; undefined if none came.
+const statusOf = async (conversationId: string, id: string): Promise<string | undefined> => {
+    const dir = backgroundJobOf(actors, conversationId, id)?.dir;
+    if (dir === undefined) {
+        return undefined;
+    }
+    const status = join(dir, "status");
+    const deadline = Date.now() + 1_000;
+    while (!existsSync(status) && Date.now() < deadline) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- the stop is not awaited by the fold, so this waits it out
+        await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    return existsSync(status) ? readFileSync(status, "utf8").trim() : undefined;
+};
+
+test("a background command the CLI stopped mid-turn is ended for real", async () => {
+    const job = finishedJob("c-cli-stop", "tu-cli-stop");
+    await collect(
+        { ...request, spec: { ...request.spec, conversationId: "c-cli-stop" } },
+        fakeQuery(...cliStop("tu-cli-stop", "bsh-cli-stop"), { type: "result", subtype: "success" }),
+    );
+    expect(await statusOf("c-cli-stop", job.id)).toBe("143");
+    job.remove();
+});
+
+test("a stop the CLI makes once the turn's input has ended is its winding down, and leaves the job to the turn's ending", async () => {
+    const job = finishedJob("c-cli-wind", "tu-cli-wind");
+    const steering = new SteeringQueue();
+    steering.push("absorbed mid-turn");
+    const [started, stopped] = cliStop("tu-cli-wind", "bsh-cli-wind");
+    const winding: QueryFn = async function* (args) {
+        // SAFETY: canned frames carry only the fields runAgent reads, as fakeQuery's do.
+        yield started as SDKMessage;
+        yield { type: "result", subtype: "success" } as SDKMessage;
+        for await (const message of args.prompt as AsyncIterable<SDKUserMessage>) {
+            void message;
+        }
+        // SAFETY: as above.
+        yield stopped as SDKMessage;
+    };
+    await withoutTheGraceWait(() => collect({ ...request, spec: { ...request.spec, conversationId: "c-cli-wind", steering } }, winding));
+    expect(await statusOf("c-cli-wind", job.id)).toBeUndefined();
+    job.remove();
+});
+
 // A backgrounded child (task_type local_agent) keeps the stream open past the parent's first result until its wake
 // turn's frames arrive, instead of ending the stream and killing the child.
 test("a result with a backgrounded child in flight holds the stream open for the wake turn", async () => {
@@ -2140,6 +2192,65 @@ test("a backgrounded shell does not hold the turn open", async () => {
         ),
     );
     expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "done" }]);
+});
+
+// Print mode holds a CLI whose input closed open for its background shells until each one's own time limit, then wakes
+// the model to say it stopped them; a steered turn drained into that hold and read as running all the while. On
+// 2026-10-12 a finished turn sat nine minutes behind a demo server that way, and another twenty-eight. The CLI here holds
+// for half an hour, or until the stream's close ends it, as the SDK's close ends the real one.
+test("a steered turn whose CLI holds itself open only for a background shell ends instead of waiting out the shell", async () => {
+    const steering = new SteeringQueue();
+    steering.push("absorbed mid-turn");
+    const drained: string[] = [];
+    const before: unknown[] = [
+        {
+            type: "system",
+            subtype: "background_tasks_changed",
+            session_id: "s",
+            tasks: [{ task_id: "bsh-1", task_type: "local_bash", description: "pnpm dev" }],
+        },
+        { type: "result", subtype: "success" },
+    ];
+    // What the CLI says once the shell's time limit passes: it stopped the shell, and wakes the model to say so.
+    const after: unknown[] = [
+        { type: "system", subtype: "task_notification", session_id: "s", task_id: "bsh-1", status: "stopped", summary: "pnpm dev" },
+        { type: "system", subtype: "init", session_id: "s" },
+        { type: "stream_event", session_id: "s", event: { type: "content_block_delta", delta: { type: "text_delta", text: "The server hit its time limit." } } },
+        { type: "result", subtype: "success" },
+    ];
+    const holding: QueryFn = (args) => {
+        const { promise: ended, resolve: end } = Promise.withResolvers<void>();
+        const frames = (async function* (): AsyncGenerator<SDKMessage> {
+            for (const frame of before) {
+                // SAFETY: canned frames carry only the fields runAgent reads, as fakeQuery's do.
+                yield frame as SDKMessage;
+            }
+            // Like the real SDK, nothing more comes until the input ends; then the CLI holds for its shell.
+            for await (const message of args.prompt as AsyncIterable<SDKUserMessage>) {
+                drained.push(String(message.message.content));
+            }
+            await Promise.race([ended, new Promise((resolve) => setTimeout(resolve, 30 * 60_000))]);
+            for (const frame of after) {
+                // SAFETY: as above.
+                yield frame as SDKMessage;
+            }
+        })();
+        return {
+            [Symbol.asyncIterator]: () => ({
+                next: () => frames.next(),
+                return: async () => {
+                    end();
+                    return frames.return(undefined);
+                },
+            }),
+        };
+    };
+    const started = Date.now();
+    const events = await withoutTheGraceWait(() => collect({ ...request, spec: { ...request.spec, conversationId: "c-shell-hold", steering } }, holding));
+    expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "done" }]);
+    expect(drained).toEqual(["add a /ping route", "absorbed mid-turn"]);
+    // The grace window, then the closed input's last one: seconds of the fake clock, never the shell's half hour.
+    expect(Date.now() - started).toBeLessThan(60_000);
 });
 
 // An unrecognised background task type holds the stream open by default (the allow-list names only what may be

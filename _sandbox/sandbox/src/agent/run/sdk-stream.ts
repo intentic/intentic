@@ -27,7 +27,7 @@ import { type CacheCreationBuckets, ttlFromCacheCreation } from "./turn/prompt-c
 import { noteRetryCause } from "./turn/turn-pulse.js";
 import { promptFingerprint } from "./prompt-fingerprint.js";
 import { noteSubagentSpawn, noteSubagentTask, type SubagentTaskMessage, type SubagentTurn } from "../subagents/subagents.js";
-import { noteJobNotice, noteJobShell, noteModelRequest } from "../tools/jobs/background-jobs.js";
+import { endJobTheCliStopped, noteJobNotice, noteJobShell, noteModelRequest } from "../tools/jobs/background-jobs.js";
 import { TaskChecklist } from "./task-checklist.js";
 import { PageDrafts } from "../pages/page-draft.js";
 import { PAGE_TOOL_NAMES } from "../pages/page-names.js";
@@ -73,6 +73,14 @@ async function* steeredInput(first: string, steering: SteeringQueue): AsyncGener
 // Grace window after a steered result: a message means another turn is coming; silence means the stream ended.
 const STEER_GRACE_MS = 1000;
 
+// How long a CLI whose input closed gets to start the one turn it can still owe (a steer that raced the close, a child's
+// notification) while only work that outlives the turn is live. Seconds against what it otherwise waits: print mode holds
+// a CLI open for its background shells until each one's own time limit (thirty minutes by default), then wakes the model
+// to say it stopped them, and the turn read as running all that time. On 2026-10-12 a finished turn sat nine minutes,
+// and another twenty-eight, behind a demo server, for a stop that stopped nothing (tmux-run outlives that signal), and
+// the server's watch then held the land. The shell is the daemon's job, judged when the turn ends (job-fates.ts).
+const OUTLIVED_GRACE_MS = 10_000;
+
 const nextWithinGrace = async (next: Promise<IteratorResult<SDKMessage, void>>): Promise<IteratorResult<SDKMessage, void> | undefined> =>
     within(next, STEER_GRACE_MS, undefined);
 
@@ -84,13 +92,23 @@ const nextWithinGrace = async (next: Promise<IteratorResult<SDKMessage, void>>):
 // remote_agent runs on the provider's side, not in this process
 const UNHELD_TASK_TYPES: ReadonlySet<string> = new Set(["local_bash", "monitor_ws", "monitor_mcp", "remote_agent"]);
 
-// The shell id the model was given for a background job, and that its completion notice is queued.
-const noteBashTask = (turn: SubagentTurn, message: SubagentTaskMessage): void => {
+// The shell id the model was given for a background job, that its completion notice is queued, and that the CLI stopped
+// it by itself (its time limit, memory running short), which only the sandbox can make true (endJobTheCliStopped). Not
+// once the turn's input has ended (`steering`, closed): a CLI that stops its shells then is ending, and what its turn left
+// running is the turn's ending to judge (job-fates.ts), not this stop's.
+const noteBashTask = (turn: SubagentTurn, message: SubagentTaskMessage, steering: SteeringQueue | undefined): void => {
     if (message.subtype === "task_started" && message.task_type === "local_bash" && message.tool_use_id !== undefined && message.task_id !== undefined) {
         noteJobShell(turn.conversations, message.tool_use_id, message.task_id);
     }
     if (message.subtype === "task_notification" && message.task_id !== undefined) {
         noteJobNotice(turn.conversations, message.task_id);
+        if (message.status === "stopped" && steering?.ended !== true) {
+            // Not awaited: the fold must not stall on a process group's grace. The stop marks the job stopped before
+            // its first await, so the turn's ending already reads it as stopped, and a stop that failed after that
+            // leaves a job no wake waits on and no land is held by, which a person can still stop from its row.
+            // allow(silent-catch): no logger reaches the fold, and what a failed stop leaves is said above.
+            void endJobTheCliStopped(turn.conversations, message.task_id)?.catch(() => undefined);
+        }
     }
 };
 
@@ -100,12 +118,16 @@ const MAX_IN_TURN_RETRIES = 8;
 // The CLI's endings for a session its window can no longer hold, compaction included; resuming it ends there again.
 const OVERFLOW_ENDINGS: ReadonlySet<TerminalReason> = new Set<TerminalReason>(["prompt_too_long", "blocking_limit", "rapid_refill_breaker"]);
 
-// Live in-process background work off the SDK's own level signal (replace semantics; a missed edge can't wedge a stale
-// hold). Undefined on every other message, so the caller keeps its last count.
-const heldTaskCount = (message: SDKMessage): number | undefined =>
-    message.type === "system" && message.subtype === "background_tasks_changed"
-        ? message.tasks.filter((task) => !UNHELD_TASK_TYPES.has(task.task_type)).length
-        : undefined;
+// Live background work off the SDK's own level signal (replace semantics; a missed edge can't wedge a stale hold): the
+// in-process work the boundary waits for, and the work that outlives the turn (UNHELD_TASK_TYPES). Undefined on every
+// other message, so the caller keeps its last counts.
+const taskCounts = (message: SDKMessage): { readonly held: number; readonly outliving: number } | undefined => {
+    if (message.type !== "system" || message.subtype !== "background_tasks_changed") {
+        return undefined;
+    }
+    const outliving = message.tasks.filter((task) => UNHELD_TASK_TYPES.has(task.task_type)).length;
+    return { held: message.tasks.length - outliving, outliving };
+};
 
 // A main-thread turn frame; only the idle gaps between turns race the grace window. A child's own frames (parented)
 // keep arriving throughout a hold and must not read as a turn underway.
@@ -119,8 +141,54 @@ const isMainTurnFrame = (message: SDKMessage): boolean =>
 const isWorkFrame = (message: SDKMessage): boolean =>
     message.type === "assistant" || message.type === "stream_event" || (message.type === "system" && message.subtype === "local_command_output");
 
+// Where a stream stands between its frames, as the turn boundary reads it.
+interface Boundary {
+    // A result passed on a steered stream: the next idle gap decides follow-up turn vs. turn-stream-over.
+    awaitingNextTurn: boolean;
+    // Live in-process background work off the latest level signal; counts only what the boundary waits for.
+    heldTasks: number;
+    // Live work that outlives the turn, off the same signal: what a CLI whose input closed holds itself open for.
+    outlivingTasks: number;
+    // The input was closed by a grace that passed in silence; the CLI owes at most a turn that raced the close.
+    inputClosed: boolean;
+    // A result passed while children were live: the stream is held open for the CLI's wake turn.
+    held: boolean;
+    // A main-thread model frame seen since the last result (see isMainTurnFrame).
+    midTurn: boolean;
+    // Anything produced since the last result (see isWorkFrame).
+    sawWork: boolean;
+}
+
+// How the boundary waits for the next frame: a grace window, whose silence closes the input (both parks end alike;
+// `held` is always false while awaitingNextTurn is set); a closed input's last window, whose silence ends the stream; or
+// as long as it takes.
+const waitOf = (at: Boundary): "grace" | "outlived" | "plain" => {
+    const quiet = !at.midTurn && at.heldTasks === 0;
+    if (at.awaitingNextTurn || (at.held && quiet)) {
+        return "grace";
+    }
+    // Silence here is the CLI holding itself open for work that outlives the turn, not a turn to come.
+    return at.inputClosed && quiet && at.outlivingTasks > 0 ? "outlived" : "plain";
+};
+
+// Folds one frame into where the stream stands.
+const noteFrame = (at: Boundary, message: SDKMessage): void => {
+    const counts = taskCounts(message);
+    at.heldTasks = counts?.held ?? at.heldTasks;
+    at.outlivingTasks = counts?.outliving ?? at.outlivingTasks;
+    at.midTurn ||= isMainTurnFrame(message);
+    at.sawWork ||= isWorkFrame(message);
+};
+
+// A swallowed prompt, given a result with no work behind it: an instant empty success (the CLI notification-wakes on a
+// dead run and drops the queued message), redelivered here once through the steering queue instead of yielded. The
+// caller skips it while held for a wake turn.
+const swallowed = (message: SdkOf<"result">, steering: SteeringQueue | undefined, redeliver: (() => boolean) | undefined): boolean =>
+    message.subtype === "success" && message.num_turns === 0 && steering?.delivered === 0 && redeliver?.() === true;
+
 // Ends the SDK stream at the right turn boundary: unsteered streams end at the first result; once steered, a result
-// arms the grace race, and one with children still live holds the stream for the CLI's wake turn.
+// arms the grace race, and one with children still live holds the stream for the CLI's wake turn. A CLI whose input
+// closed and that holds itself open only for work outliving the turn is let go after a last window.
 async function* sdkTurns(
     stream: AsyncIterable<SDKMessage>,
     steering: SteeringQueue | undefined,
@@ -128,72 +196,59 @@ async function* sdkTurns(
     redeliver: (() => boolean) | undefined,
 ): AsyncGenerator<SDKMessage> {
     const iterator = stream[Symbol.asyncIterator]();
-    // A result passed on a steered stream: the next idle gap decides follow-up turn vs. turn-stream-over.
-    let awaitingNextTurn = false;
-    // Live in-process background work off the latest level signal; counts only what the boundary waits for.
-    let heldTasks = 0;
-    // A result passed while children were live: the stream is held open for the CLI's wake turn.
-    let held = false;
-    // A main-thread model frame seen since the last result (see isMainTurnFrame).
-    let midTurn = false;
-    // Anything produced since the last result (see isWorkFrame).
-    let sawWork = false;
+    const at: Boundary = { awaitingNextTurn: false, heldTasks: 0, outlivingTasks: 0, inputClosed: false, held: false, midTurn: false, sawWork: false };
     // A pending next() that lost the grace race is re-awaited on the following pass, never abandoned.
     let pending: Promise<IteratorResult<SDKMessage, void>> | undefined;
     try {
         for (;;) {
             const nextPromise = pending ?? iterator.next();
             pending = undefined;
-            let step: IteratorResult<SDKMessage, void>;
-            // Both parks end alike on silence: close input and drain; `held` is always false while awaitingNextTurn is
-            // set.
-            if (awaitingNextTurn || (held && !midTurn && heldTasks === 0)) {
-                awaitingNextTurn = false;
-                const winner = await nextWithinGrace(nextPromise);
-                if (winner === undefined) {
-                    held = false;
+            const wait = waitOf(at);
+            let step: IteratorResult<SDKMessage, void> | undefined;
+            if (wait === "grace") {
+                at.awaitingNextTurn = false;
+                step = await nextWithinGrace(nextPromise);
+                if (step === undefined) {
+                    at.held = false;
                     steering?.close();
+                    at.inputClosed = true;
                     pending = nextPromise;
                     continue;
                 }
-                step = winner;
+            } else if (wait === "outlived") {
+                // Its close (iterator.return, below) ends the CLI, which nothing outliving the turn goes with.
+                step = await within(nextPromise, OUTLIVED_GRACE_MS, undefined);
             } else {
                 step = await nextPromise;
             }
-            if (step.done === true) {
+            if (step === undefined || step.done === true) {
                 return;
             }
             const message = step.value;
-            heldTasks = heldTaskCount(message) ?? heldTasks;
-            midTurn = midTurn || isMainTurnFrame(message);
-            sawWork = sawWork || isWorkFrame(message);
+            noteFrame(at, message);
             if (message.type !== "result") {
                 yield message;
                 continue;
             }
-            midTurn = false;
-            // A swallowed prompt: an instant empty success with no work behind it (the CLI notification-wakes on a dead
-            // run and drops the queued message). Redelivered once through the steering queue instead of yielded;
-            // skipped while held for a wake turn.
-            const idle = !sawWork;
-            sawWork = false;
-            if (!held && idle && message.subtype === "success" && message.num_turns === 0 && steering?.delivered === 0 && redeliver?.() === true) {
-                awaitingNextTurn = true;
+            at.midTurn = false;
+            const idle = !at.sawWork;
+            at.sawWork = false;
+            if (!at.held && idle && swallowed(message, steering, redeliver)) {
+                at.awaitingNextTurn = true;
                 continue;
             }
             yield message;
-            if (heldTasks > 0) {
-                held = true;
+            at.held = at.heldTasks > 0;
+            if (at.held) {
                 continue;
             }
-            held = false;
             if (steering === undefined || steering.delivered === 0) {
                 // Closed before returning so a steer racing this result reports undelivered rather than queuing
                 // forever.
                 steering?.close();
                 return;
             }
-            awaitingNextTurn = true;
+            at.awaitingNextTurn = true;
         }
     } finally {
         await iterator.return?.();
@@ -806,7 +861,7 @@ class TurnFold {
                 // The SDK's subagent lifecycle messages, the only account of a backgrounded child between its tool_use
                 // and its result. The registry owns the fold; this only forwards what came back.
                 if (this.args.subagents !== undefined && message.subtype.startsWith("task_")) {
-                    noteBashTask(this.args.subagents, message as SubagentTaskMessage);
+                    noteBashTask(this.args.subagents, message as SubagentTaskMessage, this.args.steering);
                     const frame = noteSubagentTask(this.args.subagents, message as SubagentTaskMessage);
                     if (frame !== undefined) {
                         yield frame;
