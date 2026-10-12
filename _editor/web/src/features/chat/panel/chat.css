@@ -343,22 +343,29 @@
     animation: none;
 }
 /* A RUN'S WEIGHT IS THE SEAM ITSELF, NOT A NUMBER: the gap above the words the run led to becomes a band of the same
-   ground, 1% toward the ink (in oklab, over whatever ground it lies on) and each call making it 2px taller, so a
-   quiet step is barely a line and a busy one a longer pause. Flat, edge to edge: no glow, no rule. The exact
-   count and its breakdown are on hover. `--wash-calls` is set on the spine, capped (ChatTurnAsides). */
+   ground, stippled 2% toward the ink (in oklab, over whatever ground it lies on) and each call making it 2px taller,
+   so a quiet step is barely a line and a busy one a longer pause. Dots on a 3px grid, not a flat fill: most of the
+   band is bare ground, so it reads as a texture of the page rather than a pill laid over it. No glow, no rule. The
+   exact count and its breakdown are on hover. `--wash-calls` is set on the spine, capped (ChatTurnAsides). */
+/* Registered so hover can ease the depth: a gradient's colour does not transition, a typed custom property does. */
+@property --wash-depth {
+    syntax: "<percentage>";
+    inherits: false;
+    initial-value: 2%;
+}
 .chat-spine {
     --wash-height: calc(0.25rem + var(--wash-calls, 0) * 0.125rem);
 }
 .chat-spine-wash {
     --wash-ink: var(--color-content);
-    --wash-depth: 1%;
+    --wash-depth: 2%;
     display: block;
     width: 100%;
     height: var(--wash-height);
     border-radius: 9999px;
-    background: color-mix(in oklab, var(--wash-ink) var(--wash-depth), transparent);
+    background: radial-gradient(circle, color-mix(in oklab, var(--wash-ink) var(--wash-depth), transparent) 0.7px, transparent 1.1px) 0 0 / 3px 3px;
     cursor: pointer;
-    transition: background-color var(--motion-hover);
+    transition: --wash-depth var(--motion-hover);
 }
 .chat-spine-wash:hover {
     --wash-depth: 5%;
