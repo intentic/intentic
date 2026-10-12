@@ -2,7 +2,7 @@ import type { AgentNeed, Need, NeedRaise, NeedSubject, NeedTold } from "@intenti
 import { memoryNeedsStore } from "../testing.js";
 import type { TurnStanding } from "../conversations/actor/turn-standing.js";
 import type { Answered, Met, NeedKindHandler, NeedKinds, Resolved } from "./need-kinds.js";
-import { createNeeds, type NeedsDeps } from "./needs.js";
+import { createNeeds, type NeedsDeps, onePassAtATime } from "./needs.js";
 
 // The lifecycle every kind shares, driven through a fake kind: an ask is answered on its call when a person is quick,
 // kept when they are not, and its answer reaches the conversation by itself, however the turn stands by then.
@@ -401,4 +401,50 @@ test("a need answered is withdrawn from the owner's devices once, as it stops wa
 
     await needs.answer("need-1", { kind: "accept" }, { email: "user@example.com" });
     expect(withdrawn.map((need) => [need.id, need.status])).toEqual([["need-1", "met"]]);
+});
+
+// The failure this guards: a recheck asked for while a pass was reading was dropped, so a card raised after that pass
+// listed the needs, or whose world changed after it was read, stayed open until the next tick.
+test("a check asked for while one runs is not dropped: one more pass follows, shared by every call made meanwhile", async () => {
+    const gates: (() => void)[] = [];
+    let passes = 0;
+    const check = onePassAtATime(async () => {
+        passes += 1;
+        await new Promise<void>((resolve) => gates.push(resolve));
+    });
+    const first = check();
+    const during = [check(), check()];
+    expect(passes).toBe(1);
+    gates.shift()?.();
+    await first;
+    // The pass the calls made during the first one wait on has started, and only one.
+    await Promise.resolve();
+    expect(passes).toBe(2);
+    gates.shift()?.();
+    await Promise.all(during);
+    expect(passes).toBe(2);
+});
+
+test("a pass that fails answers its own calls with the failure, and the pass queued behind it still runs", async () => {
+    let passes = 0;
+    let fail = true;
+    let release: () => void = () => undefined;
+    const check = onePassAtATime(async () => {
+        passes += 1;
+        await new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        if (fail) {
+            fail = false;
+            throw new Error("store unreadable");
+        }
+    });
+    const first = check();
+    const after = check();
+    release();
+    expect(await first.then(() => "resolved", (error: unknown) => (error instanceof Error ? error.message : String(error)))).toBe("store unreadable");
+    await Promise.resolve();
+    release();
+    await after;
+    expect(passes).toBe(2);
 });

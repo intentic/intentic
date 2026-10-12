@@ -86,7 +86,8 @@ export interface Needs {
     // A secret's value for a secret need: stored by its kind where the reference resolves it, and the need met.
     readonly provide: (id: string, value: string, by: Answerer) => Promise<Need>;
     // Something outside changed (a capability saved, a secret added): check open needs now rather than at the next tick.
-    readonly recheck: () => void;
+    // Answers once a check that began after the call has finished.
+    readonly recheck: () => Promise<void>;
     // A need the harness saw asked outside the needs door (the person's own browser's `ask_access`): drawn like any
     // other, never held, since the call that asked has its own answer. An open one with the same subject is returned.
     readonly observe: (conversationId: string, subject: NeedSubject, title: string, why?: string) => Promise<Need>;
@@ -105,6 +106,32 @@ const openAsk = (need: Need, unattended: boolean): string =>
         "The answer reaches this conversation by itself, so do not poll and do not ask again. `needs` lists what is still waiting; `needs cancel " +
             `${need.id}\` withdraws it if the task stops needing it.`,
     ].join(" ");
+
+// Runs `pass` one at a time. A call that arrives while a pass runs is not dropped: that pass may have listed the needs, or
+// read a need's world, before whatever prompted the call changed it (a card raised after its list, a draft rejected after
+// its read), and would leave that need open until the next tick. One more pass follows it instead, shared by every call
+// made meanwhile, and each call answers once a pass that began after it has finished. A pass that fails is reported to
+// the calls it answers; the one after it runs regardless.
+export const onePassAtATime = (pass: () => Promise<void>): (() => Promise<void>) => {
+    let running: Promise<void> | undefined;
+    let next: Promise<void> | undefined;
+    const settled = (): void => {
+        running = undefined;
+    };
+    const again = (): Promise<void> => {
+        next = undefined;
+        return run();
+    };
+    const run = (): Promise<void> => {
+        if (running === undefined) {
+            running = pass().finally(settled);
+            return running;
+        }
+        next ??= running.then(again, again);
+        return next;
+    };
+    return run;
+};
 
 export const createNeeds = (deps: NeedsDeps): Needs => {
     const now = deps.now ?? Date.now;
@@ -210,28 +237,21 @@ export const createNeeds = (deps: NeedsDeps): Needs => {
         return checked === undefined || isGone(checked) ? { result: need.outcome ?? "It is done.", use: [] } : checked;
     };
 
-    const checking = { running: false };
-    const checkOpen = async (): Promise<void> => {
-        if (checking.running) {
-            return;
-        }
-        checking.running = true;
-        try {
-            for (const need of (await deps.store.all()).filter(isOpenNeed)) {
-                const checked = await deps.kinds[need.subject.kind].check(need).catch((error: unknown) => {
-                    deps.logger.warn({ err: error, need: need.id }, "needs: a check failed; it stays open");
-                    return undefined;
-                });
-                if (isGone(checked)) {
-                    await settle(need.id, "declined", checked.gone, undefined);
-                } else if (checked !== undefined) {
-                    await settle(need.id, "met", checked.result, undefined, checked);
-                }
+    const checkPass = async (): Promise<void> => {
+        for (const need of (await deps.store.all()).filter(isOpenNeed)) {
+            const checked = await deps.kinds[need.subject.kind].check(need).catch((error: unknown) => {
+                deps.logger.warn({ err: error, need: need.id }, "needs: a check failed; it stays open");
+                return undefined;
+            });
+            if (isGone(checked)) {
+                await settle(need.id, "declined", checked.gone, undefined);
+            } else if (checked !== undefined) {
+                await settle(need.id, "met", checked.result, undefined, checked);
             }
-        } finally {
-            checking.running = false;
         }
     };
+
+    const checkOpen = onePassAtATime(checkPass);
 
     // Holds a raising call up to `seconds` for the need to settle; answers the need as it then stands, with what a met
     // one's answer said the agent can do with it.
@@ -412,7 +432,7 @@ export const createNeeds = (deps: NeedsDeps): Needs => {
             const met = await deps.provideSecret(need, value);
             return settle(id, "met", met.result, by, met);
         },
-        recheck: () => void checkOpen(),
+        recheck: checkOpen,
         observe: async (conversationId, subject, title, why) => {
             const key = deps.kinds[subject.kind].key(subject);
             const earlier = (await deps.store.all()).find(

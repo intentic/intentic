@@ -411,7 +411,11 @@ jobs:
     timeout-minutes: 90
     env:
       CARGO_HOME: /ci-cache/cargo
-      CARGO_TARGET_DIR: /ci-cache/desktop-verify-target
+      # Its own target dir, never ci.yml's desktop-verify-target: a nightly (or a dispatched one) runs while main's
+      # pipeline does, on the same host, and cargo's lock covers only the compile. The bundling after it, and
+      # build-desktop.sh's `rm -rf` of the bundle directories before it, are outside that lock, so a shared directory
+      # let one job delete or replace the other's packages mid-build.
+      CARGO_TARGET_DIR: /ci-cache/desktop-nightly-setup-target
       INTENTIC_HOST_IMAGE: ghcr.io/intentic/dind-host:latest
       SANDBOX_E2E_IMAGE: ghcr.io/intentic/sandbox:latest
     steps:
@@ -485,7 +489,10 @@ jobs:
     timeout-minutes: 90
     env:
       CARGO_HOME: /ci-cache/cargo
-      CARGO_TARGET_DIR: /ci-cache/desktop-windows-target
+      # Its own target dir, never ci.yml's desktop-windows-target, for the reason desktop-setup's says: run beside main's
+      # build on the same host (2026-10-12, run 38288807881), this one's `rm -rf` of the bundle directory and its own
+      # makensis pass took main's installer out from under it, and main's bundler failed on `No such file or directory`.
+      CARGO_TARGET_DIR: /ci-cache/desktop-nightly-windows-target
       XWIN_CACHE_DIR: /ci-cache/xwin
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

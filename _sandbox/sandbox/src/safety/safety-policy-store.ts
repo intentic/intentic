@@ -27,7 +27,7 @@ export const GRANTED_HEADING = `## Allowed with Always on permission cards`;
 const GRANTED_NOTE = `Lines the owner allowed with Always on a card, oldest first. They hold in every conversation until the owner takes one back under Access.`;
 
 // The legacy heading and blurb a release before the owner-wide grants appended card-accepted lines under, into the
-// owner's own file. Read only by the step that carries them out (safety-policy-grants.ts).
+// owner's own file. Read only by the step that carries them out (personas/safety-card-lines.ts).
 export const LEGACY_ADDED_HEADING = `## Added from permission cards`;
 export const LEGACY_ADDED_NOTE = `Lines you accepted on a card, newest last. Edit or delete them like anything else here.`;
 

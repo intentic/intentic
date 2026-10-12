@@ -166,21 +166,12 @@ const rebuild = async (w: World, built?: string): Promise<void> => {
     await composeEnvironment(w.services);
 };
 
-// The needs service's own periodic check, run now and waited on: every card's status as it then stands.
+// The needs service's own periodic check, run now and waited on: every card's status as it then stands. Awaited rather
+// than polled for a quiet moment: a pass the asks started is still reading on a busy runner, and two looks agreeing
+// while it reads is not the check having run.
 const statuses = async (w: World, ids: readonly string[]): Promise<string[]> => {
-    w.needs.recheck();
-    const deadline = Date.now() + 2_000;
-    let last: string[] = [];
-    // The check runs in the background; wait until a second look agrees with the first.
-    while (Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, 20));
-        const now = await Promise.all(ids.map(async (id) => (await w.needs.get(id))?.status ?? "missing"));
-        if (now.join(",") === last.join(",")) {
-            return now;
-        }
-        last = now;
-    }
-    return last;
+    await w.needs.recheck();
+    return Promise.all(ids.map(async (id) => (await w.needs.get(id))?.status ?? "missing"));
 };
 
 describe("a tool asked for in the chat ends where the image is", () => {
