@@ -83,11 +83,12 @@ const judging = (root: string, release: string, prompts: string[] = []): TurnSta
         yield { kind: "done" } as AgentEvent;
     };
 
-// The same judgment, handed in only after `delayMs`: a run that outlasts at least one heartbeat.
-const judgingAfter = (root: string, release: string, delayMs: number): TurnStarter["stream"] => {
+// The same judgment, handed in only after `delayMs`: a run that outlasts at least one heartbeat. `judged` is told when.
+const judgingAfter = (root: string, release: string, delayMs: number, judged: number[] = []): TurnStarter["stream"] => {
     const judge = judging(root, release);
     return async function* turn(input, signal) {
         await new Promise((resolve) => setTimeout(resolve, delayMs));
+        judged.push(Date.now());
         yield* judge(input, signal);
     };
 };
@@ -198,13 +199,16 @@ test("headers leave before the verdict and spaces keep a long hold talking, and 
     const services = fakeServices(root);
     await services.workflows.save(gated("wf-heartbeat"), true);
 
-    const startedAt = Date.now();
-    const response = await post(appFor(services, judgingAfter(root, "pass", 400), 20), "wf-heartbeat");
-    const headersAfter = Date.now() - startedAt;
+    // Before the verdict is measured against the verdict itself, not a wall clock: a loaded runner took 668 ms to get
+    // the headers of a hold the judge had not yet ended (run 38309408964's verify-clocks).
+    const judged: number[] = [];
+    const response = await post(appFor(services, judgingAfter(root, "pass", 400, judged), 20), "wf-heartbeat");
+    const judgedBeforeHeaders = judged.length;
     const text = await response.text();
 
     expect(response.status).toBe(200);
-    expect(headersAfter).toBeLessThan(300);
+    expect(judgedBeforeHeaders).toBe(0);
+    expect(judged).toHaveLength(1);
     expect(text).toMatch(/^ +\{/);
     expect(JSON.parse(text).outcome).toBe("pass");
 });
@@ -215,20 +219,21 @@ test("behind the daemon's compressor, with a caller that accepts gzip, headers s
     const root = tempRoot();
     const services = fakeServices(root);
     await services.workflows.save(gated("wf-compressed"), true);
+    const judged: number[] = [];
     const app = new Hono()
         .use("*", compressResponses())
-        .post("/workflows/:id/gate", createGateRoute(drivenBy(services, judgingAfter(root, "pass", 400)), 20));
+        .post("/workflows/:id/gate", createGateRoute(drivenBy(services, judgingAfter(root, "pass", 400, judged)), 20));
 
-    const startedAt = Date.now();
     const response = await app.request(`/workflows/wf-compressed/gate`, {
         method: "POST",
         body: "",
         headers: { authorization: `Bearer ${await token("wf-compressed")}`, "accept-encoding": "gzip, br" },
     });
-    const headersAfter = Date.now() - startedAt;
+    const judgedBeforeHeaders = judged.length;
     const text = await response.text();
 
-    expect(headersAfter).toBeLessThan(300);
+    expect(judgedBeforeHeaders).toBe(0);
+    expect(judged).toHaveLength(1);
     expect(response.headers.get("content-encoding")).toBeNull();
     expect(response.headers.get("cache-control")).toBe("no-store, no-transform");
     expect(text).toMatch(/^ +\{/);

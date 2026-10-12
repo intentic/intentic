@@ -10215,7 +10215,6 @@
         },
         "grants": {
             "title": "Uprawnienia rozmów",
-            "caption": "Co pojedyncze rozmowy mogą robić poza swoją personą lub obszarem",
             "everything": "Może robić wszystko bez pytania cię",
             "capability": "Może używać {what}, choć jej persona tego nie obejmuje",
             "folder": "Może pracować w {what}, poza swoim obszarem",
@@ -10238,7 +10237,6 @@
             "untitled": "Nieznana rozmowa",
             "allowedBy": "zgoda od {who}, {when}",
             "ownerWideTitle": "Uprawnienia w całym sandboksie",
-            "ownerWideCaption": "Co może każda rozmowa, nie tylko jedna",
             "ownerWideWhen": "Unieważnienie działa od następnej tury: zestaw hooków dostanie wtedy ponowne pytanie, a rozszerzenie znów czeka na twoją zgodę, bez usuwania czegokolwiek z niego.",
             "commandPolicy": "Polityka bezpieczeństwa: {what}",
             "hookSet": "Hooki Claude Code mogą działać: {what}",

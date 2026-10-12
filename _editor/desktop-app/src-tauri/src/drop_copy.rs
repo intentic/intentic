@@ -3365,8 +3365,6 @@ mod tests {
         let items: Vec<&Item> = owned.iter().collect();
         let mut tick = |_: &Copied| {};
         let mut meter = Meter::new(1, &mut tick);
-        // Left by an earlier route that failed partway through it.
-        meter.spoiled.insert("media/m/a.jpg".to_string());
         let mut writes = Writes::new(false, true, None);
         write_archive(
             Vec::new(),
@@ -3376,17 +3374,26 @@ mod tests {
             &mut writes,
         )
         .unwrap();
+        // The files go in as the readers finish them, in no set order, and tar names them in the archive's order.
+        let order: Vec<String> = writes
+            .members
+            .iter()
+            .map(|member| member.item.name.clone())
+            .collect();
+        let (first, second) = (order[0].clone(), order[1].clone());
+        // Left by an earlier route that failed partway through it.
+        meter.spoiled.insert(first.clone());
         assert_eq!(
             (meter.copied.done, meter.copied.live_bytes),
             (0, 3 * 10_240)
         );
         for line in [
-            "media/m/a.jpg",
-            "media/m/b.jpg",
-            "tar: media/m/b.jpg: Wrote only 512 of 10240 bytes",
-            "tar: Error is not recoverable: exiting now",
+            first.clone(),
+            second.clone(),
+            format!("tar: {second}: Wrote only 512 of 10240 bytes"),
+            "tar: Error is not recoverable: exiting now".to_string(),
         ] {
-            writes.hear(line, &mut meter);
+            writes.hear(&line, &mut meter);
         }
         writes.end(false, false, &mut meter);
         settle_stream(
@@ -3401,7 +3408,7 @@ mod tests {
                 meter.copied.failed,
                 meter.spoiled.clone()
             ),
-            (1, 2, HashSet::from(["media/m/b.jpg".to_string()]))
+            (1, 2, HashSet::from([second]))
         );
 
         // tar's 0 makes a complaint a warning.

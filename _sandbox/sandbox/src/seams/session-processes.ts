@@ -35,6 +35,12 @@ export const sessionOf = (stat: string): number | undefined => {
     return stat === "" || !Number.isInteger(session) ? undefined : session;
 };
 
+// The parent field of a /proc/<pid>/stat line: the second after the comm, read the way `sessionOf` reads the session.
+export const parentOf = (stat: string): number | undefined => {
+    const parent = Number(stat.slice(stat.lastIndexOf(")") + 1).trim().split(/\s+/u)[1]);
+    return stat === "" || !Number.isInteger(parent) ? undefined : parent;
+};
+
 /** Every process in the session `leader` leads, the leader itself excluded. */
 const sessionMembers = async (leader: number, procRoot = "/proc"): Promise<number[]> => {
     const members: number[] = [];

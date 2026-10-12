@@ -4509,7 +4509,6 @@
         },
         "grants": {
             "title": "Conversation permissions",
-            "caption": "What single conversations may do beyond their persona or area",
             "everything": "May do anything without asking you",
             "capability": "May use {what}, which its persona leaves out",
             "folder": "May work in {what}, outside its area",
@@ -4532,7 +4531,6 @@
             "untitled": "Unknown conversation",
             "allowedBy": "allowed by {who}, {when}",
             "ownerWideTitle": "Sandbox-wide permissions",
-            "ownerWideCaption": "What every conversation may do, not only one",
             "ownerWideWhen": "Revoking applies from the next turn: a hook set is asked about again then, and an extension waits for your yes again without anything of it being deleted.",
             "commandPolicy": "Safety policy: {what}",
             "hookSet": "Claude Code hooks may run: {what}",

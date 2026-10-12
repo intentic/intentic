@@ -77,11 +77,14 @@ interface Person {
 const sessionCookie = (token: string): string =>
     `${SESSION_COOKIE}=${token}.${createHmac(`sha256`, BETTER_AUTH_SECRET).update(token).digest(`base64`)}`;
 
+// Signed up with Google, as an account must be for the free lanes this suite meters (free-lane.ts); its subject is
+// `google-subject-<name>`, which the erase below carries the account's standing on.
 const seedPerson = async (prisma: PrismaClient, name: string): Promise<Person> => {
     const id = `e2e-${name}`;
     const email = `${name}@e2e.intentic.dev`;
     const token = randomBytes(24).toString(`base64url`);
     await prisma.user.create({ data: { id, email, name, emailVerified: true } });
+    await prisma.account.create({ data: { id: `account-${id}`, accountId: `google-subject-${name}`, providerId: `google`, userId: id } });
     await prisma.session.create({ data: { id: `session-${id}`, token, userId: id, expiresAt: new Date(Date.now() + DAY_MS) } });
     return { id, email, cookie: sessionCookie(token) };
 };
@@ -517,8 +520,6 @@ describe.skipIf(!tier.runs)(tier.title, () => {
     it(`ends the subscription, deletes the customer and destroys the machine before the account goes, through Better Auth's real deletion`, async () => {
         const machine = await prisma.hostedMachine.findUniqueOrThrow({ where: { sandboxId }, select: { appName: true } });
         expect(fly.apps.has(machine.appName)).toBe(true);
-        // A Google sign-in, so the erase has a subject to carry the account's standing on.
-        await prisma.account.create({ data: { id: `account-${alice.id}`, accountId: `google-subject-alice`, providerId: `google`, userId: alice.id } });
         await prisma.user.update({ where: { id: alice.id }, data: { hostedSuspendedAt: new Date(`2026-09-01T00:00:00Z`), hostedSuspendedReason: `mining` } });
 
         const deleted = await auth.api.deleteUser({ headers: new Headers({ cookie: alice.cookie }), body: {} });

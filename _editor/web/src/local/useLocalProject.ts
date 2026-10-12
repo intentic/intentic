@@ -152,8 +152,8 @@ const attach = async (): Promise<`pcSetup` | undefined> => {
         fold(false);
         dialogOpen.value = false;
         const pc = localHost().onboarding?.check.value;
-        const machine = asked.machine;
-        if (pc !== undefined && pc.state !== `ready` && machine.state !== `ready` && machine.state !== `signedOut`) {
+        const askedMachine = asked.machine;
+        if (pc !== undefined && pc.state !== `ready` && askedMachine.state !== `ready` && askedMachine.state !== `signedOut`) {
             return `pcSetup`;
         }
         if (asked.machine.state === `signedOut`) {
