@@ -16,3 +16,9 @@ test("honoredPinKnobs and pinKnobSummary omit knobs Google cannot run", () => {
     expect(honoredPinKnobs(pin)).toEqual({ provider: `gemini`, model: `gemini-3-flash-lite` });
     expect(pinKnobSummary(pin)).toBeUndefined();
 });
+
+test("pinKnobSummary names the model's default effort for a pin that stores none, where the model takes one", () => {
+    expect(pinKnobSummary({ provider: `claude`, model: `claude-opus-5-5` })).toBe(`default effort`);
+    expect(pinKnobSummary({ provider: `codex`, model: `gpt-5.6`, effort: `high` })).toBe(`High`);
+    expect(pinKnobSummary({ provider: `gemini`, model: `gemini-3-flash-lite` })).toBeUndefined();
+});

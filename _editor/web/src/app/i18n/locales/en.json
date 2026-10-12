@@ -3306,6 +3306,7 @@
             "turnsSpreadAcrossAutomatically": "Turns are spread across these automatically"
         },
         "pickerRunSettings": {
+            "defaultEffort": "default effort",
             "extendedThinking": "Extended thinking",
             "fast": "fast",
             "fastSpeed": "Fast speed",

@@ -3306,6 +3306,7 @@
             "turnsSpreadAcrossAutomatically": "Tury rozkładają się na nie automatycznie"
         },
         "pickerRunSettings": {
+            "defaultEffort": "domyślny wysiłek",
             "extendedThinking": "Rozszerzone myślenie",
             "fast": "szybko",
             "fastSpeed": "Wysokie tempo",

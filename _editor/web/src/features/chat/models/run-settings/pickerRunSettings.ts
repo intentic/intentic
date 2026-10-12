@@ -81,10 +81,16 @@ export const honoredPinKnobs = (pin: ModelPin): ModelPin => {
     };
 };
 
-// One-line summary beside a pin row; omits knobs the run would not read.
+// One-line summary beside a pin row; omits knobs the run would not read. Effort is always named where the model takes
+// one: a pin storing none (a preset's, one written before pins carried knobs) runs at the model's own default, and a
+// row saying nothing about it read as "no effort" rather than "whatever the model defaults to".
 export const pinKnobSummary = (pin: ModelPin): string | undefined => {
     const honored = honoredPinKnobs(pin);
-    const effort = effortLabelOf(honored.effort, honored.provider, honored.model, honored.thinking);
+    const takesEffort =
+        capabilitiesOf(honored.provider, honored.harness ?? `native`).effort && effortsFor(honored.provider, honored.model, honored.thinking).length > 0;
+    const effort =
+        effortLabelOf(honored.effort, honored.provider, honored.model, honored.thinking) ??
+        (takesEffort ? t(`chat.pickerRunSettings.defaultEffort`) : undefined);
     return (
         [
             ...(effort === undefined ? [] : [effort]),
