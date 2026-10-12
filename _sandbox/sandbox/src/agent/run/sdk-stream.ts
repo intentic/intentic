@@ -81,6 +81,14 @@ const STEER_GRACE_MS = 1000;
 // the server's watch then held the land. The shell is the daemon's job, judged when the turn ends (job-fates.ts).
 const OUTLIVED_GRACE_MS = 10_000;
 
+// How long an instant empty result waits for the CLI to start a run of its own before the prompt reads as swallowed
+// and is redelivered. A resume that wakes to a stale background-task notice ends that wake's run empty, and the CLI
+// almost always goes straight on to answer the prompt: of 48 redeliveries in the ten days to 2026-10-12, all 48 were
+// answered twice, so the agent replied twice, and the copy made the turn read as steered, which (before
+// OUTLIVED_GRACE_MS) held a finished turn open behind its demo server for nine minutes and for twenty. A run's first
+// frame arrives within seconds of its request; a prompt the CLI did drop costs this wait before it goes again.
+const SWALLOW_WAIT_MS = 10_000;
+
 const nextWithinGrace = async (next: Promise<IteratorResult<SDKMessage, void>>): Promise<IteratorResult<SDKMessage, void> | undefined> =>
     within(next, STEER_GRACE_MS, undefined);
 
@@ -157,11 +165,14 @@ interface Boundary {
     midTurn: boolean;
     // Anything produced since the last result (see isWorkFrame).
     sawWork: boolean;
+    // An instant empty result held back until the CLI shows whether it goes on to answer the prompt (emptyWake), and
+    // the Date.now() past which its silence reads as the prompt swallowed.
+    suspect: { readonly result: SdkOf<"result">; readonly until: number } | undefined;
 }
 
-// How the boundary waits for the next frame: a grace window, whose silence closes the input (both parks end alike;
-// `held` is always false while awaitingNextTurn is set); a closed input's last window, whose silence ends the stream; or
-// as long as it takes.
+// How the boundary waits for the next frame once no empty result is held (sdkTurns waits that one out first): a grace
+// window, whose silence closes the input (both parks end alike; `held` is always false while awaitingNextTurn is set); a
+// closed input's last window, whose silence ends the stream; or as long as it takes.
 const waitOf = (at: Boundary): "grace" | "outlived" | "plain" => {
     const quiet = !at.midTurn && at.heldTasks === 0;
     if (at.awaitingNextTurn || (at.held && quiet)) {
@@ -180,15 +191,97 @@ const noteFrame = (at: Boundary, message: SDKMessage): void => {
     at.sawWork ||= isWorkFrame(message);
 };
 
-// A swallowed prompt, given a result with no work behind it: an instant empty success (the CLI notification-wakes on a
-// dead run and drops the queued message), redelivered here once through the steering queue instead of yielded. The
-// caller skips it while held for a wake turn.
-const swallowed = (message: SdkOf<"result">, steering: SteeringQueue | undefined, redeliver: (() => boolean) | undefined): boolean =>
-    message.subtype === "success" && message.num_turns === 0 && steering?.delivered === 0 && redeliver?.() === true;
+// A prompt that may have been swallowed, given a result with no work behind it: an instant empty success. The CLI woke
+// on a stale notice and ended that run empty; whether it then dropped the queued prompt or goes on to answer it, only
+// what follows says (SWALLOW_WAIT_MS). The caller skips it while held for a wake turn.
+const emptyWake = (message: SdkOf<"result">, steering: SteeringQueue | undefined, redeliver: (() => boolean) | undefined): boolean =>
+    message.subtype === "success" && message.num_turns === 0 && steering?.delivered === 0 && redeliver !== undefined;
+
+// The CLI at work after a held empty result: a run of its own under way, or another result. Ambient frames (a
+// background task's progress, a settings echo) say nothing about the prompt and leave the wait running.
+const runUnderway = (message: SDKMessage): boolean => message.type === "result" || isMainTurnFrame(message) || isWorkFrame(message);
+
+// What a yielded result leaves the boundary waiting on: children still live hold the stream for the CLI's wake turn, a
+// steered stream races the grace window for a follow-up turn, and anything else ends the stream (true).
+const afterResult = (at: Boundary, steering: SteeringQueue | undefined): boolean => {
+    at.held = at.heldTasks > 0;
+    if (at.held) {
+        return false;
+    }
+    if (steering === undefined || steering.delivered === 0) {
+        // Closed before returning so a steer racing this result reports undelivered rather than queuing forever.
+        steering?.close();
+        return true;
+    }
+    at.awaitingNextTurn = true;
+    return false;
+};
+
+// One wait for the next frame, as the boundary stands: a frame to fold; silence that moved the boundary, after which
+// the same pending frame is waited on again; a held empty result that is the turn's answer after all (`last` when the
+// stream ended behind it); or the stream's end.
+type NextFrame =
+    | { readonly kind: "frame"; readonly message: SDKMessage }
+    | { readonly kind: "again" }
+    | { readonly kind: "answer"; readonly result: SdkOf<"result">; readonly last: boolean }
+    | { readonly kind: "end" };
+
+// A held empty result's window: the CLI starting a run of its own clears it (the prompt was taken, and the result was
+// the stale wake's), silence redelivers the prompt once, and a prompt that cannot go again leaves the empty answer.
+const waitOutSuspect = async (
+    at: Boundary,
+    suspect: NonNullable<Boundary["suspect"]>,
+    next: Promise<IteratorResult<SDKMessage, void>>,
+    redeliver: (() => boolean) | undefined,
+): Promise<NextFrame> => {
+    const step = await within(next, Math.max(0, suspect.until - Date.now()), undefined);
+    if (step !== undefined && step.done !== true) {
+        if (runUnderway(step.value)) {
+            at.suspect = undefined;
+        }
+        return { kind: "frame", message: step.value };
+    }
+    at.suspect = undefined;
+    if (step === undefined && redeliver?.() === true) {
+        at.awaitingNextTurn = true;
+        return { kind: "again" };
+    }
+    return { kind: "answer", result: suspect.result, last: step !== undefined };
+};
+
+const nextFrame = async (
+    at: Boundary,
+    next: Promise<IteratorResult<SDKMessage, void>>,
+    steering: SteeringQueue | undefined,
+    redeliver: (() => boolean) | undefined,
+): Promise<NextFrame> => {
+    if (at.suspect !== undefined) {
+        return waitOutSuspect(at, at.suspect, next, redeliver);
+    }
+    const wait = waitOf(at);
+    let step: IteratorResult<SDKMessage, void> | undefined;
+    if (wait === "grace") {
+        at.awaitingNextTurn = false;
+        step = await nextWithinGrace(next);
+        if (step === undefined) {
+            at.held = false;
+            steering?.close();
+            at.inputClosed = true;
+            return { kind: "again" };
+        }
+    } else if (wait === "outlived") {
+        // Its close (iterator.return, in sdkTurns) ends the CLI, which nothing outliving the turn goes with.
+        step = await within(next, OUTLIVED_GRACE_MS, undefined);
+    } else {
+        step = await next;
+    }
+    return step === undefined || step.done === true ? { kind: "end" } : { kind: "frame", message: step.value };
+};
 
 // Ends the SDK stream at the right turn boundary: unsteered streams end at the first result; once steered, a result
 // arms the grace race, and one with children still live holds the stream for the CLI's wake turn. A CLI whose input
-// closed and that holds itself open only for work outliving the turn is let go after a last window.
+// closed and that holds itself open only for work outliving the turn is let go after a last window. An instant empty
+// result is held until the CLI shows whether it took the prompt (emptyWake).
 async function* sdkTurns(
     stream: AsyncIterable<SDKMessage>,
     steering: SteeringQueue | undefined,
@@ -196,35 +289,39 @@ async function* sdkTurns(
     redeliver: (() => boolean) | undefined,
 ): AsyncGenerator<SDKMessage> {
     const iterator = stream[Symbol.asyncIterator]();
-    const at: Boundary = { awaitingNextTurn: false, heldTasks: 0, outlivingTasks: 0, inputClosed: false, held: false, midTurn: false, sawWork: false };
-    // A pending next() that lost the grace race is re-awaited on the following pass, never abandoned.
+    const at: Boundary = {
+        awaitingNextTurn: false,
+        heldTasks: 0,
+        outlivingTasks: 0,
+        inputClosed: false,
+        held: false,
+        midTurn: false,
+        sawWork: false,
+        suspect: undefined,
+    };
+    // A pending next() that lost a window's race is re-awaited on the following pass, never abandoned.
     let pending: Promise<IteratorResult<SDKMessage, void>> | undefined;
     try {
         for (;;) {
-            const nextPromise = pending ?? iterator.next();
+            const next = pending ?? iterator.next();
             pending = undefined;
-            const wait = waitOf(at);
-            let step: IteratorResult<SDKMessage, void> | undefined;
-            if (wait === "grace") {
-                at.awaitingNextTurn = false;
-                step = await nextWithinGrace(nextPromise);
-                if (step === undefined) {
-                    at.held = false;
-                    steering?.close();
-                    at.inputClosed = true;
-                    pending = nextPromise;
-                    continue;
-                }
-            } else if (wait === "outlived") {
-                // Its close (iterator.return, below) ends the CLI, which nothing outliving the turn goes with.
-                step = await within(nextPromise, OUTLIVED_GRACE_MS, undefined);
-            } else {
-                step = await nextPromise;
-            }
-            if (step === undefined || step.done === true) {
+            const got = await nextFrame(at, next, steering, redeliver);
+            if (got.kind === "end") {
                 return;
             }
-            const message = step.value;
+            if (got.kind === "again") {
+                pending = next;
+                continue;
+            }
+            if (got.kind === "answer") {
+                yield got.result;
+                if (got.last || afterResult(at, steering)) {
+                    return;
+                }
+                pending = next;
+                continue;
+            }
+            const message = got.message;
             noteFrame(at, message);
             if (message.type !== "result") {
                 yield message;
@@ -233,22 +330,14 @@ async function* sdkTurns(
             at.midTurn = false;
             const idle = !at.sawWork;
             at.sawWork = false;
-            if (!at.held && idle && swallowed(message, steering, redeliver)) {
-                at.awaitingNextTurn = true;
+            if (!at.held && idle && emptyWake(message, steering, redeliver)) {
+                at.suspect = { result: message, until: Date.now() + SWALLOW_WAIT_MS };
                 continue;
             }
             yield message;
-            at.held = at.heldTasks > 0;
-            if (at.held) {
-                continue;
-            }
-            if (steering === undefined || steering.delivered === 0) {
-                // Closed before returning so a steer racing this result reports undelivered rather than queuing
-                // forever.
-                steering?.close();
+            if (afterResult(at, steering)) {
                 return;
             }
-            at.awaitingNextTurn = true;
         }
     } finally {
         await iterator.return?.();

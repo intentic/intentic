@@ -2306,6 +2306,77 @@ test("an instant empty result redelivers the prompt instead of ending the turn o
     ]);
 });
 
+// The empty-wake tests' frames: the stale wake's empty result, a background shell's level signal, and the prompt's
+// answer with its result.
+// SAFETY: canned frames carry only the fields runAgent reads, as fakeQuery's do.
+const wake = {
+    empty: { type: "result", subtype: "success", num_turns: 0, usage: { input_tokens: 0, output_tokens: 0 } } as SDKMessage,
+    shell: {
+        type: "system",
+        subtype: "background_tasks_changed",
+        session_id: "s",
+        tasks: [{ task_id: "bsh-1", task_type: "local_bash", description: "pnpm dev" }],
+    } as SDKMessage,
+    pong: { type: "stream_event", session_id: "s", event: { type: "content_block_delta", delta: { type: "text_delta", text: "Pong." } } } as SDKMessage,
+    answered: { type: "result", subtype: "success", num_turns: 1, total_cost_usd: 0.1 } as SDKMessage,
+};
+
+// SAFETY: a steerable turn always streams its prompt (promptInput), so the fake reads it as the stream it is.
+const promptStream = (args: Parameters<QueryFn>[0]): AsyncIterator<SDKUserMessage> => (args.prompt as AsyncIterable<SDKUserMessage>)[Symbol.asyncIterator]();
+
+// What the CLI does far more often: the stale notice's own run ends empty, and it goes straight on to answer the prompt.
+// Redelivering then had the agent answer twice, and the copy made the turn read as steered, so a background shell held
+// its ending (2026-10-12, a demo server, nine minutes and twenty).
+test("an instant empty result the CLI follows with a run of its own is not redelivered, and the turn ends at that run", async () => {
+    const drained: string[] = [];
+    const answering: QueryFn = async function* (args) {
+        const input = promptStream(args);
+        drained.push(String((await input.next()).value?.message.content));
+        // The stale wake's own run, over before the prompt's begins.
+        yield wake.empty;
+        yield wake.pong;
+        yield wake.answered;
+        for (let step = await input.next(); step.done !== true; step = await input.next()) {
+            drained.push(String(step.value.message.content));
+        }
+    };
+    const steering = new SteeringQueue();
+    const events = await withoutTheGraceWait(() => collect({ ...request, spec: { ...request.spec, steering } }, answering));
+    expect(drained).toEqual(["add a /ping route"]);
+    expect(steering.delivered).toBe(0);
+    expect(events).toEqual([
+        { kind: "session", sessionId: "s" },
+        { kind: "delta", text: "Pong." },
+        { kind: "usage", costUsd: 0.1, numTurns: 1 },
+        { kind: "done" },
+    ]);
+});
+
+test("a frame that starts no run, after an instant empty result, still leaves the prompt read as swallowed", async () => {
+    const drained: string[] = [];
+    const swallowing: QueryFn = async function* (args) {
+        const input = promptStream(args);
+        drained.push(String((await input.next()).value?.message.content));
+        yield wake.empty;
+        // A background shell's level signal says nothing about the prompt.
+        yield wake.shell;
+        drained.push(String((await input.next()).value?.message.content));
+        yield wake.pong;
+        yield wake.answered;
+        for (let step = await input.next(); step.done !== true; step = await input.next()) {
+            drained.push(String(step.value.message.content));
+        }
+    };
+    const steering = new SteeringQueue();
+    const events = await withoutTheGraceWait(() => collect({ ...request, spec: { ...request.spec, steering } }, swallowing));
+    expect(drained).toEqual(["add a /ping route", "add a /ping route"]);
+    expect(events.filter((event) => event.kind !== "session")).toEqual([
+        { kind: "delta", text: "Pong." },
+        { kind: "usage", costUsd: 0.1, numTurns: 1 },
+        { kind: "done" },
+    ]);
+});
+
 test("redelivery is once per turn: a second empty answer surfaces instead of looping the prompt at it", async () => {
     const drained: string[] = [];
     const swallowingTwice: QueryFn = async function* (args) {
