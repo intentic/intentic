@@ -63,12 +63,7 @@ map (`workspaceMap`), and, on OpenCode, Pi, Cursor and ACP, the list of skills (
 skills folder themselves). The map comes in two forms: compact (the areas recent work touched, the rest by name, and
 the folders the last three weeks of commits landed in) and full (every area with its size); `workspaceMapHoldout`
 is the share that gets the full one. The comparison shares (`workspaceMapHoldout`, `iqSearchHoldout`,
-`fieldNotesHoldout`, `toolResultClearingHoldout`) assign whole conversations, not turns.
-
-**Clear old tool results** (`toolResultClearing`, Agent → Tools → Command output) has the gateway in front of a native
-Claude turn replace the oldest tool results with a one-line placeholder once the conversation passes about 100k tokens,
-a large chunk at a time, keeping the most recent 20 whole. The agent can run the tool again for anything it needs back.
-Off by default; switched on, half the conversations keep every result so the savings report can compare them.
+`fieldNotesHoldout`) assign whole conversations, not turns.
 
 Changing the model within the same provider keeps the conversation's session. Changing the provider, the loop
 (harness) or the account starts a fresh session on the next turn, handed the conversation's record and a "Where the

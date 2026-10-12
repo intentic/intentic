@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { signedPayloads } from "../../auth/signed-payload.js";
-import { opt } from "../../opt.js";
 import { loadOrMintKey } from "../../store/plain-files/minted-key.js";
 
 // What a gateway URL carries: which provider the requests behind it are for (the trust decision), where they go next,
@@ -12,12 +11,10 @@ export interface GatewaySession {
     readonly provider: string;
     readonly upstream: string;
     readonly conversationId?: string | undefined;
-    // Old tool results in its requests are replaced a chunk at a time (tool-result-clearing.ts): the conversation drew
-    // that arm of the clearing experiment. Signed with the rest, so only the daemon decides it.
-    readonly clearing?: boolean | undefined;
 }
 
-const PayloadSchema = z.object({ p: z.string().min(1), u: z.string().url(), c: z.string().optional(), k: z.literal(true).optional() });
+// An address minted while tool-result clearing ran (to 2026-10-12) also carries `k`; it parses and is ignored.
+const PayloadSchema = z.object({ p: z.string().min(1), u: z.string().url(), c: z.string().optional() });
 
 export interface SessionTokens {
     readonly sign: (session: GatewaySession) => Promise<string>;
@@ -33,16 +30,11 @@ export const sessionTokens = (keyPath: string): SessionTokens => sessionTokensFr
 export const sessionTokensFrom = (readKey: () => Promise<Buffer>): SessionTokens => {
     const payloads = signedPayloads(readKey, PayloadSchema);
     return {
-        sign: ({ provider, upstream, conversationId, clearing }) =>
-            payloads.sign({
-                p: provider,
-                u: upstream,
-                ...(conversationId !== undefined ? { c: conversationId } : {}),
-                ...opt("k", clearing === true ? true : undefined),
-            }),
+        sign: ({ provider, upstream, conversationId }) =>
+            payloads.sign({ p: provider, u: upstream, ...(conversationId !== undefined ? { c: conversationId } : {}) }),
         verify: async (token) => {
             const wire = await payloads.verify(token);
-            return wire === undefined ? undefined : { provider: wire.p, upstream: wire.u, conversationId: wire.c, ...opt("clearing", wire.k) };
+            return wire === undefined ? undefined : { provider: wire.p, upstream: wire.u, conversationId: wire.c };
         },
     };
 };

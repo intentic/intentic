@@ -195,10 +195,6 @@ export interface TurnTools {
 // shield is off and the harness talks to its provider directly.
 export interface ShieldedRoute {
     readonly gateway?: string;
-    // The gateway stands in only to clear old tool results (privacy/gateway/tool-result-clearing.ts), with the shield
-    // off: nothing is masked, so the harness keeps its own reporting, and the experiment's two arms differ in clearing
-    // alone.
-    readonly clearingOnly?: true;
 }
 
 // What authenticates the turn, one variant per kind. `container` carries nothing: the runtime authenticates from what the

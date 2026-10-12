@@ -150,6 +150,8 @@ export const SETTINGS_HISTORY = [
     at("modelRoles", drop("pre-push-fix")),
     // The short guidance form (2026-10-06): it lost its A/B to the full one, which every turn now gets.
     ...dropAll(["leanGuidance", "leanGuidanceHoldout"]),
+    // Tool-result clearing (2026-10-12): it lost its A/B, rewriting more of the cache than it saved and failing more calls.
+    ...dropAll(["toolResultClearing", "toolResultClearingHoldout"]),
     at("modelRoles", refactorsFromChores),
     roleListsIntoSetups,
 ] as const;

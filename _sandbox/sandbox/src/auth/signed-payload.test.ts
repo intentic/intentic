@@ -20,10 +20,18 @@ const payloadOf = (wire: unknown): string => Buffer.from(JSON.stringify(wire)).t
 describe("the privacy gateway's tokens", () => {
     test("are signed exactly as before the codec, so addresses already issued keep verifying", async () => {
         const tokens = sessionTokensFrom(readKey);
+        const wire = { p: "claude", u: "https://api.anthropic.com", c: "c-1" };
+        const issued = `${payloadOf(wire)}.${oldSignature(payloadOf(wire))}`;
+        expect(await tokens.sign({ provider: "claude", upstream: "https://api.anthropic.com", conversationId: "c-1" })).toBe(issued);
+        expect(await tokens.verify(issued)).toEqual({ provider: "claude", upstream: "https://api.anthropic.com", conversationId: "c-1" });
+    });
+
+    // Tool-result clearing (to 2026-10-12) signed a `k` into its conversations' addresses; a runtime still holding one
+    // keeps working, and the flag means nothing any more.
+    test("an address signed with the retired clearing flag still verifies, without it", async () => {
         const wire = { p: "claude", u: "https://api.anthropic.com", c: "c-1", k: true };
         const issued = `${payloadOf(wire)}.${oldSignature(payloadOf(wire))}`;
-        expect(await tokens.sign({ provider: "claude", upstream: "https://api.anthropic.com", conversationId: "c-1", clearing: true })).toBe(issued);
-        expect(await tokens.verify(issued)).toEqual({ provider: "claude", upstream: "https://api.anthropic.com", conversationId: "c-1", clearing: true });
+        expect(await sessionTokensFrom(readKey).verify(issued)).toEqual({ provider: "claude", upstream: "https://api.anthropic.com", conversationId: "c-1" });
     });
 });
 

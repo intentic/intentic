@@ -1,4 +1,4 @@
-// Measures the context mechanisms (the search teaching, the project map, the field notes, tool-result clearing) off rows of
+// Measures the context mechanisms (the search teaching, the project map, the field notes) off rows of
 // turns rather than asserting their value: each mechanism holds a share of conversations out as a control, and this
 // compares the two arms. The teaching applies every turn, so a conversation's sample averages over its turns; the map
 // applies once, so its sample is the opening turn alone. A delta is shown only once both arms reach MIN_ARM_TURNS and the
@@ -17,11 +17,7 @@ const Z_95 = 1.96;
 // openingListings: directory listings a turn ran to orient itself (the project map).
 // callsBeforeTarget: how far a turn walked before touching a file it went on to edit.
 // failedCalls: tool calls that ended in error (the field notes, whose largest section is a failure taxonomy).
-// roundTrips: model calls a turn took, each one a re-read of the whole context (tool-result clearing, whose lost results
-// could cost re-runs).
-// contextPerCall: prompt tokens per model call, cached or not (tool-result clearing, which exists to shrink it).
-export type MetricName =
-    "searchCalls" | "openingSearches" | "openingListings" | "callsBeforeTarget" | "failedCalls" | "roundTrips" | "contextPerCall";
+export type MetricName = "searchCalls" | "openingSearches" | "openingListings" | "callsBeforeTarget" | "failedCalls";
 
 // One turn as the arithmetic reads it: which conversation it belongs to, when and where in it it ran, and its readings.
 // Absent readings are unmeasured, never zero.
@@ -34,8 +30,6 @@ export interface MeasuredTurn {
     readonly openingListings?: number | undefined;
     readonly callsBeforeTarget?: number | undefined;
     readonly failedCalls?: number | undefined;
-    readonly roundTrips?: number | undefined;
-    readonly contextPerCall?: number | undefined;
 }
 
 export type SampleUnit = "turns" | "conversations" | "opening turns";
@@ -87,11 +81,6 @@ const CALLS_BEFORE_TARGET: Metric = { name: "callsBeforeTarget", of: (turn) => t
 // The field notes' headline: the brief's largest section is a taxonomy of what fails, so calls that ended in error is
 // the reading it either moves or does not.
 const FAILED_CALLS: Metric = { name: "failedCalls", of: (turn) => turn.failedCalls, round: round1 };
-// What a turn costs in model time and context reads: 56% of model calls in the week to 2026-10-04 only searched or read,
-// and 91% of those carried a single tool call.
-const ROUND_TRIPS: Metric = { name: "roundTrips", of: (turn) => turn.roundTrips, round: round1 };
-// Whole tokens: a call's prompt is tens of thousands of them.
-const CONTEXT_PER_CALL: Metric = { name: "contextPerCall", of: (turn) => turn.contextPerCall, round: Math.round };
 
 interface Arm {
     readonly turns: number;
@@ -184,9 +173,6 @@ export const MECHANISMS = {
     map: { metrics: [ROOT_LISTINGS, CALLS_BEFORE_TARGET], sampleUnit: "opening turns", sample: openingTurn },
     // The brief rides the whole session, so turn 40 is as much evidence as turn 1.
     notes: { metrics: [FAILED_CALLS, CALLS_BEFORE_TARGET], sampleUnit: "conversations", sample: meanOfTurns },
-    // Judged on what it is for, the prompt each call carries, and on what it could cost: a model that has lost a result
-    // it needed runs the tool again (more round trips) or guesses (more calls that fail).
-    clearing: { metrics: [CONTEXT_PER_CALL, ROUND_TRIPS, FAILED_CALLS], sampleUnit: "conversations", sample: meanOfTurns },
 } as const satisfies Record<string, Mechanism>;
 
 // One experiment: a mechanism, plus where a row says which arm it ran and which revision of the treatment it saw.

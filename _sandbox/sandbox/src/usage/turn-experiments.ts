@@ -1,9 +1,8 @@
-import { MECHANISMS, measureExperiment, type Design, type MeasuredTurn } from "@intentic/agent-context/arm-stats";
+import { MECHANISMS, measureExperiment, type Design } from "@intentic/agent-context/arm-stats";
 import type { DayWindowQuery, SavingsReport, UsageTurn } from "@intentic/sandbox-contract";
-import { opt } from "../opt.js";
 import type { UsageStore } from "./usage-store.js";
 
-// The mechanism experiments (iq search teaching, project map, field notes, tool-result clearing) measured off the usage ledger.
+// The mechanism experiments (iq search teaching, project map, field notes) measured off the usage ledger.
 // What each is judged on and the arithmetic over its two arms are @intentic/agent-context's, shared with the Claude Code
 // plugin's stats; this module only says where a ledger row keeps each experiment's arm and treatment revision.
 
@@ -25,36 +24,19 @@ const MAP_DESIGN: Design<UsageTurn> = { ...MECHANISMS.map, arm: (turn) => turn.m
 // wide enough to hold two revisions.
 const NOTES_DESIGN: Design<UsageTurn> = { ...MECHANISMS.notes, arm: (turn) => turn.notesArm, cohort: (turn) => turn.notesCohort };
 
-// `on` has its old tool results replaced. No revisions yet: the limits are constants (tool-result-clearing.ts).
-const CLEARING_DESIGN: Design<MeasuredUsageTurn> = { ...MECHANISMS.clearing, arm: (turn) => turn.clearingArm, cohort: () => undefined };
-
 const measurable = (turn: UsageTurn): boolean => turn.outcome !== "error" && turn.outcome !== "cancelled";
-
-// A ledger row with its per-call readings: the row's `turns` is the provider's count of model calls, which the Claude
-// Code loop reports per call made and every other runtime reports as 1 for the whole exchange, so only the former is a
-// round trip count, and only it divides the turn's prompt tokens into what one call carried.
-type MeasuredUsageTurn = UsageTurn & Pick<MeasuredTurn, "roundTrips" | "contextPerCall">;
-const withPerCall = (turn: UsageTurn): MeasuredUsageTurn => {
-    if (turn.harness !== "claude-code" || turn.turns < 1) {
-        return turn;
-    }
-    const prompt = turn.inputTokens + turn.cacheReadTokens + turn.cacheCreationTokens;
-    return { ...turn, roundTrips: turn.turns, contextPerCall: prompt / turn.turns };
-};
 
 export const readTurnExperiments = async (
     usage: UsageStore,
     window: DayWindowQuery,
-): Promise<Pick<SavingsReport, "search" | "map" | "notes" | "clearing">> => {
-    const turns = (await usage.turns(window)).filter(measurable).map(withPerCall);
+): Promise<Pick<SavingsReport, "search" | "map" | "notes">> => {
+    const turns = (await usage.turns(window)).filter(measurable);
     const search = measureExperiment(turns, SEARCH_DESIGN);
     const map = measureExperiment(turns, MAP_DESIGN);
     const notes = measureExperiment(turns, NOTES_DESIGN);
-    const clearing = measureExperiment(turns, CLEARING_DESIGN);
     return {
         ...(search !== undefined ? { search } : {}),
         ...(map !== undefined ? { map } : {}),
         ...(notes !== undefined ? { notes } : {}),
-        ...opt("clearing", clearing),
     };
 };

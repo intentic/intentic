@@ -266,21 +266,18 @@ Nothing the sandbox runs checks a push, and nothing is kept about one. The app p
   message), which is how stored secrets are masked: only the Claude Code loop can rewrite a tool's result before the model
   reads it, and a source-side filter misses every door nobody listed (resume, compaction, a runtime handoff's replayed
   transcript, files a CLI loads itself, helper prompts). At the request the doors no longer matter.
-- The same gateway clears old tool results from a long native Claude conversation (`toolResultClearing`,
-  [`tool-result-clearing.ts`](../../_sandbox/sandbox/src/privacy/gateway/tool-result-clearing.ts)). A conversation that
-  drew that arm has `clearing` in its signed session and goes through the gateway even with the shield off, as a relay
-  that masks and logs nothing and leaves the CLI's own reporting on, so the two arms differ in clearing alone. Past an
-  estimated 100k tokens the oldest results become a one-line placeholder, keeping the last 20 whole, and the boundary
-  moves only once 40k more tokens of results have piled up behind them. It is a pure function of the history the
-  request carries, so a subagent, a side request and a daemon restart each get the body their own history implies, and
-  the cached prompt stays the same from call to call until the next chunk. The usage ledger stamps the arm
-  (`clearingArm`), and the savings report reads prompt tokens per call, round trips and failed calls between the arms.
-- (2026-10-04) Clearing in chunks rejected the API's own `clear_tool_uses_20250919`, which the CLI does not expose
-  anyway (its `USE_API_CONTEXT_MANAGEMENT` switch is compiled out). The API's version is stateless: above its trigger it
-  clears all but the last N results on every request, so every call rewrites the kept tail into the cache, at 12.5
-  times the price of reading it. Simulated on 543 sessions from the week to 2026-10-04, that raised prompt cost by 20% at
-  ten kept results and 196% at fifty. It only came out ahead at three, a window too small to work in. The chunked
-  boundary read 11 to 18% less prompt cost, and a mean prompt of about 190k to 205k tokens instead of 255k.
+- (2026-10-12) Tool-result clearing at the gateway was tried and removed. Past an estimated 100k tokens, a native
+  Claude conversation's oldest tool results became a one-line placeholder, 20 kept whole, the boundary moving a 40k-token
+  chunk at a time so the cache broke once per chunk; the API's own `clear_tool_uses_20250919` had been rejected first
+  (2026-10-04), since its boundary moves on every call and a simulation on 543 sessions read 20% to 196% more prompt
+  cost. Measured live against a half holdout (78 conversations each, 2026-10-07 to 2026-10-12, all Opus), the chunked
+  form shrank the prompt per call by 25% and saved nothing: cache writes per call rose 50%, so cost per call came out
+  level (+1%, 95% interval −21% to +31%), and failed tool calls per turn rose 58% (+15% to +122%) as the model reached
+  for what had been cleared. Keep-warm made it worse: its refresh goes straight to the provider, so it kept the
+  uncleared prefix warm and the next real turn rewrote the cleared one (31% of a follow-up turn's opening prompt
+  written to cache, against 18.5% kept). Stale `toolResultClearing` settings and `clearingArm` ledger stamps are
+  dropped on read, and a gateway address still carrying the clearing flag verifies without it. Context growth is left
+  to the CLI's own compaction.
 
 ## Leftovers and housekeeping
 

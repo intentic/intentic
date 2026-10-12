@@ -88,7 +88,7 @@ const credentialEnv = (credential: HarnessCredential, model: string | undefined)
 // Behind the privacy shield the CLI's own reporting is switched off too (error reports and telemetry carry excerpts of
 // what it was doing, and go to the CLI vendor's own services, past the gateway).
 const shieldedEnv = (credential: HarnessCredential): Record<string, string> =>
-    credential.gateway !== undefined && credential.clearingOnly !== true
+    credential.gateway !== undefined
         ? { CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1", DISABLE_ERROR_REPORTING: "1", DISABLE_TELEMETRY: "1" }
         : {};
 

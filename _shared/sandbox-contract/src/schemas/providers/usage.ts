@@ -89,9 +89,6 @@ export const UsageTurnSchema = z.object({
     // Hash of the brief that was sent, recorded on control turns too. Load-bearing rather than decorative: the file is
     // rewritten monthly, so a 30-day window holds two different treatments and pooling them would measure neither.
     notesCohort: z.string().optional(),
-    // Arm of the tool-result clearing experiment, stable per conversation; true is a conversation whose old tool results
-    // the gateway drops. Native Claude turns only: no other runtime's requests pass a gateway that clears.
-    clearingArm: z.boolean().optional(),
     // What became of pre-turn retrieval on this turn, and how long it took. Assignment and DELIVERY are different
     // facts: the first version of this mechanism was assigned to every eligible turn and reached four in five of them,
     // which is the difference between a null result and a mechanism that never ran. Absent means the flag was off, so

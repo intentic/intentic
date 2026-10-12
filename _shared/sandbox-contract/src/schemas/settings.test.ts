@@ -114,6 +114,13 @@ describe(`the folded keep-warm settings`, () => {
     });
 });
 
+// Tool-result clearing lost its A/B and was removed (2026-10-12); a file that still switches it on reads, without it.
+test(`a stored tool-result clearing switch is dropped, and the rest of the file kept`, () => {
+    const converted = convertDocument(SETTINGS_HISTORY, `object`, { iqSearch: true, toolResultClearing: true, toolResultClearingHoldout: 0.5 }, true);
+    expect(converted.value).toEqual({ iqSearch: true });
+    expect(SandboxSettingsSchema.parse(converted.value).iqSearch).toBe(true);
+});
+
 // What a job runs on, read the way every reader reads it, over a sandbox with nothing connected: the setups a stored
 // file converts into are judged by what they make each job run on, not by their shape.
 const runsOn = (stored: unknown, role: ModelRole): readonly unknown[] => {

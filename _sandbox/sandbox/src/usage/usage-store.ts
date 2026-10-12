@@ -19,7 +19,11 @@ export const usageLedgerDocument = defineDocument({
     granularity: "entries",
     boot: false,
     // The short-guidance experiment's stamps (2026-10-06): the form lost, and the experiment went with it.
-    history: [...dropAll(["guidanceArm", "guidanceCohort"])],
+    history: [
+        ...dropAll(["guidanceArm", "guidanceCohort"]),
+        // The tool-result clearing experiment's stamp (2026-10-12): clearing lost, and the experiment went with it.
+        ...dropAll(["clearingArm"]),
+    ],
 });
 
 export interface UsageStore {

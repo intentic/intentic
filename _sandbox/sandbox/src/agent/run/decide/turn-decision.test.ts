@@ -511,36 +511,6 @@ test("a sandbox with iq off is told rg", () => {
     expect(decision.context.base.spec.search).toBe("rg");
 });
 
-// the tool-result clearing experiment: the arm's old tool results are replaced by the gateway, and only a native Claude
-// turn is ever in it, since no other runtime's requests pass a gateway that clears
-
-const CLEARING_MEASURED = SandboxSettingsSchema.parse({ toolResultClearing: true, toolResultClearingHoldout: 0.5 });
-
-test.each([true, false])("a native Claude conversation drawing the %s clearing arm is routed by it and stamped with it", (arm) => {
-    const decision = decided({ ...FACTS, settings: CLEARING_MEASURED }, turn({ conversationId: conversationIn("tool-result-clearing", arm) }));
-
-    expect(decision.context.toolResultClearing).toBe(arm);
-    expect(decision.experiments).toEqual({ turnIndex: 0, clearingArm: arm });
-});
-
-test("another runtime's conversation is never cleared and is in neither arm", () => {
-    const decision = decided(
-        { ...FACTS, settings: CLEARING_MEASURED },
-        turn({ agent: "cursor", harness: "native", conversationId: conversationIn("tool-result-clearing", true) }),
-    );
-
-    expect(decision.context.toolResultClearing).toBe(false);
-    expect(decision.experiments.clearingArm).toBeUndefined();
-});
-
-test("the switch with no holdout clears every native Claude conversation and measures nothing", () => {
-    const settings = SandboxSettingsSchema.parse({ toolResultClearing: true, toolResultClearingHoldout: 0 });
-    const decision = decided({ ...FACTS, settings }, turn({ conversationId: "c-1" }));
-
-    expect(decision.context.toolResultClearing).toBe(true);
-    expect(decision.experiments).toEqual({ turnIndex: 0 });
-});
-
 // the spawn door: the delegate shelf and full agency, on a conversation with a supervisor handed down
 
 test.each([

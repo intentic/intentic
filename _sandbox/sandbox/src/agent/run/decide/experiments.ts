@@ -27,8 +27,6 @@ export interface ExperimentReadings {
     readonly fieldNotes: TurnFieldNotes;
     // Undefined when retrieval was never attempted, which is a different fact from a lookup that skipped.
     readonly turnContext: TurnContextOutcome | undefined;
-    // Undefined on every turn but a native Claude one: no other runtime's requests pass a gateway that clears.
-    readonly clearing: { readonly arm: boolean | undefined };
 }
 
 interface Experiment<Reading> {
@@ -85,14 +83,6 @@ export const EXPERIMENTS: { readonly [K in keyof ExperimentReadings]: Experiment
         on: (settings) => settings.iqSearch,
         holdout: () => 0,
         stamps: (outcome) => ({ ...opt("turnContext", deliveryOf(outcome)), ...opt("turnContextMs", outcome?.durationMs) }),
-    },
-    // The arm has its old tool results replaced by the gateway (privacy/gateway/tool-result-clearing.ts); the holdout
-    // keeps every one.
-    clearing: {
-        salt: "tool-result-clearing",
-        on: (settings) => settings.toolResultClearing,
-        holdout: (settings) => settings.toolResultClearingHoldout,
-        stamps: ({ arm }) => opt("clearingArm", arm),
     },
 };
 
