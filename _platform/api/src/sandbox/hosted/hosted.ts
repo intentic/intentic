@@ -3,6 +3,7 @@ import { FREE_TIER, type HostedShape, type HostedTierId } from "@intentic/consta
 import { projectRemoteDir } from "@intentic/sandbox-contract";
 import { Prisma, type PrismaClient } from "@intentic/prisma";
 import { ENV_INGRESS_URL, ENV_SANDBOX_GRANT, verifyReachabilityGrant } from "@intentic/sandbox-contract/ingress-contract";
+import { ENV_PLATFORM_IDENTITY_KEY } from "@intentic/sandbox-contract/identity-assertion";
 import { ENV_PLATFORM_PUBLIC_KEY, publicKeyPemOf } from "@intentic/sandbox-contract/owner-ticket";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { flyMachineConfig } from "@intentic/sandbox-run/fly";
@@ -11,6 +12,7 @@ import type { Config } from "../../config.js";
 import { decryptSecret } from "../../crypto.js";
 import { connectTokenIdentity } from "../mint-sandbox.js";
 import { definitionSeedFor, ENV_DEFINITION_SEED } from "../profiles/profiles.js";
+import { identityKeyOf } from "../../sign-in.js";
 import { grantFor, ingressEnabled, sandboxHostname } from "../reachability.js";
 import {
     appExists,
@@ -191,6 +193,9 @@ export const hostedMachineConfig = (
                 // Public signing key: lets this machine's daemon accept the platform's owner ticket without a second
                 // sign-in.
                 [ENV_PLATFORM_PUBLIC_KEY, publicKeyPemOf(config.ingress.signingKey)],
+                // The identity key's public half, so the daemon verifies the platform's identity assertions from its
+                // first boot, before its first announce would hand it over (sign-in.ts identityKeyOf).
+                [ENV_PLATFORM_IDENTITY_KEY, identityKeyOf(config) ?? ``],
                 [`IDLE_STOP_MINUTES`, String(config.hosted.idleStopMinutes)],
                 // Re-applied on every claim, overlay and restart, like the rest of this config; the daemon applies it
                 // only to a workspace that arrived empty, so re-applying it cannot run over work.

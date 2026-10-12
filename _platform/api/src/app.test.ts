@@ -1,4 +1,4 @@
-import { createHash, createHmac } from "node:crypto";
+import { createHash, createHmac, generateKeyPairSync } from "node:crypto";
 import type { HostReportInput } from "@intentic/api-contract";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { createApp } from "./app.js";
@@ -710,6 +710,25 @@ describe(`POST /sandbox/announce`, () => {
         });
         const res = await announce(prisma, `tok`, `https://sandbox-abc.intentic.dev`);
         expect(await res.json()).toEqual({ ok: true, identity: `a0028692-7cf2-4ef4-8429-86a98d60be8a` });
+    });
+
+    // Every sandbox learns the key that verifies the platform's identity assertions from its announces, so one started
+    // by any `ic` can take an email account's sign-in, and a rotation reaches it within the hour.
+    it(`answers an accepted announce with the identity key's public half when the platform signs assertions`, async () => {
+        const keys = generateKeyPairSync(`ed25519`, { publicKeyEncoding: { type: `spki`, format: `pem` }, privateKeyEncoding: { type: `pkcs8`, format: `pem` } });
+        const prisma = fakePrisma({
+            sandbox: {
+                findUnique: jest.fn().mockResolvedValue({ id: `s1`, token: `tok`, setupPayload: null, daemonUrl: null, hosted: null }),
+                updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+            },
+            platformIdentity: { findUnique: jest.fn().mockResolvedValue(null) },
+        });
+        const res = await createApp({ ...config, identity: { signingKey: keys.privateKey } }, prisma, logger).app.request(`/sandbox/announce`, {
+            method: `POST`,
+            headers: { "content-type": `application/json`, "x-intentic-connect": `tok` },
+            body: JSON.stringify({ daemonUrl: `https://sandbox-abc.intentic.dev` }),
+        });
+        expect(await res.json()).toEqual({ ok: true, identityKey: keys.publicKey });
     });
 
     it(`still accepts the announce when the database cannot say which it is`, async () => {

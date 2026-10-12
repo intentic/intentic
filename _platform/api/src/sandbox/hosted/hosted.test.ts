@@ -1,4 +1,4 @@
-import { apiContract } from "@intentic/api-contract";
+import { GOOGLE_REQUIRED_REASON,apiContract } from "@intentic/api-contract";
 import { generateKeyPairSync } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -57,6 +57,8 @@ const config = (over?: Record<string, unknown>): Config =>
     ({
         webOrigin: `https://app.test`,
         google: { clientId: `gcid` },
+        // No identity key: a machine's env carries an empty one, as on a platform that signs no assertions.
+        identity: { signingKey: `` },
         api: { url: `https://api.test`, trustedIpHeader: `` },
         secrets: { key: `` },
         intenticCloudflare: { apiToken: `cf`, zone: `sbx.test`, reapDryRun: true },
@@ -105,6 +107,8 @@ const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof j
         // In good standing, and the provision ledger accepts every row.
         user: { findUnique: jest.fn().mockResolvedValue({ hostedSuspendedAt: null, hostedSuspendedReason: null }) },
         hostedProvision: { create: jest.fn().mockResolvedValue({}), findMany: jest.fn().mockResolvedValue([]) },
+        // A Google account linked, so the free lane is open (free-lane.ts), unless a test is about one without.
+        account: { count: jest.fn().mockResolvedValue(1) },
         /* Two shapes. */
         $transaction: jest.fn((work: Promise<unknown>[] | ((tx: unknown) => Promise<unknown>)) =>
             typeof work === `function` ? work(prisma) : Promise.all(work),
@@ -1521,7 +1525,7 @@ describe(`reapHostedOrphans`, () => {
 });
 
 describe(`sandbox routes: the hosted lane's gates`, () => {
-    const user = { id: `u1`, email: `owner@example.com`, name: `Owner`, image: null };
+    const user = { id: `u1`, email: `owner@example.com`, name: `Owner`, image: null, emailVerified: true };
     // hostedMachine.count answers two different questions per request: no `where` means the whole fleet (the ceiling);
     // a `where` means one owner's allowance. This stub only answers the fleet question.
     const fleetOf = (machines: number) =>
@@ -1709,6 +1713,53 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
             config: { env: { [ENV_PROJECT_DIR]: `${WORKSPACE_ROOT}/my-app` } },
         });
         expect(create.mock.calls[0]?.[0]).toMatchObject({ data: { sandboxId: `s1`, warm: false } });
+    });
+
+    // The free rung is a free lane (free-lane.ts): an account that signs in only by email reaches it once Google is
+    // linked, and can otherwise arrive straight onto a paid slot it bought.
+    describe(`an account that signs in only by email`, () => {
+        const emailOnly = (plan: { status: string; items: { tier: string; quantity: number }[] } | null, machine?: object) =>
+            fakePrisma({
+                account: { count: jest.fn().mockResolvedValue(0) },
+                hostedPlan: { findUnique: jest.fn().mockResolvedValue(plan) },
+                sandbox: {
+                    findFirst: jest.fn().mockResolvedValue(ownedRow),
+                    findUniqueOrThrow: jest.fn().mockResolvedValue({ ...ownedRow, hosted: { region: `iad`, warm: false } }),
+                },
+                hostedMachine: { findUnique: jest.fn().mockResolvedValue(null), count: jest.fn().mockResolvedValue(0), create: jest.fn().mockResolvedValue(machine ?? {}) },
+                hostedPoolMachine: { findMany: jest.fn().mockResolvedValue([]) },
+            });
+
+        it(`is offered no free machine, and told it needs Google`, async () => {
+            expect(await call(sandboxRoutes.hostedOffer, undefined, { context: routeContext({ prisma: emailOnly(null) }) })).toMatchObject({
+                enabled: true,
+                remaining: 0,
+                needsGoogle: true,
+            });
+        });
+
+        it(`is refused a free machine before any provider is asked, with the reason the editor reads`, async () => {
+            const fetchSpy = stubFetch([]);
+            await expect(
+                call(sandboxRoutes.hostedProvision, { sandboxId: `s1`, token: `t0k3n` }, { context: routeContext({ prisma: emailOnly(null) }) }),
+            ).rejects.toMatchObject({ code: `FORBIDDEN`, data: { reason: GOOGLE_REQUIRED_REASON } });
+            expect(fetchSpy).toHaveLength(0);
+        });
+
+        it(`arrives straight onto a paid slot it holds, built to its rung rather than taken from free stock`, async () => {
+            const calls = stubFetch([
+                { match: (method, url) => method === `GET` && url.endsWith(`/api/v2/namespaces`), respond: () => json([{ namespaceToken: `ns-1`, name: `public`, open: true }]) },
+                { match: (method, url) => method === `POST` && url.endsWith(`/apps`), respond: () => json({ id: `app1` }) },
+                { match: (method, url) => method === `POST` && url.includes(`/volumes`), respond: () => json({ id: `vol_1` }) },
+                { match: (method, url) => method === `POST` && url.includes(`/machines`), respond: () => json({ id: `m1`, state: `created` }) },
+            ]);
+            const prisma = emailOnly({ status: `active`, items: [{ tier: PAID.id, quantity: 1 }] });
+            expect(await call(sandboxRoutes.hostedOffer, undefined, { context: routeContext({ prisma }) })).toMatchObject({ remaining: 1 });
+            await call(sandboxRoutes.hostedProvision, { sandboxId: `s1`, token: `t0k3n` }, { context: routeContext({ prisma }) });
+            expect(calls.find((entry) => entry.method === `POST` && entry.url.includes(`/machines`))?.body).toMatchObject({
+                config: { guest: { cpus: PAID.cpus, memory_mb: PAID.memoryMb } },
+            });
+        });
     });
 
     // `remaining` here is this account's own untouched allowance, separate from the fleet-wide ceiling being tested.
@@ -2272,7 +2323,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
             sandbox: { findFirst: jest.fn().mockResolvedValue(row), findUnique: checkingIn({ tokenDigest: sha256Hex(WAKE_TOKEN) }) },
             hostedMachine: { findUnique: jest.fn().mockResolvedValue({ wokeAt: null }), update: stretch },
         });
-        const member = { id: `u2`, email: `member@example.com`, name: `Member`, image: null };
+        const member = { id: `u2`, email: `member@example.com`, name: `Member`, image: null, emailVerified: true };
         expect(await call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: routeContext({ prisma, user: member }) })).toEqual({ ok: true });
 
         const { env } = finalConfigOf(fly);

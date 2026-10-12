@@ -15,7 +15,8 @@ const logger = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {
 
 const configWith = (overrides: Record<string, unknown>): Config =>
     ({
-        admin: { emails: ADMIN, mutations: false, upstreamUrl: `https://api.intentic.dev`, upstreamCookie: COOKIE, ...overrides },
+        // `any`: how an admin proves their address is requireAdmin's suite's; here the allowlist is what is under test.
+        admin: { emails: ADMIN, mutations: false, signIn: `any`, upstreamUrl: `https://api.intentic.dev`, upstreamCookie: COOKIE, ...overrides },
     }) as unknown as Config;
 
 // Better Auth's one call buildOrpcContext makes, answered with whoever the case is signed in as.
@@ -23,7 +24,7 @@ const authAs = (email: string | null): Auth =>
     ({
         api: {
             getSession: async () => ({
-                response: email === null ? null : { user: { id: `u1`, email, name: `x`, image: null } },
+                response: email === null ? null : { user: { id: `u1`, email, name: `x`, image: null, emailVerified: true } },
                 headers: new Headers(),
             }),
         },

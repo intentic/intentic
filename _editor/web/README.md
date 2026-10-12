@@ -7,7 +7,7 @@ flowchart LR
     shells["Browser tab<br/>desktop · iOS · Android shells"] --> web(["web"])
     nginx["nginx image<br/>env.js filled at start"] --> web
     web -->|"cookie · api-contract"| api["Platform api<br/>account, sandbox list"]
-    google["Google Identity<br/>or passkey"] --> web
+    google["Google Identity, passkey<br/>or platform identity assertion"] --> web
     web -->|"daemon session · sandbox-contract"| daemon["Sandbox daemon<br/>tunnel or loopback"]
     daemon -->|"/events stream"| web
     ext["Extensions<br/>built-in + daemon bundles"] --> web
@@ -19,9 +19,26 @@ flowchart LR
   the iOS shell and the Android shell all open this same app, and `_site/demo` builds it through `vite.shared.ts`.
 - **Two backends, two credentials.** The platform api (`src/lib/useApi.ts`) rides the Better Auth cookie and
   answers sign-in, the sandbox list, invites and the hosted plan. Every workspace call goes directly to the daemon
-  through `sandboxRpc`, with a daemon-minted session that a Google ID token or a passkey establishes
-  (`sandboxSession.ts`). The platform is not in that path. The daemon is reached over its tunnel, or over a
-  certified loopback name when it runs on this machine (`client/endpoint/endpoint.ts`).
+  through `sandboxRpc`, with a daemon-minted session that a proof establishes (`sandboxSession.ts`). The platform is not
+  in that path. The daemon is reached over its tunnel, or over a certified loopback name when it runs on this machine
+  (`client/endpoint/endpoint.ts`).
+- **Two ways to sign in.** Google (one ID token minted in the browser, spent on the platform and on each daemon), or a
+  six-digit code mailed to an address on any domain (Better Auth's email-OTP plugin, `client/auth/useAuth.ts`). One
+  mail carries one code, offered two ways: typed on `/login` (`features/auth/EmailCodeSignIn.vue`), or followed from
+  the mail's link to `/login/confirm`, which names the address and spends the code only on a press, since mail scanners
+  fetch links; it clears the code from the address bar on mount and loads nothing from another origin (index.html keeps
+  Google's script off it). The login page offers the code only where `GET /me/sign-in-options` says the platform mails
+  them. Inside the desktop webview and the iOS shell the code runs in place, typed, because the mail's link opens the
+  system browser. An account's ways in come from `/me` (`signInMethods`, absent meaning Google), held in
+  `client/auth/signInMethods.ts` for the session module.
+- **The proof chain a daemon session is minted from**, in order (`sandboxSession.ts`): a live daemon session; a cached
+  Google token; the platform's identity assertion (`pa1.…`, minted per sandbox, spent at once, never stored) for an
+  account with `email` among its ways in, only for a call somebody waits on and only where the daemon's `/health`
+  lists `email` in `signIn.proofs` (`client/session/daemonDoor.ts`); the owner ticket on a hosted machine; then the
+  sign-in wall. An account with no Google sign-in never meets Google's prompt: a daemon too old for email sign-in is
+  named on the wall, a person the sandbox has not opted in to email sign-in gets the no-access gate saying so (the
+  owner flips it per member on the Access tab), and a first session by email code is followed by a nudge to add a
+  passkey, which opens the sandbox while the platform is down.
 - **When the platform is down or forgets.** Only the sandbox list needs the platform, so this device remembers it per
   account, names and addresses only (`features/sandbox/recovery`). The outage screen opens a remembered sandbox
   directly, the workspace running unchanged on that remembered list; a list that offers nothing to open while this

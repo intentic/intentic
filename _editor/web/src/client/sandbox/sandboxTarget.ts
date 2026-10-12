@@ -10,13 +10,16 @@ export interface SandboxTarget {
     // The owner's alone (the summary carries null on a member's row): it is spent on the daemon's first-bind,
     // which is the owner's act, and a member reaches a daemon that is already bound and never asks for it.
     readonly connectToken: string | undefined;
-    // Set when the platform can vouch for this reader via a signed ticket instead of Google; absent otherwise.
-    readonly ownerVouched?: true;
+    // Set when the platform lists this sandbox for the reader, owner or member, and so can vouch for them on it: its
+    // identity assertion for any such sandbox (an account that signs in by email), and its owner ticket too where
+    // `ownerTicket` says so (a hosted machine, read by its owner). Absent for an address the platform does not list.
+    readonly platformVouch?: { readonly ownerTicket: boolean };
 }
 
-// Whether the platform's owner ticket applies: a hosted machine, read by its owner.
-const vouchedFor = (sandbox: SandboxSummary | undefined): { readonly ownerVouched: true } | Record<never, never> =>
-    sandbox !== undefined && sandbox.hosted !== null && sandbox.hosted !== undefined && sandbox.role === `owner` ? { ownerVouched: true } : {};
+// How the platform can vouch for the reader of this listed sandbox: always its identity assertion, and the owner ticket
+// on a hosted machine read by its owner.
+const vouchFor = (sandbox: SandboxSummary | undefined): Pick<SandboxTarget, `platformVouch`> =>
+    sandbox === undefined ? {} : { platformVouch: { ownerTicket: sandbox.hosted !== null && sandbox.hosted !== undefined && sandbox.role === `owner` } };
 
 export const currentSandboxTarget = (): SandboxTarget | undefined => {
     const { active, activeSandboxId } = useSandbox();
@@ -25,7 +28,7 @@ export const currentSandboxTarget = (): SandboxTarget | undefined => {
     if (base === undefined || base === ``) {
         return undefined;
     }
-    return { sandboxId: activeSandboxId.value, base, connectToken: active.value?.token ?? undefined, ...vouchedFor(active.value) };
+    return { sandboxId: activeSandboxId.value, base, connectToken: active.value?.token ?? undefined, ...vouchFor(active.value) };
 };
 
 // Addresses a sandbox this browser may not be pointed at, always via the tunnel (never probing for a loopback
@@ -41,5 +44,5 @@ export const targetFor = (sandboxId: string): SandboxTarget | undefined => {
     if (sandbox === undefined || base === null || base === undefined || base === ``) {
         return undefined;
     }
-    return { sandboxId, base, connectToken: sandbox.token ?? undefined, ...vouchedFor(sandbox) };
+    return { sandboxId, base, connectToken: sandbox.token ?? undefined, ...vouchFor(sandbox) };
 };

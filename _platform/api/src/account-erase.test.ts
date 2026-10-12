@@ -11,7 +11,9 @@ import { DAY_MS } from "./durations.js";
 import {
     CARRIED_SUSPENSION_REASON,
     carriedStandingOf,
+    canonicalEmail,
     carriedStrikesSince,
+    standingEmailHash,
     standingSubjectHash,
     sweepHostedStanding,
 } from "./sandbox/hosted/abuse/carried-standing.js";
@@ -128,15 +130,17 @@ const CARRIED_A = {
     month: `2026-09`,
     freeMinutes: 300,
 };
+// The same standing under the erased account's address, so a code to that address (or an alias of it) finds it too.
+const CARRIED_A_BY_ADDRESS = { ...CARRIED_A, subjectHash: standingEmailHash(config, `gone@example.test`) };
 
 // What either deletion leaves once Fly and Stripe answered: the account's apps destroyed and unqueued, the other
-// account's untouched, the customer deleted, and the standing on the Google subject's record.
+// account's untouched, the customer deleted, and the standing on the records of the Google subject and the address.
 const expectErased = (store: ReturnType<typeof seededStore>, fly: FakeFly, stripeCalls: readonly string[]): void => {
     expect([...fly.apps]).toEqual([APPS.other]);
     expect(store.rows.cleanup).toEqual([]);
     expect(stripeCalls).toEqual([`cancel sub_1`, `delete cus_1`]);
     expect(store.rows.erasures).toEqual([]);
-    expect(store.rows.standing).toEqual([CARRIED_A]);
+    expect(store.rows.standing).toEqual([CARRIED_A, CARRIED_A_BY_ADDRESS]);
     expect(store.rows.users.map((user) => user.id)).toEqual([`u2`]);
     expect(store.rows.sandboxes).toEqual([{ id: `s2`, ownerId: `u2` }]);
     expect(store.rows.trash).toEqual([]);
@@ -208,12 +212,12 @@ describe(`erasing an account`, () => {
             { appName: APPS.trashed, deleteAfter: NOW },
         ]);
         expect(store.rows.erasures).toEqual([{ customerId: `cus_1`, subscriptionId: `sub_1` }]);
-        expect(store.rows.standing).toEqual([CARRIED_A]);
+        expect(store.rows.standing).toEqual([CARRIED_A, CARRIED_A_BY_ADDRESS]);
 
         // The user row survived the failure (say the delete after it never ran): a second erase changes nothing.
         const again = await eraseAccount(store.prisma, config, logger, `u1`, { gateway: stripe.gateway, now: NOW });
         expect(again).toEqual({ apps: [APPS.released], destroyed: [], stripe: `queued`, carried: true });
-        expect(store.rows.standing).toEqual([CARRIED_A]);
+        expect(store.rows.standing).toEqual([CARRIED_A, CARRIED_A_BY_ADDRESS]);
         expect(store.rows.cleanup.map((row) => row.appName).toSorted()).toEqual([APPS.live, APPS.released, APPS.trashed]);
         await store.prisma.user.delete({ where: { id: `u1` } });
         // The queues are tied to no user, so the cascade leaves them.
@@ -226,13 +230,15 @@ describe(`erasing an account`, () => {
         expect(store.rows.cleanup).toEqual([]);
     });
 
-    it(`carries nothing for an account with no Google sign-in, and lets its standing go with the cascade`, async () => {
+    // (2026-10-12) Until email sign-in, an account with no Google sign-in had nothing to key its standing on, so it went
+    // with the cascade; one that signs in with a code would then have shed a suspension by deleting itself.
+    it(`carries an account with no Google sign-in under its address alone`, async () => {
         const store = seededStore();
         store.rows.accounts.splice(0, 1);
         flyWith();
         const result = await eraseAccount(store.prisma, config, logger, `u1`, { gateway: stripeWith().gateway, now: NOW });
-        expect(result.carried).toBe(false);
-        expect(store.rows.standing).toEqual([]);
+        expect(result.carried).toBe(true);
+        expect(store.rows.standing).toEqual([CARRIED_A_BY_ADDRESS]);
     });
 });
 
@@ -285,7 +291,24 @@ describe(`signing in again after an erase`, () => {
         const store = await returned();
         await liftHostedSuspension(store.prisma, config, logger, `u3`);
         expect(await hostedSuspensionOf(store.prisma, config, `u3`)).toBeUndefined();
-        expect(store.rows.standing).toEqual([{ ...CARRIED_A, suspendedAt: null }]);
+        // Lifted under the returning account's own keys; the erased address's record is another person's to be judged.
+        expect(store.rows.standing).toEqual([{ ...CARRIED_A, suspendedAt: null }, CARRIED_A_BY_ADDRESS]);
+    });
+
+    it(`finds an account that signs in with a code to an alias of the erased address still suspended`, async () => {
+        const store = await returned();
+        store.rows.users.push({ id: `u5`, email: `Gone+Again@Example.test`, createdAt: NOW, hostedSuspendedAt: null, hostedSuspendedReason: null });
+        expect(await hostedSuspensionOf(store.prisma, config, `u5`)).toEqual({ at: SUSPENDED_AT, reason: CARRIED_SUSPENSION_REASON });
+        expect((await accountHoursOf(store.prisma, config, `u5`, NOW)).free.usedMinutes).toBe(300);
+    });
+
+    it(`reads an address as its mailbox: case, a +tag, and the dots a dotless mailbox ignores`, () => {
+        expect(canonicalEmail(` Gone+Again@Example.test `)).toBe(`gone@example.test`);
+        expect(canonicalEmail(`a.da+x@googlemail.com`)).toBe(`ada@gmail.com`);
+        expect(canonicalEmail(`a.da@fastmail.com`)).toBe(`a.da@fastmail.com`);
+        expect(standingEmailHash(config, `A.Da+x@gmail.com`)).toBe(standingEmailHash(config, `ada@gmail.com`));
+        // Its own label: an address never hashes to the record of a Google subject spelled the same.
+        expect(standingEmailHash(config, `ada@gmail.com`)).not.toBe(standingSubjectHash(config, `ada@gmail.com`));
     });
 
     it(`hashes the subject under a key derived from the platform's secret, so another secret names nobody`, () => {

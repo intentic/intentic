@@ -15,6 +15,7 @@ import { hostReportHttpRoutes } from "./sandbox/host-report.js";
 import { ingressEnabled, sandboxHostname } from "./sandbox/reachability.js";
 import { DaemonVersionSchema } from "./sandbox/daemon-version.js";
 import { identityField, isTombstoned } from "./sandbox/recovery.js";
+import { identityKeyOf } from "./sign-in.js";
 import { announcedCopyOf, noteAnnounce, seenCopiesOf } from "./sandbox/announce-copies.js";
 import { claimerOf, heldClaimerOf, namesMachine, secondMachine } from "./sandbox/setup-code.js";
 import { recoveryHttpRoutes } from "./sandbox/recovery.routes.js";
@@ -309,7 +310,11 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         if (announced.count === 0) {
             return kit.refuse(404, `unknown sandbox`);
         }
-        return kit.answer({ ok: true, ...(await identityField(prisma)) });
+        // The identity key rides along so the daemon can verify the platform's identity assertions (sign-in.ts): every
+        // sandbox learns it at its first announce and follows a rotation within the hour.
+        const identityKey = identityKeyOf(config);
+        const answer = { ok: true as const, ...(await identityField(prisma)) };
+        return kit.answer(identityKey === undefined ? answer : { ...answer, identityKey });
     });
 
     // The doors a platform that forgot a sandbox needs: adoption, and which database this is (recovery.routes.ts).

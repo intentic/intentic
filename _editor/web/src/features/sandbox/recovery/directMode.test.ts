@@ -18,7 +18,7 @@ const list = jest.fn(async () => {
 });
 jest.mock(`../../../lib/useApi`, () => ({ apiClient: { sandbox: { list } } }));
 
-const { accountFromGoogle, enterDirectMode, sandboxAt, summaryOf } = await import(`./directMode`);
+const { accountFromProof, enterDirectMode, sandboxAt, summaryOf } = await import(`./directMode`);
 const { useSandbox } = await import(`../../../client/sandbox/useSandbox`);
 const { queryClient } = await import(`../../../lib/queryPersistence`);
 
@@ -94,12 +94,25 @@ describe(`an account and a sandbox the device never listed`, () => {
     const token = (claims: Record<string, unknown>) => `h.${btoa(JSON.stringify(claims)).replaceAll(`=`, ``)}.s`;
 
     it(`names the account by the Google sign-in the daemon will check`, () => {
-        expect(accountFromGoogle(token({ email: `owner@example.com`, exp: 9_999_999_999 }), new Date(`2026-10-02T12:00:00.000Z`))).toEqual({
+        expect(
+            accountFromProof({ kind: `google`, idToken: token({ email: `owner@example.com`, exp: 9_999_999_999 }) }, new Date(`2026-10-02T12:00:00.000Z`)),
+        ).toEqual({
             user: { id: `direct:owner@example.com`, email: `owner@example.com`, name: `owner@example.com`, image: null },
             savedAt: `2026-10-02T12:00:00.000Z`,
             sandboxes: [],
         });
-        expect(accountFromGoogle(`not-a-token`)).toBeUndefined();
+        expect(accountFromProof({ kind: `google`, idToken: `not-a-token` })).toBeUndefined();
+    });
+
+    // An account that signs in by email has no Google sign-in to offer: the session the daemon minted (held already, or
+    // opened by a passkey just now) says who it let in.
+    it(`names the account by a daemon session when there is no Google sign-in`, () => {
+        expect(accountFromProof({ kind: `session`, email: ` ana@corp.example ` }, new Date(`2026-10-02T12:00:00.000Z`))).toEqual({
+            user: { id: `direct:ana@corp.example`, email: `ana@corp.example`, name: `ana@corp.example`, image: null },
+            savedAt: `2026-10-02T12:00:00.000Z`,
+            sandboxes: [],
+        });
+        expect(accountFromProof({ kind: `session`, email: `` })).toBeUndefined();
     });
 
     it(`names a sandbox by its host`, () => {

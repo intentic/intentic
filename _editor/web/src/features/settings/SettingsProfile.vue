@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { Avatar, InlineRename, RowGroup, RowNote, StatusBadge } from "@intentic/ui";
+import { Avatar, Button, InlineRename, Row, RowGroup, RowNote, StatusBadge } from "@intentic/ui";
 import { messageOr } from "@intentic/ui/async";
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { fileToSquareDataUrl } from "../../lib/imageDataUrl";
 import { useAccount } from "../../client/auth/useAccount";
+import { signsInByEmail, signsInWithGoogle } from "../../client/auth/signInMethods";
 import { useHostedPlan } from "./hosted-plan/useHostedPlan";
 import { useT } from "@intentic/ui/i18n";
 
@@ -12,7 +13,7 @@ const t = useT();
 /* Profile: display name + avatar, saved via Better Auth's update-user (useAccount.updateProfile: the workspace's own
    session, or in a desktop window on a folder the one the app reaches for it). */
 
-const { user, updateProfile } = useAccount();
+const { user, updateProfile, local } = useAccount();
 
 /* The plan chip beside the name: the same derivation the account menu reads, so the two cannot disagree about which lane this account is on. */
 const { planBadge } = useHostedPlan();
@@ -50,6 +51,28 @@ const pickAvatar = async (event: Event): Promise<void> => {
 
 const writeName = async (name: string): Promise<void> => {
     await updateProfile({ name });
+};
+
+/* How this account signs in, for one that signs in by email code: whether Google is linked beside it, and the press that
+   links it (the free hosted machine and the trial need it). A desktop window on a folder runs as a placeholder for the
+   account and cannot link anything; the workspace's own settings can. */
+const methods = computed(() => user.value?.signInMethods);
+const showsSignIn = computed(() => local !== true && signsInByEmail(methods.value));
+const googleLinked = computed(() => signsInWithGoogle(methods.value));
+const linking = ref(false);
+const linkError = ref<string | undefined>(undefined);
+const linkGoogle = async (): Promise<void> => {
+    linking.value = true;
+    linkError.value = undefined;
+    try {
+        // Loaded at the press: the settings view needs nothing else of the platform's sign-in client.
+        const { useAuth } = await import(`../../client/auth/useAuth`);
+        // Google's page, then back here with the account holding both ways in.
+        await useAuth().linkGoogle(`/settings`);
+    } catch (error) {
+        linkError.value = messageOr(error, t(`auth.useAuth.linkGoogleFailed`));
+        linking.value = false;
+    }
 };
 </script>
 
@@ -102,6 +125,24 @@ const writeName = async (name: string): Promise<void> => {
                     <p v-if="avatarError" class="h-4 truncate px-1 text-xs leading-4 text-danger">{{ avatarError }}</p>
                 </div>
             </div>
+        </RowNote>
+    </RowGroup>
+
+    <RowGroup v-if="showsSignIn" :label="t(`settings.settingsProfile.signIn`)">
+        <Row icon="envelope" :title="t(`settings.settingsProfile.emailCode`)" :description="t(`settings.settingsProfile.emailCodeDetail`, { email: user?.email ?? `` })" />
+        <Row
+            icon="google"
+            :title="t(`settings.settingsProfile.google`)"
+            :description="googleLinked ? t(`settings.settingsProfile.googleLinked`) : t(`settings.settingsProfile.googleNotLinked`)"
+        >
+            <template v-if="!googleLinked" #control>
+                <Button :label="t(`settings.settingsProfile.linkGoogle`)" size="small" tier="boring" :loading="linking" @click="linkGoogle">
+                    <template #icon><Icon name="google" /></template>
+                </Button>
+            </template>
+        </Row>
+        <RowNote v-if="linkError" variant="block">
+            <p class="text-xs text-danger">{{ linkError }}</p>
         </RowNote>
     </RowGroup>
 </template>

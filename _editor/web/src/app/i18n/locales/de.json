@@ -3638,11 +3638,9 @@
             "syncFilesHere": "Dateien hierher synchronisieren"
         },
         "sandboxUnauthorized": {
-            "intenticAccount": ", aber Ihr intentic-Konto ist",
-            "sandboxBelongsToAnother": "Diese Sandbox gehört einem anderen Konto und hat den Zugriff nicht geteilt mit",
             "switchGoogleAccount": "Google-Konto wechseln",
-            "toOpenSandbox": "um diese Sandbox zu öffnen.",
-            "youreSignedIntoGoogle": "Sie sind bei Google angemeldet als"
+            "wrongGoogleAccount": "Sie sind bei Google angemeldet als {presented}, aber Ihr intentic-Konto ist {account}. Melden Sie sich mit {account} an, um diese Sandbox zu öffnen.",
+            "notShared": "Diese Sandbox gehört einem anderen Konto und hat den Zugriff nicht mit {presented} geteilt. Bitten Sie den Besitzer um Zugriff: Diese Meldung verschwindet von selbst, sobald er gewährt ist."
         },
         "sandboxUpdateCard": {
             "againstHost": "gegen ihren Host.",
@@ -4274,7 +4272,8 @@
             "openSandbox": "Sandbox öffnen",
             "wrongAccount": "Falsches Konto",
             "youreAllSet": "Alles bereit",
-            "youreInvited": "Sie sind eingeladen"
+            "youreInvited": "Sie sind eingeladen",
+            "invitedToOpenSandboxAs": "Sie wurden eingeladen, die Sandbox {sandbox} zu öffnen. Melden Sie sich als {email} an, um fortzufahren."
         },
         "desktopSetupProgress": {
             "answer": "Beantworten",

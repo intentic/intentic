@@ -20,6 +20,7 @@ const config = (over: Record<string, unknown> = {}): Config =>
         admin: { emails: `` },
         email: { apiKey: ``, from: `` },
         google: { clientId: `gcid` },
+        identity: { signingKey: `` },
         secrets: { key: `` },
         ingress: { ...testIngressConfig },
         hosted: {

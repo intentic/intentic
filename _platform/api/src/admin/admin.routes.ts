@@ -15,8 +15,8 @@ const os = implement(apiContract).$context<OrpcContext>();
 
 // Enforces the admin namespace's one rule by shape: every handler opens with `audited` (requireAdmin plus a log line
 // naming who asked for what).
-const audited = (context: OrpcContext, route: string) => {
-    const admin = requireAdmin(context);
+const audited = async (context: OrpcContext, route: string) => {
+    const admin = await requireAdmin(context);
     context.logger.info({ admin: admin.email, route }, `admin api`);
     return admin;
 };
@@ -31,8 +31,8 @@ const requireMutations = (context: OrpcContext) => {
 
 // The shared gate for every mutation but userDelete: admin + audit, the deployment switch, and a typed confirmation
 // naming the target exactly.
-const mutating = (context: OrpcContext, route: string, confirm: string, target: string) => {
-    const admin = audited(context, route);
+const mutating = async (context: OrpcContext, route: string, confirm: string, target: string) => {
+    const admin = await audited(context, route);
     requireMutations(context);
     if (confirm.trim() !== target) {
         throw new ORPCError(`BAD_REQUEST`, { message: `confirmation must repeat “${target}” exactly` });
@@ -43,7 +43,7 @@ const mutating = (context: OrpcContext, route: string, confirm: string, target: 
 // The gate for a mutation addressed to an ACCOUNT: admin + audit, the deployment switch, the row, and the strongest
 // confirmation on the surface, the account's email retyped, case-insensitively but in full.
 const confirmedAccount = async (context: OrpcContext, route: string, input: { userId: string; confirmEmail: string }) => {
-    const admin = audited(context, route);
+    const admin = await audited(context, route);
     requireMutations(context);
     const target = await context.prisma.user.findUnique({ where: { id: input.userId }, select: { id: true, email: true } });
     if (target === null) {
@@ -57,27 +57,27 @@ const confirmedAccount = async (context: OrpcContext, route: string, input: { us
 
 export const adminRoutes = {
     overview: os.admin.overview.handler(async ({ context }) => {
-        audited(context, `admin.overview`);
+        await audited(context, `admin.overview`);
         return adminOverview(context.prisma, context.config);
     }),
     funnel: os.admin.funnel.handler(async ({ context }) => {
-        audited(context, `admin.funnel`);
+        await audited(context, `admin.funnel`);
         return adminFunnel(context.prisma);
     }),
     attention: os.admin.attention.handler(async ({ context }) => {
-        audited(context, `admin.attention`);
+        await audited(context, `admin.attention`);
         return adminAttention(context.prisma);
     }),
     costs: os.admin.costs.handler(async ({ context }) => {
-        audited(context, `admin.costs`);
+        await audited(context, `admin.costs`);
         return adminCosts(context.prisma, context.config);
     }),
     users: os.admin.users.handler(async ({ context, input }) => {
-        audited(context, `admin.users`);
+        await audited(context, `admin.users`);
         return adminUsers(context.prisma, input);
     }),
     user: os.admin.user.handler(async ({ context, input }) => {
-        audited(context, `admin.user`);
+        await audited(context, `admin.user`);
         const detail = await adminUserDetail(context.prisma, input.idOrEmail);
         if (detail === null) {
             throw new ORPCError(`NOT_FOUND`, { message: `no account with that id or email` });
@@ -85,12 +85,12 @@ export const adminRoutes = {
         return detail;
     }),
     trends: os.admin.trends.handler(async ({ context }) => {
-        audited(context, `admin.trends`);
+        await audited(context, `admin.trends`);
         return adminTrends(context.prisma);
     }),
 
     machineStop: os.admin.machineStop.handler(async ({ context, input }) => {
-        mutating(context, `admin.machineStop`, input.confirm, input.sandboxId);
+        await mutating(context, `admin.machineStop`, input.confirm, input.sandboxId);
         return stopHostedMachine(context.prisma, context.config, input.sandboxId);
     }),
     userDelete: os.admin.userDelete.handler(async ({ context, input }) => {

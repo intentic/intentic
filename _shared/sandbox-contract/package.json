@@ -227,6 +227,17 @@
                 "default": "./dist/documents/index.js"
             }
         },
+        "./identity-assertion": {
+            "types": "./dist/policy/identity-assertion.d.ts",
+            "import": {
+                "@intentic/src": "./src/policy/identity-assertion.ts",
+                "default": "./dist/policy/identity-assertion.js"
+            },
+            "require": {
+                "@intentic/src": "./src/policy/identity-assertion.ts",
+                "default": "./dist/policy/identity-assertion.js"
+            }
+        },
         "./owner-ticket": {
             "types": "./dist/policy/owner-ticket.d.ts",
             "import": {

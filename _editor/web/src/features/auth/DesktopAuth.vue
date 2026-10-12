@@ -9,7 +9,9 @@ import { hasFedCm, useGooglePress } from "./googlePress";
 import { handoffSpent, markHandoffSpent } from "./handoffSpent";
 import { apiClient } from "../../lib/useApi";
 import { useAuth } from "../../client/auth/useAuth";
+import { emailOnly } from "../../client/auth/signInMethods";
 import { useGoogleIdentity } from "../../client/auth/useGoogleIdentity";
+import { readSignInOptions } from "./signInOptions";
 import { desktopAuthLink, signInThroughBrowser } from "../../app/environments/desktop";
 import { arrivingProfile } from "../../app/useProfile";
 import { useT } from "@intentic/ui/i18n";
@@ -20,15 +22,25 @@ import { useT } from "@intentic/ui/i18n";
 // the credentials; `state` is the app's nonce, echoed back to match.
 //
 // TWO CREDENTIALS CROSS HERE AND THEY HAVE TO NAME ONE PERSON: a one-time token for this browser's Intentic session,
-// and a Google ID token minted beside it. The app shows the first and the sandbox daemon trusts only the second, so a
-// row carrying two identities hands the app a sandbox it can never open — and no screen in the app can say why, since
-// each half looks right on its own. That is what `agreed` below refuses.
+// and a Google ID token minted beside it. The app shows the first and the sandbox daemon trusts the second, so a row
+// carrying two identities hands the app a sandbox it can never open — and no screen in the app can say why, since each
+// half looks right on its own. That is what `agreed` below refuses. An account with no Google sign-in sends the first
+// alone: the app's webview asks the platform for identity assertions with the session it gives it, and no Google
+// token is minted at all (an email account has no Google account to mint one for).
 
 const t = useT();
 
 const route = useRoute();
 const { user, refresh, signInWithGoogle, signInWithGoogleCredential } = useAuth();
-const { getIdToken, renderButton, adoptIdToken, refusedCredentials } = useGoogleIdentity();
+const { getIdToken, renderButton, adoptIdToken, refusedCredentials, cancelSignIn } = useGoogleIdentity();
+
+// A signed-out browser can sign in by emailed code on /login and come straight back here, where the hand-off then runs
+// on that session; offered only where the platform mails codes.
+const emailOffered = ref(false);
+const emailSignInLink = computed(() => `/login?${new URLSearchParams({ returnTo: route.fullPath }).toString()}`);
+onMounted(async () => {
+    emailOffered.value = (await readSignInOptions()).email;
+});
 
 const error = ref<NoticeModel | undefined>(undefined);
 const working = ref(false);
@@ -164,10 +176,11 @@ const hand = async (): Promise<void> => {
         error.value = noticeOf(t(`auth.desktopAuth.linkMissingValue`));
         return;
     }
-    // Parks the credential for one pickup; the app receives only the row's id, never the credential itself.
-    const deliver = async (idToken: string): Promise<void> => {
+    // Parks the credential for one pickup; the app receives only the row's id, never the credential itself. Without a
+    // Google token for an account that has none: the session alone crosses.
+    const deliver = async (idToken: string | undefined): Promise<void> => {
         stage.value = `handing`;
-        const { handoff } = await apiClient.desktop.handoff({ idToken, challenge: link.challenge });
+        const { handoff } = await apiClient.desktop.handoff(idToken === undefined ? { challenge: link.challenge } : { idToken, challenge: link.challenge });
         stage.value = `done`;
         markHandoffSpent(link.state);
         globalThis.location.href = desktopAuthLink(handoff, link.state, arrivingProfile());
@@ -178,6 +191,13 @@ const hand = async (): Promise<void> => {
     stage.value = `checking`;
     try {
         const session = await platformSession();
+        // An account with no Google sign-in: nothing to mint and nothing to agree, so the mint the router started on
+        // arrival is called off and the session crosses alone.
+        if (session && emailOnly(user.value?.signInMethods)) {
+            cancelSignIn();
+            await deliver(undefined);
+            return;
+        }
         // Skipped on a switch: the platform's own token names the account being rejected, and it would answer
         // before the reader was asked anything.
         let idToken = session && !picking.value ? await platformHeldToken() : undefined;
@@ -430,6 +450,8 @@ onMounted(() => {
                             {{ t(`auth.words.troubleSigningInUse`) }}
                         </button>
                     </template>
+                    <!-- No Google account for this sign-in: an emailed code on /login, which brings the reader back here. -->
+                    <a v-if="emailOffered && !picking" class="escape" :href="emailSignInLink">{{ t(`auth.desktopAuth.useEmailCode`) }}</a>
                 </template>
             </section>
 

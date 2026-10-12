@@ -1,4 +1,4 @@
-import { CONNECT_TOKEN_HEADER } from "@intentic/api-contract";
+import { CONNECT_TOKEN_HEADER, GOOGLE_REQUIRED_REASON } from "@intentic/api-contract";
 import type { PrismaClient } from "@intentic/prisma";
 import { TRIAL_LABEL, TRIAL_MODEL_ID } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
@@ -6,6 +6,7 @@ import { Hono } from "hono";
 import type { Logger } from "pino";
 import type { Config } from "../config.js";
 import { ingressServer } from "../ingress.js";
+import { freeLaneOpen } from "../sandbox/hosted/free-lane.js";
 import { withImagesInUserMessages } from "./trial-images.js";
 import { createTrialLadder } from "./trial-ladder.js";
 import { createTrialPool, type Fetcher, poolRefused, trialEnabled } from "./trial-pool.js";
@@ -67,6 +68,13 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
         return sandbox?.ownerId;
     };
 
+    // The trial is a free lane: an owner who signs in only by email reaches it once a Google account is linked to theirs
+    // (sandbox/hosted/free-lane.ts). Said in the owner's words, with the reason the editor reads to offer linking.
+    const GOOGLE_REQUIRED = {
+        error: `the free trial needs a Google sign-in linked to this sandbox owner's account: link Google in Settings, or connect a model of your own`,
+        reason: GOOGLE_REQUIRED_REASON,
+    };
+
     // What this account has left today; polled by the daemon for the model picker's badge, and spends nothing.
     ingress(`trialStatus`, async (c, kit) => {
         if (!trialEnabled(config)) {
@@ -75,6 +83,9 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
         const ownerId = await ownerOf(c);
         if (ownerId === undefined) {
             return kit.refuse(404, `unknown sandbox`);
+        }
+        if (!(await freeLaneOpen(prisma, ownerId))) {
+            return kit.refuse(403, GOOGLE_REQUIRED.error);
         }
         return kit.answer({ ...(await trialStatus(prisma, config, ownerId, now())), ...pool.status() });
     });
@@ -101,6 +112,9 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
         const ownerId = await ownerOf(c);
         if (ownerId === undefined) {
             return c.json({ error: `unknown sandbox` }, 404);
+        }
+        if (!(await freeLaneOpen(prisma, ownerId))) {
+            return c.json(GOOGLE_REQUIRED, 403);
         }
         // Images are moved into a user message before anything upstream reads the body: the harness's translator hands
         // a tool result's image to a `tool` message, which Google refuses outright.

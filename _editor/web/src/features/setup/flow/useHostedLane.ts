@@ -1,8 +1,9 @@
-import type { HostedOffer, HostedStatus, SandboxSummary } from "@intentic/api-contract";
+import { GOOGLE_REQUIRED_REASON, type HostedOffer, type HostedStatus, type SandboxSummary } from "@intentic/api-contract";
 import type { NoticeModel } from "@intentic/ui";
 import { noticeFrom, noticeOf, useNow } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { computed, onScopeDispose, type Ref, ref, shallowReactive } from "vue";
+import { z } from "zod";
 import { track } from "../../../app/analytics";
 import { arrivingProfile } from "../../../app/useProfile";
 import type { apiClient } from "../../../lib/useApi";
@@ -33,6 +34,10 @@ const isAtCapacity = (err: unknown): boolean => {
     const { code, status } = err as { code?: unknown; status?: unknown };
     return code === `SERVICE_UNAVAILABLE` || status === 503;
 };
+
+// The platform's refusal of a free machine to an account that signs in only by email (FORBIDDEN with GOOGLE_REQUIRED_REASON):
+// not a failure to show, but the offer's `needsGoogle` met at the press, answered with the same three ways on.
+export const GoogleRequiredSchema = z.object({ code: z.literal(`FORBIDDEN`), data: z.object({ reason: z.literal(GOOGLE_REQUIRED_REASON) }) });
 
 const hostOf = (url: string | null | undefined): string | undefined => {
     if (url === null || url === undefined) {
@@ -69,10 +74,12 @@ const provisionFor = ({ platform, sandbox, project }: HostedLaneHost, sandboxId:
         ? sandbox.hostedProvision(sandboxId, token)
         : platform.hostedProvision({ sandboxId, token, project, profile: arrivingProfile() });
 
-// Why a machine call failed, and whether it was for want of room, which the card answers with another rung instead.
+// Why a machine call failed, and whether it was for want of room, which the card answers with another rung instead, or for
+// want of a Google sign-in on the account, which it answers with the ways on from there.
 interface HostedFailure {
     readonly notice: NoticeModel;
     readonly full: boolean;
+    readonly google?: boolean;
 }
 
 // When somebody began waiting on each row's machine, by its sandbox id. The wait card escalates on it, and a reader who
@@ -108,13 +115,16 @@ export const useHostedLane = (host: HostedLaneHost) => {
             .filter((call) => call?.state === `failed`)
             .toSorted((a, b) => (b?.order ?? 0) - (a?.order ?? 0))[0]?.failure,
     );
-    const hostedError = computed(() => hostedFailure.value?.notice);
+    // A refusal for want of Google is answered by the ways on from there (Setup.vue), not said as a failure.
+    const hostedError = computed(() => (hostedFailure.value?.google === true ? undefined : hostedFailure.value?.notice));
     const clearHostedError = (): void => {
         work.dismiss(`machine`);
         work.dismiss(`release`);
     };
     // A refusal for room met by this browser, harder than a later count; cleared only by `recheckCapacity`.
     const refusedForRoom = ref(false);
+    // The platform said, at the press, that this account needs a Google sign-in for a free machine.
+    const refusedForGoogle = ref(false);
     const hostedRefusedForRoom = computed(() => refusedForRoom.value || hostedFailure.value?.full === true);
     // When the hosted wait began (ms): it only escalates a wait already progressing, never decides what the card says.
     const hostedSince = computed<number | undefined>({
@@ -225,15 +235,21 @@ export const useHostedLane = (host: HostedLaneHost) => {
             const ran = await work.run(`machine`, {
                 what: t(`setup.useHostedLane.starting`),
                 tag: `provision`,
-                failed: (err) => ({ notice: noticeFrom(err, t(`setup.useHostedLane.startFailed`)), full: isAtCapacity(err) }),
+                failed: (err) => ({
+                    notice: noticeFrom(err, t(`setup.useHostedLane.startFailed`)),
+                    full: isAtCapacity(err),
+                    google: GoogleRequiredSchema.safeParse(err).success,
+                }),
                 // A start abandoned with its draft is no news, and one that lands is the card's own to say.
                 quiet: true,
                 task: () => provisionFor(host, target.id, token),
             });
             if (ran?.state === `failed`) {
                 if (action === lane.value.action) {
-                    // No machines left isn't a failure notice: the card replaces itself with what to do instead.
+                    // No machines left isn't a failure notice: the card replaces itself with what to do instead. Nor is a
+                    // free machine refused for want of Google: the ways on from there replace it.
                     refusedForRoom.value = ran.failure?.full === true;
+                    refusedForGoogle.value = ran.failure?.google === true;
                 } else if (!left) {
                     // Asked of a lane this page has moved on from (a hand-back): nobody waits on its failure. One that
                     // lands after the page went is kept, for the next visit to the row.
@@ -467,6 +483,8 @@ export const useHostedLane = (host: HostedLaneHost) => {
         hostedProjects,
         hostedSpent,
         hostedSuspended,
+        // Read with the offer's `needsGoogle` by the setup screen, which offers the ways on (Setup.vue hostedNeedsGoogle).
+        refusedForGoogle,
         hostedFull,
         hostedHours,
         hostedHost,

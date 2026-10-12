@@ -1,4 +1,4 @@
-import { grantBody, grantSendable } from "./accessGrant";
+import { emailSignInByDefault, grantBody, grantSendable } from "./accessGrant";
 
 describe(`grantBody`, () => {
     it(`carries areas on a guest grant like any other tier below maintainer`, () => {
@@ -43,5 +43,28 @@ describe(`grantSendable`, () => {
         expect(grantSendable(`viewer`, undefined, 0)).toBe(true);
         expect(grantSendable(`collaborator`, [`support`], 0)).toBe(true);
         expect(grantSendable(`maintainer`, undefined, 0)).toBe(true);
+    });
+});
+
+describe(`grantBody's email sign-in`, () => {
+    // Absent is "keep what the row says" at the daemon: a re-grade from this form must not send it, or it would decide
+    // a person's way in as a side effect of their tier.
+    it(`sends the switch only when the caller decides it, either way`, () => {
+        expect(grantBody(`ana@corp.example`, `viewer`, undefined)).toEqual({ email: `ana@corp.example`, role: `viewer` });
+        expect(grantBody(`ana@corp.example`, `viewer`, undefined, true)).toEqual({ email: `ana@corp.example`, role: `viewer`, emailSignIn: true });
+        expect(grantBody(`ana@corp.example`, `viewer`, undefined, false)).toEqual({ email: `ana@corp.example`, role: `viewer`, emailSignIn: false });
+    });
+});
+
+describe(`emailSignInByDefault`, () => {
+    // Built from parts, the way a reader types them: an address at Google's own domains, or at any other.
+    const at = (domain: string): string => [`ana`, domain].join(`@`);
+
+    // Google already vouches for its own addresses; a second road for them is one the owner did not ask for.
+    it(`is on for any address but the two Google holds`, () => {
+        expect(emailSignInByDefault(at(`corp.example`))).toBe(true);
+        expect(emailSignInByDefault(at(`gmail.com.example`))).toBe(true);
+        expect(emailSignInByDefault(at(`gmail.com`))).toBe(false);
+        expect(emailSignInByDefault(` ${at(`GoogleMail.com`)} `)).toBe(false);
     });
 });

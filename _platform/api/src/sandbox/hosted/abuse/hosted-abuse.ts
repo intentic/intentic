@@ -164,10 +164,10 @@ const strike = async (
     await stopMachine(config.hosted.flyApiToken, machine.appName, machine.machineId);
     await closeHostedStretch(prisma, { ...machine, ownerId }, now);
     const since = new Date(now.getTime() - config.hosted.abuseStrikeDays * DAY_MS);
-    // A deleted account's strikes count too, when its Google subject is this owner's (carried-standing.ts).
+    // A deleted account's strikes count too, when its Google subject or address is this owner's (carried-standing.ts).
     const prior =
         (await prisma.hostedStrike.count({ where: { userId: ownerId, action: { in: [`stopped`, `suspended`] }, createdAt: { gte: since } } })) +
-        carriedStrikesSince(await carriedStandingOf(prisma, config, machine.sandbox.owner.accounts), since);
+        carriedStrikesSince(await carriedStandingOf(prisma, config, machine.sandbox.owner.accounts, machine.sandbox.owner.email), since);
     const suspend = config.hosted.abuseStrikesToSuspend > 0 && prior + 1 >= config.hosted.abuseStrikesToSuspend;
     await prisma.hostedStrike.create({ data: { ...base, action: suspend ? `suspended` : `stopped` } });
     if (suspend) {

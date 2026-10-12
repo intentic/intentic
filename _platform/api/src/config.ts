@@ -38,10 +38,30 @@ export const configSchema = z.object({
             clientSecret: z.string().default(``).meta({ secret: true }),
         })
         .prefault({}),
+    // Sign-in besides Google (sign-in.ts). `email` offers a code mailed to the address (Better Auth emailOTP), so an
+    // address no identity provider vouches for can sign in; production refuses it while mail is unconfigured, since a
+    // code nobody receives is a door nobody can use and a logged one is a door anybody reading logs can.
+    signIn: z
+        .object({
+            email: z.stringbool().default(true),
+        })
+        .prefault({}),
+    // The key this platform signs identity assertions with (sandbox-contract policy/identity-assertion.ts), Ed25519 in
+    // PKCS8 PEM; empty mints none, and a sandbox then opens for an email account only on a hosted machine's owner ticket.
+    // Its own key, never the ingress key, so neither credential can stand in for the other or be rotated with it.
+    identity: z
+        .object({
+            signingKey: z.string().default(``).meta({ secret: true }),
+        })
+        .prefault({}),
     // Comma-separated admin emails, deployment config rather than a row; empty disables /admin entirely.
     admin: z
         .object({
             emails: z.string().default(``),
+            // How an admin must have proven their address: `google` (a Google account linked to theirs) or `any` (an
+            // emailed code will do). Defaults to google: the panel reads every account, so the weakest way in should
+            // not be one an inbox alone opens.
+            signIn: z.enum([`google`, `any`]).default(`google`),
             // The admin mutation gate, off until the panel's bytes are a pinned install; each mutation confirms its
             // target.
             mutations: z.stringbool().default(false),
@@ -280,6 +300,7 @@ export const CONFIG_SECRETS = [
     `betterAuth.secret`,
     `secrets.key`,
     `google.clientSecret`,
+    `identity.signingKey`,
     `email.apiKey`,
     `intenticCloudflare.apiToken`,
     `ingress.signingKey`,

@@ -5,6 +5,7 @@ import { z } from "zod";
 import {
     AddressOfferSchema,
     AdoptionTicketSchema,
+    MintedIdentityAssertionSchema,
     MintedOwnerTicketSchema,
     AdminActionResultSchema,
     AdminAttentionSchema,
@@ -41,6 +42,7 @@ import {
     SandboxSummarySchema,
     TrashedSandboxSchema,
     SetupCodeSchema,
+    SignInOptionsSchema,
     UserSchema,
     WalletPolicySchema,
 } from "./schemas.js";
@@ -52,6 +54,8 @@ export * from "./schemas.js";
 export const meContract = {
     get: oc.route({ method: "GET", path: "/me" }).output(UserSchema.nullable()),
     export: oc.route({ method: "GET", path: "/me/export" }).output(z.record(z.string(), z.unknown())),
+    // Which ways in this platform offers; sessionless, read by the login page.
+    signInOptions: oc.route({ method: "GET", path: "/me/sign-in-options" }).output(SignInOptionsSchema),
 };
 
 // Owner and shared sandboxes; every route takes `sandboxId`, owner-only ones reject non-owners. `attach` records an
@@ -121,6 +125,12 @@ export const sandboxRegistryContract = {
     addressOffer: oc.route({ method: "GET", path: "/sandbox/address-offer" }).output(AddressOfferSchema),
     // Signed way into a hosted sandbox for its owner; owner-only, hosted-only, 404 elsewhere.
     ownerTicket: oc.route({ method: "POST", path: "/sandbox/owner-ticket" }).input(sandboxIdInput).output(MintedOwnerTicketSchema),
+    // The platform's word that the caller controls their address, for a sandbox they own or were invited to; FORBIDDEN for
+    // an address no code or Google confirmed, NOT_FOUND on a platform with no identity key or no email sign-in.
+    identityAssertion: oc
+        .route({ method: "POST", path: "/sandbox/identity-assertion" })
+        .input(sandboxIdInput)
+        .output(MintedIdentityAssertionSchema),
     // What the registry holds of sandboxes the editor remembers but the list lacks, by their 12-hex ids.
     lookup: oc
         .route({ method: "POST", path: "/sandbox/lookup" })
@@ -168,16 +178,18 @@ export const inviteContract = {
 };
 
 // Carries one sign-in from the real browser into the desktop webview, since Google refuses OAuth (and FedCM) there.
-// `redeem` is sessionless by design; the row is deleted on first redeem, so a replayed link finds nothing.
+// `redeem` is sessionless by design; the row is deleted on first redeem, so a replayed link finds nothing. `idToken` is
+// the Google proof the webview spends on daemons, absent for an account that signs in by email: that webview asks the
+// platform for identity assertions with the session the one-time token gives it.
 export const desktopContract = {
     handoff: oc
         .route({ method: "POST", path: "/desktop/handoff" })
-        .input(z.object({ idToken: z.string().min(1), challenge: z.string().min(43).max(64) }))
+        .input(z.object({ idToken: z.string().min(1).optional(), challenge: z.string().min(43).max(64) }))
         .output(z.object({ handoff: z.string() })),
     redeem: oc
         .route({ method: "POST", path: "/desktop/redeem" })
         .input(z.object({ handoff: z.string().min(1), verifier: z.string().min(43).max(128) }))
-        .output(z.object({ ott: z.string(), idToken: z.string() })),
+        .output(z.object({ ott: z.string(), idToken: z.string().optional() })),
 
     // The Google ID token this platform already holds, so the desktop hand-off need not ask Google again.
     googleIdToken: oc.route({ method: "POST", path: "/desktop/google-id-token" }).output(z.object({ idToken: z.string().optional() })),

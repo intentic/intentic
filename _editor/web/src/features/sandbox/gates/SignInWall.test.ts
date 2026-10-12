@@ -38,17 +38,18 @@ jest.mock(`../../../app/environments/desktop`, () => ({
 const SESSION: DaemonSession = { token: `sess-passkey`, expiresAt: 4_102_444_800_000, email: `owner@example.com` };
 const supportsPasskeys = jest.fn(() => true);
 const signInWithPasskey = jest.fn<() => Promise<DaemonSession>>();
-const registerPasskey = jest.fn<() => Promise<{ passkey: unknown; session?: DaemonSession }>>();
-const recoverWithCode = jest.fn<() => Promise<DaemonSession & { remaining: number }>>();
+// The ceremonies' seams, typed as the gate calls them: the target, the step-up's bearer, and what was typed.
+const registerPasskey = jest.fn<(target: unknown, bearer: () => Promise<string>, label: string | undefined) => Promise<{ passkey: unknown; session?: DaemonSession }>>();
+const recoverWithCode = jest.fn<(target: unknown, bearer: () => Promise<string>, code: string) => Promise<DaemonSession & { remaining: number }>>();
 jest.mock(`../../../client/session/passkeySignIn`, () => ({
     browserSupportsPasskeys: () => supportsPasskeys(),
     signInWithPasskey: (...args: unknown[]) => signInWithPasskey(...(args as [])),
-    registerPasskey: (...args: unknown[]) => registerPasskey(...(args as [])),
-    recoverWithCode: (...args: unknown[]) => recoverWithCode(...(args as [])),
+    registerPasskey: (...args: Parameters<typeof registerPasskey>) => registerPasskey(...args),
+    recoverWithCode: (...args: Parameters<typeof recoverWithCode>) => recoverWithCode(...args),
 }));
 
 const { default: SignInWall } = await import("./SignInWall.vue");
-const { dismissSignIn, offerPasskey, raiseSignIn } = await import("../../../client/session/signInPrompt");
+const { dismissSignIn, offerPasskey, raiseSignIn, sameBearer } = await import("../../../client/session/signInPrompt");
 
 const TARGET = { sandboxId: `sb-1`, base: `https://daemon.test`, connectToken: `connect` };
 
@@ -142,7 +143,7 @@ it(`never offers a passkey in a window without WebAuthn, whatever the daemon hol
 
 it(`the step-up asks for the passkey held, with no Google button in sight`, async () => {
     needsSignIn.value = false;
-    const outcome = raiseSignIn({ kind: `step-up`, target: TARGET, enrolled: true, bearer: `google-proof` });
+    const outcome = raiseSignIn({ kind: `step-up`, target: TARGET, enrolled: true, bearer: sameBearer(`google-proof`) });
     const el = await mount();
 
     expect(el.textContent).toContain(`Confirm it's you`);
@@ -156,7 +157,7 @@ it(`the step-up asks for the passkey held, with no Google button in sight`, asyn
 
 it(`the step-up for someone with no passkey yet walks through adding the first, under the proof that was taken`, async () => {
     needsSignIn.value = false;
-    const outcome = raiseSignIn({ kind: `step-up`, target: TARGET, enrolled: false, bearer: `google-proof` });
+    const outcome = raiseSignIn({ kind: `step-up`, target: TARGET, enrolled: false, bearer: sameBearer(`google-proof`) });
     const el = await mount();
     expect(el.textContent).toContain(`Add a passkey to continue`);
 
@@ -167,13 +168,15 @@ it(`the step-up for someone with no passkey yet walks through adding the first, 
     buttonSaying(`Add a passkey`)?.click();
     await settle();
 
-    expect(registerPasskey).toHaveBeenCalledWith(TARGET, `google-proof`, `work laptop`);
+    expect(registerPasskey).toHaveBeenCalledWith(TARGET, expect.any(Function), `work laptop`);
+    // Under the proof that was taken, asked for again by each call of the ceremony.
+    expect(await registerPasskey.mock.calls[0]?.[1]?.()).toBe(`google-proof`);
     await expect(outcome).resolves.toEqual(SESSION);
 });
 
 it(`a refused ceremony is said on the card and the prompt stands, so the person can try again`, async () => {
     needsSignIn.value = false;
-    const outcome = raiseSignIn({ kind: `step-up`, target: TARGET, enrolled: true, bearer: `google-proof` });
+    const outcome = raiseSignIn({ kind: `step-up`, target: TARGET, enrolled: true, bearer: sameBearer(`google-proof`) });
     const el = await mount();
     signInWithPasskey.mockRejectedValue(new Error(`signature counter did not advance`));
     buttonSaying(`Use your passkey`)?.click();
@@ -190,7 +193,7 @@ it(`a refused ceremony is said on the card and the prompt stands, so the person 
 it(`only the owner is offered a recovery code, and it is spent under the proof that was taken`, async () => {
     needsSignIn.value = false;
     activeSandbox.value = { role: `collaborator` };
-    void raiseSignIn({ kind: `step-up`, target: TARGET, enrolled: true, bearer: `google-proof` });
+    void raiseSignIn({ kind: `step-up`, target: TARGET, enrolled: true, bearer: sameBearer(`google-proof`) });
     let el = await mount();
     expect(el.textContent).not.toContain(`recovery code`);
     dismissSignIn();
@@ -198,7 +201,7 @@ it(`only the owner is offered a recovery code, and it is spent under the proof t
     document.body.innerHTML = ``;
 
     activeSandbox.value = { role: `owner` };
-    const outcome = raiseSignIn({ kind: `step-up`, target: TARGET, enrolled: true, bearer: `google-proof` });
+    const outcome = raiseSignIn({ kind: `step-up`, target: TARGET, enrolled: true, bearer: sameBearer(`google-proof`) });
     el = await mount();
     expect(el.textContent).toContain(`recovery code`);
     const field = el.querySelector(`input[placeholder^="xxxxx"]`) as HTMLInputElement;
@@ -209,7 +212,8 @@ it(`only the owner is offered a recovery code, and it is spent under the proof t
     buttonSaying(`Use code`)?.click();
     await settle();
 
-    expect(recoverWithCode).toHaveBeenCalledWith(TARGET, `google-proof`, `abcde-fghjk-mnpqr-stuvw`);
+    expect(recoverWithCode).toHaveBeenCalledWith(TARGET, expect.any(Function), `abcde-fghjk-mnpqr-stuvw`);
+    expect(await recoverWithCode.mock.calls[0]?.[1]?.()).toBe(`google-proof`);
     await expect(outcome).resolves.toEqual(expect.objectContaining({ ...SESSION, remaining: 7 }));
 });
 
@@ -273,4 +277,97 @@ it(`shows one browser instruction after handoff, with a quiet browser link and o
     expect(cancelSignIn).toHaveBeenCalledTimes(1);
     expect(push).not.toHaveBeenCalled();
     await expect(outcome).resolves.toBeUndefined();
+});
+
+/* THE EMAIL ROAD: "Continue as", spending the platform's identity assertion, and what stops it, said by name. */
+
+describe(`an account that signs in by email`, () => {
+    const spend = jest.fn<() => Promise<{ session: DaemonSession } | { stepUp: { error: string; requires: `passkey`; enrolled: boolean }; bearer: () => Promise<string> }>>();
+    const offered = (refusal?: `email-sign-in-off` | `platform-key-unknown`) => ({ kind: `offered` as const, address: `ana@corp.example`, spend, refusal });
+
+    beforeEach(() => {
+        // No Google gate: an account with no Google sign-in never has it raised, and the prompt alone is the wall.
+        needsSignIn.value = false;
+        spend.mockReset();
+    });
+
+    it(`puts the wall up with no Google surface at all, and "Continue as" settles the prompt`, async () => {
+        const outcome = raiseSignIn({ kind: `choose`, target: TARGET, passkey: false, withoutGoogle: true, email: offered() });
+        const el = await mount();
+
+        expect(el.textContent).toContain(`intentic confirms your address to the sandbox`);
+        expect(renderButton).not.toHaveBeenCalled();
+        expect(buttonSaying(`Continue with Google`)).toBeUndefined();
+        spend.mockResolvedValue({ session: SESSION });
+        buttonSaying(`Continue as ana@corp.example`)?.click();
+        await settle();
+
+        expect(spend).toHaveBeenCalledTimes(1);
+        await expect(outcome).resolves.toEqual(SESSION);
+    });
+
+    it(`hands the desktop app nothing to do in the browser either`, async () => {
+        desktopVersion.mockReturnValue(`1.2.3`);
+        void raiseSignIn({ kind: `choose`, target: TARGET, passkey: false, withoutGoogle: true, email: offered() });
+        await mount();
+
+        expect(buttonSaying(`Continue with Google`)).toBeUndefined();
+        expect(buttonSaying(`Continue as ana@corp.example`)).toEqual(expect.any(HTMLButtonElement));
+    });
+
+    it(`says what the last assertion met before anything is pressed`, async () => {
+        void raiseSignIn({ kind: `choose`, target: TARGET, passkey: false, withoutGoogle: true, email: offered(`platform-key-unknown`) });
+        const el = await mount();
+
+        expect(el.textContent).toContain(`This sandbox hasn't reached intentic yet, so it can't check an email sign-in. Try again in a minute.`);
+    });
+
+    it(`says a refusal from the press on the card, and the prompt stands for another try`, async () => {
+        const outcome = raiseSignIn({ kind: `choose`, target: TARGET, passkey: false, withoutGoogle: true, email: offered() });
+        const el = await mount();
+        spend.mockRejectedValue(new Error(`This sandbox's owner hasn't let you sign in to it with an email code. Ask them to turn it on for you.`));
+        buttonSaying(`Continue as ana@corp.example`)?.click();
+        await settle();
+
+        expect(el.textContent).toContain(`Ask them to turn it on for you.`);
+        expect(buttonSaying(`Continue as ana@corp.example`)).toEqual(expect.any(HTMLButtonElement));
+        dismissSignIn();
+        await expect(outcome).resolves.toBeUndefined();
+    });
+
+    // The sandbox took the address and its passkey rule wants more: the same prompt becomes the step-up, under the
+    // assertion that was taken.
+    it(`turns into the step-up when the sandbox also wants a passkey`, async () => {
+        const outcome = raiseSignIn({ kind: `choose`, target: TARGET, passkey: false, withoutGoogle: true, email: offered() });
+        const el = await mount();
+        spend.mockResolvedValue({ stepUp: { error: `this sandbox requires a passkey`, requires: `passkey`, enrolled: true }, bearer: async () => `pa1.fresh` });
+        buttonSaying(`Continue as ana@corp.example`)?.click();
+        await settle();
+
+        expect(el.textContent).toContain(`Confirm it's you`);
+        signInWithPasskey.mockResolvedValue(SESSION);
+        buttonSaying(`Use your passkey`)?.click();
+        await settle();
+
+        await expect(outcome).resolves.toEqual(SESSION);
+    });
+
+    // app-plane.md: an older path is never taken silently. The gap is named, with who closes it.
+    it(`names a daemon too old for email sign-in, and who can update it`, async () => {
+        activeSandbox.value = { role: `collaborator`, lastSeenAt: `2026-10-01T12:00:00.000Z` };
+        void raiseSignIn({ kind: `choose`, target: TARGET, passkey: false, withoutGoogle: true, email: { kind: `outdated`, address: `ana@corp.example` } });
+        const el = await mount();
+
+        expect(el.textContent).toContain(`This sandbox needs an update before it accepts email sign-in. Ask its owner to update it.`);
+        expect(buttonSaying(`Continue as`)).toBeUndefined();
+    });
+
+    it(`sits beside Google's own button for an account that has both`, async () => {
+        needsSignIn.value = true;
+        void raiseSignIn({ kind: `choose`, target: TARGET, passkey: false, email: offered() });
+        await mount();
+
+        expect(renderButton).toHaveBeenCalledTimes(1);
+        expect(buttonSaying(`Continue as ana@corp.example`)).toEqual(expect.any(HTMLButtonElement));
+    });
 });

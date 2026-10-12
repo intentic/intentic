@@ -58,8 +58,11 @@ services:
             WEB_ORIGIN: ${WEB_ORIGIN:?e.g. https://app.intentic.dev}
             BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?generate a long random string}
             SECRETS_KEY: ${SECRETS_KEY:?generate a long random string — encrypts stored OAuth/sandbox tokens at rest}
-            GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?}
-            GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:?}
+            # Google sign-in, recommended. Blank → the login page (me.signInOptions) offers only email codes, which then
+            # need EMAIL_API_KEY and EMAIL_FROM, and nobody gets the free hosted machine, the trial or the Repair agent,
+            # which need a Google sign-in. Set, it must be the client whose id the web image compiles in (constants).
+            GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+            GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
             # EVERY OPTIONAL KNOB BELOW IS PASSED THROUGH EMPTY, NEVER WITH A COPY OF ITS DEFAULT. The api's
             # env source treats an empty value as unset (@puristic/env sources/env.js), so an unset knob falls
             # back to the default in _platform/api/src/config.ts and that file stays the only place a default
@@ -78,6 +81,16 @@ services:
             # The admin surface's writes (suspend/retry/stop/erase). Leave off until the panel is a pinned
             # install — see the platform-admin extension's README.
             ADMIN_MUTATIONS: ${ADMIN_MUTATIONS:-}
+            # An admin needs a verified address with a Google account linked. `any` drops the Google requirement.
+            ADMIN_SIGN_IN: ${ADMIN_SIGN_IN:-}
+            # Email sign-in: a six-digit code mailed to the address (on unless `false`, and off in production while
+            # EMAIL_API_KEY or EMAIL_FROM is unset).
+            SIGN_IN_EMAIL: ${SIGN_IN_EMAIL:-}
+            # The Ed25519 private key (PKCS8 PEM, `openssl genpkey -algorithm ed25519`) that signs identity assertions,
+            # the platform's word to a sandbox that a person who signs in by email controls their address. A pair of
+            # its own, never INGRESS_SIGNING_KEY's. The api hands sandboxes the public half when they announce. Same
+            # one-line `\n` treatment as INGRESS_SIGNING_KEY below.
+            IDENTITY_SIGNING_KEY: ${IDENTITY_SIGNING_KEY:-}
             # Cloudflare is DNS-ONLY now (the reachability fabric is the ingress below): the loopback-certificate
             # records for same-machine sandboxes, and the sweep that clears their residue.
             INTENTIC_CLOUDFLARE_API_TOKEN: ${INTENTIC_CLOUDFLARE_API_TOKEN:-}
@@ -205,7 +218,8 @@ services:
             APNS_TEAM_ID: ${APNS_TEAM_ID:-}
             APNS_BUNDLE_ID: ${APNS_BUNDLE_ID:-}
             APNS_URL: ${APNS_URL:-}
-            # Sandbox-invite email via Resend (optional — invites are logged server-side until set).
+            # Transactional email via Resend: sign-in codes, invites, hosted notices. Required for email sign-in.
+            # Unset, only Google sign-in is offered and invite links are logged server-side.
             EMAIL_API_KEY: ${EMAIL_API_KEY:-}
             EMAIL_FROM: ${EMAIL_FROM:-}
             LOG_LEVEL: ${LOG_LEVEL:-}

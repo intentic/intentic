@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 
-import { type AgentEvent, type Capability, isTurnFact, PROVIDER_VENDOR, RAW_ROUTE_LIST, type TranscriptRow } from "@intentic/sandbox-contract";
+import { type AgentEvent, type Capability, EMAIL_SIGN_IN_OFF, isTurnFact, PLATFORM_KEY_UNKNOWN, PROVIDER_VENDOR, RAW_ROUTE_LIST, type TranscriptRow } from "@intentic/sandbox-contract";
 
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 
@@ -14,7 +14,7 @@ import type { OpenCodeService } from "./runtimes/opencode/opencode.js";
 
 import { createApp } from "./app.js";
 import { workspacePaths } from "./workspace/workspace.js";
-import { OwnerUnreadableError, PasskeyRequiredError } from "./auth/auth.js";
+import { ForbiddenError, OwnerUnreadableError, PasskeyRequiredError, PlatformKeyUnknownError } from "./auth/auth.js";
 import { createAuthConnections } from "./auth/connections.js";
 
 import { createLogger } from "./logger.js";
@@ -63,6 +63,49 @@ test("GET /health reports ok, and names the sandbox so a loopback probe can tell
     expect(await (await createApp(services()).request("/health")).json()).toMatchObject({ profile: "container" });
     const local = services({ config: { ...testConfig, sandbox: { ...testConfig.sandbox, profile: "local" } } });
     expect(await (await createApp(local).request("/health")).json()).toMatchObject({ profile: "local" });
+});
+
+// An editor must know before any sign-in whether this daemon takes the platform's identity assertion, since the route
+// list arrives only after one; a loopback daemon asks for no proof and names none.
+test("GET /health names the proofs a session opens with, and none on a loopback daemon", async () => {
+    expect(await (await createApp(services()).request("/health")).json()).not.toHaveProperty("signIn");
+    const guarded = services({
+        config: { ...testConfig, connectToken: "tok", google: { clientId: "cid" }, platform: { ...testConfig.platform, url: "https://api.intentic.dev" } },
+        auth: { authorize: rejectAuth, authorizeOwner: rejectAuth },
+    });
+    expect(await (await createApp(guarded).request("/health")).json()).toMatchObject({ signIn: { proofs: ["google", "email", "passkey", "recovery"] } });
+});
+
+// A refusal of the platform's word names why, so the editor says "ask the owner" or "try again" rather than prompting.
+test("a refused identity assertion answers its reason beside the error", async () => {
+    const forbidden = createApp(
+        services({
+            config: { ...testConfig, connectToken: "tok" },
+            auth: {
+                authorize: async () => {
+                    throw new ForbiddenError("email sign-in is not on for you on this sandbox: ask its owner to allow it", EMAIL_SIGN_IN_OFF);
+                },
+                authorizeOwner: rejectAuth,
+            },
+        }),
+    );
+    const refused = await forbidden.request("/system/session", { method: "POST", headers: { authorization: "Bearer pa1.x.y" } });
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toEqual({ error: "email sign-in is not on for you on this sandbox: ask its owner to allow it", reason: EMAIL_SIGN_IN_OFF });
+    const unknownKey = createApp(
+        services({
+            config: { ...testConfig, connectToken: "tok" },
+            auth: {
+                authorize: async () => {
+                    throw new PlatformKeyUnknownError();
+                },
+                authorizeOwner: rejectAuth,
+            },
+        }),
+    );
+    const early = await unknownKey.request("/system/session", { method: "POST", headers: { authorization: "Bearer pa1.x.y" } });
+    expect(early.status).toBe(401);
+    expect(await early.json()).toEqual({ error: "unauthorized", reason: PLATFORM_KEY_UNKNOWN });
 });
 
 // /health answers a stranger with the sandbox id, which the loopback port also derives from.

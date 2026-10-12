@@ -64,6 +64,27 @@ describe(`desktop handoff`, () => {
         expect(remove).toHaveBeenCalledWith({ where: { id: `h1`, challenge } });
     });
 
+    // An account that signs in by email has no Google token to carry: its webview asks the platform for identity
+    // assertions with the session the one-time token gives it.
+    it(`carries an email account's sign-in with no Google token, and hands back the session alone`, async () => {
+        const create = jest.fn().mockResolvedValue({ id: `h1` });
+        await expect(call(desktopRoutes.handoff, { challenge }, { context: context({ prisma: fakePrisma({ desktopHandoff: { create } }) }) })).resolves.toEqual({
+            handoff: `h1`,
+        });
+        expect(create.mock.calls[0]?.[0]?.data).toMatchObject({ ott: `ott-1`, idToken: null, challenge });
+
+        const ctx = context({
+            prisma: fakePrisma({
+                desktopHandoff: {
+                    findUnique: jest.fn().mockResolvedValue({ ...row(new Date(Date.now() + 60_000)), idToken: null }),
+                    deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
+                },
+            }),
+            user: null,
+        });
+        await expect(call(desktopRoutes.redeem, { handoff: `h1`, verifier }, { context: ctx })).resolves.toEqual({ ott: `ott-1` });
+    });
+
     it(`gives an expired row the same answer as an unknown one without exposing credentials`, async () => {
         const remove = jest.fn().mockResolvedValue({ count: 1 });
         const expired = context({

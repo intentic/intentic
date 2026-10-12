@@ -1,6 +1,5 @@
 import { FLY_VOLUME_GB_USD, FREE_TIER, type HostedTier, hostedTier, PAID_TIERS } from "@intentic/constants";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
-import type { ORPCError } from "@orpc/server";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { Logger } from "pino";
 import type { PrismaClient } from "@intentic/prisma";
@@ -37,7 +36,7 @@ const round2 = (value: number): number => Math.round(value * 100) / 100;
 const configWith = (overrides?: Record<string, unknown>): Config =>
     ({
         admin: { emails: `radarsu@gmail.com`, mutations: false },
-        hostedPlan: { stripeSecretKey: `sk`, stripePrices: `${ENTRY.id}=price_${ENTRY.id}` },
+        hostedPlan: { stripeSecretKey: `sk`, stripePrices: `${ENTRY.id}=price_${ENTRY.id}`, compEmails: `` },
         hosted: { monthlyHours: 40, poolSize: 2, image: `ghcr.io/intentic/sandbox:stable`, flyApiToken: ``, flyOrg: `` },
         ingress: { url: ``, signingKey: ``, zone: `sbx.test` },
         trial: { keys: `k1`, dailyMessages: 12 },
@@ -45,44 +44,62 @@ const configWith = (overrides?: Record<string, unknown>): Config =>
         apns: { keyP8: `` },
         email: { apiKey: ``, from: `` },
         webOrigin: `https://app.test`,
+        // What standing is hashed under (carried-standing.ts), read by a suspension's lift and an erasure.
+        betterAuth: { secret: `admin-test-secret` },
         ...overrides,
     }) as unknown as Config;
 
-const contextWith = (emails: string, user: { email: string } | null): OrpcContext =>
-    ({ user: user ? { id: `u1`, email: user.email, name: `x`, image: null } : null, config: { admin: { emails } } }) as OrpcContext;
+// The admin gate's whole input: the allowlist, how an admin must have proven their address, the caller, and whether a
+// Google account is linked to them.
+const contextWith = (
+    emails: string,
+    user: { email: string; emailVerified?: boolean } | null,
+    proof: { signIn?: `google` | `any`; googleAccounts?: number } = {},
+): OrpcContext =>
+    ({
+        user: user ? { id: `u1`, email: user.email, name: `x`, image: null, emailVerified: user.emailVerified ?? true } : null,
+        config: { admin: { emails, signIn: proof.signIn ?? `google` } },
+        prisma: { account: { count: async () => proof.googleAccounts ?? 1 } },
+    }) as unknown as OrpcContext;
 
 describe(`requireAdmin`, () => {
-    it(`refuses an unauthenticated caller with UNAUTHORIZED, before any allowlist reading`, () => {
-        expect(() => requireAdmin(contextWith(`radarsu@gmail.com`, null))).toThrowError(
-            expect.objectContaining({ code: `UNAUTHORIZED` }) as unknown as ORPCError<string, unknown>,
-        );
+    it(`refuses an unauthenticated caller with UNAUTHORIZED, before any allowlist reading`, async () => {
+        await expect(requireAdmin(contextWith(`radarsu@gmail.com`, null))).rejects.toMatchObject({ code: `UNAUTHORIZED` });
     });
 
-    it(`refuses everyone when the allowlist is empty — the unconfigured platform has no admin surface`, () => {
-        expect(() => requireAdmin(contextWith(``, { email: `radarsu@gmail.com` }))).toThrowError(
-            expect.objectContaining({ code: `FORBIDDEN` }) as unknown as ORPCError<string, unknown>,
-        );
+    it(`refuses everyone when the allowlist is empty — the unconfigured platform has no admin surface`, async () => {
+        await expect(requireAdmin(contextWith(``, { email: `radarsu@gmail.com` }))).rejects.toMatchObject({ code: `FORBIDDEN` });
     });
 
-    it(`refuses a signed-in account that is not on the list`, () => {
-        expect(() => requireAdmin(contextWith(`radarsu@gmail.com`, { email: `visitor@example.com` }))).toThrowError(
-            expect.objectContaining({ code: `FORBIDDEN` }) as unknown as ORPCError<string, unknown>,
-        );
+    it(`refuses a signed-in account that is not on the list`, async () => {
+        await expect(requireAdmin(contextWith(`radarsu@gmail.com`, { email: `visitor@example.com` }))).rejects.toMatchObject({ code: `FORBIDDEN` });
     });
 
-    it(`admits a listed email and returns the session user`, () => {
-        expect(requireAdmin(contextWith(`radarsu@gmail.com`, { email: `radarsu@gmail.com` })).email).toBe(`radarsu@gmail.com`);
+    it(`admits a listed email and returns the session user`, async () => {
+        expect((await requireAdmin(contextWith(`radarsu@gmail.com`, { email: `radarsu@gmail.com` }))).email).toBe(`radarsu@gmail.com`);
     });
 
-    it(`matches by address, not by spelling: case-folded on both sides, whitespace trimmed, several entries`, () => {
+    it(`matches by address, not by spelling: case-folded on both sides, whitespace trimmed, several entries`, async () => {
         const context = contextWith(` Ops@Example.COM , radarsu@gmail.com `, { email: `RADARSU@gmail.com` });
-        expect(requireAdmin(context).email).toBe(`RADARSU@gmail.com`);
+        expect((await requireAdmin(context)).email).toBe(`RADARSU@gmail.com`);
     });
 
-    it(`does not admit on a stray empty entry (",," never matches the empty string)`, () => {
-        expect(() => requireAdmin(contextWith(`,,`, { email: `visitor@example.com` }))).toThrowError(
-            expect.objectContaining({ code: `FORBIDDEN` }) as unknown as ORPCError<string, unknown>,
-        );
+    it(`does not admit on a stray empty entry (",," never matches the empty string)`, async () => {
+        await expect(requireAdmin(contextWith(`,,`, { email: `visitor@example.com` }))).rejects.toMatchObject({ code: `FORBIDDEN` });
+    });
+
+    // An address on the list is an admin only once proven the way the deployment asks: an inbox alone must not open a
+    // panel that reads every account.
+    it(`refuses a listed address that was never confirmed, and one with no Google account linked unless ADMIN_SIGN_IN=any`, async () => {
+        await expect(requireAdmin(contextWith(`ops@example.com`, { email: `ops@example.com`, emailVerified: false }))).rejects.toMatchObject({
+            code: `FORBIDDEN`,
+            message: `an admin's address must be confirmed first`,
+        });
+        await expect(requireAdmin(contextWith(`ops@example.com`, { email: `ops@example.com` }, { googleAccounts: 0 }))).rejects.toMatchObject({
+            code: `FORBIDDEN`,
+            message: `admin access needs a Google account linked to this one (ADMIN_SIGN_IN)`,
+        });
+        expect((await requireAdmin(contextWith(`ops@example.com`, { email: `ops@example.com` }, { googleAccounts: 0, signIn: `any` }))).email).toBe(`ops@example.com`);
     });
 });
 
@@ -607,8 +624,14 @@ describe(`admin over the OpenAPI wire`, () => {
         const handler = new OpenAPIHandler({ admin: adminRoutes });
         const context = {
             prisma,
-            config: { admin: { emails: `radarsu@gmail.com`, mutations: options?.mutations ?? false }, hosted: { flyApiToken: ``, flyOrg: `` } },
-            user: user ? { id: `u1`, email: user.email, name: `x`, image: null } : null,
+            config: {
+                // The gate's own proofs are requireAdmin's suite's; here any confirmed listed address will do.
+                admin: { emails: `radarsu@gmail.com`, mutations: options?.mutations ?? false, signIn: `any` },
+                hosted: { flyApiToken: ``, flyOrg: `` },
+                hostedPlan: { compEmails: `` },
+                betterAuth: { secret: `admin-test-secret` },
+            },
+            user: user ? { id: `u1`, email: user.email, name: `x`, image: null, emailVerified: true } : null,
             logger,
         } as unknown as OrpcContext;
         const request = options?.body
@@ -693,6 +716,8 @@ describe(`admin over the OpenAPI wire`, () => {
     it(`suspension demands the account's email retyped and a reason, refuses the admin's own account, and lifts the same way`, async () => {
         const stub = {
             user: { findUnique: async () => ({ id: `u2`, email: `victim@example.com`, hostedSuspendedAt: null, hostedSuspendedReason: null }) },
+            // Nothing carried from a deleted account under the address's key.
+            hostedStanding: { findUnique: async () => null },
         } as unknown as PrismaClient;
         const mismatch = await serve(`/rpc/admin/user/suspend`, { email: `radarsu@gmail.com` }, stub, {
             mutations: true,

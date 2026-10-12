@@ -69,7 +69,7 @@ export const testConfig: Config = {
     hostPlatform: "",
     hostLabel: "",
     webOrigin: "",
-    platform: { url: "", publicKey: "" },
+    platform: { url: "", publicKey: "", identityKey: "" },
     intenticAgentTools: "",
     claudeCodeOauthToken: "",
     anthropicApiKey: "",

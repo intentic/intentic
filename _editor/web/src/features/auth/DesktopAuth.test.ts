@@ -29,14 +29,16 @@ const renderButton = jest.fn<(parent: HTMLElement, dark: boolean) => Promise<boo
 const adoptIdToken = jest.fn<(credential: string) => boolean>().mockReturnValue(true);
 // Bumped by the module each time it refuses an answer Google gave (useGoogleIdentity.refused.test.ts).
 const refusedCredentials = ref(0);
+// The mint the router starts on arrival, called off for an account with no Google sign-in.
+const cancelSignIn = jest.fn();
 jest.mock(`../../client/auth/useGoogleIdentity`, () => ({
-    useGoogleIdentity: () => ({ getIdToken, renderButton, adoptIdToken, refusedCredentials }),
+    useGoogleIdentity: () => ({ getIdToken, renderButton, adoptIdToken, refusedCredentials, cancelSignIn }),
 }));
 // The stall's funnel event, recorded rather than sent.
 jest.mock(`../../app/analytics`, () => ({ track: jest.fn(), replaySessionId: () => undefined }));
 const signInWithGoogle = jest.fn<(callbackPath?: string) => Promise<void>>().mockResolvedValue(undefined);
 // What this window's session resolves to; null means a signed-out browser, covered by the tests below.
-const user = ref<{ email: string } | null>({ email: `owner@example.com` });
+const user = ref<{ email: string; signInMethods?: (`google` | `email`)[] } | null>({ email: `owner@example.com` });
 const refresh = jest.fn<() => Promise<{ email: string } | null>>().mockResolvedValue(null);
 const signInWithGoogleCredential = jest.fn<(idToken: string) => Promise<void>>().mockResolvedValue(undefined);
 jest.mock(`../../client/auth/useAuth`, () => ({ useAuth: () => ({ user, refresh, signInWithGoogle, signInWithGoogleCredential }) }));
@@ -84,6 +86,7 @@ beforeEach(() => {
     signInWithGoogleCredential.mockReset().mockResolvedValue(undefined);
     handoff.mockReset();
     googleIdToken.mockReset().mockResolvedValue({});
+    cancelSignIn.mockReset();
     refusedCredentials.value = 0;
     // A browser with FedCM, as on /login's tests; a test that wants one without it leaves this out.
     Object.assign(window, { IdentityCredential: {} });
@@ -361,4 +364,36 @@ it(`still runs a hand-off the app asked for since`, async () => {
 
     expect(handoff).toHaveBeenLastCalledWith({ idToken: expect.any(String), challenge: `chal-2` });
     expect(handoff).toHaveBeenCalledTimes(2);
+});
+
+// An account that signs in by email code alone has no Google account to mint a token for: the session crosses alone,
+// and the app's webview asks the platform for identity assertions with it.
+it(`hands an email account's session over with no Google token, and calls off the mint started on arrival`, async () => {
+    user.value = { email: `ana@corp.example`, signInMethods: [`email`] };
+    handoff.mockResolvedValue({ handoff: `row-1` });
+
+    const el = await mount();
+    await nextTick();
+
+    expect(handoff).toHaveBeenCalledWith({ challenge: `chal-1` });
+    expect(cancelSignIn).toHaveBeenCalledTimes(1);
+    expect({ held: googleIdToken.mock.calls.length, minted: getIdToken.mock.calls.length, button: renderButton.mock.calls.length }).toEqual({
+        held: 0,
+        minted: 0,
+        button: 0,
+    });
+    expect(el.textContent).not.toContain(`Continue with Google`);
+});
+
+// An account with both ways in still sends the Google proof its sandboxes may want.
+it(`keeps minting for an account that also signs in with Google`, async () => {
+    user.value = { email: `owner@example.com`, signInMethods: [`google`, `email`] };
+    googleIdToken.mockResolvedValue({ idToken: credential(60 * 60 * 1000) });
+    handoff.mockResolvedValue({ handoff: `row-1` });
+
+    await mount();
+    await nextTick();
+
+    expect(handoff).toHaveBeenCalledWith({ idToken: expect.any(String), challenge: `chal-1` });
+    expect(cancelSignIn).not.toHaveBeenCalled();
 });

@@ -185,7 +185,7 @@ export const startNotificationSources = (): void => {
     // useSandboxAvailability binds to the caller's Vue scope, so this must run from a component's setup.
     const { user } = useAuth();
     const { activeSandboxId, reachable, connection } = useSandbox();
-    const { presentedEmail, invalidateSession, getSessionToken } = useSandboxSession();
+    const { presentedEmail, invalidateSession, getSessionToken, passkeyNudge, dismissPasskeyNudge } = useSandboxSession();
     const { clearCredential } = useGoogleIdentity();
     // The gate's own reading (established.ts): a screen the gate took is its to explain, and every other screen is this
     // lane's.
@@ -305,6 +305,34 @@ export const startNotificationSources = (): void => {
             dismiss: () => {
                 lostDismissed.value = true;
             },
+        };
+    });
+
+    // A first sign-in by email code on the open sandbox: the platform vouched for the address, which it cannot do while
+    // it is down. A passkey is the sandbox's own way to know the reader, so it is suggested once, here, and put away
+    // for that sandbox with either answer (sandboxSession.ts `passkeyNudge`).
+    hold(`passkey-nudge`, () => {
+        const sandboxId = passkeyNudge.value;
+        if (sandboxId === undefined || sandboxId !== activeSandboxId.value || !reachable.value) {
+            return undefined;
+        }
+        return {
+            kind: `question`,
+            tone: `info`,
+            icon: `key`,
+            title: t(`shell.notificationSources.passkeyNudgeTitle`),
+            detail: t(`shell.notificationSources.passkeyNudgeDetail`),
+            actions: [
+                { label: t(`shell.notificationSources.passkeyNudgeLater`), tier: `boring` as const, run: dismissPasskeyNudge },
+                {
+                    label: t(`shell.notificationSources.passkeyNudgeAdd`),
+                    run: async () => {
+                        dismissPasskeyNudge();
+                        await router.push(`/sandbox/access`);
+                    },
+                },
+            ],
+            dismiss: dismissPasskeyNudge,
         };
     });
 

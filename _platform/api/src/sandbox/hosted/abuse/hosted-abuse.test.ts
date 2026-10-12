@@ -94,6 +94,8 @@ const prismaWith = (
         hostedUsage: { upsert: jest.fn().mockResolvedValue({}), aggregate: jest.fn().mockResolvedValue({ _sum: { minutes: null } }) },
         hostedPlan: { findUnique: jest.fn().mockResolvedValue(null) },
         user: { update: jest.fn().mockResolvedValue({}) },
+        // No standing carried from a deleted account, under either key, unless a test says so.
+        hostedStanding: { findUnique: jest.fn().mockResolvedValue(null) },
         ...over,
     } as unknown as PrismaClient;
     return { prisma, created };

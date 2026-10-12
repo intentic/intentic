@@ -2,11 +2,20 @@ import { apiContract } from "@intentic/api-contract";
 import { implement } from "@orpc/server";
 import type { OrpcContext } from "../context.js";
 import { requireUser } from "../guards.js";
+import { hasGoogleAccount, signInMethodsOf, signInOptionsOf } from "../sign-in.js";
 
 const os = implement(apiContract).$context<OrpcContext>();
 
 export const meRoutes = {
-    get: os.me.get.handler(({ context }) => context.user),
+    get: os.me.get.handler(async ({ context }) => {
+        if (context.user === null) {
+            return null;
+        }
+        const { emailVerified: _verified, ...user } = context.user;
+        return { ...user, signInMethods: signInMethodsOf(await hasGoogleAccount(context.prisma, user.id), context.config) };
+    }),
+    // Sessionless: the login page reads it before anyone has signed in.
+    signInOptions: os.me.signInOptions.handler(({ context }) => signInOptionsOf(context.config)),
     // GDPR data export: every personal-data row the platform holds for the caller, as downloadable JSON.
     // Credentials are deliberately excluded, session tokens, OAuth tokens, sandbox connect tokens and
     // setup payloads are secrets, not personal data.

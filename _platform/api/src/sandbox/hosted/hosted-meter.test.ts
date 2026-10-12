@@ -34,6 +34,8 @@ const config = (over: Record<string, unknown> = {}, compEmails = ``): Config =>
             ...over,
         },
         hostedPlan: { compEmails },
+        // What carried standing is hashed under (carried-standing.ts): an owner with an address is looked up by it.
+        betterAuth: { secret: `meter-test-secret` },
     }) as unknown as Config;
 
 // One machine with an open stretch, as the tick selects it.
@@ -61,6 +63,8 @@ const prismaWith = (rows: ReturnType<typeof machine>[], over: Record<string, Rec
         hostedPlan: { findUnique: jest.fn().mockResolvedValue(null) },
         // In good standing unless a test says otherwise; the tick reads the owner's row before the meter.
         user: { findUnique: jest.fn().mockResolvedValue({ hostedSuspendedAt: null }) },
+        // Nothing carried from a deleted account, under either key.
+        hostedStanding: { findUnique: jest.fn().mockResolvedValue(null) },
         ...over,
     }) as unknown as PrismaClient;
 

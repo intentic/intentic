@@ -7,6 +7,8 @@ import {
     type AuthorizeOptions,
     createAuthorizer,
     createGoogleVerifier,
+    identityAssertionVerifier,
+    type IdTokenVerifier,
     fileMembersStore,
     fileOwnerStore,
     membersDocument,
@@ -21,10 +23,12 @@ import {
     type Proof,
     type ProvenCaller,
 } from "./auth.js";
+import { assertionsPossible, authEnabled } from "./auth-enabled.js";
 import { fileBrowserAccess } from "./browser-access.js";
 import { allowedOriginsOf, originAllowedBy } from "./browser-origins.js";
 import { type AuthConnections, createAuthConnections } from "./connections.js";
 import { createPasskeyCeremonies, filePasskeys, type PasskeyCeremonies, passkeysDocument, type PasskeyStore } from "./passkeys/passkey-store.js";
+import { createPlatformIdentityKey, type PlatformIdentityKey } from "./platform/platform-identity-key.js";
 import { createSessions, type MintedSession } from "./session.js";
 import { type ControlTokens, controlTokensDocument, fileControlTokens, minterBound } from "./tokens/control-tokens.js";
 import { type DoorTokens, doorTokensDocument, fileDoorTokens } from "./tokens/door-tokens.js";
@@ -52,6 +56,8 @@ export interface AuthSlice {
     readonly members: MembersStore;
     // Bound owner's email, read-only; undefined before the first trust-on-first-use sign-in; binding is elsewhere.
     readonly ownerEmail: () => Promise<string | undefined>;
+    // The platform's identity key the authorizer verifies assertions with; the announcer hands it each key it is answered.
+    readonly platformIdentityKey: PlatformIdentityKey;
     // When set, the daemon verifies the bearer on every route but /health and emits CORS; unset means loopback.
     readonly auth:
         | {
@@ -136,11 +142,16 @@ const noticedOwnerStore = (store: OwnerStore, logger: Pick<Logger, "error">, con
                 throw error;
             }
         },
-        write: (email) => store.write(email),
+        write: (email, options) => store.write(email, options),
+        emailSignIn: async () => (await store.emailSignIn?.()) ?? false,
     };
 };
 
-// Builds the auth slice from config; loopback (no Google client id) leaves `auth` undefined, so every route is open.
+// A daemon with no Google client id refuses every Google proof; it still verifies the platform's identity assertion.
+const noGoogle: IdTokenVerifier = () => Promise.reject(new Error("this sandbox takes no Google sign-in"));
+
+// Builds the auth slice from config; loopback (no way to verify anybody, auth-enabled.ts) leaves `auth` undefined, so
+// every route is open.
 export const createAuthSlice = (config: Config, workspaceRoot: string, logger: Pick<Logger, "error">): AuthSlice => {
     const members = fileMembersStore(join(config.historyRoot, membersDocument.path));
     const { passkeys, passkeyCeremonies, passkeyPolicy } = passkeysOf(config, logger);
@@ -153,10 +164,11 @@ export const createAuthSlice = (config: Config, workspaceRoot: string, logger: P
     const sessions = createSessions(join(config.historyRoot, "session-secret"));
     const authConnections = createAuthConnections();
     const browserAccess = fileBrowserAccess(join(config.historyRoot, "browser-access-disabled"));
-    const authorizer =
-        config.google.clientId !== ""
-            ? createAuthorizer({
-                  verify: createGoogleVerifier(config.google.clientId),
+    const platformIdentityKey = createPlatformIdentityKey(config.platform.identityKey);
+    const sandboxId = sandboxIdFromToken(config.connectToken) ?? "";
+    const authorizer = authEnabled(config)
+        ? createAuthorizer({
+                  verify: config.google.clientId !== "" ? createGoogleVerifier(config.google.clientId) : noGoogle,
                   session: sessions.verify,
                   owner: ownerStore,
                   members,
@@ -166,10 +178,14 @@ export const createAuthSlice = (config: Config, workspaceRoot: string, logger: P
                   ...(config.owner.email !== "" ? { expectedOwner: config.owner.email } : {}),
                   // Hosted machines only: the provisioner sets the platform's key, checked against this sandbox's id.
                   ...(config.platform.publicKey !== "" && config.connectToken !== ""
-                      ? { ownerTicket: ownerTicketVerifier(config.platform.publicKey, sandboxIdFromToken(config.connectToken) ?? "") }
+                      ? { ownerTicket: ownerTicketVerifier(config.platform.publicKey, sandboxId) }
                       : {}),
+                  // The platform's identity assertion: on a hosted machine for anyone on the roster, elsewhere only for
+                  // the owner who bound with one and the members the owner opted in (auth.ts `assertionsForAnyone`).
+                  identityAssertion: assertionsPossible(config) ? identityAssertionVerifier({ key: platformIdentityKey.settled, sandboxId }) : undefined,
+                  assertionsForAnyone: config.sandbox.vm,
               })
-            : undefined;
+        : undefined;
     const auth = authorizer
         ? {
               authorize: authorizer.authorize,
@@ -194,6 +210,7 @@ export const createAuthSlice = (config: Config, workspaceRoot: string, logger: P
         passkeyCeremonies,
         members,
         ownerEmail: () => ownerStore.read(),
+        platformIdentityKey,
         auth,
     };
 };

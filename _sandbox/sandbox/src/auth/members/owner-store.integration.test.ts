@@ -22,6 +22,20 @@ test("a sandbox nobody has claimed reads as no owner, and the first write is rea
     expect(await owner.read()).toBe("ada@example.com");
 });
 
+test("an owner who bound with the platform's identity assertion is read back as signing in by email; one from before it as not", async () => {
+    const path = ownerPath();
+    const owner = fileOwnerStore(path);
+    await owner.write("ada@example.org", { emailSignIn: true });
+    expect(await owner.read()).toBe("ada@example.org");
+    expect(await owner.emailSignIn?.()).toBe(true);
+    expect(JSON.parse(await readFile(path, "utf8"))).toEqual({ email: "ada@example.org", emailSignIn: true });
+    // A file a release before email sign-in wrote: a Google owner.
+    await writeFile(path, `{"email": "bo@example.org"}`, "utf8");
+    expect(await fileOwnerStore(path).emailSignIn?.()).toBe(false);
+    await owner.write("cy@example.org");
+    expect(JSON.parse(await readFile(path, "utf8"))).toEqual({ email: "cy@example.org" });
+});
+
 test("an owner file that cannot be read refuses both the read and a new claim, and stays as it was", async () => {
     const path = ownerPath();
     await writeFile(path, `{"email": "ada@example.com"`, "utf8");

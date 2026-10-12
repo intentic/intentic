@@ -149,7 +149,10 @@
                 "BETTER_AUTH_URL",
                 "WEB_ORIGIN",
                 "GOOGLE_CLIENT_ID",
-                "GOOGLE_CLIENT_SECRET"
+                "GOOGLE_CLIENT_SECRET",
+                "SIGN_IN_EMAIL",
+                "IDENTITY_SIGNING_KEY",
+                "ADMIN_SIGN_IN"
             ]
         },
         "preview": {

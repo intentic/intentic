@@ -15,6 +15,7 @@ import type { Config } from "./config.js";
 import type { Logger } from "pino";
 import type { PrismaClient } from "@intentic/prisma";
 import { DAY_MS } from "./durations.js";
+import { sweepCodeAllowances } from "./sign-in.js";
 
 // GDPR storage limitation: expired sessions/verifications/handoffs, plus invites unclaimed past this age.
 const INVITE_MAX_AGE_MS = 90 * DAY_MS;
@@ -39,6 +40,8 @@ const runRetention = async (
         prisma.trialUsage.deleteMany({ where: { day: { lt: utcDayCutoff } } }),
         prisma.repairUsage.deleteMany({ where: { day: { lt: utcDayCutoff } } }),
         prisma.hostedProvision.deleteMany({ where: { createdAt: { lt: new Date(now.getTime() - PROVISION_MAX_AGE_MS) } } }),
+        // Each address's count of sign-in codes, once its windows have passed (sign-in.ts).
+        sweepCodeAllowances(prisma, now),
     ]);
     const stale = await prisma.sandboxMember.findMany({
         where: { createdAt: { lt: new Date(now.getTime() - INVITE_MAX_AGE_MS) } },

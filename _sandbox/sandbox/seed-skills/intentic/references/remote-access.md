@@ -3,11 +3,11 @@
 ## The link
 
 The app is **https://app.intentic.dev**. The owner opens it in any browser, on any device, and signs in with the
-same Google account; it lists their sandboxes and talks to each sandbox directly. Nothing else is needed for
-remote access, and no port has to be opened: every sandbox, hosted or on the owner's own machine, dials out to
-intentic's ingress and is reached at its own address, `sandbox-<id>.sbx.intentic.dev`, shown as **Sandbox URL** on
-Sandbox ▸ Overview. A sandbox on the owner's own computer answers only while that computer and its container are
-running.
+account they set the sandbox up with: Google, or a six-digit code mailed to their address on any domain. It lists
+their sandboxes and talks to each sandbox directly. Nothing else is needed for remote access, and no port has to be
+opened: every sandbox, hosted or on the owner's own machine, dials out to intentic's ingress and is reached at its
+own address, `sandbox-<id>.sbx.intentic.dev`, shown as **Sandbox URL** on Sandbox ▸ Overview. A sandbox on the
+owner's own computer answers only while that computer and its container are running.
 
 ## On a phone
 
@@ -45,7 +45,13 @@ silence them like any other app's.
 publishing become requests), **Writer** (changes files in the folders named for them), **Maintainer** (operates
 everything the owner can), **Guest** (talks only to the assistants that work in the areas named). **Areas**
 narrows a person to folders. The invite link is emailed, lasts 7 days and must be accepted by that address,
-signed in with Google. Only the owner invites or changes roles.
+signed in with Google or with an emailed code. A person can open the sandbox with an emailed code only where the
+owner allowed it for them: the invite form has that switch, on by default for an address outside Gmail, and
+without it they sign in with Google or a passkey. Only the owner invites or changes roles.
+
+A sandbox older than email sign-in says it needs an update before it accepts one. Right after a first email sign-in
+the app suggests a passkey: passkeys belong to the sandbox itself and keep working while app.intentic.dev is down,
+which email sign-in does not.
 
 The same tab holds **Require a passkey to open this sandbox**, API tokens (**Mint token**), the list of signed-in
 browsers with **Sign out everywhere**, and who is connected right now.

@@ -15,14 +15,18 @@ What the editor does when the platform is down or has forgotten an account's san
   outage screen; it used to leave the page blank. A session check that does not answer within ten seconds does too.
 - **Recovery** (`/recover`, `Recover.vue`, `useRecovery.ts`): each missing sandbox is probed at `/health` and the ones
   that answer are looked up in one question. An unknown one of the account's own is offered back. Reconnect gets a
-  daemon session (a Google sign-in, no platform needed), an adoption ticket from the platform, and has the daemon
+  daemon session (a Google sign-in, a passkey, or the platform's identity assertion for an account that signs in by
+  email code), an adoption ticket from the platform, and has the daemon
   relink (`POST /platform/relink`), which has the platform make the row again from the daemon's own token and grant. A
   daemon too old to relink, or a platform that cannot vouch (no reachability grants), is recorded by its address alone
   (the setup screen's attach). A share is its owner's to bring back; a deleted sandbox stays deleted.
 - **Direct mode** (`directMode.ts`, `DirectSandboxes.vue` on the outage screen): a remembered sandbox opens without
   the platform. The window signs in as the remembered account, whole, so presence, analytics and the persisted cache
   read as before, and the remembered list is seeded into the list's own cache entry, which every reader of the list
-  reads. Nothing in the shell changes; what needs the platform (sharing, billing, a hosted machine's power) fails as it
+  reads. A device that remembers no account names the reader by what the sandbox itself knows (`accountFromProof`): a
+  daemon session this browser already holds there, or else the reader picks Google's sign-in or a passkey registered
+  with that sandbox. The passkey is the one way in for an account that signs in by email code, since the platform that
+  vouches for its address is the thing that is down; its session is kept under the id the window opens the sandbox by. Nothing in the shell changes; what needs the platform (sharing, billing, a hosted machine's power) fails as it
   does offline, and a card says why. The next session check the platform answers ends it, and the list it answers
   replaces the remembered one.
 - **A sandbox's own address** (`/open?url=`): the daemon sends a browser that opened its address here (its `GET /`).

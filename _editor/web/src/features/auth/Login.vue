@@ -4,11 +4,15 @@ import { AppBrand, Button, vAction } from "@intentic/ui";
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useAuth } from "../../client/auth/useAuth";
+import type { SignInOptions } from "@intentic/api-contract";
 import { useBrowserHandoff } from "./browserHandoff";
+import EmailCodeSignIn from "./EmailCodeSignIn.vue";
 import { hasFedCm, useGooglePress } from "./googlePress";
+import { GOOGLE_ONLY, readSignInOptions } from "./signInOptions";
 import { useGoogleIdentity } from "../../client/auth/useGoogleIdentity";
 import { desktopVersion, openThisComputer } from "../../app/environments/desktop";
 import { desktopInstaller } from "../../app/environments/desktopDownloads";
+import { inNativeShell } from "../../workbench/window/capacitor";
 import { returnPath } from "../../lib/routes/signIn";
 import { useT } from "@intentic/ui/i18n";
 
@@ -24,6 +28,15 @@ const destination = computed(() => returnPath(route.query[`returnTo`]));
 
 // True in the desktop webview, where Google can't run; sign-in there hands off to the real browser instead.
 const desktop = computed(() => desktopVersion() !== undefined);
+// A window whose mail links open somewhere else (the desktop webview, the iOS shell): the emailed code runs in place,
+// typed rather than followed, so it needs no hand-off at all.
+const inApp = computed(() => desktop.value || inNativeShell());
+
+// Which ways in this platform offers; Google alone until it says, which is what every platform before email offered.
+const options = ref<SignInOptions>(GOOGLE_ONLY);
+onMounted(async () => {
+    options.value = await readSignInOptions();
+});
 
 // Mirrors the site's 'Getting started' band, in order; the current step makes this a rail, not a list.
 // The third step must match `desktopInstaller()`, the same call the setup page uses, so the two screens agree.
@@ -31,15 +44,12 @@ const desktop = computed(() => desktopVersion() !== undefined);
 // height that put a scrollbar on the desktop window. Inside the installed app the third is behind the reader already,
 // so it is not offered as the step still to come.
 const install = desktopInstaller();
-const steps = computed<readonly string[]>(() =>
-    desktop.value
-        ? [t(`auth.login.stepSignIn`), t(`auth.login.stepSandboxWaiting`)]
-        : [
-              t(`auth.login.stepSignIn`),
-              t(`auth.login.stepSandboxWaiting`),
-              install === undefined ? t(`auth.login.stepPasteCommand`) : t(`auth.login.stepInstallApp`),
-          ],
-);
+const steps = computed<readonly string[]>(() => {
+    const signIn = options.value.email ? t(`auth.login.stepSignInAnyWay`) : t(`auth.login.stepSignIn`);
+    return desktop.value
+        ? [signIn, t(`auth.login.stepSandboxWaiting`)]
+        : [signIn, t(`auth.login.stepSandboxWaiting`), install === undefined ? t(`auth.login.stepPasteCommand`) : t(`auth.login.stepInstallApp`)];
+});
 
 // Mints one Google credential and spends it on both the platform and the sandbox, removing the second ask; the
 // credential the sandbox gets is unchanged. The road around it is offered unconditionally because one failure mode (a
@@ -108,6 +118,11 @@ const signInWithCredential = async (): Promise<void> => {
 
 onMounted(() => void signInWithCredential());
 
+// The emailed code signed this window in: on to where the guard was sending the reader, as Google's road goes.
+const arrive = async (): Promise<void> => {
+    await router.push(destination.value);
+};
+
 // Always rendered in light theme, never following the app's scheme: this screen has one near-black ground, and a
 // light button is the only light-on-dark object needing the visitor's attention.
 watch(
@@ -174,47 +189,59 @@ watch(
                     <p v-else-if="stallNote" class="gate-error">{{ stallNote }}</p>
                 </div>
 
-                <!-- Google's button also supplies the sandbox credential, one sign-in for both. -->
-                <div v-show="googleReady" class="entry-socket">
-                    <div ref="googleButton" class="entry-socket-slot"></div>
-                </div>
+                <!-- Google's button also supplies the sandbox credential, one sign-in for both. Left out only on a platform
+                     that says it offers no Google sign-in at all. -->
+                <template v-if="options.google">
+                    <div v-show="googleReady" class="entry-socket">
+                        <div ref="googleButton" class="entry-socket-slot"></div>
+                    </div>
 
-                <!-- The desktop app after the press: the sign-in is in the browser now, and this window says so until it returns. -->
-                <div v-if="desktop && handoffWaiting" class="handoff" role="status">
-                    <p class="handoff-title">{{ t(`auth.words.finishInBrowser`) }}</p>
-                    <p class="handoff-detail">{{ t(`auth.words.finishInBrowserDetail`) }}</p>
-                    <Button :label="t(`auth.words.openBrowserAgain`)" tier="boring" class="w-full justify-center" @click="handoff.start">
+                    <!-- The desktop app after the press: the sign-in is in the browser now, and this window says so until it returns. -->
+                    <div v-if="desktop && handoffWaiting" class="handoff" role="status">
+                        <p class="handoff-title">{{ t(`auth.words.finishInBrowser`) }}</p>
+                        <p class="handoff-detail">{{ t(`auth.words.finishInBrowserDetail`) }}</p>
+                        <Button :label="t(`auth.words.openBrowserAgain`)" tier="boring" class="w-full justify-center" @click="handoff.start">
+                            <template #icon><Icon name="google" /></template>
+                        </Button>
+                        <button type="button" class="escape" @click="handoff.cancel">{{ t(`ui.action.cancel`) }}</button>
+                    </div>
+
+                    <!-- The site's primary button style (@intentic/entry-css), shown only when Google's embedded button could not render. -->
+                    <Button
+                        v-else-if="!googleReady"
+                        :label="desktop ? t(`auth.words.continueGoogleInBrowser`) : t(`auth.words.continueGoogle`)"
+                        class="w-full justify-center"
+                        @click="redirectSignIn"
+                    >
                         <template #icon><Icon name="google" /></template>
                     </Button>
-                    <button type="button" class="escape" @click="handoff.cancel">{{ t(`ui.action.cancel`) }}</button>
-                </div>
 
-                <!-- The site's primary button style (@intentic/entry-css), shown only when Google's embedded button could not render. -->
-                <Button
-                    v-else-if="!googleReady"
-                    :label="desktop ? t(`auth.words.continueGoogleInBrowser`) : t(`auth.words.continueGoogle`)"
-                    class="w-full justify-center"
-                    @click="redirectSignIn"
-                >
-                    <template #icon><Icon name="google" /></template>
-                </Button>
+                    <!-- The road around Google's button as a real button: the page's primary action once that button has failed
+                         in front of the reader, and a secondary one from the start where it can only open a pop-up. -->
+                    <Button
+                        v-else-if="!desktop && (stallNote || popupOnly)"
+                        :label="t(`auth.words.continueOnGooglesPage`)"
+                        :tier="stallNote ? `accent` : `boring`"
+                        class="mt-4 w-full justify-center"
+                        @click="redirectSignIn"
+                    >
+                        <template #icon><Icon name="google" /></template>
+                    </Button>
 
-                <!-- The road around Google's button as a real button: the page's primary action once that button has failed
-                     in front of the reader, and a secondary one from the start where it can only open a pop-up. -->
-                <Button
-                    v-else-if="!desktop && (stallNote || popupOnly)"
-                    :label="t(`auth.words.continueOnGooglesPage`)"
-                    :tier="stallNote ? `accent` : `boring`"
-                    class="mt-4 w-full justify-center"
-                    @click="redirectSignIn"
-                >
-                    <template #icon><Icon name="google" /></template>
-                </Button>
+                    <!-- Embedded-button failures are handled by the direct login path. -->
+                    <button v-else-if="googleReady && !desktop" type="button" class="escape" v-action="redirectSignIn">
+                        {{ t(`auth.words.troubleSigningInUse`) }}
+                    </button>
+                </template>
 
-                <!-- Embedded-button failures are handled by the direct login path. -->
-                <button v-else-if="googleReady && !desktop" type="button" class="escape" v-action="redirectSignIn">
-                    {{ t(`auth.words.troubleSigningInUse`) }}
-                </button>
+                <!-- The second way in, under Google's: a code mailed to any address. Inside the app it runs in place (the
+                     code is typed), so it stays while Google's sign-in waits in the browser. -->
+                <template v-if="options.email">
+                    <p v-if="options.google" class="or" aria-hidden="true">
+                        <span>{{ t(`auth.login.or`) }}</span>
+                    </p>
+                    <EmailCodeSignIn :in-app="inApp" :google-offered="options.google" @signed-in="arrive" />
+                </template>
 
                 <p class="fine">
                     {{ t(`auth.login.weKeepEmailAddress`) }}
@@ -340,6 +367,24 @@ watch(
     line-height: 1.5;
     text-align: left;
     color: var(--ink);
+}
+
+/* A hairline either side of the word, as the eyebrow's lozenges flank theirs: the two ways in are peers, not a list. */
+.or {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 1.25rem 0 1rem;
+    font-size: 0.6875rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-subtle);
+}
+.or::before,
+.or::after {
+    content: "";
+    flex: 1;
+    border-top: 1px solid var(--rule);
 }
 
 .escape {

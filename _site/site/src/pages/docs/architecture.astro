@@ -16,7 +16,7 @@ const lifecycle = [
     },
     {
         title: "Bind on first use",
-        body: "Your browser presents a fresh Google proof directly to the daemon. The daemon verifies it, binds the first owner, and mints its own renewable session.",
+        body: "Your browser presents a fresh proof of who you are directly to the daemon: a Google ID token, or the platform's signed word for an address it confirmed by email. The daemon verifies it, binds the first owner, and mints its own renewable session.",
     },
     {
         title: "Start a detached turn",
@@ -111,8 +111,11 @@ const state = [
         grant to act as you.
     </p>
     <p>
-        Google is the first proof, not the credential carried forever. The daemon verifies the ID token against Google's keys, binds the
-        owner on first use, then exchanges it for a sandbox-signed session whose signing secret never leaves the box. Membership and role are
+        The first proof is not the credential carried forever. The daemon verifies a Google ID token against Google's keys, or the
+        platform's identity assertion against the platform's key, which it accepts only for people the owner allowed to sign in by email
+        (and for anyone on the roster of a machine we host). It binds the owner on first use, then exchanges the proof for a
+        sandbox-signed session whose signing secret never leaves the box. A passkey registered with the sandbox works with no platform at
+        all. Membership and role are
         checked again on each request, so removing a member also ends the authority of an already-open session. Programs use separately
         scoped, revocable control tokens instead of pretending to be a browser.
     </p>

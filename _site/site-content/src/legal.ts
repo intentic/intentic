@@ -59,7 +59,8 @@ export const privacyDoc: LegalDoc = {
             heading: "What we collect about you",
             paragraphs: ["The platform itself stores your identity, where your sandboxes are, and what you have paid for:"],
             list: [
-                "Account data: your name, email address and avatar, received from Google when you sign in, plus the version of these documents you accepted and when.",
+                "Account data: your name, email address and avatar, received from Google when you sign in with Google, or the email address you give us when you sign in with a code we email you, plus the version of these documents you accepted and when.",
+                "Sign-in codes: when you sign in by email, the six-digit code we send you, stored only as a hash and valid for 10 minutes, and counts of recent code requests for each address (kept under a hash of the address) and each IP address, which limit how many codes anyone can request or try.",
                 "Session data: a session token, and the IP address and browser user agent of each sign-in, kept to keep accounts secure. Expired sessions are deleted automatically.",
                 "Sandbox records: sandbox names, their public addresses, and the connection tokens used to reach them. Tokens are stored encrypted.",
                 "Hosted machine records: for a sandbox we host, the machine and volume identifiers at our infrastructure provider and the region it runs in.",
@@ -159,12 +160,13 @@ export const privacyDoc: LegalDoc = {
             heading: "How long we keep things",
             paragraphs: ["A daily sweep enforces these windows automatically:"],
             list: [
-                "Sessions and sign-in verifications: deleted when they expire.",
+                "Sessions and sign-in verifications, sign-in codes included: deleted when they expire.",
+                "Counts of sign-in codes sent to an address: deleted once the hour they count has passed.",
                 "Unaccepted sandbox invitations: deleted after 90 days.",
                 "Hosted usage records: 13 months.",
                 "Analytics events and session replays: held by PostHog under the retention of our plan with them, and nowhere else. Ask and we delete yours before that.",
                 "Account, sandbox and hosted plan records: until you delete your account. When you do, we also delete your customer record at Stripe, with the payment method saved there; the invoices already issued stay with Stripe for the payment records below.",
-                "Hosted standing after you delete your account: a one-way keyed hash of your Google account identifier, kept with your hosted standing (whether hosted sandboxes were suspended for you, the abuse watch's strike count, and the free hosted hours you used this calendar month) so that deleting an account and signing in again does not reset them. We keep it under our legitimate interest in preventing abuse of the free hosted plan (Art. 6(1)(f)): the suspension and strike count for 12 months after the latest of them, the used hours until the end of that month.",
+                "Hosted standing after you delete your account: a one-way keyed hash of your Google account identifier and one of a canonical form of your email address (lowercased, without a +tag, and for Gmail without dots), kept with your hosted standing (whether hosted sandboxes were suspended for you, the abuse watch's strike count, and the free hosted hours you used this calendar month) so that deleting an account and signing in again does not reset them. We keep it under our legitimate interest in preventing abuse of the free hosted plan (Art. 6(1)(f)): the suspension and strike count for 12 months after the latest of them, the used hours until the end of that month.",
                 "Payment records: as long as tax law requires us to keep them, currently five years from the end of the accounting year in Poland.",
                 "A hosted sandbox's disk: destroyed with the machine, immediately, when you delete the sandbox or your account (if our infrastructure provider does not answer at that moment, we retry every minute until it does), and, for a machine whose owner is not on the hosted plan, when it has gone unopened for the period published in the app, which we warn you about by email first. Our infrastructure provider's automatic daily snapshots of that disk are not destroyed with it, they expire on their own retention schedule, currently five days, so erasure completes within that window rather than instantly. We hold no other copy.",
             ],
@@ -215,7 +217,7 @@ export const termsDoc: LegalDoc = {
         {
             heading: "Your account",
             paragraphs: [
-                "You sign in with Google and must be legally able to enter this agreement. If you are using the service for an organisation, you confirm you are authorised to bind it. You are responsible for everything done under your account and for keeping access to it secure. One person per account.",
+                "You sign in with Google or with a code we email to your address, and must be legally able to enter this agreement. A free hosted sandbox and the model trial need a Google account linked to yours. If you are using the service for an organisation, you confirm you are authorised to bind it. You are responsible for everything done under your account and for keeping access to it secure. One person per account.",
             ],
         },
         {
@@ -285,7 +287,7 @@ export const termsDoc: LegalDoc = {
         {
             heading: "Suspension and termination",
             paragraphs: [
-                "You can stop using the service and delete your account at any time in Settings, which deletes your data immediately and destroys any hosted machine with it. A suspension of hosted sandboxes, and the free hosted hours used this month, stay with your Google account for the period the Privacy Policy states, so deleting the account and signing in again does not lift or reset them.",
+                "You can stop using the service and delete your account at any time in Settings, which deletes your data immediately and destroys any hosted machine with it. A suspension of hosted sandboxes, and the free hosted hours used this month, stay with your Google account and your email address for the period the Privacy Policy states, so deleting the account and signing in again does not lift or reset them.",
                 "We may suspend or terminate an account that breaches these terms or the Acceptable Use Policy: with notice where it is reasonable to give it, and without where the breach is serious or ongoing. We may also discontinue the free parts of the service, giving reasonable notice first. If we terminate for reasons other than your breach and you had paid for a membership, we refund the unused portion.",
             ],
         },
@@ -436,7 +438,7 @@ export const dpaDoc: LegalDoc = {
                 "Each hosted sandbox is a separate machine, with its own disk, in its own private network at our infrastructure provider. Two users' sandboxes never share a machine, a disk or a network.",
                 "The machine is reachable only through a tunnel provisioned for that sandbox; nothing on it is exposed by us to the public internet by default.",
                 "Traffic between your browser and your sandbox is encrypted in transit.",
-                "Access to a sandbox is bound at first connection to the Google identity that created it. Connection tokens are stored encrypted in our database.",
+                "Access to a sandbox is bound at first connection to the identity that created it: a Google account, or an email address we confirmed by mailing it a code. Connection tokens are stored encrypted in our database.",
                 "No standing access path exists from the platform into a running machine, which is a structural limit rather than a policy one.",
                 "Access to our own production systems is limited to the operator, over authenticated channels.",
                 "Deletion is immediate: destroying the sandbox destroys the machine and the disk together. The only residue is our provider's automatic disk snapshots, which we neither read nor restore and which expire on their retention schedule.",
@@ -484,9 +486,15 @@ export const subprocessorsDoc: LegalDoc = {
                     ],
                     [
                         "Google Ireland Ltd / Google LLC",
-                        "Sign-in, the fonts the website loads, and the Gemini models that serve the free trial",
+                        "Sign-in with Google, the fonts the website loads, and the Gemini models that serve the free trial",
                         "European Union and United States",
                         "Data Privacy Framework",
+                    ],
+                    [
+                        "Resend (Plus Five Five, Inc., US)",
+                        "Sends the platform's email: sign-in codes, sandbox invitations and notices about a hosted sandbox. It receives the recipient's address and the message",
+                        "United States",
+                        "Standard Contractual Clauses",
                     ],
                     [
                         "PostHog, Inc. (US)",
@@ -507,7 +515,7 @@ export const subprocessorsDoc: LegalDoc = {
             heading: "Not on this list, deliberately",
             paragraphs: [
                 "Your own model provider, Anthropic, or whoever you configure with your own key, is not our sub-processor. Your sandbox talks to them directly under your own agreement, and that traffic never passes through us. The one exception is the free trial, where the model calls are ours: that is why Google appears above.",
-                "We use no advertising, error-tracking or customer-messaging providers, so none appear here. Our one analytics provider, PostHog, is in the table above.",
+                "We use no advertising, error-tracking or customer-messaging providers, so none appear here. Resend, above, sends only the mail the service needs, never marketing. Our one analytics provider, PostHog, is in the table above.",
             ],
         },
         {

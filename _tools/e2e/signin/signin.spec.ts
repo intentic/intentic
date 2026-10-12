@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type Browser, type BrowserContext, expect, type Page, test } from "@playwright/test";
@@ -18,6 +19,8 @@ interface Labels {
         readonly words: { readonly continueGoogleInBrowser: string };
         readonly desktopAuth: { readonly closeTab: string };
         readonly desktopAuthComplete: { readonly backToSignIn: string };
+        readonly emailSignIn: { readonly addressLabel: string; readonly continueWithEmail: string; readonly codeLabel: string };
+        readonly loginConfirm: { readonly confirm: string };
     };
 }
 // SAFETY: the editor's own catalogue, nested objects of strings; a key gone from it reads as undefined, which the
@@ -27,6 +30,10 @@ const LABELS = {
     continueInBrowser: EN.words.continueGoogleInBrowser,
     closeTab: EN.desktopAuth.closeTab,
     backToSignIn: EN.desktopAuthComplete.backToSignIn,
+    emailAddress: EN.emailSignIn.addressLabel,
+    continueWithEmail: EN.emailSignIn.continueWithEmail,
+    signInCode: EN.emailSignIn.codeLabel,
+    confirmSignIn: EN.loginConfirm.confirm,
 };
 for (const [name, label] of Object.entries(LABELS)) {
     if (typeof label !== `string`) {
@@ -218,4 +225,74 @@ test(`a person who asked an agent about a file before signing in still signs in,
     // Still kept: no sandbox answers here, so no chat has taken it, and the sign-in must not have dropped it either.
     const waiting = await window.evaluate(() => sessionStorage.getItem(`intentic.localHandoff`));
     expect(waiting, `the file asked about before signing in must still be waiting for its chat`).toContain(file.name);
+});
+
+/* EMAIL CODES. An address no identity provider vouches for (a company's own domain on its own mail server) signs in with
+ * a code the platform mails it. The tier's api keeps what it would have handed Resend and serves the newest mail to an
+ * address back (browser-api.ts `/__e2e/mail`), which is the inbox these specs read. */
+
+// A person on a domain of their own, with no Google account behind the address.
+const newEmailPerson = (label: string): string => `${label}-${randomUUID().slice(0, 8)}@own-domain.e2e.intentic.dev`;
+
+/** The newest sign-in mail to `email`: its code, and the confirm link in it. Waits for it to arrive. */
+const mailTo = async (context: BrowserContext, email: string): Promise<{ readonly code: string; readonly link: string }> => {
+    const read = async (): Promise<{ readonly code: string; readonly link: string } | undefined> => {
+        const response = await context.request.get(`${stackUrls().api}/__e2e/mail?to=${encodeURIComponent(email)}`);
+        if (!response.ok()) {
+            return undefined;
+        }
+        // SAFETY: browser-api.ts answers this shape, the kept mail and the code read out of it.
+        const mail = (await response.json()) as { html: string; code: string | null };
+        const href = /href="([^"]*\/login\/confirm[^"]*)"/u.exec(mail.html)?.[1];
+        return mail.code === null || href === undefined ? undefined : { code: mail.code, link: href.replaceAll(`&amp;`, `&`) };
+    };
+    await expect.poll(read, { message: `the platform never mailed ${email} a sign-in code` }).toBeDefined();
+    const mail = await read();
+    if (mail === undefined) {
+        throw new Error(`the mail to ${email} went away`);
+    }
+    return mail;
+};
+
+/** Asks for a code on the web's own sign-in page, leaving the page at the code step. */
+const askForCode = async (context: BrowserContext, email: string): Promise<Page> => {
+    const page = await context.newPage();
+    record(page, `web`);
+    await page.goto(`${stackUrls().web}/login`);
+    await page.getByLabel(LABELS.emailAddress).fill(email);
+    await page.getByRole(`button`, { name: LABELS.continueWithEmail }).click();
+    await expect(page.getByLabel(LABELS.signInCode)).toBeVisible();
+    return page;
+};
+
+test(`a person whose address is on their own domain signs in on the web with a code mailed to it`, async ({ browser }) => {
+    const email = newEmailPerson(`code`);
+    const context = await freshBrowser(browser);
+    const page = await askForCode(context, email);
+    const { code } = await mailTo(context, email);
+    // The sixth digit signs in by itself.
+    await page.getByLabel(LABELS.signInCode).fill(code);
+    await expect(page).not.toHaveURL(/\/login(?:[?#]|$)/u);
+    expect(await signedInAs(context)).toBe(email);
+});
+
+// A mail scanner opens every link it is handed; the confirm page must sign nobody in until a person presses.
+test(`the link in the mail signs in on the device that opens it, and only once Confirm is pressed`, async ({ browser }) => {
+    const email = newEmailPerson(`link`);
+    const asker = await freshBrowser(browser);
+    await askForCode(asker, email);
+    const { link } = await mailTo(asker, email);
+
+    const phone = await freshBrowser(browser);
+    const page = await phone.newPage();
+    record(page, `phone`);
+    await page.goto(link);
+    await expect(page.getByRole(`button`, { name: LABELS.confirmSignIn })).toBeVisible();
+    // Opened, not pressed: what a scanner does, and nothing is signed in for it.
+    expect(await signedInAs(phone)).toBeUndefined();
+    // The code is taken out of the address bar as the page opens.
+    await expect(page).not.toHaveURL(/code=/u);
+    await page.getByRole(`button`, { name: LABELS.confirmSignIn }).click();
+    await expect.poll(() => signedInAs(phone)).toBe(email);
+    expect(await signedInAs(asker)).toBeUndefined();
 });

@@ -1,3 +1,4 @@
+import { GOOGLE_REQUIRED_REASON } from "@intentic/api-contract";
 import { createHash } from "node:crypto";
 import { Prisma, type PrismaClient } from "@intentic/prisma";
 import type { Logger } from "pino";
@@ -32,9 +33,11 @@ const digestOf = (token: string) => createHash(`sha256`).update(token).digest(`h
 
 interface Counters {
     readonly used?: number;
+    // Google accounts linked to the owner's: the trial is a free lane, open only with one (free-lane.ts).
+    readonly googleAccounts?: number;
 }
 
-const fakePrisma = ({ used }: Counters = {}) => {
+const fakePrisma = ({ used, googleAccounts = 1 }: Counters = {}) => {
     let messages = used ?? 0;
     let lastModel: string | null = null;
     const trialUsage = {
@@ -62,6 +65,7 @@ const fakePrisma = ({ used }: Counters = {}) => {
             ),
         },
         trialUsage,
+        account: { count: jest.fn(async () => googleAccounts) },
     };
     return { prisma: prisma as unknown as PrismaClient, trialUsage, spent: () => messages };
 };
@@ -109,6 +113,20 @@ describe("the free trial", () => {
         expect(await response.text()).toBe(`{"choices":[]}`);
         expect(spent()).toBe(1);
         unstubAllGlobals();
+    });
+
+    // A free lane: an owner who signs in only by email reaches it once Google is linked (free-lane.ts), and is told so.
+    it("is closed to a sandbox whose owner has no Google sign-in linked, spending nothing and saying why", async () => {
+        const { prisma, spent } = fakePrisma({ googleAccounts: 0 });
+        const status = await call(baseConfig, prisma, `/trial/status`);
+        expect(status.status).toBe(403);
+        const refused = await chat(baseConfig, prisma);
+        expect(refused.status).toBe(403);
+        expect(await refused.json()).toEqual({
+            error: `the free trial needs a Google sign-in linked to this sandbox owner's account: link Google in Settings, or connect a model of your own`,
+            reason: GOOGLE_REQUIRED_REASON,
+        });
+        expect(spent()).toBe(0);
     });
 
     it("refuses once the day's allowance is gone, and names the way forward", async () => {

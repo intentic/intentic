@@ -158,6 +158,18 @@ model Account {
     @@map("account")
 }
 
+// How many sign-in codes each address was sent in the current window (sign-in.ts `takeCodeAllowance`), so nobody can
+// fill a stranger's inbox through the sign-in form. Keyed `<window>:<sha256 of the address>` rather than by the address,
+// since nothing needs it back. One row per address and window; retention.ts deletes rows whose window has passed.
+model SignInCodeAllowance {
+    key         String   @id
+    count       Int
+    windowStart DateTime
+
+    @@index([windowStart])
+    @@map("sign_in_code_allowance")
+}
+
 model Verification {
     id         String   @id
     identifier String
@@ -743,7 +755,8 @@ model HostedOom {
 model DesktopHandoff {
     id        String   @id @default(cuid())
     ott       String
-    idToken   String
+    // Absent for an account that signs in by email: its webview asks the platform for identity assertions instead.
+    idToken   String?
     challenge String
     expiresAt DateTime
     createdAt DateTime @default(now())

@@ -555,6 +555,22 @@ it(`starts nothing, and offers the other rung, when the platform is out of machi
     expect(buttonLabelled(`Set it up on my own computer`)?.tagName).toBe(`BUTTON`);
 });
 
+// An account that signs in only by email holds no free slot: the free machine needs a Google sign-in linked first, so the
+// ladder offers the three ways on from there in place of its button, and starts nothing.
+it(`offers linking Google, buying a machine or this computer when the free machine needs a Google sign-in`, async () => {
+    query.value = { elsewhere: `1` };
+    hostedOffer.mockResolvedValue({ enabled: true, remaining: 0, needsGoogle: true });
+    const el = await mount();
+    expect(hostedProvision).not.toHaveBeenCalled();
+    const rungs = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)];
+    expect(rungs[0]?.textContent).toContain(`Needs a Google sign-in on your account`);
+    expect(rungs[0]?.textContent).not.toContain(`Already using yours`);
+    expect(el.textContent).toContain(`A free machine needs a Google sign-in linked to it first`);
+    expect(buttonLabelled(`Link your Google account`)?.tagName).toBe(`BUTTON`);
+    expect(el.textContent).toContain(`Buy a machine`);
+    expect(buttonLabelled(`Run it on your own computer`)?.tagName).toBe(`BUTTON`);
+});
+
 // Opening the alternative is just reading it: nothing starts or releases until it's chosen.
 it(`offers the rung it did not take, without taking it`, async () => {
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });

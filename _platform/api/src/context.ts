@@ -11,10 +11,14 @@ import type { PrismaClient } from "@intentic/prisma";
 // user, the desktop handoff mints a one-time token FOR THE CALLER'S SESSION, which means handing Better Auth
 // the same headers this context was resolved from. `sessionHeaders` carries Better Auth's refreshed cookie
 // back through the oRPC response instead of updating the database while leaving the browser's cookie stale.
+// The signed-in caller as a handler reads them: the account, and whether its address was proven (Google said so, or a
+// mailed code was spent). Who may administer, be comped, or be vouched for to a sandbox reads `emailVerified`.
+export type SessionUser = User & { readonly emailVerified: boolean };
+
 export interface OrpcContext {
     prisma: PrismaClient;
     config: Config;
-    user: User | null;
+    user: SessionUser | null;
     logger: Logger;
     auth: Auth;
     headers: Headers;
@@ -26,8 +30,14 @@ export const buildOrpcContext = async (
     headers: Headers,
 ): Promise<OrpcContext> => {
     const { response: session, headers: sessionHeaders } = await deps.auth.api.getSession({ headers, returnHeaders: true });
-    const user: User | null = session
-        ? { id: session.user.id, email: session.user.email, name: session.user.name, image: session.user.image ?? null }
+    const user: SessionUser | null = session
+        ? {
+              id: session.user.id,
+              email: session.user.email,
+              name: session.user.name,
+              image: session.user.image ?? null,
+              emailVerified: session.user.emailVerified,
+          }
         : null;
     return { prisma: deps.prisma, config: deps.config, user, logger: deps.logger, auth: deps.auth, headers, sessionHeaders };
 };

@@ -11,6 +11,9 @@ export interface Mail {
     // Its own field, not dug out of `html`: the unconfigured-dev branch logs exactly this for a developer to read.
     link: string;
     html: string;
+    // Mailed even when the link resolves only here: a sign-in code is for the person at this machine, who asked for it
+    // from a page this machine served, and the code in the mail works wherever the link does not.
+    forThisMachine?: boolean;
 }
 
 // Text from outside (a machine's failure message, a name the owner typed) goes into a mail as text, never as markup.
@@ -39,6 +42,23 @@ export const linkEmail = (mail: { heading: string; body: string; action: string;
     </div>
 `;
 
+// The sign-in mail: one code, offered two ways. Typed into the page that asked for it, or opened from the link, whose
+// page asks for a Confirm press before it signs in, so a mail scanner that opens every link uses nothing up.
+export const signInCodeEmail = (mail: { code: string; link: string; minutes: number }): string => `
+    <div style="font-family: -apple-system, Segoe UI, Roboto, sans-serif; max-width: 30rem; margin: 0 auto; color: #1a1a1a;">
+        <h2 style="font-size: 1.25rem; font-weight: 600;">Your intentic sign-in code</h2>
+        <p style="color: #555; line-height: 1.5;">Type this code on the page where you asked for it:</p>
+        <p style="font-size: 2rem; font-weight: 700; letter-spacing: 0.3rem; margin: 1rem 0;">${escapeHtml(mail.code)}</p>
+        <p style="color: #555; line-height: 1.5;">Or sign in on this device:</p>
+        <p style="margin: 1.5rem 0;">
+            <a href="${escapeHtml(mail.link)}" style="background: #4f46e5; color: #fff; padding: 0.6rem 1.1rem; border-radius: 0.5rem; text-decoration: none; font-weight: 600;">
+                Sign in to intentic
+            </a>
+        </p>
+        <p style="color: #888; font-size: 0.8rem;">The code works once and for ${mail.minutes} minutes. If you did not ask for it, ignore this mail: nobody can sign in without the code.</p>
+    </div>
+`;
+
 // A link that would only resolve on the machine that built it (loopback only, not a LAN address); mailing it strands
 // the recipient, so this declines and keeps the link at the near end instead.
 const resolvesOnlyHere = (link: string): boolean => {
@@ -56,7 +76,7 @@ export const sendMail = async (config: Config, logger: Logger, mail: Mail): Prom
         logger.warn({ to: mail.to, link: mail.link }, `email unconfigured, logging link instead of sending`);
         return `unconfigured`;
     }
-    if (resolvesOnlyHere(mail.link)) {
+    if (mail.forThisMachine !== true && resolvesOnlyHere(mail.link)) {
         logger.warn({ to: mail.to, link: mail.link }, `link resolves only on this machine, not emailing it`);
         return `local-link`;
     }

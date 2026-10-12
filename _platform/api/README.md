@@ -22,6 +22,40 @@ flowchart LR
 - A registry, never a relay: a daemon announces the address it answers on, and the browser talks to it directly.
   The api stores who owns which sandbox and where it answers; traffic between browser and sandbox never passes
   through it.
+- Sign-in is Better Auth (`src/auth.ts`, `src/sign-in.ts`): Google, or a six-digit code mailed to the address (its
+  emailOTP plugin, sent through Resend like every other mail here). One email carries one code, offered two ways:
+  typed in, or a link to `app.intentic.dev/login/confirm?…` whose page needs a Confirm press, so a mail scanner that
+  only opens links cannot spend it. Codes are stored hashed, expire after 10 minutes and allow 5 attempts. An address
+  is sent at most one code a minute and five an hour, counted in `SignInCodeAllowance` under a hash of the address,
+  beside Better Auth's limit per IP address (kept in each replica's memory). The form answers the same whether a code
+  went out or not, and
+  `HOSTED_CANARY_EMAIL` is never sent one. Accounts are linked by address with Google trusted: a code for an address
+  that already has an account enters that account, and Google can be linked to an account made by email.
+  `SIGN_IN_EMAIL` switches codes on (the default). In production they stay off while `EMAIL_API_KEY` or `EMAIL_FROM` is
+  unset. In development the mail's link, code included, goes to the log instead. The login page reads
+  `me.signInOptions` and offers only what is on (Google needs `GOOGLE_CLIENT_ID`). (2026-10-12) Better Auth's
+  magicLink plugin was rejected: its verify step is a GET, so a scanner opening the link would use it up.
+- `sandbox.identityAssertion` mints the platform's identity assertion: its signed word that the caller controls their
+  address, for one sandbox they own or accepted an invitation to, valid for two minutes
+  ([identity-assertion.ts](../../_shared/sandbox-contract/src/policy/identity-assertion.ts),
+  `src/sandbox/identity-assertion.ts`). The editor asks for one only for an account that signs in by email, and a
+  Google account spends its Google ID token. The claim names how the address was confirmed (`google` when a Google account is
+  linked, `email` otherwise). The route answers FORBIDDEN for an address not yet confirmed, and NOT_FOUND on a
+  platform that signs none (no `IDENTITY_SIGNING_KEY`, or email sign-in off), where an email account reaches a sandbox
+  only with a passkey or, for a hosted one it owns, the owner ticket. The key is an Ed25519 private key (PKCS8 PEM)
+  of its own, never `INGRESS_SIGNING_KEY`, so neither can stand in for the other. Every accepted announce carries its
+  public half (`identityKey`, derived from the private key), which is how a daemon on its owner's machine learns it,
+  and a hosted machine also gets it in its environment as `PLATFORM_IDENTITY_KEY`. Whether an assertion opens anything
+  is the daemon's decision ([topology.md](../../docs/architecture/topology.md#trust-model)).
+- The desktop handoff (`src/desktop`) carries a Google ID token for a Google account and none for an email account,
+  whose webview asks for identity assertions with the session the one-time token gives it.
+- The free hosted machine, the trial and the Repair agent need a Google sign-in linked to the account
+  (`src/sandbox/hosted/free-lane.ts`). `hostedOffer` answers `needsGoogle` to an email-only account with no paid slot,
+  and a refused call carries the reason `google-required`, so the editor can offer linking Google, buying a machine, or
+  running the sandbox on the reader's own computer. An email-only account that holds an unused paid slot has its
+  machine built straight onto that slot's rung, never the free one, and none of the free lane's limits apply to it.
+- `ADMIN_EMAILS` opens the operator panel only to a verified address with a Google account linked, unless
+  `ADMIN_SIGN_IN=any` (the default is `google`), so a mailed code alone never reaches `/admin`.
 - Reachability is a signed grant. The api holds the Ed25519 private key (`INGRESS_SIGNING_KEY`), the edge holds only
   the public half, and a deletion record revokes it (`src/sandbox/reachability.ts`). A trigger on `sandbox` records
   the tunnel id of every deleted row and every rotated token (`SandboxTombstone`), and `GET /api/reachability/:id`
@@ -180,7 +214,7 @@ flowchart LR
   (`sandbox.fixCode`: owner-only, NOT_FOUND for a hosted or removed sandbox, thirty minutes, the setup code's
   generator, each mint replacing the last), which `ic` redeems at `POST /host-report/claim` (`{ code }`) for
   `{ sandbox, key }`. The code stays redeemable until it expires; unknown, expired, removed and hosted all answer 404.
-  Neither route is rate-limited, as no route of this app is, and a fix code carries the setup code's 65 bits. Releasing
+  Neither route is rate-limited, and a fix code carries the setup code's 65 bits. Releasing
   a hosted machine rotates the connect token, so it clears both columns with the setup ones.
 - Deleting an account runs one erase path whichever side asks (`src/account-erase.ts`): Better Auth's `beforeDelete`
   for the owner's own deletion, `deleteUserAccount` for an operator's. Before the cascade, in one transaction, it queues
@@ -191,10 +225,11 @@ flowchart LR
   minute and is not held back by the orphan reaper's caps; the retention sweep retries a failed Stripe customer daily.
   Running it again after a partial failure is safe: the queues are upserts, and the standing is moved, not copied.
 - A deleted account's hosted standing outlives it (`sandbox/hosted/abuse/carried-standing.ts`): the suspension, the
-  abuse watch's strike count and the month's free minutes, keyed by HMAC-SHA256 of the Google subject under a key
-  derived from `BETTER_AUTH_SECRET` with HKDF and a fixed label. The suspension gate, the hour meter and the abuse watch
-  add it to whichever account's Google subject hashes to it, so deleting an account and signing in again does not
-  reset them; an operator's lift clears a carried suspension too. The retention sweep clears the standing twelve months
+  abuse watch's strike count and the month's free minutes, keyed by HMAC-SHA256 of the Google subject and, beside it,
+  of the canonical email (lowercased, a `+tag` dropped, and for Gmail the dots dropped), both under a key derived from
+  `BETTER_AUTH_SECRET` with HKDF and a fixed label. The suspension gate, the hour meter and the abuse watch add it to
+  whichever account's Google subject or canonical email hashes to it, so deleting an account and signing in again,
+  with Google or by email, does not reset them; an operator's lift clears a carried suspension too. The retention sweep clears the standing twelve months
   after its latest change, the minutes when their month ends, and the row once both are gone. Rotating
   `BETTER_AUTH_SECRET` orphans every record. (2026-09-29: derived rather than a new env var, so no deployment has to
   carry one more secret. A dedicated key would survive a session-secret rotation, at the cost of one more thing to set.)
@@ -210,7 +245,7 @@ flowchart LR
 | --- | --- |
 | `src/sandbox` | Sandbox routes, reachability grants, loopback DNS, trash; `hosted/` runs the Fly lane |
 | `src/sandbox/hosted` | Fly client, provisioning, pool, meter, builds, migrations between machines, the Stripe plan |
-| `src/admin` | Operator panel routes behind `ADMIN_EMAILS`, each call audited |
+| `src/admin` | Operator panel routes behind `ADMIN_EMAILS` and `ADMIN_SIGN_IN`, each call audited |
 | `src/desktop` | Desktop sign-in handoff over the `intentic://` deep link |
 | `src/fleet` | `/fleet`: an API token lets a sandbox create sandboxes for its owner |
 | `src/invite` | Emailed invitations to share a sandbox |
@@ -242,4 +277,4 @@ pnpm --filter @intentic/api fleet      # read-only: what the platform runs on Fl
 
 ## Repair (`POST /api/repair/turn`)
 
-Session-authenticated turn endpoint for the desktop Repair agent. Tool definitions and the system prompt live on the server; the app executes tool calls locally. Allowance is **48 turns per user per UTC day** by default (`REPAIR_*` config, separate from the sandbox trial). Disabled when no repair/trial model keys are configured.
+Session-authenticated turn endpoint for the desktop Repair agent. Tool definitions and the system prompt live on the server; the app executes tool calls locally. Allowance is **48 turns per user per UTC day** by default (`REPAIR_*` config, separate from the sandbox trial), for an account with a Google sign-in linked. Disabled when no repair/trial model keys are configured.

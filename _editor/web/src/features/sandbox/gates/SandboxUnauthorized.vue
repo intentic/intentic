@@ -1,24 +1,32 @@
 <script setup lang="ts">
 import { Button } from "@intentic/ui";
+import { EMAIL_SIGN_IN_OFF } from "@intentic/sandbox-contract";
 import GateCard from "./GateCard.vue";
 import { computed } from "vue";
 import { useAuth } from "../../../client/auth/useAuth";
+import { emailOnly } from "../../../client/auth/signInMethods";
 import { useGoogleIdentity } from "../../../client/auth/useGoogleIdentity";
 import { useSandboxSession } from "../../../client/session/sandboxSession";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { desktopVersion, signInThroughBrowser } from "../../../app/environments/desktop";
 import { useT } from "@intentic/ui/i18n";
 
-// Shown when the daemon is up but rejects the signed-in Google account with 403: neither owner nor a granted
-// member. No spinner and no 'Open setup', since waiting won't fix an account mismatch; the liveness loop keeps
-// retrying, so a grant clears this screen by itself.
+// Shown when the daemon is up but rejects the signed-in account with 403: neither owner nor a granted member, or a
+// member this sandbox has not opted in to email sign-in (the daemon's EMAIL_SIGN_IN_OFF). No spinner and no 'Open
+// setup', since waiting won't fix either; the liveness loop keeps retrying, so a grant (or the owner's opt-in) clears
+// this screen by itself.
 
 const t = useT();
 
 const { active } = useSandbox();
 const { user } = useAuth();
 const { clearCredential, getIdToken } = useGoogleIdentity();
-const { presentedEmail, invalidateSession, getSessionToken } = useSandboxSession();
+const { presentedEmail, invalidateSession, getSessionToken, emailRefusal, retryEmailSignIn } = useSandboxSession();
+
+// The sandbox took the platform's word for the address and still said no: only its owner can turn email sign-in on.
+const emailSignInOff = computed(() => emailRefusal.value === EMAIL_SIGN_IN_OFF);
+// An account with no Google sign-in has no Google account to switch to; its way on is asking again once the owner acts.
+const withoutGoogle = computed(() => emailOnly(user.value?.signInMethods));
 
 // The Google identity the daemon saw differs from the user's intentic account; usually two Google accounts.
 const wrongGoogleAccount = computed(
@@ -35,6 +43,13 @@ const title = computed(() => t(`sandbox.sandboxUnauthorized.noAccessTo`, { name:
 // account already approved here unless it is told not to, so a press landed back on the same refusal.
 // In the app's own window nothing can ask Google at all, so the press goes straight to the browser hand-off
 // carrying the same intent; raising the shared sign-in gate first only put a second dialog in front of one road.
+// Asks again at once, past the pause a refusal only the owner can lift puts on new attempts (sandboxSession.ts).
+const tryAgain = async (): Promise<void> => {
+    retryEmailSignIn();
+    invalidateSession();
+    await getSessionToken();
+};
+
 const switchAccount = async (): Promise<void> => {
     clearCredential();
     invalidateSession();
@@ -53,18 +68,29 @@ const switchAccount = async (): Promise<void> => {
 
 <template>
     <GateCard icon="lock" :title="title">
-        <p v-if="wrongGoogleAccount" class="text-sm text-muted">
-            {{ t(`sandbox.sandboxUnauthorized.youreSignedIntoGoogle`) }} <span class="font-medium text-content">{{ presentedEmail }}</span
-            >{{ t(`sandbox.sandboxUnauthorized.intenticAccount`) }} <span class="font-medium text-content">{{ user?.email }}</span
-            >. Sign in with <span class="font-medium text-content">{{ user?.email }}</span> {{ t(`sandbox.sandboxUnauthorized.toOpenSandbox`) }}
-        </p>
-        <p v-else class="text-sm text-muted">
-            {{ t(`sandbox.sandboxUnauthorized.sandboxBelongsToAnother`) }}
-            <span class="font-medium text-content">{{ presentedEmail }}</span
-            >. Ask its owner to grant you access: this clears automatically the moment it's granted.
-        </p>
+        <i18n-t v-if="emailSignInOff" keypath="sandbox.sandboxUnauthorized.emailSignInOff" tag="p" class="text-sm text-muted" scope="global">
+            <template #email
+                ><span class="font-medium text-content">{{ user?.email }}</span></template
+            >
+        </i18n-t>
+        <i18n-t v-else-if="wrongGoogleAccount" keypath="sandbox.sandboxUnauthorized.wrongGoogleAccount" tag="p" class="text-sm text-muted" scope="global">
+            <template #presented
+                ><span class="font-medium text-content">{{ presentedEmail }}</span></template
+            >
+            <template #account
+                ><span class="font-medium text-content">{{ user?.email }}</span></template
+            >
+        </i18n-t>
+        <i18n-t v-else keypath="sandbox.sandboxUnauthorized.notShared" tag="p" class="text-sm text-muted" scope="global">
+            <template #presented
+                ><span class="font-medium text-content">{{ presentedEmail ?? user?.email }}</span></template
+            >
+        </i18n-t>
         <template #actions>
-            <Button :label="t(`sandbox.sandboxUnauthorized.switchGoogleAccount`)" tier="boring" @click="switchAccount">
+            <Button v-if="emailSignInOff || withoutGoogle" :label="t(`ui.action.tryAgain`)" tier="boring" @click="tryAgain">
+                <template #icon><Icon name="refresh" /></template>
+            </Button>
+            <Button v-else :label="t(`sandbox.sandboxUnauthorized.switchGoogleAccount`)" tier="boring" @click="switchAccount">
                 <template #icon><Icon name="user" /></template>
             </Button>
         </template>

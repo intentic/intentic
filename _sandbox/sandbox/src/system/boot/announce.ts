@@ -106,7 +106,13 @@ const verdictOf = (answer: IngressAnswer<IngressOutput<"announce">>, at: number)
     return { state: "rejected", retrying: true, detail: `the platform answered HTTP ${answer.status} to this sandbox's registration`, at };
 };
 
-export const createAnnouncer = (config: Config, logger: Logger): Announcer => {
+// What the announcer hands on from an accepted announce besides the verdict: the platform's identity key, which the
+// authorizer verifies identity assertions with (auth/platform/platform-identity-key.ts).
+export interface AnnounceListeners {
+    readonly identityKey?: (pem: string) => void;
+}
+
+export const createAnnouncer = (config: Config, logger: Logger, listeners: AnnounceListeners = {}): Announcer => {
     let fastUntil = 0;
     let backoff = 2_000;
     let lastLoggedAt = 0;
@@ -126,7 +132,13 @@ export const createAnnouncer = (config: Config, logger: Logger): Announcer => {
     const register = (signal: AbortSignal): Promise<AnnounceState> =>
         flight.run("announce", () =>
             callIngress(config, { route: "announce", input: announceBody, signal }).then(
-                (answer) => verdictOf(answer, Date.now()),
+                (answer) => {
+                    const identityKey = answer.status === 200 ? answer.data?.identityKey : undefined;
+                    if (identityKey !== undefined) {
+                        listeners.identityKey?.(identityKey);
+                    }
+                    return verdictOf(answer, Date.now());
+                },
                 (error: Error): AnnounceState => ({
                     state: "unreachable",
                     detail: `the platform could not be reached from inside the sandbox: ${errorMessage(error)}`,

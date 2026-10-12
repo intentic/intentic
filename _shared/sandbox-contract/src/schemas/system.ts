@@ -193,8 +193,8 @@ export const ManifestRepairSchema = z.object({
         ),
 });
 export type ManifestRepair = z.infer<typeof ManifestRepairSchema>;
-// Steady-state browser credential (system.session), exchanged for a verified Google ID token so Google UI appears only
-// at sign-in. expiresAt is epoch ms; renew ahead of it without parsing the token.
+// Steady-state browser credential (system.session), exchanged for a verified Google ID token or the platform's identity
+// assertion, so sign-in UI appears only once. expiresAt is epoch ms; renew ahead of it without parsing the token.
 export const DaemonSessionSchema = z.object({
     token: z.string().describe("The credential every other call carries. Present it as a bearer token."),
     expiresAt: z.number().describe("When it stops working, in milliseconds, so a caller can renew ahead of it without reading the token."),
@@ -206,9 +206,17 @@ export type DaemonSession = z.infer<typeof DaemonSessionSchema>;
 // daemon is the WebAuthn relying party; these are the shapes its /system/passkeys routes and the 428 step-up carry.
 
 // How a session's identity was proven. A session carries the set it was minted from; the require-passkey policy reads
-// it on every request, so a session minted before the switch stops working on its next call.
-export const ProofMethodSchema = z.enum(["google", "ticket", "passkey", "recovery"]);
+// it on every request, so a session minted before the switch stops working on its next call. `email` is the platform's
+// signed word that the person controls the address (policy/identity-assertion.ts), accepted only where the owner opted
+// that person in, and on hosted machines.
+export const ProofMethodSchema = z.enum(["google", "ticket", "passkey", "recovery", "email"]);
 export type ProofMethod = z.infer<typeof ProofMethodSchema>;
+
+// The `reason` a daemon's refusal of an identity assertion carries beside its `error`, so the editor can say what to do:
+// a 403 for a person this sandbox has not opted in to email sign-in (the owner turns it on for them), a 401 when the
+// daemon has not yet learned the platform's identity key (it has not reached the platform; worth a retry).
+export const EMAIL_SIGN_IN_OFF = "email-sign-in-off";
+export const PLATFORM_KEY_UNKNOWN = "platform-key-unknown";
 
 export const PasskeySummarySchema = z.object({
     id: z.string().describe("The credential id the authenticator chose, base64url."),
@@ -382,6 +390,9 @@ export const DaemonHealthSchema = z.object({
     // How the world reaches here: a dialed tunnel, or loopback only.
     reachedBy: z.enum(["tunnel", "loopback"]),
     build: BuildStampSchema,
+    // Which proofs this daemon takes to open a session, read before any sign-in since the route list arrives only after
+    // one. Absent on a daemon from before email sign-in: Google, and the owner ticket on a hosted machine.
+    signIn: z.object({ proofs: z.array(ProofMethodSchema) }).optional(),
 });
 export type DaemonHealth = z.infer<typeof DaemonHealthSchema>;
 
@@ -399,5 +410,10 @@ export const DaemonHealthReadingSchema = z.object({
     reach: ReachStateSchema.optional().catch(undefined),
     reachedBy: z.string().optional().catch(undefined),
     build: BuildStampSchema.optional().catch(undefined),
+    // Proof names this build may not know are kept as text, so a newer daemon's list still reads.
+    signIn: z
+        .object({ proofs: z.array(z.string()).catch([]) })
+        .optional()
+        .catch(undefined),
 });
 export type DaemonHealthReading = z.infer<typeof DaemonHealthReadingSchema>;

@@ -24,7 +24,7 @@ const config = (
     monthlyHours = FREE_TIER.monthlyHours,
     ramp: { newAccountDays: number; newAccountHours: number } = { newAccountDays: 0, newAccountHours: 0 },
     compEmails = ``,
-): Config => ({ hosted: { flyApiToken: `fly`, monthlyHours, ...ramp }, hostedPlan: { compEmails } }) as unknown as Config;
+): Config => ({ betterAuth: { secret: `usage-test-secret` }, hosted: { flyApiToken: `fly`, monthlyHours, ...ramp }, hostedPlan: { compEmails } }) as unknown as Config;
 
 // The machine row a stretch write names: which row, whose month.
 const owned = { id: `h1`, sandboxId: `s1`, ownerId: `u1` };
@@ -40,6 +40,8 @@ const prismaWith = (over: Record<string, Record<string, ReturnType<typeof jest.f
         // No plan, and an account with no age and no address to judge: the free hours at the month's figure.
         hostedPlan: { findUnique: jest.fn().mockResolvedValue(null) },
         user: { findUnique: jest.fn().mockResolvedValue(null) },
+        // No standing carried from a deleted account, under either key.
+        hostedStanding: { findUnique: jest.fn().mockResolvedValue(null) },
         hostedOom: { create: jest.fn().mockResolvedValue({}), count: jest.fn().mockResolvedValue(0) },
         // A stretch write locks the row and acts in one transaction; the stub runs it in place.
         $transaction: jest.fn((work: (tx: unknown) => Promise<unknown>) => work(prisma)),

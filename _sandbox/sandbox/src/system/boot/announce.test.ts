@@ -273,6 +273,16 @@ describe("createAnnouncer", () => {
             expect(announcer.status()).toEqual({ state: "registered", identity: "a0028692-7cf2-4ef4-8429-86a98d60be8a", at: Date.now() });
         });
 
+        it("hands on the platform's identity key from an accepted announce, and nothing from one that says none", async () => {
+            const learned: string[] = [];
+            outcomes.push({ status: 200, body: `{"ok":true,"identityKey":"-----BEGIN PUBLIC KEY-----\\nMCow\\n-----END PUBLIC KEY-----\\n"}` });
+            const announcer = createAnnouncer(config, logger, { identityKey: (pem) => learned.push(pem) });
+            announcer.start();
+            await settle();
+            expect(learned).toEqual(["-----BEGIN PUBLIC KEY-----\nMCow\n-----END PUBLIC KEY-----\n"]);
+            expect(announcer.status()).toEqual({ state: "registered", at: Date.now() });
+        });
+
         it("reports registered without an identity from a platform too old to send one", async () => {
             outcomes.push({ status: 200, body: `{"ok":true}` });
             const announcer = createAnnouncer(config, logger);

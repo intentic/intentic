@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { DaemonSession } from "@intentic/sandbox-contract";
 import { Button, Notice, type NoticeModel, ui, useTheme, vAction } from "@intentic/ui";
-import { noticeFrom } from "@intentic/ui/async";
+import { noticeFrom, noticeOf } from "@intentic/ui/async";
 import FocusTrap from "primevue/focustrap";
 import { computed, ref, useId, watch } from "vue";
 import { useRouter } from "vue-router";
@@ -15,11 +15,13 @@ import { desktopVersion } from "../../../app/environments/desktop";
 import { useT } from "@intentic/ui/i18n";
 
 // The sign-in overlay, in its three states. CHOOSE: useGoogleIdentity raised `needsSignIn`, so Google's button is
-// up, and a passkey is offered beside it when the daemon has one for this origin. STEP-UP: a Google proof was taken
-// but the sandbox requires a passkey: confirm with the one held, or add a first one; the owner may spend a recovery
-// code instead. Every ceremony ends in a session handed back through the prompt; no token touches the platform here.
-// Two Google surfaces, since Google's button does nothing inside the desktop app's webview: that window hands off to
-// the real browser and adopts the credential on return.
+// up, and a passkey is offered beside it when the daemon has one for this origin. An account that signs in by email has
+// its own row ("Continue as"), which spends the platform's identity assertion; for one with no Google sign-in at all the
+// prompt alone raises this wall and Google is never shown. A daemon too old to take the assertion is said by name, as is
+// a refusal the last one met. STEP-UP: a proof was taken but the sandbox requires a passkey: confirm with the one held,
+// or add a first one; the owner may spend a recovery code instead. Every ceremony ends in a session handed back through
+// the prompt. Two Google surfaces, since Google's button does nothing inside the desktop app's webview: that window
+// hands off to the real browser and adopts the credential on return.
 
 const t = useT();
 
@@ -28,7 +30,7 @@ const { user } = useAuth();
 const sandbox = useSandbox();
 const router = useRouter();
 const { scheme } = useTheme();
-const { prompt, completeSignIn, dismissSignIn } = useSignInPrompt();
+const { prompt, completeSignIn, dismissSignIn, escalateSignIn } = useSignInPrompt();
 
 const btn = ref<HTMLElement>();
 const desktop = computed(() => desktopVersion() !== undefined);
@@ -36,8 +38,13 @@ const desktop = computed(() => desktopVersion() !== undefined);
 const passkeysWork = browserSupportsPasskeys();
 
 const stepUp = computed(() => (prompt.value?.kind === `step-up` ? prompt.value : undefined));
-const passkeyOffered = computed(() => prompt.value?.kind === `choose` && prompt.value.passkey && passkeysWork);
-const visible = computed(() => needsSignIn.value || stepUp.value !== undefined);
+const choose = computed(() => (prompt.value?.kind === `choose` ? prompt.value : undefined));
+const passkeyOffered = computed(() => choose.value?.passkey === true && passkeysWork);
+// The account's email road on this sandbox, when it has one (sandboxSession.ts emailRoadFor).
+const emailRoad = computed(() => choose.value?.email);
+// An account with no Google sign-in: no Google surface at all, and the prompt alone is what raises this wall.
+const withoutGoogle = computed(() => choose.value?.withoutGoogle === true);
+const visible = computed(() => needsSignIn.value || stepUp.value !== undefined || withoutGoogle.value);
 // Names the dialog by whichever heading the state it is in draws.
 const titleId = useId();
 // Tab stays inside the gate while it is up, as it does in every <Modal>.
@@ -49,6 +56,23 @@ const busy = ref(false);
 const notice = ref<NoticeModel | undefined>(undefined);
 const label = ref(``);
 const code = ref(``);
+
+// What the email road met last time, said before anything is pressed; a refusal from a press here replaces it.
+const roadNotice = computed<NoticeModel | undefined>(() => {
+    const road = emailRoad.value;
+    if (road?.kind !== `offered` || road.refusal === undefined) {
+        return undefined;
+    }
+    return noticeOf(road.refusal === `email-sign-in-off` ? t(`sandbox.sandboxSession.emailSignInOff`) : t(`sandbox.sandboxSession.platformKeyUnknown`), {
+        tone: `warning`,
+    });
+});
+// A refusal from a press here, else what the email road met before the wall went up.
+const shownNotice = computed(() => notice.value ?? roadNotice.value);
+// A daemon from before email sign-in, for an account with no other way in: the gap, named, with who closes it.
+const outdatedNote = computed(() =>
+    emailRoad.value?.kind === `outdated` ? (isOwner.value ? t(`sandbox.signInWall.emailNeedsUpdateOwner`) : t(`sandbox.signInWall.emailNeedsUpdate`)) : undefined,
+);
 
 // Watches the container itself, not just the flag: a mint already in flight when mounted never toggles it.
 watch(
@@ -67,20 +91,44 @@ watch(prompt, () => {
     code.value = ``;
 });
 
-// One ceremony at a time; its session settles the establish waiting behind the prompt, its refusal is shown here.
-const ceremony = async (wrote: string, work: () => Promise<DaemonSession>): Promise<void> => {
+// One attempt at a time; what it settles is its own business, its refusal is shown here.
+const attempt = async (wrote: string, work: () => Promise<void>): Promise<void> => {
     if (busy.value) {
         return;
     }
     busy.value = true;
     notice.value = undefined;
     try {
-        completeSignIn(await work());
+        await work();
     } catch (error) {
         notice.value = noticeFrom(error, wrote);
     } finally {
         busy.value = false;
     }
+};
+
+// A ceremony's session settles the establish waiting behind the prompt.
+const ceremony = (wrote: string, work: () => Promise<DaemonSession>): Promise<void> =>
+    attempt(wrote, async () => {
+        completeSignIn(await work());
+    });
+
+// "Continue as": a fresh assertion from the platform, spent on this daemon. A sandbox that also wants a passkey turns
+// this same prompt into the step-up, whose ceremony then settles it.
+const useEmail = (): Promise<void> => {
+    const current = choose.value;
+    const road = current?.email;
+    if (current === undefined || road?.kind !== `offered`) {
+        return Promise.resolve();
+    }
+    return attempt(t(`sandbox.signInWall.emailSignInIncomplete`), async () => {
+        const answered = await road.spend();
+        if (`session` in answered) {
+            completeSignIn(answered.session);
+            return;
+        }
+        escalateSignIn(current.target, answered.stepUp, answered.bearer);
+    });
 };
 
 const usePasskey = (): Promise<void> => {
@@ -157,7 +205,7 @@ const backToSetup = async (): Promise<void> => {
         <div v-focustrap class="ui-dialog-surface w-full max-w-sm p-6" role="dialog" aria-modal="true" :aria-labelledby="titleId">
             <div class="flex flex-col items-center gap-3 text-center">
                 <span class="flex h-11 w-11 items-center justify-center rounded-xl bg-overlay text-link">
-                    <Icon :name="stepUp ? `key` : waitingInBrowser ? `external-link` : `google`" class="text-lg" />
+                    <Icon :name="stepUp ? `key` : waitingInBrowser ? `external-link` : withoutGoogle ? `envelope` : `google`" class="text-lg" />
                 </span>
 
                 <!-- STEP-UP: the proof was taken, the sandbox wants its passkey. -->
@@ -227,6 +275,7 @@ const backToSetup = async (): Promise<void> => {
                         </h2>
                         <p class="text-sm text-muted">
                             <template v-if="waitingInBrowser">{{ t(`sandbox.signInWall.browserReturnsAutomatically`) }}</template>
+                            <template v-else-if="withoutGoogle">{{ t(`sandbox.signInWall.intenticConfirmsAddress`) }}</template>
                             <template v-else-if="desktop">{{ t(`sandbox.signInWall.intenticSignsInThrough`) }}</template>
                             <template v-else>{{ t(`sandbox.signInWall.continueGoogleToSecurely`) }}</template>
                         </p>
@@ -234,19 +283,39 @@ const backToSetup = async (): Promise<void> => {
                     <p v-if="user?.email" class="text-xs text-muted">
                         {{ t(`sandbox.signInWall.useIntenticAccount`) }} <span class="break-all font-medium text-content">{{ user.email }}</span>
                     </p>
-                    <Notice v-if="notice" :of="notice" class="w-full text-left" />
-                    <!-- Google's own button does nothing when clicked here, so the desktop app hands off to the real browser instead. -->
-                    <Button
-                        v-if="desktop && !waitingInBrowser"
-                        :label="t(`auth.words.continueGoogle`)"
-                        tier="boring"
-                        class="mt-2 w-full justify-center"
-                        @click="signInOutside"
-                    >
-                        <template #icon><Icon name="google" /></template>
-                    </Button>
-                    <!-- `color-scheme: light` matches Google's button iframe so the browser paints no opaque canvas behind it. -->
-                    <div v-else-if="!desktop" ref="btn" class="mt-2 flex justify-center" style="color-scheme: light"></div>
+                    <Notice v-if="shownNotice" :of="shownNotice" class="w-full text-left" />
+                    <!-- Google's surfaces, for an account that has a Google sign-in. Google's own button does nothing when
+                         clicked inside the desktop app, so that window hands off to the real browser instead. -->
+                    <template v-if="!withoutGoogle">
+                        <Button
+                            v-if="desktop && !waitingInBrowser"
+                            :label="t(`auth.words.continueGoogle`)"
+                            tier="boring"
+                            class="mt-2 w-full justify-center"
+                            @click="signInOutside"
+                        >
+                            <template #icon><Icon name="google" /></template>
+                        </Button>
+                        <!-- `color-scheme: light` matches Google's button iframe so the browser paints no opaque canvas behind it. -->
+                        <div v-else-if="!desktop" ref="btn" class="mt-2 flex justify-center" style="color-scheme: light"></div>
+                    </template>
+                    <!-- The email road: the platform vouches for the address, so it works the same in every window. -->
+                    <template v-if="emailRoad?.kind === `offered` && !waitingInBrowser">
+                        <span v-if="!withoutGoogle" class="text-2xs uppercase tracking-wide text-subtle">{{ t(`sandbox.signInWall.or`) }}</span>
+                        <Button
+                            :label="t(`sandbox.signInWall.continueAsEmail`, { email: emailRoad.address })"
+                            :tier="withoutGoogle ? `accent` : `boring`"
+                            class="w-full justify-center"
+                            :class="withoutGoogle ? `mt-2` : ``"
+                            :loading="busy"
+                            @click="useEmail"
+                        >
+                            <template #icon><Icon name="envelope" /></template>
+                        </Button>
+                    </template>
+                    <p v-else-if="outdatedNote" class="w-full rounded-md bg-overlay px-3 py-2 text-left text-xs leading-snug text-muted" role="note">
+                        {{ outdatedNote }}
+                    </p>
                     <template v-if="passkeyOffered && !waitingInBrowser">
                         <span class="text-2xs uppercase tracking-wide text-subtle">{{ t(`sandbox.signInWall.or`) }}</span>
                         <Button

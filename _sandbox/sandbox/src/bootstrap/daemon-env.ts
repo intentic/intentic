@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import type { Logger } from "pino";
+import { authEnabled } from "../auth/auth-enabled.js";
 import type { Config } from "../env.config.js";
 import { createLogger } from "../logger.js";
 import { logsRoot, terminalLogsDir } from "../logs/log-files.js";
@@ -11,9 +12,10 @@ import type { ProfileTraits } from "../system/boot/profile.js";
 
 // Runs before the first service exists, so nothing here may depend on one.
 
-// An empty google.clientId is safe only when this daemon is unreachable; SANDBOX_ALLOW_UNAUTHENTICATED is the one loud exception.
+// A daemon with no way to verify anybody (no Google client id, no platform identity key and no platform to learn one
+// from: auth-enabled.ts) is safe only when it is unreachable; SANDBOX_ALLOW_UNAUTHENTICATED is the one loud exception.
 export const requireAuthWhenReachable = (config: Config): void => {
-    if (config.google.clientId !== "" || (config.connectToken === "" && config.sandbox.publicUrl === "")) {
+    if (authEnabled(config) || (config.connectToken === "" && config.sandbox.publicUrl === "")) {
         return;
     }
     if (config.sandbox.allowUnauthenticated) {
@@ -26,8 +28,9 @@ export const requireAuthWhenReachable = (config: Config): void => {
     }
     // Before the logger: must be legible in `docker logs` even when log config is what went wrong.
     process.stderr.write(
-        "FATAL: this sandbox is externally reachable (CONNECT_TOKEN / SANDBOX_PUBLIC_URL is set) but GOOGLE_CLIENT_ID is empty.\n" +
-            "Without it the daemon authenticates nobody and every route: terminals, secrets, the file API, is open to anyone\n" +
+        "FATAL: this sandbox is externally reachable (CONNECT_TOKEN / SANDBOX_PUBLIC_URL is set) but has no way to verify anyone:\n" +
+            "GOOGLE_CLIENT_ID and PLATFORM_IDENTITY_KEY are empty and no platform is configured to learn a key from.\n" +
+            "Without one the daemon authenticates nobody and every route: terminals, secrets, the file API, is open to anyone\n" +
             "who can reach the tunnel. Set GOOGLE_CLIENT_ID to the platform's Google web client id and restart.\n",
     );
     process.exit(78); // EX_CONFIG

@@ -8,7 +8,7 @@ import {
     carriedStandingOf,
     GOOGLE_SUBJECT_SELECT,
     googleSubjectOf,
-    standingSubjectHash,
+    standingKeysOf,
 } from "./carried-standing.js";
 
 // An account's standing on the hosted lane. Suspended means no machine is provisioned, woken, restarted or rebuilt for
@@ -45,7 +45,7 @@ export const hostedSuspensionOf = async (
 ): Promise<HostedSuspension | undefined> => {
     const user = await prisma.user.findUnique({
         where: { id: userId },
-        select: { hostedSuspendedAt: true, hostedSuspendedReason: true, ...GOOGLE_SUBJECT_SELECT },
+        select: { hostedSuspendedAt: true, hostedSuspendedReason: true, email: true, ...GOOGLE_SUBJECT_SELECT },
     });
     if (user === null) {
         return undefined;
@@ -53,7 +53,7 @@ export const hostedSuspensionOf = async (
     if (user.hostedSuspendedAt !== null) {
         return { at: user.hostedSuspendedAt, reason: user.hostedSuspendedReason ?? `acceptable use` };
     }
-    const carried = await carriedStandingOf(prisma, config, user.accounts);
+    const carried = await carriedStandingOf(prisma, config, user.accounts, user.email);
     return carried?.suspendedAt == null ? undefined : { at: carried.suspendedAt, reason: CARRIED_SUSPENSION_REASON };
 };
 
@@ -94,11 +94,11 @@ export const liftHostedSuspension = async (prisma: PrismaClient, config: Pick<Co
     const user = await prisma.user.update({
         where: { id: userId },
         data: { hostedSuspendedAt: null, hostedSuspendedReason: null },
-        select: GOOGLE_SUBJECT_SELECT,
+        select: { email: true, ...GOOGLE_SUBJECT_SELECT },
     });
-    const subject = googleSubjectOf(user.accounts);
-    if (subject !== undefined) {
-        await prisma.hostedStanding.updateMany({ where: { subjectHash: standingSubjectHash(config, subject) }, data: { suspendedAt: null } });
+    const keys = standingKeysOf(config, { subject: googleSubjectOf(user.accounts), email: user.email });
+    if (keys.length > 0) {
+        await prisma.hostedStanding.updateMany({ where: { subjectHash: { in: keys } }, data: { suspendedAt: null } });
     }
     logger.warn({ userId }, `hosted standing: suspension lifted`);
 };

@@ -7,7 +7,7 @@ import type { RememberedAccount, RememberedSandbox } from "../../../client/direc
 
 // OPENING A SANDBOX WITHOUT THE PLATFORM (README.md). All the workspace needs from the platform once it is open is the
 // account and the list: the account is the one this device last saw list, whole, and the list is what it remembers.
-// The daemon checks the reader's Google sign-in itself, which needs no platform either. Seeding the list's cache entry is
+// The daemon checks the reader's sign-in itself (Google's, a passkey, or a session it minted), which needs no platform. Seeding the list's cache entry is
 // all it takes, since every reader of the list reads that entry (useSandbox.ts); what else would ask the platform
 // (sharing, billing, a hosted machine's power) fails as it does offline, and the direct-mode card says why
 // (notificationSources.ts). The next session check the platform answers ends it.
@@ -47,14 +47,19 @@ export const enterDirectMode = (account: RememberedAccount, sandbox: RememberedS
     useSandbox().select(sandbox.id);
 };
 
-// A device that remembers no account (the platform was down before this one ever listed) is named by the Google
-// sign-in the daemon checks anyway; undefined for a token that is not one.
-export const accountFromGoogle = (idToken: string, now = new Date()): RememberedAccount | undefined => {
-    const claims = idTokenClaims(idToken);
-    if (claims === undefined) {
+// What names the reader on a device that remembers no account (the platform was down before this one ever listed):
+// the Google sign-in the daemon checks anyway, or a daemon session, one this browser already holds on the sandbox or
+// the one a passkey just opened. An account that signs in by email has no Google sign-in to offer, and the daemon's own
+// session says who it let in just as well.
+export type DirectProof = { readonly kind: `google`; readonly idToken: string } | { readonly kind: `session`; readonly email: string };
+
+// The account a proof names, whole enough for the window to run as it; undefined for a token that is not one.
+export const accountFromProof = (proof: DirectProof, now = new Date()): RememberedAccount | undefined => {
+    const email = (proof.kind === `google` ? idTokenClaims(proof.idToken)?.email : proof.email)?.trim();
+    if (email === undefined || email === ``) {
         return undefined;
     }
-    return { user: { id: `direct:${claims.email}`, email: claims.email, name: claims.email, image: null }, savedAt: now.toISOString(), sandboxes: [] };
+    return { user: { id: `direct:${email}`, email, name: email, image: null }, savedAt: now.toISOString(), sandboxes: [] };
 };
 
 // A sandbox known only by its address: named after its host until the platform names it again. Owner by default, a

@@ -2,7 +2,7 @@ import { FREE_TIER } from "@intentic/constants";
 import type { Prisma, PrismaClient } from "@intentic/prisma";
 import type { Logger } from "pino";
 import type { Config } from "./config.js";
-import { STANDING_RETENTION_MS, standingSubjectHash } from "./sandbox/hosted/abuse/carried-standing.js";
+import { mergeStanding, STANDING_RETENTION_MS, standingKeysOf } from "./sandbox/hosted/abuse/carried-standing.js";
 import { destroyQueuedApps, lockHostedSandbox, queueHostedTeardown } from "./sandbox/hosted/hosted-cleanup.js";
 import { eraseStripeCustomer, queueStripeErasure } from "./sandbox/hosted/plan/hosted-plan.js";
 import type { StripeGateway } from "./sandbox/hosted/plan/hosted-plan-stripe.js";
@@ -32,7 +32,7 @@ export interface AccountErasure {
     readonly destroyed: readonly string[];
     // The account's Stripe customer: none, deleted now, or queued for the daily sweep.
     readonly stripe: `none` | `erased` | `queued`;
-    // Whether a hosted-standing record was written for the account's Google subject.
+    // Whether a hosted-standing record was written for the account's Google subject or address.
     readonly carried: boolean;
 }
 
@@ -40,23 +40,22 @@ export interface AccountErasure {
 const latest = (moments: readonly (Date | null | undefined)[]): Date | null =>
     moments.reduce<Date | null>((best, at) => (at != null && (best === null || at > best) ? at : best), null);
 
-/* Moves the account's hosted standing onto its Google subject's record. Returns whether a record was written: an
- * account with no Google sign-in has nothing to key it on, and one in good standing with no free minutes this month
- * has nothing to carry. */
+/* Moves the account's hosted standing onto the records of its Google subject and its address. Returns whether a record
+ * was written: one in good standing with no free minutes this month has nothing to carry. */
 const carryStanding = async (tx: Prisma.TransactionClient, config: Config, userId: string, now: Date): Promise<boolean> => {
     const account = await tx.account.findFirst({ where: { userId, providerId: `google` }, select: { accountId: true } });
-    if (account === null) {
+    const month = usageMonth(now);
+    const user = await tx.user.findUnique({ where: { id: userId }, select: { hostedSuspendedAt: true, email: true } });
+    const keys = standingKeysOf(config, { subject: account?.accountId, email: user?.email });
+    if (keys.length === 0) {
         return false;
     }
-    const subjectHash = standingSubjectHash(config, account.accountId);
-    const month = usageMonth(now);
-    const user = await tx.user.findUnique({ where: { id: userId }, select: { hostedSuspendedAt: true } });
     // The watch's strikes that count towards a suspension, over the window the record itself is kept for.
     const strikes = await tx.hostedStrike.findMany({
         where: { userId, action: { in: [`stopped`, `suspended`] }, createdAt: { gte: new Date(now.getTime() - STANDING_RETENTION_MS) } },
         select: { createdAt: true },
     });
-    const carried = await tx.hostedStanding.findUnique({ where: { subjectHash } });
+    const carried = mergeStanding(await Promise.all(keys.map((subjectHash) => tx.hostedStanding.findUnique({ where: { subjectHash } }))));
     // This month's free minutes as the meter counts them: settled, open stretches, and a record already carried.
     const hours = await accountHoursOf(tx, config, userId, now);
     const suspendedAt = user?.hostedSuspendedAt ?? carried?.suspendedAt ?? null;
@@ -67,7 +66,7 @@ const carryStanding = async (tx: Prisma.TransactionClient, config: Config, userI
         return false;
     }
     const record = { suspendedAt, strikes: strikeCount, standingAt, month: freeMinutes === 0 ? null : month, freeMinutes };
-    await tx.hostedStanding.upsert({ where: { subjectHash }, create: { subjectHash, ...record }, update: record });
+    await Promise.all(keys.map((subjectHash) => tx.hostedStanding.upsert({ where: { subjectHash }, create: { subjectHash, ...record }, update: record })));
     // Moved, not copied: a second run of this erase must find nothing of the account's own left to add again.
     await tx.hostedStrike.deleteMany({ where: { userId } });
     await tx.hostedUsage.deleteMany({ where: { ownerId: userId, month, tier: FREE_TIER.id } });

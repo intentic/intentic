@@ -14,6 +14,7 @@ import {
 } from "@intentic/sandbox-contract";
 import type { z } from "zod";
 import type { SandboxTarget } from "../sandbox/sandboxTarget";
+import type { StepUpBearer } from "./signInPrompt";
 import { t } from "@intentic/ui/i18n";
 
 // The browser half of a passkey ceremony against the sandbox daemon, which is the relying party. Raw fetches on
@@ -171,14 +172,16 @@ export const signInWithPasskey = async (target: SandboxTarget): Promise<DaemonSe
     return ask(`POST /system/passkeys/assert`, target, { response });
 };
 
-// Registers a passkey under `bearer` (a session, or the Google proof of someone enrolling their first under the
-// require-passkey policy) and names it `label`.
-export const registerPasskey = async (target: SandboxTarget, bearer: string, label: string | undefined): Promise<PasskeyRegistered> => {
-    const options = await ask(`POST /system/passkeys/register/options`, target, undefined, bearer);
+// Registers a passkey under `bearer` (a session, or the Google proof or identity assertions of someone enrolling their
+// first under the require-passkey policy) and names it `label`. Each call gets its own bearer, since a daemon spends an
+// identity assertion once.
+export const registerPasskey = async (target: SandboxTarget, bearer: StepUpBearer, label: string | undefined): Promise<PasskeyRegistered> => {
+    const options = await ask(`POST /system/passkeys/register/options`, target, undefined, await bearer());
     const response = await createPasskey(options);
-    return ask(`POST /system/passkeys/register`, target, label === undefined ? { response } : { response, label }, bearer);
+    return ask(`POST /system/passkeys/register`, target, label === undefined ? { response } : { response, label }, await bearer());
 };
 
-// The owner's way back in without a passkey: their Google proof plus one of the codes shown when the policy went on.
-export const recoverWithCode = async (target: SandboxTarget, bearer: string, code: string): Promise<SessionRecovered> =>
-    ask(`POST /system/session/recover`, target, { code }, bearer);
+// The owner's way back in without a passkey: their Google proof (or a fresh identity assertion) plus one of the codes
+// shown when the policy went on.
+export const recoverWithCode = async (target: SandboxTarget, bearer: StepUpBearer, code: string): Promise<SessionRecovered> =>
+    ask(`POST /system/session/recover`, target, { code }, await bearer());

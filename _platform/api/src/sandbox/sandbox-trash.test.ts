@@ -14,6 +14,7 @@ const config = () =>
         ingress: { ...testIngressConfig },
         secrets: { key: `` },
         google: { clientId: `gcid` },
+        identity: { signingKey: `` },
         hosted: {
             flyApiToken: `fly`,
             flyOrg: `intentic`,

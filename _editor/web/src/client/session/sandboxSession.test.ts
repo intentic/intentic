@@ -66,6 +66,11 @@ jest.mock("../endpoint/endpoint", () => ({
     healthAnswers: async () => state.daemonAnswers,
     sandboxIdOf: async () => `sb-1`,
 }));
+// The platform's half of the email road (and the owner ticket's): what it mints is whatever a test says.
+const identityAssertion = jest.fn<(input: { sandboxId: string }) => Promise<{ assertion: string; expiresAt: string }>>();
+jest.mock("../../lib/useApi", () => ({
+    apiClient: { sandbox: { identityAssertion: (input: { sandboxId: string }) => identityAssertion(input), ownerTicket: jest.fn() } },
+}));
 // A real ref, not a getter, since the module watches the active sandbox to settle a parked mint on a switch.
 jest.mock("../sandbox/useSandbox", () => {
     const activeSandboxId = ref(state.sandboxId);
@@ -84,6 +89,11 @@ jest.mock("../sandbox/useSandbox", () => {
 // module via load(). Dynamic and below the mocks: a static import links useEndpoint to the real useSandbox refs, and
 // a daemon base read off those is undefined, which reads as an unaddressed sandbox.
 await import("./sandboxSession");
+// Shared with every fresh copy of the session module: only that module is loaded afresh, never what it imports.
+const { accountWaysIn } = await import("../auth/signInMethods");
+const { EMAIL_SIGN_IN_OFF, PLATFORM_KEY_UNKNOWN } = await import("@intentic/sandbox-contract");
+const prompts = await import("./signInPrompt");
+const { sandboxSummary } = await import("../../testing/sandboxSummary");
 
 // A minimal Storage stand-in for the node test environment, backed by a Map.
 const stubStorage = (): void => {
@@ -115,6 +125,9 @@ const load = (): Promise<typeof import("./sandboxSession")> => freshImport("./sa
 
 beforeEach(() => {
     stubStorage();
+    // A Google account unless a test says otherwise, as every account was before email sign-in.
+    accountWaysIn.value = undefined;
+    identityAssertion.mockReset().mockResolvedValue({ assertion: `pa1.minted`, expiresAt: new Date(Date.now() + 120_000).toISOString() });
     state.idToken = `id-token`;
     state.cachedIdToken = undefined;
     state.daemonAnswers = true;
@@ -484,7 +497,11 @@ it(`a 428 on the exchange raises the step-up with the proof it took, and the cer
     const { completeSignIn, useSignInPrompt } = await import("./signInPrompt");
     const { prompt } = useSignInPrompt();
     const pending = useSandboxSession().getSessionToken();
-    await waitFor(() => expect(prompt.value).toMatchObject({ kind: `step-up`, enrolled: true, bearer: `id-token` }));
+    await waitFor(() => expect(prompt.value?.kind).toBe(`step-up`));
+    const raised = prompt.value?.kind === `step-up` ? prompt.value : undefined;
+    expect(raised?.enrolled).toBe(true);
+    // The proof it took, asked for again by each call of the ceremony.
+    expect(await raised?.bearer()).toBe(`id-token`);
     completeSignIn(PASSKEY_SESSION);
     expect(await pending).toEqual({ token: `sess-passkey`, kind: `session` });
     expect(JSON.parse(localStorage.getItem(`intentic.session.sb-1`) ?? ``)).toMatchObject({ token: `sess-passkey`, email: `o@x.com` });
@@ -646,4 +663,176 @@ it(`a background establishment retired mid-exchange holds no cooldown for the ne
     await waitFor(() => expect(signals).toHaveLength(2));
     answers[1]!(sessionResponse(`sess-sb2`));
     await expect(second).resolves.toEqual({ token: `sess-sb2`, kind: `session` });
+});
+
+/* THE EMAIL ROAD: an account that signs in by email code, the platform's identity assertion, the daemon's refusals. */
+
+// What one daemon answers: its /health (listing proofs or not) and each /system/session in turn.
+const daemonAnswering = (options: { readonly proofs?: readonly string[]; readonly sessions: readonly (() => Response)[] }) => {
+    let exchanged = 0;
+    return jest.fn(async (url: string, _init?: RequestInit) => {
+        if (url.endsWith(`/health`)) {
+            const signIn = options.proofs === undefined ? {} : { signIn: { proofs: options.proofs } };
+            return new Response(JSON.stringify({ ok: true, sandboxId: `sb-1`, ...signIn }), { status: 200 });
+        }
+        const answer = options.sessions[Math.min(exchanged, options.sessions.length - 1)]!;
+        exchanged += 1;
+        return answer();
+    });
+};
+const refusal = (status: number, reason: string) => (): Response => new Response(JSON.stringify({ error: `refused`, reason }), { status });
+const exchanges = (fetchMock: ReturnType<typeof daemonAnswering>) => fetchMock.mock.calls.filter(([url]) => url.endsWith(`/system/session`));
+const EMAIL_ONLY = { email: `ana@corp.example`, methods: [`email` as const] };
+
+it(`spends the platform's assertion for an account that signs in only by email, and never asks Google`, async () => {
+    accountWaysIn.value = EMAIL_ONLY;
+    const fetchMock = daemonAnswering({ proofs: [`google`, `email`], sessions: [() => sessionResponse()] });
+    stubGlobal(`fetch`, fetchMock);
+    const { useSandboxSession } = await load();
+    const { getSessionToken, passkeyNudge } = useSandboxSession();
+
+    expect(await getSessionToken()).toEqual({ token: `sess-minted`, kind: `session` });
+    expect(identityAssertion).toHaveBeenCalledWith({ sandboxId: `sb-1` });
+    // Spent at once on the session route, beside the owner's connect token as a Google proof would be.
+    expect(exchanges(fetchMock)[0]?.[1]?.headers).toMatchObject({ authorization: `Bearer pa1.minted`, "x-intentic-connect": `connect` });
+    expect({ minted: state.minted, nudge: passkeyNudge.value }).toEqual({ minted: 0, nudge: `sb-1` });
+});
+
+it(`never asks the platform for an assertion in the background`, async () => {
+    accountWaysIn.value = EMAIL_ONLY;
+    const fetchMock = daemonAnswering({ proofs: [`email`], sessions: [() => sessionResponse()] });
+    stubGlobal(`fetch`, fetchMock);
+    const { useSandboxSession } = await load();
+
+    expect(await useSandboxSession().getSessionToken(undefined, { background: true })).toBeUndefined();
+    expect({ asked: identityAssertion.mock.calls.length, fetched: fetchMock.mock.calls.length }).toEqual({ asked: 0, fetched: 0 });
+});
+
+// Only the owner can opt a person in, so the refusal is the no-access gate's to say (SandboxUnauthorized.vue), and the
+// liveness loop's retries are not each a mint and an exchange.
+it(`says a refusal only the owner can lift by name, and holds the next attempt back rather than asking again`, async () => {
+    accountWaysIn.value = EMAIL_ONLY;
+    const fetchMock = daemonAnswering({ proofs: [`email`], sessions: [refusal(403, EMAIL_SIGN_IN_OFF)] });
+    stubGlobal(`fetch`, fetchMock);
+    const { useSandboxSession, SandboxSessionError } = await load();
+    const { getSessionToken, emailRefusal } = useSandboxSession();
+
+    const first = await getSessionToken().catch((error: unknown) => error);
+    expect(first).toBeInstanceOf(SandboxSessionError);
+    expect(first).toMatchObject({ status: 403, reason: EMAIL_SIGN_IN_OFF });
+    expect(emailRefusal.value).toBe(EMAIL_SIGN_IN_OFF);
+
+    await expect(getSessionToken()).rejects.toMatchObject({ status: 403, reason: EMAIL_SIGN_IN_OFF });
+    expect({ asked: identityAssertion.mock.calls.length, exchanged: exchanges(fetchMock).length, minted: state.minted }).toEqual({
+        asked: 1,
+        exchanged: 1,
+        minted: 0,
+    });
+});
+
+it(`asks again at once once the reader retries past the hold`, async () => {
+    accountWaysIn.value = EMAIL_ONLY;
+    const fetchMock = daemonAnswering({ proofs: [`email`], sessions: [refusal(403, EMAIL_SIGN_IN_OFF), () => sessionResponse()] });
+    stubGlobal(`fetch`, fetchMock);
+    const { useSandboxSession } = await load();
+    const { getSessionToken, retryEmailSignIn, emailRefusal } = useSandboxSession();
+    await getSessionToken().catch(() => undefined);
+
+    retryEmailSignIn();
+
+    expect(await getSessionToken()).toEqual({ token: `sess-minted`, kind: `session` });
+    expect({ asked: identityAssertion.mock.calls.length, refusal: emailRefusal.value }).toEqual({ asked: 2, refusal: undefined });
+});
+
+// app-plane.md: an older path is never taken silently. The account has no Google sign-in, so Google's prompt would sign
+// in somebody else; the wall names the gap and offers the passkey instead.
+it(`puts up the wall naming the gap on a daemon from before email sign-in, with no Google prompt`, async () => {
+    accountWaysIn.value = EMAIL_ONLY;
+    const fetchMock = daemonAnswering({ sessions: [() => sessionResponse()] });
+    stubGlobal(`fetch`, fetchMock);
+    const { useSandboxSession } = await load();
+    const pending = useSandboxSession().getSessionToken();
+
+    await waitFor(() => expect(prompts.useSignInPrompt().prompt.value?.kind).toBe(`choose`));
+    expect(prompts.useSignInPrompt().prompt.value).toMatchObject({ withoutGoogle: true, email: { kind: `outdated`, address: `ana@corp.example` } });
+    prompts.dismissSignIn();
+
+    await expect(pending).resolves.toBeUndefined();
+    expect({ asked: identityAssertion.mock.calls.length, exchanged: exchanges(fetchMock).length, minted: state.minted }).toEqual({
+        asked: 0,
+        exchanged: 0,
+        minted: 0,
+    });
+});
+
+it(`names a key the daemon has not learned yet on the wall, and its "Continue as" tries again`, async () => {
+    accountWaysIn.value = EMAIL_ONLY;
+    const fetchMock = daemonAnswering({ proofs: [`email`], sessions: [refusal(401, PLATFORM_KEY_UNKNOWN), () => sessionResponse(`sess-retried`)] });
+    stubGlobal(`fetch`, fetchMock);
+    const { useSandboxSession } = await load();
+    const pending = useSandboxSession().getSessionToken();
+
+    await waitFor(() => expect(prompts.useSignInPrompt().prompt.value?.kind).toBe(`choose`));
+    const shown = prompts.useSignInPrompt().prompt.value;
+    expect(shown).toMatchObject({ withoutGoogle: true, email: { kind: `offered`, refusal: PLATFORM_KEY_UNKNOWN } });
+    const road = shown?.kind === `choose` ? shown.email : undefined;
+    const answered = road?.kind === `offered` ? await road.spend() : undefined;
+    expect(answered).toEqual({ session: { token: `sess-retried`, expiresAt: expect.any(Number), email: `o@x.com` } });
+    if (answered !== undefined && `session` in answered) {
+        prompts.useSignInPrompt().completeSignIn(answered.session);
+    }
+
+    await expect(pending).resolves.toEqual({ token: `sess-retried`, kind: `session` });
+    expect({ asked: identityAssertion.mock.calls.length, minted: state.minted }).toEqual({ asked: 2, minted: 0 });
+});
+
+// An account that also signs in with Google has that road: a sandbox that has not opted it in by email falls back to
+// Google's own prompt, with the email row still on the wall saying why it did not open.
+it(`falls back to Google for an account that has it when the sandbox has not opted it in by email`, async () => {
+    accountWaysIn.value = { email: `ana@corp.example`, methods: [`google`, `email`] };
+    const fetchMock = daemonAnswering({ proofs: [`google`, `email`], sessions: [refusal(403, EMAIL_SIGN_IN_OFF), () => sessionResponse(`sess-google`)] });
+    stubGlobal(`fetch`, fetchMock);
+    state.mintParks = true;
+    const { useSandboxSession } = await load();
+    const pending = useSandboxSession().getSessionToken();
+
+    await waitFor(() => expect(prompts.useSignInPrompt().prompt.value?.kind).toBe(`choose`));
+    expect(prompts.useSignInPrompt().prompt.value).toMatchObject({ email: { kind: `offered`, refusal: EMAIL_SIGN_IN_OFF } });
+    expect(prompts.useSignInPrompt().prompt.value).not.toHaveProperty(`withoutGoogle`, true);
+    expect(state.minted).toBe(1);
+    prompts.dismissSignIn();
+    state.releaseMint();
+    await expect(pending).resolves.toBeUndefined();
+});
+
+// Account deletion with no session on file: the assertion opens one, and the removal goes out under it.
+it(`retires an email account's access through a session the assertion opens`, async () => {
+    accountWaysIn.value = EMAIL_ONLY;
+    const fetchMock = jest.fn(async (url: string, _init?: RequestInit) =>
+        url.endsWith(`/system/session`) ? sessionResponse(`sess-for-removal`) : new Response(`{}`, { status: 200 }),
+    );
+    stubGlobal(`fetch`, fetchMock);
+    const { useSandboxSession } = await load();
+    const sandbox = sandboxSummary({ id: `sb-9`, name: `notes`, role: `collaborator`, daemonUrl: `https://notes.test/`, token: null });
+
+    await useSandboxSession().retireAccountAccess([sandbox]);
+
+    expect(identityAssertion).toHaveBeenCalledWith({ sandboxId: `sb-9` });
+    const removal = fetchMock.mock.calls.find(([url]) => String(url).endsWith(`/members/self`));
+    expect(removal?.[1]?.headers).toMatchObject({ authorization: `Bearer sess-for-removal` });
+    expect(state.minted).toBe(0);
+});
+
+// The wall an account with no Google sign-in is shown has no Google mint for a switch to cancel: the prompt itself goes.
+it(`a switch away takes down the wall left for an email account on the sandbox being left`, async () => {
+    accountWaysIn.value = EMAIL_ONLY;
+    stubGlobal(`fetch`, daemonAnswering({ sessions: [() => sessionResponse()] }));
+    const { useSandboxSession } = await load();
+    const pending = useSandboxSession().getSessionToken();
+    await waitFor(() => expect(prompts.useSignInPrompt().prompt.value?.kind).toBe(`choose`));
+
+    state.select(`sb-2`);
+
+    await expect(pending).resolves.toBeUndefined();
+    expect(prompts.useSignInPrompt().prompt.value).toBeUndefined();
 });

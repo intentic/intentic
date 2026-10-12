@@ -1,5 +1,5 @@
 import type { User } from "@intentic/api-contract";
-import { type Ref, readonly, ref } from "vue";
+import { computed, type Ref, ref } from "vue";
 import { reloadOnHotUpdate } from "../../app/hotReload";
 import { localFace } from "../../app/environments/local";
 import { localHost } from "../../app/environments/localHost";
@@ -70,7 +70,9 @@ const startLocal = (): Promise<void> =>
     })());
 
 const localAccount: Account = {
-    user: readonly(localUser),
+    // A read-only view of the one ref this module writes: computed rather than `readonly`, whose deep conversion makes
+    // the account's list of sign-in methods a type the Account's own field does not take.
+    user: computed(() => localUser.value),
     refresh: askPlatform,
     updateProfile: async (change) => {
         await localHost().updateAccount(change);

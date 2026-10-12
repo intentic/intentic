@@ -12,13 +12,25 @@ export * from "./ingress/index.js";
 
 // ---- platform-native shapes. A daemon wire shape is imported from @intentic/sandbox-contract, never through here ----
 
+// How an account can prove its address: a Google sign-in, or a code mailed to it. An account holds one or both, and
+// the editor picks the proof it spends on a daemon from this (an identity assertion only for an `email` account).
+export const SignInMethodSchema = z.enum(["google", "email"]);
+export type SignInMethod = z.infer<typeof SignInMethodSchema>;
+
 export const UserSchema = z.object({
     id: z.string(),
     email: z.email(),
     name: z.string(),
     image: z.string().nullable(),
+    // Absent from a platform from before email sign-in, where every account is a Google one.
+    signInMethods: z.array(SignInMethodSchema).optional(),
 });
 export type User = z.infer<typeof UserSchema>;
+
+// What this platform lets a person sign in with, read by the login page before anyone has. `email` is off on a platform
+// that cannot send mail.
+export const SignInOptionsSchema = z.object({ google: z.boolean(), email: z.boolean() });
+export type SignInOptions = z.infer<typeof SignInOptionsSchema>;
 
 // The caller's hosted-plan billing state; `enabled: false` means the page doesn't exist at all.
 // `cancelAtPeriodEnd` turns "renews" into "ends": a cancel leaves `status` active until the period runs out.
@@ -248,8 +260,16 @@ export const HostedOfferSchema = z.object({
     // before hosted projects, which would drop that field unread, so the editor keeps a project on the reader's own
     // computer there.
     projects: z.boolean().optional(),
+    // True when this account signs in only by email and holds no free paid slot: a free machine, the trial and Repair
+    // need a Google sign-in linked to the account first (api sandbox/hosted/free-lane.ts), so the editor offers linking
+    // Google, buying a machine, or running the sandbox on the reader's own computer. `remaining` is 0 with it.
+    needsGoogle: z.boolean().optional(),
 });
 export type HostedOffer = z.infer<typeof HostedOfferSchema>;
+
+// The `data.reason` a refusal carries when the free hosted lane (or the trial, or Repair) needs a Google sign-in linked to
+// an account that signs in only by email.
+export const GOOGLE_REQUIRED_REASON = "google-required";
 
 // Whether this platform can give a sandbox its own address, the tunnel fabric behind `setupCode`.
 // A platform with none mints no codes; the wizard must say so before drawing the pasted-command lane.
@@ -264,6 +284,17 @@ export const MintedOwnerTicketSchema = z.object({
     expiresAt: z.string(),
 });
 export type MintedOwnerTicket = z.infer<typeof MintedOwnerTicketSchema>;
+
+// The platform's signed word that the caller controls their address, for one sandbox they own or were invited to
+// (sandbox-contract policy/identity-assertion.ts). The editor asks for one for an account that signs in by email; the
+// daemon decides whether it opens anything (the person's opt-in on a sandbox on its owner's machine, the roster
+// everywhere).
+export const MintedIdentityAssertionSchema = z.object({
+    assertion: z.string(),
+    // ISO, the moment it stops verifying; the browser spends it at once and never stores it.
+    expiresAt: z.string(),
+});
+export type MintedIdentityAssertion = z.infer<typeof MintedIdentityAssertionSchema>;
 export type AddressOffer = z.infer<typeof AddressOfferSchema>;
 
 // What the registry holds of a sandbox named by its 12-hex id (the `sandboxId` its daemon's /health reports), for the
@@ -767,7 +798,7 @@ export const AdminUserDetailSchema = z.object({
             userAgent: z.string().nullable(),
         }),
     ),
-    // Auth providers on the account ("google", …).
+    // Auth providers on the account ("google", …), and "email" for one that signs in with a mailed code.
     providers: z.array(z.string()),
     plan: z.object({ status: z.string(), currentPeriodEnd: z.iso.datetime() }).nullable(),
     trialDays: z.array(z.object({ day: z.string(), messages: z.number(), lastModel: z.string().nullable() })),

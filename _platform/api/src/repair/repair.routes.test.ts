@@ -1,3 +1,4 @@
+import { GOOGLE_REQUIRED_REASON } from "@intentic/api-contract";
 import type { PrismaClient } from "@intentic/prisma";
 import type { Logger } from "pino";
 import { Hono } from "hono";
@@ -33,13 +34,14 @@ const authAs = (signedIn: boolean): Auth =>
         },
     }) as unknown as Auth;
 
-const fakePrisma = (turnsAfterSpend: number) => {
+// `googleAccounts`: Repair is a free lane, open only to an account with Google linked to it (free-lane.ts).
+const fakePrisma = (turnsAfterSpend: number, googleAccounts = 1) => {
     const repairUsage = {
         findUnique: jest.fn(async () => (turnsAfterSpend === 0 ? null : { turns: turnsAfterSpend })),
         upsert: jest.fn(async () => ({ turns: turnsAfterSpend })),
         update: jest.fn(async () => ({ turns: turnsAfterSpend - 1 })),
     };
-    return { prisma: { repairUsage } as unknown as PrismaClient, repairUsage };
+    return { prisma: { repairUsage, account: { count: jest.fn(async () => googleAccounts) } } as unknown as PrismaClient, repairUsage };
 };
 
 const serve = (options: {
@@ -87,6 +89,18 @@ describe(`Repair turn`, () => {
             tool_calls: [{ id: `c1`, type: `function`, function: { name: `doctor`, arguments: `{}` } }],
         });
         expect(openAi[3]).toEqual({ role: `tool`, tool_call_id: `c1`, content: `ok` });
+    });
+
+    it(`is closed to an account with no Google sign-in linked, spending no turn and saying why`, async () => {
+        const { prisma, repairUsage } = fakePrisma(1, 0);
+        const response = await serve({ prisma }).request(`/api/repair/turn`, {
+            method: `POST`,
+            headers: { "content-type": `application/json` },
+            body: JSON.stringify({ messages: [{ role: `user`, content: `help` }] }),
+        });
+        expect(response.status).toBe(403);
+        expect(await response.json()).toEqual({ error: `Repair needs a Google sign-in linked to this account: link Google in Settings`, reason: GOOGLE_REQUIRED_REASON });
+        expect(repairUsage.upsert).not.toHaveBeenCalled();
     });
 
     it(`rejects a system role in the client transcript`, async () => {

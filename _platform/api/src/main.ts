@@ -18,6 +18,7 @@ import { startHostedPool } from "./sandbox/hosted/hosted-pool.js";
 import { startSetupFailureMail } from "./sandbox/setup-failure-email.js";
 import { bootIdentityOf, watchPlatformIdentity } from "./sandbox/recovery.js";
 import { startRetention } from "./retention.js";
+import { emailSignInEnabled } from "./sign-in.js";
 import { startTracing } from "./tracing.js";
 
 // OTEL_* vars come from the environment; dev scripts pass --env-file so the root .env populates them under Bun.
@@ -35,6 +36,12 @@ if (!config.secrets.key) {
 }
 if (!config.email.apiKey || !config.email.from) {
     logger.warn(`EMAIL_API_KEY/EMAIL_FROM unset: invite links and setup-failure mails will be logged instead of emailed`);
+}
+// Email sign-in says which way it went at boot, since the login page simply leaves the option out when it is off.
+if (config.signIn.email && !emailSignInEnabled(config)) {
+    logger.warn(`SIGN_IN_EMAIL is on but EMAIL_API_KEY/EMAIL_FROM are unset: email sign-in is off until mail can be sent`);
+} else if (emailSignInEnabled(config) && !config.identity.signingKey) {
+    logger.warn(`IDENTITY_SIGNING_KEY unset: email accounts can sign in here, but only a hosted sandbox's owner can be let into a sandbox`);
 }
 // A plan on sale with no webhook secret would take payment and refuse activation for every buyer via a 400.
 if (hostedPlanEnabled(config) && !config.hostedPlan.stripeWebhookSecret) {

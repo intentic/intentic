@@ -1,9 +1,11 @@
+import { GOOGLE_REQUIRED_REASON } from "@intentic/api-contract";
 import { Hono } from "hono";
 import type { Logger } from "pino";
 import type { PrismaClient } from "@intentic/prisma";
 import type { Auth } from "../auth.js";
 import { buildOrpcContext } from "../context.js";
 import type { Config } from "../config.js";
+import { freeLaneOpen } from "../sandbox/hosted/free-lane.js";
 import { createTrialLadder } from "../trial/trial-ladder.js";
 import { createTrialPool, poolRefused, type Fetcher,listed } from "../trial/trial-pool.js";
 import { asOpenAiMessages, repairToolDefinitions, repairTurnBodySchema } from "./repair-turn-schema.js";
@@ -59,6 +61,10 @@ export const repairRoutes = ({ config, prisma, auth, fetchFn = fetch, now = () =
         const user = context.user;
         if (user === null) {
             return c.json({ error: `sign in to use Repair` }, 401);
+        }
+        // A free lane, like the trial: an account that signs in only by email reaches it once Google is linked to it.
+        if (!(await freeLaneOpen(prisma, user.id))) {
+            return c.json({ error: `Repair needs a Google sign-in linked to this account: link Google in Settings`, reason: GOOGLE_REQUIRED_REASON }, 403);
         }
         let rawBody: unknown;
         try {

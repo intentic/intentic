@@ -5,6 +5,7 @@
 import "@intentic/testing/dom";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
+import { installI18n } from "@intentic/ui/i18n";
 
 // Needs jsdom: ui reads matchMedia at module scope, and environment.ts reads window.env and throws without it.
 
@@ -13,12 +14,17 @@ const getIdToken = jest.fn<(options?: { pick?: boolean }) => Promise<string | un
 jest.mock(`../../../client/auth/useGoogleIdentity`, () => ({
     useGoogleIdentity: () => ({ clearCredential, getIdToken: (options?: { pick?: boolean }) => getIdToken(options) }),
 }));
-jest.mock(`../../../client/auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
+// A Google account unless a test says it signs in by email code alone.
+const user = ref<{ email: string; signInMethods?: (`google` | `email`)[] }>({ email: `owner@example.com` });
+jest.mock(`../../../client/auth/useAuth`, () => ({ useAuth: () => ({ user }) }));
 
 const invalidateSession = jest.fn();
 const getSessionToken = jest.fn<() => Promise<unknown>>();
+// Why the sandbox last refused an email sign-in; nothing unless a test says so.
+const emailRefusal = ref<string | undefined>(undefined);
+const retryEmailSignIn = jest.fn();
 jest.mock(`../../../client/session/sandboxSession`, () => ({
-    useSandboxSession: () => ({ presentedEmail: ref(`someone.else@example.com`), invalidateSession, getSessionToken }),
+    useSandboxSession: () => ({ presentedEmail: ref(`someone.else@example.com`), invalidateSession, getSessionToken, emailRefusal, retryEmailSignIn }),
 }));
 jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ active: ref({ name: `workspace`, role: `owner` }) }) }));
 
@@ -39,6 +45,8 @@ const mount = async (): Promise<HTMLElement> => {
     document.body.append(el);
     app = createApp({ render: () => h(SandboxUnauthorized) });
     app.component(`Icon`, IconStub);
+    // The gate's sentences slot the addresses in (`<i18n-t>`), which the plugin registers.
+    installI18n(app);
     app.mount(el);
     await nextTick();
     return el;
@@ -51,6 +59,9 @@ const press = async (el: HTMLElement): Promise<void> => {
 };
 
 beforeEach(() => {
+    user.value = { email: `owner@example.com` };
+    emailRefusal.value = undefined;
+    retryEmailSignIn.mockReset();
     clearCredential.mockReset();
     invalidateSession.mockReset();
     getSessionToken.mockReset().mockResolvedValue(undefined);
@@ -95,4 +106,40 @@ it(`hands the app's own window straight to the browser, asking for the chooser t
     // No Google mint in this window: it cannot ask, and the gate it used to raise was a second dialog on one road.
     expect(getIdToken).not.toHaveBeenCalled();
     expect(signInThroughBrowser).toHaveBeenCalledWith({ pickAccount: true });
+});
+
+// Two Google accounts: the one the daemon saw and the account's own, both named, in one sentence of the catalog's.
+it(`names both addresses when the daemon saw another Google account`, async () => {
+    const el = await mount();
+
+    expect(el.textContent).toContain(
+        `You're signed into Google as someone.else@example.com, but your intentic account is owner@example.com. Sign in with owner@example.com to open this sandbox.`,
+    );
+});
+
+// The sandbox took the platform's word for the address and still said no: only its owner can opt a person in, and a
+// Google chooser would be the wrong road for an account that may have no Google sign-in at all.
+describe(`a sandbox that has not opted this person in to email sign-in`, () => {
+    beforeEach(() => {
+        emailRefusal.value = `email-sign-in-off`;
+        user.value = { email: `ana@corp.example`, signInMethods: [`email`] };
+    });
+
+    it(`says so, and who can change it`, async () => {
+        const el = await mount();
+
+        expect(el.textContent).toContain(`ana@corp.example isn't set up to sign in to this sandbox with an email code. Ask its owner to turn email sign-in on for you`);
+        expect(el.textContent).not.toContain(`Switch Google account`);
+    });
+
+    it(`asks again at once on a press, past the pause the refusal put on new attempts`, async () => {
+        const el = await mount();
+
+        await press(el);
+
+        expect(retryEmailSignIn).toHaveBeenCalledTimes(1);
+        expect(invalidateSession).toHaveBeenCalledTimes(1);
+        expect(getSessionToken).toHaveBeenCalledTimes(1);
+        expect(getIdToken).not.toHaveBeenCalled();
+    });
 });

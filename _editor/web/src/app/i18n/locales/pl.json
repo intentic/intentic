@@ -850,7 +850,8 @@
             "linkMissingValue": "W tym linku brakuje wartości, która wiąże go z Twoją aplikacją: otwórz Intentic i zaloguj się stamtąd.",
             "needsGoogleSignIn": "Intentic potrzebuje Twojego logowania Google, żeby dostać się do Twojego sandboxa.",
             "couldntFinishInApp": "Nie udało się dokończyć logowania do aplikacji.",
-            "couldntSignInAs": "Nie udało się zalogować do Intentic jako {email}."
+            "couldntSignInAs": "Nie udało się zalogować do Intentic jako {email}.",
+            "useEmailCode": "Nie masz konta Google? Zaloguj się kodem z e-maila."
         },
         "desktopAuthComplete": {
             "backToSignIn": "Wróć do logowania",
@@ -874,14 +875,17 @@
             "stepSandboxWaiting": "Twój sandbox czeka",
             "stepPasteCommand": "Wklej jedno polecenie",
             "stepInstallApp": "Zainstaluj aplikację",
-            "signInDidntFinish": "Nie udało się dokończyć tego logowania. Zamiast tego kontynuuj przez Google poniżej."
+            "signInDidntFinish": "Nie udało się dokończyć tego logowania. Zamiast tego kontynuuj przez Google poniżej.",
+            "stepSignInAnyWay": "Zaloguj się przez Google lub e-mail",
+            "or": "lub"
         },
         "useAuth": {
             "accountDeletionFailed": "Usunięcie konta nie powiodło się.",
             "googleRefused": "Logowanie przez Google zostało odrzucone.",
             "profileUpdateFailed": "Aktualizacja profilu nie powiodła się.",
             "sessionCheckFailed": "Nie udało się sprawdzić Twojej sesji.",
-            "signOutFailed": "Wylogowanie nie powiodło się."
+            "signOutFailed": "Wylogowanie nie powiodło się.",
+            "linkGoogleFailed": "Nie udało się połączyć konta Google."
         },
         "useGoogleIdentity": {
             "loadFailed": "Nie udało się wczytać usług Google Identity"
@@ -897,6 +901,38 @@
             "googleAnswerRefused": "Google odpowiedział, ale logowaniem, które ten komputer uznaje za już wygasłe: jego zegar może być źle ustawiony. Kontynuuj na stronie Google.",
             "continueGoogleInBrowser": "Kontynuuj przez Google w przeglądarce",
             "continueGoogle": "Kontynuuj przez Google"
+        },
+        "emailCode": {
+            "rateLimited": "Za dużo próśb o kod naraz. Odczekaj minutę i spróbuj ponownie.",
+            "invalid": "To nie jest kod, który wysłaliśmy. Sprawdź najnowszą wiadomość od intentic albo wyślij nowy kod.",
+            "expired": "Ten kod już wygasł. Wyślij nowy.",
+            "tooManyAttempts": "Zbyt wiele błędnych prób z tym kodem. Wyślij nowy.",
+            "sendFailed": "Nie udało się wysłać kodu.",
+            "signInFailed": "Nie udało się zalogować tym kodem."
+        },
+        "emailSignIn": {
+            "addressLabel": "Adres e-mail",
+            "addressPlaceholder": "ty{'@'}example.com",
+            "googleFaster": "To adres Google: Kontynuuj z Google będzie szybsze. Kod też zadziała.",
+            "continueWithEmail": "Kontynuuj przez e-mail",
+            "emailMeCode": "Wyślij mi kod logowania",
+            "sentTo": "Wysłaliśmy 6-cyfrowy kod na adres {email}.",
+            "typeItHereInApp": "Wpisz go tutaj. Link w wiadomości otwiera przeglądarkę, nie tę aplikację.",
+            "typeItOrOpenLink": "Wpisz go tutaj albo otwórz link z wiadomości na tym urządzeniu.",
+            "codeLabel": "Kod logowania",
+            "useDifferentAddress": "Użyj innego adresu",
+            "sendAgainIn": "Wyślij ponownie za {seconds} s",
+            "sendAgain": "Wyślij ponownie",
+            "usedLinkElsewhere": "Użyto linku na innym urządzeniu? Tam jesteś już zalogowany.",
+            "sendNewCode": "Wyślij nowy kod"
+        },
+        "loginConfirm": {
+            "title": "Potwierdź logowanie",
+            "signInAs": "Zalogować się do intentic jako {email}?",
+            "confirm": "Potwierdź i zaloguj się",
+            "notYou": "To nie ty prosiłeś o kod? Zamknij tę stronę: bez naciśnięcia przycisku nic się nie stanie.",
+            "linkDidntSignIn": "Ten link cię nie zalogował.",
+            "linkIncomplete": "Ten link logowania jest niekompletny. Poproś o nowy kod na stronie logowania."
         }
     },
     "browsers": {
@@ -4248,7 +4284,8 @@
             "setup": "Konfiguracja",
             "signInToIntentic": "Zaloguj się do Intentic",
             "signingIn": "Logowanie…",
-            "reconnectSandboxes": "Połącz ponownie swoje sandboxy"
+            "reconnectSandboxes": "Połącz ponownie swoje sandboxy",
+            "confirmSignIn": "Potwierdź logowanie"
         }
     },
     "sandbox": {
@@ -6142,7 +6179,13 @@
             "changingRoleOf": "Zmiana roli {email}",
             "revokingWhom": "Odbieranie dostępu {email}",
             "signingOthersOut": "Wylogowywanie innych przeglądarek",
-            "youFallback": "Ty"
+            "youFallback": "Ty",
+            "inviteEmailSignIn": "Może logować się kodem z e-maila (intentic potwierdza adres)",
+            "emailSignInFor": "Logowanie kodem z e-maila dla {email}",
+            "emailSignInSwitch": "Logowanie kodem",
+            "emailSignInSwitchNote": "intentic potwierdza ich adres",
+            "changingEmailSignInOf": "Zmiana sposobu logowania {email}",
+            "couldntChangeEmailSignIn": "Nie udało się zmienić logowania kodem z e-maila."
         },
         "sandboxAgent": {
             "agentSettingsCategory": "Kategoria ustawień agenta",
@@ -6473,12 +6516,11 @@
             "syncFilesHere": "Synchronizuj pliki tutaj"
         },
         "sandboxUnauthorized": {
-            "intenticAccount": ", ale Twoje konto intentic to",
             "noAccessTo": "Brak dostępu do „{name}”",
-            "sandboxBelongsToAnother": "Ten sandbox należy do innego konta i nie udostępnił dostępu",
             "switchGoogleAccount": "Przełącz konto Google",
-            "toOpenSandbox": "żeby otworzyć ten sandbox.",
-            "youreSignedIntoGoogle": "Jesteś zalogowany do Google jako"
+            "emailSignInOff": "{email} nie może jeszcze logować się do tego sandboxa kodem z e-maila. Poproś właściciela, żeby włączył ci logowanie przez e-mail: ten ekran zniknie sam, gdy to zrobi.",
+            "wrongGoogleAccount": "Jesteś zalogowany do Google jako {presented}, ale Twoje konto intentic to {account}. Zaloguj się jako {account}, żeby otworzyć ten sandbox.",
+            "notShared": "Ten sandbox należy do innego konta i nie udostępnił dostępu {presented}. Poproś właściciela o dostęp: ten ekran zniknie sam, gdy go dostaniesz."
         },
         "sandboxUpdateCard": {
             "againstHost": "wobec jego hosta.",
@@ -6650,7 +6692,12 @@
             "useIntenticAccount": "Zaloguj się jako",
             "usePasskey": "Użyj swojego klucza dostępu",
             "usePasskey2": "Użyj klucza dostępu",
-            "windowCantUsePasskeys": "To okno nie obsługuje kluczy dostępu. Otwórz sandbox w przeglądarce."
+            "windowCantUsePasskeys": "To okno nie obsługuje kluczy dostępu. Otwórz sandbox w przeglądarce.",
+            "emailNeedsUpdate": "Ten sandbox wymaga aktualizacji, zanim przyjmie logowanie przez e-mail. Poproś właściciela o aktualizację.",
+            "emailNeedsUpdateOwner": "Ten sandbox wymaga aktualizacji, zanim przyjmie logowanie przez e-mail. Zaktualizuj go na maszynie, na której działa, albo użyj klucza dostępu.",
+            "emailSignInIncomplete": "Logowanie przez e-mail nie zostało dokończone.",
+            "intenticConfirmsAddress": "intentic potwierdza sandboxowi twój adres, więc nie trzeba niczego więcej.",
+            "continueAsEmail": "Kontynuuj jako {email}"
         },
         "skillForm": {
             "addSkill": "Dodaj umiejętność",
@@ -7273,7 +7320,9 @@
             "answering": "Odpowiada",
             "silent": "Nie odpowiada",
             "open": "Otwórz",
-            "signInFirst": "Zaloguj się przez Google, aby go otworzyć."
+            "whoIsOpening": "To urządzenie nie pamięta twojego konta. Zaloguj się, żeby otworzyć {name}:",
+            "passkeyNote": "Klucz dostępu zadziała tylko wtedy, gdy wcześniej dodano go do tego sandboxa.",
+            "signInToOpen": "Zaloguj się przez Google lub kluczem dostępu, aby go otworzyć."
         },
         "autoUpdate": {
             "switchTitle": "Aktualizuj automatycznie",
@@ -7339,7 +7388,12 @@
             "googleRejected": "Sandbox odrzucił Twoje logowanie przez Google.",
             "invalidSession": "Sandbox zwrócił nieprawidłową sesję.",
             "signInTimeout": "Sandbox nie dokończył logowania w ciągu 10 sekund.",
-            "unknownSandbox": "Nieznany sandbox"
+            "unknownSandbox": "Nieznany sandbox",
+            "emailSignInOff": "Właściciel tego sandboxa nie pozwolił ci logować się do niego kodem z e-maila. Poproś go, żeby to dla ciebie włączył.",
+            "platformKeyUnknown": "Ten sandbox nie połączył się jeszcze z intentic, więc nie może sprawdzić logowania przez e-mail. Spróbuj ponownie za minutę.",
+            "assertionRejected": "Sandbox nie przyjął potwierdzenia twojego adresu od intentic.",
+            "assertionUnavailable": "intentic nie może teraz potwierdzić twojego adresu temu sandboxowi. Spróbuj ponownie za chwilę.",
+            "passkeyFirst": "Ten sandbox otwiera się tylko kluczem dostępu. Najpierw otwórz go i potwierdź swoim kluczem."
         },
         "passkeySignIn": {
             "noneCreated": "Nie utworzono klucza dostępu.",
@@ -7952,7 +8006,14 @@
             "notAnImage": "Nie udało się odczytać tego pliku jako obrazu.",
             "profile": "Profil",
             "renameDisplayName": "Zmień nazwę wyświetlaną",
-            "updateFailed": "Aktualizacja profilu nie powiodła się."
+            "updateFailed": "Aktualizacja profilu nie powiodła się.",
+            "signIn": "Logowanie",
+            "emailCode": "Kod z e-maila",
+            "emailCodeDetail": "intentic wysyła kod na adres {email} przy każdym logowaniu.",
+            "google": "Google",
+            "googleLinked": "Połączone: możesz logować się także przez Google.",
+            "googleNotLinked": "Niepołączone. Darmowa maszyna hostowana i okres próbny wymagają logowania Google na twoim koncie.",
+            "linkGoogle": "Połącz konto Google"
         },
         "settingsTokens": {
             "labelEGStorefrontSandbox": "Etykieta (np. piaskownica sklepu)",
@@ -7995,7 +8056,8 @@
             "openSandbox": "Otwórz sandbox",
             "wrongAccount": "Niewłaściwe konto",
             "youreAllSet": "Wszystko gotowe",
-            "youreInvited": "Masz zaproszenie"
+            "youreInvited": "Masz zaproszenie",
+            "invitedToOpenSandboxAs": "Masz zaproszenie do otwarcia sandboxa {sandbox}. Zaloguj się jako {email}, żeby kontynuować."
         },
         "desktopSetupProgress": {
             "answer": "Odpowiedz",
@@ -8195,7 +8257,12 @@
             "webOriginMustName": "{variable} demona musi też wskazywać {origin}. Inaczej przeglądarka zablokuje wywołanie, zanim zostanie wysłane.",
             "wellConnectTo": "Połączymy się z",
             "wellNoticeMomentSandbox": "Zauważymy to w chwili, gdy Twój sandbox wystartuje.",
-            "whereSandboxRuns": "Gdzie działa sandbox"
+            "whereSandboxRuns": "Gdzie działa sandbox",
+            "freeMachineNeedsGoogle": "Wymaga logowania Google na twoim koncie",
+            "needsGoogleDetail": "Twoje konto loguje się kodem z e-maila. Darmowa maszyna wymaga najpierw połączenia konta z logowaniem Google; kupiona maszyna albo własny komputer nie wymagają niczego więcej.",
+            "linkGoogle": "Połącz konto Google",
+            "buyMachine": "Kup maszynę",
+            "runOnThisComputer": "Uruchom na własnym komputerze"
         },
         "setupAccount": {
             "signOutFailed": "Nie udało się wylogować. Spróbuj ponownie.",
@@ -8438,7 +8505,11 @@
             "reconnect": "Połącz ponownie",
             "skippedUnreadable": "Pominięto {count} element, którego nie dało się odczytać (dowiązanie symboliczne lub plik specjalny). | Pominięto {count} elementy, których nie dało się odczytać (dowiązania symboliczne lub pliki specjalne). | Pominięto {count} elementów, których nie dało się odczytać (dowiązania symboliczne lub pliki specjalne).",
             "skippedUnchanged": "Pominięto {count} niezmieniony plik. | Pominięto {count} niezmienione pliki. | Pominięto {count} niezmienionych plików.",
-            "uploadedFiles": "Wysłano {count} plik | Wysłano {count} pliki | Wysłano {count} plików"
+            "uploadedFiles": "Wysłano {count} plik | Wysłano {count} pliki | Wysłano {count} plików",
+            "passkeyNudgeTitle": "Dodaj klucz dostępu do tego sandboxa",
+            "passkeyNudgeDetail": "Dodaj klucz dostępu, żeby dostać się do tego sandboxa nawet wtedy, gdy intentic nie działa.",
+            "passkeyNudgeAdd": "Dodaj klucz",
+            "passkeyNudgeLater": "Nie teraz"
         },
         "pushMenuRow": {
             "addToHomeScreen": "Dodaj do ekranu głównego, żeby dostawać powiadomienia",

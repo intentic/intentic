@@ -7,6 +7,7 @@ import { IconStub } from "@intentic/ui/testing";
 import * as actualVueRouter from "vue-router";
 import * as actualDesktop from "../../app/environments/desktop";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
+import { installI18n } from "@intentic/ui/i18n";
 
 // Mounting reads matchMedia (ui) and window.env (environment.ts) at module scope; see Setup.test.ts.
 
@@ -26,9 +27,16 @@ jest.mock(`vue-router`, () => ({
 
 const signInWithGoogle = jest.fn().mockResolvedValue(undefined);
 const signInWithGoogleCredential = jest.fn().mockResolvedValue(undefined);
+// The emailed-code road's two platform calls (useAuth.ts), answered as each test says.
+const sendEmailCode = jest.fn<(email: string) => Promise<void>>().mockResolvedValue(undefined);
+const signInWithEmailCode = jest.fn<(email: string, otp: string) => Promise<void>>().mockResolvedValue(undefined);
 jest.mock(`../../client/auth/useAuth`, () => ({
-    useAuth: () => ({ user: ref(null), signInWithGoogle, signInWithGoogleCredential }),
+    useAuth: () => ({ user: ref(null), signInWithGoogle, signInWithGoogleCredential, sendEmailCode, signInWithEmailCode }),
 }));
+// Which ways in the platform offers: Google alone, as every platform before email sign-in, unless a test says more.
+const GOOGLE_ONLY = { google: true, email: false };
+const readSignInOptions = jest.fn<() => Promise<{ google: boolean; email: boolean }>>();
+jest.mock(`./signInOptions`, () => ({ GOOGLE_ONLY, readSignInOptions: () => readSignInOptions() }));
 
 const getIdToken = jest.fn<(options?: { gate?: boolean }) => Promise<string | undefined>>();
 const renderButton = jest.fn<(parent: HTMLElement) => Promise<boolean>>();
@@ -65,6 +73,8 @@ const mount = async (): Promise<HTMLElement> => {
     document.body.append(el);
     app = createApp({ render: () => h(Login) });
     app.component(`Icon`, IconStub);
+    // The emailed code's "sent to" sentence slots the address in (`<i18n-t>`), which the plugin registers.
+    installI18n(app);
     app.mount(el);
     // The sign-in chain is several awaits deep; a macrotask flush avoids a fixed, fragile tick count.
     await new Promise((resolve) => setTimeout(resolve));
@@ -100,6 +110,9 @@ beforeEach(() => {
     openThisComputer.mockReset();
     refusedCredentials.value = 0;
     track.mockReset();
+    readSignInOptions.mockReset().mockResolvedValue(GOOGLE_ONLY);
+    sendEmailCode.mockReset().mockResolvedValue(undefined);
+    signInWithEmailCode.mockReset().mockResolvedValue(undefined);
     withFedCm();
 });
 
@@ -381,5 +394,105 @@ describe(`in the installed app`, () => {
         expect(el.textContent).not.toContain(`Install the app`);
         expect(el.textContent).not.toContain(`Paste one command`);
         expect(el.textContent).toContain(`Two steps to your first agent`);
+    });
+});
+
+// The second way in, under Google's: one mailed code, typed here. The terms stand before anything is sent, a Google
+// address is pointed at Google without being refused, and the guard's destination holds as it does for Google.
+describe(`with email sign-in offered`, () => {
+    beforeEach(() => {
+        readSignInOptions.mockResolvedValue({ google: true, email: true });
+        // Google's silent answer would sign the page in before the email road is touched.
+        getIdToken.mockReturnValue(new Promise<never>(() => {}));
+    });
+
+    const field = (selector: string): HTMLInputElement | null => document.querySelector<HTMLInputElement>(selector);
+    const button = (label: string): HTMLButtonElement | undefined =>
+        [...document.querySelectorAll(`button`)].find((candidate) => candidate.textContent?.includes(label));
+    const type = async (input: HTMLInputElement | null, value: string): Promise<void> => {
+        if (input === null) {
+            throw new Error(`no field to type into`);
+        }
+        input.value = value;
+        input.dispatchEvent(new Event(`input`));
+        await nextTick();
+    };
+    const settle = async (): Promise<void> => {
+        await new Promise((resolve) => setTimeout(resolve));
+        await nextTick();
+    };
+
+    it(`offers the address beside Google, with the terms on screen and nothing pressable until there is one`, async () => {
+        const el = await mount();
+
+        expect(renderButton).toHaveBeenCalledTimes(1);
+        expect(field(`input[type="email"]`)).toEqual(expect.any(HTMLInputElement));
+        expect(el.textContent).toContain(`By continuing you agree to our`);
+        expect(el.textContent).toContain(`Sign in with Google or email`);
+        expect(button(`Continue with email`)?.disabled).toBe(true);
+    });
+
+    it(`mails the code, names where it went, and signs in on the sixth digit to the page that asked`, async () => {
+        query.value = { returnTo: `/sandbox/usage` };
+        const el = await mount();
+
+        await type(field(`input[type="email"]`), `Ana@Corp.example`);
+        button(`Continue with email`)?.click();
+        await settle();
+
+        expect(sendEmailCode).toHaveBeenCalledWith(`ana@corp.example`);
+        expect(el.textContent).toContain(`We sent a 6-digit code to ana@corp.example.`);
+        expect(el.textContent).toContain(`Send it again in 60s`);
+
+        await type(field(`input[autocomplete="one-time-code"]`), `123 456`);
+        await settle();
+
+        expect(signInWithEmailCode).toHaveBeenCalledWith(`ana@corp.example`, `123456`);
+        expect(push).toHaveBeenCalledWith(`/sandbox/usage`);
+    });
+
+    it(`points a Google address at Google without refusing it`, async () => {
+        const el = await mount();
+
+        await type(field(`input[type="email"]`), [`ana`, `gmail.com`].join(`@`));
+
+        expect(el.textContent).toContain(`Continue with Google is faster`);
+        expect(button(`Continue with email`)?.disabled).toBe(false);
+    });
+
+    it(`asks for a minute's rest when the platform says too many codes were asked for`, async () => {
+        const { EmailCodeError } = await import(`../../client/auth/emailCode`);
+        sendEmailCode.mockRejectedValue(new EmailCodeError(`rate-limited`, `Too many codes asked for at once. Wait a minute, then try again.`));
+        const el = await mount();
+
+        await type(field(`input[type="email"]`), `ana@corp.example`);
+        button(`Continue with email`)?.click();
+        await settle();
+
+        expect(el.textContent).toContain(`Wait a minute, then try again.`);
+        expect(field(`input[autocomplete="one-time-code"]`)).toBeNull();
+    });
+
+    it(`stays away entirely on a platform that does not mail codes`, async () => {
+        readSignInOptions.mockResolvedValue(GOOGLE_ONLY);
+        const el = await mount();
+
+        expect(field(`input[type="email"]`)).toBeNull();
+        expect(el.textContent).toContain(`Sign in with Google`);
+        expect(el.textContent).not.toContain(`Sign in with Google or email`);
+    });
+
+    // The mail's link opens the system browser, not the app's window: the code is typed here, with no hand-off.
+    it(`runs in place inside the installed app, and says to type the code`, async () => {
+        desktopVersion.mockReturnValue(`1.316.0`);
+        renderButton.mockResolvedValue(false);
+        const el = await mount();
+
+        await type(field(`input[type="email"]`), `ana@corp.example`);
+        button(`Continue with email`)?.click();
+        await settle();
+
+        expect(signInThroughBrowser).not.toHaveBeenCalled();
+        expect(el.textContent).toContain(`The link in the email opens your browser, not this app.`);
     });
 });

@@ -244,7 +244,10 @@ export type BootReportBody = z.input<typeof BootReportBodySchema>;
 export const IngressOkSchema = z.object({ ok: z.literal(true) });
 
 // An announce the platform took: which database took it, from a platform new enough to say (GET /api/identity).
-export const AnnounceAcceptedSchema = z.object({ ok: z.literal(true), identity: z.string().min(1).optional() });
+// `identityKey` is the public half of the key this platform signs identity assertions with (sandbox-contract
+// policy/identity-assertion.ts), in SPKI PEM: the daemon keeps the newest it was answered, so a sandbox started by any
+// `ic` learns it at its first announce and follows a rotation within the hour. Absent from a platform that signs none.
+export const AnnounceAcceptedSchema = z.object({ ok: z.literal(true), identity: z.string().min(1).optional(), identityKey: z.string().min(1).optional() });
 
 // `POST /sandbox/adopt`: the owner's adoption ticket the browser handed the daemon, the grant this platform signed for
 // the token, the address the token derives and the owner the daemon bound, with what the owner's browser remembers of

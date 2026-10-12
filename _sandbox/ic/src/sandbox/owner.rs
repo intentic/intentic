@@ -34,7 +34,7 @@ fn owner_file(container: &str) -> Option<String> {
 fn consequence(slug: &str, named_owner: Option<&str>) -> String {
     let who = match named_owner {
         Some(email) => format!("Only {email} can sign in to bind it, as when it was set up."),
-        None => "This sandbox names no owner, so the first Google account to sign in with its connect token becomes its owner.".to_string(),
+        None => "This sandbox names no owner, so the first account to sign in with its connect token becomes its owner.".to_string(),
     };
     format!("{slug}'s owner file cannot be read, so nobody can sign in. This moves it aside so the owner's next sign-in binds the sandbox again. {who}")
 }
@@ -81,7 +81,7 @@ pub fn run(slug: String, yes: bool) -> Result<()> {
         );
     }
     // Who can bind once the file is gone: the owner the platform named (OWNER_EMAIL), signing in with the connect
-    // token. Without a connect token any Google account that reaches the daemon would bind, so this refuses; without
+    // token. Without a connect token any account that reaches the daemon would bind, so this refuses; without
     // an owner email the first account to sign in with the token does, which is said before anyone agrees.
     if docker::container_env_value(&container, "CONNECT_TOKEN").is_none() {
         bail!(

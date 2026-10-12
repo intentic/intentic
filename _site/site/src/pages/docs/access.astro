@@ -48,7 +48,13 @@ const roles = [
         Trust on first use. The first verified identity to reach a new sandbox becomes its owner, and the daemon remembers it. The platform cannot name one for you: it holds your identity and your sandbox's address, and has no way to reach in.
     </p>
     <p>
-        Sign-in is directly against Google: your browser presents an ID token and your sandbox verifies it against Google's published keys. The platform never holds or signs that credential, so a platform compromise cannot command your sandbox.
+        With Google, sign-in is directly against Google: your browser presents an ID token and your sandbox verifies it against Google's published keys. The platform never holds or signs that credential.
+    </p>
+    <p>
+        An address that no identity provider vouches for, on your own domain or a company mail server, signs in with a code the platform mails to it. The platform then signs a short-lived assertion that you control the address, for one sandbox, and the sandbox checks that signature. On a sandbox on your own machine it accepts one only for an owner who first signed in to it by email, or for a person you allowed to sign in by email when you invited them. So a platform compromise can reach only those people's access, never an owner or member who signs in with Google. On a machine we host, the platform already holds the machine, and an assertion is accepted for anyone on the roster.
+    </p>
+    <p>
+        A passkey removes the platform from the path. Passkeys belong to the sandbox, keep working while the platform is down, and are suggested right after a first email sign-in. Turn on <strong>Require a passkey to open this sandbox</strong> and the platform's word alone opens nothing.
     </p>
 
     <h2>The tiers</h2>
@@ -128,7 +134,7 @@ const roles = [
 
     <h2>If you lose a laptop</h2>
     <p>
-        <strong>Sign out everywhere</strong> re-keys the session signer, so every session stops verifying at once, including your own, which re-establishes from the Google credential it holds. That is what makes it a button rather than a support procedure. Control tokens are revoked separately, per token, because programs hold them.
+        <strong>Sign out everywhere</strong> re-keys the session signer, so every session stops verifying at once, including your own, which re-establishes from the sign-in your browser still holds. That is what makes it a button rather than a support procedure. Control tokens are revoked separately, per token, because programs hold them.
     </p>
 
     <DocsRelated

@@ -225,7 +225,7 @@ free column is your machine, the other is ours.
    own domain. Bring your own zone if you prefer: your token is used once to list zones and is
    never stored.
 6. **What do I need to run a sandbox?**: A machine with Docker (installed automatically if
-   missing, with your confirmation) and a Google account. No open inbound ports, nothing deployed.
+   missing, with your confirmation) and a Google account or any email address. No open inbound ports, nothing deployed.
 7. **Can the agent break my stuff?**: No, because it's co-piloted, not fire-and-forget. It starts
    in plan mode: it proposes, you approve. Every file change is reviewable as a diff you can discard
    or commit; environment (Dockerfile) changes require your explicit approval; stricter and looser

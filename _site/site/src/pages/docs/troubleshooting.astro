@@ -183,7 +183,7 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
 
     <h3>Every browser session stopped verifying at once</h3>
     <p>
-        That is what <strong>Sign out everywhere</strong> does: it re-keys the sandbox's session signer, so every session stops verifying, including yours. Your own browser re-establishes from the Google credential it holds, so it looks like nothing happened locally while everyone else is signed out. That is intended.
+        That is what <strong>Sign out everywhere</strong> does: it re-keys the sandbox's session signer, so every session stops verifying, including yours. Your own browser re-establishes from the sign-in it still holds, so it looks like nothing happened locally while everyone else is signed out. That is intended.
     </p>
 
     <h3>An update left the sandbox worse</h3>

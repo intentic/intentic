@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { AppBrand, Button, Notice, type NoticeModel, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
-import type { InvitePreview } from "@intentic/api-contract";
+import type { InvitePreview, SignInOptions } from "@intentic/api-contract";
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { apiClient } from "../../lib/useApi";
 import { useAuth } from "../../client/auth/useAuth";
 import { useSandbox } from "../../client/sandbox/useSandbox";
+import { desktopVersion } from "../../app/environments/desktop";
+import { inNativeShell } from "../../workbench/window/capacitor";
+import EmailCodeSignIn from "../auth/EmailCodeSignIn.vue";
+import { GOOGLE_ONLY, readSignInOptions } from "../auth/signInOptions";
 import { useT } from "@intentic/ui/i18n";
 
 // Public accept-invite landing for /invite/:token: previews the token without a session, resolves the current session,
@@ -26,11 +30,19 @@ const loading = ref(true);
 const previewFailed = ref(false);
 const busy = ref(false);
 const error = ref<NoticeModel>();
+// Which ways in the platform offers: an invited address on a domain Google holds no account for signs in with a code.
+const options = ref<SignInOptions>(GOOGLE_ONLY);
+// The desktop app's webview or the iOS shell, where the mail's link opens elsewhere and the code is typed instead.
+const inApp = desktopVersion() !== undefined || inNativeShell();
 
 onMounted(async () => {
-    // Session refresh and token preview are independent (preview needs no session): resolve them together. The platform
-    // answers a bad token in-band, so a preview that throws is an unanswered question, never an invalid invite.
-    const [session, previewed] = await Promise.allSettled([refresh(), apiClient.invite.preview({ token })]);
+    // Session refresh, token preview and the platform's ways in are independent (none needs a session): resolve them
+    // together. The platform answers a bad token in-band, so a preview that throws is an unanswered question, never an
+    // invalid invite.
+    const [session, previewed, offered] = await Promise.allSettled([refresh(), apiClient.invite.preview({ token }), readSignInOptions()]);
+    if (offered.status === `fulfilled`) {
+        options.value = offered.value;
+    }
     if (previewed.status === `fulfilled`) {
         preview.value = previewed.value;
     } else {
@@ -111,8 +123,15 @@ const accept = async (): Promise<void> => {
 // id ("idempotent once accepted"): a plain link to `/` opened whichever sandbox this browser had open last, so a member
 // with a sandbox of their own landed there rather than in the one the invite names.
 
+// With a code on offer the reader is brought back to this page signed out, to pick either way in as the invited address;
+// otherwise Google's own page is the one road, as before.
 const switchAccount = async (): Promise<void> => {
     await signOut();
+    if (options.value.email) {
+        // Signing out sends a stale shell to /login (App.vue); the invite is still the page this reader is on.
+        await router.replace(`/invite/${token}`);
+        return;
+    }
     await signIn();
 };
 </script>
@@ -142,7 +161,8 @@ const switchAccount = async (): Promise<void> => {
 
             <template v-else-if="view === 'signin'">
                 <h2 class="text-2xl font-semibold tracking-tight">{{ t(`setup.acceptInvite.youreInvited`) }}</h2>
-                <i18n-t keypath="setup.acceptInvite.invitedToOpenSandbox" tag="p" class="mt-2 text-sm text-muted" scope="global">
+                <!-- Method-neutral where a code is offered too; Google's own words where it is the only way in. -->
+                <i18n-t v-if="options.email" keypath="setup.acceptInvite.invitedToOpenSandboxAs" tag="p" class="mt-2 text-sm text-muted" scope="global">
                     <template #sandbox
                         ><span class="font-medium text-content">{{ sandboxName }}</span></template
                     >
@@ -150,9 +170,36 @@ const switchAccount = async (): Promise<void> => {
                         ><span class="font-medium text-content">{{ invitedEmail }}</span></template
                     >
                 </i18n-t>
-                <Button :label="t(`auth.words.continueGoogle`)" tier="boring" class="mt-6 w-full justify-center" @click="signIn">
+                <i18n-t v-else keypath="setup.acceptInvite.invitedToOpenSandbox" tag="p" class="mt-2 text-sm text-muted" scope="global">
+                    <template #sandbox
+                        ><span class="font-medium text-content">{{ sandboxName }}</span></template
+                    >
+                    <template #email
+                        ><span class="font-medium text-content">{{ invitedEmail }}</span></template
+                    >
+                </i18n-t>
+                <Button v-if="options.google" :label="t(`auth.words.continueGoogle`)" tier="boring" class="mt-6 w-full justify-center" @click="signIn">
                     <template #icon><Icon name="google" /></template>
                 </Button>
+                <!-- The invited address, locked: the platform accepts this invite for no other, so no other is offered. -->
+                <template v-if="options.email && invitedEmail !== undefined">
+                    <span v-if="options.google" class="my-3 block text-center text-2xs uppercase tracking-wide text-subtle">{{
+                        t(`auth.login.or`)
+                    }}</span>
+                    <EmailCodeSignIn :class="options.google ? `` : `mt-6`" :locked-email="invitedEmail" :in-app="inApp" />
+                </template>
+                <!-- The clickwrap, before anything is sent: a first sign-in from here makes the account. -->
+                <p class="mt-4 text-2xs leading-relaxed text-subtle">
+                    {{ t(`auth.login.weKeepEmailAddress`) }}
+                    <a href="https://intentic.dev/terms/" target="_blank" rel="noopener" class="text-link hover:underline">{{ t(`auth.login.terms`) }}</a
+                    >,
+                    <a href="https://intentic.dev/acceptable-use/" target="_blank" rel="noopener" class="text-link hover:underline">{{
+                        t(`auth.login.acceptableUsePolicy`)
+                    }}</a>
+                    {{ t(`auth.login.and`) }}
+                    <a href="https://intentic.dev/privacy/" target="_blank" rel="noopener" class="text-link hover:underline">{{ t(`auth.login.privacyPolicy`) }}</a
+                    >.
+                </p>
             </template>
 
             <template v-else-if="view === 'accept'">

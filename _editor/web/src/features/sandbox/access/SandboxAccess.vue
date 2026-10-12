@@ -23,7 +23,8 @@ import {
 } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { formatDate } from "@intentic/ui/format";
-import { computed, onMounted, ref, watch } from "vue";
+import ToggleSwitch from "primevue/toggleswitch";
+import { computed, onMounted, ref, useId, watch } from "vue";
 import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
 import { apiClient } from "../../../lib/useApi";
 import { grantMember, revokeMember, useMembers } from "../../../client/sandbox/useMembers";
@@ -39,7 +40,7 @@ import { useAccessInventory } from "./useAccessInventory";
 import ControlTokensSection from "./ControlTokensSection.vue";
 import AreaPicker from "./AreaPicker.vue";
 import PasskeysSection from "./PasskeysSection.vue";
-import { type AccessGrant, grantBody, grantSendable } from "./accessGrant";
+import { type AccessGrant, emailSignInByDefault, grantBody, grantSendable } from "./accessGrant";
 import { usePersonaReach } from "./usePersonaReach";
 import AccessMemberBadges from "./AccessMemberBadges.vue";
 import StandingGrants from "./StandingGrants.vue";
@@ -109,6 +110,11 @@ const ownRole = computed((): string => {
     return ROLE_OPTIONS.value.find((option) => option.value === role)?.label ?? (role === `owner` ? t(`sandbox.sandboxAccess.owner`) : role);
 });
 const inviteRole = ref<GrantedRole>(`collaborator`);
+// Whether the invitee may sign in with an email code the platform confirms: undefined follows the address (on, except
+// for an address Google itself holds), a flip of the switch is the owner's own word until the invite goes out.
+const inviteEmailPick = ref<boolean>();
+const inviteEmailSignIn = computed(() => inviteEmailPick.value ?? emailSignInByDefault(email.value));
+const inviteEmailSwitchId = useId();
 // The areas an invite is fenced to; undefined is the whole workspace, which is what an invite means unnarrowed.
 const inviteAreas = ref<string[] | undefined>(undefined);
 // The daemon's own roster, the one copy that knows a fence; the platform's records above carry the tier only. It is the
@@ -128,6 +134,8 @@ const fencesUnknown = computed(() => grantsUnread.value !== undefined || roster.
 // Undefined, not an empty list: a row with no areas reaches the whole workspace, which is what every grant means
 // until somebody narrows it.
 const areasOf = (address: string): readonly string[] | undefined => grants.value.find((grant) => grant.email === address.toLowerCase())?.areas;
+// Whether this person may sign in with an email code here; the roster's absent field means no.
+const emailSignInOf = (address: string): boolean => grants.value.find((grant) => grant.email === address.toLowerCase())?.emailSignIn === true;
 // A row on its way to a tier the daemon refuses half-made: a writer with no area, a guest whose areas reach no
 // assistant. The pick is held here, the picker under the row names the areas, and that write is what makes the tier
 // real — so picking the tier is never itself the grant.
@@ -374,9 +382,15 @@ const deliveryNote = (delivery: Exclude<InviteDelivery, "sent">): string =>
 
 // Daemon push first, enforced; sandboxRaw throws on non-2xx, so an unenforced grant is never recorded as sent. Its
 // answer is the daemon's whole roster, which lands in the members cache entry (useMembers) whole.
-const grantOnDaemon = async (target: string, role: GrantedRole, areas: readonly string[] | undefined, refused: string): Promise<void> => {
+const grantOnDaemon = async (
+    target: string,
+    role: GrantedRole,
+    areas: readonly string[] | undefined,
+    refused: string,
+    emailSignIn?: boolean,
+): Promise<void> => {
     try {
-        await grantMember(grantBody(target, role, areas));
+        await grantMember(grantBody(target, role, areas, emailSignIn));
     } catch (err) {
         throw new DaemonRefused(refused, err);
     }
@@ -387,6 +401,7 @@ const invite = async (): Promise<void> => {
     const value = email.value.trim().toLowerCase();
     const role = inviteRole.value;
     const areas = inviteAreas.value;
+    const emailSignIn = inviteEmailSignIn.value;
     if (id === undefined || busy.value || !validEmail(value) || !sendable(role, areas)) {
         return;
     }
@@ -397,7 +412,7 @@ const invite = async (): Promise<void> => {
         // The link mail could not carry is read here or nowhere.
         keep: true,
         task: async () => {
-            await grantOnDaemon(value, role, areas, t(`sandbox.sandboxAccess.couldntGrantAccess`));
+            await grantOnDaemon(value, role, areas, t(`sandbox.sandboxAccess.couldntGrantAccess`), emailSignIn);
             const result = await apiClient.invite.create({ sandboxId: id, email: value, role });
             return { members: result.members, delivery: result };
         },
@@ -405,6 +420,7 @@ const invite = async (): Promise<void> => {
     if (outcome?.state === `done`) {
         email.value = ``;
         emailTouched.value = false;
+        inviteEmailPick.value = undefined;
     }
 };
 
@@ -528,6 +544,30 @@ const pickAreas = async (member: InviteRecord, areas: string[] | undefined): Pro
     }
 };
 
+// The row's email sign-in switch: one write to the daemon, the person's tier and fence sent as they stand (a grant
+// replaces the row whole), and nothing for the platform, whose record carries no way in. Held while the fences are
+// unknown, for the reason a re-grade is.
+const setEmailSignIn = async (member: InviteRecord, on: boolean): Promise<void> => {
+    if (busy.value) {
+        return;
+    }
+    clearNotice();
+    if (fencesUnknown.value) {
+        localNotice.value = grantsUnread.value;
+        return;
+    }
+    const granted = grants.value.find((grant) => grant.email === member.email.toLowerCase());
+    await writes.run({
+        what: t(`sandbox.sandboxAccess.changingEmailSignInOf`, { email: member.email }),
+        failed: refusedAs(t(`sandbox.sandboxAccess.couldntChangeEmailSignIn`)),
+        quiet: true,
+        task: async () => {
+            await grantOnDaemon(member.email, granted?.role ?? member.role, granted?.areas, t(`sandbox.sandboxAccess.couldntChangeEmailSignIn`), on);
+            return {};
+        },
+    });
+};
+
 const revoke = async (target: string): Promise<void> => {
     const id = sandbox.activeSandboxId.value;
     if (id === undefined || busy.value) {
@@ -588,6 +628,15 @@ const revoke = async (target: string): Promise<void> => {
                             </span>
                         </template>
                         <template #control>
+                            <!-- Whether intentic's word for the address opens the sandbox for them, flipped in place. -->
+                            <ToggleSwitch
+                                :model-value="emailSignInOf(member.email)"
+                                :disabled="busy || fencesUnknown"
+                                class="ui-switch-sm shrink-0"
+                                :aria-label="t(`sandbox.sandboxAccess.emailSignInFor`, { email: member.email })"
+                                v-tooltip.top="{ title: t(`sandbox.sandboxAccess.emailSignInSwitch`), note: t(`sandbox.sandboxAccess.emailSignInSwitchNote`) }"
+                                @update:model-value="(on: boolean) => void setEmailSignIn(member, on)"
+                            />
                             <!-- Changeable in place, since a re-grade is routine and shouldn't cost a revoke + re-invite. -->
                             <Picker
                                 :model-value="rowRole(member)"
@@ -695,6 +744,17 @@ const revoke = async (target: string): Promise<void> => {
                                  for everybody rather than the next part of this one. Only when the sandbox has named
                                  areas; unnarrowed is the default, and the empty case is explained from a member
                                  row's Areas control. -->
+                            <!-- The invitee's way in besides Google and a passkey, decided with the invite: on for most addresses. -->
+                            <div v-if="composing" class="flex items-center gap-2">
+                                <ToggleSwitch
+                                    :input-id="inviteEmailSwitchId"
+                                    :model-value="inviteEmailSignIn"
+                                    :disabled="busy"
+                                    class="ui-switch-sm shrink-0"
+                                    @update:model-value="(on: boolean) => (inviteEmailPick = on)"
+                                />
+                                <label :for="inviteEmailSwitchId" class="cursor-pointer text-2xs text-muted">{{ t(`sandbox.sandboxAccess.inviteEmailSignIn`) }}</label>
+                            </div>
                             <template v-if="composing && sandboxAreas.length > 0">
                                 <span v-if="inviteRole === 'maintainer'" class="text-2xs text-subtle">{{
                                     t(`sandbox.sandboxAccess.maintainerUnfenced`)

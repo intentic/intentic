@@ -204,6 +204,14 @@ const routes: RouteRecordRaw[] = [
         component: () => import(`../features/auth/Login.vue`),
     },
     {
+        // A sign-in mail's link: names the address and spends the code it carries on a press, never on load (mail
+        // scanners fetch links). Unguarded, there is no session yet.
+        path: `/login/confirm`,
+        name: `login-confirm`,
+        meta: { title: () => t(`router.index.confirmSignIn`) },
+        component: () => import(`../features/auth/LoginConfirm.vue`),
+    },
+    {
         path: `/platform-unavailable`,
         name: `platform-unavailable`,
         meta: { title: () => t(`router.index.cantReachIntentic`) },

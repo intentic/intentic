@@ -147,6 +147,8 @@
             (function () {
                 try {
                     if (!/^\/(login|desktop-auth|invite|setup|platform-unavailable)(\/|$)/.test(location.pathname)) return;
+                    // A sign-in mail's link carries its code in the address: that page loads nothing from another origin.
+                    if (/^\/login\/confirm(\/|$)/.test(location.pathname)) return;
                     var gis = document.createElement("script");
                     gis.src = "https://accounts.google.com/gsi/client";
                     gis.async = true;

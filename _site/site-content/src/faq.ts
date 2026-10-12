@@ -89,7 +89,7 @@ export const faqGroups: FaqGroup[] = [
                 id: "what-do-i-need",
                 question: "What do I need to run a sandbox?",
                 answer: [
-                    "A computer with Docker and a Google account. You do not need a public IP address or any open inbound ports. If Docker is missing, the installer offers to install it after you confirm.",
+                    "A computer with Docker, and a Google account or any email address to sign in with. You do not need a public IP address or any open inbound ports. If Docker is missing, the installer offers to install it after you confirm.",
                 ],
             },
             {

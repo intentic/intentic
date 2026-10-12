@@ -10,7 +10,8 @@ import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
 import { compressResponses } from "./http/compress-responses.js";
 import { watchResponseLength } from "./http/response-length.js";
-import { bearerFrom, ForbiddenError, OWNER_UNREADABLE, OwnerUnreadableError, PasskeyRequiredError } from "./auth/auth.js";
+import { bearerFrom, ForbiddenError, OwnerUnreadableError, PasskeyRequiredError, PlatformKeyUnknownError } from "./auth/auth.js";
+import { signInProofs } from "./auth/auth-enabled.js";
 import { allowedOriginsOf, originAllowedBy } from "./auth/browser-origins.js";
 import { createPasskeyRoutes } from "./auth/passkeys/passkeys.routes.js";
 import { createAccessRoutes } from "./auth/access.routes.js";
@@ -270,9 +271,10 @@ export const createApp = (services: Services): Hono<AppEnv> => {
                     return c.json(refused, 403);
                 }
             } catch (error) {
-                // 403 is a verified identity that isn't the owner/member; 401 reads like any other unreachable daemon.
+                // 403 is a verified identity that isn't the owner/member, with a machine-readable reason where the editor
+                // acts on one (an email sign-in the owner has not allowed); 401 reads like any other unreachable daemon.
                 if (error instanceof ForbiddenError) {
-                    return c.json({ error: error.message }, 403);
+                    return c.json({ error: error.message, reason: error.reason }, 403);
                 }
                 // 428: the identity is welcome, the proof is not enough; the body says whether a passkey is held or
                 // must first be added (the contract's PasskeyRequired).
@@ -280,9 +282,10 @@ export const createApp = (services: Services): Hono<AppEnv> => {
                     return c.json({ error: error.message, requires: "passkey", enrolled: error.enrolled }, 428);
                 }
                 // Still a 401, fail-closed, naming only why: no sign-in can succeed until the host moves the owner file
-                // aside, which the auth slice logged with the command that does it.
-                if (error instanceof OwnerUnreadableError) {
-                    return c.json({ error: "unauthorized", reason: OWNER_UNREADABLE }, 401);
+                // aside, which the auth slice logged with the command that does it; or the daemon has not learned the
+                // platform's identity key yet, so the editor retries rather than asking for another sign-in.
+                if (error instanceof OwnerUnreadableError || error instanceof PlatformKeyUnknownError) {
+                    return c.json({ error: "unauthorized", reason: error.reason }, 401);
                 }
                 return c.json({ error: "unauthorized" }, 401);
             }
@@ -298,8 +301,8 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // answering" from "still converging".
     // `announce` is the one signal for whether this daemon reached the platform; ic reads it via docker exec. The answer
     // is the contract's DaemonHealth, which every reader parses with its loose twin, DaemonHealthReadingSchema.
-    serve("GET /health", (c) =>
-        c.json({
+    serve("GET /health", (c) => {
+        const health: DaemonHealth = {
             ok: true,
             sandboxId: sandboxIdFromToken(services.config.connectToken),
             // Which posture answers (platform/profile.ts); needed before any authenticated read.
@@ -319,8 +322,14 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             }).by,
             // Which build answers (version, source commit, build time), so "is the fix live?" is one read.
             build: buildInfo(),
-        } satisfies DaemonHealth),
-    );
+        };
+        // Which proofs open a session here, so an editor knows before signing in whether this daemon takes the platform's
+        // identity assertion. Absent on a loopback daemon, which asks for no proof at all.
+        if (services.auth !== undefined) {
+            health.signIn = { proofs: signInProofs(services.config) };
+        }
+        return c.json(health);
+    });
 
     // A browser opening this sandbox's own address lands in the app on it (system/boot/open-in-app.ts).
     serve("GET /", (c) => openInApp(services.config, c));

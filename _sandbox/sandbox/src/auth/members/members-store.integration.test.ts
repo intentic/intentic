@@ -9,6 +9,20 @@ import { fileMembersStore } from "../auth.js";
 // hand-editable and tracked, so both tiers that carry a companion list are pinned here as well as at the route.
 const storePath = async (): Promise<string> => join(await mkdtemp(join(tmpdir(), "members-")), "members.json");
 
+describe("fileMembersStore: email sign-in", () => {
+    test("an opt-in round-trips, survives a re-grade that does not mention it, and goes when the owner takes it back", async () => {
+        const path = await storePath();
+        const store = fileMembersStore(path);
+        await store.add("bo@example.org", { role: "viewer", emailSignIn: true });
+        await expect(store.list()).resolves.toEqual([{ email: "bo@example.org", role: "viewer", emailSignIn: true }]);
+        await store.add("bo@example.org", { role: "collaborator" });
+        await expect(store.list()).resolves.toEqual([{ email: "bo@example.org", role: "collaborator", emailSignIn: true }]);
+        await store.add("bo@example.org", { role: "collaborator", emailSignIn: false });
+        await expect(store.list()).resolves.toEqual([{ email: "bo@example.org", role: "collaborator" }]);
+        expect(JSON.parse(await readFile(path, "utf8"))).toEqual({ members: [{ email: "bo@example.org", role: "collaborator" }] });
+    });
+});
+
 describe("fileMembersStore: guests", () => {
     test("a guest grant round-trips its fence, and a re-grade keeps it, since areas ride on every tier", async () => {
         const store = fileMembersStore(await storePath());

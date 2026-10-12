@@ -57,7 +57,7 @@ const columns: PricingColumn[] = [
         price: `Free, then $${entry.priceUsd}`,
         priceNote: "a month per hosted sandbox via Stripe, cancel any time",
         includes: [
-            `Free: one sandbox on ${hostedShapeLine(FREE_TIER)}, ${FREE_TIER.monthlyHours} awake hours a month (${hosted.newAccountHours} in ${rampSpan}), removed after ${idleWeeks} weeks unopened`,
+            `Free: one sandbox on ${hostedShapeLine(FREE_TIER)}, ${FREE_TIER.monthlyHours} awake hours a month (${hosted.newAccountHours} in ${rampSpan}), removed after ${idleWeeks} weeks unopened, for an account with Google linked`,
             `Paid: a bigger machine and more hours, from $${entry.priceUsd} a month, and never removed`,
             "Every feature on every size. What money changes is the machine, never what an agent can do",
             `Sleeps after ${hosted.idleStopMinutes} minutes away; a sleeping machine spends no hours`,

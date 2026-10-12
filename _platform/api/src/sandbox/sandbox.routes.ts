@@ -64,6 +64,8 @@ import { definitionSeedFor } from "./profiles/profiles.js";
 import { mintSetupCodeFor, ReachabilityUnavailable } from "./setup-code.js";
 import { sendSetupLinkEmail } from "./setup-email.js";
 import { mintOwnerTicket, OWNER_TICKET_TTL_MS } from "@intentic/sandbox-contract/owner-ticket";
+import { type AdmittedArrival, arrivalTier, googleRequired, type HostedArrival, hostedArrivalFor, offeredMachines } from "./hosted/free-lane.js";
+import { mintIdentityAssertionFor } from "./identity-assertion.js";
 import { ingressEnabled } from "./reachability.js";
 import { ADOPTION_TICKET_TTL_MS, mintAdoptionTicket, standingsOf } from "./recovery.js";
 
@@ -259,9 +261,17 @@ const openStretchOrStop = async (
 const assertHostedAllowance = async (
     context: OrpcContext,
     source: { readonly userId: string; readonly email: string; readonly ip: string | undefined },
-): Promise<void> => {
+    arrival: HostedArrival,
+): Promise<AdmittedArrival> => {
     const { userId } = source;
+    if (arrival.lane === `needs-google`) {
+        throw googleRequired(`A free hosted machine`);
+    }
     await requireHostedStanding(context, userId);
+    // A machine arriving on a paid slot spends nothing of the free lane, so none of its limits below apply to it.
+    if (arrival.lane === `slot`) {
+        return arrival;
+    }
     try {
         await assertHostedSource(context.prisma, context.config, source);
     } catch (error) {
@@ -281,6 +291,7 @@ const assertHostedAllowance = async (
     if (budget.metered && budget.remainingMinutes === 0) {
         throw paymentRequired(hoursSpent(budget, `owner`));
     }
+    return arrival;
 };
 
 /* THE CONNECT TOKEN IS THE OWNER'S AND ONLY THE OWNER'S: decrypted onto their row, null on a member's. */
@@ -467,7 +478,7 @@ export const sandboxRoutes = {
         if (!hostedEnabled(context.config)) {
             return { enabled: false, remaining: 0, projects: true };
         }
-        const [slots, budget, plan, capacity, suspension] = await Promise.all([
+        const [slots, budget, plan, capacity, suspension, arrival] = await Promise.all([
             // The free rung's, like the gate above: the card offers a machine, and the one on offer is a free one.
             hostedSlotUse(context.prisma, context.config, user.id, FREE_TIER.id),
             // Included so the card states the ceiling before it's spent; omitted entirely when unmetered.
@@ -479,18 +490,22 @@ export const sandboxRoutes = {
             // Region-aware, since stock the residency rule forbids this caller isn't stock to promise.
             hostedCapacity(context.prisma, context.config, hostedRegionFor(context.config.hosted, context.headers)),
             hostedSuspensionOf(context.prisma, context.config, user.id),
+            // An account that signs in only by email reaches the free rung once it links Google (free-lane.ts).
+            hostedArrivalFor(context.prisma, context.config, user.id),
         ]);
-        return {
+        const offer = {
             enabled: true,
             projects: true,
-            // A suspended account is offered nothing, whatever its slots say.
-            remaining: suspension === undefined ? Math.max(0, slots.left) : 0,
+            // A suspended account is offered nothing, whatever its slots say, nor is one that must link Google first; an
+            // email-only account's own paid slot is offered as the one machine it can have (free-lane.ts).
+            remaining: offeredMachines(arrival, suspension !== undefined, slots.left),
             // Absent unless true: a lane with room says nothing, so this can't age into a false scare.
             ...(capacity.full ? { full: true } : {}),
             ...(budget.metered ? { hours: hoursOf(budget) } : {}),
             ...(plan ? { plan: true } : {}),
             ...(suspension === undefined ? {} : { suspended: true }),
         };
+        return arrival.lane === `needs-google` ? { ...offer, needsGoogle: true } : offer;
     }),
     // Gives an existing sandbox a machine; idempotent (an existing machine is returned, never duplicated). A warm claim
     // changes the row's token, digest and id, so the summary is re-read after provisioning rather than reused.
@@ -514,7 +529,8 @@ export const sandboxRoutes = {
             return toSummary(already, `owner`, context);
         }
         const source = { userId: user.id, email: user.email, ip: clientIp(context.headers, context.config) };
-        await assertHostedAllowance(context, source);
+        const arrival = await hostedArrivalFor(context.prisma, context.config, user.id);
+        const admitted = await assertHostedAllowance(context, source, arrival);
         if (!ingressEnabled(context.config)) {
             throw new ORPCError(`NOT_FOUND`, { message: `this platform has no reachability fabric configured` });
         }
@@ -524,7 +540,7 @@ export const sandboxRoutes = {
                 connectToken: input.token,
                 ownerEmail: user.email.toLowerCase(),
                 region: hostedRegionFor(context.config.hosted, context.headers),
-                tier: FREE_TIER.id,
+                tier: arrivalTier(admitted),
                 profile: input.profile,
                 project: input.project,
             });
@@ -579,6 +595,8 @@ export const sandboxRoutes = {
             expiresAt: new Date(issuedAtMs + OWNER_TICKET_TTL_MS).toISOString(),
         };
     }),
+    // The platform's word that the caller controls their address, for a sandbox they own or joined (identity-assertion.ts).
+    identityAssertion: os.sandbox.identityAssertion.handler(({ context, input }) => mintIdentityAssertionFor(context, input.sandboxId)),
     // The recovery screen's question about sandboxes the editor remembers and the list lacks (recovery.ts).
     lookup: os.sandbox.lookup.handler(async ({ context, input }) => {
         const user = requireUser(context);

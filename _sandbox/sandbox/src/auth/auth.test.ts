@@ -1,10 +1,12 @@
 import { generateKeyPairSync } from "node:crypto";
-import type { ProofMethod } from "@intentic/sandbox-contract";
+import { EMAIL_SIGN_IN_OFF, type ProofMethod } from "@intentic/sandbox-contract";
+import { mintIdentityAssertion } from "@intentic/sandbox-contract/identity-assertion";
 import { mintOwnerTicket } from "@intentic/sandbox-contract/owner-ticket";
 import {
     authorizeMaintainer,
     createAuthorizer,
     ForbiddenError,
+    identityAssertionVerifier,
     type IdTokenVerifier,
     type Member,
     memberRow,
@@ -13,17 +15,21 @@ import {
     ownerTicketVerifier,
     type PasskeyPolicy,
     PasskeyRequiredError,
+    PlatformKeyUnknownError,
     type Proof,
 } from "./auth.js";
 
-// In-memory owner store so the TOFU branching is exercised without touching disk.
-const memOwner = (initial?: string): OwnerStore => {
+// In-memory owner store so the TOFU branching is exercised without touching disk. `emailSignIn` is what the bind wrote.
+const memOwner = (initial?: string, initialEmailSignIn = false): OwnerStore => {
     let value = initial;
+    let emailSignIn = initialEmailSignIn;
     return {
         read: async () => value,
-        write: async (email) => {
+        write: async (email, options = {}) => {
             value = email;
+            emailSignIn = options.emailSignIn === true;
         },
+        emailSignIn: async () => emailSignIn,
     };
 };
 
@@ -33,7 +39,8 @@ const memMembers = (initial: Member[] = []): MembersStore => {
     return {
         list: async () => members,
         add: async (email, grant) => {
-            members = [...members.filter((member) => member.email !== email), memberRow(email, grant)];
+            const previous = members.find((member) => member.email === email);
+            members = [...members.filter((member) => member.email !== email), memberRow(email, grant, previous)];
         },
         remove: async (email) => {
             members = members.filter((member) => member.email !== email);
@@ -372,6 +379,148 @@ describe("owner ticket", () => {
         // Every non-hosted daemon: no key in its env, so a ticket-shaped bearer is refused outright.
         const withoutKey = createAuthorizer({ verify, owner: memOwner(), members: memMembers() });
         await expect(withoutKey.authorize(ticketFor("a@x.com"), undefined)).rejects.toThrow(/owner ticket refused/);
+    });
+});
+
+// The platform's identity assertion (identity-assertion.ts): how a person whose address no identity provider vouches for
+// gets in. Off a hosted machine it opens the sandbox only for an owner who bound with one and for members the owner opted
+// in, so the platform's word alone never opens a sandbox for someone who signs in with Google there.
+describe("identity assertion", () => {
+    // PEM strings straight from the generator, the form the platform's env and the announce answer carry.
+    const pemPair = (): { privateKey: string; publicKey: string } =>
+        generateKeyPairSync("ed25519", { publicKeyEncoding: { type: "spki", format: "pem" }, privateKeyEncoding: { type: "pkcs8", format: "pem" } });
+    const { privateKey: privatePem, publicKey: publicPem } = pemPair();
+    const SANDBOX = "0123456789ab";
+    const assertionFor = (email: string, sandboxId = SANDBOX, key = privatePem): string =>
+        mintIdentityAssertion(key, { sandboxId, email, method: "email", issuedAtMs: Date.now() });
+    const verifier = () => identityAssertionVerifier({ key: async () => publicPem, sandboxId: SANDBOX });
+    const reasonOf = async (promise: Promise<unknown>): Promise<string | undefined> => {
+        const error = await rejection(promise);
+        return error instanceof ForbiddenError ? error.reason : undefined;
+    };
+
+    test("first-binds the expected owner with the connect token beside it, recording that they sign in by email", async () => {
+        const owner = memOwner();
+        const authz = createAuthorizer({
+            verify: verifierFor({}),
+            owner,
+            members: memMembers(),
+            connectToken: "secret",
+            expectedOwner: "ada@example.org",
+            identityAssertion: verifier(),
+        });
+        await expect(authz.authorize(assertionFor("ada@example.org"), undefined)).rejects.toThrow("first-bind requires the connection token");
+        expect(await owner.read()).toBeUndefined();
+        await expect(authz.authorize(assertionFor("ada@example.org"), "secret")).resolves.toEqual({ email: "ada@example.org", role: "owner", methods: ["email"] });
+        expect(await owner.emailSignIn?.()).toBe(true);
+        // Bound: the owner keeps coming in on the platform's word; a stranger's assertion is refused by the roster.
+        await expect(authz.authorize(assertionFor("ada@example.org"), undefined)).resolves.toEqual({ email: "ada@example.org", role: "owner", methods: ["email"] });
+        await expect(authz.authorize(assertionFor("eve@example.org"), undefined)).rejects.toThrow("not authorized for this sandbox");
+    });
+
+    test("cannot pick an owner the sandbox was not created for", async () => {
+        const owner = memOwner();
+        const authz = createAuthorizer({ verify: verifierFor({}), owner, members: memMembers(), connectToken: "secret", expectedOwner: "ada@example.org", identityAssertion: verifier() });
+        await expect(authz.authorize(assertionFor("eve@example.org"), "secret")).rejects.toThrow("this sandbox is registered to ada@example.org");
+        expect(await owner.read()).toBeUndefined();
+    });
+
+    test("never opens a sandbox for an owner who bound with Google, there or at the owner-only doors", async () => {
+        const authz = createAuthorizer({
+            verify: verifierFor({ "google-ada": "ada@example.org" }),
+            owner: memOwner("ada@example.org"),
+            members: memMembers(),
+            identityAssertion: verifier(),
+        });
+        expect(await reasonOf(authz.authorize(assertionFor("ada@example.org"), undefined))).toBe(EMAIL_SIGN_IN_OFF);
+        expect(await reasonOf(authz.authorizeOwner(assertionFor("ada@example.org")))).toBe(EMAIL_SIGN_IN_OFF);
+        expect(await reasonOf(authz.authorizeRetirement(assertionFor("ada@example.org")))).toBe(EMAIL_SIGN_IN_OFF);
+        expect(await reasonOf(authz.authorizeRecovery(assertionFor("ada@example.org")))).toBe(EMAIL_SIGN_IN_OFF);
+        // Google still opens it, as it always did.
+        await expect(authz.authorize("google-ada", undefined)).resolves.toEqual({ email: "ada@example.org", role: "owner", methods: ["google"] });
+    });
+
+    test("opens it for a member only when the owner opted them in, and re-reads the opt-in on every request", async () => {
+        const members = memMembers([
+            { email: "bo@example.org", role: "collaborator", emailSignIn: true },
+            { email: "cy@example.org", role: "viewer" },
+        ]);
+        const authz = createAuthorizer({
+            verify: verifierFor({}),
+            session: sessionFor({ "sess-bo": "bo@example.org", "sess-bo-passkey": "bo@example.org" }, ["email"]),
+            owner: memOwner("ada@example.org"),
+            members,
+            identityAssertion: verifier(),
+        });
+        await expect(authz.authorize(assertionFor("bo@example.org"), undefined)).resolves.toEqual({ email: "bo@example.org", role: "collaborator", methods: ["email"] });
+        expect(await reasonOf(authz.authorize(assertionFor("cy@example.org"), undefined))).toBe(EMAIL_SIGN_IN_OFF);
+        await expect(authz.authorize("sess-bo", undefined)).resolves.toMatchObject({ email: "bo@example.org", methods: ["email"] });
+        // The owner takes it back: the session minted from the platform's word stops at its next request.
+        await members.add("bo@example.org", { role: "collaborator", emailSignIn: false });
+        expect(await reasonOf(authz.authorize("sess-bo", undefined))).toBe(EMAIL_SIGN_IN_OFF);
+    });
+
+    test("lets a session that added a passkey or a recovery code of this daemon's own stand without the opt-in", async () => {
+        const authz = createAuthorizer({
+            verify: verifierFor({}),
+            session: sessionFor({ "sess-cy": "cy@example.org" }, ["email", "passkey"]),
+            owner: memOwner("ada@example.org"),
+            members: memMembers([{ email: "cy@example.org", role: "viewer" }]),
+            identityAssertion: verifier(),
+        });
+        await expect(authz.authorize("sess-cy", undefined)).resolves.toEqual({ email: "cy@example.org", role: "viewer", methods: ["email", "passkey"] });
+    });
+
+    test("on a hosted machine opens it for anyone on the roster and binds without the connect token, as the owner ticket does", async () => {
+        const owner = memOwner();
+        const authz = createAuthorizer({
+            verify: verifierFor({}),
+            owner,
+            members: memMembers([{ email: "cy@example.org", role: "viewer" }]),
+            connectToken: "secret",
+            expectedOwner: "ada@example.org",
+            identityAssertion: verifier(),
+            assertionsForAnyone: true,
+        });
+        await expect(authz.authorize(assertionFor("ada@example.org"), undefined)).resolves.toEqual({ email: "ada@example.org", role: "owner", methods: ["email"] });
+        await expect(authz.authorize(assertionFor("cy@example.org"), undefined)).resolves.toEqual({ email: "cy@example.org", role: "viewer", methods: ["email"] });
+    });
+
+    test("spends each assertion once, and refuses another sandbox's, another key's, and any without a verifier, never asking Google", async () => {
+        const otherKey = pemPair().privateKey;
+        const googleAsked: string[] = [];
+        const verify: IdTokenVerifier = async (token) => {
+            googleAsked.push(token);
+            throw new Error("invalid token");
+        };
+        const authz = createAuthorizer({ verify, owner: memOwner("ada@example.org", true), members: memMembers(), identityAssertion: verifier() });
+        const once = assertionFor("ada@example.org");
+        await expect(authz.authorize(once, undefined)).resolves.toMatchObject({ role: "owner" });
+        await expect(authz.authorize(once, undefined)).rejects.toThrow("identity assertion refused: already spent");
+        await expect(authz.authorize(assertionFor("ada@example.org", "ffffffffffff"), undefined)).rejects.toThrow("identity assertion refused: not for this sandbox");
+        await expect(authz.authorize(assertionFor("ada@example.org", SANDBOX, otherKey), undefined)).rejects.toThrow("identity assertion refused: not for this sandbox");
+        const withoutVerifier = createAuthorizer({ verify, owner: memOwner("ada@example.org", true), members: memMembers() });
+        await expect(withoutVerifier.authorize(assertionFor("ada@example.org"), undefined)).rejects.toThrow("does not accept the platform's identity assertion");
+        expect(googleAsked).toEqual([]);
+    });
+
+    test("says the key is not known yet, rather than refusing the person, when the platform has not answered", async () => {
+        const authz = createAuthorizer({
+            verify: verifierFor({}),
+            owner: memOwner("ada@example.org", true),
+            members: memMembers(),
+            identityAssertion: identityAssertionVerifier({ key: async () => undefined, sandboxId: SANDBOX }),
+        });
+        await expect(authz.authorize(assertionFor("ada@example.org"), undefined)).rejects.toBeInstanceOf(PlatformKeyUnknownError);
+    });
+});
+
+describe("memberRow", () => {
+    test("keeps a person's email sign-in through a re-grade that does not mention it, and drops it when told", () => {
+        const previous: Member = { email: "bo@example.org", role: "viewer", emailSignIn: true };
+        expect(memberRow("bo@example.org", { role: "collaborator" }, previous)).toEqual({ email: "bo@example.org", role: "collaborator", emailSignIn: true });
+        expect(memberRow("bo@example.org", { role: "collaborator", emailSignIn: false }, previous)).toEqual({ email: "bo@example.org", role: "collaborator" });
+        expect(memberRow("bo@example.org", { role: "viewer", emailSignIn: true })).toEqual({ email: "bo@example.org", role: "viewer", emailSignIn: true });
     });
 });
 

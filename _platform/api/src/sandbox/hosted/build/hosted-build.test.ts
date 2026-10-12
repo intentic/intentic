@@ -40,6 +40,7 @@ const config = (over?: Partial<Config[`hosted`]>): Config =>
     ({
         webOrigin: `https://app.test`,
         google: { clientId: `gcid` },
+        identity: { signingKey: `` },
         api: { url: `https://api.test` },
         secrets: { key: `` },
         // Real signing key; machine config carries its public half, derived at compose.

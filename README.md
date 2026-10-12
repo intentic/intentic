@@ -41,7 +41,7 @@ You hand out tasks, agents plan and work in parallel, and you review the result.
 
 ## Get started
 
-1. **[Sign in](https://app.intentic.dev)** with Google. No card, no forms.
+1. **[Sign in](https://app.intentic.dev)** with Google, or with a code mailed to any email address. No card, no password.
 2. **Paste one command** on the laptop, desktop or server that will host your sandbox. The setup page shows it with your code filled in, and the command offers to install Docker if it is missing.
 
    ```sh
@@ -169,7 +169,7 @@ On your machine, as plain git. Your browser reaches the sandbox over a private t
 <details>
 <summary><b>What do I need to run a sandbox?</b></summary>
 
-A computer with Docker and a Google account. No public IP, open ports or Cloudflare account. If Docker is missing, the installer offers to install it.
+A computer with Docker, and a Google account or any email address to sign in with. No public IP, open ports or Cloudflare account. If Docker is missing, the installer offers to install it.
 </details>
 
 <details>

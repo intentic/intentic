@@ -253,10 +253,10 @@ export const landingContent: LandingContent = {
         sub: "Sign in, paste one command, and your workspace opens.",
         steps: [
             {
-                title: "Sign in with Google",
+                title: "Sign in with Google or email",
                 // Defines "sandbox" (not "container") in plain words: the product's only noun for the thing, first used
                 // here.
-                body: "No forms and no card. We keep your email address and your workspace's address, and nothing else.",
+                body: "Google, or a code mailed to an address on any domain. No password and no card. We keep your email address and your workspace's address, and nothing else.",
             },
             {
                 title: "Your sandbox is waiting",
@@ -470,8 +470,8 @@ export const deskLanding: DeskLandingContent = {
         },
         appSteps: [
             {
-                title: "Sign in with Google",
-                body: "No forms and no card. We keep your email address and your workspace's address, and nothing else.",
+                title: "Sign in with Google or email",
+                body: "Google, or a code mailed to an address on any domain. No password and no card. We keep your email address and your workspace's address, and nothing else.",
             },
             {
                 title: "Ask for something",
@@ -493,7 +493,7 @@ export const deskLanding: DeskLandingContent = {
                 id: "desk-what-do-i-need",
                 question: "What do I need to run it?",
                 answer: [
-                    "A Windows or Linux computer and a Google account to sign in with. The app installs everything else it needs, and asks before it does.",
+                    "A Windows or Linux computer, and a Google account or any email address to sign in with. The app installs everything else it needs, and asks before it does.",
                     "It works with the AI plan you already have: Claude, ChatGPT, or a free Google sign-in.",
                 ],
                 more: { label: "Download the app", href: "/download/" },

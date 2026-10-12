@@ -8,6 +8,10 @@ export const MemberSchema = z.object({
     email: z.string().describe("Who, lowercased."),
     role: GrantedRoleSchema.describe("The tier they were granted."),
     areas: z.array(z.string()).optional().describe("The areas they are fenced to. Absent means the whole workspace."),
+    emailSignIn: z
+        .boolean()
+        .optional()
+        .describe("Whether they may sign in with an email code the platform confirmed, rather than only with Google or a passkey. Absent means no."),
 });
 export type Member = z.infer<typeof MemberSchema>;
 
@@ -22,10 +26,14 @@ export type MembersRoster = z.infer<typeof MembersRosterSchema>;
 
 // POST /members: a grant is a role decision, so the role is required. Areas are optional, their absence being the whole
 // workspace; a writer and a guest are refused without them, since for those two tiers the fence is the tier.
+// `emailSignIn` lets the platform's identity assertion open this sandbox for them (policy/identity-assertion.ts): true
+// allows it, false takes it back, absent keeps what the row already says, so a re-grade from an editor that predates
+// the field never drops it.
 export const MemberGrantSchema = z.object({
     email: z.string(),
     role: GrantedRoleSchema,
     areas: z.array(z.string().min(1)).max(20).optional(),
+    emailSignIn: z.boolean().optional(),
 });
 export type MemberGrant = z.infer<typeof MemberGrantSchema>;
 

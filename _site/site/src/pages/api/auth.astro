@@ -53,13 +53,16 @@ const headings = [
 
     <h2 id="a-person">A person, in a browser</h2>
     <p>
-        The sandbox authenticates the end user <strong>directly against Google</strong>: the browser presents a Google identity token and the
-        daemon verifies its signature against Google's published keys. The platform never holds or signs it, which is why a compromise of the
-        platform cannot command your sandbox. The first verified identity to arrive becomes the owner, and the owner grants everyone else a
-        role that decides how far they reach.
+        The sandbox authenticates the end user itself. With Google, the browser presents a Google identity token and the daemon verifies its
+        signature against Google's published keys. The platform never holds or signs it. A person whose address no identity provider vouches
+        for presents the platform's <strong>identity assertion</strong> instead: a two-minute Ed25519 signature, for this one sandbox, that the
+        platform confirmed the address by mailing it a code. On a sandbox on the owner's own machine the daemon accepts it only for an owner
+        who first signed in by email or a member the owner allowed to sign in by email, so a compromise of the platform cannot command the
+        sandbox as anyone who signs in with Google. The first verified identity to arrive becomes the owner, and the owner grants everyone
+        else a role that decides how far they reach.
     </p>
     <p>
-        <code>POST /system/session</code> exchanges that token for a session the daemon minted, and that session is what every steady-state
+        <code>POST /system/session</code> exchanges that token or assertion for a session the daemon minted, and that session is what every steady-state
         call carries as <code>authorization: Bearer …</code>. Calling the same route again with a session that has not expired renews it, so a
         long-lived tab never has to sign in twice.
     </p>

@@ -13,6 +13,7 @@ const config = (over?: Partial<Config[`hosted`]>): Config =>
     ({
         webOrigin: `https://app.test`,
         google: { clientId: `gcid` },
+        identity: { signingKey: `` },
         api: { url: `https://api.test` },
         secrets: { key: `` },
         ingress: { url: `https://ingress.sbx.test`, signingKey: `k`, zone: `sbx.test` },

@@ -850,7 +850,8 @@
             "linkMissingValue": "This link is missing the value that ties it to your app: open Intentic and sign in from there.",
             "needsGoogleSignIn": "Intentic needs your Google sign-in to reach your sandbox.",
             "couldntFinishInApp": "Couldn't finish signing in to the app.",
-            "couldntSignInAs": "Couldn't sign in to Intentic as {email}."
+            "couldntSignInAs": "Couldn't sign in to Intentic as {email}.",
+            "useEmailCode": "No Google account? Sign in with an email code."
         },
         "desktopAuthComplete": {
             "backToSignIn": "Back to sign in",
@@ -874,14 +875,17 @@
             "stepSandboxWaiting": "Your sandbox is waiting",
             "stepPasteCommand": "Paste one command",
             "stepInstallApp": "Install the app",
-            "signInDidntFinish": "Couldn't finish that sign-in. Continue with Google below instead."
+            "signInDidntFinish": "Couldn't finish that sign-in. Continue with Google below instead.",
+            "stepSignInAnyWay": "Sign in with Google or email",
+            "or": "or"
         },
         "useAuth": {
             "accountDeletionFailed": "Account deletion failed.",
             "googleRefused": "Google sign-in was refused.",
             "profileUpdateFailed": "Profile update failed.",
             "sessionCheckFailed": "Couldn't check your session.",
-            "signOutFailed": "Sign out failed."
+            "signOutFailed": "Sign out failed.",
+            "linkGoogleFailed": "Couldn't link your Google account."
         },
         "useGoogleIdentity": {
             "loadFailed": "Google Identity Services failed to load"
@@ -897,6 +901,38 @@
             "googleAnswerRefused": "Google answered, but with a sign-in this computer counts as already expired: its clock may be wrong. Continue on Google's page instead.",
             "continueGoogleInBrowser": "Continue with Google in your browser",
             "continueGoogle": "Continue with Google"
+        },
+        "emailCode": {
+            "rateLimited": "Too many codes asked for at once. Wait a minute, then try again.",
+            "invalid": "That code isn't the one we sent. Check the latest email from intentic, or send a new code.",
+            "expired": "That code has run out. Send a new one.",
+            "tooManyAttempts": "Too many wrong tries for that code. Send a new one.",
+            "sendFailed": "Couldn't send the code.",
+            "signInFailed": "Couldn't sign in with that code."
+        },
+        "emailSignIn": {
+            "addressLabel": "Email address",
+            "addressPlaceholder": "you{'@'}example.com",
+            "googleFaster": "That's a Google address: Continue with Google is faster. A code works too.",
+            "continueWithEmail": "Continue with email",
+            "emailMeCode": "Email me a sign-in code",
+            "sentTo": "We sent a 6-digit code to {email}.",
+            "typeItHereInApp": "Type it here. The link in the email opens your browser, not this app.",
+            "typeItOrOpenLink": "Type it here, or open the link in the email on this device.",
+            "codeLabel": "Sign-in code",
+            "useDifferentAddress": "Use a different address",
+            "sendAgainIn": "Send it again in {seconds}s",
+            "sendAgain": "Send it again",
+            "usedLinkElsewhere": "Used the link on another device? That signed you in there.",
+            "sendNewCode": "Send a new code"
+        },
+        "loginConfirm": {
+            "title": "Confirm your sign-in",
+            "signInAs": "Sign in to intentic as {email}?",
+            "confirm": "Confirm and sign in",
+            "notYou": "Didn't ask for this? Close this page: nothing happens without the press above.",
+            "linkDidntSignIn": "This link didn't sign you in.",
+            "linkIncomplete": "This sign-in link is incomplete. Ask for a new code on the sign-in page."
         }
     },
     "browsers": {
@@ -4787,7 +4823,8 @@
             "setup": "Setup",
             "signInToIntentic": "Sign in to Intentic",
             "signingIn": "Signing in…",
-            "reconnectSandboxes": "Reconnect your sandboxes"
+            "reconnectSandboxes": "Reconnect your sandboxes",
+            "confirmSignIn": "Confirm sign-in"
         }
     },
     "sandbox": {
@@ -6675,7 +6712,13 @@
             "changingRoleOf": "Changing the role of {email}",
             "revokingWhom": "Taking access away from {email}",
             "signingOthersOut": "Signing other browsers out",
-            "youFallback": "You"
+            "youFallback": "You",
+            "inviteEmailSignIn": "Can sign in with an email code (intentic confirms the address)",
+            "emailSignInFor": "Email-code sign-in for {email}",
+            "emailSignInSwitch": "Email-code sign-in",
+            "emailSignInSwitchNote": "intentic confirms their address",
+            "changingEmailSignInOf": "Changing how {email} signs in",
+            "couldntChangeEmailSignIn": "Couldn't change their email-code sign-in."
         },
         "sandboxAgent": {
             "agentSettingsCategory": "Agent settings category",
@@ -6943,12 +6986,11 @@
             "syncFilesHere": "Sync files here"
         },
         "sandboxUnauthorized": {
-            "intenticAccount": ", but your intentic account is",
             "noAccessTo": "No access to \"{name}\"",
-            "sandboxBelongsToAnother": "This sandbox belongs to another account and hasn't shared access with",
             "switchGoogleAccount": "Switch Google account",
-            "toOpenSandbox": "to open this sandbox.",
-            "youreSignedIntoGoogle": "You're signed into Google as"
+            "emailSignInOff": "{email} isn't set up to sign in to this sandbox with an email code. Ask its owner to turn email sign-in on for you: this clears by itself once they do.",
+            "wrongGoogleAccount": "You're signed into Google as {presented}, but your intentic account is {account}. Sign in with {account} to open this sandbox.",
+            "notShared": "This sandbox belongs to another account and hasn't shared access with {presented}. Ask its owner to grant you access: this clears automatically the moment it's granted."
         },
         "sandboxUpdateCard": {
             "againstHost": "against its host.",
@@ -7120,7 +7162,12 @@
             "useIntenticAccount": "Sign in as",
             "usePasskey": "Use your passkey",
             "usePasskey2": "Use a passkey",
-            "windowCantUsePasskeys": "This window can't use passkeys. Open the sandbox in your browser instead."
+            "windowCantUsePasskeys": "This window can't use passkeys. Open the sandbox in your browser instead.",
+            "emailNeedsUpdate": "This sandbox needs an update before it accepts email sign-in. Ask its owner to update it.",
+            "emailNeedsUpdateOwner": "This sandbox needs an update before it accepts email sign-in. Update it on the machine it runs on, or use a passkey.",
+            "emailSignInIncomplete": "The email sign-in didn't complete.",
+            "intenticConfirmsAddress": "intentic confirms your address to the sandbox, so nothing else is asked.",
+            "continueAsEmail": "Continue as {email}"
         },
         "skillForm": {
             "addSkill": "Add skill",
@@ -7812,7 +7859,9 @@
             "answering": "Answering",
             "silent": "Not answering",
             "open": "Open",
-            "signInFirst": "Sign in with Google to open it."
+            "whoIsOpening": "This device doesn't remember your account. Sign in to open {name}:",
+            "passkeyNote": "A passkey works only if you added one to this sandbox before.",
+            "signInToOpen": "Sign in with Google or a passkey to open it."
         },
         "autoUpdate": {
             "switchTitle": "Update automatically",
@@ -7878,7 +7927,12 @@
             "googleRejected": "The sandbox rejected your Google sign-in.",
             "invalidSession": "The sandbox returned an invalid session.",
             "signInTimeout": "The sandbox did not finish signing in within 10 seconds.",
-            "unknownSandbox": "Unknown sandbox"
+            "unknownSandbox": "Unknown sandbox",
+            "emailSignInOff": "This sandbox's owner hasn't let you sign in to it with an email code. Ask them to turn it on for you.",
+            "platformKeyUnknown": "This sandbox hasn't reached intentic yet, so it can't check an email sign-in. Try again in a minute.",
+            "assertionRejected": "The sandbox didn't accept intentic's confirmation of your address.",
+            "assertionUnavailable": "intentic couldn't confirm your address to this sandbox right now. Try again in a moment.",
+            "passkeyFirst": "This sandbox only opens with a passkey. Open it and confirm with yours first."
         },
         "passkeySignIn": {
             "noneCreated": "No passkey was created.",
@@ -8491,7 +8545,14 @@
             "notAnImage": "Couldn't read that file as an image.",
             "profile": "Profile",
             "renameDisplayName": "Rename display name",
-            "updateFailed": "Profile update failed."
+            "updateFailed": "Profile update failed.",
+            "signIn": "Sign-in",
+            "emailCode": "Email code",
+            "emailCodeDetail": "intentic mails a code to {email} each time you sign in.",
+            "google": "Google",
+            "googleLinked": "Linked: you can sign in with Google too.",
+            "googleNotLinked": "Not linked. A free hosted machine and the trial need a Google sign-in on your account.",
+            "linkGoogle": "Link Google account"
         },
         "settingsTokens": {
             "labelEGStorefrontSandbox": "Label (e.g. storefront sandbox)",
@@ -8534,7 +8595,8 @@
             "openSandbox": "Open sandbox",
             "wrongAccount": "Wrong account",
             "youreAllSet": "You're all set",
-            "youreInvited": "You're invited"
+            "youreInvited": "You're invited",
+            "invitedToOpenSandboxAs": "You’ve been invited to open the {sandbox} sandbox. Sign in as {email} to continue."
         },
         "desktopSetupProgress": {
             "answer": "Answer it",
@@ -8734,7 +8796,12 @@
             "webOriginMustName": "The daemon's {variable} also has to name {origin}. Otherwise your browser blocks the call before it's sent.",
             "wellConnectTo": "We'll connect to",
             "wellNoticeMomentSandbox": "We'll notice the moment your sandbox starts.",
-            "whereSandboxRuns": "Where the sandbox runs"
+            "whereSandboxRuns": "Where the sandbox runs",
+            "freeMachineNeedsGoogle": "Needs a Google sign-in on your account",
+            "needsGoogleDetail": "Your account signs in with an email code. A free machine needs a Google sign-in linked to it first; a machine you buy, or your own computer, needs nothing more.",
+            "linkGoogle": "Link your Google account",
+            "buyMachine": "Buy a machine",
+            "runOnThisComputer": "Run it on your own computer"
         },
         "setupAccount": {
             "signOutFailed": "Couldn't sign out. Try again.",
@@ -8996,7 +9063,11 @@
             "reconnect": "Reconnect",
             "skippedUnreadable": "Skipped {count} item that couldn't be read (symlink or special file). | Skipped {count} items that couldn't be read (symlink or special file).",
             "skippedUnchanged": "Skipped {count} unchanged file. | Skipped {count} unchanged files.",
-            "uploadedFiles": "Uploaded {count} file | Uploaded {count} files"
+            "uploadedFiles": "Uploaded {count} file | Uploaded {count} files",
+            "passkeyNudgeTitle": "Add a passkey for this sandbox",
+            "passkeyNudgeDetail": "Add a passkey so you can reach this sandbox even when intentic is down.",
+            "passkeyNudgeAdd": "Add a passkey",
+            "passkeyNudgeLater": "Not now"
         },
         "presence": {
             "inChat": "In a chat session",

@@ -56,6 +56,19 @@ test("a guest fenced to areas no assistant works in is refused; another tier the
     expect((await postJson(app, "/members", { email: "fay@example.com", role: "viewer", areas: ["finance"] })).status).toBe(200);
 });
 
+// Whether the platform's identity assertion opens the sandbox for a person is the owner's call per member, carried on
+// the grant; a re-grade from an editor that predates it keeps what the row said.
+test("a grant carries a member's email sign-in, a re-grade without it keeps it, and the owner can take it back", async () => {
+    const { app } = await ownerApp();
+    const allowed = await postJson(app, "/members", { email: "Bo@Example.org", role: "viewer", emailSignIn: true });
+    expect(await allowed.json()).toEqual({ members: [{ email: "bo@example.org", role: "viewer", emailSignIn: true }] });
+    const regraded = await postJson(app, "/members", { email: "bo@example.org", role: "collaborator" });
+    expect(await regraded.json()).toEqual({ members: [{ email: "bo@example.org", role: "collaborator", emailSignIn: true }] });
+    const withdrawn = await postJson(app, "/members", { email: "bo@example.org", role: "collaborator", emailSignIn: false });
+    expect(await withdrawn.json()).toEqual({ members: [{ email: "bo@example.org", role: "collaborator" }] });
+    expect((await postJson(app, "/members", { email: "bo@example.org", role: "viewer", emailSignIn: "yes" })).status).toBe(400);
+});
+
 const FILM = join(WORKSPACE_ROOT, "film.mp4");
 
 // A media or download ticket lives for hours; a person removed from the roster must not keep fetching with one.

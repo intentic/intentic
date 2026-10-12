@@ -150,6 +150,26 @@ describe(`starting a machine`, () => {
         await hosted.recheckCapacity();
         expect({ full: hosted.hostedFull.value, error: hosted.hostedError.value }).toEqual({ full: false, error: undefined });
     });
+
+    // An account that signs in only by email, refused a free machine at the press: not a failure to show, but the
+    // offer's `needsGoogle` met late, which the setup screen answers with the ways on from there.
+    it(`holds a refusal for want of Google as that, with no failure said`, async () => {
+        const { sandbox, row, hosted } = stage();
+        row.created.value = draft;
+        hosted.machine.value = `hosted`;
+        sandbox.hostedProvision.mockRejectedValueOnce(Object.assign(new Error(`link Google first`), { code: `FORBIDDEN`, data: { reason: `google-required` } }));
+        expect(await hosted.provisionHosted()).toBe(false);
+        expect({ google: hosted.refusedForGoogle.value, error: hosted.hostedError.value }).toEqual({ google: true, error: undefined });
+    });
+
+    it(`reads any other refusal as the failure it is`, async () => {
+        const { sandbox, row, hosted } = stage();
+        row.created.value = draft;
+        hosted.machine.value = `hosted`;
+        sandbox.hostedProvision.mockRejectedValueOnce(Object.assign(new Error(`not yours`), { code: `FORBIDDEN`, data: { reason: `suspended` } }));
+        expect(await hosted.provisionHosted()).toBe(false);
+        expect({ google: hosted.refusedForGoogle.value, error: hosted.hostedError.value?.detail }).toEqual({ google: false, error: `not yours` });
+    });
 });
 
 describe(`stepping off the hosted rung`, () => {

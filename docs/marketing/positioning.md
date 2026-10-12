@@ -37,7 +37,7 @@ exactly this:
 - the **observability** surfaces: the fleet board, plan mode, per-edit permission modes, changes
   review, transcripts: where you *watch and steer* the agents you run.
 
-The shape of the product: you sign in with Google and run a sandbox on a machine you control (your
+The shape of the product: you sign in with Google or an emailed code and run a sandbox on a machine you control (your
 laptop, a VPS), reached by your browser over a private Cloudflare tunnel. Inside it, a coding agent
 (Claude Code, Codex, or Grok) works your files and repos with human-in-the-loop approval. You grow
 it with capabilities (GitHub, databases, Discord, Stripe, SSH, MCP servers…), wake it on

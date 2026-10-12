@@ -46,10 +46,10 @@ export const adminUpstreamRoutes = ({ config, prisma, auth, fetchUpstream = fetc
         // and the stored cookie must not be spendable by anything else that can open a port on the dev machine.
         const context = await buildOrpcContext({ auth, prisma, config, logger: c.get(`logger`) }, c.req.raw.headers);
         try {
-            c.set(`admin`, requireAdmin(context).email);
+            c.set(`admin`, (await requireAdmin(context)).email);
         } catch (error) {
             if (error instanceof ORPCError) {
-                // requireAdmin raises only these two: no session, or a session not on the allowlist.
+                // requireAdmin raises only these two: no session, or a session that is not an admin's.
                 return c.json({ message: error.message === `` ? error.code : error.message }, error.code === `FORBIDDEN` ? 403 : 401);
             }
             throw error;

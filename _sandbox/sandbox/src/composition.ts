@@ -485,6 +485,7 @@ const createDaemonMembers = (
         | "serviceProcesses"
         | "scanPorts"
         | "ownerGrants"
+        | "platformIdentityKey"
     > & { readonly manifestHost: ExtensionHost },
 ) => {
     const { config, logger, workspace, capabilities, conversations, chores, runtimeInstalls, processes, serviceProcesses, ownerGrants } = deps;
@@ -496,7 +497,7 @@ const createDaemonMembers = (
         // The browser's own reports, in their own file.
         clientLogger: createClientLogger(config),
         boot,
-        announcer: createAnnouncer(config, logger),
+        announcer: createAnnouncer(config, logger, { identityKey: deps.platformIdentityKey.learn }),
         reach: createReachReporter(config, logger, () => boot),
         browserRouters: createBrowserRouters(() => ({ capabilities, workspace, logger })),
         desktopServers: desktopServersOf,
@@ -763,6 +764,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
             scanPorts: bridged.scanPorts,
             manifestHost: capabilitiesParts.manifestHost,
             ownerGrants,
+            platformIdentityKey: authSlice.platformIdentityKey,
         }),
         trial,
         platformTunnel,

@@ -188,7 +188,7 @@ this paragraph stood alone for a day and was edited on the first turn that touch
 
 ## Conversion model
 
-- **Primary conversion**: `Get started free` → app.intentic.dev (Google sign-in). Every scroll
+- **Primary conversion**: `Get started free` → app.intentic.dev (sign-in with Google or an emailed code). Every scroll
   depth offers a path back to it.
 - **Secondary**: `See the source` → github.com/intentic/intentic, the trust-through-transparency
   path. The sandbox + CLI that run on your machine are MIT; this is *not* framed as "the open-source
@@ -198,7 +198,7 @@ this paragraph stood alone for a day and was edited on the first turn that touch
     On the landing page it appears as *proof of setup speed*, always framed as step 3 of the
     wizard: never as a standalone "install intentic" instruction.
   - Requirements stated honestly wherever setup is shown: a machine with Docker (auto-installed
-    with confirmation), Google account, **no Cloudflare account required**.
+    with confirmation), a Google account or any email address, **no Cloudflare account required**.
   - There are no tiers and no limits: every sandbox, capability and shared workspace is included,
     and nothing on the page may imply otherwise.
   - Every screenshot is real product UI. Re-shoot on UI shifts; never mock a screen the app doesn't render.
@@ -309,7 +309,7 @@ words are in `temple.ts`.
    Creator-forward: the name, the role, three profile chips, then four cards, *why trust intentic ·
    open source first · it builds itself · honest about its age*. Copy in `about.ts`, shared with
    `/about/` so the two cannot drift. (P1, P4)
-7. **Get connected (`#connect`)**, the speed proof: ① Sign in with Google ② Your sandbox is waiting
+7. **Get connected (`#connect`)**, the speed proof: ① Sign in with Google or email ② Your sandbox is waiting
    (made for you, and the step that defines the word) ③ Paste one command, with the real command block. Two of the three are things
    the visitor does not have to do, which is the point the band is making. (P3)
 8. **FAQ (`#faq`)**: see below.

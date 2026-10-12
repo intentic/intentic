@@ -50,6 +50,9 @@ export const configSchema = z.object({
             url: z.string().default(""),
             // Platform's Ed25519 public key (SPKI PEM) that verifies its owner ticket; hosted-only, empty elsewhere.
             publicKey: z.string().default(""),
+            // Platform's Ed25519 public key (SPKI PEM) that verifies its identity assertions (PLATFORM_IDENTITY_KEY): set on
+            // a hosted machine, which boots before it announces; every sandbox also learns it from its announce answers.
+            identityKey: z.string().default(""),
         })
         .prefault({}),
     // ACME directory for the loopback cert; empty ⇒ Let's Encrypt production, else staging for testing.

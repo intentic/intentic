@@ -129,9 +129,9 @@ export const accountHoursOf = async (
         rows.reduce((sum, row) => (counts(row) ? sum + (row._sum.minutes ?? 0) : sum), 0);
 
     const freeLive = machines.reduce((sum, machine) => (holders.has(machine.sandboxId) ? sum : sum + liveMinutes(machine.wokeAt, month, now)), 0);
-    // A deleted account's free minutes this month, carried onto this one by its Google subject (carried-standing.ts):
+    // A deleted account's free minutes this month, carried onto this one by its Google subject or address (carried-standing.ts):
     // deleting the account and signing in again is not a fresh month.
-    const carried = carriedFreeMinutes(await carriedStandingOf(prisma, config, owner?.accounts), month);
+    const carried = carriedFreeMinutes(await carriedStandingOf(prisma, config, owner?.accounts, owner?.email), month);
     const freeFull = hostedTierIn(config, FREE_TIER.id).monthlyHours * 60;
     const free = budgetOf(
         `free`,

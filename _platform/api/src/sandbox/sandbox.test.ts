@@ -1,5 +1,7 @@
+import { generateKeyPairSync } from "node:crypto";
 import type { HostReport } from "@intentic/api-contract";
 import { sandboxSubdomain } from "@intentic/sandbox-contract";
+import { verifyIdentityAssertion } from "@intentic/sandbox-contract/identity-assertion";
 import { verifyReachabilityGrant } from "@intentic/sandbox-contract/ingress-contract";
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { call, ORPCError } from "@orpc/server";
@@ -11,7 +13,7 @@ import { FIX_CODE_TTL_MS } from "./host-report.js";
 import { sandboxRoutes } from "./sandbox.routes.js";
 import { verifyAdoptionTicket } from "./recovery.js";
 
-const user = { id: `u1`, email: `owner@example.com`, name: `Owner`, image: null };
+const user = { id: `u1`, email: `owner@example.com`, name: `Owner`, image: null, emailVerified: true };
 const sandboxRow = {
     id: `s1`,
     name: `dev`,
@@ -43,6 +45,8 @@ const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof j
         },
         hostedCleanup: { upsert: jest.fn().mockResolvedValue({}), findMany: jest.fn().mockResolvedValue([]) },
         sandboxTrash: { create: jest.fn().mockResolvedValue({}), ...overrides[`sandboxTrash`] },
+        // A Google account linked, so the free lane is open (free-lane.ts), unless a test is about one without.
+        account: { count: jest.fn().mockResolvedValue(1), ...overrides[`account`] },
     };
     return prisma as unknown as OrpcContext[`prisma`];
 };
@@ -209,7 +213,7 @@ describe(`sandbox routes`, () => {
     it(`setupCode signs the reachability grant into the payload, with no provider call`, async () => {
         const update = jest.fn().mockResolvedValue(sandboxRow);
         const prisma = fakePrisma({ sandbox: { findFirst: jest.fn().mockResolvedValue(sandboxRow), update } });
-        const mixedCase = { id: `u1`, email: `Owner@Example.com`, name: `Owner`, image: null };
+        const mixedCase = { id: `u1`, email: `Owner@Example.com`, name: `Owner`, image: null, emailVerified: true };
         // Reachability is signed in-process; a fetch here is the regression this stub catches.
         stubGlobal(`fetch`, () => {
             throw new Error(`the mint must call no provider — a grant is signed in-process`);
@@ -684,6 +688,60 @@ describe(`sandbox.delete on a hosted sandbox`, () => {
 });
 
 /* THE RECOVERY COMMAND'S FIX CODE: the owner's, for a sandbox on a machine of their own that is still there. */
+// The platform's word that the caller controls their address (identity-assertion.ts): for a sandbox they own or joined,
+// verifiable with the identity key alone, and only for an address a code or Google confirmed.
+describe(`sandbox.identityAssertion`, () => {
+    const keys = generateKeyPairSync(`ed25519`, { publicKeyEncoding: { type: `spki`, format: `pem` }, privateKeyEncoding: { type: `pkcs8`, format: `pem` } });
+    const signing = (signingKey: string): Partial<OrpcContext> => ({
+        // SAFETY: the route reads only these sections of config, and the suite's context() builds its config as the same
+        // partial object.
+        config: { ...context().config, signIn: { email: true }, identity: { signingKey } } as OrpcContext[`config`],
+    });
+    const owned = (found: { token: string } | null, googleAccounts = 0) => {
+        const findFirst = jest.fn().mockResolvedValue(found);
+        return {
+            findFirst,
+            prisma: fakePrisma({ sandbox: { findFirst }, account: { count: jest.fn().mockResolvedValue(googleAccounts) } }),
+        };
+    };
+
+    it(`signs the caller's address for a sandbox they own or accepted an invitation to, named by its tunnel id`, async () => {
+        const { prisma, findFirst } = owned({ token: `tok` });
+        const minted = await call(
+            sandboxRoutes.identityAssertion,
+            { sandboxId: `s1` },
+            { context: context({ ...signing(keys.privateKey), prisma, user: { ...user, email: `Owner@Example.com` } }) },
+        );
+        expect(verifyIdentityAssertion(keys.publicKey, minted.assertion, Date.now())).toMatchObject({
+            sandboxId: sandboxIdFromToken(`tok`),
+            email: `owner@example.com`,
+            method: `email`,
+        });
+        expect(findFirst).toHaveBeenCalledWith({
+            where: { id: `s1`, OR: [{ ownerId: `u1` }, { members: { some: { email: `owner@example.com`, acceptedAt: { not: null } } } }] },
+            select: { token: true },
+        });
+    });
+
+    it(`says how the platform confirmed the address: Google for an account with Google linked`, async () => {
+        const { prisma } = owned({ token: `tok` }, 1);
+        const minted = await call(sandboxRoutes.identityAssertion, { sandboxId: `s1` }, { context: context({ ...signing(keys.privateKey), prisma }) });
+        expect(verifyIdentityAssertion(keys.publicKey, minted.assertion, Date.now())).toMatchObject({ method: `google` });
+    });
+
+    it(`vouches for nothing without an identity key, for an unconfirmed address, or for a sandbox the caller is not in`, async () => {
+        await expect(call(sandboxRoutes.identityAssertion, { sandboxId: `s1` }, { context: context({ ...signing(``), prisma: owned({ token: `tok` }).prisma }) })).rejects.toMatchObject({
+            code: `NOT_FOUND`,
+        });
+        await expect(
+            call(sandboxRoutes.identityAssertion, { sandboxId: `s1` }, { context: context({ ...signing(keys.privateKey), prisma: owned({ token: `tok` }).prisma, user: { ...user, emailVerified: false } }) }),
+        ).rejects.toMatchObject({ code: `FORBIDDEN` });
+        await expect(call(sandboxRoutes.identityAssertion, { sandboxId: `s1` }, { context: context({ ...signing(keys.privateKey), prisma: owned(null).prisma }) })).rejects.toMatchObject({
+            code: `NOT_FOUND`,
+        });
+    });
+});
+
 describe(`sandbox.fixCode`, () => {
     const minting = (row: object = sandboxRow, hosted: { id: string } | null = null) => {
         const update = jest.fn().mockResolvedValue({});

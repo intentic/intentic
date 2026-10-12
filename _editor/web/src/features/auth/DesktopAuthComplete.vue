@@ -15,6 +15,8 @@ import { useT } from "@intentic/ui/i18n";
 // 2. Verify the Better Auth one-time token at /api/auth/one-time-token/verify; its Set-Cookie gives this webview a
 //    session over an ordinary HTTP round trip, nothing injected from Rust.
 // 3. Adopt the Google ID token into the shared cache, so the first daemon call gets a session that renews silently.
+//    An account with no Google sign-in carries none: its daemon sessions come from the platform's identity assertions,
+//    which this webview asks for with the session step 2 gave it.
 // A failure is terminal for this link; retry means signing in again, not reloading the link.
 
 const t = useT();
@@ -46,7 +48,7 @@ const complete = async (): Promise<void> => {
             error.value = noticeOf(t(`auth.desktopAuthComplete.expired`));
             return;
         }
-        if (!adoptIdToken(idToken)) {
+        if (idToken !== undefined && !adoptIdToken(idToken)) {
             error.value = noticeOf(t(`auth.desktopAuthComplete.expired`));
             return;
         }

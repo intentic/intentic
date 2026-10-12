@@ -6,7 +6,10 @@ import { waitFor } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
-const user = ref<{ name: string; image: string | null } | undefined>({ name: `Artur Kurowski`, image: null });
+const user = ref<{ name: string; image: string | null; email?: string; signInMethods?: (`google` | `email`)[] } | undefined>({
+    name: `Artur Kurowski`,
+    image: null,
+});
 const updateProfile = jest.fn<(input: { name?: string; image?: string }) => Promise<void>>().mockResolvedValue(undefined);
 jest.mock(`../../client/auth/useAccount`, () => ({
     useAccount: () => ({ user, updateProfile }),
@@ -18,6 +21,10 @@ jest.mock(`../../lib/imageDataUrl`, () => ({ fileToSquareDataUrl }));
 // Plan chip words are pinned in hostedHours.test.ts; mocked here to avoid needing a query client.
 const planBadge = ref<{ label: string; variant: string; detail: string } | undefined>(undefined);
 jest.mock(`./hosted-plan/useHostedPlan`, () => ({ useHostedPlan: () => ({ planBadge }) }));
+
+// Linking Google is the platform's sign-in client's, loaded at the press.
+const linkGoogle = jest.fn<(callbackPath?: string) => Promise<void>>().mockResolvedValue(undefined);
+jest.mock(`../../client/auth/useAuth`, () => ({ useAuth: () => ({ linkGoogle }) }));
 
 const { default: SettingsProfile } = await import(`./SettingsProfile.vue`);
 
@@ -53,6 +60,7 @@ beforeEach(() => {
     planBadge.value = { label: `hosted`, variant: `primary`, detail: `Hosted plan, renews Oct 1.` };
     updateProfile.mockClear();
     fileToSquareDataUrl.mockClear();
+    linkGoogle.mockClear();
 });
 
 afterEach(() => {
@@ -132,4 +140,38 @@ it(`shows the chip only while the platform sells a plan`, async () => {
     planBadge.value = undefined;
     await nextTick();
     expect(chip(el)).toBeUndefined();
+});
+
+// An account that signs in by email code: how it signs in is said, and Google can be linked beside it, which the free
+// hosted machine and the trial ask of it.
+describe(`an account that signs in by email code`, () => {
+    const linkButton = (): HTMLButtonElement | undefined =>
+        [...document.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`Link Google account`));
+
+    it(`offers to link Google, and sends the press to Google's page with this page to come back to`, async () => {
+        user.value = { name: `Ana`, image: null, email: `ana@corp.example`, signInMethods: [`email`] };
+        const el = mount();
+        await nextTick();
+
+        expect(el.textContent).toContain(`intentic mails a code to ana@corp.example each time you sign in.`);
+        linkButton()?.click();
+        await waitFor(() => expect(linkGoogle).toHaveBeenCalledWith(`/settings`));
+    });
+
+    it(`says Google is linked once it is, with nothing to press`, async () => {
+        user.value = { name: `Ana`, image: null, email: `ana@corp.example`, signInMethods: [`google`, `email`] };
+        const el = mount();
+        await nextTick();
+
+        expect(el.textContent).toContain(`Linked: you can sign in with Google too.`);
+        expect(linkButton()).toBeUndefined();
+    });
+
+    // A Google account (or any account on a platform from before email sign-in) has nothing here to decide.
+    it(`stays away for an account that signs in with Google alone`, () => {
+        const el = mount();
+
+        expect(el.textContent).not.toContain(`Email code`);
+        expect(linkButton()).toBeUndefined();
+    });
 });

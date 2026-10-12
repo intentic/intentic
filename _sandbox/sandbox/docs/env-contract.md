@@ -23,7 +23,7 @@ when the daemon runs from a checkout), the process environment, then command-lin
 | Group | For example |
 | --- | --- |
 | Roots | `WORKSPACE_ROOT`, `HISTORY_ROOT`, `AGENT_AUTH_DIR`, `SANDBOX_PROJECT_DIR`, `SANDBOX_PROJECTS_HOST` |
-| Owner and sign-in | `CONNECT_TOKEN`, `OWNER_EMAIL`, `GOOGLE_CLIENT_ID`, `WEB_ORIGIN` |
+| Owner and sign-in | `CONNECT_TOKEN`, `OWNER_EMAIL`, `GOOGLE_CLIENT_ID`, `PLATFORM_IDENTITY_KEY`, `WEB_ORIGIN` |
 | Reachability | `SANDBOX_GRANT`, `INGRESS_URL`, `SANDBOX_PUBLIC_URL`, `PLATFORM_URL`, `SANDBOX_PORT` |
 | Posture | `SANDBOX_PROFILE`, `SANDBOX_VM`, `SANDBOX_PREWARM`, `IDLE_STOP_MINUTES` |
 | Image assets | `IQ_MODEL_DIR`, `WEBQ_PLUGIN_DIR`, `EXTENSIONS_DIR`, `TRANSLATOR_URL` |
@@ -32,6 +32,9 @@ when the daemon runs from a checkout), the process environment, then command-lin
 ## Who sets what
 
 - The image bakes the asset paths and ports ([Dockerfile](../Dockerfile) `ENV` lines).
+- The platform sets `PLATFORM_IDENTITY_KEY` on a hosted machine, which boots before it first announces. Every other
+  sandbox learns the same key from the answer to its announce (`identityKey`) and keeps it in memory
+  ([src/auth/platform/platform-identity-key.ts](../src/auth/platform/platform-identity-key.ts)), so `ic` passes nothing new.
 - The host's creation flow sets identity, reachability and the owner's resource asks. `REPLAY_ENV` in
   [`@intentic/sandbox-run`](../../../_shared/sandbox-run/src/index.ts) lists every variable a recreate carries over.
 - `intentic-netd` sets `INTENTIC_NETD_SOCKET` and `INTENTIC_NODE_SOCKET` for the daemon it spawns, both named once
@@ -57,8 +60,12 @@ when the daemon runs from a checkout), the process environment, then command-lin
 
 The daemon exits with code 78 rather than serve an unsafe posture:
 
-- reachable (`CONNECT_TOKEN` or `SANDBOX_PUBLIC_URL` set) with an empty `GOOGLE_CLIENT_ID`, since nobody would be
-  authenticated; only the e2e harnesses bypass this, with `SANDBOX_ALLOW_UNAUTHENTICATED`;
+- reachable (`CONNECT_TOKEN` or `SANDBOX_PUBLIC_URL` set) with no way to verify anyone, since nobody would be
+  authenticated: an empty `GOOGLE_CLIENT_ID`, an empty `PLATFORM_IDENTITY_KEY`, and no platform to learn that key
+  from (`PLATFORM_URL` with a connect token). A Google client id or a platform identity key, set or still to be
+  learned, turns authentication on, so a sandbox of a self-hosted platform that offers only email sign-in runs
+  ([src/auth/auth-enabled.ts](../src/auth/auth-enabled.ts)). Only the e2e harnesses bypass this, with
+  `SANDBOX_ALLOW_UNAUTHENTICATED`;
 - `SANDBOX_PROFILE=local` with a non-loopback `SANDBOX_HOST`, a connect token, a public URL or a platform URL
   (`requireLocalContract` in [src/system/boot/profile.ts](../src/system/boot/profile.ts));
 - a `SANDBOX_PROJECT_DIR` that is not one folder directly under the workspace root with a name a project may take: the

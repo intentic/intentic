@@ -122,7 +122,10 @@ const mount = (): void => {
 const shown = (): string => document.body.textContent ?? ``;
 
 const inviteEmail = async (address: string): Promise<void> => {
-    const field = document.body.querySelector(`input[type=email]`) as HTMLInputElement;
+    const field = document.body.querySelector<HTMLInputElement>(`input[type=email]`);
+    if (field === null) {
+        throw new Error(`no invite field on the tab`);
+    }
     field.value = address;
     field.dispatchEvent(new Event(`input`));
     await nextTick();
@@ -639,4 +642,65 @@ it(`says which owner-wide records could not be read, and draws the list for them
     expect(shown()).toContain(`Sandbox-wide permissions`);
     expect(shown()).not.toContain(`Conversation permissions`);
     expect(shown()).toContain(`none of it stands until the file is fixed: hook sets, extensions.`);
+});
+
+/* EMAIL SIGN-IN: whether intentic's word for an address opens this sandbox for its person, decided with the invite and
+   flipped per row afterwards. */
+
+// The daemon's POST /members bodies, in order.
+const grantsSent = (): unknown[] =>
+    // SAFETY: sandboxJson is called as (path, init) by sandboxRaw, and a POST's init carries its JSON body as a string.
+    (sandboxJson.mock.calls as unknown[][])
+        .filter(([path, init]) => path === `/members` && (init as { method?: string } | undefined)?.method === `POST`)
+        .map(([, init]) => JSON.parse((init as { body: string }).body) as unknown);
+
+it(`lets an invited address sign in with an email code by default, and says so beside the invite`, async () => {
+    create.mockResolvedValue({ members: [], link: `https://localhost:47145/invite/tok`, delivery: `sent` });
+    mount();
+    await inviteEmail(`dee@corp.example`);
+
+    expect(grantsSent()).toEqual([{ email: `dee@corp.example`, role: `collaborator`, emailSignIn: true }]);
+});
+
+// Google already vouches for its own addresses: a second road for one is one the owner did not ask for.
+it(`leaves it off for an address Google holds, unless the owner turns it on`, async () => {
+    create.mockResolvedValue({ members: [], link: `https://localhost:47145/invite/tok`, delivery: `sent` });
+    mount();
+    const address = [`dee`, `gmail.com`].join(`@`);
+    const field = document.body.querySelector<HTMLInputElement>(`input[type=email]`);
+    if (field === null) {
+        throw new Error(`no invite field on the tab`);
+    }
+    field.value = address;
+    field.dispatchEvent(new Event(`input`));
+    await nextTick();
+
+    expect(shown()).toContain(`Can sign in with an email code (intentic confirms the address)`);
+    const toggle = document.body.querySelector<HTMLInputElement>(`input[role="switch"][id]`);
+    expect(toggle?.checked).toBe(false);
+    document.body.querySelector(`form`)?.dispatchEvent(new Event(`submit`));
+    await settle();
+
+    expect(grantsSent()).toEqual([{ email: address, role: `collaborator`, emailSignIn: false }]);
+});
+
+// The row's switch is one daemon write that carries the person's tier and fence as they stand (a grant replaces the
+// row whole), and nothing for the platform, whose record has no way in to hold.
+it(`flips a member's email sign-in with their tier and fence kept, at the sandbox alone`, async () => {
+    const member = { email: `guest@example.com`, role: `collaborator`, status: `accepted`, invitedAt: `2026-08-18T00:00:00.000Z` };
+    list.mockResolvedValue({ members: [member] });
+    daemonMembers.mockReturnValue([{ email: `guest@example.com`, role: `collaborator`, areas: [`support`] }]);
+    sandboxJson.mockImplementation(async (path: unknown) => (path === `/members` ? { members: daemonMembers() } : quiet(path)));
+    mount();
+    await settle();
+
+    const toggle = document.body.querySelector<HTMLInputElement>(`input[aria-label="Email-code sign-in for guest@example.com"]`);
+    expect(toggle?.checked).toBe(false);
+    daemonMembers.mockReturnValue([{ email: `guest@example.com`, role: `collaborator`, areas: [`support`], emailSignIn: true }]);
+    toggle?.click();
+    await settle();
+
+    expect(grantsSent()).toEqual([{ email: `guest@example.com`, role: `collaborator`, areas: [`support`], emailSignIn: true }]);
+    expect(setRole).not.toHaveBeenCalled();
+    expect(document.body.querySelector<HTMLInputElement>(`input[aria-label="Email-code sign-in for guest@example.com"]`)?.checked).toBe(true);
 });

@@ -21,19 +21,28 @@ const memberEmail = async (c: Context): Promise<string | undefined> => {
 // missing or malformed. Role is required: a grant is a role decision, and a default here would be a policy nobody
 // chose. Areas are optional, and their absence is the whole workspace — which is also every assistant, since which
 // cards a person may wear is read off their fence (personas/persona-reach.ts) rather than listed per person.
-const memberGrant = async (c: Context): Promise<{ email: string; role: GrantedRole; areas?: readonly string[] } | undefined> => {
+// `emailSignIn` lets the platform's identity assertion open this sandbox for them; absent keeps what their row says.
+const memberGrant = async (c: Context): Promise<MemberGrantRequest | undefined> => {
     const body = MemberGrantSchema.safeParse(await c.req.json().catch(() => undefined));
     if (!body.success) {
         return undefined;
     }
-    const { email, role, areas } = body.data;
-    return { email: email.toLowerCase(), role, ...(areas !== undefined ? { areas } : {}) };
+    const { email, role, areas, emailSignIn } = body.data;
+    return { email: email.toLowerCase(), role, areas, emailSignIn };
 };
+
+// A grant as the route reads it: who, at what tier, fenced to what, and whether email sign-in is theirs.
+interface MemberGrantRequest {
+    readonly email: string;
+    readonly role: GrantedRole;
+    readonly areas?: readonly string[] | undefined;
+    readonly emailSignIn?: boolean | undefined;
+}
 
 // The two tiers whose fence IS the tier, refused unfenced: a writer's areas are the folders it may change, a guest's
 // are the assistants it speaks through. For each, an absent area list resolves to the whole workspace — every file,
 // every card — which is not a narrower grant of that tier but a different one nobody chose.
-const fenceRequired = (grant: { role: GrantedRole; areas?: readonly string[] }): string | undefined => {
+const fenceRequired = (grant: { role: GrantedRole; areas?: readonly string[] | undefined }): string | undefined => {
     if ((grant.areas?.length ?? 0) > 0) {
         return undefined;
     }
@@ -47,7 +56,7 @@ const fenceRequired = (grant: { role: GrantedRole; areas?: readonly string[] }):
 // nobody wrote resolves to a fence admitting nothing, and somebody would have to guess whether that was intended.
 // A maintainer is not fenceable: the tier carries the owner's operating authority, reads every credential and drives
 // every conversation, so a folder fence over it would be a line on a screen rather than a boundary.
-const areaRefusal = async (services: Pick<Services, "areas">, grant: { role: GrantedRole; areas?: readonly string[] }): Promise<string | undefined> => {
+const areaRefusal = async (services: Pick<Services, "areas">, grant: { role: GrantedRole; areas?: readonly string[] | undefined }): Promise<string | undefined> => {
     if (grant.areas === undefined) {
         return undefined;
     }
@@ -62,7 +71,7 @@ const areaRefusal = async (services: Pick<Services, "areas">, grant: { role: Gra
 // Why a guest's fence cannot be granted even though its areas exist: no card works in the folders it names. A guest
 // reaches nothing but its assistants, so such a grant would sign somebody in to a chat that answers nothing.
 // Checked only for a guest: every other tier has business in a workspace with no card homed in its folders.
-const guestReachRefusal = async (services: PersonaReachDeps, grant: { role: GrantedRole; areas?: readonly string[] }): Promise<string | undefined> => {
+const guestReachRefusal = async (services: PersonaReachDeps, grant: { role: GrantedRole; areas?: readonly string[] | undefined }): Promise<string | undefined> => {
     if (grant.role !== "guest") {
         return undefined;
     }

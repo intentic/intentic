@@ -40,7 +40,7 @@ const families: Family[] = [
             },
             {
                 word: "Daemon",
-                what: "The program inside the sandbox that everything talks to. It serves the HTTP API, verifies who you are against Google directly, runs the agent, and owns the files and git history. When these docs say the daemon enforces something, they mean it is enforced by the container on your hardware rather than by a screen you could bypass.",
+                what: "The program inside the sandbox that everything talks to. It serves the HTTP API, checks who you are itself (a Google sign-in, a passkey, or an email sign-in the owner allowed), runs the agent, and owns the files and git history. When these docs say the daemon enforces something, they mean it is enforced by the container on your hardware rather than by a screen you could bypass.",
                 href: "/api/",
                 page: "Sandbox API",
             },

@@ -9,7 +9,8 @@ const os = implement(apiContract).$context<OrpcContext>();
 
 // One sign-in, carried into the app's webview via the intentic:// deep link, since Google refuses OAuth in an embedded
 // webview. The platform session (a one-time token) and the Google ID token cross separately; only the row id rides the
-// link itself.
+// link itself. An account that signs in by email carries no Google ID token: its webview asks the platform for identity
+// assertions with the session the one-time token gives it.
 
 // Long enough for an immediate redirect, short enough that a link in history is inert by the time it's read.
 const HANDOFF_TTL_MS = 3 * 60_000;
@@ -32,7 +33,7 @@ export const desktopRoutes = {
         const row = await context.prisma.desktopHandoff.create({
             data: {
                 ott: encryptSecret(context.config, minted.token),
-                idToken: encryptSecret(context.config, input.idToken),
+                idToken: input.idToken === undefined ? null : encryptSecret(context.config, input.idToken),
                 challenge: input.challenge,
                 expiresAt: new Date(Date.now() + HANDOFF_TTL_MS),
             },
@@ -51,7 +52,8 @@ export const desktopRoutes = {
         if (spent.count !== 1) {
             throw new ORPCError(`NOT_FOUND`, { message: `this sign-in link has already been used or expired` });
         }
-        return { ott: decryptSecret(context.config, row.ott), idToken: decryptSecret(context.config, row.idToken) };
+        const ott = decryptSecret(context.config, row.ott);
+        return row.idToken === null ? { ott } : { ott, idToken: decryptSecret(context.config, row.idToken) };
     }),
 
     // Best-effort refresh of the on-file Google ID token, tried before Google's own button; never a 500.

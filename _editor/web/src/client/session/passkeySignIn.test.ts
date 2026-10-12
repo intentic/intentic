@@ -3,6 +3,7 @@
 import "@intentic/testing/dom";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { passkeyOffered, PasskeyRefusedError, recoverWithCode, registerPasskey, signInWithPasskey } from "./passkeySignIn";
+import { sameBearer } from "./signInPrompt";
 
 const TARGET = { sandboxId: `sb-1`, base: `https://daemon.test`, connectToken: `connect` };
 
@@ -122,7 +123,7 @@ it(`registers under the given bearer: user handle and exclusions as bytes, the a
         );
     create.mockResolvedValue(new FakeCredential(`Bg`, bytes(6), new FakeAttestation(bytes(7), bytes(8))));
 
-    const registered = await registerPasskey(TARGET, `google-proof`, `laptop`);
+    const registered = await registerPasskey(TARGET, sameBearer(`google-proof`), `laptop`);
     expect(registered).toEqual({ passkey: expect.objectContaining({ id: `Bg` }), session: { token: `sess`, expiresAt: 1, email: `o@x.com` } });
 
     const [{ publicKey }] = create.mock.calls[0] as [{ publicKey: PublicKeyCredentialCreationOptions }];
@@ -144,9 +145,38 @@ it(`registers under the given bearer: user handle and exclusions as bytes, the a
     });
 });
 
+// A daemon spends an identity assertion once, so an email account enrolling its first passkey presents a fresh one on
+// each call of the ceremony.
+it(`asks the bearer afresh for each call, so each call of an email account's enrolment carries its own assertion`, async () => {
+    fetchMock
+        .mockResolvedValueOnce(
+            json({
+                rp: { id: `app.test`, name: `work` },
+                user: { id: `AQI`, name: `o@x.com`, displayName: `o@x.com · work` },
+                challenge: `AwQ`,
+                pubKeyCredParams: [{ type: `public-key`, alg: -7 }],
+                timeout: 1,
+                attestation: `none`,
+                excludeCredentials: [],
+                authenticatorSelection: { residentKey: `required`, requireResidentKey: true, userVerification: `required` },
+            }),
+        )
+        .mockResolvedValueOnce(
+            json({
+                passkey: { id: `Bg`, email: `o@x.com`, label: `laptop`, rpId: `app.test`, createdAt: 1, backedUp: false },
+                session: { token: `sess`, expiresAt: 1, email: `o@x.com` },
+            }),
+        );
+    create.mockResolvedValue(new FakeCredential(`Bg`, bytes(6), new FakeAttestation(bytes(7), bytes(8))));
+    let minted = 0;
+    await registerPasskey(TARGET, async () => `pa1.assertion-${++minted}`, undefined);
+    expect(sent(0).headers).toMatchObject({ authorization: `Bearer pa1.assertion-1` });
+    expect(sent(1).headers).toMatchObject({ authorization: `Bearer pa1.assertion-2` });
+});
+
 it(`the daemon's refusal comes back with its status and its own words`, async () => {
     fetchMock.mockResolvedValueOnce(json({ error: `that recovery code is not one of yours, or was already used` }, 403));
-    const refused = recoverWithCode(TARGET, `google-proof`, `abcde`);
+    const refused = recoverWithCode(TARGET, sameBearer(`google-proof`), `abcde`);
     await expect(refused).rejects.toBeInstanceOf(PasskeyRefusedError);
     await expect(refused).rejects.toMatchObject({ status: 403, message: `that recovery code is not one of yours, or was already used` });
     expect(sent(0).body).toEqual({ code: `abcde` });

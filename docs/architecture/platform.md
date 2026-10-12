@@ -1,6 +1,6 @@
 # The platform
 
-The hosted account service: Google sign-in, the registry that tells a browser where each sandbox is, and the lifecycle and billing of the sandboxes intentic hosts.
+The hosted account service: sign-in with Google or a code mailed to any address, the registry that tells a browser where each sandbox is, and the lifecycle and billing of the sandboxes intentic hosts.
 
 ```mermaid
 flowchart LR
@@ -16,7 +16,7 @@ flowchart LR
 
 ## What it is
 
-- [`_platform/api`](../../_platform/api) runs on Bun with Hono. Its oRPC router ([`router.ts`](../../_platform/api/src/router.ts)) serves the editor through the contract in [`_shared/api-contract`](../../_shared/api-contract), and Better Auth handles sign-in with Google as the only provider ([`auth.ts`](../../_platform/api/src/auth.ts)).
+- [`_platform/api`](../../_platform/api) runs on Bun with Hono. Its oRPC router ([`router.ts`](../../_platform/api/src/router.ts)) serves the editor through the contract in [`_shared/api-contract`](../../_shared/api-contract), and Better Auth handles sign-in ([`auth.ts`](../../_platform/api/src/auth.ts)): with Google, or with a six-digit code mailed to the person's address through Resend. Accounts are linked by address, so a code for an address that already has an account enters that account. For a person who signs in by email the platform also mints the identity assertion a daemon may accept in place of a Google ID token ([topology.md](topology.md#trust-model) says when).
 - [`app.ts`](../../_platform/api/src/app.ts) holds the plain HTTP routes the machines call: the setup claim, the daemon's announce, farewell and boot report, the host report `ic sandbox fix` posts about the machine a sandbox runs on (`/host-report`, and `/host-report/claim` for the fix code the recovery panel hands out), the ingress's reachability lookup, and the Stripe webhook. Every one but the webhook is declared in api-contract's ingress table (`PLATFORM_INGRESS`): the platform serves it there through [`ingress.ts`](../../_platform/api/src/ingress.ts), reading its body with the route's schema, and the daemon calls it by name. A refusal is `{ "error": … }` with the route's status. (2026-10-05) Each side used to spell these routes by hand; the boot report's handler listed its fields one by one and dropped the two the editor's unreachable and missing-environment notices wait on.
 - [`_platform/prisma`](../../_platform/prisma) owns the Postgres schema and migrations. [`_platform/ingress`](../../_platform/ingress) is the public edge a sandbox tunnels to; see [topology.md](topology.md).
 - The editor itself is a static build of [`_editor/web`](../../_editor/web) served by nginx at `app.intentic.dev`, next to the api. [`_tools/selfhost/platform`](../../_tools/selfhost/platform) runs the same stack (Postgres, api, web, ingress) for an operator's own fleet.
@@ -25,7 +25,7 @@ flowchart LR
 
 [`schema.prisma`](../../_platform/prisma/schema.prisma), in four groups:
 
-- **Accounts**: `User`, Better Auth's `Session`, `Account` and `Verification`, and `ApiToken` for provisioning from a script or an agent.
+- **Accounts**: `User`, Better Auth's `Session`, `Account` and `Verification` (which also holds sign-in codes, hashed), `SignInCodeAllowance` (how many codes each address was sent lately, under a hash of the address), and `ApiToken` for provisioning from a script or an agent.
 - **The registry**: `Sandbox` (the daemon's public URL, its last-seen time, the encrypted connect token, the setup code and the machine that claimed it, the last boot report, the recovery command's fix code, the newest host report of each machine that reports on it, and the last two copies of it that announced), `SandboxMember` for invitations, `SandboxTrash` for a deleted sandbox that can still be restored, `SandboxTombstone` for the deletion record of every tunnel id the registry let go of, and `PlatformIdentity`, which database this is. The daemon enforces membership; the platform only records it.
 - **Convergence across owners' machines** ([`upkeep-convergence.ts`](../../_platform/api/src/admin/upkeep-convergence.ts)): a host report carries the machine agent's last upkeep pass, its counts and the agent's version. The daily sweep sums them by version, one machine counted once. When machines on the newest agent still hold leftovers their own pass could not clear, it puts one line in the admin digest. (2026-10-05) This is how intentic sees whether a release brought machines nobody is watching to the current shape, rather than assuming it did; see [convergence.md](convergence.md).
 - **Hosted sandboxes**: `HostedMachine` and the warm pool `HostedPoolMachine`, image builds, migrations, cleanups, awake-minute metering, the Stripe subscription mirror (`HostedPlan`, `HostedPlanItem`) and the abuse ledgers.
@@ -61,9 +61,10 @@ between forgotten and deleted, so the platform keeps the difference explicit ([`
   every few seconds at first and every five minutes after; only a 410 ends it. Registered, it announces again every
   hour, and a heartbeat answered 404 puts it back to asking.
 - **The editor remembers.** Each device keeps, per account, where every listed sandbox answers (names and addresses,
-  never a token). With the platform down it opens them directly, since a daemon checks the reader's Google sign-in
-  itself; with the platform answering an empty list it offers them back instead of onboarding
-  ([`recovery`](../../_editor/web/src/features/sandbox/recovery)).
+  never a token). With the platform down it opens them directly, since a daemon checks a Google sign-in itself. A
+  person who signs in by email gets in then only on a live daemon session or a passkey, because the assertion comes
+  from the platform. With the platform answering an empty list the editor offers the sandboxes back instead of
+  onboarding ([`recovery`](../../_editor/web/src/features/sandbox/recovery)).
 - **Adoption puts a row back.** The owner presses Reconnect: the editor asks `sandbox.adoptionTicket` for a ten-minute
   ticket naming the sandbox and the account, hands it to the daemon (`POST /platform/relink`, owner-only), and the
   daemon presents it at `POST /sandbox/adopt` with its connect token and the grant this platform signed for it. The
@@ -98,6 +99,8 @@ volume with it at the next daily pass, and a backlog after an outage never clear
 
 [`hosted.ts`](../../_platform/api/src/sandbox/hosted/hosted.ts) gives each hosted sandbox its own Fly app, machine and volume, booting the same public sandbox image every other lane runs, in a region chosen by where the owner is. The platform starts and stops machines (they stop when idle; a wake also re-applies the config of a machine whose tunnel grant or edge address is missing or stale), resizes and moves them, keeps a pool of warm machines, and meters awake time ([`hosted-usage.ts`](../../_platform/api/src/sandbox/hosted/hosted-usage.ts)): every awake minute is charged either to the account's free hours, one allowance a month shared by every machine the account has off a paid slot, or to one machine's own month on a paid slot of the hosted plan ([`hosted-plan.ts`](../../_platform/api/src/sandbox/hosted/plan/hosted-plan.ts)), a Stripe subscription for a bigger machine than the free one. A sandbox on its owner's own computer is never metered. The tier ladder is in [`hosted-tiers.ts`](../../_tools/constants/src/hosted-tiers.ts).
 
+The free machine, the free trial and the desktop Repair agent need a Google sign-in linked to the account. An account that signs in only by email is told so (`hostedOffer.needsGoogle`) and can link Google, buy a machine on a paid slot, or run the sandbox on its own computer.
+
 A hosted sandbox can be made for one folder of the owner's computer, as a sandbox on that computer can. The desktop app's "Work on this with an agent" makes a sandbox on the owner's own computer by default (the app creates the row and mints its setup code with the owner's session); a machine of ours is asked for by name in the editor's setup for the folder (`?machine=hosted`), which asks for a machine with the folder's name where `hostedOffer` answers `projects` (`hostedProvision`'s `project`). The machine boots with that folder as its project (`SANDBOX_PROJECT_DIR=/work/<name>`, as `ic` starts a project container), is built to order rather than taken from the warm pool, and keeps the folder through every config it takes later ([`hosted-project.ts`](../../_platform/api/src/sandbox/hosted/hosted-project.ts)). Once the machine is reachable, the setup page hands the desktop app a sync pairing for it and the app copies the folder in: agents work on the copy, and the owner brings their changes back from the folder's window.
 
 Every change of image a hosted machine takes (a restart onto a new release, an environment rebuild, the wake that heals a stale tunnel, the owner's rollback) goes through one gate ([`state-gate.ts`](../../_platform/api/src/sandbox/hosted/gate/state-gate.ts)): the new image's state planner runs against the machine's volume first, and once the new version starts, the platform waits on its daemon's `/health` and its check-in ([`daemon-health.ts`](../../_platform/api/src/sandbox/hosted/gate/daemon-health.ts)) and puts the machine back on the image it ran if that version crashes, never becomes ready or cannot convert the stored files. The image before the last change is kept on the machine's row, so its owner can go back to it (`hostedRollback`) while the daemon is down; a version applied to a stopped machine is on trial until its next start is judged the same way. COMPATIBILITY.md has the promise.
@@ -111,5 +114,5 @@ Background jobs started in [`main.ts`](../../_platform/api/src/main.ts) reap orp
 ## What it does not do
 
 - It does not relay or inspect agent turns. The one exception is the optional free trial ([`trial`](../../_platform/api/src/trial)), whose turns use platform-owned model accounts.
-- It holds no credential that drives a sandbox the owner runs. It can power, resize and destroy only the machines it hosts.
+- It holds no credential that drives a sandbox the owner runs. Its identity assertion opens such a sandbox only for the people its owner opted in to email sign-in, and only with the role the owner gave them. It can power, resize and destroy only the machines it hosts.
 - It does not deploy anything for users; that is the [deployment engine](deploy-engine.md), run from inside a sandbox.

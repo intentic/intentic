@@ -3,7 +3,7 @@ import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { OrpcContext } from "../context.js";
 import { inviteRoutes } from "./invite.routes.js";
 
-const user = { id: `u1`, email: `owner@example.com`, name: `Owner`, image: null };
+const user = { id: `u1`, email: `owner@example.com`, name: `Owner`, image: null, emailVerified: true };
 const sandboxRow = { id: `s1`, name: `dev`, image: null, ownerId: `u1`, token: `tok`, daemonUrl: null, lastSeenAt: null, tunnelToken: null };
 
 // Minimal prisma fake: each test overrides just the calls its route makes.
@@ -142,7 +142,7 @@ describe(`invite routes`, () => {
     });
 
     it(`invite.accept flips a valid invite for the invited address and is email-locked`, async () => {
-        const guest = { id: `u2`, email: `Guest@Example.com`, name: `Guest`, image: null };
+        const guest = { id: `u2`, email: `Guest@Example.com`, name: `Guest`, image: null, emailVerified: true };
         const memberRow = {
             id: `m1`,
             sandboxId: `s1`,
