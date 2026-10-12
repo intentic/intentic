@@ -297,12 +297,16 @@ watch(
             <!-- The panes share the room equally (mirroring the terminal panel's split cells) until the floor, then scroll sideways instead of crushing. -->
             <!-- The strip holds one pane and so needs no sideways scroll — which would clip the `@` and `/` lists standing above a
                  composer whose box is the whole panel. -->
+            <!-- One pane in the panel has nothing to scroll to either: it takes the row's width (the floor is a split's), and
+                 the row clips rather than scrolls. A scroll box there turned the touch-target hit areas of the controls at its
+                 edges (utilities.css, 44px overlays under a coarse pointer) into a few pixels of overflow, and a phone drew
+                 both scrollbars around the whole chat. A split scrolls sideways only: nothing in a column overflows downward. -->
             <div
                 v-else
                 ref="paneRow"
                 class="chat-panes flex min-h-0 min-w-0 flex-1"
-                :class="bar ? 'overflow-visible' : 'overflow-x-auto'"
-                :style="{ '--min-pane': minPaneLength }"
+                :class="bar ? 'overflow-visible' : split ? 'overflow-x-auto overflow-y-hidden' : 'overflow-clip'"
+                :style="{ '--min-pane': split ? minPaneLength : `0px` }"
             >
                 <!-- A pane's own × only appears in a split: with one column, closing it is the panel's job, not a control living inside the pane. -->
                 <template v-for="conversation in shown" :key="conversation.conversationId">
