@@ -4,7 +4,7 @@ import { definePreference } from "@intentic/ui/preference";
 
 // A wallpaper is a picture behind the agents board and a few full-width extension pages, chosen on its own and worn under any look: it is one
 // `data-wallpaper` attribute on <html>, and wallpapers.css draws it, picking each picture's dark or light master from
-// the scheme. `none` writes no attribute, and is the default: the board keeps its plain canvas until someone picks one.
+// the scheme. `none` writes no attribute; `mist` is the default when nothing is stored yet.
 
 /** Every wallpaper there is; the list the Appearance row offers, in order. */
 export const WALLPAPERS = [`none`, `mist`] as const;
@@ -24,7 +24,7 @@ const apply = (value: Wallpaper): void => {
 
 const wallpaper: Ref<Wallpaper> = definePreference<Wallpaper>({
     key: STORAGE_KEY,
-    read: (raw) => (isWallpaper(raw) ? raw : `none`),
+    read: (raw) => (isWallpaper(raw) ? raw : `mist`),
     write: (value) => value,
 });
 
