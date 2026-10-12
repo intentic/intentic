@@ -52,7 +52,7 @@ interface Watcher {
     readonly beat: (now: number, beatAt: number) => void;
 }
 
-// allow(module-state): the one beat this window runs for every watcher
+// The one beat this window runs for every watcher.
 const watchers = new Set<Watcher>();
 let beat: ReturnType<typeof setInterval> | undefined;
 let beatAt = 0;

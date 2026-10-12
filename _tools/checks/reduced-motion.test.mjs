@@ -7,7 +7,7 @@ import { animationClasses, cssAnimations, motionAskers, motionReduceVariants, sk
 const lines = (found) => found.map(({ line }) => line);
 
 test("a media query or matchMedia string asks the OS", () => {
-    // The one that shipped in _editor/web/src/features/browsers/BrowserTabStrip.vue (4e1f67a870).
+    // The one that shipped in the browser tab strip (4e1f67a870), since renamed.
     assert.deepEqual(lines(motionAskers(`<style>\n@media (prefers-reduced-motion: reduce) {\n  .tab { transition: none; }\n}\n</style>`)), [2]);
     assert.deepEqual(lines(motionAskers("const still = matchMedia(`(prefers-reduced-motion: reduce)`).matches;")), [1]);
     assert.deepEqual(lines(motionAskers(`html[data-motion="reduced"] .tab { transition: none; }`)), []);

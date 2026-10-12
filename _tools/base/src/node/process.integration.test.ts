@@ -5,13 +5,22 @@ import { clipText, execBounded, ProcessError, runBounded, runBoundedBytes, runBo
 
 // Real processes under /bin/sh: the guarantees are about process groups and pipes, which no fake can stand in for.
 
+// Running, as opposed to gone or a zombie. A killed grandchild is reparented to PID 1, and in a CI job's container that is
+// `tail -f /dev/null`, which never reaps: the dead process stays in the table, answering signal 0, until the job ends.
 const alive = (pid: number): boolean => {
     try {
         process.kill(pid, 0);
-        return true;
     } catch {
         return false;
     }
+    // Linux's /proc/<pid>/stat: "<pid> (<comm>) <state> ...". Without /proc there is no zombie to tell apart this way.
+    if (!existsSync("/proc/self/stat")) {
+        return true;
+    }
+    const stat = existsSync(`/proc/${pid}/stat`) ? readFileSync(`/proc/${pid}/stat`, "utf8") : "";
+    const state = stat.slice(stat.lastIndexOf(")") + 2, stat.lastIndexOf(")") + 3);
+    // Gone between the signal and the read, or a zombie: not running either way.
+    return state !== "" && state !== "Z";
 };
 
 describe("runBounded", () => {

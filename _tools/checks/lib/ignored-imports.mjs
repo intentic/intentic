@@ -99,7 +99,7 @@ export const ignoredAmong = (root, paths, env = process.env) => {
  * Which candidate an import means is read off the disk where it can be: a file there that git does not ignore will land
  * with the next commit (`./x.js` for a new x.ts, while a stale x.js beside it is ignored output), so only an import
  * whose every file on disk is ignored is a finding. With none on disk, which is a fresh clone of the commit that broke,
- * it is a finding when every path it could mean is ignored: `**\/dist-*` swallows dist-x.mjs and dist-x.mts alike.
+ * it is a finding when every path it could mean is ignored: `**\/dist-*` swallows a dist-prefixed .mjs and its .mts alike.
  */
 export const ignoredImports = ({ root, subjects, tracked, read, exists, env = process.env }) => {
     const unanswered = [];

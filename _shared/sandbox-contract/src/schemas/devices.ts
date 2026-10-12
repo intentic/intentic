@@ -329,7 +329,10 @@ export const DeviceLocalDirSchema = z
     .string()
     .min(1)
     .max(4096)
-    .regex(/^(?:~|\/|[A-Za-z]:[\\/])[^"'`$;|&\n\r“”„‘’‚‛]*$/);
+    // The curly quotes as escapes: bun's transpiler rewrites a literal one in a regex to its escape and tsgo keeps it,
+    // so spelled literally the pattern reads differently from source and from dist, and contract.lock.json can match
+    // only one of them.
+    .regex(/^(?:~|\/|[A-Za-z]:[\\/])[^"'`$;|&\n\r\u201C\u201D\u201E\u2018\u2019\u201A\u201B]*$/);
 // A TCP port number, the one value a caller supplies that reaches a command line as a number rather than a string.
 export const PortNumberSchema = z.number().int().min(1).max(65535);
 export const DeviceCommandInputSchema = z.object({

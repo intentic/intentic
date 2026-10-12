@@ -6,6 +6,7 @@ import {
     Button,
     clipboardOf,
     Notice,
+    type IconName,
     type NoticeModel,
     Picker,
     type PickerOption,
@@ -247,7 +248,7 @@ const pairedWhat = (devices: number, runners: number): string => {
 const notReadable = (): string => t(`sandbox.sandboxAccess.notReadableRightNow`);
 const doors = computed(() => {
     const { webhooks, gates, ciRepos, paired } = inventory.value;
-    const rows: { key: string; icon: string; title: string; description: string }[] = [];
+    const rows: { key: string; icon: IconName; title: string; description: string }[] = [];
     if (webhooks !== 0) {
         rows.push({
             key: `webhooks`,

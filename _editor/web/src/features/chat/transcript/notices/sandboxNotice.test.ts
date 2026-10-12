@@ -160,7 +160,9 @@ describe(`a sandbox notice, as the chat says it`, () => {
         // A failure the sandbox worded itself is said in Polish whole.
         expect(line(coded(`failed`))).toBe(`Ten agent już wykonuje turę, poczekaj, aż skończy.`);
         expect(DAEMON.map(line).slice(0, 3)).toEqual([`Pytanie odrzucone.`, `Plan zatwierdzony.`, `Planowanie trwa dalej.`]);
-        expect(line(RESUMED.find((row) => row.noticeCode?.params?.[`reason`] === `restart`))).toBe(`Sandbox znów działa, ta tura wróciła tam, gdzie przerwała.`);
+        expect(line(RESUMED.find((row) => row.noticeCode?.params?.[`reason`] === `restart`))).toBe(
+            `Sandbox znów działa; polecenia w tle i serwery deweloperskie uruchomione w tej turze zostały zatrzymane; ta tura wróciła tam, gdzie przerwała.`,
+        );
         expect(UNSPOKEN.slice(0, 1).map(line)).toEqual([`CI run 316 — obserwacja zadziałała po 43m.`]);
         expect(line(UNSPOKEN.at(-2))).toBe(`Podagent „Port the parser” (sub-x7) skończył.`);
         expect(noticeLine(coded(`landed`)!, `maker`)).toBe(`Zmiany zostały przyjęte do Twoich plików: zobacz je w „Co się zmieniło”.`);

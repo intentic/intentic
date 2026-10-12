@@ -65,7 +65,7 @@ const rows = computed(() =>
 const ops = useOperations(`needs/grants`);
 const keyOf = (grant: GrantRevoke): string => `${grant.conversationId}/${grant.kind}/${grant.capability ?? ``}/${grant.what}`;
 const busyOn = (grant: GrantRevoke): boolean => ops.at(keyOf(grant))?.state === `running`;
-const notice = computed(() => ops.all.value.filter((operation) => operation.state === `failed`).at(-1)?.failure);
+const notice = computed(() => ops.all.value.findLast((operation) => operation.state === `failed`)?.failure);
 const takeBack = async (grant: GrantRevoke, label: string): Promise<void> => {
     ops.dismiss(keyOf(grant));
     await ops.run(keyOf(grant), {

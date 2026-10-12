@@ -358,7 +358,7 @@ export const TIDY_AFTER_MS = 12 * 60 * 60 * 1000;
 // Minutes are the tidy's resolution: a twelve-hour rule gains nothing from a finer clock. It runs only while some chat is
 // done with, the only kind the tidy can let go. Detached: the rail's tidy is the window's, not any one component's.
 // `run()` returns undefined only for a stopped scope; this one is never stopped.
-// allow(module-state): the wall clock the rail's tidy reads, the same in every sandbox
+// The wall clock the rail's tidy reads, the same in every sandbox.
 const tidyClock = effectScope(true).run(() => useNow(() => fleet.value.some(doneWith), 60_000))!;
 
 // The reader's last contact with a chat: its finish, their last read of it, or focus leaving it.

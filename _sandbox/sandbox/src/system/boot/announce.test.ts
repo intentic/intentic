@@ -11,6 +11,8 @@ type FakeRequest = EventEmitter & {
     end: (payload?: string) => void;
     setTimeout: (ms: number, onIdle: () => void) => FakeRequest;
     destroy: (error: Error) => void;
+    // What the exchange cut the request with, once it did: an abort reaches the request this way (nodeRequest).
+    destroyedWith?: Error;
 };
 // The response is an emitter like the real one: the exchange reads its body to the end before it answers.
 const requestMock = jest.fn((url: URL, _opts: unknown, cb: (res: EventEmitter & { statusCode: number; headers: Record<string, string> }) => void) => {
@@ -20,7 +22,10 @@ const requestMock = jest.fn((url: URL, _opts: unknown, cb: (res: EventEmitter & 
         idle = { ms, onIdle };
         return req;
     };
-    req.destroy = (error) => req.emit("error", error);
+    req.destroy = (error) => {
+        req.destroyedWith = error;
+        req.emit("error", error);
+    };
     req.end = (payload) => {
         calls.push({ path: url.pathname, body: payload === undefined ? undefined : JSON.parse(payload) });
         const outcome = outcomes.shift() ?? { status: 200 };
@@ -217,8 +222,9 @@ describe("createAnnouncer", () => {
             const announcer = createAnnouncer(config, logger);
             announcer.start();
             announcer.stop();
-            const [, options] = requestMock.mock.calls[0] ?? [];
-            expect(options).toHaveProperty("signal.aborted", true);
+            // SAFETY: requestMock returns the FakeRequest it built, and this test made exactly one call.
+            const request = requestMock.mock.results[0]?.value as FakeRequest | undefined;
+            expect(request?.destroyedWith).toBeInstanceOf(Error);
             // The fake exchange ignores the signal and hangs into its idle cut, as a platform mid-answer might.
             await advanceTimersByTimeAsync(60_000 + 30 * 60_000);
             expect(requestMock).toHaveBeenCalledTimes(1);

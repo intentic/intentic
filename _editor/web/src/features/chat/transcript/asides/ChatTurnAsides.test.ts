@@ -56,7 +56,7 @@ const nodes = (element: HTMLElement): HTMLButtonElement[] => [...element.querySe
 const controls = (element: HTMLElement): HTMLButtonElement[] => [
     ...element.querySelectorAll<HTMLButtonElement>(`.chat-spine-node, .chat-spine-wash`),
 ];
-const wash = (element: HTMLElement): HTMLButtonElement | null => element.querySelector<HTMLButtonElement>(`.chat-spine-wash`);
+const wash = (element: HTMLElement): HTMLButtonElement | undefined => element.querySelector<HTMLButtonElement>(`.chat-spine-wash`) ?? undefined;
 const reads = (count: number): TranscriptTool[] => Array.from({ length: count }, (_, index) => read(`f${index}.ts`));
 
 let next = 0;
@@ -100,7 +100,7 @@ describe(`ChatTurnAsides run node`, () => {
         node.click();
         await nextTick();
         // The band gives way to the calls; a gutter mark is what folds them again.
-        expect(wash(element)).toBeNull();
+        expect(wash(element)).toBeUndefined();
         const fold = nodes(element)[0]!;
         expect(fold.getAttribute(`aria-expanded`)).toBe(`true`);
         expect(element.querySelector(`.chat-spine`)?.classList.contains(`chat-spine-open`)).toBe(true);
@@ -158,7 +158,7 @@ describe(`ChatTurnAsides run node`, () => {
         const element = mount({ tools: [read(`a.ts`), edit(`c.ts`)] });
 
         expect(controls(element)).toHaveLength(0);
-        expect(wash(element)).toBeNull();
+        expect(wash(element)).toBeUndefined();
         expect(element.textContent).toContain(`a.ts`);
         expect(element.textContent).toContain(`c.ts`);
     });

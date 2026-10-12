@@ -87,6 +87,7 @@ const STORAGE_KEY = commitDraftPaceKey;
 const SamplesSchema = z.array(z.object({ model: z.string(), startedAt: z.number(), ms: z.number() }));
 
 /** Every timing learned so far, oldest first. */
+// allow(module-state): how fast each model drafts is this browser's, kept in its storage and the same in every sandbox
 export const paceSamples = shallowRef<readonly PaceSample[]>(storedJson(STORAGE_KEY, SamplesSchema) ?? []);
 
 // Started with the drafting receipts (draftingReceipts.ts), from module scope: a draft written while the Changes panel
