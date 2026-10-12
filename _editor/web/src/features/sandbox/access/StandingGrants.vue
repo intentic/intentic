@@ -212,8 +212,6 @@ const pageOf = (conversationId: string): string => `/agents/${encodeURIComponent
     <RowGroup
         v-if="ownerItems.length > 0 || unreadable.length > 0"
         :label="t(`needs.grants.ownerWideTitle`)"
-        :count="ownerItems.length"
-        :caption="t(`needs.grants.ownerWideCaption`)"
     >
         <RowNote v-if="unreadable.length > 0" variant="block"><Notice tone="warning" size="sm">{{ t(`needs.grants.unreadable`, { what: unreadableWhat }) }}</Notice></RowNote>
         <Row v-for="item in ownerItems" :key="keyOf(item.grant)" :icon="item.icon" :description="item.note" indent>
@@ -233,7 +231,7 @@ const pageOf = (conversationId: string): string => `/agents/${encodeURIComponent
         </Row>
         <RowNote>{{ t(`needs.grants.ownerWideWhen`) }}</RowNote>
     </RowGroup>
-    <RowGroup v-if="rows.length > 0" :label="t(`needs.grants.title`)" :count="rows.length" :caption="t(`needs.grants.caption`)">
+    <RowGroup v-if="rows.length > 0" :label="t(`needs.grants.title`)">
         <Row
             v-for="row in rows"
             :key="row.conversation.conversationId"
