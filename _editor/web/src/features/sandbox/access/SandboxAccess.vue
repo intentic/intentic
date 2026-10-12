@@ -45,7 +45,6 @@ import { type AccessGrant, grantBody, grantSendable } from "./accessGrant";
 import { usePersonaReach } from "./usePersonaReach";
 import AccessMemberBadges from "./AccessMemberBadges.vue";
 import StandingGrants from "./StandingGrants.vue";
-import { useAgents } from "../../agents/fleet/useAgents";
 import { useOperation } from "../../../workbench/operations/operations";
 import { useT } from "@intentic/ui/i18n";
 
@@ -65,10 +64,6 @@ const isOwner = computed(() => sandbox.active.value?.role === `owner`);
 // every browser out is maintainer and up at the daemon (`ownerDenied`), and the door counts below read at viewer. Only
 // inviting and re-grading people stays the owner's (`isOwner`).
 const { canShip } = useRole();
-// What conversations were allowed past their persona or area, each taken back from here. The Needs you inbox's Allowed
-// tab until 2026-10-12; this is the page about who and what reaches this box, and the daemon serves it to a maintainer.
-const { agentById } = useAgents();
-const conversationTitle = (conversationId: string): string => agentById(conversationId)?.title ?? t(`needs.grants.untitled`);
 
 const members = ref<InviteRecord[]>([]);
 // A grant or revoke changes the roster for more than this page: the board's Everyone/Mine row reads the same list
@@ -821,8 +816,9 @@ const revoke = async (target: string): Promise<void> => {
             >
                 <Row v-for="door in doors" :key="door.key" :icon="door.icon" :title="door.title" :description="door.description" />
             </RowGroup>
-            <!-- Draws nothing while nothing stands, as the other machine doors do. -->
-            <StandingGrants :title-of="conversationTitle" />
+            <!-- What conversations were allowed past their persona or area, each taken back here: the Needs you inbox's Allowed
+                 tab until 2026-10-12, now on the page about who and what reaches this box. Draws nothing while nothing stands. -->
+            <StandingGrants />
         </template>
 
         <!-- Live presence: who else is connected right now (everyone sees this). -->

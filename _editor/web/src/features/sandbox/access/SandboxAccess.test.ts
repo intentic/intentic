@@ -546,10 +546,10 @@ it(`lists only the doors in use, with paired machines counted`, async () => {
 
 // What a conversation was allowed past its persona is taken back here, where the rest of who-reaches-this-box is: the
 // Needs you inbox's Allowed tab until 2026-10-12. Nothing standing draws nothing.
-it(`lists what conversations were allowed past their persona, each with Take back`, async () => {
+it(`lists what conversations were allowed past their persona, each with Revoke`, async () => {
     mount();
     await settle();
-    expect(shown()).not.toContain(`What you have allowed`);
+    expect(shown()).not.toContain(`Conversation permissions`);
     app?.unmount();
     document.body.innerHTML = ``;
 
@@ -559,7 +559,7 @@ it(`lists what conversations were allowed past their persona, each with Take bac
     mount();
     await settle();
 
-    expect(shown()).toContain(`What you have allowed`);
-    expect(shown()).toContain(`github, although its persona leaves it out`);
-    expect(buttonLabelled(`Take back`)?.disabled).toBe(false);
+    expect(shown()).toContain(`Conversation permissions`);
+    expect(shown()).toContain(`May use github, which its persona leaves out`);
+    expect(buttonLabelled(`Revoke`)?.disabled).toBe(false);
 });
