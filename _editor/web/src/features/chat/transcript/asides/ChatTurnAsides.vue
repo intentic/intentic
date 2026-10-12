@@ -107,11 +107,12 @@ const tip = computed((): TooltipValue => {
         :style="calls === undefined ? undefined : { '--wash-calls': calls }"
     >
         <div class="chat-spine-bar">
-            <!-- Open, the band gives way to the calls; a run with no thought then keeps one quiet mark in the gutter, sticky
-                 down its material, as the way to fold it again. -->
+            <!-- Shut, a row that ran calls is its band alone: the thought folds into it like any other step, so no mark
+                 stands beside it. A thought with no run has no band, so its mark is the control. Open, the band gives way
+                 to the material and one quiet mark in the gutter, sticky down it, is the way to fold it again. -->
             <ChatSpineNode
-                v-if="thought !== undefined || shown !== undefined"
-                :icon="thought === undefined ? `chevron-up` : `sparkles`"
+                v-if="(thought !== undefined && run === undefined) || shown !== undefined"
+                :icon="thought !== undefined && (run === undefined || shown === `thought`) ? `sparkles` : `chevron-up`"
                 :open="shown !== undefined"
                 :label="label"
                 :tip="tip"
@@ -120,8 +121,7 @@ const tip = computed((): TooltipValue => {
                 @toggle="toggle"
             />
         </div>
-        <!-- The run's weight as the seam itself, never a number. Where a thought mark stands too, that mark is the
-             control and the band only answers the pointer. -->
+        <!-- The run's weight as the seam itself, never a number, and the one control for the thought and the calls. -->
         <button
             v-if="calls !== undefined && shown === undefined"
             type="button"
@@ -133,8 +133,6 @@ const tip = computed((): TooltipValue => {
             }"
             :aria-expanded="shown !== undefined"
             :aria-label="label"
-            :aria-hidden="thought === undefined ? undefined : `true`"
-            :tabindex="thought === undefined ? undefined : -1"
             v-tooltip.top="tip"
             @click="toggle"
         />

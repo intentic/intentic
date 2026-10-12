@@ -52,9 +52,9 @@ const settle = async (): Promise<void> => {
 };
 
 const nodes = (element: HTMLElement): HTMLButtonElement[] => [...element.querySelectorAll<HTMLButtonElement>(`.chat-spine-node`)];
-// The control a row offers: the thought's mark where there is one, else the run's wash.
+// The controls a row offers: the run's wash, else the thought's mark.
 const controls = (element: HTMLElement): HTMLButtonElement[] => [
-    ...element.querySelectorAll<HTMLButtonElement>(`.chat-spine-node, .chat-spine-wash:not([tabindex="-1"])`),
+    ...element.querySelectorAll<HTMLButtonElement>(`.chat-spine-node, .chat-spine-wash`),
 ];
 const wash = (element: HTMLElement): HTMLButtonElement | null => element.querySelector<HTMLButtonElement>(`.chat-spine-wash`);
 const reads = (count: number): TranscriptTool[] => Array.from({ length: count }, (_, index) => read(`f${index}.ts`));
@@ -169,23 +169,21 @@ describe(`ChatTurnAsides run node`, () => {
 describe(`ChatTurnAsides thought on the node`, () => {
     const thinking = `The tile already renders a status dot, so the badge should reuse that lane.`;
 
-    it(`shares the run's node, and opens with it`, async () => {
+    it(`folds into the run's band, with no mark of its own, and opens with it`, async () => {
         const element = mount({ thinking, tools: [read(`a.ts`)] });
 
-        const [node, ...others] = nodes(element);
+        expect(nodes(element)).toHaveLength(0);
+        const [band, ...others] = controls(element);
         expect(others).toHaveLength(0);
-        expect(node?.querySelector(`[data-icon="sparkles"]`)).not.toBeNull();
-        expect(node?.textContent?.trim()).toBe(``);
-        // The run still shows as a wash, which the pointer may press but the keyboard and screen reader skip.
-        expect(wash(element)?.getAttribute(`tabindex`)).toBe(`-1`);
-        expect(wash(element)?.getAttribute(`aria-hidden`)).toBe(`true`);
-        expect(node?.getAttribute(`aria-label`)).toBe(`Show thinking and 1 step`);
+        expect(band).toBe(wash(element));
+        expect(band?.getAttribute(`aria-label`)).toBe(`Show thinking and 1 step`);
         expect(shownText(element)).not.toContain(thinking);
 
-        node!.click();
+        band!.click();
         await nextTick();
         expect(shownText(element)).toContain(thinking);
         expect(element.textContent).toContain(`a.ts`);
+        expect(nodes(element)[0]?.querySelector(`[data-icon="chevron-up"]`)).not.toBeNull();
     });
 
     it(`stands alone as a thought when the row ran nothing`, () => {
