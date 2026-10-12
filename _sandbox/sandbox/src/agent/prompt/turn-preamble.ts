@@ -226,6 +226,8 @@ export const storedPromptTitle = (stored: string): string | undefined => {
     const { spoken, queued, attachments, handoff } = parsePromptEnvelope(stored);
     const words = handoff === undefined ? spoken : (handoff.history.find((message) => message.role === "user")?.text ?? queued);
     const title = words.replaceAll(/\s+/g, " ").trim() || attachments.map((path) => basename(path)).join(", ");
+    // Cut the way the SDK's own session list cuts a prompt (its length, then the ellipsis past it), not with oneLine:
+    // a title read from either side must read alike.
     return title === "" ? undefined : title.length > TITLE_LENGTH ? `${title.slice(0, TITLE_LENGTH).trim()}…` : title;
 };
 

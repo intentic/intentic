@@ -1,6 +1,7 @@
 import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract";
 import { type FleetRecallDeps, present } from "./fleet-recall.js";
 import type { PersistedAgent } from "../registry/agents-store.js";
+import { oneLine } from "@intentic/base/one-line";
 
 // The record itself, for what the capsule did not cover, three ways: the last messages one line each with the tools each
 // called (`--transcript`), the rows exactly as stored (`--transcript --json`), and one message whole (`--message <n>`).
@@ -38,7 +39,7 @@ export interface TranscriptOptions {
 }
 
 const toolLine = (tool: TranscriptTool): string =>
-    clamp(collapse([tool.name, tool.target ?? tool.subagent?.description ?? tool.input ?? ""].join(" ")), TOOL_CHARS);
+    oneLine([tool.name, tool.target ?? tool.subagent?.description ?? tool.input ?? ""].join(" "), TOOL_CHARS);
 
 const questionsOf = (row: TranscriptRow): string[] => (row.question?.questions ?? []).map((asked) => asked.question);
 

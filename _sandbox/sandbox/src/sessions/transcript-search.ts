@@ -1,6 +1,7 @@
 import { sdk } from "../engines/claude-sdk.js";
 import type { MatchSnippet, TranscriptRow, TranscriptTool, Speaker } from "@intentic/sandbox-contract";
 import { parsePromptEnvelope } from "../agent/prompt/turn-preamble.js";
+import { oneLine } from "@intentic/base/one-line";
 
 // Spoken text, a side's own words, never tool output or protocol wrapping (preambles, attachment notes), is what the
 // fleet filter and history search match on. Beside it a conversation's record also yields what it DID, marked by `via`:
@@ -99,8 +100,7 @@ const DEED_CHARS = 160;
 
 // Carried as the agent's, since a snippet names one of two sides; `via` is what says it was a deed, or the sandbox's.
 const deed = (text: string, via: LineVia): SpokenLine[] => {
-    const line = text.replace(/\s+/gu, " ").trim();
-    return spoken(line.length > DEED_CHARS ? `${line.slice(0, DEED_CHARS - 1)}…` : line, "agent").map((said) => ({ ...said, via }));
+    return spoken(oneLine(text, DEED_CHARS), "agent").map((said) => ({ ...said, via }));
 };
 
 // A call's name with what it acted on, a delegation's own calls included; a call with no target (an MCP tool, a

@@ -6,6 +6,7 @@ import { type HeldAnswer, type HoldDeps, createHeldAsks } from "../../guard/held
 import { wakeWords } from "../../guard/held-cards.js";
 import type { CredentialGatesStore } from "../credential-gates.js";
 import type { CredentialGrants } from "../credential-grants.js";
+import { oneLine } from "@intentic/base/one-line";
 
 // The single choke point every credential-spending exit routes through, so the rule and its refusal wording exist once.
 // Addressed to a named, verified approver list, not the owner, and fails closed rather than holds when nobody can be
@@ -55,8 +56,8 @@ const clipped = (text: string | undefined): string | undefined => {
     if (text === undefined || text === "") {
         return undefined;
     }
-    const flat = text.trim().replaceAll(/\s+/g, " ");
-    return flat.length <= DETAIL_MAX ? flat : `${flat.slice(0, DETAIL_MAX)}…`;
+    const flat = oneLine(text, DETAIL_MAX);
+    return flat === "" ? undefined : flat;
 };
 
 type Gate = Awaited<ReturnType<CredentialGatesStore["list"]>>[number];

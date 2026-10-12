@@ -4,8 +4,6 @@
     "_devices/webext/src/page/driver.ts": 1,
     "_editor/desktop-app/local/devDesktop.ts": 11,
     "_editor/desktop-app/local/main.ts": 5,
-    "_editor/desktop-app/src/analytics.ts": 1,
-    "_editor/desktop-app/src/device/setup.ts": 1,
     "_editor/ui/src/composables/useHighlighter.ts": 1,
     "_editor/ui/src/composables/useTheme.ts": 1,
     "_editor/ui/src/lib/loadChunk.ts": 3,

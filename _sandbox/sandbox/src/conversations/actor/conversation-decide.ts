@@ -53,6 +53,7 @@ import {
     type TurnRuntime,
     type TurnUsage,
 } from "./conversation-state.js";
+import { oneLine } from "@intentic/base/one-line";
 
 // The conversation's one writer: an event and the state it meets become the next state, the effects to perform, and
 // the answer owed to whoever sent it. Pure: the persisted entry arrives as a value, time as `now`, and every write
@@ -343,8 +344,7 @@ const askOf = (event: ParkFrame): string | undefined => {
     if (event.kind !== "permission") {
         return undefined;
     }
-    const line = (event.title ?? event.displayName ?? event.toolName).replaceAll(/\s+/gu, " ").trim();
-    return line.length > ASK_MAX_CHARS ? `${line.slice(0, ASK_MAX_CHARS - 1)}…` : line;
+    return oneLine(event.title ?? event.displayName ?? event.toolName, ASK_MAX_CHARS);
 };
 
 // A card raised on a live turn parks it; one raised on a turn being torn down, or on no turn, has nowhere to go. A

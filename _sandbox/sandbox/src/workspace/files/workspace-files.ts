@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
-import { cp, mkdir, open, readFile, rename, rm, stat, utimes, writeFile } from "node:fs/promises";
+import { cp, lstat, mkdir, open, readFile, realpath, rename, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { openWorkspaceFileRange } from "./workspace-files-download.js";
-import { errnoCode, isMissing } from "@intentic/base/errors";
+import { errnoCode, isMissing, undefinedIfMissing } from "@intentic/base/errors";
+import { writeFileAtomic } from "@intentic/base/fs";
 import { decodeUtf16Window, UTF16_PROBE, utf16ByBom } from "@intentic/base/utf16-text";
 import { isUtf8, trimUtf8Window } from "@intentic/base/utf8-text";
 import type { WorkspaceFilePresentSchema } from "@intentic/sandbox-contract";
@@ -72,10 +73,34 @@ export const readWorkspaceFileWindow = async (absPath: string, offset = 0, limit
 // sha256 over the text's utf8 bytes, matching what the browser computes from the same decoded string.
 export const sha256Text = (text: string): string => createHash("sha256").update(text, "utf8").digest("hex");
 
-// Writes a file's contents, creating parent dirs; accepts bytes or text so upload and editor save share one path.
+// Who may be given back a file it rewrites: root may hand a new inode to any owner, anyone else only to themselves.
+const canKeepOwner = (owner: { readonly uid: number; readonly gid: number }): boolean => {
+    const uid = process.getuid?.();
+    return uid === undefined || uid === 0 || (owner.uid === uid && owner.gid === process.getgid?.());
+};
+
+// Writes a file's contents, creating parent dirs; accepts bytes or text so the editor's save, the environment overlay and
+// every other daemon write of a workspace file share one path. Whole or not at all: staged and renamed over the file,
+// so a rebuild, an agent or the owner reading it mid-write never sees half of it. What a reader sees of the file
+// otherwise stays as it was: an existing file keeps its mode and owner, and a symlink is written at its target rather
+// than replaced by a file. Where a replace would change more than the bytes (a file hard-linked elsewhere, one owned by
+// somebody this process cannot give it back to, a link pointing at nothing yet), it is written in place, as before.
+// 2026-10-12: it wrote in place always; rejected after the environment overlay was found half-written by a rebuild.
 export const writeWorkspaceFile = async (absPath: string, content: string | Uint8Array): Promise<void> => {
     await mkdir(dirname(absPath), { recursive: true });
-    await writeFile(absPath, content);
+    const entry = await lstat(absPath).catch(undefinedIfMissing);
+    const target = entry?.isSymbolicLink() === true ? await realpath(absPath).catch(undefinedIfMissing) : absPath;
+    const existing = target === absPath ? entry : target === undefined ? undefined : await stat(target).catch(undefinedIfMissing);
+    if (target === undefined || (existing !== undefined && (existing.nlink > 1 || !canKeepOwner(existing)))) {
+        await writeFile(absPath, content);
+        return;
+    }
+    await writeFileAtomic(
+        target,
+        content,
+        existing === undefined ? undefined : existing.mode & 0o7777,
+        existing === undefined ? {} : { owner: { uid: existing.uid, gid: existing.gid } },
+    );
 };
 
 // Creates a directory and any missing parents; idempotent when it already exists.

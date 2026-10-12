@@ -1,6 +1,7 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
+import { queueOnFile } from "@intentic/base/fs";
 import {
     DEV_SANDBOX_IMAGE,
     type Environment,
@@ -328,7 +329,8 @@ export const approveEnvironment = async (services: Services, hash: string): Prom
         return "invalid";
     }
     const accepted = renderBlocks(uniqueBlocks(splitBlocks(proposal.content)));
-    await services.files.write(customPath(services), accepted === "" ? "" : `${accepted}\n`);
+    // On the custom section's own queue, so a removal rewriting it at the same moment reads what this approve wrote.
+    await queueOnFile(customPath(services), async () => await services.files.write(customPath(services), accepted === "" ? "" : `${accepted}\n`));
     // Drafts are now in the custom section; leaving them would re-propose what the owner just approved, forever, and
     // remembering them keeps the copies an agent's branch still carries from proposing them again on its land.
     await settleDrafts(services, await listDrafts(services));
@@ -473,9 +475,15 @@ export const removeFromEnvironment = async (services: Services, block: string): 
     const settledAs = removed.flatMap((entry) => [...new Set([entry.name, fileNamed(entry.name)])].map((tool) => ({ tool, body: entry.body })));
     await settleDrafts(services, settledAs);
     await declineAutoDrafted(services, removed);
-    const kept = renderBlocks(uniqueBlocks(custom.filter((entry) => !isBlock(entry))));
+    let kept = renderBlocks(uniqueBlocks(custom.filter((entry) => !isBlock(entry))));
     if (custom.some(isBlock)) {
-        await services.files.write(customPath(services), kept === "" ? "" : `${kept}\n`);
+        // Taken out of what the section holds once this rewrite's turn comes, so an approve landing meanwhile keeps
+        // every block it added.
+        await queueOnFile(customPath(services), async () => {
+            const current = splitBlocks(((await services.files.read(customPath(services))) ?? "").trim());
+            kept = renderBlocks(uniqueBlocks(current.filter((entry) => !isBlock(entry))));
+            await services.files.write(customPath(services), kept === "" ? "" : `${kept}\n`);
+        });
     }
     if (draft !== undefined) {
         await services.files.remove(draft.path);

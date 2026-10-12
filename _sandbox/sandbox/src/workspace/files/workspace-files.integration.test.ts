@@ -1,7 +1,7 @@
-import { mkdtemp, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, chown, link, lstat, mkdtemp, readdir, readFile, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MAX_TEXT_BYTES, openWorkspaceFile, readWorkspaceFile, readWorkspaceFileWindow } from "./workspace-files.js";
+import { MAX_TEXT_BYTES, openWorkspaceFile, readWorkspaceFile, readWorkspaceFileWindow, writeWorkspaceFile } from "./workspace-files.js";
 
 // A temp file holding `content`, and the dir to clean up after.
 const fileWith = async (name: string, content: string | Uint8Array): Promise<{ dir: string; path: string }> => {
@@ -142,5 +142,55 @@ test("readWorkspaceFile is undefined only for a missing path or a directory, and
     expect(await readWorkspaceFile(join(dir, "nope.md"))).toBeUndefined();
     expect(await readWorkspaceFile(dir)).toBeUndefined();
     await expect(readWorkspaceFile(looped)).rejects.toMatchObject({ code: "ELOOP" });
+    await rm(dir, { recursive: true, force: true });
+});
+
+// The daemon's one write of a workspace file (an editor save, the environment overlay) is whole or not at all, and a
+// reader sees nothing else change: the mode, the owner, a link and its target stay as they were.
+test("writeWorkspaceFile replaces a file whole, keeping its mode and leaving no staging file behind", async () => {
+    const { dir, path } = await fileWith("run.sh", "echo old\n");
+    await chmod(path, 0o750);
+    await writeWorkspaceFile(path, "echo new\n");
+    expect(await readFile(path, "utf8")).toBe("echo new\n");
+    expect((await stat(path)).mode & 0o777).toBe(0o750);
+    expect(await readdir(dir)).toEqual(["run.sh"]);
+    await rm(dir, { recursive: true, force: true });
+});
+
+test("writeWorkspaceFile writes through a symlink to its target and leaves the link a link", async () => {
+    const { dir, path } = await fileWith("real.txt", "before");
+    const linked = join(dir, "linked.txt");
+    await symlink(path, linked);
+    await writeWorkspaceFile(linked, "after");
+    expect((await lstat(linked)).isSymbolicLink()).toBe(true);
+    expect(await readFile(path, "utf8")).toBe("after");
+    await rm(dir, { recursive: true, force: true });
+});
+
+test("writeWorkspaceFile writes a hard-linked file in place, so every name for it sees the change", async () => {
+    const { dir, path } = await fileWith("a.txt", "before");
+    const other = join(dir, "b.txt");
+    await link(path, other);
+    await writeWorkspaceFile(path, "after");
+    expect(await readFile(other, "utf8")).toBe("after");
+    await rm(dir, { recursive: true, force: true });
+});
+
+test("writeWorkspaceFile creates a missing file and its parent directories", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "wfw-"));
+    const path = join(dir, "new", "deep", "file.txt");
+    await writeWorkspaceFile(path, "hello");
+    expect(await readFile(path, "utf8")).toBe("hello");
+    await rm(dir, { recursive: true, force: true });
+});
+
+// Only root can hand a new inode back to another user; anywhere else this has nothing to show.
+test.if(process.getuid?.() === 0)("writeWorkspaceFile run as root gives the file back to the user who owned it", async () => {
+    const { dir, path } = await fileWith("owned.txt", "before");
+    await chown(path, 1234, 1234);
+    await writeWorkspaceFile(path, "after");
+    const { uid, gid } = await stat(path);
+    expect({ uid, gid }).toEqual({ uid: 1234, gid: 1234 });
+    expect(await readFile(path, "utf8")).toBe("after");
     await rm(dir, { recursive: true, force: true });
 });

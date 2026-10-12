@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { chmodSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { access, chmod, mkdir, open, rename, rm } from "node:fs/promises";
+import { access, chmod, chown, mkdir, open, rename, rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import { basename, dirname, join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -153,6 +153,9 @@ export interface WriteOptions {
     // With `durable`: also flush every directory above the target up to and including this one, for a write that may
     // have just created them (see syncDirectories).
     readonly syncUpTo?: string;
+    // Who owns the new file: a replace is a new inode, so a file someone else owned would otherwise come back owned by
+    // this process. Only a process allowed to give a file away (root) can name another user here.
+    readonly owner?: { readonly uid: number; readonly gid: number };
 }
 
 // Staged, renamed over `path`, the staging file removed on any failure, and with `durable` the directories flushed.
@@ -161,6 +164,10 @@ const replaceAtomically = async (path: string, write: (handle: FileHandle) => Pr
     await mkdir(dirname(path), { recursive: true });
     try {
         await writeStaged(staging, write, mode, options.durable === true);
+        if (options.owner !== undefined) {
+            await chown(staging, options.owner.uid, options.owner.gid);
+        }
+        // After the owner: a chown clears setuid and setgid bits, which an exact mode must keep.
         if (mode !== undefined) {
             await chmod(staging, mode);
         }

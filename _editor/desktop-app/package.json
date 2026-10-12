@@ -24,6 +24,7 @@
         "stage:ic": "bash ../../_tools/scripts/desktop/stage-desktop-ic.sh"
     },
     "dependencies": {
+        "@intentic/base": "workspace:*",
         "@intentic/entry-css": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
         "@intentic/ui": "workspace:*",

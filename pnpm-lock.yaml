@@ -1212,6 +1212,9 @@ importers:
 
   _editor/desktop-app:
     dependencies:
+      '@intentic/base':
+        specifier: workspace:*
+        version: link:../../_tools/base
       '@intentic/entry-css':
         specifier: workspace:*
         version: link:../../_shared/entry-css

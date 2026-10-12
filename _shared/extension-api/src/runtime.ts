@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { isAbsolute, relative, resolve } from "node:path";
-import { createBackoff, sleep } from "@intentic/base/async";
+import { createBackoff, sleep, within } from "@intentic/base/async";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import { FetchJsonError, fetchJson } from "@intentic/base/fetch-json";
 import { queueOnFile, writeFileAtomic } from "@intentic/base/fs";
@@ -463,20 +463,6 @@ export const activateServerModule = async (imported: ServerBundleExports, api: E
 export const DEACTIVATE_DEADLINE_MS = 2_500;
 export const HEALTH_DEADLINE_MS = 2_000;
 
-// `work`'s answer, or `late` once `ms` passes, whichever comes first; the timer never holds the process open.
-const within = async <T, L>(work: () => T | Promise<T>, ms: number, late: L): Promise<T | L> => {
-    let timer: NodeJS.Timeout | undefined;
-    const lateness = new Promise<L>((settle) => {
-        timer = setTimeout(() => settle(late), ms);
-        timer.unref();
-    });
-    try {
-        return await Promise.race([Promise.resolve().then(work), lateness]);
-    } finally {
-        clearTimeout(timer);
-    }
-};
-
 // Runs an activation's `deactivate` under the deadline. A throw or a timeout is said, never raised: the code is being
 // replaced either way, and the caller's next step must not wait on it.
 export const deactivateWithin = async (activation: ServerActivation, log: (message: string) => void): Promise<void> => {
@@ -488,7 +474,7 @@ export const deactivateWithin = async (activation: ServerActivation, log: (messa
         const outcome = await within(async () => {
             await deactivate();
             return "done" as const;
-        }, DEACTIVATE_DEADLINE_MS, "late" as const);
+        }, DEACTIVATE_DEADLINE_MS, "late" as const, { unref: true });
         if (outcome === "late") {
             log(`deactivate did not finish within ${DEACTIVATE_DEADLINE_MS} ms; its code is replaced anyway`);
         }
@@ -506,7 +492,7 @@ export const healthWithin = async (activation: ServerActivation): Promise<Extens
     }
     const late: ExtensionHealth = { state: "degraded", detail: `its health check did not answer within ${HEALTH_DEADLINE_MS} ms` };
     try {
-        const answer = await within(health, HEALTH_DEADLINE_MS, late);
+        const answer = await within(health, HEALTH_DEADLINE_MS, late, { unref: true });
         const parsed = ExtensionHealthSchema.safeParse(answer);
         if (!parsed.success) {
             return { state: "degraded", detail: "its health check answered something other than ok, starting, degraded or failed" };

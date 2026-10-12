@@ -7,6 +7,7 @@ import type { FoundLine } from "../../sessions/search-index.js";
 import { transcriptFile } from "../../sessions/transcript-record.js";
 import { type FleetNow, fleetNow } from "./fleet-now.js";
 import { type Ending, endingStatus, isIsolated, type PersistedAgent, reposOf } from "../registry/agents-store.js";
+import { oneLine } from "@intentic/base/one-line";
 
 // The join behind `agents ls|show|find`: everything about one conversation in a single answer, from a handle alone.
 // Read-only; steering is `agents send`, landing, archiving and discarding are the board's own actions. Returns data,
@@ -250,7 +251,6 @@ const DIGEST_PROMPTS = 3;
 
 const collapse = (text: string): string => text.replaceAll(/\s+/gu, " ").trim();
 
-const clamp = (text: string, max: number): string => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 
 export interface FleetDigest {
     readonly messages: number;
@@ -274,7 +274,7 @@ const noticeAge = (messages: readonly TranscriptRow[]): Pick<FleetDigest, "lastN
 
 const digestOf = (messages: readonly TranscriptRow[]): FleetDigest => {
     const spoken = (role: TranscriptRow["role"]): string[] =>
-        messages.filter((row) => row.role === role).flatMap((row) => (collapse(row.text) === "" ? [] : [clamp(collapse(row.text), DIGEST_CHARS)]));
+        messages.filter((row) => row.role === role).flatMap((row) => (oneLine(row.text) === "" ? [] : [oneLine(row.text, DIGEST_CHARS)]));
     return {
         messages: messages.length,
         asked: spoken("user").slice(0, DIGEST_PROMPTS),

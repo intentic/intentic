@@ -50,6 +50,7 @@ import {
 } from "./installTelemetry";
 import { dockerReady, info } from "./machine";
 import { activeRun, eventsOf, linesOf, running, runOutcome, start } from "./runs";
+import { sleep } from "@intentic/base/async";
 
 // A SANDBOX'S SETUP ON THIS MACHINE, handed over from the workspace's /setup page (`intentic://setup`, parked by the
 // app for the main window, windows.rs `park_setup`). It runs on arrival, unasked: installing and signing in to run a
@@ -568,15 +569,13 @@ export const endSession = async (how: `restart` | `signout`): Promise<void> => {
 /* A FRESH CODE FOR THE SAME SANDBOX, minted by the app with the workspace's session (commands.rs `setup_fresh_code`):
    for a setup resumed on an old code, and for a run whose claim the platform refused as invalid or expired. */
 
-const pause = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
-
 // The answer, asked again while the platform cannot be reached at all.
 const askForCode = async (args: SetupArgs, attempt = 1): Promise<FreshCode | null> => {
     const answer = await freshSetupCode(args).catch((error: unknown): FreshCode => ({ kind: `unreached`, reason: String(error) }));
     if (answer?.kind !== `unreached` || attempt >= RENEW_ATTEMPTS) {
         return answer;
     }
-    await pause(RENEW_PAUSE_MS);
+    await sleep(RENEW_PAUSE_MS);
     return askForCode(args, attempt + 1);
 };
 

@@ -1,4 +1,5 @@
 import type { DesktopInfo } from "./desktop";
+import { within } from "@intentic/base/async";
 
 // Reports desktop-only events (install, update, environment) via hand-rolled POST rather than the PostHog SDK.
 // Distinct id is the install id (state.rs), shared with the SPA's own window. The build-time key is unset in
@@ -72,5 +73,5 @@ export const trackBeforeExit = async (event: string, properties?: Record<string,
     if (sent === undefined) {
         return;
     }
-    await Promise.race([sent, new Promise<void>((resolve) => setTimeout(resolve, EXIT_FLUSH_MS))]);
+    await within(sent, EXIT_FLUSH_MS, undefined);
 };

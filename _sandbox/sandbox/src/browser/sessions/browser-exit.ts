@@ -1,3 +1,4 @@
+import { within } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import type { BrowserConfig, Capability, ExitConfig, IdentityConfig } from "@intentic/sandbox-contract";
 import { countryLocale } from "../../exit/exit-countries.js";
@@ -60,16 +61,13 @@ export const resolveProfileExit = async (
         const start = startExitOnce(exitEntry, link.country);
         // Tagged rather than boolean|unknown, since a driver rejecting with `false` must not be misread as a timeout;
         // the unbudgeted case is just a one-element race.
-        const settled = await Promise.race<StartOutcome>([
-            start.then<StartOutcome, StartOutcome>(
-                () => ({ ok: true }),
-                (failed: unknown) => ({ failed }),
-            ),
-            // unref'd: a start nobody is waiting on any more must not hold the process open by itself.
-            ...(budgetMs === undefined
-                ? []
-                : [new Promise<StartOutcome>((resolve) => setTimeout(() => resolve({ timedOut: true }), budgetMs).unref())]),
-        ]);
+        const outcome = start.then<StartOutcome, StartOutcome>(
+            () => ({ ok: true }),
+            (failed: unknown) => ({ failed }),
+        );
+        // unref'd, and cleared once the start settles: a start nobody is waiting on any more must not hold the process
+        // open by itself.
+        const settled: StartOutcome = budgetMs === undefined ? await outcome : await within(outcome, budgetMs, { timedOut: true } as const, { unref: true });
         if ("timedOut" in settled) {
             return {
                 refusal: `${owner} browses through the exit "${exitId}", which is still coming up. It was not opened from this sandbox's own address instead, so try again once the exit reports up.`,

@@ -1,3 +1,5 @@
+import { oneLine } from "@intentic/base/one-line";
+
 // What `fileq check` reports, and the rules every format shares.
 // An ERROR is a fact read off the file's structure that a reader will meet: a missing image, a formula showing #REF!,
 // a link to a bookmark that is not there. A WARNING is either a fact whose harm depends on the reader (a tracked change,
@@ -31,8 +33,7 @@ export const plural = (count: number, noun: string, nouns = `${noun}s`): string 
 
 /** A text excerpt for a message: one line, quoted, cut at `max` characters. */
 export const excerpt = (text: string, max = 60): string => {
-    const line = text.replaceAll(/\s+/g, " ").trim();
-    return `"${line.length > max ? `${line.slice(0, max - 1)}…` : line}"`;
+    return `"${oneLine(text, max)}"`;
 };
 
 // Text an authoring tool or a template put there for a person to replace. The first group is never a document's own
