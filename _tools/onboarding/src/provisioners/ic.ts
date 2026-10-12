@@ -1,5 +1,6 @@
 import { DAEMON_PORT } from "@intentic/constants";
 import { DaemonHealthReadingSchema } from "@intentic/sandbox-contract";
+import { shellQuote } from "@intentic/sandbox-run/quote";
 import { slugOfDaemonUrl } from "@intentic/sandbox-run/slug";
 import { waitForAnnounce } from "../announce.js";
 import { findIcBinary } from "../ic-binary.js";
@@ -62,7 +63,9 @@ export const icProvisioner = (): Provisioner => {
         if (command === ``) {
             throw new Error(`the wizard's Copy button copied nothing: it rendered an empty command`);
         }
-        if (!command.includes(`PLATFORM_URL='${apiUrl}'`)) {
+        // Spelled by the quoter the wizard's own command goes through (installCommand.ts), which leaves a plain word such
+        // as a URL bare: a hand-written `'…'` here stopped matching the day the wizard moved onto it.
+        if (!command.includes(` PLATFORM_URL=${shellQuote(apiUrl)} `)) {
             throw new Error(
                 `the wizard rendered a command that does not name this run's platform (${apiUrl}): running it would ` +
                     `redeem this setup code somewhere that is not ours. The command was: ${command}`,
