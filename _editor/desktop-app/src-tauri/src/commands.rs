@@ -375,6 +375,9 @@ pub fn open_url(app: AppHandle, url: String) -> CommandResult<()> {
         .map_err(|error| format!("could not open your browser: {error}"))
 }
 
+/// The run id a handed-over setup streams under, on This device and in a Quit's question (windows.rs `quit_now`).
+pub const SETUP_RUN: &str = "setup";
+
 /// `install` is the user's answer to the requirements list — see [`SetupContext::consented`]. False on the
 /// first attempt of any setup, which is why a machine that needs changes reports them instead of making them.
 #[tauri::command]
@@ -395,8 +398,24 @@ pub async fn setup_run(app: AppHandle, args: SetupArgs, install: bool) -> Comman
         while scripts::is_running(crate::machine_sandbox::RUN) {
             std::thread::sleep(std::time::Duration::from_secs(2));
         }
+        // A setup an earlier launch left going (a crash, or a quit from before a quit stopped it) is stopped first: two
+        // `ic connect`s at once race for one sandbox's row and one docker (scripts.rs `stop_left_running`, 2026-10-12).
+        if let Some(left) = scripts::stop_left_running(&handle, SETUP_RUN) {
+            eprintln!(
+                "intentic: stopped the setup an earlier launch left running (pid {}, {} sandbox)",
+                left.pid,
+                if left.sandbox_id.is_some() && left.sandbox_id == args.sandbox_id {
+                    "the same"
+                } else {
+                    "another"
+                }
+            );
+        }
         let run = setup_script(&args, &SetupContext::of(&handle, install));
-        let ran = scripts::run(&handle, "setup", run);
+        let spawned = scripts::mark_on_spawn(&handle, SETUP_RUN, args.sandbox_id.clone());
+        let ran = scripts::run_told(&handle, SETUP_RUN, run, Some(spawned));
+        // Followed to its end here, however it ended: nothing of it is left going for the next setup to stop.
+        scripts::unmark(&handle, SETUP_RUN);
         // However it ended (done, failed, stopped, or stopped to ask for another restart, which writes the entry
         // again), the next sign-in has nothing to start this app for any more (resume.rs).
         crate::resume::settle(&handle);
@@ -434,6 +453,16 @@ pub fn restart_for_setup(app: AppHandle, args: SetupArgs) -> CommandResult<()> {
     app.state::<AppState>()
         .park_setup(&args, SessionEnd::Restart);
     end_session(SessionEnd::Restart)
+}
+
+/* A SETUP HANDED OVER WHILE THIS PC STILL NEEDS ITS OWN SETUP (src/device/pcSetup/pcGate.ts) waits for that setup, which may
+ * restart Windows on its way: parked here as a restart parks one, it comes back after that restart (`resumable_setup`)
+ * and carries on by itself. It goes when it runs (`setup_run`) or is given up (`forget_resumable_setup`). Nothing is
+ * ended here: this PC's own setup asks for its restart itself (onboarding.rs). */
+#[tauri::command]
+pub fn park_setup_for_pc(app: AppHandle, args: SetupArgs) {
+    app.state::<AppState>()
+        .park_setup(&args, SessionEnd::Restart);
 }
 
 /* THE OTHER THING WINDOWS ONLY DOES BETWEEN SESSIONS, and the requirement that had no button. */
@@ -1098,8 +1127,9 @@ pub fn setup_alert(app: AppHandle) {
     crate::windows::alert_setup(&app);
 }
 
-/* WHERE THE INSTALL HAS GOT TO, as This device draws it (src/device/useDevice.ts `progressShown`). */
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/* WHERE THE INSTALL HAS GOT TO, as This device draws it (src/device/useDevice.ts `progressShown`). The web's
+ * `DesktopSetupReport` reads the same object (its environments/desktop.ts): a field added here is optional there. */
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetupReport {
     pub name: Option<String>,
@@ -1114,16 +1144,31 @@ pub struct SetupReport {
     /// The running step's phase id, for the page's analytics rather than its screen.
     pub step: Option<String>,
     /// On `waiting`, what the question asks: `consent`, `restart` or `signOut`. The page words a restart as a
-    /// restart, and keeps saying so after the card is put away, since the PC is still waiting for it.
+    /// restart, and keeps saying so after the card is put away, since the PC is still waiting for it. `pcSetup`: the
+    /// setup is parked until this PC's own setup (Docker/WSL, onboarding.rs) is done, and carries on by itself then.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub waiting_for: Option<String>,
     /// On `waiting`, the requirement ids on the card, for the page's analytics: never their sentences.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requirements: Option<Vec<String>>,
+    /// Milliseconds since the epoch when the app sent this report. While a setup is `running` or `waiting` the app
+    /// sends its current report again at least every 5 s (src/device/setup.ts `HEARTBEAT_MS`), so the page can tell a
+    /// quiet step from an app that is gone; the field being there says the app does. Numbers here are f64, as
+    /// `percent` is: a report the page never hears because one number came with a fraction is worse than the fraction.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<f64>,
+    /// During `pulling-image`, the sandbox image's bytes downloaded so far and in all, when ic reports them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub downloaded: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub download_total: Option<f64>,
+    /// The estimate behind `remaining`, in seconds, for the page's own logic.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remaining_seconds: Option<f64>,
 }
 
-/// This device reporting a setup's progress, on every change, for the workspace page (windows.rs `announce_setup`).
-/// Nothing is stored: a page that opens later hears the next tick within a second.
+/// This device reporting a setup's progress, on every change and at least every 5 s while it runs or waits, for the
+/// workspace page (windows.rs `announce_setup`). Nothing is stored: a page that opens later hears the next one.
 #[tauri::command]
 pub fn setup_progress(app: AppHandle, report: SetupReport) {
     crate::windows::announce_setup(&app, &report);

@@ -25,6 +25,7 @@ import Requirements from "../components/Requirements.vue";
 import SetupProgress from "../components/SetupProgress.vue";
 import { openUrl, revealLog, signIn, workspaceOpen } from "../desktop";
 import MachineSandboxSection from "./MachineSandboxSection.vue";
+import PcSetupGate from "./pcSetup/PcSetupGate.vue";
 import { machineSandbox } from "./machineSandbox";
 import { DEVICES_PATH, DOCKER_DOCS, REFRESH_EVERY_MS, useDevice } from "./useDevice";
 
@@ -126,6 +127,13 @@ const {
     installRequirements,
     endSession,
     freshCode,
+    pcParked,
+    pcCheck,
+    pcSetup,
+    pcError,
+    setUpThisPc,
+    recheckThisPc,
+    restartThisPc,
     syncSetup,
     syncLines,
     retrySync,
@@ -277,7 +285,8 @@ onMounted(() => {
                             {{ t(`desktop.app.settingUp`) }} {{ pending?.name ?? t(`desktop.app.sandbox`) }}
                         </h2>
                         <!-- What the next few minutes are, in one sentence; gone once the run has stopped, when the card below is the true one. -->
-                        <p v-if="!expired && !setupError && !wasStopped" class="mt-1 max-w-read-sm text-xs leading-relaxed text-muted">
+                        <p v-if="pcParked" class="mt-1 max-w-read-sm text-xs leading-relaxed text-muted">{{ t(`desktop.app.pcSetupFirst`) }}</p>
+                        <p v-else-if="!expired && !setupError && !wasStopped" class="mt-1 max-w-read-sm text-xs leading-relaxed text-muted">
                             <template v-if="resuming">{{ t(`desktop.app.pickingUpWhereRestart`) }}</template>
                             <template v-else-if="requirementsShown">{{ t(`desktop.app.nothingOnComputerChanges`) }}</template>
                             <template v-else>{{ t(`desktop.app.gettingComputerReadyStarting`) }}</template>
@@ -301,8 +310,18 @@ onMounted(() => {
                     <span class="flex-1">{{ resumedHow ? t(`desktop.app.setupCodeRanOut`) : t(`desktop.app.setupCodeRanOutHere`) }}</span>
                     <Button class="ml-2 shrink-0" size="small" tier="boring" :label="t(`desktop.app.getFreshCode`)" @click="freshCode" />
                 </Notice>
+                <!-- THIS PC'S OWN SETUP COMES FIRST: the setup is parked until it is done, and carries on by itself after. -->
+                <PcSetupGate
+                    v-if="pcParked && !expired"
+                    :check="pcCheck"
+                    :setup="pcSetup"
+                    :error="pcError"
+                    @set-up="setUpThisPc()"
+                    @recheck="recheckThisPc"
+                    @restart="restartThisPc"
+                />
                 <!-- `=== false`, not `!`: unknown is a real third state here, not yet a warning. -->
-                <p v-if="dockerReady === false && !expired && requirements.length === 0" class="flex items-start gap-2.5 text-xs text-subtle">
+                <p v-else-if="dockerReady === false && !expired && requirements.length === 0" class="flex items-start gap-2.5 text-xs text-subtle">
                     <Icon name="box" class="mt-0.5 shrink-0 text-warning" />
                     <span v-if="info?.os === `windows`">{{ t(`desktop.app.sandboxRunsInDocker`) }}</span>
                     <span v-else>{{ t(`desktop.app.sandboxRunsInDocker2`) }}</span>
@@ -310,7 +329,7 @@ onMounted(() => {
 
                 <!-- Leads above the progress bar, since it's the only thing here to act on. -->
                 <Requirements
-                    v-if="requirementsShown"
+                    v-if="requirementsShown && !pcParked"
                     :requirements="requirements"
                     :busy="running"
                     :progress="requirementState"
@@ -322,16 +341,16 @@ onMounted(() => {
                     @elsewhere="setUpElsewhere(`requirements`)"
                 />
                 <!-- Only where the progress card cannot say it: with a plan on screen, the failure is told once, there. -->
-                <Notice v-else-if="setupError && !expired && !progressShown" tone="danger" class="text-xs">{{ setupError }}</Notice>
+                <Notice v-else-if="setupError && !expired && !progressShown && !pcParked" tone="danger" class="text-xs">{{ setupError }}</Notice>
 
                 <!-- A user-ended run isn't a failure, but still gets said out loud rather than just stopping silently. -->
-                <p v-if="wasStopped" class="flex items-start gap-2.5 text-xs text-subtle">
+                <p v-if="wasStopped && !pcParked" class="flex items-start gap-2.5 text-xs text-subtle">
                     <Icon name="times" class="mt-0.5 shrink-0" />
                     <span>{{ t(`desktop.app.stoppedInstallNothingElse`) }}</span>
                 </p>
 
                 <SetupProgress
-                    v-if="progressShown && !expired"
+                    v-if="progressShown && !expired && !pcParked"
                     :events="eventsOf(`setup`)"
                     :view="progressShown"
                     :running="activeRun === `setup`"
@@ -342,7 +361,10 @@ onMounted(() => {
                 />
 
                 <!-- Only on failure: the hosted alternative rides the same row, as it does on the requirements card. -->
-                <div v-if="(setupError || wasStopped) && !expired && requirements.length === 0" class="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <div
+                    v-if="(setupError || wasStopped) && !expired && requirements.length === 0 && !pcParked"
+                    class="flex flex-wrap items-center gap-x-4 gap-y-2"
+                >
                     <Button :label="t(`ui.action.tryAgain`)" :disabled="running" @click="runSetup(`retry`)">
                         <template #icon><Icon name="bolt" /></template>
                     </Button>
@@ -359,11 +381,11 @@ onMounted(() => {
                     <button v-if="running" type="button" :class="ui.textButton({ tone: `quiet` }, `shrink-0`)" :disabled="stopping" v-action="stopSetup">
                         {{ stopping ? t(`desktop.app.stopping`) : t(`ui.action.stop`) }}
                     </button>
-                    <button v-if="progressShown" type="button" :class="ui.textButton({ tone: `quiet` }, `shrink-0`)" @click="toggleSetupLog">
+                    <button v-if="progressShown && !pcParked" type="button" :class="ui.textButton({ tone: `quiet` }, `shrink-0`)" @click="toggleSetupLog">
                         {{ setupLogOpen ? t(`desktop.app.hideLog`) : t(`desktop.app.showLog`) }}
                     </button>
                     <!-- Only beside an open log: away from it, "copy" and "folder" name a thing the reader has not been shown. -->
-                    <template v-if="setupLogOpen">
+                    <template v-if="setupLogOpen && !pcParked">
                         <button type="button" :class="ui.textButton({ tone: `quiet` }, `shrink-0`)" v-action="copyLog">
                             {{ logCopied ? t(`ui.action.copied`) : t(`desktop.app.copy`) }}
                         </button>

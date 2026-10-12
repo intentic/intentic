@@ -1,4 +1,5 @@
-import { NO_ITEMS, NO_NEWS, newsBetween, newsItemsBetween, type TabFrame, tabMark, tabTitle } from "./tabSignal";
+import type { SandboxAvailability } from "../../features/sandbox/overview/availability";
+import { NO_ITEMS, NO_NEWS, newsBetween, newsItemsBetween, type TabFrame, tabMark, tabOffline, tabTitle } from "./tabSignal";
 
 const facts = { asks: 0, offline: false, doneAway: false, working: false };
 
@@ -18,6 +19,40 @@ describe(`the tab's one mark`, () => {
     it(`says a finish over work still running`, () => {
         expect(tabMark({ ...facts, doneAway: true, working: true })).toEqual({ kind: `done` });
         expect(tabMark({ ...facts, working: true })).toEqual({ kind: `working` });
+    });
+});
+
+describe(`whether the tab says offline`, () => {
+    it(`says it of a sandbox that answered before and went away`, () => {
+        const away: readonly SandboxAvailability[] = [`unreachable`, `detached`, `removed`, `blocked`];
+        expect(away.map((availability) => tabOffline(availability, true))).toEqual([
+            true,
+            true,
+            true,
+            true,
+        ]);
+    });
+
+    // /setup's tab read "Offline" twenty seconds into a first install, over a sandbox nothing had started yet (2026-10-12).
+    it(`does not say it of a sandbox that has never answered, which is still being set up`, () => {
+        expect(tabOffline(`detached`, false)).toBe(false);
+        expect(tabOffline(`blocked`, false)).toBe(false);
+        expect(tabOffline(`unreachable`, false)).toBe(false);
+    });
+
+    it(`still says a removal, which is a fact rather than a silence`, () => {
+        expect(tabOffline(`removed`, false)).toBe(true);
+    });
+
+    it(`never says it over a sandbox that is up, starting or catching up`, () => {
+        const here: readonly SandboxAvailability[] = [`live`, `stale`, `warming`, `starting`, `busy`];
+        expect(here.map((availability) => tabOffline(availability, true))).toEqual([
+            false,
+            false,
+            false,
+            false,
+            false,
+        ]);
     });
 });
 

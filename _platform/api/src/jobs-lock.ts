@@ -24,6 +24,8 @@ export const JOB_HOSTED_MIGRATE = 9;
 export const JOB_EDGE_CERTIFICATE = 10;
 // Counts a failed look at a machine's new image once and puts the earlier image back once; two replicas would strike it twice.
 export const JOB_HOSTED_PROBATION = 11;
+// Mails the owner of a setup run that failed unwatched; two replicas reading the same failure would mail it twice.
+export const JOB_SETUP_FAILURE_MAIL = 12;
 
 export const runExclusive = async (config: Config, key: number, fn: () => Promise<void>): Promise<void> => {
     const client = new Client({ connectionString: config.database.url });

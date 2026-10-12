@@ -1,5 +1,5 @@
 import { EXIT_NEEDS_CONSENT, EXIT_NEEDS_RESTART, parseStep, readMarker, type RequirementProgress, type RunEvent } from "../desktop";
-import { parseLayer, type Progress } from "../setupPlan";
+import { parseLayer, type Progress, type ProgressView } from "../setupPlan";
 
 // WHERE A SETUP'S TIME GOES, as the funnel hears it (setup.ts sends it): how long each step of the plan ran, how long
 // each requirement row ran and how much of that it sat waiting on the person (Windows' permission prompt), and, for a
@@ -43,6 +43,56 @@ export const openStep = (state: Progress, at: number): StepTime | undefined => {
 /** The step an event moved the cursor off, timed to that moment; none when the cursor stayed where it was. */
 export const stepLeft = (before: Progress, after: Progress, at: number): StepTime | undefined =>
     after.index === before.index ? undefined : openStep(before, at);
+
+/* WHERE A LONG PULL HAS GOT TO, AND WHERE A RUN WAS LEFT: numbers only, never a path, a name or a line of output. */
+
+/** How often a running pull reports where it has got to (`desktop_install_progress`). */
+export const PULL_REPORT_EVERY_MS = 30_000;
+
+const MIB = 1024 * 1024;
+const megabytes = (bytes: number): number => Math.round((bytes / MIB) * 10) / 10;
+
+/** A run's position, as `desktop_install_progress` and `desktop_install_abandoned` carry it; null where it is not known. */
+export interface RunFacts {
+    readonly step: string | null;
+    readonly percent: number;
+    readonly elapsedSeconds: number;
+    readonly stepSeconds: number;
+    /** Docker's layers heard in the running step. */
+    readonly layers: number;
+    /** The pull's bytes, in megabytes, while ic reports them. */
+    readonly downloadedMb: number | null;
+    readonly downloadTotalMb: number | null;
+    /** Measured over the last minute of the pull. */
+    readonly bytesPerSecond: number | null;
+    readonly remainingSeconds: number | null;
+}
+
+/** A run's position at `at`: its step, the bar, how long it and its step have run, and the pull's bytes when known. */
+export const runFacts = (state: Progress, view: ProgressView, at: number): RunFacts => {
+    const download = view.download;
+    const rate = download?.bytesPerSecond;
+    return {
+        step: (state.index < 0 ? undefined : state.plan[state.index]?.phase) ?? null,
+        percent: view.percent,
+        elapsedSeconds: secondsBetween(state.startedAt, at),
+        stepSeconds: secondsBetween(state.stepStartedAt, at),
+        layers: Object.keys(state.layers).length,
+        downloadedMb: download === undefined ? null : megabytes(download.done),
+        downloadTotalMb: download === undefined ? null : megabytes(download.total),
+        bytesPerSecond: rate === undefined ? null : Math.round(rate),
+        remainingSeconds: view.remainingMs === undefined ? null : Math.round(view.remainingMs / 1000),
+    };
+};
+
+/**
+ * Whether the pull, running at `at`, is due its next report: every PULL_REPORT_EVERY_MS from the step's start, counted
+ * from the last one sent (`sentAt`). False for any other step, and once the run has ended.
+ */
+export const pullReportDue = (state: Progress, sentAt: number | undefined, at: number): boolean =>
+    state.ended === undefined &&
+    state.plan[state.index]?.phase === `pulling-image` &&
+    at - Math.max(sentAt ?? state.stepStartedAt, state.stepStartedAt) >= PULL_REPORT_EVERY_MS;
 
 /** One requirement row's clock, from its first `running` marker. */
 export interface RequirementClock {

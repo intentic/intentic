@@ -2,6 +2,7 @@
 <script setup lang="ts">
 import { CopyButton, Notice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
+import type { NudgeVariant } from "./flow/commandHandoff";
 
 // Reader this is addressed to:
 //   `emailed` : a phone that mailed itself the link, not yet opened on the other computer
@@ -10,6 +11,7 @@ import { useT } from "@intentic/ui/i18n";
 //   `install` : a browser offered the desktop app, not yet installed or opened
 //   `downloaded`: the installer was taken from this page
 //   `app` : the desktop app was handed the setup and its own window has the log
+//   `pcSetup` : the desktop app said the setup waits on this PC's own setup (Docker), which it runs first
 //   `button` : in the app, with nothing pressed yet
 const t = useT();
 
@@ -19,7 +21,7 @@ const {
     command = ``,
     copyable = false,
 } = defineProps<{
-    variant: "emailed" | "terminal" | "phone" | "install" | "downloaded" | "app" | "button";
+    variant: NudgeVariant;
     // Only the `terminal` reader has a terminal to be told about; other variants ignore this.
     stalled?: boolean;
     command?: string;
@@ -51,8 +53,15 @@ const emit = defineEmits<{ copied: [] }>();
                     <span class="font-medium">{{ t(`setup.setupNudge.waitingOnInstaller`) }}</span>
                     {{ t(`setup.setupNudge.runFileBrowserDownloaded`) }}
                 </span>
+                <!-- Nothing heard from the app at all: an app from before it said so (v1.331.0) did nothing while this PC
+                     still needed its own setup, so the window's "Set up this PC" is named as the likely next step. -->
                 <span v-else-if="variant === `app`" class="min-w-0">
-                    <span class="font-medium">{{ t(`setup.setupNudge.stillNothing`) }}</span> {{ t(`setup.setupNudge.checkIntenticWindowShows`) }}
+                    <span class="font-medium">{{ t(`setup.setupNudge.stillNothing`) }}</span>
+                    {{ t(`setup.setupNudge.checkWindowSetUpPc`, { action: t(`local.agents.steps.setup.action`), button: t(`setup.setup.setUpNow`) }) }}
+                </span>
+                <!-- Not a correction: the app said this setup waits on the PC's own, which it is running. -->
+                <span v-else-if="variant === `pcSetup`" class="min-w-0">
+                    <span class="font-medium">{{ t(`setup.setupNudge.pcSetupFirst`) }}</span> {{ t(`setup.setupNudge.pcSetupFollow`) }}
                 </span>
                 <span v-else class="min-w-0">
                     <span class="font-medium">{{ t(`setup.setupNudge.stillNothing`) }}</span> {{ t(`setup.setupNudge.nothingStartsUntilPress`) }}

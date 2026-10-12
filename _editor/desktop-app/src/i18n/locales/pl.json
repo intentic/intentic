@@ -44,7 +44,19 @@
         "yourSandbox": "Twój sandbox",
         "newerIntenticInstalled": "Zainstalowano nowszą wersję Intentic. Uruchom Intentic ponownie, aby jej używać.",
         "restartIntentic": "Uruchom Intentic ponownie",
-        "startEngine": "Uruchom silnik"
+        "startEngine": "Uruchom silnik",
+        "pcSetupFirst": "Ten komputer potrzebuje Dockera, zanim uruchomi się na nim Twój sandbox, więc konfiguracja sandboxa czeka na konfigurację tego komputera. Gdy komputer będzie gotowy, będzie kontynuowana sama.",
+        "pcSetupChecking": "Sprawdzanie, czego potrzebuje ten komputer…",
+        "pcSetupWhat": "Konfiguracja tego komputera przygotowuje Dockera i Podsystem Windows dla systemu Linux (WSL): silnik, w którym działa Twój sandbox.",
+        "pcSetupAdmin": "Windows raz poprosi o uprawnienia administratora.",
+        "pcSetupRestart": "W trakcie komputer trzeba będzie uruchomić ponownie, a konfiguracja sandboxa będzie potem kontynuowana sama.",
+        "setUpThisPc": "Skonfiguruj ten komputer",
+        "pcSetupInstalledDocker": "Docker zainstalowany samodzielnie? Sprawdź ponownie",
+        "pcSetupRunning": "Konfigurowanie tego komputera… {percent}%",
+        "pcSetupAdminDeclined": "Windows nie otrzymał uprawnień administratora, więc nic się nie zmieniło. Skonfiguruj komputer ponownie i wybierz „Tak”, gdy Windows zapyta.",
+        "pcSetupNeedsRestart": "Ten komputer musi zostać uruchomiony ponownie, aby dokończyć konfigurację. Konfiguracja sandboxa będzie kontynuowana sama po powrocie.",
+        "pcSetupNeedsSignOut": "Wyloguj się z Windows i zaloguj ponownie, aby dokończyć konfigurację tego komputera. Konfiguracja sandboxa będzie kontynuowana sama po powrocie.",
+        "pcSetupFailed": "Konfiguracja tego komputera zatrzymała się przed końcem."
     },
     "closeConfirm": {
         "alwaysDoDontAsk": "Zawsze tak rób: nie pytaj ponownie",
@@ -164,7 +176,9 @@
         "startSandbox": "Uruchom swój sandbox",
         "stepOf": "Krok {index} z {total}",
         "useSandboxImage": "Użyj obrazu sandboxa, który już tu jest",
-        "waitToComeUp": "Poczekaj, aż wstanie"
+        "waitToComeUp": "Poczekaj, aż wstanie",
+        "downloadedOf": "Pobrano {done} z {total}",
+        "loadingImage": "Wczytywanie obrazu do Dockera…"
     },
     "setupProgress": {
         "allDone": "Wszystko gotowe",

@@ -168,6 +168,7 @@ pub fn run() {
             commands::sign_out_for_setup,
             commands::resumable_setup,
             commands::forget_resumable_setup,
+            commands::park_setup_for_pc,
             commands::setup_fresh_code,
             commands::sandbox_list,
             commands::sandbox_power,

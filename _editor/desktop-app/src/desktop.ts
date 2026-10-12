@@ -1,7 +1,7 @@
 import type { ResourcesForm } from "@intentic/ui";
 import type { DeviceReport, DeviceSandbox } from "@intentic/sandbox-contract";
 import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { LocalFirstTask, LocalFound } from "@intentic/web/local-host";
 import type { FixEnd } from "./fixReport";
 
@@ -316,29 +316,59 @@ export interface OnboardingCheck {
     readonly engine?: `dockerDesktop` | `intentic` | `native`;
 }
 
+/** How a try of the download stopped (onboarding.rs `PrefetchFailure`). `reason` is as the run said it: scrub before sending. */
+export interface OnboardingPrefetchFailure {
+    readonly phase: `engine` | `image`;
+    readonly exitCode?: number;
+    readonly reason: string;
+    readonly log?: string;
+}
+
 export interface OnboardingPrefetch {
-    readonly state: `idle` | `running` | `paused` | `metered` | `done` | `failed`;
+    /** `yielded`: stepped aside while a sandbox's setup pulls the image itself; `skipped`: nothing to fetch. */
+    readonly state: `idle` | `running` | `paused` | `metered` | `yielded` | `done` | `skipped` | `failed`;
     readonly done: number;
     readonly total: number;
+    /** Which try of this run of the app, from 1. */
+    readonly attempt?: number;
+    readonly failure?: OnboardingPrefetchFailure;
+    /** While failed: when its one automatic retry starts (seconds since the epoch); absent once it has given up. */
+    readonly retryAt?: number;
+    readonly skipped?: `imageInDocker` | `dockerPulls` | `elsewhere`;
 }
 
 export type OnboardingSetup =
+    | {
+          readonly state: `running`;
+          readonly step?: string;
+          readonly percent: number;
+          readonly needsYou?: boolean;
+          /** The setup a Windows restart was waited for, and when it parked (seconds since the epoch). */
+          readonly resumed?: boolean;
+          readonly parkedAt?: number;
+          /** It has said nothing since then (seconds since the epoch), for twenty minutes or more; and its transcript. */
+          readonly quietSince?: number;
+          readonly log?: string;
+      }
     | { readonly state: `idle` }
-    | { readonly state: `running`; readonly step?: string; readonly percent: number; readonly needsYou?: boolean }
     | { readonly state: `waiting`; readonly for: `admin` | `restart` | `signOut`; readonly restartAt?: number }
     | { readonly state: `ready` }
     | { readonly state: `failed`; readonly reason: string };
 
 export interface OnboardingSnapshot {
-    readonly check?: OnboardingCheck;
+    /** null until the check has answered once. */
+    readonly check?: OnboardingCheck | null;
     readonly prefetch?: OnboardingPrefetch;
     readonly setup: OnboardingSetup;
     readonly firstLaunch?: boolean;
+    /** A PC setup was running when the app last ended and nothing saw it end: when it started, the requirement it was on. */
+    readonly orphaned?: { readonly startedAt?: number; readonly step?: string };
 }
 
 export const onboardingState = (): Promise<OnboardingSnapshot> => invoke(`onboarding_state`);
 export const onboardingRecheck = (): Promise<void> => invoke(`onboarding_recheck`);
-export const onboardingSetUp = (): Promise<void> => invoke(`onboarding_set_up`);
+/** `again`: stop a setup that has gone quiet and start it anew; without it a running setup is left alone. */
+export const onboardingSetUp = (again = false): Promise<void> => invoke(`onboarding_set_up`, { again });
 export const onboardingPause = (paused: boolean): Promise<void> => invoke(`onboarding_pause`, { paused });
 export const onboardingRestart = (when: `now` | `in10Minutes` | `later`): Promise<void> => invoke(`onboarding_restart`, { when });
 export const onboardingUseCloud = (): Promise<void> => invoke(`onboarding_use_cloud`);
@@ -381,6 +411,12 @@ export const setupAlert = (): Promise<void> => invoke(`setup_alert`);
 /* Setup progress is shared with the workspace bar. */
 /** What a setup stopped on a question is waiting for: the reader's go-ahead, or a session Windows has to end. */
 export type SetupWaitingFor = `consent` | `restart` | `signOut`;
+/**
+ * What the workspace page is told a waiting setup waits for: one of the card's questions, or `pcSetup`, a setup handed
+ * over while this PC still needs its own setup (Docker/WSL, run by onboarding), parked until that is done and then
+ * carried on by itself (setup.ts `pcParked`).
+ */
+export type SetupReportWaitingFor = SetupWaitingFor | `pcSetup`;
 export interface SetupReport {
     name?: string;
     state: `running` | `waiting` | `failed` | `stopped` | `done` | `closed`;
@@ -389,11 +425,31 @@ export interface SetupReport {
     remaining?: string;
     step?: string;
     /** On `waiting`: what the question asks (commands.rs `SetupReport`). */
-    waitingFor?: SetupWaitingFor;
+    waitingFor?: SetupReportWaitingFor;
     /** On `waiting`: the requirement ids on the card, for the page's analytics. */
     requirements?: string[];
+    /**
+     * Milliseconds since the epoch when the app sent this report. The app sends its current report again at least every
+     * 5 s while the setup is `running` or `waiting` (a heartbeat), so the page can tell a quiet step from an app that is
+     * gone; its presence says the app heartbeats.
+     */
+    at?: number;
+    /** During `pulling-image`, the sandbox image's bytes downloaded so far and in all, when ic reports them. */
+    downloaded?: number;
+    downloadTotal?: number;
+    /** The estimate behind `remaining`, in whole seconds, for the page's own logic. */
+    remainingSeconds?: number;
 }
 export const setupProgress = (report: SetupReport): Promise<void> => invoke(`setup_progress`, { report });
+/**
+ * A handed-over setup parked until this PC's own setup is done, saved the way a restart saves one, so a restart that
+ * setup asks for brings it back (`resumableSetup`); running it, or forgetting it, takes it away again.
+ */
+export const parkSetupForPc = (args: SetupArgs): Promise<void> => invoke(`park_setup_for_pc`, { args });
+/** The app is about to quit with a setup running (windows.rs `quit_now`): what it waits a moment for before it does. */
+export const onQuitting = (handler: () => void): Promise<UnlistenFn> => listen(`desktop://quitting`, () => handler());
+/** This window has said what it had to say before the app quits; the app quits without waiting out the rest. */
+export const quitReady = (): Promise<void> => emit(`desktop://quit-ready`);
 /* This page's content is `height` tall: size the window to it (fitWindow.ts is the caller). */
 export const fitToContent = (height: number): Promise<void> => invoke(`fit_to_content`, { height });
 /** End a run and everything it started. */
@@ -595,6 +651,10 @@ export const onPendingSetup = (handler: () => void): Promise<UnlistenFn> => list
 export const onPendingRecreate = (handler: () => void): Promise<UnlistenFn> => listen(`desktop://pending-recreate`, () => handler());
 export const onPendingFix = (handler: () => void): Promise<UnlistenFn> => listen(`desktop://pending-fix`, () => handler());
 export const onPendingSync = (handler: () => void): Promise<UnlistenFn> => listen(`desktop://pending-sync`, () => handler());
+// The workspace's setup page took a sandbox to a machine of ours (`intentic://setup-stop`, windows.rs): its id, for the
+// main window to stop the install it runs for that sandbox, if it runs one.
+export const onSetupStop = (handler: (sandboxId: string) => void): Promise<UnlistenFn> =>
+    listen<string>(`desktop://setup-stop`, (event) => handler(event.payload));
 
 // Read once, then followed by the event listener below: the read covers a window opening mid-update (the ordinary
 // case, since this face is built on demand); without it the screen would sit stale until the next transition.

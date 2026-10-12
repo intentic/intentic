@@ -15,6 +15,7 @@ import { startHostedMeter } from "./sandbox/hosted/hosted-meter.js";
 import { startHostedProbation } from "./sandbox/hosted/hosted-probation.js";
 import { checkHostedPlanPrices, hostedPlanEnabled } from "./sandbox/hosted/plan/hosted-plan.js";
 import { startHostedPool } from "./sandbox/hosted/hosted-pool.js";
+import { startSetupFailureMail } from "./sandbox/setup-failure-email.js";
 import { bootIdentityOf, watchPlatformIdentity } from "./sandbox/recovery.js";
 import { startRetention } from "./retention.js";
 import { startTracing } from "./tracing.js";
@@ -33,7 +34,7 @@ if (!config.secrets.key) {
     logger.warn(`SECRETS_KEY unset: OAuth/sandbox tokens will be persisted in plaintext (never run production like this)`);
 }
 if (!config.email.apiKey || !config.email.from) {
-    logger.warn(`EMAIL_API_KEY/EMAIL_FROM unset: sandbox invite links will be logged instead of emailed`);
+    logger.warn(`EMAIL_API_KEY/EMAIL_FROM unset: invite links and setup-failure mails will be logged instead of emailed`);
 }
 // A plan on sale with no webhook secret would take payment and refuse activation for every buyer via a 400.
 if (hostedPlanEnabled(config) && !config.hostedPlan.stripeWebhookSecret) {
@@ -89,6 +90,8 @@ startHostedProbation(prisma, config, logger);
 startHostedCanary(prisma, config, logger);
 // Orders and renews the edge's certificate, off unless INGRESS_PLATFORM_TOKEN is set (edge-certificate.ts).
 startEdgeCertificate(prisma, config, logger);
+// Mails the owner once when a setup run on their own computer failed and nobody was watching (setup-failure-email.ts).
+startSetupFailureMail(prisma, config, logger);
 const { app } = createApp(config, prisma, logger);
 
 // Falls back to the pair pnpm install mints for this user (their own data directory) when the config knobs are unset.

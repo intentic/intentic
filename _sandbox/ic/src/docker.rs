@@ -959,6 +959,9 @@ pub fn logs_into(container: &str, tail: &str, log: &Log) {
 /// strength of a non-zero exit alone.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum PullRefusal {
+    /// Docker reached no engine: it stopped (Docker Desktop quit, Intentic's engine's distro ended) after the setup
+    /// checked it. Read first and never retried: every attempt asks the same engine that is not there.
+    EngineGone,
     /// The registry answered and refuses this package anonymously: it is private, and publishing it is ours.
     Refused,
     /// The registry answered and has no such reference: the tag is missing from the package, also ours.
@@ -973,43 +976,180 @@ enum PullRefusal {
 /// finished, so each retry is cheaper than the one before.
 const PULL_ATTEMPTS: u32 = 3;
 
+/// A pull that stopped, in the two halves a setup report keeps apart (platform.rs `Reporter::stopped`): what happened,
+/// closed by docker's own last words, and what to do about it, which the wizard shows as the fix. Every other flow reads
+/// it as the one sentence it bails with (its `Display`), so `?` still turns it into a [`Fail`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PullStop {
+    what: String,
+    remedy: String,
+    words: Option<String>,
+}
+
+impl PullStop {
+    /// What happened, with docker's own words at the end: the only trace of the cause that leaves a machine whose
+    /// install log stays on it.
+    pub fn problem(&self) -> String {
+        match &self.words {
+            Some(words) => format!("{} Docker said: {words}", self.what),
+            None => self.what.clone(),
+        }
+    }
+
+    /// What to do about it; empty when the problem already says it.
+    pub fn remedy(&self) -> &str {
+        &self.remedy
+    }
+}
+
+impl std::fmt::Display for PullStop {
+    /// The terminal's sentence: what happened, what to do, and docker's words last, as a failed pull has always read.
+    fn fmt(&self, out: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        out.write_str(&self.what)?;
+        if !self.remedy.is_empty() {
+            write!(out, " {}", self.remedy)?;
+        }
+        if let Some(words) = &self.words {
+            write!(out, " Docker said: {words}")?;
+        }
+        Ok(())
+    }
+}
+
+/// A failure from before docker could say anything (it would not run): the message as it was, with no fix of its own.
+impl From<Fail> for PullStop {
+    fn from(fail: Fail) -> Self {
+        PullStop {
+            what: fail.0,
+            remedy: String::new(),
+            words: None,
+        }
+    }
+}
+
 /// Pull a published image, with the recoveries this can make itself: an existing local copy beats a failed
 /// pull, a stale `docker login ghcr.io` (Docker Desktop's credential store) makes docker present a dead token
 /// instead of pulling anonymously, and a broken transfer is retried. The login is cleared only for a failure
-/// shaped like an auth refusal — a user's own ghcr.io login is not a network blip's to throw away.
-pub fn pull(image: &str, log: &Log) -> Result<()> {
+/// shaped like an auth refusal — a user's own ghcr.io login is not a network blip's to throw away. An engine that is
+/// not there is said at once, before the first attempt as after any: a setup's own check of it can be minutes old by
+/// the time its pull starts (a download ahead of it ran in between), and three pulls at a dead engine only delay the
+/// one thing a person can do about it.
+pub fn pull(image: &str, log: &Log) -> std::result::Result<(), PullStop> {
     log.section(&format!("docker pull {image}"));
+    if let Engine::Down(said) = engine(ENGINE_PROBE) {
+        if let Some(stop) = engine_gone(&said) {
+            log.write(said.as_bytes());
+            return Err(stop);
+        }
+    }
+    pull_retrying(
+        image,
+        &mut || pull_once(image, log),
+        &|| image_exists(image),
+        &mut |wait| std::thread::sleep(std::time::Duration::from_secs(wait)),
+        &mut || quiet(&["logout", "ghcr.io"]),
+    )
+}
+
+/// The attempts [`pull`] makes, over the four things it does to the machine (pull once, look for a local copy, wait,
+/// log out of ghcr.io), so a test can count them.
+fn pull_retrying(
+    image: &str,
+    once: &mut dyn FnMut() -> Result<Streamed>,
+    exists: &dyn Fn() -> bool,
+    wait: &mut dyn FnMut(u64),
+    logout: &mut dyn FnMut(),
+) -> std::result::Result<(), PullStop> {
     let mut cleared_login = false;
     let mut attempt = 0;
     loop {
         attempt += 1;
-        let pulled = pull_once(image, log)?;
+        let pulled = once()?;
         if pulled.ok {
             return Ok(());
         }
-        if image_exists(image) {
+        let refusal = pull_refusal(&pulled.said);
+        // No local copy to fall back on is asked of an engine that is not there: it cannot answer either.
+        if refusal != PullRefusal::EngineGone && exists() {
             crate::ui::warn("pull failed but the image exists locally — using the local copy.");
             return Ok(());
         }
-        let refusal = pull_refusal(&pulled.said);
         match refusal {
             PullRefusal::Refused if !cleared_login => {
                 cleared_login = true;
                 crate::ui::warn(
                     "the registry refused the pull — clearing a stale ghcr.io login and retrying anonymously…",
                 );
-                quiet(&["logout", "ghcr.io"]);
+                logout();
             }
             PullRefusal::Broken if attempt < PULL_ATTEMPTS => {
-                let wait = pull_backoff(attempt);
+                let seconds = pull_backoff(attempt);
                 crate::ui::warn(&format!(
-                    "the download broke before it finished — retrying in {wait}s (attempt {} of {PULL_ATTEMPTS})…",
+                    "the download broke before it finished — retrying in {seconds}s (attempt {} of {PULL_ATTEMPTS})…",
                     attempt + 1
                 ));
-                std::thread::sleep(std::time::Duration::from_secs(wait));
+                wait(seconds);
             }
-            _ => bail!("{}", pull_refusal_message(image, refusal, &pulled.said)),
+            _ => {
+                return Err(pull_stop(
+                    image,
+                    refusal,
+                    &pulled.said,
+                    crate::engine::stamp(),
+                ))
+            }
         }
+    }
+}
+
+/// The stop for a download whose engine went away, when docker's words say it reached none; None when they do not.
+/// Any download's words will do: a pull's, a `docker load`'s (image_cache.rs), a probe's.
+pub fn engine_gone(said: &str) -> Option<PullStop> {
+    intentic_docker_host::refusal::unreachable(said)
+        .then(|| gone_stop(gone_engine(said, crate::engine::stamp()), said))
+}
+
+/// Which engine went away, for the remedy that names it: the pipe or socket docker's words name, else the engine this
+/// device's sandboxes run on (`engine::stamp`). None when neither says, and the remedy stays general. Pure.
+fn gone_engine(said: &str, stamp: &str) -> Option<crate::engine::Kind> {
+    use crate::engine::Kind;
+    let lower = said.to_ascii_lowercase();
+    if stamp == Kind::Intentic.id() || lower.contains("/pipe/intentic-engine") {
+        return Some(Kind::Intentic);
+    }
+    // Docker Desktop's pipe on Windows, and its per-user socket on macOS and Linux.
+    if lower.contains("/pipe/dockerdesktoplinuxengine")
+        || lower.contains("/.docker/run/docker.sock")
+        || lower.contains("/.docker/desktop/docker.sock")
+        || stamp == Kind::DockerDesktop.id()
+    {
+        return Some(Kind::DockerDesktop);
+    }
+    None
+}
+
+/// What a download says when its engine went away: which engine stopped, how to start it again, and that nothing
+/// downloaded so far is lost. Pure.
+fn gone_stop(engine: Option<crate::engine::Kind>, said: &str) -> PullStop {
+    use crate::engine::Kind;
+    let (what, start) = match engine {
+        Some(Kind::DockerDesktop) => (
+            "Docker Desktop stopped while the sandbox image was downloading.",
+            "Start Docker Desktop and wait until it says it's running, then re-run the setup.",
+        ),
+        Some(Kind::Intentic) => (
+            "Intentic's engine stopped while the sandbox image was downloading.",
+            "Start Intentic's engine again (open the Intentic app, which starts it by itself, or run ic engine start), then re-run the setup.",
+        ),
+        _ => (
+            "Docker stopped while the sandbox image was downloading.",
+            "Start Docker again and wait until it is running, then re-run the setup.",
+        ),
+    };
+    PullStop {
+        what: what.to_string(),
+        remedy: format!("{start} The parts already downloaded are kept."),
+        words: docker_last_words(said),
     }
 }
 
@@ -1025,6 +1165,10 @@ fn pull_backoff(attempt: u32) -> u64 {
 /// codes, matched narrowly: Windows' "Access is denied." is a daemon refusing this account, not a registry
 /// refusing this package, and must never be read as one.
 fn pull_refusal(said: &str) -> PullRefusal {
+    // Read before anything about the registry: with no engine, nothing reached it, and nothing here is about it.
+    if intentic_docker_host::refusal::unreachable(said) {
+        return PullRefusal::EngineGone;
+    }
     let text = said.to_lowercase();
     // Read first: the credential store fails before any registry answer, and its message is the only one
     // carrying these words.
@@ -1056,26 +1200,33 @@ fn pull_refusal(said: &str) -> PullRefusal {
     PullRefusal::Broken
 }
 
-/// The sentence a stopped pull ends on: what happened, who fixes it, and docker's own last line — which is
-/// the only trace of the cause that reaches a user whose install log stays on their machine.
-fn pull_refusal_message(image: &str, refusal: PullRefusal, said: &str) -> String {
-    let body = match refusal {
-        PullRefusal::Refused => format!(
-            "the registry refused an anonymous pull of {image} — its package is not public, which is a packaging fault on our side, not a problem with your machine. Report it, or if this org is yours make the package public at https://github.com/orgs/intentic/packages, then re-run."
+/// Where a stopped pull ends: what happened, who fixes it and how, and docker's own last line — which is the only
+/// trace of the cause that reaches a user whose install log stays on their machine. `stamp` names the engine in use
+/// (`engine::stamp`). Pure.
+fn pull_stop(image: &str, refusal: PullRefusal, said: &str, stamp: &str) -> PullStop {
+    let (what, remedy) = match refusal {
+        PullRefusal::EngineGone => return gone_stop(gone_engine(said, stamp), said),
+        PullRefusal::Refused => (
+            format!("the registry refused an anonymous pull of {image} — its package is not public, which is a packaging fault on our side, not a problem with your machine."),
+            "Report it, or if this org is yours make the package public at https://github.com/orgs/intentic/packages, then re-run.".to_string(),
         ),
-        PullRefusal::Missing => format!(
-            "the registry has no {image} — that reference is missing from the package, which is ours to fix, not a problem with your machine. Report it, then re-run."
+        PullRefusal::Missing => (
+            format!("the registry has no {image} — that reference is missing from the package, which is ours to fix, not a problem with your machine."),
+            "Report it, then re-run.".to_string(),
         ),
-        PullRefusal::Credentials => format!(
-            "docker could not read its own saved credentials, so the pull of {image} never reached the registry. Run 'docker logout ghcr.io' (or remove \"credsStore\" from ~/.docker/config.json), then re-run."
+        PullRefusal::Credentials => (
+            format!("docker could not read its own saved credentials, so the pull of {image} never reached the registry."),
+            "Run 'docker logout ghcr.io' (or remove \"credsStore\" from ~/.docker/config.json), then re-run.".to_string(),
         ),
-        PullRefusal::Broken => format!(
-            "{image} did not finish downloading in {PULL_ATTEMPTS} attempts. That is most often the network between this machine and the registry (docker's own words close this message) — re-run when it is steadier: the layers that finished are kept, so the next pull resumes rather than starting over."
+        PullRefusal::Broken => (
+            format!("{image} did not finish downloading in {PULL_ATTEMPTS} attempts. That is most often the network between this machine and the registry (docker's own words close this message)."),
+            "Re-run when the connection is steadier: the layers that finished are kept, so the next pull resumes rather than starting over.".to_string(),
         ),
     };
-    match docker_last_words(said) {
-        Some(words) => format!("{body} Docker said: {words}"),
-        None => body,
+    PullStop {
+        what,
+        remedy,
+        words: docker_last_words(said),
     }
 }
 
@@ -1128,9 +1279,10 @@ fn pull_once(image: &str, log: &Log) -> Result<Streamed> {
 #[cfg(test)]
 mod tests {
     use super::{
-        docker_last_words, mount_source_format, pull_refusal, pull_refusal_message, refusal_of,
-        wrong_container_platform, PullRefusal,
+        docker_last_words, gone_engine, gone_stop, mount_source_format, pull_refusal,
+        pull_retrying, pull_stop, refusal_of, wrong_container_platform, PullRefusal, Streamed,
     };
+    use crate::engine::Kind;
 
     #[test]
     fn a_mount_is_named_the_way_docker_run_takes_it_back() {
@@ -1269,33 +1421,261 @@ mod tests {
     fn a_broken_credential_store_points_at_the_store() {
         let refusal = pull_refusal("error getting credentials - err: exit status 1, out: ``");
         assert_eq!(refusal, PullRefusal::Credentials);
-        let message = pull_refusal_message("ghcr.io/intentic/sandbox:stable", refusal, "");
-        assert!(message.contains("docker logout ghcr.io"), "{message}");
+        let stop = pull_stop("ghcr.io/intentic/sandbox:stable", refusal, "", "native");
+        assert!(stop.remedy().contains("docker logout ghcr.io"), "{stop}");
+        assert!(stop.to_string().contains("docker logout ghcr.io"), "{stop}");
     }
 
     #[test]
     fn only_a_real_refusal_sends_a_user_to_our_packaging() {
-        let ours = pull_refusal_message(
+        let ours = pull_stop(
             "ghcr.io/intentic/sandbox:stable",
             PullRefusal::Refused,
             "denied: requested access to the resource is denied",
-        );
+            "native",
+        )
+        .to_string();
         assert!(ours.contains("packaging fault on our side"), "{ours}");
         assert!(
             ours.contains("https://github.com/orgs/intentic/packages"),
             "{ours}"
         );
 
-        let theirs = pull_refusal_message(
+        let theirs = pull_stop(
             "ghcr.io/intentic/sandbox:stable",
             PullRefusal::Broken,
             "net/http: TLS handshake timeout",
-        );
+            "native",
+        )
+        .to_string();
         assert!(!theirs.contains("packaging"), "{theirs}");
         assert!(!theirs.contains("not public"), "{theirs}");
-        assert!(theirs.contains("re-run"), "{theirs}");
+        assert!(theirs.contains("Re-run"), "{theirs}");
         // Docker's own line rides along: the install log stays on the user's machine, this message does not.
         assert!(theirs.contains("TLS handshake timeout"), "{theirs}");
+    }
+
+    /* AN ENGINE THAT WENT AWAY UNDER A DOWNLOAD — said as that, never as the network, and never retried. */
+
+    /// Verbatim from the setup report a Windows PC sent on 2026-10-12: Docker Desktop had stopped, and the setup blamed
+    /// the network, with no fix, after three attempts at an engine that was not there.
+    const DESKTOP_GONE: &str = "failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine; check if the path is correct and if the daemon is running: open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified.";
+    const SOCKET_GONE: &str = "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?";
+    const IMAGE: &str = "ghcr.io/intentic/sandbox:stable";
+
+    #[test]
+    fn docker_desktop_stopping_under_a_pull_is_said_as_that_with_its_fix() {
+        assert_eq!(pull_refusal(DESKTOP_GONE), PullRefusal::EngineGone);
+        // The pipe names Docker Desktop, whatever this device's record says it runs on.
+        let stop = pull_stop(IMAGE, PullRefusal::EngineGone, DESKTOP_GONE, "native");
+        let problem = stop.problem();
+        assert!(
+            problem.starts_with("Docker Desktop stopped while the sandbox image was downloading."),
+            "{problem}"
+        );
+        assert!(!problem.contains("network"), "{problem}");
+        // Docker's own words still close it.
+        assert!(
+            problem.contains("Docker said: failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine"),
+            "{problem}"
+        );
+        assert_eq!(
+            stop.remedy(),
+            "Start Docker Desktop and wait until it says it's running, then re-run the setup. The parts already downloaded are kept."
+        );
+        // The terminal's one sentence: what, the fix, then docker's words last.
+        let sentence = stop.to_string();
+        let fix_at = sentence.find("Start Docker Desktop").expect("the fix");
+        let said_at = sentence.find("Docker said:").expect("docker's words");
+        assert!(fix_at < said_at, "{sentence}");
+    }
+
+    #[test]
+    fn a_linux_daemon_gone_gets_the_general_fix_and_a_desktop_socket_names_docker_desktop() {
+        assert_eq!(pull_refusal(SOCKET_GONE), PullRefusal::EngineGone);
+        assert_eq!(gone_engine(SOCKET_GONE, "native"), None);
+        let stop = gone_stop(None, SOCKET_GONE);
+        assert!(
+            stop.problem()
+                .starts_with("Docker stopped while the sandbox image was downloading."),
+            "{}",
+            stop.problem()
+        );
+        assert!(
+            stop.remedy().starts_with("Start Docker again"),
+            "{}",
+            stop.remedy()
+        );
+        assert!(stop
+            .remedy()
+            .ends_with("The parts already downloaded are kept."));
+        assert_eq!(
+            gone_engine(
+                "Cannot connect to the Docker daemon at unix:///Users/ada/.docker/run/docker.sock. Is the docker daemon running?",
+                "native"
+            ),
+            Some(Kind::DockerDesktop)
+        );
+        // A Windows PC whose record says Docker Desktop, on its older pipe name.
+        assert_eq!(
+            gone_engine(
+                "error during connect: open //./pipe/docker_engine: The system cannot find the file specified.",
+                "dockerDesktop"
+            ),
+            Some(Kind::DockerDesktop)
+        );
+        // Rancher Desktop, or anything else the person runs: the general fix.
+        assert_eq!(
+            gone_engine(
+                "error during connect: open //./pipe/docker_engine: The system cannot find the file specified.",
+                "own"
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn intentic_engine_stopping_is_named_with_the_way_it_starts_again() {
+        let said = "failed to connect to the docker API at npipe:////./pipe/intentic-engine.Ada; check if the path is correct and if the daemon is running: open //./pipe/intentic-engine.Ada: The system cannot find the file specified.";
+        assert_eq!(pull_refusal(said), PullRefusal::EngineGone);
+        assert_eq!(gone_engine(said, "dockerDesktop"), Some(Kind::Intentic));
+        // Its TLS endpoint names no engine; the record does.
+        let tcp = "error during connect: Get \"https://127.0.0.1:2378/v1.47/version\": dial tcp 127.0.0.1:2378: connectex: No connection could be made because the target machine actively refused it.";
+        assert_eq!(pull_refusal(tcp), PullRefusal::EngineGone);
+        assert_eq!(gone_engine(tcp, "intentic"), Some(Kind::Intentic));
+        let stop = gone_stop(Some(Kind::Intentic), said);
+        assert!(
+            stop.problem().starts_with("Intentic's engine stopped"),
+            "{}",
+            stop.problem()
+        );
+        assert!(
+            stop.remedy().contains("ic engine start"),
+            "{}",
+            stop.remedy()
+        );
+        assert!(stop
+            .remedy()
+            .ends_with("The parts already downloaded are kept."));
+    }
+
+    #[test]
+    fn the_network_case_keeps_its_words_and_now_carries_its_fix() {
+        let stop = pull_stop(
+            IMAGE,
+            PullRefusal::Broken,
+            "net/http: TLS handshake timeout",
+            "native",
+        );
+        assert!(
+            stop.problem().starts_with(
+                "ghcr.io/intentic/sandbox:stable did not finish downloading in 3 attempts. That is most often the network between this machine and the registry"
+            ),
+            "{}",
+            stop.problem()
+        );
+        assert!(stop
+            .problem()
+            .ends_with("Docker said: net/http: TLS handshake timeout"));
+        // The fix the wizard shows was empty before; it says what a re-run keeps.
+        assert!(stop.remedy().starts_with("Re-run"), "{}", stop.remedy());
+        assert!(
+            stop.remedy().contains("the layers that finished are kept"),
+            "{}",
+            stop.remedy()
+        );
+        // And the fix is said once, not again inside the problem.
+        assert!(
+            !stop.problem().contains("layers that finished"),
+            "{}",
+            stop.problem()
+        );
+    }
+
+    /// One scripted run of the retry loop: what each attempt printed, and everything the loop did to the machine.
+    struct Scripted {
+        attempts: usize,
+        local_copy_asked: usize,
+        waits: Vec<u64>,
+        logouts: usize,
+        ended: Result<(), super::PullStop>,
+    }
+
+    fn scripted(said: &[&str]) -> Scripted {
+        let mut next = said.iter();
+        let mut attempts = 0;
+        let local_copy_asked = std::cell::Cell::new(0);
+        let mut waits = Vec::new();
+        let mut logouts = 0;
+        let ended = pull_retrying(
+            IMAGE,
+            &mut || {
+                attempts += 1;
+                let said = next
+                    .next()
+                    .expect("the loop asked for more attempts than scripted");
+                Ok(Streamed {
+                    ok: false,
+                    said: (*said).to_string(),
+                })
+            },
+            &|| {
+                local_copy_asked.set(local_copy_asked.get() + 1);
+                false
+            },
+            &mut |seconds| waits.push(seconds),
+            &mut || logouts += 1,
+        );
+        Scripted {
+            attempts,
+            local_copy_asked: local_copy_asked.get(),
+            waits,
+            logouts,
+            ended,
+        }
+    }
+
+    #[test]
+    fn a_pull_at_an_engine_that_is_gone_stops_at_the_first_attempt() {
+        let run = scripted(&[DESKTOP_GONE]);
+        assert_eq!(
+            run.attempts, 1,
+            "no retry against an engine that is not there"
+        );
+        assert!(run.waits.is_empty(), "no wait either: {:?}", run.waits);
+        assert_eq!(run.local_copy_asked, 0);
+        assert_eq!(run.logouts, 0);
+        let stop = run.ended.expect_err("the pull stops");
+        assert!(stop
+            .problem()
+            .contains("stopped while the sandbox image was downloading"));
+        assert!(!stop.remedy().is_empty());
+    }
+
+    #[test]
+    fn an_engine_that_goes_away_between_attempts_ends_the_retries_there() {
+        // The transfer broke when Docker went down mid-download; the retry then found no engine.
+        let run = scripted(&["unexpected EOF", SOCKET_GONE]);
+        assert_eq!(run.attempts, 2);
+        assert_eq!(run.waits, vec![3]);
+        let stop = run.ended.expect_err("the pull stops");
+        assert!(stop
+            .problem()
+            .contains("stopped while the sandbox image was downloading"));
+    }
+
+    #[test]
+    fn a_broken_transfer_is_still_retried_to_the_limit() {
+        let broke = "read tcp 10.0.0.2:52344->140.82.121.33:443: read: connection reset by peer";
+        let run = scripted(&[broke, broke, broke]);
+        assert_eq!(run.attempts, 3);
+        assert_eq!(run.waits, vec![3, 10]);
+        assert_eq!(run.local_copy_asked, 3);
+        let stop = run.ended.expect_err("the pull stops");
+        assert!(stop
+            .problem()
+            .contains("did not finish downloading in 3 attempts"));
+        assert!(stop.remedy().contains("the layers that finished are kept"));
     }
 
     #[test]

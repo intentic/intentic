@@ -9,6 +9,9 @@ What docker's refusals mean and where Docker Desktop lives on a PC: the readings
 - A refusal is one of three kinds: the engine is erroring (it answers with errors, so no start fixes it), it denied
   this account (a group membership, never a longer wait), or it is down or unrecognised (start it). Before this crate
   `ic` and the desktop each classified on their own, and the desktop could not tell a broken engine from a slow one.
+- Apart from those, `unreachable` reads any command's output (a pull, a load) for the words docker leaves when it
+  reached no engine at all, and says yes to nothing else: a download that lost its engine is told to start it, and one
+  that broke on the network never is (2026-10-12, after a setup blamed the network for a Docker Desktop that had quit).
 - Docker Desktop is found two ways: one full probe (registry, uninstall entry, the CLI on `PATH`, Start-menu shortcuts)
   for flows that ask once, and a cheap list of default install folders, Program Files, x86 and per-user, for a path that
   runs before every `docker` call. Paths found from inside WSL are translated through `/etc/wsl.conf`'s automount root
@@ -16,7 +19,8 @@ What docker's refusals mean and where Docker Desktop lives on a PC: the readings
 
 ## Key files
 
-- [src/refusal.rs](src/refusal.rs) — the three kinds of engine refusal, read off what the docker CLI printed.
+- [src/refusal.rs](src/refusal.rs) — the three kinds of engine refusal, and whether any engine was reached, read off
+  what the docker CLI printed.
 - [src/desktop_app.rs](src/desktop_app.rs) — the one Docker Desktop discovery script, the default install folders, and
   WSL path translation.
 - [src/powershell.rs](src/powershell.rs) — the `-EncodedCommand` form both binaries hand a script to PowerShell in.

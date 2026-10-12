@@ -542,19 +542,19 @@ fn alive(marker: &Marker) -> bool {
 }
 
 #[cfg(target_os = "linux")]
-fn process_identity(pid: u32) -> Option<String> {
+pub(crate) fn process_identity(pid: u32) -> Option<String> {
     crate::machine_sandbox::start_time_in_stat(
         &std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?,
     )
 }
 
 #[cfg(windows)]
-fn process_identity(pid: u32) -> Option<String> {
+pub(crate) fn process_identity(pid: u32) -> Option<String> {
     stuck::creation_time(pid).map(|ticks| ticks.to_string())
 }
 
 #[cfg(not(any(target_os = "linux", windows)))]
-fn process_identity(_pid: u32) -> Option<String> {
+pub(crate) fn process_identity(_pid: u32) -> Option<String> {
     None
 }
 

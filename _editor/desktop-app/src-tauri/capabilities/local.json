@@ -30,6 +30,7 @@
         "allow-sign-out-for-setup",
         "allow-resumable-setup",
         "allow-forget-resumable-setup",
+        "allow-park-setup-for-pc",
         "allow-setup-fresh-code",
         "allow-sandbox-list",
         "allow-sandbox-power",

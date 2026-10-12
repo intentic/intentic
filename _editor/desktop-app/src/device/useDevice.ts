@@ -11,8 +11,11 @@ import {
     onPendingSetup,
     onPendingSync,
     onPrefetch,
+    onQuitting,
     onRun,
+    onSetupStop,
     onUpdate,
+    quitReady,
     updateInstall,
     updateState,
     type RunEvent,
@@ -105,6 +108,14 @@ const onRunEvent = (event: RunEvent): void => {
     fixing.foldFix(event);
 };
 
+// The app is quitting with a setup running: the window running it says where it was left, then lets the app go (it waits
+// a moment for that, windows.rs `quit_now`). Any other window has nothing to say, and says nothing.
+const onQuit = async (): Promise<void> => {
+    if (await setup.abandonOnQuit()) {
+        await quitReady();
+    }
+};
+
 // Probed beside everything else, since it's slowest on the machines it matters for. `desktop_app_opened` waits for it,
 // so the property means something on precisely the machines it's about.
 const probeDocker = async (): Promise<void> => {
@@ -136,13 +147,20 @@ const startOnce = async (options: DeviceOptions): Promise<void> => {
     void engine.loadEngine();
     // Registered before a parked setup can start a run, or its first seconds would show an empty log. A move between
     // engines is heard by every window, whichever started it.
-    const listening = [onRun(onRunEvent), onUpdate((stage) => (update.value = stage)), onEngineMove(engine.hearEngineMove)];
+    const listening = [
+        onRun(onRunEvent),
+        onUpdate((stage) => (update.value = stage)),
+        onEngineMove(engine.hearEngineMove),
+        onQuitting(() => void onQuit()),
+    ];
     const parked = options.takesWork
         ? [
               onPendingSetup(() => void setup.loadPending()),
               onPendingRecreate(() => void sandboxes.drainRecreate()),
               onPendingSync(() => void sync.drainSync()),
               onPendingFix(() => void fixing.drainFix()),
+              // The setup page took a sandbox to a machine of ours: its install here stops, if this window runs one.
+              onSetupStop((sandboxId) => void setup.stopForHosted(sandboxId)),
               // The sandbox image fetched ahead of a setup (prefetch.rs) has ended: heard by every window, told once.
               onPrefetch((ended) => track(`desktop_image_prefetch`, { ...ended })),
           ]

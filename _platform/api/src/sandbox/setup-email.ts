@@ -11,8 +11,11 @@ export interface SetupLinkEmail {
     sandboxId: string;
 }
 
+// The setup page resumed on one sandbox; also where the mail about a failed setup run sends its owner back to.
+export const setupLink = (config: Config, sandboxId: string): string => `${config.webOrigin}/setup?sandbox=${encodeURIComponent(sandboxId)}`;
+
 export const sendSetupLinkEmail = async (config: Config, logger: Logger, setup: SetupLinkEmail): Promise<void> => {
-    const link = `${config.webOrigin}/setup?sandbox=${encodeURIComponent(setup.sandboxId)}`;
+    const link = setupLink(config, setup.sandboxId);
     await sendMail(config, logger, {
         to: setup.to,
         subject: `Finish setting up your "${setup.sandboxName}" sandbox`,

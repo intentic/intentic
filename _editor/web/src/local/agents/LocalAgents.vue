@@ -10,6 +10,7 @@ import { localHost } from "../../app/environments/localHost";
 import { useAccount } from "../../client/auth/useAccount";
 import { useOperation } from "../../workbench/operations/operations";
 import AgentsFirstTaskComposer from "./AgentsFirstTaskComposer.vue";
+import AgentsPrefetch from "./AgentsPrefetch.vue";
 
 const props = defineProps<{
     onboarding?: LocalOnboardingHost;
@@ -197,31 +198,6 @@ const hideSetupStep = computed(() => check.value?.state === `ready`);
 
 const phoneUrl = PLATFORM_WEB_ORIGIN;
 
-const prefetchLine = computed(() => {
-    const row = prefetch.value;
-    if (row === undefined || row.total <= 0) {
-        return ``;
-    }
-    if (row.done === 0) {
-        return t(`local.agents.prefetch.todo`, { total: formatBytes(row.total) });
-    }
-    return t(`local.agents.prefetch.progress`, { done: formatBytes(row.done), total: formatBytes(row.total) });
-});
-
-const prefetchStatus = computed((): string | undefined => {
-    const row = prefetch.value;
-    if (row === undefined) {
-        return undefined;
-    }
-    if (row.state === `paused`) {
-        return t(`local.agents.prefetch.paused`);
-    }
-    if (row.state === `metered`) {
-        return t(`local.agents.prefetch.meteredWait`);
-    }
-    return undefined;
-});
-
 const setupMinutesLeft = computed((): number | undefined => {
     const row = check.value;
     if (setup.value.state !== `running` || row === undefined || row.minutes <= 0) {
@@ -234,6 +210,9 @@ const setupMinutesLeft = computed((): number | undefined => {
 const setupNeedsYou = computed(
     () => setup.value.state === `running` && setup.value.needsYou === true,
 );
+
+// No line from the setup for twenty minutes or more (onboarding.rs `SETUP_STALL_AFTER`): what it was on, and a way on.
+const setupQuietMinutes = computed(() => (setup.value.state === `running` ? setup.value.quietMinutes : undefined));
 
 const restartScheduled = computed(
     () =>
@@ -443,41 +422,32 @@ const goRepair = (): void => {
                 </li>
             </ol>
 
-            <div v-if="prefetch && prefetch.state !== `idle` && prefetch.state !== `done`" class="mt-4 space-y-1 text-xs text-muted">
-                <div class="flex flex-wrap items-center gap-2">
-                    <span>{{ t(`local.agents.prefetch.label`) }}: {{ prefetchLine }}</span>
-                    <span v-if="prefetchStatus">{{ prefetchStatus }}</span>
-                </div>
-                <div class="flex flex-wrap items-center gap-2">
-                    <div class="h-1 min-w-32 flex-1 overflow-hidden rounded-full bg-line">
-                        <div
-                            class="h-full rounded-full bg-primary-500 transition-[width] duration-700 ease-smooth"
-                            :style="{ width: `${prefetch.total ? (prefetch.done / prefetch.total) * 100 : 0}%` }"
-                        ></div>
-                    </div>
-                    <button
-                        v-if="prefetch.state === `running` || prefetch.state === `paused`"
-                        type="button"
-                        :class="ui.textButton({ tone: `subtle`, size: `xs` })"
-                        @click="onboarding?.pause(prefetch.state !== `paused`)"
-                    >
-                        {{ prefetch.state === `paused` ? t(`local.agents.prefetch.resume`) : t(`local.agents.prefetch.pause`) }}
-                    </button>
-                    <button
-                        v-if="prefetch.state === `metered`"
-                        type="button"
-                        :class="ui.textButton({ tone: `subtle`, size: `xs` })"
-                        @click="onboarding?.pause(false)"
-                    >
-                        {{ t(`local.agents.prefetch.anyway`) }}
-                    </button>
-                </div>
-            </div>
+            <AgentsPrefetch class="mt-4" :prefetch="prefetch" :onboarding="onboarding" />
         </section>
 
         <section v-if="phase === `settingUp`" class="space-y-4 rounded-lg border border-line bg-card p-4">
             <Notice v-if="setupNeedsYou" tone="warning">
                 <p class="text-sm font-medium">{{ t(`local.agents.progress.needsYou`) }}</p>
+            </Notice>
+            <Notice v-if="setupQuietMinutes !== undefined" tone="warning" :title="t(`local.agents.progress.quiet.title`, { count: setupQuietMinutes })">
+                <p v-if="setup.state === `running` && setup.step" class="text-sm">{{ t(`local.agents.progress.quiet.at`, { step: setup.step }) }}</p>
+                <p class="text-sm">{{ t(`local.agents.progress.quiet.body`) }}</p>
+                <div class="mt-3 flex flex-wrap gap-2">
+                    <Button
+                        v-if="onboarding?.showSetupLog"
+                        size="small"
+                        tier="boring"
+                        :label="t(`local.agents.progress.quiet.log`)"
+                        @click="run(`log`, () => onboarding!.showSetupLog!())"
+                    />
+                    <Button
+                        v-if="onboarding?.setUpAgain"
+                        size="small"
+                        :label="t(`local.agents.progress.quiet.again`)"
+                        :disabled="busy !== undefined"
+                        @click="run(`setup`, () => onboarding!.setUpAgain!())"
+                    />
+                </div>
             </Notice>
             <div class="flex flex-wrap items-center justify-between gap-2">
                 <div>
@@ -497,6 +467,7 @@ const goRepair = (): void => {
                 ></div>
             </div>
             <p v-if="setup.state === `running` && setup.step" class="text-sm text-muted">{{ setup.step }}</p>
+            <AgentsPrefetch :prefetch="prefetch" :onboarding="onboarding" />
             <ul v-if="showDetails" class="space-y-1 text-sm">
                 <li v-for="row in check?.rows ?? []" :key="row.id" class="flex items-center gap-2 text-muted">
                     <span class="size-2 shrink-0 rounded-full" :class="rowDone(row) ? `bg-success` : `border border-line`"></span>

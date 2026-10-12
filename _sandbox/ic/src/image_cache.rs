@@ -1023,6 +1023,12 @@ fn load(
         String::from_utf8_lossy(&output.stderr)
     );
     log.write(said.as_bytes());
+    // A Docker that went away (before the load, or during it, which breaks the pipe first) is answered with its own words
+    // alone: they say which engine it was, and connect's `docker::engine_gone` quotes them as docker's, where a broken
+    // pipe says neither.
+    if !output.status.success() && intentic_docker_host::refusal::unreachable(&said) {
+        return Err(said.trim().to_string());
+    }
     written?;
     if !output.status.success() {
         return Err(format!(

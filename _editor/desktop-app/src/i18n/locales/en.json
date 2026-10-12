@@ -44,7 +44,19 @@
         "yourSandbox": "your sandbox",
         "newerIntenticInstalled": "A newer Intentic is installed. Restart Intentic to use it.",
         "restartIntentic": "Restart Intentic",
-        "startEngine": "Start the engine"
+        "startEngine": "Start the engine",
+        "pcSetupFirst": "This PC needs Docker before your sandbox can run on it, so the sandbox's setup waits for this PC's own setup. Once this PC is ready, it carries on by itself.",
+        "pcSetupChecking": "Checking what this PC needs…",
+        "pcSetupWhat": "Setting up this PC gets Docker and Windows Subsystem for Linux (WSL) ready: the engine your sandbox runs in.",
+        "pcSetupAdmin": "Windows asks for administrator permission once.",
+        "pcSetupRestart": "The PC needs to restart part way, and your sandbox's setup carries on by itself afterwards.",
+        "setUpThisPc": "Set up this PC",
+        "pcSetupInstalledDocker": "Installed Docker yourself? Check again",
+        "pcSetupRunning": "Setting up this PC… {percent}%",
+        "pcSetupAdminDeclined": "Windows didn't get administrator permission, so nothing changed. Set up this PC again and choose Yes when Windows asks.",
+        "pcSetupNeedsRestart": "This PC needs to restart to finish its setup. Your sandbox's setup carries on by itself once you're back.",
+        "pcSetupNeedsSignOut": "Sign out of Windows and back in to finish this PC's setup. Your sandbox's setup carries on by itself once you're back.",
+        "pcSetupFailed": "This PC's setup stopped before it was done."
     },
     "closeConfirm": {
         "alwaysDoDontAsk": "Always do this: don't ask again",
@@ -164,7 +176,9 @@
         "startSandbox": "Start your sandbox",
         "stepOf": "Step {index} of {total}",
         "useSandboxImage": "Use the sandbox image already here",
-        "waitToComeUp": "Wait for it to come up"
+        "waitToComeUp": "Wait for it to come up",
+        "downloadedOf": "{done} of {total} downloaded",
+        "loadingImage": "Loading the image into Docker…"
     },
     "setupProgress": {
         "allDone": "All done",

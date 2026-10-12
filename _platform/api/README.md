@@ -139,6 +139,17 @@ flowchart LR
   side) is answered 409 with a sentence that says where it was used and what to do; the same machine retrying is let
   through, and so is any machine once the first copy has reported its removal (`/sandbox/farewell`). A claim that names
   nothing is never refused for it. `ic` does not send these fields yet, so until it does nothing is refused.
+- (2026-10-12) A setup run that fails after its owner has left gets one email to the owner
+  (`src/sandbox/setup-failure-email.ts`). Every two minutes, under its own advisory lock, a sweep reads the sandboxes
+  that never connected (no `lastSeenAt`, no `daemonUrl`, not hosted) whose newest setup report has a non-empty
+  `failed` and is between ten minutes and a day old. It mails the owner when no claim came after the failure, the
+  owner has not signed in since, and no other sandbox of theirs was created or first announced since. The mail names
+  the stage, the first failure's problem (clipped to 600 characters), its remedy or a generic retry, a link back to
+  `/setup?sandbox=<id>`, and, where the hosted lane is on and the owner is not suspended from it, the same page with
+  `&machine=hosted`. The row keeps `setupFailureEmailedAt` and `setupFailureEmailedFor`: the run (its claim, or its
+  code's expiry) and the failed checks. The same failure is never mailed twice, even when two runs on one claim
+  report it. The next claim's failure is mailed again. The send happens before the stamp, so a refused send is
+  retried on the next pass. The platform has no mail preferences to respect.
 - (2026-10-05) `POST /sandbox/boot-report` keeps `retrying` and `drift` as the daemon sends them; both used to be
   dropped, so the editor never learned that a reachability probe had given up.
 - A sandbox on its owner's own machine can be reported on from outside it, for when the browser cannot reach it

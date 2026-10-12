@@ -1,13 +1,16 @@
-import { computed, effectScope, ref, watch } from "vue";
+import { computed, effectScope, ref, shallowRef, watch, type Ref, type WatchStopHandle } from "vue";
 import { useNow } from "@intentic/ui/async";
 import { useCopied } from "@intentic/ui/clipboard";
 import { t } from "@intentic/ui/i18n";
 import { track, trackBeforeExit } from "../analytics";
 import {
     claimExpired,
+    desktopInfo,
+    dockerReady as dockerReadyProbe,
     expectedStop,
     forgetResumableSetup,
     freshSetupCode,
+    parkSetupForPc,
     parseCommandFailure,
     parseStep,
     readMarker,
@@ -17,12 +20,12 @@ import {
     runStop,
     setupAlert,
     setupProgress,
-    onboardingSetUp,
-    onboardingState,
     setupRun,
     signOutForSetup,
     takePendingSetup,
     workspaceOpen,
+    type OnboardingCheck,
+    type OnboardingSetup,
     type Requirement,
     type RequirementProgress,
     type RunEvent,
@@ -33,6 +36,7 @@ import {
     type SetupReport,
     type SetupWaitingFor,
 } from "../desktop";
+import { currentPcCheck, followPcSetup, pcParts, setUpThisPc as startPcSetup, type PcParts } from "../onboarding/pc";
 import { advance, type PlanStep, progressView, setupPlan, startProgress, tick, type Progress } from "../setupPlan";
 import {
     endRequirements,
@@ -40,7 +44,9 @@ import {
     foldRequirement,
     homeOf,
     openStep,
+    pullReportDue,
     runEnding,
+    runFacts,
     scrubReason,
     stepLeft,
     type RequirementClocks,
@@ -49,8 +55,9 @@ import {
     type StepTime,
 } from "./installTelemetry";
 import { dockerReady, info } from "./machine";
+import { pcGate, type PcGate } from "./pcSetup/pcGate";
 import { activeRun, eventsOf, linesOf, running, runOutcome, start } from "./runs";
-import { sleep } from "@intentic/base/async";
+import { sleep, within } from "@intentic/base/async";
 
 // A SANDBOX'S SETUP ON THIS MACHINE, handed over from the workspace's /setup page (`intentic://setup`, parked by the
 // app for the main window, windows.rs `park_setup`). It runs on arrival, unasked: installing and signing in to run a
@@ -62,22 +69,6 @@ import { sleep } from "@intentic/base/async";
 // Setup codes last 30 minutes (the platform's setup-code.ts). A setup resumed on one older than 20 asks for a fresh one
 // first, since its claim is still minutes of Docker ahead of it; one that cannot be had (signed out, offline, refused)
 // leaves the old code to run while it has 5 minutes left, and the card saying it ran out past that.
-/** On Windows, Docker/WSL for this PC goes through onboarding, not a sandbox setup run. */
-const pcPrepareUsesOnboarding = async (): Promise<boolean> => {
-    try {
-        const snap = await onboardingState();
-        const os = snap.check?.machine?.os ?? ``;
-        if (!os.toLowerCase().includes(`windows`)) {
-            return false;
-        }
-        return snap.check?.state !== `ready`;
-    } catch {
-        // allow(silent-catch): no onboarding state to read means the setup run's own prepare goes ahead, as before the
-        // one setup path, and that run reports its own failures on the requirements card.
-        return false;
-    }
-};
-
 const RENEW_AFTER_SECONDS = 20 * 60;
 const RESUME_WINDOW_SECONDS = 25 * 60;
 // A park this old is not resumed at all, however fresh a code could be: the restart it waited for was cancelled or
@@ -105,6 +96,14 @@ export const setupLog = ref<string | undefined>(undefined);
 export const setupLogOpen = ref(false);
 /** A stop has been asked for: the exit it produces reads as an answer, not a failure. */
 export const stopping = ref(false);
+/**
+ * Who asked for a stop: the card's own Stop, or the workspace's setup page taking the sandbox to a machine of ours
+ * (`intentic://setup-stop`, `stopForHosted`).
+ */
+type StopReason = `card` | `hosted`;
+// Why the run being stopped was, for its events and its ending: a run stopped for a machine of ours does not bring This
+// device up over the page the reader is watching that machine start on.
+let stopReason: StopReason | undefined;
 // Exit code of the last setup, to tell a designed stop from something going wrong.
 const setupExit = ref<number | null | undefined>(undefined);
 const setupCommandFailure = ref<string | undefined>(undefined);
@@ -149,6 +148,7 @@ watch(setupClock, (at) => {
     now.value = at;
     if (progress.value !== undefined) {
         progress.value = tick(progress.value, at);
+        reportPull(progress.value, at);
     }
 });
 
@@ -221,6 +221,17 @@ const reportStep = (time: StepTime, outcome: StepOutcome): void => {
     track(`desktop_install_step`, { ...time, outcome, ...attemptFacts });
 };
 
+// A pull runs for minutes with no step to leave: where it has got to, every 30 seconds while it runs (installTelemetry.ts
+// `pullReportDue`), is what says whether a slow one was the network, and how slow.
+let pullSentAt: number | undefined;
+const reportPull = (state: Progress, at: number): void => {
+    if (!pullReportDue(state, pullSentAt, at)) {
+        return;
+    }
+    pullSentAt = at;
+    track(`desktop_install_progress`, { ...runFacts(state, progressView(state, at), at), ...attemptFacts });
+};
+
 const reportRequirement = (time: RequirementTime): void => {
     track(`desktop_install_requirement`, { ...time, resumed: attemptFacts.resumed });
 };
@@ -249,6 +260,7 @@ const beginAttempt = (args: SetupArgs, startedAt: number): void => {
     setupCommandFailure.value = undefined;
     clearCommandFailureTimer();
     stopping.value = false;
+    stopReason = undefined;
     expired.value = false;
     progress.value = startProgress(planFor(args), startedAt, floorFor(args));
     now.value = startedAt;
@@ -256,6 +268,7 @@ const beginAttempt = (args: SetupArgs, startedAt: number): void => {
     attemptFacts = { resumed: resuming.value, dockerReady: dockerReady.value ?? null };
     clocks = {};
     exitHeardAt = undefined;
+    pullSentAt = undefined;
 };
 
 /**
@@ -264,7 +277,199 @@ const beginAttempt = (args: SetupArgs, startedAt: number): void => {
  * after the platform refused the last one at the claim. A run that stops on a question and a reader who presses again
  * look the same from the outcome alone.
  */
-export type InstallTrigger = `arrival` | `resume` | `consent` | `recheck` | `retry` | `renewed`;
+export type InstallTrigger = `arrival` | `resume` | `consent` | `recheck` | `retry` | `renewed` | `pcReady`;
+
+/* A SETUP HANDED OVER BEFORE THIS PC IS READY (pcSetup/pcGate.ts) is parked until this PC's own setup is done, the card offering
+   that setup, and then carries on by itself. Before, it silently did nothing: the card had only "Back" and "Dismiss",
+   and the workspace page waited on a run that never started (2026-10-12). */
+
+/** Parked for this PC's own setup (Docker/WSL, onboarding.rs): the workspace page hears `waitingFor: "pcSetup"`. */
+export const pcParked = ref(false);
+// Onboarding's own reading of this PC (onboarding/pc.ts, as the Agents page follows it), from the first park on: its
+// check for the card, and this PC's setup as it runs. Shallow: their fields are refs of their own.
+interface PcFollowed {
+    readonly host: PcParts;
+    readonly setup: Readonly<Ref<OnboardingSetup>>;
+}
+const pcFollowed = shallowRef<PcFollowed | undefined>(undefined);
+const followPc = (): PcFollowed => (pcFollowed.value ??= { host: pcParts(), setup: followPcSetup() });
+/** The PC check while parked: what the card says this PC needs. */
+export const pcCheck = computed(() => pcFollowed.value?.host.check.value);
+/** This PC's own setup while parked: started, running, waiting on Windows, or stopped. */
+export const pcSetup = computed(() => pcFollowed.value?.setup.value);
+/** A press on the card that the app refused (a restart Windows would not do), in its own words. */
+export const pcError = ref<string | undefined>(undefined);
+// The park's watch on the gate, and its slow Docker probe, both stopped when the setup runs or is given up; and whether
+// the gate has opened and the run is on its way, so a gate that opens twice runs it once.
+let pcWatch: WatchStopHandle | undefined;
+let pcProbe: ReturnType<typeof setInterval> | undefined;
+let carrying = false;
+
+// How long a setup waits for this PC's check before it parks rather than keep the page waiting on nothing: the check runs
+// at launch, and usually answers in seconds. A park while it runs says "checking" on the card and carries on when it has.
+const CHECK_QUICK_MS = 2_000;
+// While parked, Docker is asked again this often: someone who installs Docker Desktop by hand meanwhile (2026-10-12) is
+// picked up without a press.
+const PARKED_PROBE_MS = 30_000;
+
+// The app's own OS, which the window reads before it takes any work (useDevice.ts); asked here only if it has not.
+const osOf = async (): Promise<string | undefined> =>
+    info.value?.os ??
+    (await desktopInfo().then(
+        (answer) => answer?.os,
+        () => undefined,
+    ));
+
+/**
+ * The gate as it stands. The check is onboarding's own answer (`currentPcCheck`), never its silence: a check that has
+ * not answered within CHECK_QUICK_MS is a park, never a go-ahead (pcSetup/pcGate.ts). Off Windows nothing is asked.
+ */
+const gateNow = async (): Promise<PcGate> => {
+    const os = await osOf();
+    if (os !== `windows` || dockerReady.value === true) {
+        return `go`;
+    }
+    let check: OnboardingCheck | undefined;
+    try {
+        check = await within(currentPcCheck(), CHECK_QUICK_MS, undefined);
+    } catch {
+        // allow(silent-catch): the app cannot be asked about this PC at all, so the setup run's own prepare goes ahead,
+        // as before the one setup path, and that run reports its own failures on the requirements card.
+        return `go`;
+    }
+    return pcGate({ os, dockerReady: dockerReady.value, check: check?.state, pcSetup: followPcSetup().value.state });
+};
+
+// Docker asked again: a probe made at launch says nothing about a Docker installed by hand since.
+const probeDocker = async (): Promise<void> => {
+    try {
+        dockerReady.value = await dockerReadyProbe();
+    } catch (error) {
+        console.error(`[setup] Docker could not be asked:`, error);
+    }
+};
+
+// Onboarding's check asked again; its answer arrives through onboarding's own events, which the park follows.
+const recheckPc = async (host: PcParts): Promise<void> => {
+    try {
+        await host.recheck();
+    } catch (error) {
+        console.error(`[setup] this PC could not be checked again:`, error);
+    }
+};
+
+const saveParked = async (args: SetupArgs): Promise<void> => {
+    try {
+        await parkSetupForPc(args);
+    } catch (error) {
+        console.error(`[setup] the parked setup could not be saved:`, error);
+    }
+};
+
+const unpark = (): void => {
+    pcParked.value = false;
+    pcError.value = undefined;
+    pcWatch?.();
+    pcWatch = undefined;
+    clearInterval(pcProbe);
+    pcProbe = undefined;
+};
+
+// Parked: saved so a restart this PC's setup asks for brings it back (commands.rs `park_setup_for_pc`), and followed
+// until the gate opens: this PC's setup finishing, its check saying ready, or Docker answering. A newer setup handed over
+// meanwhile takes the old one's place, on disk too.
+const parkForPc = (args: SetupArgs, gate: PcGate, trigger: InstallTrigger): void => {
+    void saveParked(args);
+    if (pcParked.value) {
+        return;
+    }
+    pcParked.value = true;
+    track(`desktop_install_pc_setup`, { action: `parked`, gate, trigger, dockerReady: dockerReady.value ?? null });
+    const { host, setup } = followPc();
+    // A check made before Docker was installed by hand still says it is needed, and so does a launch's Docker probe:
+    // both are asked again, once, unless this PC's setup is under way; Docker again every PARKED_PROBE_MS.
+    void probeDocker();
+    pcProbe = setInterval(() => void probeDocker(), PARKED_PROBE_MS);
+    if (gate === `needsSetup` && setup.value.state !== `running`) {
+        void recheckPc(host);
+    }
+    pcWatch = watch(
+        () => pcGate({ os: `windows`, dockerReady: dockerReady.value, check: host.check.value?.state, pcSetup: setup.value.state }),
+        (open) => {
+            if (open === `go`) {
+                void carryOn();
+            }
+        },
+    );
+    // A check still running when the setup arrived: its answer decides, the moment it has one.
+    if (gate === `checking`) {
+        void afterCheck();
+    }
+};
+
+// The check answered, however long it took (onboarding.rs bounds it at two minutes): the gate is read again.
+const afterCheck = async (): Promise<void> => {
+    try {
+        await currentPcCheck();
+    } catch (error) {
+        console.error(`[setup] this PC's check could not be read:`, error);
+        return;
+    }
+    await carryOn();
+};
+
+// The gate may have opened: the parked setup runs again through the gate, once whatever else this window runs has ended.
+// It stays parked until the run itself has read the gate open (`runSetup`), so the workspace's strip goes from waiting
+// to running with nothing between, and a gate still shut parks it again with nothing said twice.
+const carryOn = async (): Promise<void> => {
+    if (!pcParked.value || carrying) {
+        return;
+    }
+    carrying = true;
+    try {
+        while (running.value) {
+            await sleep(RENEW_PAUSE_MS);
+        }
+        await runSetup(`pcReady`);
+        if (!pcParked.value) {
+            track(`desktop_install_pc_setup`, { action: `continued` });
+        }
+    } finally {
+        carrying = false;
+    }
+};
+
+/** The card's "Set up this PC": the Agents page's own press (onboarding/pc.ts `setUpThisPc`), which it follows itself. */
+export const setUpThisPc = async (from: `card` | `consent` = `card`): Promise<void> => {
+    followPc();
+    pcError.value = undefined;
+    track(`desktop_install_pc_setup`, { action: `pressed`, from });
+    try {
+        await startPcSetup(`device`);
+    } catch (error) {
+        // How it stopped is its own state (`pcSetup`), which the card draws; a press refused outright is said here.
+        pcError.value = String(error);
+    }
+};
+
+/** "Installed Docker yourself? Check again": the PC check and the Docker probe asked again. */
+export const recheckThisPc = async (): Promise<void> => {
+    track(`desktop_install_pc_setup`, { action: `recheck` });
+    const { host } = followPc();
+    await Promise.all([probeDocker(), recheckPc(host)]);
+};
+
+/** This PC's setup waits for a restart: restart now, the setup saved to carry on afterwards. */
+export const restartThisPc = async (): Promise<void> => {
+    const { host } = followPc();
+    track(`desktop_install_pc_setup`, { action: `restart` });
+    pcError.value = undefined;
+    try {
+        await host.restart(`now`);
+    } catch (error) {
+        pcError.value = String(error);
+    }
+};
 
 /** A fresh code is being asked for: up to a minute and a half with no run active. */
 const renewing = ref(false);
@@ -278,8 +483,13 @@ export const runSetup = async (trigger: InstallTrigger = `retry`): Promise<void>
     if (args === undefined || running.value || (renewing.value && READER_PRESSES.has(trigger))) {
         return;
     }
-    if (await pcPrepareUsesOnboarding()) {
+    const gate = await gateNow();
+    if (gate !== `go`) {
+        parkForPc(args, gate, trigger);
         return;
+    }
+    if (pcParked.value) {
+        unpark();
     }
     const startedAt = Date.now();
     beginAttempt(args, startedAt);
@@ -324,7 +534,14 @@ const reasonOf = (args: SetupArgs): string | undefined => {
 const reportFinished = (args: SetupArgs, ok: boolean, startedAt: number): void => {
     const failed = !ok && !stopping.value && !expectedStop(setupExit.value ?? null);
     const reason = failed ? reasonOf(args) : undefined;
-    track(`desktop_install_finished`, { ...runOutcome(`setup`, ok, startedAt), ...requirementFacts(), ...(reason === undefined ? {} : { reason }) });
+    // A stopped run says who stopped it: the card's Stop, or a machine of ours taking the sandbox over.
+    const stopped = !ok && stopping.value && stopReason !== undefined ? { stopped: stopReason } : {};
+    track(`desktop_install_finished`, {
+        ...runOutcome(`setup`, ok, startedAt),
+        ...requirementFacts(),
+        ...(reason === undefined ? {} : { reason }),
+        ...stopped,
+    });
 };
 
 // A designed stop (desktop.ts) carries no error text, since the requirements list is the message; a stop nobody asked
@@ -351,6 +568,17 @@ const settleSetup = async (args: SetupArgs, failure: string | undefined, started
         if (!stopping.value && claimExpired(linesOf(`setup`)) && (await rerunOnFreshCode(args))) {
             return;
         }
+        // Stopped because the setup page took this sandbox to a machine of ours: the reader is on that page, watching it
+        // start, and This device swapped in over it would take them off it.
+        // Its card goes with it: the sandbox is the machine's now, and the card's "Try again" would set it up on this PC
+        // as well. The page hears `stopped` first, so its button is handed back if the machine of ours falls through.
+        if (stopping.value && stopReason === `hosted`) {
+            tell({ ...nameOf(args), state: `stopped`, percent: Math.round(progress.value?.percent ?? 0) });
+            pending.value = undefined;
+            setupOpen.value = false;
+            tell({ ...nameOf(args), state: `closed`, percent: 0 });
+            return;
+        }
         // The main window is never topmost, so a run that stops while it is hidden would otherwise go unnoticed;
         // `setupAlert` brings it back to the front, in the workspace's place rather than beside it.
         await setupAlert();
@@ -359,7 +587,7 @@ const settleSetup = async (args: SetupArgs, failure: string | undefined, started
     // The last word the workspace page hears about this run, sent while there is still a setup to report on: the page
     // draws nothing for it (the workspace is about to open), and a strip left saying "97%" is what a later setup would
     // open on for its first second.
-    void setupProgress({ ...nameOf(args), state: `done`, percent: 100 });
+    tell({ ...nameOf(args), state: `done`, percent: 100 });
     pending.value = undefined;
     setupOpen.value = false;
     // Brings the workspace back without navigating it: the page waiting on `/setup` opens the workspace by itself the
@@ -368,18 +596,54 @@ const settleSetup = async (args: SetupArgs, failure: string | undefined, started
 };
 
 /** `stopping` is set before the kill so the exit code it produces reads as an answer, not a failure. */
-export const stopSetup = async (): Promise<void> => {
+const stopRun = async (reason: StopReason): Promise<void> => {
     if (!running.value) {
         return;
     }
     stopping.value = true;
-    track(`desktop_install_stopped`, { percent: Math.round(progress.value?.percent ?? 0) });
+    stopReason = reason;
+    track(`desktop_install_stopped`, { percent: Math.round(progress.value?.percent ?? 0), reason });
     try {
         await runStop(`setup`);
     } catch (error) {
         stopping.value = false;
+        stopReason = undefined;
         setupError.value = String(error);
     }
+};
+
+/** The card's Stop. Takes no argument: the press hands its handler the click. */
+export const stopSetup = (): Promise<void> => stopRun(`card`);
+
+/* THE SANDBOX TAKEN TO A MACHINE OF OURS (2026-10-12). The setup page offers a machine of ours beside a download too slow
+   to wait for, and the reader who took it left this PC downloading two gigabytes for the same sandbox. The machine of
+   ours adopts the sandbox's address, so that download ended in an announce the platform refused, and a failed setup on a
+   row that was by then hosted. The page now says so to the app (`intentic://setup-stop`, windows.rs) before it starts
+   the machine, and the run stops as the card's Stop stops it: told as `stopped`, never as a failure. The run's mark
+   (scripts.rs `RunMark`) goes as for any run followed to its end, once the stopped run has exited (commands.rs
+   `setup_run`). */
+
+/** Stop the install this window runs for `sandboxId`; a request for another sandbox, or with no install running, does nothing. */
+export const stopForHosted = async (sandboxId: string): Promise<void> => {
+    if (activeRun.value !== `setup` || stopping.value || pending.value?.sandboxId !== sandboxId) {
+        return;
+    }
+    await stopRun(`hosted`);
+};
+
+/**
+ * The app is quitting with this window's setup running (windows.rs `quit_now`, which stops the run and waits a moment
+ * for this): where the run was left, sent before the app goes. True when there was a run here to say it about.
+ */
+export const abandonOnQuit = async (): Promise<boolean> => {
+    const state = progress.value;
+    if (activeRun.value !== `setup` || state === undefined) {
+        return false;
+    }
+    const at = Date.now();
+    // Awaited, unlike other events here, and capped (analytics.ts): the next thing that happens is the process ending.
+    await trackBeforeExit(`desktop_install_abandoned`, { ...runFacts(state, progressView(state, at), at), ...attemptFacts });
+    return true;
 };
 
 /** Puts the transcript on the clipboard: what someone stuck actually needs to hand over. */
@@ -401,21 +665,30 @@ export const openLogFolder = async (): Promise<void> => {
     }
 };
 
-// The card off the page, and the workspace's strip told so.
+// The card off the page, and the workspace's strip told so. A live run keeps it, and so does a setup parked for this PC's
+// own setup: both are still going, and the workspace's strip goes on hearing from them.
 const putAway = (): void => {
-    if (running.value) {
+    if (running.value || pcParked.value) {
         return;
     }
     setupOpen.value = false;
-    void setupProgress({ ...nameOf(pending.value), state: `closed`, percent: 0 });
+    tell({ ...nameOf(pending.value), state: `closed`, percent: 0 });
 };
 
-/** A finished or failed setup's card dismissed by the reader: on a question still open, the likeliest place to leave. */
+/**
+ * A finished or failed setup's card dismissed by the reader: on a question still open, the likeliest place to leave. A
+ * setup parked for this PC's own setup is given up on here, the one press that does that: it no longer carries on by
+ * itself, and no restart brings it back.
+ */
 export const closeSetup = (): void => {
     if (running.value) {
         return;
     }
     track(`desktop_install_closed`, { state: setupState.value, ...whereLeft(), ...requirementFacts() });
+    if (pcParked.value) {
+        unpark();
+        void forgetResumableSetup();
+    }
     putAway();
 };
 
@@ -458,6 +731,9 @@ export const setupState = computed<SetupReport[`state`]>(() => {
     if (running.value) {
         return `running`;
     }
+    if (pcParked.value) {
+        return `waiting`;
+    }
     // A requirements card is a question on this page whichever exit code put it there, and the workspace's strip should
     // say so rather than "stopped" (which reads as broken) beside a button that opens it.
     if (awaitingConsent.value || requirementsShown.value) {
@@ -469,6 +745,10 @@ export const setupState = computed<SetupReport[`state`]>(() => {
     return progress.value?.ended === `ok` ? `done` : `failed`;
 });
 const report = computed((): SetupReport | undefined => {
+    if (setupMode.value && pcParked.value && !running.value) {
+        // No run, so no plan to report from: where the bar stood, and what it waits for.
+        return { ...nameOf(pending.value), state: `waiting`, percent: Math.round(progress.value?.percent ?? 0), waitingFor: `pcSetup` };
+    }
     const view = progressShown.value;
     const state = progress.value;
     if (!setupMode.value || view === undefined || state === undefined) {
@@ -480,6 +760,13 @@ const report = computed((): SetupReport | undefined => {
     }
     if (view.remaining !== undefined) {
         told.remaining = view.remaining;
+    }
+    if (view.remainingMs !== undefined) {
+        told.remainingSeconds = Math.round(view.remainingMs / 1000);
+    }
+    if (view.download !== undefined) {
+        told.downloaded = view.download.done;
+        told.downloadTotal = view.download.total;
     }
     const step = state.plan[state.index]?.phase;
     if (step !== undefined) {
@@ -514,12 +801,41 @@ watch(
         }
     },
 );
+/* THE HEARTBEAT (2026-10-12). The page took ten seconds without a report for an app that was gone, and the app sent one
+   only when something in it changed: a pull whose bar sat still for minutes went quiet, and the page told the reader to
+   start the app again, which started a second install beside the first. Every report now says when it was sent (`at`),
+   and while the setup runs or waits it is sent again every HEARTBEAT_MS whether or not anything changed, so silence
+   means the app is gone and nothing else does. This window is hidden whenever the workspace holds the frame, where its
+   timers slow to one a minute, so the app also repeats the last report itself in this window's silence (windows.rs
+   `keep_heartbeat`). */
+const HEARTBEAT_MS = 4_000;
+
+// Stamped as it goes: `at` is when the app sent it, never part of what makes two reports different.
+const tell = (told: SetupReport): void => {
+    void setupProgress({ ...told, at: Date.now() });
+};
+
 watch(
     () => JSON.stringify(report.value),
     () => {
         if (report.value !== undefined) {
-            void setupProgress(report.value);
+            tell(report.value);
         }
+    },
+);
+
+let heartbeat: ReturnType<typeof setInterval> | undefined;
+watch(
+    () => report.value?.state === `running` || report.value?.state === `waiting`,
+    (live) => {
+        clearInterval(heartbeat);
+        heartbeat = live
+            ? setInterval(() => {
+                  if (report.value !== undefined) {
+                      tell(report.value);
+                  }
+              }, HEARTBEAT_MS)
+            : undefined;
     },
 );
 
@@ -527,6 +843,10 @@ watch(
    all and then stopped anyway. Both are the same question: run this sandbox somewhere else. */
 export const setUpElsewhere = async (from: `requirements` | `stopped`): Promise<void> => {
     track(`desktop_install_elsewhere`, { from, requirements: requirements.value.map((requirement) => requirement.id) });
+    if (pcParked.value) {
+        unpark();
+        void forgetResumableSetup();
+    }
     setupOpen.value = false;
     // The sandbox runs elsewhere now: the restart or sign-out this PC was waiting for is nobody's next step any more.
     requirements.value = [];
@@ -540,14 +860,16 @@ export const setUpElsewhere = async (from: `requirements` | `stopped`): Promise<
     await workspaceOpen(`/setup?${query.toString()}`);
 };
 
-/** The reader's go-ahead after the first pass reported what it would change: the terminal path's typed "y". */
+/**
+ * The reader's go-ahead after the first pass reported what it would change: the terminal path's typed "y". On a PC
+ * whose own setup comes first, the go-ahead is for that: it starts, and the setup carries on once it is done.
+ */
 export const installRequirements = async (): Promise<void> => {
     consented.value = true;
-    if (await pcPrepareUsesOnboarding()) {
-        await onboardingSetUp();
-        return;
-    }
     await runSetup(`consent`);
+    if (pcParked.value && pcSetup.value?.state !== `running`) {
+        void setUpThisPc(`consent`);
+    }
 };
 
 /** Restart and sign-out are one verb, both applied by Windows between sessions; the setup is saved to disk first. */
@@ -670,9 +992,7 @@ export const loadPending = async (): Promise<void> => {
     // A fresh link is a fresh conversation: nothing about an earlier session's ending applies to it.
     resumedHow.value = undefined;
     expired.value = false;
-    if (await pcPrepareUsesOnboarding()) {
-        return;
-    }
+    // Parked rather than run when this PC's own setup comes first (`gateNow`).
     await runSetup(`arrival`);
 };
 
@@ -741,6 +1061,9 @@ export const takeSetupEvent = (event: RunEvent): boolean => {
         if (left !== undefined) {
             reportStep(left, `done`);
         }
+        // Also on each line, not on the clock alone: this window's clock slows to a minute while it is hidden, and ic
+        // says where the pull is every two seconds.
+        reportPull(progress.value, now.value);
     }
     if (event.kind !== `line`) {
         boundaryHeard(event);

@@ -83,7 +83,9 @@ describe(`a stuck wait's correction`, () => {
         [`an installer the reader downloaded`, { ...reader, installing: true, downloaded: true }, `downloaded`],
         [`a phone with the command folded away`, { ...reader, mobile: true }, `phone`],
         [`the app it was handed to`, { ...reader, launched: true }, `app`],
+        [`the app it was handed to, which said it sets this PC up first`, { ...reader, launched: true, pcSetup: true }, `pcSetup`],
         [`the app's button nobody pressed`, reader, `button`],
+        [`the app's button nobody pressed, whatever an earlier run said`, { ...reader, pcSetup: true }, `button`],
     ])(`addresses %s`, (_, input, variant) => {
         expect(nudgeVariantOf(input)).toBe(variant);
     });

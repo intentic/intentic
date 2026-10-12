@@ -236,7 +236,13 @@ impl Reporter {
     /// left empty — the flow's messages already carry their fix, and the wizard adds the one instruction
     /// that is always true (fix it and re-run the same command).
     pub fn failure(&self, message: &str) {
-        if self.reported.get() {
+        self.stopped(message, "");
+    }
+
+    /// A terminal failure that knows its fix apart from what happened (a stopped download, docker.rs `PullStop`): the
+    /// wizard shows `remedy` as the fix, and the flow's closing [`Reporter::failure`] does not overwrite it with less.
+    pub fn stopped(&self, problem: &str, remedy: &str) {
+        if self.reported.replace(true) {
             return;
         }
         let stage = self.stage.borrow().clone();
@@ -244,8 +250,8 @@ impl Reporter {
             &stage,
             vec![crate::checks::WireFailure {
                 check: stage.clone(),
-                problem: message.to_string(),
-                remedy: String::new(),
+                problem: problem.to_string(),
+                remedy: remedy.to_string(),
             }],
         );
     }

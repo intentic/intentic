@@ -3,6 +3,7 @@ import { useNow } from "@intentic/ui/async";
 import { computed, ref, type Ref, watch } from "vue";
 import { track } from "../../../app/analytics";
 import type { DesktopSetupReport } from "../../../app/environments/desktop";
+import { appRunLive } from "../desktopRun";
 import { setupReportView } from "../setupReport";
 import { handoffOf, nudgeAfterMs, nudgeVariantOf, SLOW_BUILD_MS, STALLED_MS, waitedFrom } from "./commandHandoff";
 import type { SetupReader } from "./useRunStep";
@@ -32,9 +33,13 @@ export interface CommandWaitHost {
     readonly reader: SetupReader;
     // The app's own account of the setup it was handed; undefined outside the app.
     readonly desktopReport: Readonly<Ref<DesktopSetupReport | undefined>>;
+    // When that account was last heard (desktopSetup.ts), and whether its last word was a wait on this PC's own setup,
+    // kept after its card was put away.
+    readonly desktopHeardAt: Readonly<Ref<number | undefined>>;
+    readonly desktopPcSetup: Readonly<Ref<boolean>>;
 }
 
-export const useCommandWait = ({ command, row, step, reader, desktopReport }: CommandWaitHost) => {
+export const useCommandWait = ({ command, row, step, reader, desktopReport, desktopHeardAt, desktopPcSetup }: CommandWaitHost) => {
     // A link back to this screen went to the reader's inbox. Not a step of the handoff, which follows the command to a
     // machine: it changes only what a stuck wait's correction says.
     const emailed = ref(false);
@@ -83,15 +88,22 @@ export const useCommandWait = ({ command, row, step, reader, desktopReport }: Co
             installing: step.installing.value,
             downloaded: downloaded.value,
             launched: command.launched.value,
+            pcSetup: desktopPcSetup.value,
         }),
     );
     // Copying again helps a reader with a command not yet run, never a phone: its clipboard was never the blocker.
     const nudgeCopyable = computed(() => step.commandVisible.value && step.runTab.value !== `compose` && !(reader.mobile.value && emailed.value));
-    // Claimed but silent differs from never run: the command ran, so its terminal has the answer.
+    // Claimed but silent differs from never run: the command ran, so its terminal has the answer. Never beside a run the
+    // app still reports (a download it is visibly making, a step it is in): an ic older than reports is silent towards the
+    // platform for a whole image pull, and "safe to re-run" there started a second install over the first (2026-10-12).
     const slowBuild = computed(() => {
         const claimed = row.claimedAt.value;
         return (
-            row.report.value === null && claimed !== null && handoff.value === `claimed` && now.value - new Date(claimed).getTime() > SLOW_BUILD_MS
+            row.report.value === null &&
+            claimed !== null &&
+            handoff.value === `claimed` &&
+            now.value - new Date(claimed).getTime() > SLOW_BUILD_MS &&
+            !appRunLive(desktopReport.value, desktopHeardAt.value, now.value)
         );
     });
 

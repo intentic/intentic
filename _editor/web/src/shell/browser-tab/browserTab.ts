@@ -6,7 +6,7 @@ import { readingAcross } from "../../features/agents/fleet/fleetScope";
 import { type FleetAgent, fleet } from "../../features/agents/fleet/useAgents-fleet";
 import { heldHeard, heldWakes, rosterHeard } from "../../features/agents/fleet/useAgents-registry";
 import { activeSandboxId } from "../../lib/activeSandbox";
-import type { SandboxAvailability } from "../../features/sandbox/overview/availability";
+import { useSandbox } from "../../client/sandbox/useSandbox";
 import { useSandboxAvailability } from "../../features/sandbox/overview/useSandboxAvailability";
 import { otherBoxes } from "../../features/sandbox/live/fleetAcross";
 import { floatingWindowPanel } from "../../workbench/window/floating";
@@ -16,17 +16,12 @@ import { readerBack, settleDesktop, tellDesktop } from "./desktopSignal";
 import { readerHere } from "../../workbench/browser-tab/readerHere";
 import { setTabMark } from "./tabTitle";
 import { chimeAsks, chimeFinished, tabStatus } from "../../workbench/browser-tab/tabPreferences";
-import { newsItemsBetween, type TabFrame, tabMark } from "./tabSignal";
+import { newsItemsBetween, type TabFrame, tabMark, tabOffline } from "./tabSignal";
 
 // The browser tab as a surface of the app (tabSignal.ts has the rules): what the fleet says the tab should show, and
 // when it should ring. The page's own name comes from the router, and tabTitle.ts writes both. Inside the desktop app,
 // whose window has no tab, the same mark goes on the app's icon (desktopBadge.ts) and the same news, for the same
 // reader, becomes the system's notifications (desktopSignal.ts); each does nothing in a browser.
-
-// Past the half minute a reconnect is given in silence (availability.ts), and every ending that waiting will not mend.
-// Not `busy`: a sandbox the diagnosis saw alive is catching up, and a tab that said "Offline" over it was the loudest
-// false alarm the app had.
-const OFFLINE: ReadonlySet<SandboxAvailability> = new Set([`unreachable`, `detached`, `removed`, `blocked`]);
 
 // A Stop the reader pressed files its card in Attention, which is no news to them.
 const endedByHand = (agent: AgentStanding): boolean => agent.status === `stopping` || agent.status === `stopped`;
@@ -95,6 +90,9 @@ export const startBrowserTab = (): void => {
         return;
     }
     const availability = useSandboxAvailability();
+    const { active, connection } = useSandbox();
+    // Answered before, here or anywhere: a sandbox still being set up has never announced, and is not "Offline".
+    const seen = computed(() => connection.value.everOnline || (active.value?.lastSeenAt ?? null) !== null);
     // A turn finished while the reader was elsewhere; over the moment they are back in any window of the app.
     const doneAway = ref(false);
     watch(
@@ -136,7 +134,7 @@ export const startBrowserTab = (): void => {
         tabStatus.value
             ? tabMark({
                   asks: agentsAttention.value,
-                  offline: OFFLINE.has(availability.value),
+                  offline: tabOffline(availability.value, seen.value),
                   doneAway: doneAway.value,
                   working: fleet.value.some(turnWorking),
               })

@@ -156,9 +156,14 @@ pub struct Ended {
     pub bytes: u64,
 }
 
-/// Start one for a setup that is starting now, when [`wanted`]. Returns at once; quick enough for a command's own thread,
-/// since the engine's socket is all it asks of the machine.
+/// Start one for a setup that is starting now, when [`wanted`]. Returns within a few seconds; quick enough for a
+/// command's own thread, since the engine's socket is all it asks of the machine.
+///
+/// The download started at first launch (onboarding.rs) steps aside first, whatever this setup wants: two fetches of the
+/// same image cannot share its cache (one holds the lock, the other waits), and the setup is the one being watched.
+/// Stopping it first means the fetch that carries on from its bytes is this setup's own, here or at its pull.
 pub fn begin_for_setup(app: &AppHandle, consented: bool) {
+    crate::onboarding::yield_to_install();
     if wanted(
         Host::current(),
         consented,

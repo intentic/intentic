@@ -22,7 +22,7 @@ import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
-import { desktopTakesProjects, desktopVersion, openDesktopLink } from "../../app/environments/desktop";
+import { desktopSetupStopLink, desktopTakesProjects, desktopVersion, openDesktopLink } from "../../app/environments/desktop";
 import { desktopInstaller } from "../../app/environments/desktopDownloads";
 import { openOnProject } from "../../app/projectScope";
 import { apiClient } from "../../lib/useApi";
@@ -38,7 +38,7 @@ import { activeSandboxId } from "../../lib/activeSandbox";
 import { mintSyncPairing } from "../sandbox/devices/sync/useDesktopSync";
 import { sandboxIdFromToken } from "../sandbox/session/sandboxIdFromToken";
 import DesktopSetupProgress from "./DesktopSetupProgress.vue";
-import { setupUnderWay, useDesktopSetup } from "./desktopSetup";
+import { setupUnderWay, tellSlowDownloadHosted, useDesktopSetup } from "./desktopSetup";
 import { useProjectHandoff } from "./hostedProject";
 import SetupCompose from "./SetupCompose.vue";
 import SetupAccount from "./SetupAccount.vue";
@@ -74,7 +74,14 @@ const { user } = useAuth();
 const { getIdToken, warmIdToken } = useGoogleIdentity();
 // The preferred shell, a persisted singleton shared across screens.
 const { cmdOs } = useOsPreference();
-const { report: desktopReport, heardAt: desktopHeardAt, ended: desktopEnded, parked: desktopParked } = useDesktopSetup();
+const {
+    report: desktopReport,
+    heardAt: desktopHeardAt,
+    ended: desktopEnded,
+    parked: desktopParked,
+    pcSetup: desktopPcSetup,
+    stepSince: desktopStepSince,
+} = useDesktopSetup();
 // Token and zone discovery shared with useCloudflareZones; it feeds only the command, never .env.
 const cf = useCloudflareZones();
 const { cfToken, cfTokenValid, selectedZone, zonesLoading, zonesError } = cf;
@@ -167,7 +174,7 @@ const {
     composeArgs,
     runHere,
 } = step;
-const wait = useCommandWait({ command, row, step, reader, desktopReport });
+const wait = useCommandWait({ command, row, step, reader, desktopReport, desktopHeardAt, desktopPcSetup });
 const { emailed, handoff, reportFailures, buildStage, nudging, stalled, nudgeVariant, nudgeCopyable, slowBuild, onCopied, onEmailed, onDownload } =
     wait;
 const attach = useAttachLane({ sandbox, row, minted: () => setup.value?.hostname, getIdToken, probe: probeDaemon, reopen: (id) => reopenListed(id) });
@@ -207,6 +214,31 @@ const resumedLine = computed((): string => {
         ? t(`setup.setup.stillOnPlatformCleanup`)
         : t(`setup.setup.setUpBeforeLastSeen`, { when: timeAgo(Date.parse(resumed.lastSeenAt), { days: true }) });
 });
+// A slow download's way out (DesktopSetupProgress): the picker's "Start instantly" rung, offered only while it could
+// start a machine on this row right now, and taken in one press as an arrival on that rung takes it. The PC's own
+// download is stopped first: the machine takes over the sandbox's address, and a PC that went on downloading for it
+// was refused when it announced, which left a failed setup on a row that was hosted by then (2026-10-12).
+const slowDownloadHosted = computed(
+    () =>
+        ladderOptions.value.some((option) => option.value === `hosted`) &&
+        machine.value === `mine` &&
+        hostedRow.value === null &&
+        !hostedSpent.value &&
+        !hostedFull.value &&
+        !hostedBusy.value &&
+        !releasingHosted.value,
+);
+const startHostedForSlowDownload = async (): Promise<void> => {
+    tellSlowDownloadHosted(desktopReport.value);
+    const target = created.value;
+    if (desktop.value && target !== null) {
+        openDesktopLink(desktopSetupStopLink(target.id));
+    }
+    await chooseMachine(`hosted`);
+    if (machine.value === `hosted`) {
+        await provisionHosted();
+    }
+};
 // Whether a provision lane exists (a machine or an address); without either, attach is the whole flow, not a detour.
 const provisionOffered = computed(() => addressed.value || hostedOffered.value);
 // Whether a machine left unopened is collected: every account's but one on the plan or its comp, whatever its hours say.
@@ -1192,7 +1224,10 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                                 v-if="launched && desktopReport && !(desktopReport.state === `failed` && reportFailures !== null)"
                                 :report="desktopReport"
                                 :heard-at="desktopHeardAt"
+                                :step-since="desktopStepSince"
+                                :hosted-offered="slowDownloadHosted"
                                 @elsewhere="showOtherMachines"
+                                @hosted="startHostedForSlowDownload"
                             />
                             <!-- The app's card was put away on a restart or a sign-out the PC still waits for: still the next thing
                                  to do, and "Still nothing" under it read as a setup that had died. -->
@@ -1238,10 +1273,12 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                             <p v-if="slowBuild" class="flex items-start gap-2 text-xs text-warning">
                                 <Icon name="exclamation-circle" class="mt-0.5 shrink-0" />
                                 <!-- Check launch state, not visibility, before handing a command to the app. -->
+                                <!-- A re-run is safe only from a terminal: the app's second press starts a second install
+                                     beside a first one it may still be running unseen (2026-10-12). -->
                                 <span class="min-w-0">{{
-                                    t(`setup.setup.pickedUpNoSandbox`, {
-                                        where: launched ? t(`setup.setup.theIntenticWindow`) : t(`setup.setup.thatTerminal`),
-                                    })
+                                    launched
+                                        ? t(`setup.setup.pickedUpNoSandboxApp`)
+                                        : t(`setup.setup.pickedUpNoSandbox`, { where: t(`setup.setup.thatTerminal`) })
                                 }}</span>
                             </p>
                         </div>

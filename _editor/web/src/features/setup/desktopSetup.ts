@@ -1,6 +1,7 @@
 import { readonly, ref, type Ref } from "vue";
 import { track } from "../../app/analytics";
 import { DESKTOP_SETUP_EVENT, readDesktopSetupReport, type DesktopSetupReport } from "../../app/environments/desktop";
+import { downloadMb, type DownloadMb } from "./desktopRun";
 
 /** A session Windows has to end before Docker can run, which outlasts the app's card being put away. */
 export type DesktopSetupParked = `restart` | `signOut`;
@@ -14,9 +15,18 @@ const heardAt = ref<number | undefined>(undefined);
 const ended = ref(false);
 // allow(module-state): the restart or sign-out the app's last run stopped on, kept when its card is put away
 const parked = ref<DesktopSetupParked | undefined>(undefined);
+// allow(module-state): whether the app's last run was parked behind this PC's own setup, kept when its card is put away
+const pcSetup = ref(false);
+// allow(module-state): when the step the app last reported was first heard, which is how long a download has run
+const stepSince = ref<number | undefined>(undefined);
+// The step `stepSince` dates.
+let lastStep: string | undefined;
 let listening = false;
-// What this page last told the funnel, so a bar ticking every second is one event per change of state, not sixty.
+// What this page last told the funnel, so a bar ticking every second, or a heartbeat re-sending what it already said, is
+// one event per change of state, not sixty.
 let lastTold = ``;
+// Whether the slow download's way out was told to the funnel: once a visit, however often it comes and goes.
+let slowOfferTold = false;
 
 // The app's reports on this page's own record, so the replay's timeline holds what the app's window was saying: the
 // app's own events go out under its install id, beside this session rather than in it (desktop-app analytics.ts).
@@ -32,6 +42,7 @@ const tell = (heard: DesktopSetupReport): void => {
         ...(heard.step === undefined ? {} : { step: heard.step }),
         ...(heard.waitingFor === undefined ? {} : { waitingFor: heard.waitingFor }),
         ...(heard.requirements === undefined ? {} : { requirements: heard.requirements }),
+        ...downloadMb(heard),
     });
 };
 
@@ -43,6 +54,8 @@ export const useDesktopSetup = (): {
     readonly heardAt: Readonly<Ref<number | undefined>>;
     readonly ended: Readonly<Ref<boolean>>;
     readonly parked: Readonly<Ref<DesktopSetupParked | undefined>>;
+    readonly pcSetup: Readonly<Ref<boolean>>;
+    readonly stepSince: Readonly<Ref<number | undefined>>;
 } => {
     if (!listening) {
         listening = true;
@@ -51,18 +64,52 @@ export const useDesktopSetup = (): {
             if (next === undefined) {
                 return;
             }
-            heardAt.value = Date.now();
+            const now = Date.now();
+            heardAt.value = now;
             tell(next);
             // A card put away is not a PC that stopped waiting: a restart it stopped on is still the next thing to do.
             if (next.state !== `closed`) {
                 ended.value = next.state === `failed` || next.state === `stopped`;
                 parked.value = parkedBy(next);
+                pcSetup.value = next.waitingFor === `pcSetup` && (next.state === `running` || next.state === `waiting`);
+                // Dated by the step's first report, not by its card: a run whose card was put away is still in it.
+                if (next.step !== lastStep || stepSince.value === undefined) {
+                    lastStep = next.step;
+                    stepSince.value = now;
+                }
             }
             // The card was put away: nothing left to draw, and nothing to be stale about.
             report.value = next.state === `closed` ? undefined : next;
         });
     }
-    return { report: readonly(report), heardAt: readonly(heardAt), ended: readonly(ended), parked: readonly(parked) };
+    return {
+        report: readonly(report),
+        heardAt: readonly(heardAt),
+        ended: readonly(ended),
+        parked: readonly(parked),
+        pcSetup: readonly(pcSetup),
+        stepSince: readonly(stepSince),
+    };
+};
+
+// How far a slow download had got: in whole MB, and how long it still had to go where the app said.
+const slowFigures = (slow: DesktopSetupReport | undefined): { remainingSeconds: number | null } & DownloadMb => ({
+    remainingSeconds: slow?.remainingSeconds ?? null,
+    ...downloadMb(slow),
+});
+
+// The slow download's way out went up (desktopRun.ts `slowDownload`): told once a visit, however often it comes and goes.
+export const tellSlowDownloadOffered = (offered: DesktopSetupReport): void => {
+    if (slowOfferTold) {
+        return;
+    }
+    slowOfferTold = true;
+    track(`setup_slow_download_offered`, slowFigures(offered));
+};
+
+// The reader took it: told on each press, with the same figures, so the offer's take-up reads off the two events.
+export const tellSlowDownloadHosted = (offered: DesktopSetupReport | undefined): void => {
+    track(`setup_slow_download_hosted`, slowFigures(offered));
 };
 
 // How long a claim with no word from the app counts as an install under way: past a slow install's four minutes with

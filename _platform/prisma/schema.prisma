@@ -221,6 +221,12 @@ model Sandbox {
     // code. The wizard renders it so "why did setup fail" has an answer in the browser, not just in a
     // terminal that may be closed. Cleared on every mint, same lifecycle as the claim stamp above.
     setupReport        Json?
+    // The one email that tells the owner a setup run failed once nobody was watching it (api setup-failure-email.ts):
+    // when it went, and which failure it was for (the run, as its claim or code, and the checks that failed). The same
+    // failure is never mailed twice; a different one, such as the next run's, earns its own. No mint lifecycle: the
+    // run is part of what it names, so it outlives the code.
+    setupFailureEmailedAt  DateTime?
+    setupFailureEmailedFor String?
     // The DAEMON's own account of its boot (BootReportSchema): whether the sandbox's PUBLIC address answers,
     // checked by the box from the inside and posted to /sandbox/boot-report over the connect token. The one
     // link nothing else can see — a daemon that is up and announcing proves only that it started, not that

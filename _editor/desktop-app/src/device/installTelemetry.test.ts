@@ -1,12 +1,15 @@
 import type { RequirementProgress, RunEvent } from "../desktop";
-import { advance, startProgress, type PlanStep } from "../setupPlan";
+import { advance, progressView, startProgress, tick, type PlanStep } from "../setupPlan";
 import {
     endRequirements,
     failureLine,
     foldRequirement,
     homeOf,
     openStep,
+    PULL_REPORT_EVERY_MS,
+    pullReportDue,
     runEnding,
+    runFacts,
     scrubReason,
     secondsBetween,
     stepLeft,
@@ -160,5 +163,53 @@ describe(`why a run failed`, () => {
         expect(long).toHaveLength(300);
         expect(long.endsWith(`…`)).toBe(true);
         expect(scrubReason(`one\n  two`, {})).toBe(`one two`);
+    });
+});
+
+/* A LONG PULL, AND A RUN LEFT BEHIND: where it had got to, in numbers only. */
+const PULL: readonly PlanStep[] = [
+    { phase: `claiming-code`, label: () => `Claim`, weight: 5 },
+    { phase: `pulling-image`, label: () => `Pull`, weight: 240 },
+    { phase: `starting-sandbox`, label: () => `Start`, weight: 25 },
+];
+const MIB = 1024 * 1024;
+
+describe(`a pull under way`, () => {
+    const pulling = advance(advance(startProgress(PULL, 0), step(`claiming-code`), 0), step(`pulling-image`), 10_000);
+
+    it(`reports every thirty seconds from the pull's start, and only while the pull runs`, () => {
+        expect(pullReportDue(pulling, undefined, 10_000 + PULL_REPORT_EVERY_MS - 1)).toBe(false);
+        expect(pullReportDue(pulling, undefined, 10_000 + PULL_REPORT_EVERY_MS)).toBe(true);
+        expect(pullReportDue(pulling, 40_000, 69_999)).toBe(false);
+        expect(pullReportDue(pulling, 40_000, 70_000)).toBe(true);
+        // A report sent in an earlier attempt's pull says nothing about this one's clock.
+        expect(pullReportDue(pulling, 5_000, 30_000)).toBe(false);
+        expect(pullReportDue(advance(pulling, step(`starting-sandbox`), 50_000), undefined, 200_000)).toBe(false);
+        expect(pullReportDue(advance(pulling, { kind: `exit`, run: `setup`, code: 1, ok: false }, 50_000), undefined, 200_000)).toBe(false);
+    });
+
+    it(`is told in numbers: its step, the bar, the bytes and their rate, the time it has run and the time left`, () => {
+        const read = (mb: number) => said(`      downloading the sandbox image: ${mb} of 2200 MB (5.0 MB/s)`, `stdout`);
+        const state = tick([0, 1, 2, 3].reduce((sofar, at) => advance(sofar, read(200 + at * 50), 20_000 + at * 10_000), pulling), 50_000);
+        const facts = runFacts(state, progressView(state, 50_000), 50_000);
+        expect(facts).toEqual({
+            step: `pulling-image`,
+            percent: expect.any(Number),
+            elapsedSeconds: 50,
+            stepSeconds: 40,
+            layers: 0,
+            downloadedMb: 350,
+            downloadTotalMb: 2200,
+            bytesPerSecond: 5 * MIB,
+            remainingSeconds: expect.any(Number),
+        });
+        // Nothing but the step's id is anything but a number.
+        expect(Object.entries(facts).filter(([key, value]) => key !== `step` && !Number.isFinite(value))).toEqual([]);
+    });
+
+    it(`says what it does not know as nothing, rather than as a number`, () => {
+        const facts = runFacts(pulling, progressView(pulling, 20_000), 20_000);
+        expect([facts.downloadedMb, facts.downloadTotalMb, facts.bytesPerSecond]).toEqual([null, null, null]);
+        expect(runFacts(startProgress(PULL, 0), progressView(startProgress(PULL, 0), 0), 0).step).toBeNull();
     });
 });

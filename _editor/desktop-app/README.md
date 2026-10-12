@@ -494,6 +494,7 @@ every link and drops what an outside sender may not ask for. The editor builds t
 | `recreate?slug=…[&hash=…][&rollback=1]` | app windows | Moves the sandbox to the `:stable` base, a pinned overlay, or its previous image, from This device. |
 | `fix?slug=…[&code=…]` | app windows | Runs `ic sandbox fix` for that sandbox here and shows it on This device; `code` is the recovery panel's fix code, which `ic` claims so the panel follows the run. A slug or code that is not a plain token drops the link. |
 | `update` | app windows | Installs the downloaded update and restarts. |
+| `setup-stop?sandbox=<id>` | app windows | Stops the setup This device runs for that sandbox, as its card's Stop does, and shows nothing: the setup page sends it when the reader takes a slow download's offer of a machine of ours, which takes over the sandbox's address. A setup for another sandbox, or none running, is left alone; an id that is not a plain token drops the link. |
 | `launcher[?to=files]` | app windows | Brings the main window back in the workspace's place: at This device (a setup's way back to its run, a sandbox's restart), or at its folder with `to=files` (the sandbox switcher's "This computer"). |
 | `badge?mark=…[&count=…][&tooltip=…][&icon=…][&overlay=…]` | app windows | The workspace tab's mark (`none`, `asks`, `done`, `working`, `offline`) on the app's icon: `icon` for the tray and `overlay` for the Windows taskbar button, each a PNG as unpadded URL-safe base64 of at most 64 KiB and 256 pixels a side; `count` for a Linux dock, heard only with `asks`; `tooltip` after the app's name in the tray's, one line of at most 100 characters. A value out of shape drops the link. |
 | `notice?do=show&key=…&kind=asks\|finished&title=…[&body=…][&path=…][&silent=1]` | app windows | Puts up one of the system's notifications, replacing the one under the same `key`. `path` is a workspace route (`/?sandbox=<id>&conversation=<id>`) a press opens, `silent` asks for no sound. `do=withdraw&key=…` takes one down, `do=clear` all of them, and `do=status` asks whether the system shows them at all (answered as `intentic-desktop-notices`). A line that is empty, too long or holds a control character, or a path that is not rooted or starts `//`, drops the link. |
@@ -533,8 +534,9 @@ Nothing is returned over a link. The app answers with DOM events it dispatches i
 | `intentic:drop-copy` | workspace, floating (Windows) | `{ id, kind, … }` for a drop the page handed over: `received`, `declined` (`reason`), `scanning`, `copying`, `progress` and `finished`. See "A big drop" below. |
 
 A local window also hears the app's Tauri events, which This device listens on: `desktop://run` (a script run's
-`started`, `line` and `exit`), `desktop://pending-setup`, `desktop://pending-recreate`, `desktop://pending-sync`,
-`desktop://update`, and `desktop://machine-sandbox` (this computer's own sandbox, its whole record on every change).
+`started`, `line` and `exit`), `desktop://pending-setup`, `desktop://setup-stop` (a sandbox id),
+`desktop://pending-recreate`, `desktop://pending-sync`, `desktop://update`, and `desktop://machine-sandbox` (this
+computer's own sandbox, its whole record on every change).
 
 ## A big drop, copied by the app (2026-10-09)
 

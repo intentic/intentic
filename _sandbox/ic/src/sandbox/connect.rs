@@ -368,19 +368,34 @@ fn connect(
     } else {
         // An image fetched ahead of Docker (`ic image prefetch`, which the desktop app starts while Docker is still being
         // installed) is finished and loaded here instead of pulled; without one, or if it cannot be used, the pull.
-        match crate::image_cache::load_if_cached(&sandbox_image, &log) {
-            crate::image_cache::Cached::Loaded => step(
-                "pulling-image",
-                &format!("loaded the sandbox image downloaded ahead of time ({sandbox_image})."),
-            ),
-            crate::image_cache::Cached::Nothing => ensure_image(&sandbox_image, &log)?,
-            crate::image_cache::Cached::Failed(why) => {
-                crate::ui::warn(&format!(
-                    "the sandbox image downloaded ahead of time could not be used ({why}); pulling it instead."
-                ));
-                ensure_image(&sandbox_image, &log)?;
-                crate::image_cache::discard(&sandbox_image);
+        let fetched = match crate::image_cache::load_if_cached(&sandbox_image, &log) {
+            crate::image_cache::Cached::Loaded => {
+                step(
+                    "pulling-image",
+                    &format!(
+                        "loaded the sandbox image downloaded ahead of time ({sandbox_image})."
+                    ),
+                );
+                Ok(())
             }
+            crate::image_cache::Cached::Nothing => fetch_image(&sandbox_image, &log),
+            crate::image_cache::Cached::Failed(why) => match docker::engine_gone(&why) {
+                // Docker went away before it could take the download in, and a pull would ask the same engine. The
+                // download stays where it is (discarded only once Docker has the image), so the re-run loads it.
+                Some(stop) => Err(stop),
+                None => {
+                    crate::ui::warn(&format!(
+                        "the sandbox image downloaded ahead of time could not be used ({why}); pulling it instead."
+                    ));
+                    fetch_image(&sandbox_image, &log)
+                        .map(|()| crate::image_cache::discard(&sandbox_image))
+                }
+            },
+        };
+        if let Err(stop) = fetched {
+            // The report keeps the fix apart from what happened, so the wizard shows it as the fix.
+            reporter.stopped(&stop.problem(), stop.remedy());
+            bail!("{stop}");
         }
     }
 
@@ -1129,6 +1144,11 @@ fn reuses_local_image(asked: Option<&str>, self_host: bool) -> bool {
 /// checkout; this binary ships without one). Registry images are pulled even when cached so the moving
 /// `stable` tag always runs the newest release.
 pub(crate) fn ensure_image(image: &str, log: &Log) -> Result<()> {
+    Ok(fetch_image(image, log)?)
+}
+
+/// [`ensure_image`], with a stopped pull still in the two halves the setup's report keeps apart (docker.rs `PullStop`).
+fn fetch_image(image: &str, log: &Log) -> std::result::Result<(), docker::PullStop> {
     if is_registryless(image) {
         if docker::image_exists(image) {
             step(
@@ -1137,7 +1157,7 @@ pub(crate) fn ensure_image(image: &str, log: &Log) -> Result<()> {
             );
             return Ok(());
         }
-        bail!("'{image}' is a local dev tag that isn't built — run 'pnpm build:sandbox' in the intentic repo (or its dev-sandbox wrapper), or unset SANDBOX_IMAGE to use the published image.");
+        return Err(util::Fail(format!("'{image}' is a local dev tag that isn't built — run 'pnpm build:sandbox' in the intentic repo (or its dev-sandbox wrapper), or unset SANDBOX_IMAGE to use the published image.")).into());
     }
     step(
         "pulling-image",

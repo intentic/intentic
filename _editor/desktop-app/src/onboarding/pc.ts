@@ -1,8 +1,7 @@
 import type { LocalOnboardingHost, LocalPcCheck, LocalPcSetup, LocalPrefetch, LocalRestartWhen } from "@intentic/web/local-host";
-import { computed, ref } from "vue";
+import { computed, shallowRef, watch, type Ref } from "vue";
 import { t } from "@intentic/ui/i18n";
 import { track } from "../analytics";
-import { scrubReason } from "../device/installTelemetry";
 import {
     onOnboarding,
     onboardingPause,
@@ -11,23 +10,38 @@ import {
     onboardingSetUp,
     onboardingState,
     onboardingUseCloud,
+    revealLog,
     type OnboardingCheck,
     type OnboardingCheckRow,
+    type OnboardingPrefetch,
     type OnboardingSnapshot,
     type OnboardingSetup,
 } from "../desktop";
+import {
+    mapPrefetch,
+    NO_PREFETCH,
+    NO_SETUP,
+    orphanedEvent,
+    prefetchEvents,
+    setupEvents,
+    type PrefetchMemory,
+    type SetupMemory,
+    type Tracked,
+} from "./pcEvents";
 
 export type PcParts = Omit<LocalOnboardingHost, `firstTask` | `pickFolder` | `queueFirstTask` | `clearFirstTask`>;
 
-const check = ref<LocalPcCheck | undefined>(undefined);
-const prefetch = ref<LocalPrefetch | undefined>(undefined);
-const setup = ref<LocalPcSetup>({ state: `idle` });
+// What the app last said, as it said it; the page's shapes are computed from these.
+const rawCheck = shallowRef<OnboardingCheck | undefined>(undefined);
+const rawPrefetch = shallowRef<OnboardingPrefetch | undefined>(undefined);
+const rawSetup = shallowRef<OnboardingSetup>({ state: `idle` });
 
+let listening: Promise<unknown> | undefined;
 let started: Promise<void> | undefined;
 let launched = false;
-let prefetchStartedAt: number | undefined;
 let lastCheckKey = ``;
-let lastPrefetchKey = ``;
+let prefetchMemory: PrefetchMemory = NO_PREFETCH;
+let setupMemory: SetupMemory = NO_SETUP;
 
 // A row ic names that this app has no words for yet (a newer ic) shows its id rather than the key.
 const rowLabel = (row: OnboardingCheckRow): string => {
@@ -48,8 +62,11 @@ const formatMachine = (parts: NonNullable<OnboardingCheck[`machine`]>): string =
     return bits.join(t(`desktop.onboarding.machineSep`));
 };
 
-const mapCheck = (raw: OnboardingCheck | undefined): LocalPcCheck | undefined => {
-    if (raw === undefined) {
+// The app says `null` until its check has answered once (onboarding.rs serializes the missing check as null). Before
+// 2026-10-12 this read `null.state`, which threw on the first snapshot of every launch whose check was still running: the
+// listener's start failed for good, and with it every button on the Agents page, "Set up this PC" included.
+const mapCheck = (raw: OnboardingCheck | null | undefined): LocalPcCheck | undefined => {
+    if (raw === undefined || raw === null) {
         return undefined;
     }
     return {
@@ -78,6 +95,8 @@ const mapSetup = (raw: OnboardingSetup): LocalPcSetup => {
             step: needsYou ? t(`desktop.onboarding.needsYou`) : raw.step,
             percent: raw.percent,
             needsYou: needsYou ? true : undefined,
+            quietMinutes:
+                raw.quietSince === undefined ? undefined : Math.max(0, Math.floor((Date.now() / 1000 - raw.quietSince) / 60)),
         };
     }
     if (raw.state === `waiting`) {
@@ -90,11 +109,12 @@ const mapSetup = (raw: OnboardingSetup): LocalPcSetup => {
     return raw;
 };
 
-const checkKey = (raw: OnboardingCheck | undefined): string => {
-    if (raw === undefined) {
-        return ``;
-    }
-    return [
+const check = computed(() => mapCheck(rawCheck.value));
+const prefetch = computed((): LocalPrefetch | undefined => (rawPrefetch.value === undefined ? undefined : mapPrefetch(rawPrefetch.value)));
+const setup = computed(() => mapSetup(rawSetup.value));
+
+const checkKey = (raw: OnboardingCheck): string =>
+    [
         raw.state,
         raw.engine ?? ``,
         raw.restart,
@@ -104,15 +124,19 @@ const checkKey = (raw: OnboardingCheck | undefined): string => {
             .map((row) => row.id)
             .join(`,`),
     ].join(`|`);
+
+const send = (tracked: readonly Tracked[]): void => {
+    for (const [event, properties] of tracked) {
+        track(event, properties);
+    }
 };
 
-const prefetchKey = (raw: LocalPrefetch | undefined): string =>
-    raw === undefined ? `` : `${raw.state}|${raw.done}|${raw.total}`;
-
-const trackCheckIfChanged = (snapshot: OnboardingSnapshot): void => {
-    const raw = snapshot.check;
+const trackCheckIfChanged = (raw: OnboardingCheck | undefined): void => {
+    if (raw === undefined) {
+        return;
+    }
     const key = checkKey(raw);
-    if (key === lastCheckKey || raw === undefined) {
+    if (key === lastCheckKey) {
         return;
     }
     lastCheckKey = key;
@@ -128,122 +152,138 @@ const trackCheckIfChanged = (snapshot: OnboardingSnapshot): void => {
     }
 };
 
-const trackPrefetchIfChanged = (raw: LocalPrefetch | undefined, previous: LocalPrefetch | undefined): void => {
-    if (raw === undefined) {
-        return;
-    }
-    const key = prefetchKey(raw);
-    if (key === lastPrefetchKey) {
-        return;
-    }
-    const prevState = previous?.state;
-    lastPrefetchKey = key;
-    if (raw.state === `running` && prevState !== `running`) {
-        if (prevState === `paused` || prevState === `metered`) {
-            track(`onboarding_prefetch`, { action: `resumed` });
-        } else {
-            prefetchStartedAt = Date.now();
-            track(`onboarding_prefetch`, { action: `started` });
-        }
-    }
-    if (raw.state === `paused` && prevState !== `paused`) {
-        track(`onboarding_prefetch`, { action: `paused` });
-    }
-    if (raw.state === `metered` && prevState !== `metered`) {
-        track(`onboarding_prefetch`, { action: `metered` });
-    }
-    if (raw.state === `done` && prevState !== `done`) {
-        const seconds =
-            prefetchStartedAt === undefined ? undefined : Math.round((Date.now() - prefetchStartedAt) / 1000);
-        track(`onboarding_prefetch`, { action: `done`, seconds, bytes: raw.done });
-    }
-    if (raw.state === `failed` && prevState !== `failed`) {
-        track(`onboarding_prefetch`, { action: `failed` });
-    }
-};
-
-let lastSetupState: OnboardingSetup[`state`] = `idle`;
-
-const trackSetupTransition = (raw: OnboardingSetup, previous: OnboardingSetup): void => {
-    if (raw.state === previous.state && raw.state !== `running`) {
-        return;
-    }
-    if (raw.state === `running` && previous.state !== `running` && lastSetupState === `waiting`) {
-        track(`onboarding_setup`, { action: `resumedAfterRestart` });
-    }
-    if (raw.state === `waiting` && previous.state !== `waiting`) {
-        if (raw.for === `admin`) {
-            track(`onboarding_setup`, { action: `adminRefused` });
-        }
-        if (raw.for === `restart`) {
-            track(`onboarding_setup`, { action: `restartAsked` });
-        }
-    }
-    if (raw.state === `ready` && previous.state !== `ready`) {
-        const minutes = check.value?.minutes;
-        track(`onboarding_setup`, { action: `ready`, minutes });
-    }
-    if (raw.state === `failed` && previous.state !== `failed`) {
-        track(`onboarding_setup`, {
-            action: `failed`,
-            step: previous.state === `running` ? previous.step : undefined,
-            reason: scrubReason(raw.reason, {}),
-        });
-    }
-    lastSetupState = raw.state;
-};
-
-let previousSetupSnapshot: OnboardingSetup = { state: `idle` };
-
 const apply = (snapshot: OnboardingSnapshot): void => {
-    const previousPrefetch = prefetch.value;
-    const previousSetup = previousSetupSnapshot;
-    check.value = mapCheck(snapshot.check);
+    const now = Date.now();
+    const raw = snapshot.check ?? undefined;
+    rawCheck.value = raw;
     if (snapshot.prefetch !== undefined) {
-        trackPrefetchIfChanged(snapshot.prefetch, previousPrefetch);
-        prefetch.value = snapshot.prefetch;
+        const told = prefetchEvents(snapshot.prefetch, rawPrefetch.value, prefetchMemory, now);
+        prefetchMemory = told.memory;
+        send(told.tracked);
+        rawPrefetch.value = snapshot.prefetch;
     }
-    trackSetupTransition(snapshot.setup, previousSetup);
-    setup.value = mapSetup(snapshot.setup);
-    previousSetupSnapshot = snapshot.setup;
+    const told = setupEvents(snapshot.setup, rawSetup.value, setupMemory, { minutes: raw?.minutes, now });
+    setupMemory = told.memory;
+    send(told.tracked);
+    rawSetup.value = snapshot.setup;
+    const orphaned = orphanedEvent(snapshot.orphaned, now);
+    if (orphaned !== undefined) {
+        send([orphaned]);
+    }
     if (!launched && snapshot.firstLaunch === true) {
         launched = true;
-        track(`onboarding_launched`, {
-            state: snapshot.check?.state ?? `unknown`,
-            engine: snapshot.check?.engine ?? `unknown`,
-        });
+        track(`onboarding_launched`, { state: raw?.state ?? `unknown`, engine: raw?.engine ?? `unknown` });
     }
-    trackCheckIfChanged(snapshot);
+    trackCheckIfChanged(raw);
 };
 
-const ensureListening = (): Promise<void> =>
-    (started ??= (async () => {
-        await onOnboarding(apply);
-        apply(await onboardingState());
-    })());
+// Listening and the first read, once; a start that failed is tried again by the next ask rather than kept as a
+// rejection every button would then fail on. The listener itself is kept apart, so a retry never adds a second one.
+const startListening = async (): Promise<void> => {
+    try {
+        listening ??= onOnboarding(apply);
+        await listening;
+    } catch (error) {
+        listening = undefined;
+        throw error;
+    }
+    apply(await onboardingState());
+};
+
+const ensureListening = async (): Promise<void> => {
+    started ??= startListening();
+    try {
+        await started;
+    } catch (error) {
+        started = undefined;
+        throw error;
+    }
+};
+
+// For a caller that only wants the page kept current: a failure to listen is said in the console, never thrown.
+const followQuietly = async (): Promise<void> => {
+    try {
+        await ensureListening();
+    } catch (error) {
+        console.error(`[onboarding] this PC's setup could not be followed:`, error);
+    }
+};
+
+const answered = (raw: OnboardingCheck | undefined): raw is OnboardingCheck => raw !== undefined && raw.state !== `checking`;
+
+/**
+ * This PC's check as it stands, once it has answered: never undefined, never `checking`. What a setup handed over from the
+ * workspace asks before it runs (device/setup.ts), and This device's card. The check is `ic docker prepare --dry-run`,
+ * started at launch and bounded at two minutes (onboarding.rs `PREPARE_DEADLINE`); one that cannot answer answers
+ * `unknown`. Rejects only when the app cannot be asked at all.
+ */
+export const currentPcCheck = async (): Promise<OnboardingCheck> => {
+    await ensureListening();
+    const now = rawCheck.value;
+    if (answered(now)) {
+        return now;
+    }
+    return new Promise((resolve) => {
+        const stop = watch(rawCheck, (raw) => {
+            if (answered(raw)) {
+                stop();
+                resolve(raw);
+            }
+        });
+    });
+};
+
+/** This PC's own setup as the app tells it, live: what a handed-over setup parked behind it watches for its end. */
+export const followPcSetup = (): Readonly<Ref<OnboardingSetup>> => {
+    void followQuietly();
+    return rawSetup;
+};
+
+/**
+ * "Set up this PC": the Agents page's button, This device's card, and a handed-over setup that finds this PC not ready
+ * all start the same one setup (`ic docker prepare --yes`); a second press while it runs changes nothing. `from` names
+ * the button, for the funnel.
+ */
+export const setUpThisPc = async (from = `agents`): Promise<void> => {
+    await ensureListening();
+    track(`onboarding_setup`, { action: `pressed`, from });
+    await onboardingSetUp();
+};
 
 // Started with the host, not on import: the host is installed only where the app is behind the page (host.ts
 // `installHost`), and a page without it (the built local face in a test's browser) has no events to listen to.
 export const pcParts = (): PcParts => {
-    void ensureListening().catch((error: unknown) => {
-        console.error(`[onboarding] this PC's setup could not be followed:`, error);
-    });
+    void followQuietly();
     return {
-        check: computed(() => check.value),
-        prefetch: computed(() => prefetch.value),
+        check,
+        prefetch,
         setup,
         recheck: async () => {
             await ensureListening();
             await onboardingRecheck();
         },
-        setUp: async () => {
-            await ensureListening();
-            track(`onboarding_setup`, { action: `pressed` });
-            await onboardingSetUp();
-        },
+        setUp: () => setUpThisPc(`agents`),
         pause: async (paused: boolean) => {
             await ensureListening();
             await onboardingPause(paused);
+        },
+        retryPrefetch: async () => {
+            await ensureListening();
+            track(`onboarding_prefetch`, { action: `retryPressed` });
+            // Resuming a failed download starts it again (onboarding.rs `onboarding_pause`).
+            await onboardingPause(false);
+        },
+        setUpAgain: async () => {
+            await ensureListening();
+            track(`onboarding_setup`, { action: `again` });
+            await onboardingSetUp(true);
+        },
+        showSetupLog: async () => {
+            const raw = rawSetup.value;
+            const log = raw.state === `running` ? raw.log : undefined;
+            if (log !== undefined) {
+                await revealLog(log);
+            }
         },
         restart: async (when: LocalRestartWhen) => {
             await ensureListening();

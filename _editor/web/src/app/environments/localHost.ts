@@ -153,15 +153,27 @@ export interface LocalPcCheck {
 
 /** The download of what agents need: started at first launch on an unmetered connection, before anything is asked. */
 export interface LocalPrefetch {
-    readonly state: `idle` | `running` | `paused` | `metered` | `done` | `failed`;
+    /** `yielded`: stepped aside while a sandbox's setup downloads the image itself; `skipped`: there was nothing to fetch. */
+    readonly state: `idle` | `running` | `paused` | `metered` | `yielded` | `done` | `skipped` | `failed`;
     readonly done: number;
     readonly total: number;
+    /** Failed: the last thing it said about why, with no path in it. */
+    readonly reason?: string;
+    /** Failed, and about to try once more by itself. */
+    readonly retrying?: boolean;
 }
 
 /** The PC's own setup (WSL, the container engine), started by the reader's "Set up this PC", with or without an account. */
 export type LocalPcSetup =
     | { readonly state: `idle` }
-    | { readonly state: `running`; readonly step: string | undefined; readonly percent: number; readonly needsYou?: boolean }
+    | {
+          readonly state: `running`;
+          readonly step: string | undefined;
+          readonly percent: number;
+          readonly needsYou?: boolean;
+          /** It has said nothing for this many minutes (twenty or more): it may be stuck, or waiting on a window. */
+          readonly quietMinutes?: number;
+      }
     | { readonly state: `waiting`; readonly for: `admin` | `restart` | `signOut`; readonly restartAt?: number }
     | { readonly state: `ready` }
     | { readonly state: `failed`; readonly reason: string };
@@ -189,6 +201,12 @@ export interface LocalOnboardingHost {
     /** "Set up this PC": the reader's one consent. Windows asks for permission once; a restart is asked for on its own. */
     setUp(): Promise<void>;
     pause(paused: boolean): Promise<void>;
+    /** The download again, after it stopped. */
+    retryPrefetch?(): Promise<void>;
+    /** Stop a setup that has gone quiet, and start it again. */
+    setUpAgain?(): Promise<void>;
+    /** The setup's log, shown in the file manager. */
+    showSetupLog?(): Promise<void>;
     restart(when: LocalRestartWhen): Promise<void>;
     /** The system's folder dialog for the first task's folder: undefined when nothing was chosen. */
     pickFolder(): Promise<string | undefined>;

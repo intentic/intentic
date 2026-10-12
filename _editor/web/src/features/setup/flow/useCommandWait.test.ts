@@ -24,15 +24,22 @@ const stage = (over: { mobile?: boolean; installer?: ReturnType<typeof desktopIn
     };
     const reader = { mobile: ref(over.mobile ?? false), inApp: ref(false), installer: ref(over.installer) };
     const desktopReport = ref<DesktopSetupReport | undefined>(undefined);
+    const desktopHeardAt = ref<number | undefined>(undefined);
+    const desktopPcSetup = ref(false);
     const scope = effectScope();
     scopes.push(scope);
-    const wait = scope.run(() => useCommandWait({ command, row, step, reader, desktopReport }))!;
+    const wait = scope.run(() => useCommandWait({ command, row, step, reader, desktopReport, desktopHeardAt, desktopPcSetup }))!;
     // The code lands and the command becomes runnable, which is what arms the clock.
     const arm = async (): Promise<void> => {
         command.commandReady.value = true;
         await nextTick();
     };
-    return { command, row, step, desktopReport, wait, arm };
+    // The app says something about its run, heard now.
+    const hear = (report: DesktopSetupReport): void => {
+        desktopReport.value = report;
+        desktopHeardAt.value = Date.now();
+    };
+    return { command, row, step, desktopReport, desktopPcSetup, wait, arm, hear };
 };
 
 beforeEach(() => {
@@ -108,6 +115,45 @@ describe(`a quiet wait`, () => {
         expect(wait.slowBuild.value).toBe(true);
         row.report.value = { stage: `pulling-image`, failed: [], at: `2026-09-23T10:06:00Z` };
         expect(wait.slowBuild.value).toBe(false);
+    });
+
+    // The app's pinned ic says nothing to the platform for a whole image pull, and "safe to re-run" beside the app's own
+    // moving bar started a second install over the first (2026-10-12).
+    it(`never calls a claimed code slow beside a run the app still reports, whatever its pull's pace`, async () => {
+        const { row, wait, arm, hear } = stage();
+        await arm();
+        row.claimedAt.value = new Date(Date.now()).toISOString();
+        // An app from before heartbeats: its last change was minutes ago, and its download is still going.
+        hear({ state: `running`, percent: 53, step: `pulling-image` });
+        await advanceTimersByTimeAsync(20 * 60_000);
+        expect(wait.slowBuild.value).toBe(false);
+        // An app that heartbeats, still beating with its download growing.
+        hear({ state: `running`, percent: 60, step: `pulling-image`, at: Date.now(), downloaded: 1_300_000_000, downloadTotal: 2_200_000_000 });
+        await advanceTimersByTimeAsync(5_000);
+        expect(wait.slowBuild.value).toBe(false);
+    });
+
+    it(`calls it slow once an app that heartbeats has stopped for a minute`, async () => {
+        const { row, wait, arm, hear } = stage();
+        await arm();
+        row.claimedAt.value = new Date(Date.now()).toISOString();
+        await advanceTimersByTimeAsync(6 * 60_000);
+        hear({ state: `running`, percent: 60, step: `pulling-image`, at: Date.now() });
+        await advanceTimersByTimeAsync(60_000);
+        expect(wait.slowBuild.value).toBe(false);
+        await advanceTimersByTimeAsync(2_000);
+        expect(wait.slowBuild.value).toBe(true);
+    });
+
+    // In the app the command is never on screen: the app was handed it, and its last word decides what the wait says.
+    it(`addresses a reader whose app said it sets this PC up first by that, and any other by the app's window`, async () => {
+        const { command, step, desktopPcSetup, wait, arm } = stage();
+        await arm();
+        step.commandVisible.value = false;
+        command.launched.value = true;
+        expect(wait.nudgeVariant.value).toBe(`app`);
+        desktopPcSetup.value = true;
+        expect(wait.nudgeVariant.value).toBe(`pcSetup`);
     });
 
     it(`offers the command to copy again only where it is on screen, and never to a phone that mailed itself the link`, () => {

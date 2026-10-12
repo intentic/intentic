@@ -24,7 +24,11 @@ flowchart LR
   on the other side of this one, is refused with the platform's own sentence instead of starting a second copy
   (2026-10-05). It pulls the published image even when it is cached, so the moving `stable` tag runs the newest
   release, unless its caller would rather start now on the image the machine already holds (`INTENTIC_REUSE_IMAGE=1`,
-  the desktop app's setups; never with `SELF_HOST`). On Windows its preflight takes the shim's word for the facts
+  the desktop app's setups; never with `SELF_HOST`). A pull, or a load of the image fetched ahead, whose engine went
+  away (Docker Desktop quit, Intentic's engine stopped) stops at once rather than retrying against nothing, and the
+  setup report says which engine stopped and how to start it again in its `remedy`; a transfer that broke on the
+  network is still tried three times, and its report now carries a fix too (2026-10-12).
+  On Windows its preflight takes the shim's word for the facts
   `ic docker prepare` passed on a moment before (`INTENTIC_PREPARED=1`, connect.ps1) rather than probing the PC a second
   time. Connect refuses a sandbox this machine already has, running, stopped or parked, even with `-y`, and points to
   `fix`, `rollback` and `rebuild` instead (2026-10-07). With `--replace` it reinstalls it under the sandbox's lock,

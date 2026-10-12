@@ -1242,7 +1242,14 @@ pub fn hold_quit(app: &AppHandle, code: i32) -> bool {
  * quit then, quit now, or cancel. A run's child no longer writes to a pipe of this process (scripts.rs `Spool`), so a
  * "Quit now" leaves it to finish on its own with its own words in its files, which its transcript names. This
  * computer's own sandbox's setup is not asked about: a quit stops it and the next launch runs it again by design
- * (machine_sandbox.rs `before_exit`). */
+ * (machine_sandbox.rs `before_exit`).
+ *
+ * A SETUP HANDED OVER STOPS WITH THE APP (2026-10-12). Left to carry on, it went on unwatched: a reader who quit mid-
+ * download and set the sandbox up again had two `ic connect`s racing for one sandbox, and the first reported its failure
+ * twenty minutes after he had gone, to nobody. "Quit now" stops it with everything it started, and says so; setting it
+ * up again from the workspace reuses what it already downloaded. Before it goes, the window running it is given a moment
+ * to send where it was left (`desktop_install_abandoned`, [`tell_quitting`]). A setup a crash left going is stopped by
+ * the next one instead (scripts.rs `stop_left_running`). */
 
 /// What still runs that a Quit should ask about: every script and `ic` run but this computer's own sandbox's setup, and
 /// a folder's bring-back, restore or direction change (`project_busy`). Pure.
@@ -1277,13 +1284,26 @@ pub fn run_said(run: &str) -> String {
     }
 }
 
-/// The question about work still under way, as one sentence. Pure.
+/// The question about work still under way, as one sentence. A setup stops with the app, and everything else carries
+/// on: the question says which is which. Pure.
 pub fn runs_question(waits: &[String]) -> String {
     let mut doing: Vec<String> = waits.iter().map(|run| run_said(run)).collect();
     doing.dedup();
+    let setup = waits.iter().any(|run| run == crate::commands::SETUP_RUN);
+    let others = waits.iter().any(|run| run != crate::commands::SETUP_RUN);
+    let then = match (setup, others) {
+        (true, false) => {
+            "If you quit now, the setup stops. Set it up again from your workspace whenever you like: it reuses what \
+             it already downloaded."
+        }
+        (true, true) => {
+            "If you quit now, the setup stops (set it up again from your workspace whenever you like), and the rest \
+             carries on without Intentic, which won't show you how it ends."
+        }
+        _ => "If you quit now, it carries on without Intentic, and Intentic won't show you how it ends.",
+    };
     format!(
-        "Intentic is still {} on this computer. If you quit now, it carries on without Intentic, and Intentic won't \
-         show you how it ends.",
+        "Intentic is still {} on this computer. {then}",
         doing.join(", ")
     )
 }
@@ -1328,9 +1348,54 @@ fn hold_quit_for_runs(app: &AppHandle, code: i32) -> bool {
 }
 
 fn quit_now(app: &AppHandle, code: i32) {
-    RUNS_ANSWERED.store(true, Ordering::SeqCst);
-    crate::scripts::note_quit(&[crate::machine_sandbox::RUN]);
-    app.exit(code);
+    use crate::commands::SETUP_RUN;
+    if !crate::scripts::is_running(SETUP_RUN) {
+        RUNS_ANSWERED.store(true, Ordering::SeqCst);
+        crate::scripts::note_quit(&[crate::machine_sandbox::RUN]);
+        app.exit(code);
+        return;
+    }
+    // Held while the setup's window has its moment: a second Quit meanwhile joins this one rather than ending the app
+    // ahead of it, with the setup still running.
+    ASKING_QUIT.store(true, Ordering::SeqCst);
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        tell_quitting(&handle, QUIT_FLUSH);
+        crate::scripts::note(
+            SETUP_RUN,
+            "[Intentic quit while this setup was running, and stopped it with everything it started.]",
+        );
+        if let Err(error) = crate::scripts::stop(SETUP_RUN) {
+            eprintln!("intentic: the setup did not stop with the app: {error}");
+        }
+        crate::scripts::note_quit(&[crate::machine_sandbox::RUN, SETUP_RUN]);
+        RUNS_ANSWERED.store(true, Ordering::SeqCst);
+        ASKING_QUIT.store(false, Ordering::SeqCst);
+        handle.exit(code);
+    });
+}
+
+/// How long a Quit with a setup running waits for the setup's window to send where the run was left. The window
+/// answers as soon as it has (src/device/useDevice.ts), and gives its own send 1.5 s (analytics.ts `trackBeforeExit`).
+const QUIT_FLUSH: Duration = Duration::from_millis(2500);
+/// Told to every window when the app is about to quit with a setup running.
+pub const QUITTING_EVENT: &str = "desktop://quitting";
+/// The setup's window saying it has said its piece.
+pub const QUIT_READY_EVENT: &str = "desktop://quit-ready";
+
+/// Tell the windows the app is quitting, and wait up to `limit` for the one running the setup to answer that it has
+/// sent what it had to: true when it answered. BLOCKING.
+fn tell_quitting(app: &AppHandle, limit: Duration) -> bool {
+    let (said, heard) = std::sync::mpsc::channel::<()>();
+    let listening = tauri::Listener::once_any(app, QUIT_READY_EVENT, move |_| {
+        let _ = said.send(());
+    });
+    let _ = tauri::Emitter::emit(app, QUITTING_EVENT, ());
+    let answered = heard.recv_timeout(limit).is_ok();
+    if !answered {
+        tauri::Listener::unlisten(app, listening);
+    }
+    answered
 }
 
 /// Wait out the work under way, then quit with `code`. Once: a second "Quit when it's done" joins the first.
@@ -1730,10 +1795,78 @@ pub fn alert_setup(app: &AppHandle) {
 
 /* "Back to your workspace" hands the frame back to the SPA's setup page, and that page used to know nothing from then on: it sat on "Handed to the app. */
 pub fn announce_setup(app: &AppHandle, report: &SetupReport) {
+    if let Ok(mut told) = LAST_TOLD.lock() {
+        *told = Some((report.clone(), Instant::now()));
+    }
+    keep_heartbeat(app);
+    tell_workspace(app, report);
+}
+
+fn tell_workspace(app: &AppHandle, report: &SetupReport) {
     let Some(window) = app.get_webview_window(WORKSPACE) else {
         return;
     };
     let _ = window.eval(setup_announcement(report));
+}
+
+/* THE HEARTBEAT, KEPT BY THE APP ITSELF (2026-10-12). This device's page sends its report again every few seconds while
+ * a setup runs or waits (src/device/setup.ts `HEARTBEAT_MS`), and the workspace page reads a minute without one as the
+ * app being gone. But that page is the main window's, which is hidden whenever the workspace holds the frame, and a
+ * hidden page's timers are cut to one a minute after a few minutes: the very wait the heartbeat is for. So the app
+ * repeats the last report itself, freshly stamped, whenever the page has been quiet for a beat. Only while it can vouch
+ * for it: a running setup while its run is alive, a waiting one while the page has spoken in the last few minutes (a
+ * throttled page still speaks once a minute, and a page that has said nothing for longer is not one to speak for). */
+
+/// The last report the page sent, and when.
+static LAST_TOLD: LazyLock<Mutex<Option<(SetupReport, Instant)>>> = LazyLock::new(Mutex::default);
+static BEATING: AtomicBool = AtomicBool::new(false);
+const HEARTBEAT_EVERY: Duration = Duration::from_secs(4);
+/// How long the page's last word is repeated for while the page itself says nothing more.
+const HEARTBEAT_TRUST: Duration = Duration::from_secs(180);
+
+/// Whether the app repeats `told`, sent `ago`, now. Pure.
+pub fn heartbeat_due(told: &SetupReport, ago: Duration, setup_running: bool) -> bool {
+    if ago < HEARTBEAT_EVERY || ago >= HEARTBEAT_TRUST {
+        return false;
+    }
+    match told.state.as_str() {
+        "running" => setup_running,
+        "waiting" => true,
+        _ => false,
+    }
+}
+
+fn now_ms() -> f64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|since| since.as_millis() as f64)
+        .unwrap_or(0.0)
+}
+
+/// The thread that repeats the page's last report, started by the first one and kept for the life of the app.
+fn keep_heartbeat(app: &AppHandle) {
+    if BEATING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let app = app.clone();
+    std::thread::spawn(move || loop {
+        std::thread::sleep(HEARTBEAT_EVERY);
+        let again = LAST_TOLD.lock().ok().and_then(|told| {
+            let (report, at) = told.as_ref()?;
+            heartbeat_due(
+                report,
+                at.elapsed(),
+                crate::scripts::is_running(crate::commands::SETUP_RUN),
+            )
+            .then(|| SetupReport {
+                at: Some(now_ms()),
+                ..report.clone()
+            })
+        });
+        if let Some(report) = again {
+            tell_workspace(&app, &report);
+        }
+    });
 }
 
 /// The event as the page receives it. JSON is a JavaScript object literal since ES2019 (the two line
@@ -1807,6 +1940,12 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
             show_home_at(app, Some(FILES_ROUTE), Keyboard::Take);
         }
         Some(Link::Launcher { files: false }) => show_device(app),
+        // The setup page took this sandbox to a machine of ours: the main window stops the install it runs for it, if it
+        // runs one, as the card's own Stop does (src/device/setup.ts `stopForHosted`). Nothing is shown or swapped: the
+        // reader stays on that page, watching the machine start.
+        Some(Link::SetupStop { sandbox_id }) => {
+            let _ = tauri::Emitter::emit(app, "desktop://setup-stop", sandbox_id);
+        }
         // The workspace's account and sandboxes, for the local windows to show (state.rs `remember_roster`). Nothing
         // is shown now: the page sends it whenever either changes, not because the reader asked for anything.
         Some(Link::Roster(roster)) => {
@@ -2020,6 +2159,18 @@ mod unsaved_tests {
             runs_question(&quit_waits_for(&runs, true)),
             "Intentic is still updating work, removing old, bringing changes back to a folder on this computer. If \
              you quit now, it carries on without Intentic, and Intentic won't show you how it ends."
+        );
+        // A setup handed over stops with the app, and the question says so, apart from what carries on.
+        assert_eq!(
+            runs_question(&["setup".to_string()]),
+            "Intentic is still setting up a sandbox on this computer. If you quit now, the setup stops. Set it up \
+             again from your workspace whenever you like: it reuses what it already downloaded."
+        );
+        assert_eq!(
+            runs_question(&["recreate:work".to_string(), "setup".to_string()]),
+            "Intentic is still updating work, setting up a sandbox on this computer. If you quit now, the setup stops \
+             (set it up again from your workspace whenever you like), and the rest carries on without Intentic, which \
+             won't show you how it ends."
         );
         assert_eq!(run_said("power:work"), "starting or stopping work");
         assert_eq!(run_said("setup"), "setting up a sandbox");
@@ -2497,8 +2648,7 @@ mod frame_tests {
             position: Some("Step 4 of 10".into()),
             remaining: Some("about 3 min left".into()),
             step: Some("pulling-image".into()),
-            waiting_for: None,
-            requirements: None,
+            ..SetupReport::default()
         });
         assert!(script.starts_with("window.dispatchEvent(new CustomEvent('intentic-desktop-setup'"));
         assert!(script.contains("\"percent\":42.5"), "{script}");
@@ -2520,6 +2670,7 @@ mod frame_tests {
             step: None,
             waiting_for: Some("restart".into()),
             requirements: Some(vec!["pending-restart".into()]),
+            ..SetupReport::default()
         });
         assert!(waiting.contains("\"waitingFor\":\"restart\""), "{waiting}");
         assert!(
@@ -2530,13 +2681,72 @@ mod frame_tests {
             name: None,
             state: "running".into(),
             percent: 10.0,
-            position: None,
-            remaining: None,
-            step: None,
-            waiting_for: None,
-            requirements: None,
+            ..SetupReport::default()
         });
         assert!(!running.contains("waitingFor"), "{running}");
+        // An older page reads none of the heartbeat's fields, and a report without them says nothing about them.
+        for field in ["\"at\"", "downloaded", "downloadTotal", "remainingSeconds"] {
+            assert!(!running.contains(field), "{running}");
+        }
+    }
+
+    /// The heartbeat's report, as the app's window sends it (src/device/setup.ts) and the page reads it: when it was
+    /// sent, the pull's bytes and the estimate in seconds, camelCase; and a setup parked for this PC's own setup.
+    #[test]
+    fn a_heartbeat_report_carries_when_it_was_sent_and_the_pulls_bytes() {
+        let told: SetupReport = serde_json::from_str(
+            r#"{"state":"running","percent":41,"step":"pulling-image","at":1760270400000,"downloaded":838860800,"downloadTotal":2306867200,"remainingSeconds":312}"#,
+        )
+        .unwrap();
+        assert_eq!(told.at, Some(1_760_270_400_000.0));
+        assert_eq!(told.downloaded, Some(838_860_800.0));
+        assert_eq!(told.download_total, Some(2_306_867_200.0));
+        assert_eq!(told.remaining_seconds, Some(312.0));
+        let script = setup_announcement(&told);
+        for field in [
+            "\"at\":",
+            "\"downloaded\":",
+            "\"downloadTotal\":",
+            "\"remainingSeconds\":",
+        ] {
+            assert!(script.contains(field), "{script}");
+        }
+        // A number with a fraction is still a report the page hears, not a refused command.
+        let fractional: SetupReport =
+            serde_json::from_str(r#"{"state":"running","percent":41.5,"remainingSeconds":12.5}"#)
+                .unwrap();
+        assert_eq!(fractional.remaining_seconds, Some(12.5));
+        let parked: SetupReport = serde_json::from_str(
+            r#"{"state":"waiting","percent":0,"waitingFor":"pcSetup","at":1}"#,
+        )
+        .unwrap();
+        assert!(setup_announcement(&parked).contains("\"waitingFor\":\"pcSetup\""));
+    }
+
+    /// The app repeats the page's last report only in the page's silence, only for a setup it can vouch for, and not
+    /// for ever.
+    #[test]
+    fn the_app_repeats_a_quiet_pages_report_only_while_it_can_vouch_for_it() {
+        let report = |state: &str| SetupReport {
+            state: state.into(),
+            ..SetupReport::default()
+        };
+        let quiet = Duration::from_secs(30);
+        assert!(heartbeat_due(&report("running"), quiet, true));
+        // A run that is gone is not one to say is running.
+        assert!(!heartbeat_due(&report("running"), quiet, false));
+        assert!(heartbeat_due(&report("waiting"), quiet, false));
+        for ended in ["done", "failed", "stopped", "closed"] {
+            assert!(!heartbeat_due(&report(ended), quiet, true));
+        }
+        // The page spoke a moment ago: nothing to fill in.
+        assert!(!heartbeat_due(
+            &report("running"),
+            Duration::from_secs(1),
+            true
+        ));
+        // The page has said nothing for minutes: not a page to speak for.
+        assert!(!heartbeat_due(&report("waiting"), HEARTBEAT_TRUST, false));
     }
 
     /// A loaded workspace is told the path through its own opener, and falls back to loading the address; the path

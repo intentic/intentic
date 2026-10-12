@@ -1,4 +1,4 @@
-import { ref, type Ref } from "vue";
+import { ref } from "vue";
 import type {
     LocalCheckRow,
     LocalFirstTask,
@@ -52,8 +52,10 @@ export type AgentsFixtureName =
     | `needsSetup`
     | `pcReady`
     | `prefetch`
+    | `prefetchFailed`
     | `settingUp`
     | `needsYou`
+    | `setupQuiet`
     | `restart`
     | `restartScheduled`
     | `admin`
@@ -90,9 +92,23 @@ export const onboardingFixture = (name: AgentsFixtureName): LocalOnboardingHost 
                 check.value = FIXTURE_CHECKS.needsSetup;
                 prefetch.value = { state: `metered`, done: 0, total: 3_000_000_000 };
                 break;
+            case `prefetchFailed`:
+                check.value = FIXTURE_CHECKS.needsSetup;
+                prefetch.value = {
+                    state: `failed`,
+                    done: 1_150_000_000,
+                    total: 3_000_000_000,
+                    reason: `could not fetch ghcr.io/intentic/sandbox:stable ahead: connection reset by peer`,
+                    retrying: false,
+                };
+                break;
             case `settingUp`:
                 check.value = FIXTURE_CHECKS.needsSetup;
                 setup.value = { state: `running`, step: `Installing the container engine`, percent: 62 };
+                break;
+            case `setupQuiet`:
+                check.value = FIXTURE_CHECKS.needsSetup;
+                setup.value = { state: `running`, step: `Turning on Linux support for Windows`, percent: 38, quietMinutes: 21 };
                 break;
             case `needsYou`:
                 check.value = FIXTURE_CHECKS.needsSetup;
@@ -143,6 +159,9 @@ export const onboardingFixture = (name: AgentsFixtureName): LocalOnboardingHost 
         recheck: noop,
         setUp: noop,
         pause: noop,
+        retryPrefetch: noop,
+        setUpAgain: noop,
+        showSetupLog: noop,
         restart: (_when: LocalRestartWhen) => noop(),
         pickFolder: () => Promise.resolve(undefined),
         queueFirstTask: noop,

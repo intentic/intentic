@@ -1279,3 +1279,48 @@ it(`names the spent allowance instead of a missing fabric`, async () => {
     expect(el.textContent).not.toContain(`doesn't start sandboxes`);
     expect(el.textContent).not.toContain(`Connect your sandbox`);
 });
+
+/* THE SLOW DOWNLOAD'S WAY OUT, TAKEN (2026-10-12). A machine of ours adopts the sandbox's address, so a PC left
+ * downloading for the same row was refused when it announced, and left a failed setup on a row that was hosted by then.
+ * Inside the app, the press tells the app to stop this row's install before anything of ours starts. */
+describe(`a download too slow to wait for, given up for a machine of ours`, () => {
+    // The app's report of a pull with twenty-five minutes still to go: the offer's cue.
+    const reportSlowPull = (): void => {
+        window.dispatchEvent(
+            new CustomEvent(actualDesktop.DESKTOP_SETUP_EVENT, {
+                detail: { name: `workspace`, state: `running`, percent: 40, step: `pulling-image`, remainingSeconds: 1500, at: Date.now() },
+            }),
+        );
+    };
+    const offerButton = (): HTMLButtonElement | undefined =>
+        [...document.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`Start on our servers`));
+
+    afterEach(() => {
+        // The page's hearing of the app is module state: put away here, so no later mount opens on this run.
+        window.dispatchEvent(new CustomEvent(actualDesktop.DESKTOP_SETUP_EVENT, { detail: { state: `closed`, percent: 0 } }));
+    });
+
+    it(`tells the app to stop this row's install before it starts the machine`, async () => {
+        desktopApp.value = `1.340.0`;
+        hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
+        setupCode.mockResolvedValue(MINTED);
+        // One record of both, so which came first is a fact the test reads rather than infers.
+        const order: string[] = [];
+        openDesktopLink.mockImplementation((link) => order.push(link));
+        hostedProvision.mockImplementation(async (id: string) => {
+            order.push(`provision ${id}`);
+            return sandboxRow({ id, hosted: { region: `iad`, warm: true } });
+        });
+        const el = await mount();
+        jest.useFakeTimers();
+        await advanceTimersByTimeAsync(500);
+        await waitFor(() => expect(el.textContent).toContain(`Handed to the app`));
+        expect(hostedProvision).not.toHaveBeenCalled();
+        reportSlowPull();
+        await waitFor(() => expect(offerButton()?.tagName).toBe(`BUTTON`));
+        order.length = 0;
+        offerButton()!.click();
+        await waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`, `tok`));
+        expect(order).toEqual([`intentic://setup-stop?sandbox=new`, `provision new`]);
+    });
+});

@@ -279,6 +279,149 @@ pub fn stop(id: &str) -> Result<(), String> {
     }
 }
 
+/* A RUN THAT OUTLIVES ITS LAUNCH (2026-10-12).
+ *
+ * A run's child writes to files of its own ([`Spool`]), so it carries on when the app goes: after a crash, or a quit
+ * from a version that let it. The registry above is this process's memory and went with it, so nothing knew the run
+ * was still going, and a setup started again ran a second `ic connect` beside the first for the same sandbox (a reader
+ * restarted the app mid-download because the workspace page told him to; the first connect reported a failure twenty
+ * minutes after he had left). A run that must never have a twin now leaves a mark in the app's data folder while it
+ * lives ([`RunMark`]): its pid, the start time its system gives that process (so a pid handed to another process since
+ * is not taken for it), the sandbox it was for, and the file it writes. Before the next run of the same id starts, a
+ * marked run still going is stopped with everything it started ([`stop_left_running`]). Stopped, not followed: it was
+ * started on its own setup code with nobody left to answer its questions, the run starting now is the one the person
+ * asked for, and what the first one downloaded stays on this computer (Docker keeps finished layers, ic's image cache
+ * resumes a blob), so the second loses little. */
+
+/// The mark a run leaves in the app's data folder while it lives.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunMark {
+    /// The run's child: the shim (`powershell.exe`, `sh`) whose tree holds `ic` and `docker`.
+    pub pid: u32,
+    /// When its system says that process started, in the system's own unit; none when it could not be read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub started: Option<String>,
+    /// Unix seconds when the run started.
+    pub at: u64,
+    /// The platform row the run was setting up, where it was known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sandbox_id: Option<String>,
+    /// The file its child writes stdout to; its transcript, where there is one, is beside it as `.log`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub out: Option<String>,
+}
+
+/// How long a mark whose process start could not be read is believed while its pid lives: longer than any setup.
+const MARK_TRUST_SECONDS: u64 = 3 * 60 * 60;
+
+/// How long a run left going is given to end once told to, before it is killed outright.
+const LEFT_RUNNING_GRACE: Duration = Duration::from_secs(10);
+
+/// Whether the run `mark` names is still going, given the start time the system gives its pid now (`None`: no such
+/// process) and the time now. A mark that recorded no start time is believed for [`MARK_TRUST_SECONDS`] while its pid
+/// lives. Pure.
+pub fn still_running(mark: &RunMark, started_now: Option<&str>, now: u64) -> bool {
+    let Some(started_now) = started_now else {
+        return false;
+    };
+    match &mark.started {
+        Some(started) => started == started_now,
+        None => now.saturating_sub(mark.at) < MARK_TRUST_SECONDS,
+    }
+}
+
+/// Where a run of `id` keeps its mark: the app's data folder, beside this computer's own sandbox's run lock.
+fn mark_path(app: &AppHandle, id: &str) -> Option<PathBuf> {
+    let dir = app.path().app_data_dir().ok()?;
+    std::fs::create_dir_all(&dir).ok()?;
+    Some(dir.join(format!("run-{}.json", safe_name(id))))
+}
+
+/// The mark a run of `id` leaves while it lives, written the moment its child starts: the [`OnSpawn`] to hand
+/// [`run_told`]. [`unmark`] takes it away once the run has been followed to its end.
+pub fn mark_on_spawn(app: &AppHandle, id: &str, sandbox_id: Option<String>) -> OnSpawn {
+    let path = mark_path(app, id);
+    Box::new(move |child: &Spawned| {
+        let Some(path) = path else {
+            return;
+        };
+        crate::state::write_json(
+            &path,
+            &RunMark {
+                pid: child.pid,
+                started: crate::launch::process_identity(child.pid),
+                at: now_ms() / 1000,
+                sandbox_id,
+                out: Some(child.out.display().to_string()),
+            },
+        );
+    })
+}
+
+/// The run of `id` was followed to its end here: nothing of it is left going for a later launch to stop.
+pub fn unmark(app: &AppHandle, id: &str) {
+    if let Some(path) = mark_path(app, id) {
+        let _ = std::fs::remove_file(path);
+    }
+}
+
+/// A run of `id` an earlier launch of this app left going, stopped with everything it started before another starts:
+/// its mark, when there was one still going. A mark whose run has ended is taken away. A run of `id` this process is
+/// following is not a run left going, and is never touched here. BLOCKING, for up to [`LEFT_RUNNING_GRACE`] and a kill.
+pub fn stop_left_running(app: &AppHandle, id: &str) -> Option<RunMark> {
+    if is_running(id) {
+        return None;
+    }
+    let path = mark_path(app, id)?;
+    let mark: RunMark = crate::state::read_json(&path)?;
+    let stopped = stop_marked(&mark, LEFT_RUNNING_GRACE).then_some(mark);
+    let _ = std::fs::remove_file(&path);
+    stopped
+}
+
+/// Stop the run `mark` names, if it is still going: told to end, given `grace`, then killed, with everything it started
+/// either way, and its transcript told how it ended. True when there was a run to stop. BLOCKING.
+fn stop_marked(mark: &RunMark, grace: Duration) -> bool {
+    let alive = || {
+        still_running(
+            mark,
+            crate::launch::process_identity(mark.pid).as_deref(),
+            now_ms() / 1000,
+        )
+    };
+    if !alive() {
+        return false;
+    }
+    let _ = intentic_bounded::kill_tree(mark.pid, intentic_bounded::Signal::Term);
+    let until = Instant::now() + grace;
+    while alive() && Instant::now() < until {
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    if alive() {
+        let _ = intentic_bounded::kill_tree(mark.pid, intentic_bounded::Signal::Kill);
+    }
+    // Its transcript ends with a quit's note, or with nothing at all after a crash: it says now how it ended.
+    if let Some(transcript) = mark
+        .out
+        .as_deref()
+        .map(|out| Path::new(out).with_extension("log"))
+    {
+        append_line(
+            &transcript,
+            "[Stopped by Intentic: a new setup started on this computer, and two must never run at once.]",
+        );
+    }
+    true
+}
+
+/// A line at the end of a transcript that is there; nothing for one that is not.
+fn append_line(path: &Path, line: &str) {
+    if let Ok(mut file) = std::fs::OpenOptions::new().append(true).open(path) {
+        let _ = writeln!(file, "\n{line}");
+    }
+}
+
 /* A SHORT CHILD, BOUNDED — every docker read and every agent call this window waits on goes through `capture`. */
 
 /// What a bounded child said, once it exited.
@@ -1301,6 +1444,19 @@ pub fn note_quit(except: &[&str]) {
     }
 }
 
+/// A line in the transcript of the run `id`, being followed right now: what the app did to it that the run itself
+/// cannot say (a quit that stopped it).
+pub fn note(id: &str, line: &str) {
+    let Ok(live) = followed().lock() else {
+        return;
+    };
+    if let Some((transcript, _, _)) = live.get(id) {
+        if let Ok(mut file) = transcript.lock() {
+            let _ = writeln!(file, "\n{line}");
+        }
+    }
+}
+
 /// Run a script to completion, streaming every line to the window as it arrives. BLOCKING — call it from
 /// `spawn_blocking`; the scripts pull multi-gigabyte images and a setup legitimately takes minutes.
 ///
@@ -1308,8 +1464,18 @@ pub fn note_quit(except: &[&str]) {
 /// "install Docker?"), and a prompt nobody can answer is a run that hangs forever with no UI for it — so every caller
 /// passes the non-interactive flags instead (`-y`, `INSTALL_DOCKER=1`).
 pub fn run(app: &AppHandle, id: &str, script: ScriptRun) -> Result<(), String> {
+    run_told(app, id, script, None)
+}
+
+/// [`run`], with `spawned` told the child's pid and files the moment it starts ([`mark_on_spawn`]).
+pub fn run_told(
+    app: &AppHandle,
+    id: &str,
+    script: ScriptRun,
+    spawned: Option<OnSpawn>,
+) -> Result<(), String> {
     let file = script.file;
-    let ended = run_heard(app, id, script, None, None)?;
+    let ended = run_heard(app, id, script, None, spawned)?;
     if ended.success {
         return Ok(());
     }
@@ -1945,6 +2111,110 @@ fn quiet(mut command: Command) -> Command {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn mark(started: Option<&str>, at: u64) -> RunMark {
+        RunMark {
+            pid: 4242,
+            started: started.map(str::to_string),
+            at,
+            sandbox_id: Some("cmsandbox0001".into()),
+            out: Some("/home/ann/.intentic/logs/desktop-setup-20261012-133800.out".into()),
+        }
+    }
+
+    /// A run a crashed or quit launch left going is the one its mark names: the same process, started when the mark
+    /// says. A pid the system handed to another process since, or one no process holds, is not it.
+    #[test]
+    fn a_run_left_going_is_the_process_its_mark_names() {
+        let now = 1_760_270_400;
+        assert!(still_running(
+            &mark(Some("98765"), now - 60),
+            Some("98765"),
+            now
+        ));
+        assert!(!still_running(
+            &mark(Some("98765"), now - 60),
+            Some("11111"),
+            now
+        ));
+        assert!(!still_running(&mark(Some("98765"), now - 60), None, now));
+        // A start that could not be read: the pid alone, for as long as any setup could still be going.
+        assert!(still_running(&mark(None, now - 60), Some("11111"), now));
+        assert!(!still_running(
+            &mark(None, now - MARK_TRUST_SECONDS),
+            Some("11111"),
+            now
+        ));
+    }
+
+    /// The mark is the app's own file across launches: camelCase, and an older one without the optional fields reads.
+    #[test]
+    fn a_run_mark_round_trips_and_reads_without_its_optional_fields() {
+        let written = mark(Some("98765"), 1_760_270_400);
+        let text = serde_json::to_string(&written).unwrap();
+        assert!(text.contains("\"sandboxId\":\"cmsandbox0001\""), "{text}");
+        assert_eq!(serde_json::from_str::<RunMark>(&text).unwrap(), written);
+        let bare: RunMark = serde_json::from_str(r#"{"pid":7,"at":1}"#).unwrap();
+        assert_eq!(
+            (bare.started, bare.sandbox_id, bare.out),
+            (None, None, None)
+        );
+    }
+
+    /// This process's own process is a run that is going, as its system names it: what the mark is checked against.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn this_process_is_still_running_by_its_own_mark() {
+        let pid = std::process::id();
+        let started = crate::launch::process_identity(pid);
+        assert!(started.is_some());
+        let mine = RunMark {
+            started: started.clone(),
+            pid,
+            ..mark(None, now_ms() / 1000)
+        };
+        assert!(still_running(&mine, started.as_deref(), now_ms() / 1000));
+    }
+
+    /// A run left going is stopped with everything it started, and its transcript says why; a mark whose run has
+    /// ended stops nothing. A real child in a process group of its own, as every run's is.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_run_left_going_is_stopped_with_its_tree_and_its_transcript_told() {
+        let dir = std::env::temp_dir().join(format!(
+            "intentic-left-running-{}",
+            uuid::Uuid::new_v4().simple()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let out = dir.join("desktop-setup-1.out");
+        let transcript = dir.join("desktop-setup-1.log");
+        std::fs::write(&transcript, "intentic: [pulling-image] pulling\n").unwrap();
+        // The shim and the download under it, as `sh connect.sh` and `ic` would be.
+        let mut child = own_group({
+            let mut command = Command::new("sh");
+            command.args(["-c", "sleep 30 & wait"]);
+            command
+        })
+        .spawn()
+        .unwrap();
+        let pid = child.id();
+        let left = RunMark {
+            pid,
+            started: crate::launch::process_identity(pid),
+            at: now_ms() / 1000,
+            sandbox_id: None,
+            out: Some(out.display().to_string()),
+        };
+        assert!(stop_marked(&left, Duration::from_secs(5)));
+        let status = child.wait().unwrap();
+        assert!(!status.success());
+        assert!(std::fs::read_to_string(&transcript)
+            .unwrap()
+            .contains("[Stopped by Intentic"));
+        // Gone now: a second look finds nothing to stop.
+        assert!(!stop_marked(&left, Duration::from_secs(1)));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn resumable_downloads_can_be_paused_but_setup_still_holds_an_update() {

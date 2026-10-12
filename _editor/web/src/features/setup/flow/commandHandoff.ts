@@ -76,14 +76,15 @@ export const lockedReasonOf = (lock: LockInput): string => {
 export const nudgeAfterMs = (roundabout: boolean): number => (roundabout ? 3 * 60_000 : 40_000);
 // Past this (ms), the correction stops assuming the command never ran and helps a terminal that errored instead.
 export const STALLED_MS = 3 * 60_000;
-// Claimed with no report yet (ms): only an ic older than reports (a desktop app's pinned one) is silent this long.
+// Claimed with no report yet (ms): only an ic older than reports (a desktop app's pinned one) is silent this long, and
+// through the app it stays silent for a whole image pull, so the wait holds its word while the app reports the run.
 export const SLOW_BUILD_MS = 6 * 60_000;
 
 // When the wait started (ms): the command becoming runnable, or the reader's last visible act where that is later.
 export const waitedFrom = (armedAt: number | undefined, actedAt: number | undefined): number | undefined =>
     actedAt !== undefined && armedAt !== undefined ? Math.max(actedAt, armedAt) : armedAt;
 
-export type NudgeVariant = `emailed` | `terminal` | `downloaded` | `install` | `phone` | `app` | `button`;
+export type NudgeVariant = `emailed` | `terminal` | `downloaded` | `install` | `phone` | `app` | `pcSetup` | `button`;
 
 export interface NudgeReader {
     readonly mobile: boolean;
@@ -94,6 +95,8 @@ export interface NudgeReader {
     readonly installing: boolean;
     readonly downloaded: boolean;
     readonly launched: boolean;
+    // The app's last word on the setup it was handed: parked behind this PC's own setup, which it runs first.
+    readonly pcSetup?: boolean;
 }
 
 // Which reader the correction addresses (SetupNudge draws it).
@@ -111,5 +114,8 @@ export const nudgeVariantOf = (reader: NudgeReader): NudgeVariant => {
     if (reader.mobile) {
         return `phone`;
     }
-    return reader.launched ? `app` : `button`;
+    if (!reader.launched) {
+        return `button`;
+    }
+    return reader.pcSetup === true ? `pcSetup` : `app`;
 };

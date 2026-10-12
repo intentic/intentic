@@ -550,6 +550,13 @@ pub enum Link {
     Launcher {
         files: bool,
     },
+    /// `intentic://setup-stop?sandbox=<id>`: the workspace's setup page took this sandbox to a machine of ours, whose
+    /// address it now is, so the install This device runs for it stops rather than download on to an announce the
+    /// platform will refuse (windows.rs). App-window only, like `update`: from anywhere else it could stop an install
+    /// somebody is watching.
+    SetupStop {
+        sandbox_id: String,
+    },
     /// `intentic://roster?list=<JSON>[&account=<JSON>]`: who is signed in to the workspace and the sandboxes its
     /// switcher lists, sent whenever either changes and emptied by a sign-out, kept so a local window can show them too
     /// (state.rs `remember_roster`). App-window only: a link from anywhere else could fill them with what it chose.
@@ -675,6 +682,11 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
         "launcher" => source.is_app().then(|| Link::Launcher {
             files: get("to").as_deref() == Some("files"),
         }),
+        // App-window only, like `update`. A sandbox id out of shape is no request: there is nothing to stop "for".
+        "setup-stop" if source.is_app() => Some(Link::SetupStop {
+            sandbox_id: get("sandbox").filter(|id| is_sandbox_id(id))?,
+        }),
+        "setup-stop" => None,
         "roster" if source.is_app() => {
             roster_of(&get("list")?, get("account").as_deref()).map(Link::Roster)
         }
@@ -1065,6 +1077,31 @@ mod tests {
             Some(Link::Launcher { files: false })
         );
         assert_eq!(parse_link("intentic://launcher", Source::External), None);
+    }
+
+    /// The setup page taking a sandbox to a machine of ours stops the install this app runs for it: asked by the app's
+    /// own window only, exactly like the update, and only for a sandbox named the way a row's id is.
+    #[test]
+    fn a_setup_stop_is_heard_from_the_app_only_and_names_its_sandbox() {
+        let link = "intentic://setup-stop?sandbox=cmsandbox0001";
+        assert_eq!(
+            parse_link(link, APP),
+            Some(Link::SetupStop {
+                sandbox_id: "cmsandbox0001".into()
+            })
+        );
+        assert_eq!(parse_link(link, Source::External), None);
+        assert_eq!(parse_link(link, Source::Files { window: "files-1" }), None);
+        for nothing in [
+            "intentic://setup-stop",
+            "intentic://setup-stop?sandbox=",
+            "intentic://setup-stop?sandbox=..%2Fwork",
+            "intentic://setup-stop?sandbox=a%20b",
+        ] {
+            assert_eq!(parse_link(nothing, APP), None, "{nothing}");
+        }
+        let too_long = format!("intentic://setup-stop?sandbox={}", "a".repeat(65));
+        assert_eq!(parse_link(&too_long, APP), None);
     }
 
     fn roster_link(json: &str) -> String {

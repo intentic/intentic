@@ -5,6 +5,7 @@
 // wherever floating.ts does, node tests included (where to DOWNLOAD the app is desktopDownloads.ts, which does not).
 
 import { isTypingTarget } from "@intentic/ui/event-target";
+import { z } from "zod";
 import { inAppPath } from "../../lib/routes/inAppPath";
 
 // What the app tells the page about the webview (not about the app): whether this window skips the loopback gate
@@ -63,8 +64,9 @@ export const DESKTOP_UPDATE_LINK = `intentic://update`;
 export const DESKTOP_SETUP_EVENT = `intentic-desktop-setup`;
 
 export type DesktopSetupState = `running` | `waiting` | `failed` | `stopped` | `done` | `closed`;
-/** What a waiting setup waits for: the reader's go-ahead on the app's card, or Windows ending the session. */
-export type DesktopSetupWaitingFor = `consent` | `restart` | `signOut`;
+/** What a waiting setup waits for: the reader's go-ahead on the app's card, Windows ending the session, or this PC's own
+ * setup (Docker, WSL: the app's onboarding), after which the handed-over setup carries on by itself. */
+export type DesktopSetupWaitingFor = `consent` | `restart` | `signOut` | `pcSetup`;
 
 export interface DesktopSetupReport {
     /// The sandbox's name, as the user typed it.
@@ -82,11 +84,25 @@ export interface DesktopSetupReport {
     readonly waitingFor?: DesktopSetupWaitingFor;
     /// On `waiting`: the requirement ids on the card, for analytics rather than the screen.
     readonly requirements?: readonly string[];
+    /// When the app sent this report, ms since the epoch. Only an app that heartbeats says it: one that re-sends its
+    /// report at least every five seconds while it runs or waits, so silence from it means something. An app without it
+    /// (v1.331.0 and older) reports only on a change, and a download that outruns its estimate changes nothing for minutes.
+    readonly at?: number;
+    /// During `pulling-image`, when known: bytes of the sandbox image downloaded so far, and in all.
+    readonly downloaded?: number;
+    readonly downloadTotal?: number;
+    /// The estimate behind `remaining`, in seconds: for this page's own words and decisions, `remaining` being the app's.
+    readonly remainingSeconds?: number;
 }
 
-const WAITING_FOR: readonly DesktopSetupWaitingFor[] = [`consent`, `restart`, `signOut`];
+const WAITING_FOR: readonly DesktopSetupWaitingFor[] = [`consent`, `restart`, `signOut`, `pcSetup`];
 
 const SETUP_STATES: readonly DesktopSetupState[] = [`running`, `waiting`, `failed`, `stopped`, `done`, `closed`];
+
+// The report's counts and clocks, each a real amount or nothing: a negative or a NaN would read as "-1 of NaN GB". An
+// older app sends none of them.
+const amount = z.number().nonnegative().optional().catch(undefined);
+const SetupAmountsSchema = z.object({ at: amount, downloaded: amount, downloadTotal: amount, remainingSeconds: amount });
 
 /* The event's detail read back as a report, or nothing. */
 export const readDesktopSetupReport = (detail: unknown): DesktopSetupReport | undefined => {
@@ -116,6 +132,7 @@ export const readDesktopSetupReport = (detail: unknown): DesktopSetupReport | un
         ...(step === undefined ? {} : { step }),
         ...(waitingFor === undefined ? {} : { waitingFor }),
         ...(requirements === undefined ? {} : { requirements }),
+        ...SetupAmountsSchema.parse(raw),
     };
 };
 
@@ -463,6 +480,12 @@ export const desktopSetupLink = (args: DesktopSetupArgs): string => {
     }
     return `intentic://setup?${params.toString()}`;
 };
+
+// Stops the app's install on this computer for a sandbox the page is taking to a machine of ours: that machine adopts
+// the sandbox's address, and a download left going would end in an announce the platform refuses. The app hears it only
+// from its own window, and stops only an install it runs for this very sandbox (the app's setup_link.rs); an app from
+// before it hears nothing.
+export const desktopSetupStopLink = (sandboxId: string): string => `intentic://setup-stop?${new URLSearchParams({ sandbox: sandboxId }).toString()}`;
 
 // Signs in via the user's default browser, since Google refuses OAuth from an embedded webview (FedCM isn't
 // implemented by WebKitGTK). Credentials return over `intentic://auth`, and the app reopens this SPA at

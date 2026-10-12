@@ -3,6 +3,7 @@
 //! `LocalOnboardingHost`, drawn by local/agents/LocalAgents.vue; the app's half is src/onboarding/pc.ts).
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::PoisonError;
 use std::sync::{Arc, Mutex, OnceLock};
@@ -34,6 +35,36 @@ const PREPARE_DEADLINE: Duration = Duration::from_secs(120);
 const METERED_DEADLINE: Duration = Duration::from_secs(15);
 const PREFETCH_START_DELAY: Duration = Duration::from_secs(3);
 const METERED_RECHECK: Duration = Duration::from_secs(5 * 60);
+/// How often the download's loop looks again while it waits (paused, stepped aside, a retry not yet due).
+const PREFETCH_TICK: Duration = Duration::from_secs(2);
+/// A failed download tries once more by itself after this long, then gives up for this run of the app. Long enough
+/// for a dropped connection or a Wi-Fi hand-over to settle; short enough that the reader still sees it happen. `ic`
+/// already retries a stopped layer four times itself, so what reaches here is rarely a blip.
+const PREFETCH_RETRY_DELAY: Duration = Duration::from_secs(30);
+
+/* THE DOWNLOAD STEPS ASIDE FOR A REAL INSTALL (2026-10-12). On a Windows PC set up by hand (Docker Desktop installed by
+ * the reader), the download started at first launch was still running when the sandbox's own setup reached its pull:
+ * it held the image cache's lock (`ic` image_cache.rs `try_lock`), and the setup's connect sat watching it instead of
+ * pulling, behind a bar that said nothing. A setup that pulls the image does the same work itself, and its progress is
+ * the one the reader is watching, so while one runs the download is stopped (which releases the lock: it is an OS lock
+ * on a file, held by the `ic` process) and comes back after it only if there is still something to fetch. */
+
+/// Runs that set a sandbox up on this machine and pull its image as they go: the setup handed over from the workspace
+/// (commands.rs `setup_run`) and this computer's own sandbox (machine_sandbox.rs). This PC's own setup (`pc-setup`,
+/// WSL and the engine) is not one of them: the download exists to overlap exactly that wait.
+const INSTALL_RUNS: [&str; 2] = ["setup", crate::machine_sandbox::RUN];
+/// How long a setup announced by prefetch.rs `begin_for_setup` counts as running before its run is registered.
+const INSTALL_ANNOUNCE_GRACE: Duration = Duration::from_secs(30);
+
+/* A SETUP THAT NEVER REPORTS BACK (2026-10-12). On 2026-10-12 a reader pressed "Set up this PC" and nothing came back
+ * for almost two hours: no outcome, no failure, a bar that did not move. `ic docker prepare --yes` prints a line at
+ * every step and while it downloads; its silent stretches are the ones Windows itself runs (DISM turning the WSL
+ * features on, an installer unpacking), which can take minutes without a word, ten or so on a slow disk. Twenty minutes
+ * with no line at all is well past that, and still short of the point where someone gives up and closes the app (the
+ * reader of 2026-10-12 waited nineteen on the install that followed), so that is when the page says it has gone quiet
+ * and offers a way on. */
+const SETUP_STALL_AFTER: Duration = Duration::from_secs(20 * 60);
+const SETUP_STALL_CHECK: Duration = Duration::from_secs(30);
 
 #[cfg_attr(not(windows), allow(dead_code))]
 const REQUIREMENT: &str = "intentic-requirement: ";
@@ -53,8 +84,22 @@ const FIRST_LAUNCH_FILE: &str = "onboarding-first-launch-seen";
 const RESTART_NOTICE_KEY: &str = "onboarding-restart-soon";
 
 static SETUP_RUNNING: AtomicBool = AtomicBool::new(false);
+/// The running setup is being stopped to start it again ("Start again" on a quiet one): its end is not an outcome.
+static SETUP_RESTARTING: AtomicBool = AtomicBool::new(false);
+/// When the PC setup last said anything, in ms since the epoch.
+static SETUP_LAST_LINE_MS: AtomicU64 = AtomicU64::new(0);
 static PREFETCH_PAUSED: AtomicBool = AtomicBool::new(false);
 static PREFETCH_ACTIVE: AtomicBool = AtomicBool::new(false);
+/// The download's loop is running (at most one).
+static PREFETCH_LOOP: AtomicBool = AtomicBool::new(false);
+/// The reader chose "Download anyway" on a metered connection.
+static PREFETCH_ANYWAY: AtomicBool = AtomicBool::new(false);
+/// A setup started, and the download it stopped is to read as stepped aside rather than failed.
+static PREFETCH_YIELDING: AtomicBool = AtomicBool::new(false);
+/// This run of the app's one automatic retry after a failed download has been spent.
+static PREFETCH_RETRIED: AtomicBool = AtomicBool::new(false);
+/// When prefetch.rs last announced a setup about to start, in ms since the epoch (0: never).
+static INSTALL_ANNOUNCED_MS: AtomicU64 = AtomicU64::new(0);
 static RESTART_GENERATION: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -97,12 +142,57 @@ pub struct Check {
     pub engine: Option<String>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+/// The download started at first launch. `state`: `idle`, `running`, `paused` (the reader's, or an update's), `metered`,
+/// `yielded` (stepped aside while a setup pulls the image itself), `done`, `skipped` (nothing to fetch) or `failed`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Prefetch {
     pub state: String,
     pub done: u64,
     pub total: u64,
+    /// Which try of this run of the app is (or was last) running, from 1; 0 before the first.
+    #[serde(default)]
+    pub attempt: u32,
+    /// Why the last try stopped, while `failed`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure: Option<PrefetchFailure>,
+    /// While `failed`: when the one automatic retry starts, in seconds since the epoch. Absent once it has given up.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retry_at: Option<u64>,
+    /// While `skipped`: `imageInDocker` (Docker is up and has the image), `dockerPulls` (Docker is installed and
+    /// nothing was half-fetched: it pulls the image itself), or `elsewhere` (another `ic` holds the cache and is fetching).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skipped: Option<String>,
+}
+
+impl Default for Prefetch {
+    fn default() -> Self {
+        Prefetch {
+            state: "idle".into(),
+            done: 0,
+            total: 0,
+            attempt: 0,
+            failure: None,
+            retry_at: None,
+            skipped: None,
+        }
+    }
+}
+
+/// How a try of the download stopped, as the page shows it and the funnel hears it (the page scrubs `reason` of the
+/// home folder and any other path before it sends it anywhere: src/onboarding/pcEvents.ts).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrefetchFailure {
+    /// `engine` (`ic engine fetch`) or `image` (`ic image prefetch`).
+    pub phase: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exit_code: Option<i32>,
+    /// The last thing it said that explains it, on one line.
+    pub reason: String,
+    /// Its transcript, when one was written.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub log: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -149,6 +239,18 @@ struct Store {
     restart_scheduled_at: Option<u64>,
     setup_track_ids: Vec<String>,
     setup_row_states: HashMap<String, String>,
+    /// The running setup is the one a restart waited for (the park file was there at launch), and when it parked.
+    setup_resumed: bool,
+    setup_parked_at: Option<u64>,
+    /// When the running setup started (seconds since the epoch), and the requirement it is on: what the ledger keeps.
+    setup_started_at: u64,
+    setup_row: Option<String>,
+    /// The running setup has said nothing since this (seconds since the epoch), for [`SETUP_STALL_AFTER`] or more.
+    setup_quiet_since: Option<u64>,
+    /// Its transcript, found when it went quiet, for "Show the log".
+    setup_log: Option<String>,
+    /// A setup that was running when the app last ended, with no outcome: told to the page once.
+    orphaned_in_next_payload: Option<Value>,
 }
 
 fn store() -> &'static Mutex<Store> {
@@ -162,8 +264,19 @@ fn lock_store<T>(f: impl FnOnce(&mut Store) -> T) -> T {
 }
 
 fn emit(app: &AppHandle) {
-    let payload = snapshot_payload(Some(app));
+    let payload = snapshot_payload(app, false);
     let _ = app.emit(EVENT, payload);
+}
+
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|since| since.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+fn now_secs() -> u64 {
+    now_ms() / 1000
 }
 
 fn setup_json(setup: &Setup) -> Value {
@@ -220,12 +333,18 @@ fn load_first_launch(app: &AppHandle) {
     });
 }
 
-/// Whether the first-launch prefetch has finished or given up — the office editor waits on this (sidecar.rs).
+/// Whether the first-launch prefetch has finished, had nothing to do, or given up — the office editor waits on this
+/// (sidecar.rs). A failure with its automatic retry still to come has not given up.
 pub fn prefetch_settled() -> bool {
-    matches!(
-        lock_store(|store| store.prefetch.state.clone()).as_str(),
-        "done" | "failed"
-    )
+    lock_store(|store| settled(&store.prefetch))
+}
+
+fn settled(prefetch: &Prefetch) -> bool {
+    match prefetch.state.as_str() {
+        "done" | "skipped" => true,
+        "failed" => prefetch.retry_at.is_none(),
+        _ => false,
+    }
 }
 
 /// The check alone, for the machine sandbox supervisor.
@@ -243,19 +362,10 @@ pub fn start_pc_setup_if_needed(app: &AppHandle, consent: bool) -> bool {
     let needs = check_snapshot()
         .is_some_and(|check| matches!(check.state.as_str(), "needsSetup" | "unknown" | "checking"))
         && !scripts::engine_listening();
-    if !(needs && consent) || SETUP_RUNNING.load(Ordering::SeqCst) {
+    if !(needs && consent) || SETUP_RUNNING.swap(true, Ordering::SeqCst) {
         return false;
     }
-    SETUP_RUNNING.store(true, Ordering::SeqCst);
-    begin_setup_rows();
-    lock_store(|store| {
-        store.setup = Setup::Running {
-            step: None,
-            percent: 0,
-            needs_you: None,
-        };
-    });
-    emit(app);
+    mark_setup_started(app, None);
     let app = app.clone();
     std::thread::spawn(move || {
         let _ = run_pc_setup(&app);
@@ -264,55 +374,111 @@ pub fn start_pc_setup_if_needed(app: &AppHandle, consent: bool) -> bool {
     true
 }
 
+/// A setup starting now, as the page draws it from its first moment. `resumed`: the park the restart left, and when
+/// it was written (if it says), for a setup the restart was waited for. The caller holds [`SETUP_RUNNING`].
+fn mark_setup_started(app: &AppHandle, resumed: Option<Option<u64>>) {
+    begin_setup_rows();
+    let started_at = now_secs();
+    lock_store(|store| {
+        store.setup = Setup::Running {
+            step: None,
+            percent: 0,
+            needs_you: None,
+        };
+        store.setup_resumed = resumed.is_some();
+        store.setup_parked_at = resumed.flatten();
+        store.setup_started_at = started_at;
+        store.setup_row = None;
+        store.setup_quiet_since = None;
+        store.setup_log = None;
+    });
+    SETUP_LAST_LINE_MS.store(now_ms(), Ordering::SeqCst);
+    write_running_ledger(started_at, None);
+    emit(app);
+}
+
 /// Start the read-only check and the first-launch prefetch (lib.rs setup).
 pub fn begin(app: &AppHandle) {
     load_first_launch(app);
+    // Read before a resumed setup below writes its own: a ledger still here is a setup the last run of the app never
+    // saw end.
+    if let Some(orphaned) = take_running_ledger() {
+        lock_store(|store| store.orphaned_in_next_payload = Some(orphaned));
+    }
     let handle = app.clone();
     std::thread::spawn(move || run_check(&handle));
     let handle = app.clone();
     std::thread::spawn(move || {
         std::thread::sleep(PREFETCH_START_DELAY);
-        run_prefetch_loop(&handle);
+        ensure_prefetch_loop(&handle);
     });
     if resume_wanted() {
+        let parked_at = parked_at();
         let handle = app.clone();
         std::thread::spawn(move || {
-            SETUP_RUNNING.store(true, Ordering::SeqCst);
-            begin_setup_rows();
+            if SETUP_RUNNING.swap(true, Ordering::SeqCst) {
+                return;
+            }
+            mark_setup_started(&handle, Some(parked_at));
             let _ = run_pc_setup(&handle);
             SETUP_RUNNING.store(false, Ordering::SeqCst);
         });
     }
 }
 
-/// The check, the download and the setup as they stand.
+/// The check, the download and the setup as they stand. The page asks this once it listens (src/onboarding/pc.ts), so
+/// what is told only once (the first launch, a setup the last run left behind) goes here and never in an event, which
+/// a page not listening yet would miss.
 #[tauri::command]
 pub fn onboarding_state(app: AppHandle) -> Value {
-    snapshot_payload(Some(&app))
+    snapshot_payload(&app, true)
 }
 
-fn snapshot_payload(app: Option<&AppHandle>) -> Value {
+/// The setup as the page reads it: its state, and while it runs, whether it is the one a restart was waited for and
+/// whether it has gone quiet. Pure.
+fn setup_payload(store: &Store) -> Value {
+    let mut setup = setup_json(&store.setup);
+    if matches!(store.setup, Setup::Running { .. }) {
+        if store.setup_resumed {
+            setup["resumed"] = json!(true);
+            if let Some(at) = store.setup_parked_at {
+                setup["parkedAt"] = json!(at);
+            }
+        }
+        if let Some(since) = store.setup_quiet_since {
+            setup["quietSince"] = json!(since);
+            if let Some(log) = &store.setup_log {
+                setup["log"] = json!(log);
+            }
+        }
+    }
+    setup
+}
+
+fn snapshot_payload(app: &AppHandle, asked: bool) -> Value {
     let (payload, mark_seen) = lock_store(|store| {
         let mut payload = json!({
             "check": store.check,
             "prefetch": store.prefetch,
-            "setup": setup_json(&store.setup),
+            "setup": setup_payload(store),
         });
+        if !asked {
+            return (payload, false);
+        }
+        if let Some(orphaned) = store.orphaned_in_next_payload.take() {
+            payload["orphaned"] = orphaned;
+        }
         if store.first_launch_in_next_payload {
             payload["firstLaunch"] = json!(true);
-            if app.is_some() {
-                store.first_launch_in_next_payload = false;
-                store.first_launch_seen = true;
-            }
-            (payload, app.is_some())
+            store.first_launch_in_next_payload = false;
+            store.first_launch_seen = true;
+            (payload, true)
         } else {
             (payload, false)
         }
     });
     if mark_seen {
-        if let Some(app) = app {
-            mark_first_launch_seen(app);
-        }
+        mark_first_launch_seen(app);
     }
     payload
 }
@@ -329,21 +495,19 @@ pub async fn onboarding_recheck(app: AppHandle) -> Result<(), String> {
     .map_err(|error| error.to_string())?
 }
 
-/// "Set up this PC": the reader's one consent.
+/// "Set up this PC": the reader's one consent. `again`: a setup that has gone quiet is stopped first and started anew
+/// ("Start again" on the page); without it a setup already running is left to run, and this does nothing.
 #[tauri::command]
-pub async fn onboarding_set_up(app: AppHandle) -> Result<(), String> {
+pub async fn onboarding_set_up(app: AppHandle, again: Option<bool>) -> Result<(), String> {
+    if again == Some(true) && SETUP_RUNNING.load(Ordering::SeqCst) {
+        tauri::async_runtime::spawn_blocking(stop_setup_to_start_again)
+            .await
+            .map_err(|error| error.to_string())??;
+    }
     if SETUP_RUNNING.swap(true, Ordering::SeqCst) {
         return Ok(());
     }
-    begin_setup_rows();
-    lock_store(|store| {
-        store.setup = Setup::Running {
-            step: None,
-            percent: 0,
-            needs_you: None,
-        };
-    });
-    emit(&app);
+    mark_setup_started(&app, None);
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let result = run_pc_setup(&app);
@@ -354,7 +518,26 @@ pub async fn onboarding_set_up(app: AppHandle) -> Result<(), String> {
     .map_err(|error| error.to_string())?
 }
 
-/// Pause or resume the download started at first launch.
+/// Stop the running setup, and everything it started, so it can start again; its end is not reported as an outcome.
+fn stop_setup_to_start_again() -> Result<(), String> {
+    SETUP_RESTARTING.store(true, Ordering::SeqCst);
+    let stopped = wait_until_stopped(&SETUP_RUNNING, Duration::from_secs(15), || {
+        if scripts::is_running(RUN_SETUP) {
+            scripts::stop(RUN_SETUP)?;
+        }
+        Ok(())
+    });
+    SETUP_RESTARTING.store(false, Ordering::SeqCst);
+    stopped.map_err(|error| match error {
+        Some(error) => format!(
+            "The setup that stopped answering could not be stopped ({error}). Restart this PC, then set it up again."
+        ),
+        None => "The setup that stopped answering has not stopped yet. Restart this PC, then set it up again."
+            .into(),
+    })
+}
+
+/// Pause or resume the download started at first launch. Resuming one that failed starts it again ("Try again").
 #[tauri::command]
 pub fn onboarding_pause(app: AppHandle, paused: bool) -> Result<(), String> {
     if paused {
@@ -362,19 +545,23 @@ pub fn onboarding_pause(app: AppHandle, paused: bool) -> Result<(), String> {
         let _ = scripts::stop(RUN_ENGINE);
         let _ = scripts::stop(RUN_IMAGE);
         lock_store(|store| {
-            if store.prefetch.state == "running" {
+            // Paused while metered too: a resume then asks the connection again, where "Download anyway" does not.
+            if matches!(
+                store.prefetch.state.as_str(),
+                "running" | "yielded" | "metered"
+            ) {
                 store.prefetch.state = "paused".into();
             }
         });
     } else {
         PREFETCH_PAUSED.store(false, Ordering::SeqCst);
-        let resume =
-            lock_store(|store| matches!(store.prefetch.state.as_str(), "paused" | "metered"));
-        if resume {
-            lock_store(|store| store.prefetch.state = "idle".into());
-            let app = app.clone();
-            std::thread::spawn(move || run_prefetch_once(&app));
-        }
+        lock_store(|store| match store.prefetch.state.as_str() {
+            "metered" => PREFETCH_ANYWAY.store(true, Ordering::SeqCst),
+            // Due now: the loop starts it on its next look, as it does the automatic retry.
+            "failed" => store.prefetch.retry_at = Some(now_secs()),
+            _ => {}
+        });
+        ensure_prefetch_loop(&app);
     }
     emit(&app);
     Ok(())
@@ -403,23 +590,32 @@ pub fn pause_for_update(app: &AppHandle) -> Result<bool, String> {
 fn wait_for_prefetch_stop(
     active: &AtomicBool,
     timeout: Duration,
-    mut stop: impl FnMut() -> Result<(), String>,
+    stop: impl FnMut() -> Result<(), String>,
 ) -> Result<(), String> {
+    wait_until_stopped(active, timeout, stop).map_err(|error| match error {
+        Some(error) => {
+            format!("The background download has not stopped yet: {error}. Try the update again.")
+        }
+        None => "The background download has not stopped yet. Try the update again.".into(),
+    })
+}
+
+/// Call `stop` until `active` is cleared, or `timeout` runs out with it still set: then the last error `stop` gave.
+fn wait_until_stopped(
+    active: &AtomicBool,
+    timeout: Duration,
+    mut stop: impl FnMut() -> Result<(), String>,
+) -> Result<(), Option<String>> {
     let until = std::time::Instant::now() + timeout;
     let mut stop_error = None;
     while active.load(Ordering::SeqCst) {
         // follow() forgets a PID after joining its readers. TERM may fail against an already exited child
-        // during that interval; only a worker that remains active at the deadline should refuse an update.
+        // during that interval; only a worker that remains active at the deadline should refuse.
         if let Err(error) = stop() {
             stop_error = Some(error);
         }
         if std::time::Instant::now() >= until && active.load(Ordering::SeqCst) {
-            return Err(match stop_error {
-                Some(error) => format!(
-                    "The background download has not stopped yet: {error}. Try the update again."
-                ),
-                None => "The background download has not stopped yet. Try the update again.".into(),
-            });
+            return Err(stop_error);
         }
         std::thread::sleep(Duration::from_millis(50));
     }
@@ -670,14 +866,37 @@ fn begin_setup_rows() {
 fn run_pc_setup(app: &AppHandle) -> Result<(), String> {
     let heard = heard_setup(app);
     let env = vec![("INSTALL_DOCKER".into(), "1".into())];
-    let ended = scripts::run_ic_heard(
+    let watch = StallWatch::start(app);
+    let ran = scripts::run_ic_heard(
         app,
         RUN_SETUP,
         "ic docker prepare --yes",
         &["docker", "prepare", "--yes"],
         &env,
         Some(heard),
-    )?;
+    );
+    drop(watch);
+    // However it ended, this app saw it end: the ledger is only for a run the app never saw end.
+    clear_running_ledger();
+    if SETUP_RESTARTING.load(Ordering::SeqCst) {
+        // Stopped to start again ("Start again" on a setup gone quiet): the run that follows is the one to report.
+        return Ok(());
+    }
+    let ended = match ran {
+        Ok(ended) => ended,
+        Err(error) => {
+            // It never started (no `ic` beside the app, nowhere to write its log): a failure the page can show and
+            // offer again, rather than a bar left at 0% for good.
+            settle_setup(
+                app,
+                Setup::Failed {
+                    reason: error.clone(),
+                },
+                None,
+            );
+            return Err(error);
+        }
+    };
     let transcript = ended
         .log
         .as_deref()
@@ -707,15 +926,7 @@ fn run_pc_setup(app: &AppHandle) -> Result<(), String> {
     if recheck {
         clear_pc_park();
     }
-    lock_store(|store| {
-        store.setup = setup;
-        if let Some(state) = apply.check_state {
-            if let Some(check) = store.check.as_mut() {
-                check.state = state;
-            }
-        }
-    });
-    emit(app);
+    settle_setup(app, setup, apply.check_state);
     if recheck {
         run_check(app);
         crate::machine_sandbox::kick();
@@ -735,6 +946,92 @@ fn run_pc_setup(app: &AppHandle) -> Result<(), String> {
         return Err("setup failed".into());
     }
     Ok(())
+}
+
+/// The setup's outcome, as the page reads it from now on: what was only true of the run (resumed, gone quiet) goes.
+fn settle_setup(app: &AppHandle, setup: Setup, check_state: Option<String>) {
+    lock_store(|store| {
+        store.setup = setup;
+        store.setup_resumed = false;
+        store.setup_parked_at = None;
+        store.setup_quiet_since = None;
+        store.setup_log = None;
+        store.setup_row = None;
+        if let Some(state) = check_state {
+            if let Some(check) = store.check.as_mut() {
+                check.state = state;
+            }
+        }
+    });
+    emit(app);
+}
+
+/// Watches the running setup for [`SETUP_STALL_AFTER`] without a line, and tells the page once it has gone that quiet.
+/// Stops with the run (dropped by [`run_pc_setup`]).
+struct StallWatch(Arc<AtomicBool>);
+
+impl StallWatch {
+    fn start(app: &AppHandle) -> StallWatch {
+        let ended = Arc::new(AtomicBool::new(false));
+        let watching = Arc::clone(&ended);
+        let app = app.clone();
+        std::thread::spawn(move || loop {
+            std::thread::sleep(SETUP_STALL_CHECK);
+            if watching.load(Ordering::SeqCst) {
+                return;
+            }
+            let last = SETUP_LAST_LINE_MS.load(Ordering::SeqCst);
+            if !quiet_too_long(now_ms(), last) {
+                continue;
+            }
+            let newly = lock_store(|store| {
+                if store.setup_quiet_since.is_some()
+                    || !matches!(store.setup, Setup::Running { .. })
+                {
+                    return false;
+                }
+                store.setup_quiet_since = Some(last / 1000);
+                store.setup_log = newest_setup_log();
+                true
+            });
+            if newly {
+                emit(&app);
+            }
+        });
+        StallWatch(ended)
+    }
+}
+
+impl Drop for StallWatch {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::SeqCst);
+    }
+}
+
+/// Whether a setup that last said something at `last_ms` has said nothing for [`SETUP_STALL_AFTER`] by `now_ms`. Pure.
+fn quiet_too_long(now_ms: u64, last_ms: u64) -> bool {
+    last_ms > 0 && now_ms.saturating_sub(last_ms) >= SETUP_STALL_AFTER.as_millis() as u64
+}
+
+/// The newest transcript of the run `run` among `names` (`desktop-<run>-<stamp>.log`, scripts.rs `log_path`): the stamp
+/// sorts by time. Pure.
+fn newest_log<'a>(names: impl IntoIterator<Item = &'a str>, run: &str) -> Option<&'a str> {
+    let prefix = format!("desktop-{run}-");
+    names
+        .into_iter()
+        .filter(|name| name.starts_with(&prefix) && name.ends_with(".log"))
+        .max()
+}
+
+fn newest_setup_log() -> Option<String> {
+    let dir = scripts::logs_dir()?;
+    let names: Vec<String> = std::fs::read_dir(&dir)
+        .ok()?
+        .flatten()
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .collect();
+    newest_log(names.iter().map(String::as_str), RUN_SETUP)
+        .map(|name| dir.join(name).to_string_lossy().into_owned())
 }
 
 fn scrub_setup_reason(ended: &scripts::Ended, transcript: &str) -> String {
@@ -759,28 +1056,49 @@ fn scrub_setup_reason(ended: &scripts::Ended, transcript: &str) -> String {
 fn heard_setup(app: &AppHandle) -> Heard {
     let app = app.clone();
     std::sync::Arc::new(move |_stream: Stream, line: &str| {
-        if let Some(json) = line.trim().strip_prefix(REQUIREMENT_STATE) {
-            if let Ok(value) = serde_json::from_str::<Value>(json) {
-                if let Some(id) = value["id"].as_str() {
-                    if let Some(state) = value["state"].as_str() {
-                        lock_store(|store| {
-                            store
-                                .setup_row_states
-                                .insert(id.to_string(), state.to_string());
-                        });
-                    }
-                }
-                let setup = lock_store(|store| {
-                    setup_running_from_marker(
-                        &store.setup_track_ids,
-                        &store.setup_row_states,
-                        Some(&value),
-                    )
-                });
-                lock_store(|store| store.setup = setup);
+        SETUP_LAST_LINE_MS.store(now_ms(), Ordering::SeqCst);
+        // Word again from a setup the page was told had gone quiet: it is not quiet any more.
+        let was_quiet = lock_store(|store| {
+            store.setup_log = None;
+            store.setup_quiet_since.take().is_some()
+        });
+        let Some(json) = line.trim().strip_prefix(REQUIREMENT_STATE) else {
+            if was_quiet {
                 emit(&app);
             }
+            return;
+        };
+        let Ok(value) = serde_json::from_str::<Value>(json) else {
+            if was_quiet {
+                emit(&app);
+            }
+            return;
+        };
+        if let (Some(id), Some(state)) = (value["id"].as_str(), value["state"].as_str()) {
+            let moved_on = lock_store(|store| {
+                store
+                    .setup_row_states
+                    .insert(id.to_string(), state.to_string());
+                if state != "running" || store.setup_row.as_deref() == Some(id) {
+                    return None;
+                }
+                store.setup_row = Some(id.to_string());
+                Some(store.setup_started_at)
+            });
+            // The ledger says which requirement it was on, for a launch that finds this run left behind.
+            if let Some(started_at) = moved_on {
+                write_running_ledger(started_at, Some(id));
+            }
         }
+        let setup = lock_store(|store| {
+            setup_running_from_marker(
+                &store.setup_track_ids,
+                &store.setup_row_states,
+                Some(&value),
+            )
+        });
+        lock_store(|store| store.setup = setup);
+        emit(&app);
     })
 }
 
@@ -797,41 +1115,233 @@ fn setup_running_from_marker(
     }
 }
 
+/* THE DOWNLOAD'S LOOP. One at a time ([`ensure_prefetch_loop`]); it ends once the download is settled ([`settled`]), and
+ * a resume or a "Try again" after that starts it again. Commands only change the state and the flags it reads. */
+
+/// What the download's loop does next.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Next {
+    /// Finished, nothing to fetch, or given up: the loop ends.
+    Stop,
+    /// Paused, a try already going, or a retry not due yet: look again in a moment.
+    Wait,
+    /// A setup is pulling the image itself: step aside until it ends.
+    Yield,
+    /// The setup it stepped aside for has ended: fetch again only if there is still something to fetch.
+    Recheck,
+    Fetch,
+}
+
+/// What the loop sees when it looks.
+struct Seen<'a> {
+    state: &'a str,
+    paused: bool,
+    active: bool,
+    installing: bool,
+    /// While `failed`: whether its automatic retry is due. None: no retry is coming.
+    retry_due: Option<bool>,
+}
+
+/// What the loop does next, from what it sees. Pure.
+fn prefetch_next(seen: &Seen) -> Next {
+    match seen.state {
+        "done" | "skipped" => return Next::Stop,
+        "failed" if seen.retry_due.is_none() => return Next::Stop,
+        _ => {}
+    }
+    if seen.paused || seen.active {
+        return Next::Wait;
+    }
+    if seen.installing {
+        return Next::Yield;
+    }
+    if seen.state == "yielded" {
+        return Next::Recheck;
+    }
+    if seen.retry_due == Some(false) {
+        return Next::Wait;
+    }
+    Next::Fetch
+}
+
+/// Run the download's loop unless it runs already.
+fn ensure_prefetch_loop(app: &AppHandle) {
+    if PREFETCH_LOOP.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let app = app.clone();
+    std::thread::spawn(move || loop {
+        run_prefetch_loop(&app);
+        PREFETCH_LOOP.store(false, Ordering::SeqCst);
+        // Asked to go on (a resume, a retry) just as it ended: carry on, rather than leave the ask to nobody.
+        if prefetch_settled() || PREFETCH_LOOP.swap(true, Ordering::SeqCst) {
+            return;
+        }
+    });
+}
+
 fn run_prefetch_loop(app: &AppHandle) {
+    let fresh = lock_store(|store| store.prefetch.state == "idle");
+    if fresh && !installing() && nothing_to_fetch() {
+        skip_prefetch(app, "imageInDocker");
+    }
     loop {
-        if prefetch_settled() {
-            crate::sidecar::try_office_after_prefetch(app);
+        let installing = installing();
+        let next = lock_store(|store| {
+            let failed = store.prefetch.state == "failed";
+            prefetch_next(&Seen {
+                state: &store.prefetch.state,
+                paused: PREFETCH_PAUSED.load(Ordering::SeqCst),
+                active: PREFETCH_ACTIVE.load(Ordering::SeqCst),
+                installing,
+                retry_due: if failed {
+                    store.prefetch.retry_at.map(|at| now_secs() >= at)
+                } else {
+                    None
+                },
+            })
+        });
+        match next {
+            Next::Stop => {
+                crate::sidecar::try_office_after_prefetch(app);
+                return;
+            }
+            Next::Wait => std::thread::sleep(PREFETCH_TICK),
+            Next::Yield => {
+                step_aside(app);
+                std::thread::sleep(PREFETCH_TICK);
+            }
+            Next::Recheck if nothing_to_fetch() => skip_prefetch(app, "imageInDocker"),
+            Next::Recheck | Next::Fetch => fetch_unless_metered(app),
+        }
+    }
+}
+
+fn fetch_unless_metered(app: &AppHandle) {
+    if !PREFETCH_ANYWAY.load(Ordering::SeqCst) && metered() {
+        lock_store(|store| store.prefetch.state = "metered".into());
+        emit(app);
+        wait_out_metered();
+        return;
+    }
+    run_prefetch_once(app);
+}
+
+/// Up to [`METERED_RECHECK`], cut short by anything that changes what the loop should do.
+fn wait_out_metered() {
+    let until = std::time::Instant::now() + METERED_RECHECK;
+    while std::time::Instant::now() < until {
+        std::thread::sleep(PREFETCH_TICK);
+        let state = lock_store(|store| store.prefetch.state.clone());
+        if state != "metered"
+            || PREFETCH_ANYWAY.load(Ordering::SeqCst)
+            || PREFETCH_PAUSED.load(Ordering::SeqCst)
+            || installing()
+        {
             return;
         }
-        if PREFETCH_PAUSED.load(Ordering::SeqCst) {
-            std::thread::sleep(Duration::from_secs(2));
-            continue;
+    }
+}
+
+/// The download stands aside while a setup pulls the image (nothing of it is running by now).
+fn step_aside(app: &AppHandle) {
+    let changed = lock_store(|store| {
+        if store.prefetch.state == "yielded" {
+            return false;
         }
-        if metered() {
-            lock_store(|store| store.prefetch.state = "metered".into());
-            emit(app);
-            std::thread::sleep(METERED_RECHECK);
-            continue;
+        store.prefetch.state = "yielded".into();
+        store.prefetch.retry_at = None;
+        true
+    });
+    if changed {
+        emit(app);
+    }
+}
+
+/// Whether a setup that pulls the sandbox image runs here, or was announced a moment ago (prefetch.rs).
+fn installing() -> bool {
+    install_announced(now_ms(), INSTALL_ANNOUNCED_MS.load(Ordering::SeqCst))
+        || INSTALL_RUNS.iter().any(|id| scripts::is_running(id))
+}
+
+/// Whether a setup announced at `announced_ms` (0: never) still counts as starting at `now_ms`. Pure.
+fn install_announced(now_ms: u64, announced_ms: u64) -> bool {
+    announced_ms > 0
+        && now_ms.saturating_sub(announced_ms) < INSTALL_ANNOUNCE_GRACE.as_millis() as u64
+}
+
+/// A setup that pulls the sandbox image is about to start (prefetch.rs `begin_for_setup`, called before its run is
+/// registered): the download started at first launch stops now and lets go of the image cache, so the setup's own
+/// prefetch, or its pull, carries on from where it was. Waits a few seconds at most for it to let go.
+pub fn yield_to_install() {
+    INSTALL_ANNOUNCED_MS.store(now_ms(), Ordering::SeqCst);
+    if !PREFETCH_ACTIVE.load(Ordering::SeqCst) {
+        return;
+    }
+    PREFETCH_YIELDING.store(true, Ordering::SeqCst);
+    let _ = wait_until_stopped(&PREFETCH_ACTIVE, Duration::from_secs(5), || {
+        stop_prefetch_runs();
+        Ok(())
+    });
+}
+
+fn stop_prefetch_runs() {
+    for id in PREFETCH_RUNS {
+        if scripts::is_running(id) {
+            let _ = scripts::stop(id);
         }
-        run_prefetch_once(app);
-        if prefetch_settled() {
-            crate::sidecar::try_office_after_prefetch(app);
-            return;
-        }
-        std::thread::sleep(Duration::from_secs(2));
+    }
+}
+
+/// Docker is up and already holds the sandbox image: a PC set up before, or one whose setup has finished (a finished
+/// setup is a sandbox running from that image, loaded or pulled into Docker). Nothing is left to fetch ahead.
+fn nothing_to_fetch() -> bool {
+    scripts::engine_listening() && crate::commands::sandbox_image_ready()
+}
+
+/// Stops the download's runs for as long as a setup that pulls the image runs, while one try is going. Stops with the
+/// try (dropped by [`run_prefetch_once`]).
+struct YieldWatch(Arc<AtomicBool>);
+
+impl YieldWatch {
+    fn start() -> YieldWatch {
+        let ended = Arc::new(AtomicBool::new(false));
+        let watching = Arc::clone(&ended);
+        std::thread::spawn(move || {
+            while !watching.load(Ordering::SeqCst) {
+                if installing() {
+                    PREFETCH_YIELDING.store(true, Ordering::SeqCst);
+                    stop_prefetch_runs();
+                }
+                std::thread::sleep(Duration::from_millis(500));
+            }
+        });
+        YieldWatch(ended)
+    }
+}
+
+impl Drop for YieldWatch {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::SeqCst);
     }
 }
 
 fn run_prefetch_once(app: &AppHandle) {
+    let installing = installing();
+    // A try going on is PREFETCH_ACTIVE, not the state: a `running` with nothing active is one to start, never to wait on.
     let should_run = lock_store(|store| {
-        if PREFETCH_PAUSED.load(Ordering::SeqCst)
+        if installing
+            || PREFETCH_PAUSED.load(Ordering::SeqCst)
             || PREFETCH_ACTIVE.load(Ordering::SeqCst)
-            || matches!(store.prefetch.state.as_str(), "done" | "running")
+            || matches!(store.prefetch.state.as_str(), "done" | "skipped")
         {
             return false;
         }
         PREFETCH_ACTIVE.store(true, Ordering::SeqCst);
         store.prefetch.state = "running".into();
+        store.prefetch.attempt += 1;
+        store.prefetch.failure = None;
+        store.prefetch.retry_at = None;
         true
     });
     if !should_run {
@@ -845,116 +1355,242 @@ fn run_prefetch_once(app: &AppHandle) {
         }
     }
     let _active = Active;
+    PREFETCH_YIELDING.store(false, Ordering::SeqCst);
+    let _watch = YieldWatch::start();
     emit(app);
     let base = Arc::new(Mutex::new((0u64, 0u64)));
-    if let Err(()) = run_engine_fetch(app, Arc::clone(&base)) {
-        if prefetch_was_paused() {
-            return;
+    if let Err(failure) = run_fetch_phase(
+        app,
+        "engine",
+        RUN_ENGINE,
+        "ic engine fetch",
+        &["engine", "fetch"],
+        Arc::clone(&base),
+    ) {
+        if !prefetch_was_stopped(app) {
+            fail_prefetch(app, failure);
         }
-        fail_prefetch(app);
         return;
     }
-    if prefetch_was_paused() {
+    // The engine's bytes are what the image's are counted on top of.
+    *base.lock().unwrap_or_else(PoisonError::into_inner) =
+        lock_store(|store| (store.prefetch.done, store.prefetch.total));
+    if prefetch_was_stopped(app) {
         return;
     }
-    if let Err(()) = run_image_prefetch(app, base) {
-        if prefetch_was_paused() {
-            return;
+    let image = crate::commands::setup_image();
+    let args = prefetch::args(&image);
+    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+    match run_fetch_phase(
+        app,
+        "image",
+        RUN_IMAGE,
+        "ic image prefetch",
+        &arg_refs,
+        base,
+    ) {
+        Err(failure) => {
+            if !prefetch_was_stopped(app) {
+                fail_prefetch(app, failure);
+            }
         }
-        fail_prefetch(app);
-        return;
+        Ok(said) => match nothing_fetched(&said) {
+            Some(why) => skip_prefetch(app, why),
+            None => {
+                lock_store(|store| {
+                    store.prefetch.state = "done".into();
+                    store.prefetch.total = store.prefetch.total.max(store.prefetch.done);
+                });
+                emit(app);
+            }
+        },
     }
-    let (done, total) = lock_store(|store| (store.prefetch.done, store.prefetch.total));
-    lock_store(|store| {
-        store.prefetch = Prefetch {
-            state: "done".into(),
-            done,
-            total: total.max(done),
-        };
-    });
-    emit(app);
 }
 
-fn prefetch_was_paused() -> bool {
+/// A try that ended because it was told to: by the reader's pause (whose command tells the page), or by a setup that
+/// pulls the image itself. Either way not a failure.
+fn prefetch_was_stopped(app: &AppHandle) -> bool {
     if PREFETCH_PAUSED.load(Ordering::SeqCst) {
         lock_store(|store| {
             if store.prefetch.state == "running" {
                 store.prefetch.state = "paused".into();
             }
         });
-        true
-    } else {
-        false
+        return true;
     }
+    if PREFETCH_YIELDING.swap(false, Ordering::SeqCst) || installing() {
+        lock_store(|store| {
+            store.prefetch.state = "yielded".into();
+            store.prefetch.retry_at = None;
+        });
+        emit(app);
+        return true;
+    }
+    false
 }
 
-fn fail_prefetch(app: &AppHandle) {
-    lock_store(|store| store.prefetch.state = "failed".into());
+/// A try failed: the page says so and why. The first failure of this run of the app tries again by itself after
+/// [`PREFETCH_RETRY_DELAY`]; the next one gives up until the reader asks again.
+fn fail_prefetch(app: &AppHandle, failure: PrefetchFailure) {
+    let retry_at = (!PREFETCH_RETRIED.swap(true, Ordering::SeqCst))
+        .then(|| now_secs() + PREFETCH_RETRY_DELAY.as_secs());
+    lock_store(|store| {
+        store.prefetch.state = "failed".into();
+        store.prefetch.failure = Some(failure);
+        store.prefetch.retry_at = retry_at;
+    });
     emit(app);
-    crate::sidecar::try_office_after_prefetch(app);
-}
-
-fn run_engine_fetch(app: &AppHandle, base: Arc<Mutex<(u64, u64)>>) -> Result<(), ()> {
-    let heard = heard_prefetch(app, Arc::clone(&base));
-    let ended = scripts::run_ic_heard(
-        app,
-        RUN_ENGINE,
-        "ic engine fetch",
-        &["engine", "fetch"],
-        &[],
-        Some(heard),
-    )
-    .map_err(|_| ())?;
-    if ended.success {
-        if let Ok(mut locked) = base.lock() {
-            let (done, total) = lock_store(|store| (store.prefetch.done, store.prefetch.total));
-            *locked = (done, total);
-        }
-        Ok(())
-    } else {
-        // Paused or failed alike: the loop reads PREFETCH_PAUSED to tell the two apart.
-        Err(())
+    if retry_at.is_none() {
+        crate::sidecar::try_office_after_prefetch(app);
     }
 }
 
-fn run_image_prefetch(app: &AppHandle, base: Arc<Mutex<(u64, u64)>>) -> Result<(), ()> {
-    let image = crate::commands::setup_image();
-    let args = prefetch::args(&image);
-    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
-    let heard = heard_prefetch(app, base);
-    let ended = scripts::run_ic_heard(
-        app,
-        RUN_IMAGE,
-        "ic image prefetch",
-        &arg_refs,
-        &[],
-        Some(heard),
-    )
-    .map_err(|_| ())?;
-    ended.success.then_some(()).ok_or(())
+fn skip_prefetch(app: &AppHandle, why: &str) {
+    lock_store(|store| {
+        store.prefetch.state = "skipped".into();
+        store.prefetch.skipped = Some(why.into());
+        store.prefetch.failure = None;
+        store.prefetch.retry_at = None;
+    });
+    emit(app);
 }
 
-fn heard_prefetch(app: &AppHandle, base: Arc<Mutex<(u64, u64)>>) -> Heard {
+/// The last `intentic-prefetch:` marker a phase said: its state and its total.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct Said {
+    state: Option<String>,
+    total: u64,
+}
+
+/// Why an image phase that succeeded fetched nothing, as [`Prefetch::skipped`] names it; None when it fetched the
+/// image. Pure.
+fn nothing_fetched(said: &Said) -> Option<&'static str> {
+    match said.state.as_deref() {
+        Some("skipped") => Some("dockerPulls"),
+        Some("elsewhere") => Some("elsewhere"),
+        // `ic image prefetch` answers an image Docker already has with a ready that fetched nothing.
+        Some("ready") if said.total == 0 => Some("imageInDocker"),
+        _ => None,
+    }
+}
+
+/// One phase of the download, to its end: what it last said when it succeeded, how it failed otherwise.
+fn run_fetch_phase(
+    app: &AppHandle,
+    phase: &'static str,
+    id: &str,
+    what: &str,
+    args: &[&str],
+    base: Arc<Mutex<(u64, u64)>>,
+) -> Result<Said, PrefetchFailure> {
+    let said = Arc::new(Mutex::new(Said::default()));
+    let heard = heard_prefetch(app, base, Arc::clone(&said));
+    let ended = scripts::run_ic_heard(app, id, what, args, &[], Some(heard)).map_err(|error| {
+        PrefetchFailure {
+            phase: phase.into(),
+            exit_code: None,
+            reason: tidy_reason(&error),
+            log: None,
+        }
+    })?;
+    if ended.success {
+        return Ok(said.lock().unwrap_or_else(PoisonError::into_inner).clone());
+    }
+    let transcript = ended
+        .log
+        .as_deref()
+        .and_then(|path| std::fs::read_to_string(path).ok())
+        .unwrap_or_default();
+    Err(phase_failure(phase, what, &ended, &transcript))
+}
+
+/// How a phase that exited unsuccessfully failed, from its exit and its transcript. Pure.
+fn phase_failure(
+    phase: &str,
+    what: &str,
+    ended: &scripts::Ended,
+    transcript: &str,
+) -> PrefetchFailure {
+    let reason = last_meaningful_line(transcript).unwrap_or_else(|| match ended.code {
+        Some(code) => format!("{what} exited with code {code}"),
+        None => format!("{what} was stopped before it finished"),
+    });
+    PrefetchFailure {
+        phase: phase.into(),
+        exit_code: ended.code,
+        reason,
+        log: ended.log.clone(),
+    }
+}
+
+/// The line of a run's transcript that best says why it stopped: the last thing it wrote to stderr (the transcript
+/// marks those `! `; `ic` writes its `error: …` there), else the last thing it said at all. Never a progress marker
+/// (`intentic-prefetch: …`) or this app's own `[… exited with …]` note. Pure.
+fn last_meaningful_line(transcript: &str) -> Option<String> {
+    let mut said = None;
+    for line in transcript.lines().rev() {
+        let line = line.trim();
+        let (stderr, text) = match line.strip_prefix('!') {
+            Some(rest) => (true, rest.trim()),
+            None => (false, line),
+        };
+        if text.is_empty()
+            || (text.starts_with('[') && text.ends_with(']'))
+            || text.starts_with("intentic-")
+        {
+            continue;
+        }
+        if stderr {
+            return Some(tidy_reason(text));
+        }
+        said.get_or_insert(text);
+    }
+    said.map(tidy_reason)
+}
+
+/// A reason on one line, without the `error:` or `intentic:` it was printed after, at most 300 characters. Pure.
+fn tidy_reason(text: &str) -> String {
+    let text = text.trim();
+    let text = text
+        .strip_prefix("error:")
+        .or_else(|| text.strip_prefix("intentic:"))
+        .unwrap_or(text);
+    let line = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if line.chars().count() > 300 {
+        format!("{}…", line.chars().take(299).collect::<String>())
+    } else {
+        line
+    }
+}
+
+fn heard_prefetch(app: &AppHandle, base: Arc<Mutex<(u64, u64)>>, said: Arc<Mutex<Said>>) -> Heard {
     let app = app.clone();
     std::sync::Arc::new(move |_stream: Stream, line: &str| {
-        if let Some(json) = line.trim().strip_prefix(PREFETCH_MARKER) {
-            if let Ok(marker) = serde_json::from_str::<Value>(json) {
-                let phase_done = marker["done"].as_u64().unwrap_or(0);
-                let phase_total = marker["total"].as_u64().unwrap_or(0);
-                let base_guard = base.lock().unwrap_or_else(PoisonError::into_inner);
-                let (base_done, base_total) = *base_guard;
-                let (done, total) =
-                    prefetch_display(base_done, base_total, phase_done, phase_total);
-                lock_store(|store| {
-                    store.prefetch = Prefetch {
-                        state: "running".into(),
-                        done,
-                        total,
-                    };
-                });
-                emit(&app);
-            }
+        let Some(json) = line.trim().strip_prefix(PREFETCH_MARKER) else {
+            return;
+        };
+        let Ok(marker) = serde_json::from_str::<Value>(json) else {
+            return;
+        };
+        let state = marker["state"].as_str().unwrap_or("").to_string();
+        let phase_done = marker["done"].as_u64().unwrap_or(0);
+        let phase_total = marker["total"].as_u64().unwrap_or(0);
+        *said.lock().unwrap_or_else(PoisonError::into_inner) = Said {
+            state: Some(state.clone()),
+            total: phase_total,
+        };
+        // A marker that failed, deferred or skipped says 0 about what it had: the bar keeps the bytes it was last told,
+        // which are what a failure reports as how far it got.
+        if !matches!(state.as_str(), "fetching" | "ready") {
+            return;
         }
+        let (base_done, base_total) = *base.lock().unwrap_or_else(PoisonError::into_inner);
+        let (done, total) = prefetch_display(base_done, base_total, phase_done, phase_total);
+        lock_store(|store| {
+            store.prefetch.done = done;
+            store.prefetch.total = total;
+        });
+        emit(&app);
     })
 }
 
@@ -979,25 +1615,34 @@ fn metered() -> bool {
 }
 
 const PARK_FILE: &str = "onboarding-pc-parked.json";
+/// The PC setup running right now: written when it starts, removed when this app sees it end. One still there at
+/// launch is a setup the last run of the app never saw end (it quit, crashed, or Windows restarted under it).
+const RUNNING_FILE: &str = "onboarding-pc-running.json";
 
-fn park_path() -> Option<std::path::PathBuf> {
+/// `~/.intentic/<name>`: beside the setup's logs, and outliving the app's own data on an uninstall and reinstall.
+fn ledger_path(name: &str) -> Option<PathBuf> {
     let home = std::env::var("USERPROFILE")
         .or_else(|_| std::env::var("HOME"))
         .ok()?;
-    Some(
-        std::path::Path::new(&home)
-            .join(".intentic")
-            .join(PARK_FILE),
-    )
+    Some(std::path::Path::new(&home).join(".intentic").join(name))
 }
 
-fn park_pc_setup() {
-    if let Some(path) = park_path() {
+fn park_path() -> Option<PathBuf> {
+    ledger_path(PARK_FILE)
+}
+
+fn write_ledger(name: &str, value: &Value) {
+    if let Some(path) = ledger_path(name) {
         if let Some(parent) = path.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
-        let _ = std::fs::write(path, b"1");
+        let _ = std::fs::write(path, value.to_string());
     }
+}
+
+/// The setup stopped for a restart: the next launch resumes it, and says when it parked (an older app wrote `1`).
+fn park_pc_setup() {
+    write_ledger(PARK_FILE, &json!({ "at": now_secs() }));
 }
 
 fn clear_pc_park() {
@@ -1008,6 +1653,50 @@ fn clear_pc_park() {
 
 fn resume_wanted() -> bool {
     park_path().is_some_and(|path| path.is_file())
+}
+
+fn parked_at() -> Option<u64> {
+    parse_parked(&std::fs::read_to_string(park_path()?).ok()?)
+}
+
+/// When a park was written, in seconds since the epoch: `{"at": …}`, or nothing for an older app's `1`. Pure.
+fn parse_parked(text: &str) -> Option<u64> {
+    serde_json::from_str::<Value>(text).ok()?["at"].as_u64()
+}
+
+fn write_running_ledger(started_at: u64, row: Option<&str>) {
+    write_ledger(
+        RUNNING_FILE,
+        &json!({ "startedAt": started_at, "step": row }),
+    );
+}
+
+fn clear_running_ledger() {
+    if let Some(path) = ledger_path(RUNNING_FILE) {
+        let _ = std::fs::remove_file(path);
+    }
+}
+
+/// The setup the last run of the app left behind, if it did, as the page is told it; read once, then gone.
+fn take_running_ledger() -> Option<Value> {
+    let path = ledger_path(RUNNING_FILE)?;
+    let text = std::fs::read_to_string(&path).ok()?;
+    let _ = std::fs::remove_file(&path);
+    Some(orphaned_from_ledger(&text))
+}
+
+/// A setup left behind as the page is told it: when it started and the requirement it was on, as far as the ledger
+/// says (a ledger that cannot be read still says one was left behind). Pure.
+fn orphaned_from_ledger(text: &str) -> Value {
+    let ledger: Value = serde_json::from_str(text).unwrap_or(Value::Null);
+    let mut orphaned = json!({});
+    if let Some(at) = ledger["startedAt"].as_u64() {
+        orphaned["startedAt"] = json!(at);
+    }
+    if let Some(step) = ledger["step"].as_str() {
+        orphaned["step"] = json!(step);
+    }
+    orphaned
 }
 
 /// The last `intentic-prepare-summary:` line in a prepare transcript.
@@ -1341,5 +2030,298 @@ intentic-prepare-summary: {\"state\":\"needsSetup\",\"engine\":\"intentic\",\"re
             last_prepare_summary(text).and_then(|v| v["state"].as_str().map(str::to_string)),
             Some("ready".into())
         );
+    }
+
+    fn seen(state: &str) -> Seen<'_> {
+        Seen {
+            state,
+            paused: false,
+            active: false,
+            installing: false,
+            retry_due: None,
+        }
+    }
+
+    /// The incident of 2026-10-12: the download held the image cache while the sandbox's own setup waited on it.
+    #[test]
+    fn the_download_steps_aside_while_a_setup_pulls_and_comes_back_after_it() {
+        for state in ["idle", "running", "metered", "yielded"] {
+            assert_eq!(
+                prefetch_next(&Seen {
+                    installing: true,
+                    ..seen(state)
+                }),
+                Next::Yield,
+                "{state}"
+            );
+        }
+        // Its automatic retry, due or not, waits for the setup too.
+        assert_eq!(
+            prefetch_next(&Seen {
+                installing: true,
+                retry_due: Some(true),
+                ..seen("failed")
+            }),
+            Next::Yield
+        );
+        // The setup has ended: fetch again only if there is still something to fetch.
+        assert_eq!(prefetch_next(&seen("yielded")), Next::Recheck);
+        // The reader's pause outranks everything but an end.
+        assert_eq!(
+            prefetch_next(&Seen {
+                paused: true,
+                installing: true,
+                ..seen("paused")
+            }),
+            Next::Wait
+        );
+        assert_eq!(
+            prefetch_next(&Seen {
+                installing: true,
+                ..seen("done")
+            }),
+            Next::Stop
+        );
+    }
+
+    #[test]
+    fn a_failed_download_retries_once_when_due_then_stops() {
+        assert_eq!(
+            prefetch_next(&Seen {
+                retry_due: Some(false),
+                ..seen("failed")
+            }),
+            Next::Wait
+        );
+        assert_eq!(
+            prefetch_next(&Seen {
+                retry_due: Some(true),
+                ..seen("failed")
+            }),
+            Next::Fetch
+        );
+        assert_eq!(prefetch_next(&seen("failed")), Next::Stop);
+        assert_eq!(prefetch_next(&seen("skipped")), Next::Stop);
+        assert_eq!(prefetch_next(&seen("idle")), Next::Fetch);
+        // A try already going is waited for, never started twice.
+        assert_eq!(
+            prefetch_next(&Seen {
+                active: true,
+                ..seen("running")
+            }),
+            Next::Wait
+        );
+    }
+
+    #[test]
+    fn a_download_is_settled_once_done_skipped_or_given_up() {
+        let with = |state: &str, retry_at: Option<u64>| Prefetch {
+            state: state.into(),
+            retry_at,
+            ..Prefetch::default()
+        };
+        assert!(settled(&with("done", None)));
+        assert!(settled(&with("skipped", None)));
+        assert!(settled(&with("failed", None)));
+        // Its retry is still to come: the office editor keeps waiting (sidecar.rs).
+        assert!(!settled(&with("failed", Some(1))));
+        for state in ["idle", "running", "paused", "metered", "yielded"] {
+            assert!(!settled(&with(state, None)), "{state}");
+        }
+        assert_eq!(Prefetch::default().state, "idle");
+    }
+
+    #[test]
+    fn a_setup_announced_counts_as_running_until_its_run_is_registered() {
+        assert!(!install_announced(1_000_000, 0));
+        assert!(install_announced(1_000_000, 1_000_000 - 1_000));
+        let grace = INSTALL_ANNOUNCE_GRACE.as_millis() as u64;
+        assert!(!install_announced(1_000_000, 1_000_000 - grace));
+    }
+
+    #[test]
+    fn an_image_phase_that_fetched_nothing_says_why() {
+        let said = |state: &str, total: u64| Said {
+            state: Some(state.into()),
+            total,
+        };
+        assert_eq!(nothing_fetched(&said("skipped", 0)), Some("dockerPulls"));
+        assert_eq!(nothing_fetched(&said("elsewhere", 0)), Some("elsewhere"));
+        assert_eq!(nothing_fetched(&said("ready", 0)), Some("imageInDocker"));
+        assert_eq!(nothing_fetched(&said("ready", 2_200_000_000)), None);
+        // An `ic` that exited 0 without a marker fetched what it fetched.
+        assert_eq!(nothing_fetched(&Said::default()), None);
+    }
+
+    #[test]
+    fn a_failed_phase_says_its_last_error_not_its_progress() {
+        let transcript = "\
+intentic-prefetch: {\"state\":\"fetching\",\"done\":700,\"total\":900}
+intentic: the prefetch stopped (connection reset); trying again
+! error: could not fetch ghcr.io/intentic/sandbox:stable ahead: connection reset by peer
+intentic-prefetch: {\"state\":\"failed\",\"done\":0,\"total\":0}
+
+[ic image prefetch exited with Some(1)]
+";
+        let ended = scripts::Ended {
+            code: Some(1),
+            success: false,
+            timed_out: false,
+            log: Some("/home/ann/.intentic/logs/desktop-pc-image-1.log".into()),
+        };
+        let failure = phase_failure("image", "ic image prefetch", &ended, transcript);
+        assert_eq!(
+            failure,
+            PrefetchFailure {
+                phase: "image".into(),
+                exit_code: Some(1),
+                reason: "could not fetch ghcr.io/intentic/sandbox:stable ahead: connection reset by peer"
+                    .into(),
+                log: ended.log.clone(),
+            }
+        );
+        // Nothing on stderr: the last thing it said at all.
+        assert_eq!(
+            last_meaningful_line(
+                "intentic: fetched 1 MB\nintentic: the cache is locked\n[x exited with Some(2)]"
+            ),
+            Some("the cache is locked".into())
+        );
+        // Nothing at all: the exit says it.
+        let silent = phase_failure(
+            "engine",
+            "ic engine fetch",
+            &ended,
+            "[ic engine fetch exited with Some(1)]\n",
+        );
+        assert_eq!(silent.reason, "ic engine fetch exited with code 1");
+        let killed = scripts::Ended {
+            code: None,
+            ..ended
+        };
+        assert_eq!(
+            phase_failure("engine", "ic engine fetch", &killed, "").reason,
+            "ic engine fetch was stopped before it finished"
+        );
+    }
+
+    #[test]
+    fn a_reason_is_one_line_of_at_most_300_characters() {
+        assert_eq!(tidy_reason("  error:   a\n   b  "), "a b");
+        let long = "x".repeat(400);
+        let tidy = tidy_reason(&long);
+        assert_eq!(tidy.chars().count(), 300);
+        assert!(tidy.ends_with('…'));
+    }
+
+    #[test]
+    fn a_failed_download_reads_as_the_page_expects() {
+        let prefetch = Prefetch {
+            state: "failed".into(),
+            done: 700,
+            total: 900,
+            attempt: 1,
+            failure: Some(PrefetchFailure {
+                phase: "image".into(),
+                exit_code: Some(1),
+                reason: "could not fetch".into(),
+                log: None,
+            }),
+            retry_at: Some(42),
+            skipped: None,
+        };
+        assert_eq!(
+            serde_json::to_value(&prefetch).unwrap(),
+            json!({
+                "state": "failed",
+                "done": 700,
+                "total": 900,
+                "attempt": 1,
+                "failure": { "phase": "image", "exitCode": 1, "reason": "could not fetch" },
+                "retryAt": 42,
+            })
+        );
+    }
+
+    #[test]
+    fn a_setup_goes_quiet_after_twenty_minutes_without_a_line() {
+        let last = 10_000_000;
+        let after = SETUP_STALL_AFTER.as_millis() as u64;
+        assert!(!quiet_too_long(last + after - 1, last));
+        assert!(quiet_too_long(last + after, last));
+        // Nothing heard yet is not a stall (the watch starts with the run).
+        assert!(!quiet_too_long(last + after, 0));
+    }
+
+    #[test]
+    fn a_quiet_setup_shows_its_newest_transcript() {
+        let names = [
+            "desktop-pc-setup-20261012-110700.log",
+            "desktop-pc-setup-20261012-121500.log",
+            "desktop-pc-setup-20261012-121500.out",
+            "desktop-setup-20261012-130000.log",
+            "prefetch-20261012-130000.log",
+        ];
+        assert_eq!(
+            newest_log(names, RUN_SETUP),
+            Some("desktop-pc-setup-20261012-121500.log")
+        );
+        assert_eq!(newest_log(["desktop-setup-1.log"], RUN_SETUP), None);
+    }
+
+    #[test]
+    fn a_running_setup_says_it_resumed_and_that_it_went_quiet() {
+        let running = Setup::Running {
+            step: Some("installing the engine".into()),
+            percent: 40,
+            needs_you: None,
+        };
+        let store = Store {
+            setup: running.clone(),
+            setup_resumed: true,
+            setup_parked_at: Some(100),
+            setup_quiet_since: Some(200),
+            setup_log: Some("/logs/desktop-pc-setup-1.log".into()),
+            ..Store::default()
+        };
+        let payload = setup_payload(&store);
+        assert_eq!(payload["resumed"], json!(true));
+        assert_eq!(payload["parkedAt"], json!(100));
+        assert_eq!(payload["quietSince"], json!(200));
+        assert_eq!(payload["log"], json!("/logs/desktop-pc-setup-1.log"));
+        // Once it has an outcome, neither is said.
+        let ended = Store {
+            setup: Setup::Ready,
+            ..store
+        };
+        assert_eq!(setup_payload(&ended), json!({ "state": "ready" }));
+        let fresh = Store {
+            setup: running,
+            ..Store::default()
+        };
+        assert!(setup_payload(&fresh).get("resumed").is_none());
+        assert!(setup_payload(&fresh).get("quietSince").is_none());
+    }
+
+    #[test]
+    fn a_park_says_when_it_was_written() {
+        assert_eq!(parse_parked("{\"at\":1791000000}"), Some(1_791_000_000));
+        // An older app's park says nothing of when; it still resumes.
+        assert_eq!(parse_parked("1"), None);
+        assert_eq!(parse_parked(""), None);
+    }
+
+    #[test]
+    fn a_setup_left_behind_says_when_it_started_and_where_it_was() {
+        assert_eq!(
+            orphaned_from_ledger("{\"startedAt\":1791000000,\"step\":\"wsl-features\"}"),
+            json!({ "startedAt": 1_791_000_000u64, "step": "wsl-features" })
+        );
+        assert_eq!(
+            orphaned_from_ledger("{\"startedAt\":1791000000,\"step\":null}"),
+            json!({ "startedAt": 1_791_000_000u64 })
+        );
+        // Unreadable, it was still left behind.
+        assert_eq!(orphaned_from_ledger("garbage"), json!({}));
     }
 }

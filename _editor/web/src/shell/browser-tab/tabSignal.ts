@@ -14,6 +14,8 @@
 // 3. `done`: a turn someone started finished while the reader was away; gone the moment they are back.
 // 4. `working`: a turn is running. Icon only.
 
+import type { SandboxAvailability } from "../../features/sandbox/overview/availability";
+
 export type TabMark =
     | { readonly kind: `asks`; readonly count: number }
     | { readonly kind: `offline` }
@@ -39,6 +41,18 @@ export const tabMark = (facts: TabFacts): TabMark | undefined => {
     }
     return facts.working ? { kind: `working` } : undefined;
 };
+
+// Past the half minute a reconnect is given in silence (availability.ts), and every ending that waiting will not mend.
+// Not `busy`: a sandbox the diagnosis saw alive is catching up, and a tab that said "Offline" over it was the loudest
+// false alarm the app had.
+const OFFLINE: ReadonlySet<SandboxAvailability> = new Set([`unreachable`, `detached`, `removed`, `blocked`]);
+
+// Whether the tab says the sandbox is offline. `seen`: it has answered before, in this tab or anywhere (its row's last
+// announce). One that never has is still being set up, not offline: /setup's tab read "Offline" twenty seconds into a
+// first install (2026-10-12), over a sandbox whose edge had no tunnel yet because nothing had started. Its removal is a
+// fact rather than a silence, and is still said.
+export const tabOffline = (availability: SandboxAvailability, seen: boolean): boolean =>
+    OFFLINE.has(availability) && (seen || availability === `removed`);
 
 // The title a page gets with no mark: `<Page> / intentic`, or the bare brand on a route that names nothing.
 export const pageTitle = (page: string | undefined): string => (page === undefined ? `intentic` : `${page} / intentic`);
