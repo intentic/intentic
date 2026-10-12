@@ -44,7 +44,7 @@ export const fuzzyScore = (needle: string, path: string): number | undefined => 
     }
     const raw = subsequenceScore(n, h, path);
     // Normalized against the best possible per-char score, damped by path length.
-    return raw === undefined ? undefined : (raw / (n.length * 2.4)) * 0.7 * Math.min(1, 20 / Math.max(20, h.length - n.length));
+    return raw === undefined ? undefined : (raw / (n.length * 2.4)) * 0.7 * (20 / Math.max(20, h.length - n.length));
 };
 
 /** Matching paths, best first, each with its score. */

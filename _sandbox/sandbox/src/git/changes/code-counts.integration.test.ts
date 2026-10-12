@@ -39,6 +39,32 @@ const counted = async (dir: string) => {
     };
 };
 
+test("counts every row when the input outlasts the counting lanes", async () => {
+    const dir = await tempRepo();
+    const paths = Array.from({ length: 9 }, (_, index) => `file-${index}.ts`);
+    await Promise.all(paths.map((path, index) => writeFile(join(dir, path), `// a comment\nconst value = ${index};\n`)));
+
+    const { unstaged } = await counted(dir);
+
+    expect(unstaged).toEqual(paths.map((path) => ({ path, status: "added", additions: 2, deletions: 0, code: { additions: 1, deletions: 0 } })));
+});
+
+test("never resolves sides for empty or noncountable inputs", async () => {
+    const sides = (): never => {
+        throw new Error("no countable row should ask for sides");
+    };
+    expect(await withCodeCounts("", [], sides)).toEqual([]);
+    expect(await withCodeCounts("", [{ path: "binary.bin", status: "modified" }], sides)).toEqual([{ path: "binary.bin", status: "modified" }]);
+});
+
+test("propagates a side resolver failure", async () => {
+    await expect(
+        withCodeCounts("", [{ path: "a.ts", status: "added", additions: 1, deletions: 0 }], () => {
+            throw new Error("cannot resolve sides");
+        }),
+    ).rejects.toThrow("cannot resolve sides");
+});
+
 test("counts an edit as the code it added, leaving the comments to git's own numbers", async () => {
     const dir = await tempRepo();
     await writeFile(

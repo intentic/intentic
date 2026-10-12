@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { LineStat } from "@intentic/code-read";
 import type { GitChange } from "@intentic/sandbox-contract";
 import { readWorkspaceFile, statWorkspaceSizeMtime } from "../../workspace/files/workspace-files.js";
-import { SingleFlight } from "@intentic/base/async";
+import { mapPool, SingleFlight } from "@intentic/base/async";
 import { siblingModule, type WorkerCalls, workerPool } from "@intentic/base/worker-calls";
 import { readObject } from "./blob-reader.js";
 import { MAX_FILE_DIFF_BYTES } from "./diff-partial.js";
@@ -211,17 +211,9 @@ export const withCodeCounts = async (dir: string, changes: readonly GitChange[],
     // Skips rows git itself couldn't count (binary, conflict); there's no pair of numbers to compare against.
     const countable = rows.filter((change) => change.additions !== undefined || change.deletions !== undefined).slice(0, MAX_COUNTED);
     const stats = new Map<GitChange, LineStat | undefined>();
-    let cursor = 0;
-    const lane = async (): Promise<void> => {
-        while (cursor < countable.length) {
-            const change = countable[cursor++];
-            if (change === undefined) {
-                return;
-            }
-            stats.set(change, await countOne(dir, change.path, sidesOf(change)));
-        }
-    };
-    await Promise.all(Array.from({ length: Math.min(LANES, countable.length) }, lane));
+    await mapPool(countable, LANES, async (change) => {
+        stats.set(change, await countOne(dir, change.path, sidesOf(change)));
+    });
     return rows.map((change) => {
         const stat = stats.get(change);
         return stat === undefined ? change : { ...change, code: stat };

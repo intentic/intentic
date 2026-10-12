@@ -224,22 +224,20 @@ export type ActivityFinding =
 // Newest first, as the log is: a value seen again in an older request adds to the newest row's count rather than a row.
 export const activityFindings = (entries: readonly PrivacyLedgerEntry[]): ActivityFinding[] => {
     const findings: ActivityFinding[] = [];
-    const seen = new Map<string, number>();
+    const seen = new Map<string, Extract<ActivityFinding, { kind: `value` }> & { requests: number }>();
     entries.forEach((entry, index) => {
         const base = { at: ledgerTime(entry.at), provider: entry.provider, trusted: entry.trusted, action: entry.action };
         const replacements = entry.replacements ?? [];
         if (entry.action !== `refused`) {
             for (const replacement of replacements) {
-                const at = seen.get(replacement.token);
-                if (at !== undefined) {
-                    const earlier = findings[at];
-                    if (earlier?.kind === `value`) {
-                        findings[at] = { ...earlier, requests: earlier.requests + 1 };
-                    }
+                const earlier = seen.get(replacement.token);
+                if (earlier !== undefined) {
+                    earlier.requests += 1;
                     continue;
                 }
-                seen.set(replacement.token, findings.length);
-                findings.push({ ...base, kind: `value`, key: `value-${replacement.token}`, replacement, requests: 1 });
+                const finding = { ...base, kind: `value`, key: `value-${replacement.token}`, replacement, requests: 1 } satisfies ActivityFinding;
+                seen.set(replacement.token, finding);
+                findings.push(finding);
             }
         }
         // Counts with no tokens beside them are the only account an older entry has of what it found; images and

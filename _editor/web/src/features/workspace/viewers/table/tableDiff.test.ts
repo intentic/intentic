@@ -82,6 +82,14 @@ describe(`tableDiff`, () => {
         expect(diff?.rows[0]?.cells.at(-1)).toEqual({ kind: `added`, after: `c` });
     });
 
+    it(`keeps empty removed, matched, and added sheets at zero columns`, () => {
+        expect(tableDiff([sheet(`Removed`), sheet(`Kept`)], [sheet(`Kept`), sheet(`Added`)])).toEqual([
+            { name: `Removed`, kind: `removed`, rows: [], columns: 0, changedRows: 0 },
+            { name: `Kept`, kind: `same`, rows: [], columns: 0, changedRows: 0 },
+            { name: `Added`, kind: `added`, rows: [], columns: 0, changedRows: 0 },
+        ]);
+    });
+
     it(`diffs rows appended to a long sheet without building a table over the whole of it`, () => {
         const rows = Array.from({ length: MAX_ROWS - 10 }, (_, index) => [`row ${index}`, String(index)]);
         const [diff] = tableDiff([sheet(`S`, ...rows)], [sheet(`S`, ...rows, [`row new`, `x`])]);

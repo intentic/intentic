@@ -32,6 +32,14 @@ test("a subsequence score stays within 0..1, while a substring score may pass 1 
     expect(fuzzyScore("notes", "notes.md")!).toBeGreaterThan(1);
 });
 
+test.each([
+    [18, 0.4666666666666667],
+    [19, 0.4666666666666667],
+    [20, 0.4444444444444444],
+])("pins the subsequence length penalty with %i padding characters", (padding, score) => {
+    expect(fuzzyScore("ab", `a${"x".repeat(padding)}/b`)).toBe(score);
+});
+
 const CORPUS = [
     "_sandbox/sandbox/src/sessions/store.ts",
     "_sandbox/sandbox/src/sessions/search.ts",

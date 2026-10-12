@@ -351,7 +351,7 @@ const diffRows = (beforeRows: readonly (readonly string[])[], afterRows: readonl
     return [...sameRows(before.slice(0, head), 0), ...middle, ...sameRows(before.slice(before.length - tail), after.length - tail)];
 };
 
-const width = (sheet: Sheet | undefined): number => Math.max(0, ...(sheet?.rows.map((row) => row.length) ?? []));
+const width = (sheet: Sheet): number => Math.max(0, ...sheet.rows.map((row) => row.length));
 
 /** Sheets matched by name, in the before side's order with the after side's new sheets last; each row diffed inside. */
 export const tableDiff = (before: readonly Sheet[], after: readonly Sheet[]): SheetDiff[] => {

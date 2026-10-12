@@ -287,6 +287,48 @@ describe(`activityFindings`, () => {
         expect(findings[0]).toMatchObject({ replacement: { excerpt: `to ${PERSON} today` } });
     });
 
+    it(`counts repeated tokens across interleaved request rows without changing their newest metadata or the log`, () => {
+        const newest = { token: PERSON, class: `person-name`, excerpt: `to ${PERSON} today` } as const;
+        const entries = [
+            entry({ at: `2026-10-05T12:04:00Z`, action: `refused` }),
+            entry({ at: `2026-10-05T12:03:00Z`, replacements: [newest] }),
+            entry({ at: `2026-10-05T12:02:00Z`, documents: 1 }),
+            entry({
+                at: `2026-10-05T12:01:00Z`,
+                replacements: [
+                    { token: EMAIL, class: `email`, excerpt: EMAIL },
+                    { token: PERSON, class: `person-name`, excerpt: PERSON },
+                ],
+            }),
+            entry({ at: `2026-10-05T12:00:00Z`, provider: `codex`, trusted: true, action: `watched`, replacements: [newest] }),
+        ];
+        const before = structuredClone(entries);
+        const findings = activityFindings(entries);
+        expect(
+            findings.map((finding) =>
+                finding.kind === `value`
+                    ? [finding.kind, finding.replacement.token, finding.requests]
+                    : [finding.kind, finding.images, finding.documents],
+            ),
+        ).toEqual([
+            [`request`, 0, 0],
+            [`value`, PERSON, 3],
+            [`request`, 0, 1],
+            [`value`, EMAIL, 1],
+        ]);
+        expect(findings[1]).toEqual({
+            kind: `value`,
+            key: `value-${PERSON}`,
+            at: Date.parse(`2026-10-05T12:03:00Z`),
+            provider: `claude`,
+            trusted: false,
+            action: `masked`,
+            replacement: newest,
+            requests: 3,
+        });
+        expect(entries).toEqual(before);
+    });
+
     it(`gives a refused request, images or documents no value speaks for, and counts alone a row of their own`, () => {
         const findings = activityFindings([
             entry({ at: `2026-10-05T12:04:00Z`, action: `refused`, detail: `unrecognised request /v1/files` }),
