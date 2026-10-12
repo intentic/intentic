@@ -911,7 +911,7 @@
         },
         "browsers": {
             "account": "Konto",
-            "addressPlaceholder": "Szukaj w DuckDuckGo lub wpisz adres URL",
+            "addressPlaceholder": "Wyszukaj lub wpisz adres URL",
             "agentsNextBrowserTool": "Następne wywołanie narzędzia przeglądarki przez agenta się nie uda",
             "back": "Wstecz",
             "closeBrowser": "Zamknij to okno",

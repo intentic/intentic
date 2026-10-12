@@ -655,7 +655,7 @@
     "browsers": {
         "browsers": {
             "account": "Cuenta",
-            "addressPlaceholder": "Busca con DuckDuckGo o escribe una URL",
+            "addressPlaceholder": "Busca o escribe una URL",
             "agentsNextBrowserTool": "La próxima llamada del agente a una herramienta de navegador fallará",
             "back": "Atrás",
             "closeBrowser": "Cerrar esta ventana",

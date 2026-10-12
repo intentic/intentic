@@ -17,10 +17,10 @@ describe("toUrl", () => {
     });
 
     test("anything else is a search, spaces included", () => {
-        expect(toUrl(`how to center a div`)).toBe(`https://duckduckgo.com/?q=how%20to%20center%20a%20div`);
+        expect(toUrl(`how to center a div`)).toBe(`https://search.brave.com/search?q=how%20to%20center%20a%20div`);
         // Host-like first word, but a sentence: a search, not an address.
-        expect(toUrl(`example.com pricing`)).toBe(`https://duckduckgo.com/?q=example.com%20pricing`);
-        expect(toUrl(`intentic`)).toBe(`https://duckduckgo.com/?q=intentic`);
+        expect(toUrl(`example.com pricing`)).toBe(`https://search.brave.com/search?q=example.com%20pricing`);
+        expect(toUrl(`intentic`)).toBe(`https://search.brave.com/search?q=intentic`);
     });
 
     test("nothing typed goes nowhere", () => {

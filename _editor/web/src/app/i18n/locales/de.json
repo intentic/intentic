@@ -649,7 +649,7 @@
     "browsers": {
         "browsers": {
             "account": "Konto",
-            "addressPlaceholder": "Mit DuckDuckGo suchen oder URL eingeben",
+            "addressPlaceholder": "Suchen oder URL eingeben",
             "agentsNextBrowserTool": "Der nächste Browser-Werkzeugaufruf des Agenten wird fehlschlagen",
             "back": "Zurück",
             "closeBrowser": "Dieses Fenster schließen",

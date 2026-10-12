@@ -224,17 +224,17 @@ export const visitedPage = (url: string): string => {
     }
     const parsed = parsedUrl(url);
     const host = parsed?.host || url;
-    const search = parsed?.host === `duckduckgo.com` ? parsed.searchParams.get(`q`) : null;
+    const search = parsed?.host === `search.brave.com` ? parsed.searchParams.get(`q`) : null;
     const heading = search === null ? host : `Results for “${search}”`;
     const lines =
         search === null
             ? [`A page from ${host}`, `In the demo nothing is fetched, so this stands in for it.`]
             : [`Ten results would be listed here.`];
     return page(
-        `${box(0, 0, WIDTH, 64, `#faf9f8`)}${box(0, 63, WIDTH, 1, `#e6e3e0`, 0)}${text(48, 40, search === null ? host : `DuckDuckGo`, {
+        `${box(0, 0, WIDTH, 64, `#faf9f8`)}${box(0, 63, WIDTH, 1, `#e6e3e0`, 0)}${text(48, 40, search === null ? host : `Search`, {
             size: 20,
             weight: 700,
-            fill: search === null ? `#1b1a19` : `#de5833`,
+            fill: `#1b1a19`,
         })}${text(48, 150, heading, { size: 34, weight: 700 })}${lines
             .map((line, index) => text(48, 200 + index * 30, line, { size: 16, fill: `#6c6862` }))
             .join(``)}${[0, 1, 2]

@@ -4,7 +4,7 @@
      rather than a background that jumps, and a tab grows in as it opens and folds away as it closes. Middle-click closes
      a tab and double-clicking the empty strip opens one, the two gestures a browser's own strip answers to. Pinned tabs
      (a live app, the desktop, a window on it) lead, set off from the web pages by a hairline. When the web pages come
-     from more than one window, each window's run of tabs opens with its label, as a browser's tab groups do. What a tab
+     from more than one window, each window's run of tabs opens with a small mark of whose it is. What a tab
      IS stays the caller's: this draws, it decides nothing. -->
 <script setup lang="ts">
 import { Icon, ui, vMiddleclick } from "@intentic/ui";
@@ -114,26 +114,34 @@ const items = computed(() => stripItems(tabs));
             />
             <TransitionGroup name="tab">
                 <template v-for="item in items" :key="item.key">
-                    <!-- A window's label: whose tabs follow, and the one press that puts that window in front. Squeezed, it
-                         keeps enough of its name to tell one window from the next, which is what it is for; on a strip
-                         too narrow to spare that (a side panel), its dot, with the name on hover. -->
+                    <!-- A window's mark: whose tabs follow, and the one press that puts that window in front. A glyph or
+                         a letter, never the name: a name stood longer than the tabs it introduced and pushed them along
+                         the strip. The name, who has the window and its tabs are the hover's; a dot only when the
+                         window wants a look (asking for help, an agent at work in it). -->
                     <button
                         v-if="item.kind === `label`"
                         type="button"
                         :data-seam="item.seam"
-                        class="browser-group relative flex h-8 min-w-20 max-w-40 shrink cursor-pointer @max-[36rem]/strip:min-w-6 items-center px-0.5 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary-500"
+                        class="browser-group group/mark relative flex h-8 shrink-0 cursor-pointer items-center px-0.5 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary-500"
                         :aria-label="item.group.note === undefined ? item.group.label : `${item.group.label}, ${item.group.note}`"
                         v-tooltip.bottom="{ title: item.group.label, note: item.group.note }"
                         @click="emit('pickGroup', item.group)"
                     >
                         <span
-                            class="flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-0.5 text-2xs font-medium transition-colors"
+                            class="relative flex size-5 items-center justify-center rounded-md text-2xs font-semibold leading-none transition-colors"
                             :class="
-                                item.group.current ? 'bg-content/10 text-content' : 'bg-content/5 text-muted hover:bg-content/10 hover:text-content'
+                                item.group.current
+                                    ? 'bg-content/10 text-content'
+                                    : 'text-subtle group-hover/mark:bg-content/5 group-hover/mark:text-content'
                             "
                         >
-                            <span class="size-1.5 shrink-0 rounded-full" :class="item.group.dot" />
-                            <span class="min-w-0 truncate">{{ item.group.label }}</span>
+                            <Icon v-if="item.group.mark.kind === `icon`" :name="item.group.mark.icon" class="text-xs" />
+                            <template v-else>{{ item.group.mark.letter }}</template>
+                            <span
+                                v-if="item.group.dot"
+                                class="absolute -right-0.5 -top-0.5 size-1.5 rounded-full ring-2 ring-canvas"
+                                :class="item.group.dot"
+                            />
                         </span>
                     </button>
                     <!-- The tab and its close are siblings, not nested: a button cannot hold one. -->

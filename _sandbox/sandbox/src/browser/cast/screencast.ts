@@ -89,7 +89,9 @@ export type ScreencastClientMessage =
     | { readonly type: "bind"; readonly pageId: string }
     // The chrome is the client's own (tabs, address bar, navigation); these are what its buttons send. The picture
     // carries the page alone, see live-view.ts.
-    | { readonly type: "navigate"; readonly url: string }
+    // `pageId` names the tab when the client knows it and the picture may not be on it yet (an address typed into a new
+    // tab before the tab arrived); without one it is the tab the picture shows.
+    | { readonly type: "navigate"; readonly url: string; readonly pageId?: string }
     | { readonly type: "back" }
     | { readonly type: "forward" }
     | { readonly type: "reload" }

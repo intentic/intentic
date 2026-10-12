@@ -66,8 +66,8 @@ const titleOf = (url: string): string | undefined => {
     }
     try {
         const parsed = new URL(url);
-        const query = parsed.host === `duckduckgo.com` ? parsed.searchParams.get(`q`) : null;
-        return query === null ? parsed.host : `${query} at DuckDuckGo`;
+        const query = parsed.host === `search.brave.com` ? parsed.searchParams.get(`q`) : null;
+        return query ?? parsed.host;
     } catch {
         return url;
     }
@@ -153,10 +153,14 @@ const ownBrowserSession: DemoSession = (socket: DemoSocket) => {
             ownChanged();
         } else if (message.type === `closeTab` && message.pageId !== undefined) {
             closeOwnTab(message.pageId);
-        } else if (message.type === `navigate` && message.url !== undefined && active !== undefined) {
-            active.url = message.url;
-            active.title = titleOf(message.url);
-            ownChanged();
+        } else if (message.type === `navigate` && message.url !== undefined) {
+            // A tab named by id (an address typed into a new tab before it arrived), else the one in front.
+            const tab = message.pageId === undefined ? active : own.tabs.find((candidate) => candidate.id === message.pageId);
+            if (tab !== undefined) {
+                tab.url = message.url;
+                tab.title = titleOf(message.url);
+                ownChanged();
+            }
         }
     });
     socket.addEventListener(`close`, () => ownWatchers.delete(repaint));

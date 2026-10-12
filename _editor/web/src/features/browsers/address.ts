@@ -2,8 +2,9 @@
 // anything else as a search. The same rule an omnibox applies, since the chrome is ours and Chromium's never sees the
 // text.
 
-// Where a query goes; the sandbox's browser has no search engine of its own, and this one asks nothing of the user.
-const SEARCH_URL = `https://duckduckgo.com/?q=`;
+// Where a query goes; the sandbox's browser has no search engine of its own. An index of its own rather than a resold
+// one, no account, no tracking; the chrome never names it, since nothing here is an advert for it.
+const SEARCH_URL = `https://search.brave.com/search?q=`;
 
 // Something with a scheme (`https:`, `about:`, `file:`), taken as written. A colon followed by digits and nothing
 // but a path is a host with a port (`localhost:5173`), not a scheme.

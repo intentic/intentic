@@ -12,7 +12,7 @@ import { parseTabKey, sameTab, tabKey, type LiveTab, type PinnedTab } from "../.
 import { toggleBrowsersFloating, useBrowsersFloating } from "../../workbench/browsers/browsersFloating";
 import LiveTabStrip from "../../features/browsers/LiveTabStrip.vue";
 import LiveLauncher, { type LaunchGroup } from "./LiveLauncher.vue";
-import type { StripGroup, StripTab } from "../../features/browsers/stripTab";
+import { initialOf, type GroupMark, type StripGroup, type StripTab } from "../../features/browsers/stripTab";
 import { closeBrowser, closeBrowserPage, openBrowser, useBrowsersQuery } from "../../features/browsers/browsersQuery";
 import type { BrowserCommand } from "../../features/browsers/keyIntent";
 import Omnibox from "../../features/browsers/Omnibox.vue";
@@ -38,7 +38,7 @@ import { useT } from "@intentic/ui/i18n";
 // the side panel and a window of its own; parked, the framed apps keep their state and the streams pause.
 //
 // The strip leads with the reader's pins (apps, the desktop, its windows), then the pages of every open web window, each
-// window's run behind its label once there is more than the person's own, theirs last and right beside the +; the list of
+// window's run behind its mark once there is more than the person's own, theirs last and right beside the +; the list of
 // windows sits at the strip's far end. What a tab is shows in its glyph and the glyph's colour. One window streams at a
 // time, the one whose page is in front; picking a tab of another switches the picture to it. The
 // toolbar is the browser's: history, reload, the address bar, then whatever the tab in front owns (an app's Start and
@@ -186,6 +186,19 @@ const windowMeta = (session: BrowserSession): string =>
 // One dot of state: asking for help, an agent at work in it, or simply open.
 const dotOf = (session: BrowserSession): string =>
     session.help !== undefined ? `bg-warning` : agentDrives(session) ? `bg-primary-500` : `bg-success`;
+// The strip's dot says only what wants a look; a window simply open is most of them, and a green dot on each was noise.
+const stripDotOf = (session: BrowserSession): string | undefined => (session.help !== undefined || agentDrives(session) ? dotOf(session) : undefined);
+
+// What stands for a window on the strip: a person for the reader's own, an agent's conversation by its initial, and an
+// agent whose conversation isn't known by name by a robot rather than the initial of whatever page it is on.
+const OWN_MARK: GroupMark = { kind: `icon`, icon: `user` };
+const markOf = (session: BrowserSession): GroupMark => {
+    if (session.own === true) {
+        return OWN_MARK;
+    }
+    const letter = initialOf((session.owner === undefined ? undefined : agentTitle(session.owner)) ?? ``);
+    return letter === undefined ? { kind: `icon`, icon: `robot` } : { kind: `initial`, letter };
+};
 
 // Yours first, then the agents' by who moved last.
 const windowList = computed(() => [
@@ -349,16 +362,21 @@ const stripWindows = computed<readonly BrowserSession[]>(() => {
 // in it; the one in front also once they have taken it over.
 const usable = (session: BrowserSession): boolean => (session.name === current.value?.name ? interactive.value : !agentDrives(session));
 
-// Whose tabs are whose, said once it is not simply the person's own browser: every window's run carries its name.
-const labelled = computed(() => stripWindows.value.length > 1 || stripWindows.value.some((session) => session.own !== true));
-// The person's own window keeps one label key from the moment a tab of theirs is on its way, so the label that stood
+// Whose tabs are whose, said once the strip holds more than the person's own browser's: every window's run carries its
+// mark. Only windows with a tab on the strip count; one with every tab closed has no run to tell apart.
+const labelled = computed(() => {
+    const shown = stripWindows.value.filter((session) => session.pages.length > 0);
+    return shown.length > 1 || shown.some((session) => session.own !== true);
+});
+// The person's own window keeps one group key from the moment a tab of theirs is on its way, so the mark that stood
 // over a tab still opening is the one the window's arrival keeps.
 const OWN_GROUP = `own`;
 const groupOf = (session: BrowserSession): StripGroup => ({
     id: session.own === true ? OWN_GROUP : session.name,
     label: windowName(session),
     note: windowMeta(session),
-    dot: dotOf(session),
+    mark: markOf(session),
+    dot: stripDotOf(session),
     current: webInFront.value && session.name === selected.value,
 });
 
@@ -373,6 +391,7 @@ const pageEntries = computed(() =>
             page,
             tab: {
                 id: stripIdOf(session.name, page.id),
+                key: arrivedKeys.value.get(stripIdOf(session.name, page.id)),
                 label: pageLabel(page),
                 note: page.url === `` ? undefined : page.url,
                 icon: `globe`,
@@ -385,10 +404,10 @@ const pageEntries = computed(() =>
 );
 const entryOf = (stripId: string) => pageEntries.value.find((entry) => entry.tab.id === stripId);
 
-// The person's own window's label, standing over a tab of theirs on its way before the window itself is listed.
+// The person's own window's mark, standing over a tab of theirs on its way before the window itself is listed.
 const ownGroup = computed<StripGroup>(() =>
     ownWindow.value === undefined
-        ? { id: OWN_GROUP, label: t(`browsers.browsers.yourBrowser`), dot: `bg-success`, current: false }
+        ? { id: OWN_GROUP, label: t(`browsers.browsers.yourBrowser`), mark: OWN_MARK, current: false }
         : groupOf(ownWindow.value),
 );
 
@@ -396,13 +415,29 @@ const ownGroup = computed<StripGroup>(() =>
 // browser's new tab is there the moment it's pressed rather than once the page behind it answers.
 const OPENING_ID = `${PAGE}opening`;
 // Held until the tab itself is listed and put in front, so the strip never shows neither.
+const tabOnTheWay = computed(
+    () => current.value !== undefined && (opening.value || blankAsked.value || (pendingTab.value !== undefined && pendingTab.value.focus !== `page`)),
+);
+// A blank one, from the press of + until the tab is listed and in front: already a new tab in every way the reader can
+// see (its own page, an empty address bar with the keyboard), since nothing about it needs the daemon's answer. One
+// opened at an address is loading, and says so.
+const blankOnTheWay = computed(() => tabOnTheWay.value && (blankAsked.value || pendingTab.value?.blank === true));
+// What the stage draws for it, and for a tab of the person's own that is still blank once it is there: this view's own
+// new-tab page rather than the picture of Chromium's about:blank, which is a white screen in any theme. An agent's
+// blank page is left as the picture, since an agent may have written into it without ever giving it an address.
+const newTabPage = computed(
+    () =>
+        blankOnTheWay.value ||
+        (current.value?.own === true && activePage.value !== undefined && (activePage.value.url === `` || activePage.value.url === BLANK)),
+);
 const openingTab = computed<StripTab | undefined>(() =>
-    (opening.value || (pendingTab.value !== undefined && pendingTab.value.focus !== `page`)) && current.value !== undefined
+    tabOnTheWay.value
         ? {
               id: OPENING_ID,
+              key: openingKey.value,
               label: t(`browsers.browsers.newTab`),
-              icon: `spinner`,
-              spin: true,
+              icon: blankOnTheWay.value ? `globe` : `spinner`,
+              spin: !blankOnTheWay.value,
               closable: false,
               pinned: false,
               group: labelled.value ? ownGroup.value : undefined,
@@ -417,7 +452,15 @@ const webTabs = computed<readonly StripTab[]>(() => {
             ? [{ id: START_ID, label: t(`browsers.browsers.newTab`), icon: `globe`, closable: false, pinned: false }]
             : [];
     }
-    const tabs = pageEntries.value.map((entry) => entry.tab);
+    // The tab on its way stands in for the one it becomes until that one is taken, so the strip never shows both: by id
+    // once the open has answered, and before that, as any tab of the person's own the open found not there yet, since
+    // the list can carry it before the answer names it.
+    const arriving = pendingTab.value?.key === undefined ? undefined : stripIdOf(pendingTab.value.name, pendingTab.value.pageId);
+    const inFlight = openingTab.value !== undefined && (opening.value || blankAsked.value) ? ownBefore.value : undefined;
+    const standIn = (entry: (typeof pageEntries.value)[number]): boolean =>
+        openingTab.value !== undefined &&
+        (entry.tab.id === arriving || (inFlight !== undefined && entry.session.own === true && !inFlight.has(entry.tab.id)));
+    const tabs = pageEntries.value.flatMap((entry) => (standIn(entry) ? [] : [entry.tab]));
     return openingTab.value === undefined ? tabs : [...tabs, openingTab.value];
 });
 // The pins whose bodies stay mounted behind the one in front: each app keeps its frame, each desktop tab its socket.
@@ -470,7 +513,7 @@ const pickStrip = (tab: StripTab): void => {
     focusPage(entry.page);
 };
 
-// A window's label: that window in front, on the page it was last on.
+// A window's mark: that window in front, on the page it was last on.
 const pickGroup = (group: StripGroup): void => {
     pendingTab.value = undefined;
     const session = group.id === OWN_GROUP ? ownWindow.value : windows.value.find((listed) => listed.name === group.id);
@@ -533,7 +576,7 @@ const address = computed<string>(() => {
     if (tab.kind === `app`) {
         return appAddress(windowOf(tab.id), tab.id);
     }
-    return typed.shown.value ?? (webAddress.value === BLANK ? `` : webAddress.value);
+    return typed.shown.value ?? (blankOnTheWay.value || webAddress.value === BLANK ? `` : webAddress.value);
 });
 // Where the address bar takes typing: a web page and a live app; the desktop's address is a name, not a place to go.
 const addressEditable = computed(() => front.value.kind === `web` || front.value.kind === `preview`);
@@ -558,6 +601,10 @@ interface PendingTab {
     readonly name: string;
     readonly pageId: string;
     readonly focus: `address` | `stage` | `page`;
+    // Opened blank: drawn as a new tab until it arrives, and where an address typed meanwhile goes (`queued`).
+    readonly blank?: boolean;
+    // The strip key of the tab drawn while it was on its way, which it takes over on arrival (StripTab's `key`).
+    readonly key?: string;
 }
 const pendingTab = shallowRef<PendingTab | undefined>();
 // A tab that never came (closed as it opened) gives up after a while, so one the same window lists later can't grab the
@@ -573,16 +620,40 @@ const awaitTab = (pending: PendingTab | undefined): void => {
         }
     }, PENDING_MS);
 };
+// A blank tab asked for and not answered yet: set on the press itself, since the ledger's run says it is busy only a
+// tick later, after the address bar has already been focused on the address being left. Once answered, the pending
+// tab's `blank` says it instead.
+const blankAsked = ref(false);
+// An address Enter sent from a blank tab still on its way, sent to that tab by id once it arrives (takePendingTab).
+const queued = ref<string | undefined>();
+// One strip key per open, and the ones tabs took over on arrival, by strip id: the tab drawn at once and the tab that
+// arrives are one tab on the strip, filled in, rather than one folding away while another grows in beside it.
+let opens = 0;
+const openingKey = ref(`${OPENING_ID}:0`);
+// The person's own tabs as the open found them, by strip id: whichever else the list carries before the open answers is
+// the one on its way.
+const ownBefore = shallowRef<ReadonlySet<string> | undefined>();
+const arrivedKeys = shallowRef<ReadonlyMap<string, string>>(new Map());
 const openOwn = async (url?: string): Promise<void> => {
-    if (opening.value) {
+    if (opening.value || blankAsked.value) {
         return;
     }
+    queued.value = undefined;
+    opens += 1;
+    openingKey.value = `${OPENING_ID}:${opens}`;
+    const own = ownWindow.value;
+    ownBefore.value = new Set(own === undefined ? [] : own.pages.map((page) => stripIdOf(own.name, page.id)));
     if (url === undefined) {
         typed.release();
     } else {
         typed.hold(url, undefined);
     }
     showTab({ kind: `web`, session: current.value?.own === true ? current.value.name : namedWindow.value });
+    if (url === undefined && current.value !== undefined) {
+        // The new tab is already in front (blankOnTheWay), so the keyboard is the address bar's now, not once it arrives.
+        blankAsked.value = true;
+        void nextTick(focusAddress);
+    }
     const ran = await opener.run({
         what: t(`browsers.browsers.starting`),
         tag: url,
@@ -592,13 +663,29 @@ const openOwn = async (url?: string): Promise<void> => {
         task: () => openBrowser(url),
     });
     const opened = ran?.state === `done` ? ran.value : undefined;
+    blankAsked.value = false;
     if (opened === undefined) {
+        queued.value = undefined;
         typed.release();
         return;
     }
     // Read here, it is no news the next time this view comes back.
     opener.dismiss();
-    awaitTab(opened.pageId === undefined ? undefined : { name: opened.name, pageId: opened.pageId, focus: url === undefined ? `address` : `stage` });
+    if (opened.pageId === undefined) {
+        // A window that could not say which tab (an older daemon): the address typed into it has no tab to go to.
+        queued.value = undefined;
+    }
+    awaitTab(
+        opened.pageId === undefined
+            ? undefined
+            : {
+                  name: opened.name,
+                  pageId: opened.pageId,
+                  focus: url === undefined && queued.value === undefined ? `address` : `stage`,
+                  blank: url === undefined,
+                  key: openingKey.value,
+              },
+    );
     if (opened.pageId === undefined) {
         // No tab to say it of: the held address has nowhere to stand.
         typed.release();
@@ -614,10 +701,20 @@ const takePendingTab = (): void => {
         return;
     }
     pendingTab.value = undefined;
+    if (pending.key !== undefined) {
+        arrivedKeys.value = new Map(arrivedKeys.value).set(stripIdOf(pending.name, page.id), pending.key);
+    }
     pickPage(page);
+    const sent = pending.blank === true ? queued.value : undefined;
+    queued.value = undefined;
+    if (sent !== undefined) {
+        // By id: the picture's `bind` just sent may not have reached the window yet, and the tab it shows is another.
+        view.navigate(sent, page.id);
+    }
     // A blank tab is for typing an address; one opened at an address is for the page, which takes the keyboard as a
     // browser gives it after Enter (the field it was typed in may be gone with the start page).
-    void nextTick(() => (pending.focus === `address` ? focusAddress() : pending.focus === `stage` ? stageEl.value?.focus() : focusPage(page)));
+    const focus = sent === undefined ? pending.focus : `stage`;
+    void nextTick(() => (focus === `address` ? focusAddress() : focus === `stage` ? stageEl.value?.focus() : focusPage(page)));
 };
 // After the render, not before: by then the picture has dialled the window being switched to (useBrowserView's own
 // watch), so the page told to it is told to the right window rather than wiped with the one being left.
@@ -673,6 +770,12 @@ const submitAddress = (text: string): void => {
     const app = loopbackPreviewTarget(url, offered.value);
     if (app !== undefined) {
         showTab({ kind: `preview`, id: app });
+        return;
+    }
+    if (front.value.kind === `web` && blankOnTheWay.value) {
+        // Typed into the new tab before it arrived: it goes there once it does, never into the tab left behind it.
+        queued.value = url;
+        typed.hold(url, pendingTab.value?.pageId);
         return;
     }
     if (front.value.kind === `web` && navigatesHere.value) {
@@ -1133,7 +1236,7 @@ const { floats } = useBrowsersFloating();
             <button
                 type="button"
                 :class="ui.iconButton({ size: `md`, round: true })"
-                :disabled="!webInFront || !interactive"
+                :disabled="!webInFront || !interactive || blankOnTheWay"
                 :aria-label="t(`browsers.browsers.back`)"
                 v-tooltip.bottom="t(`browsers.browsers.back`)"
                 @click="view.back()"
@@ -1144,7 +1247,7 @@ const { floats } = useBrowsersFloating();
                 v-if="!compact"
                 type="button"
                 :class="ui.iconButton({ size: `md`, round: true })"
-                :disabled="!webInFront || !interactive"
+                :disabled="!webInFront || !interactive || blankOnTheWay"
                 :aria-label="t(`browsers.browsers.forward`)"
                 v-tooltip.bottom="t(`browsers.browsers.forward`)"
                 @click="view.forward()"
@@ -1154,7 +1257,7 @@ const { floats } = useBrowsersFloating();
             <button
                 type="button"
                 :class="ui.iconButton({ size: `md`, round: true })"
-                :disabled="front.kind === `preview` ? frontPreview?.framed !== true : !webInFront || !interactive"
+                :disabled="front.kind === `preview` ? frontPreview?.framed !== true : !webInFront || !interactive || blankOnTheWay"
                 :aria-label="t(`ui.action.reload`)"
                 v-tooltip.bottom="t(`ui.action.reload`)"
                 @click="reload"
@@ -1439,6 +1542,15 @@ const { floats } = useBrowsersFloating();
                             </Button>
                         </template>
                     </EmptyState>
+                </div>
+
+                <!-- A blank tab of your own, from the press of + until an address commits in it: the start page's quiet
+                     face with nothing to type into but the address bar, which has the keyboard. -->
+                <div v-if="current && newTabPage" class="absolute inset-0 z-[1] flex justify-center overflow-y-auto bg-card p-6">
+                    <div class="my-auto flex w-full max-w-xl flex-col items-center gap-5">
+                        <Icon name="browsers" class="text-3xl text-subtle" />
+                        <LiveLauncher v-if="startGroups.length > 0" :groups="startGroups" variant="page" class="mt-2" @pick="launch" />
+                    </div>
                 </div>
 
                 <!-- Your own window starting from another one: it comes up behind this. A tab added to it once it runs says so on the strip instead. -->

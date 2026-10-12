@@ -21,23 +21,38 @@ export interface StripTab {
     readonly pinned: boolean;
     // The window a web page lives in, when the strip names whose tabs are whose: its tabs run together behind one label.
     readonly group?: StripGroup | undefined;
+    // What the strip knows the tab by across renders, when not its id: a tab that arrives in the place of the one drawn
+    // while it was on its way takes that one's, so it is the same tab filled in rather than one folding away as another
+    // grows in beside it.
+    readonly key?: string | undefined;
 }
 
-// One window's run of tabs on the strip: the label before its first tab, which says whose window it is and puts it in
+// One window's run of tabs on the strip: the mark before its first tab, which says whose window it is and puts it in
 // front. Every window's pages are on the strip at once, so opening a tab in one never makes another's disappear.
 export interface StripGroup {
     // Stable for the life of the window; what `pickGroup` hands back.
     readonly id: string;
+    // Whose window, in full: said on hover and to a screen reader, never drawn on the strip, where a name ran longer than
+    // the tabs it stood over.
     readonly label: string;
     // The hover's second line: who has the window now, its account, how many tabs.
     readonly note?: string | undefined;
-    // The state dot's colour: asking for help, an agent at work in it, or simply open.
-    readonly dot: string;
+    // What the strip draws for the window: a glyph (the person's own, an agent known by no name) or one letter.
+    readonly mark: GroupMark;
+    // A state worth a glance, as a dot's colour: asking for help, or an agent at work in it. None for a window simply
+    // open, which is most of them, so the strip stays quiet until something wants the reader.
+    readonly dot?: string | undefined;
     // The window whose page is in front.
     readonly current: boolean;
 }
 
-// What the strip draws, in order: every tab, and before the first tab of a labelled window, that window's label. Where
+export type GroupMark = { readonly kind: `icon`; readonly icon: IconName } | { readonly kind: `initial`; readonly letter: string };
+
+// A name's first letter or digit, upper-cased, skipping the punctuation and emoji a conversation's title may open with;
+// undefined for a name with none.
+export const initialOf = (name: string): string | undefined => [...name].find((char) => /[\p{L}\p{N}]/u.test(char))?.toLocaleUpperCase();
+
+// What the strip draws, in order: every tab, and before the first tab of a labelled window, that window's mark. Where
 // one run ends and the next begins (the pins and the web pages, one window and the next) a hairline sets them apart,
 // drawn on whatever starts the new run.
 export type StripItem =
@@ -49,10 +64,10 @@ export const stripItems = (tabs: readonly StripTab[]): StripItem[] =>
         const before = tabs[index - 1];
         const seam = before !== undefined && (before.pinned !== tab.pinned || before.group?.id !== tab.group?.id);
         if (tab.group === undefined || tab.group.id === before?.group?.id) {
-            return [{ kind: `tab`, key: tab.id, tab, seam }];
+            return [{ kind: `tab`, key: tab.key ?? tab.id, tab, seam }];
         }
         return [
             { kind: `label`, key: `group:${tab.group.id}`, group: tab.group, seam },
-            { kind: `tab`, key: tab.id, tab, seam: false },
+            { kind: `tab`, key: tab.key ?? tab.id, tab, seam: false },
         ];
     });

@@ -60,7 +60,8 @@ export interface BrowserView {
     readonly onKeyDown: (event: KeyboardEvent, onCommand?: (command: BrowserCommand) => void) => void;
     // Left to the host: the remote clipboard is the sandbox's own, and the host's paste event carries the real one.
     readonly onPaste: (event: ClipboardEvent) => void;
-    readonly navigate: (url: string) => void;
+    // The tab the picture shows, or the one `pageId` names: a tab the picture may not be on yet (one just opened).
+    readonly navigate: (url: string, pageId?: string) => void;
     readonly back: () => void;
     readonly forward: () => void;
     readonly reload: () => void;
@@ -321,7 +322,7 @@ export const useBrowserView = (name: Ref<string | undefined>, options: BrowserVi
             event.preventDefault();
             send({ type: `text`, text });
         },
-        navigate: (url) => send({ type: `navigate`, url }),
+        navigate: (url, pageId) => send(pageId === undefined ? { type: `navigate`, url } : { type: `navigate`, url, pageId }),
         back: () => send({ type: `back` }),
         forward: () => send({ type: `forward` }),
         reload: () => send({ type: `reload` }),

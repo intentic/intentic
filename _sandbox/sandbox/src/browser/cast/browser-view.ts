@@ -117,6 +117,17 @@ export const createBrowserViewRoute = (services: Services) =>
                 case "dialog":
                     await answerBrowserDialog(session, message.accept, message.text);
                     return true;
+                case "navigate":
+                    // A tab named by id goes there whichever tab the picture shows, which a `bind` sent just before may
+                    // not have reached yet; not awaited past the commit, as live-view.ts steers. Unnamed, it is the view's.
+                    if (message.pageId === undefined) {
+                        return false;
+                    }
+                    void browserSessionPage(session, message.pageId)
+                        ?.goto(message.url, { waitUntil: "commit" })
+                        // allow(silent-catch): Chromium shows its own error page for an address that goes nowhere
+                        .catch(() => undefined);
+                    return true;
                 default:
                     return false;
             }

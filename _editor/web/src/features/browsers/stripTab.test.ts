@@ -1,6 +1,6 @@
-import { stripItems, type StripGroup, type StripTab } from "./stripTab";
+import { initialOf, stripItems, type StripGroup, type StripTab } from "./stripTab";
 
-const group = (id: string): StripGroup => ({ id, label: id, dot: `bg-success`, current: false });
+const group = (id: string): StripGroup => ({ id, label: id, mark: { kind: `icon`, icon: `user` }, current: false });
 const tab = (id: string, extra: Partial<StripTab> = {}): StripTab => ({ id, label: id, icon: `globe`, closable: true, pinned: false, ...extra });
 
 // What the strip draws, read back as a line: a label is `[id]`, a seam `|` before whatever starts a new run.
@@ -40,5 +40,29 @@ describe(`the strip's runs`, () => {
         const after = stripItems([tab(`page:browser-own:p1`, { group: own })]);
         expect(before[0]?.key).toBe(`group:own`);
         expect(after[0]?.key).toBe(`group:own`);
+    });
+});
+
+describe(`a window's initial`, () => {
+    test(`is its name's first letter, upper-cased`, () => {
+        expect(initialOf(`fix the login redirect`)).toBe(`F`);
+        expect(initialOf(`Łódź trip planner`)).toBe(`Ł`);
+    });
+
+    test(`skips the punctuation and emoji a title may open with`, () => {
+        expect(initialOf(`🚀 "Ship" the release`)).toBe(`S`);
+        expect(initialOf(`#42 flaky test`)).toBe(`4`);
+    });
+
+    test(`is nothing for a name with no letter or digit`, () => {
+        expect(initialOf(``)).toBeUndefined();
+        expect(initialOf(`— …`)).toBeUndefined();
+    });
+});
+
+describe(`a tab's key`, () => {
+    test(`is its id, or the key it was given`, () => {
+        const items = stripItems([tab(`a`), { ...tab(`b`), key: `opening:1` }]);
+        expect(items.map((item) => item.key)).toEqual([`a`, `opening:1`]);
     });
 });

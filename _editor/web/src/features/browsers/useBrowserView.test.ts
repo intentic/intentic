@@ -392,6 +392,7 @@ test("the chrome's verbs go to the daemon as messages", async () => {
     const { view, wire } = await connected();
 
     view.navigate(`https://example.com/`);
+    view.navigate(`https://example.net/`, `p3`);
     view.back();
     view.forward();
     view.reload();
@@ -403,6 +404,7 @@ test("the chrome's verbs go to the daemon as messages", async () => {
 
     expect(wire()).toEqual([
         { type: `navigate`, url: `https://example.com/` },
+        { type: `navigate`, url: `https://example.net/`, pageId: `p3` },
         { type: `back` },
         { type: `forward` },
         { type: `reload` },
