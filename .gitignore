@@ -5,6 +5,8 @@
 **/.turbo
 **/dist
 **/dist-*
+# Not a build output: the dist staleness check that `suites` and agents run (the pattern above would hide it).
+!_tools/scripts/build/dist-staleness.mjs
 # The browser extension's packed artifact (_devices/webext/scripts/pack.mjs). `**/dist` does not cover it:
 # that pattern matches a path component called `dist`, and this is a file called `dist.zip`.
 **/dist.zip

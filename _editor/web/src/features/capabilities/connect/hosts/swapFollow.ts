@@ -166,7 +166,8 @@ export const followSwap = (options: SwapFollowOptions): SwapFollow => {
 
 /** Test seam: a follow outlives its view on purpose, and one left watching would follow one test into the next. */
 export const forgetSwapFollows = (): void => {
-    for (const stop of [...live]) {
+    // A Set iterates on past the entry each stop deletes, so no copy is needed.
+    for (const stop of live) {
         stop();
     }
 };
