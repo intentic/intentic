@@ -74,12 +74,14 @@ tauri-plugin-deep-link = "2"
 #
 # The rest of `windows`' features are launch.rs (a running copy that does not answer: its window, its process, and
 # ending it) and offline.rs (a workspace navigation that failed, through WebView2's own event, where webview2-com is
-# also already in the graph through wry, at the version that matches this `windows`).
+# also already in the graph through wry, at the version that matches this `windows`). `Win32_System_Registry` is
+# cli_path.rs: the user's PATH, when the installer could not put the terminal command on it.
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.61", features = [
     "Data_Xml_Dom",
     "UI_Notifications",
     "Win32_System_Com",
+    "Win32_System_Registry",
     "Win32_Foundation",
     "Win32_System_Threading",
     "Win32_UI_WindowsAndMessaging",

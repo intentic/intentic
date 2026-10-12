@@ -1,8 +1,10 @@
 import { computed, ref } from "vue";
 import { track } from "../analytics";
 import { dockerListening, dockerOpen, dockerStart, hostsSandboxes, machineSandboxCheck, takePendingDocker, workspaceOpen, type DockerStart } from "../desktop";
+import { dockerEndingLine } from "../components/dockerWords";
 import { dockerReasonOf } from "./dockerReason";
-import { dockerReady, dockerStarting, engineListening, refresh } from "./machine";
+import { onOurEngine } from "./engine";
+import { dockerReady, dockerStarting, engineListening, info, refresh } from "./machine";
 
 // STARTING THE ENGINE: the whole of what this app can do about a Docker that is not running, and it is a lot. Docker
 // Desktop does not start itself (scripts.rs has why), so the morning after a restart a machine that hosts a sandbox
@@ -66,6 +68,19 @@ export const startDocker = async (trigger: DockerTrigger = `card`): Promise<void
     if (wokeForDocker.value) {
         wokeForDocker.value = false;
         void workspaceOpen();
+    }
+};
+
+/**
+ * A start pressed where the Docker card is not drawn (a folder window's card, host.ts `act`): the same start, and a start
+ * that did not bring the engine up rejects with the card's own words for how it ended (dockerWords.ts), so the press
+ * says it where it was made. Until 2026-10-12 that ending was said on This computer alone.
+ */
+export const startDockerAndSay = async (): Promise<void> => {
+    await startDocker(`card`);
+    const report = dockerReport.value;
+    if (report !== undefined && report.outcome !== `ready`) {
+        throw new Error(dockerEndingLine(report.outcome, { ours: onOurEngine.value, windows: info.value?.os === `windows` }));
     }
 };
 

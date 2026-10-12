@@ -119,3 +119,25 @@ it(`says why a press did nothing, and clears it at the next`, async () => {
     await store.retryMachine();
     expect(store.machineActionError.value).toBeUndefined();
 });
+
+// A folder window's card says a refusal under its own press (host.ts `act`, localHost.ts's contract): its presses reject
+// with the app's sentence, which This device's buttons show beside them too, while those buttons' own forms never reject.
+it(`hands a refusal back to a press made from a folder window's card, in the app's own words`, async () => {
+    const store = await load();
+    refuse = `This computer's sandbox isn't on this computer yet.`;
+    const refusals = await Promise.all(
+        [store.machineVerbs.start(), store.machineVerbs.retry(), store.machineVerbs.recreate()].map((press) =>
+            press.then(
+                () => `went through`,
+                (error: unknown) => (error instanceof Error ? error.message : `not an Error`),
+            ),
+        ),
+    );
+    const quiet = await store.recreateMachine().then(() => `resolved`);
+    expect([refusals, quiet, store.machineActionError.value, store.machineStarting.value]).toEqual([
+        [refuse, refuse, refuse],
+        `resolved`,
+        refuse,
+        false,
+    ]);
+});

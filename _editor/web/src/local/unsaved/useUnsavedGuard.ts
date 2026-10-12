@@ -1,12 +1,13 @@
 import { onMounted, onUnmounted, watch } from "vue";
-import { confirmDesktopWindowClose, markDesktopWindowDirty } from "../app/environments/desktop";
-import { LOCAL_CLOSE_REQUESTED_EVENT } from "../app/environments/local";
-import { useCloseGuard } from "../features/workspace/tabs/useCloseGuard";
+import { confirmDesktopWindowClose, markDesktopWindowDirty } from "../../app/environments/desktop";
+import { LOCAL_CLOSE_REQUESTED_EVENT } from "../../app/environments/local";
+import { useCloseGuard } from "../../features/workspace/tabs/useCloseGuard";
 
 // A local window's unsaved work, and every close that would lose it. The tabs' side is the workspace's own guard
 // (useCloseGuard.ts); this adds the window. The desktop app is told whenever the window turns dirty or clean (and once on
 // mount), holds back a close it believes would lose work and asks the page (`intentic:close-requested`), which asks the
-// reader and answers only with a close they agreed to.
+// reader and answers only with a close they agreed to. Held by the window's shell (LocalShell.vue), never by one of its
+// screens: the app hands the question over whichever screen is up, and a screen that is gone answers nothing.
 
 export const useUnsavedGuard = () => {
     const guard = useCloseGuard();

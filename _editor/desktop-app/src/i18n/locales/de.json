@@ -19,32 +19,37 @@
         "installKeepsRunning": "Installation läuft weiter",
         "intenticDownloadedInstallsQuit": "Intentic {version} ist heruntergeladen. Es wird beim Beenden installiert — oder jetzt:",
         "keepFolderInSync": "Diesen Ordner mit {what} synchron halten?",
-        "mirroringPortsFrom": "Ports von {sandbox} auf dieses Gerät spiegeln",
+        "mirroringPortsFrom": "Ports von {sandbox} auf diesen Computer spiegeln",
         "nothingOnComputerChanges": "Auf diesem Computer ändert sich nichts, bis Sie es sagen.",
         "openFolder": "Ordner öffnen",
         "openWorkspace": "Workspace öffnen",
         "pickingUpWhereRestart": "Es geht dort weiter, wo der Neustart aufgehört hat. Es ist nichts zu tun: dieses Fenster macht von selbst weiter.",
-        "removesSandboxKeepsFiles": "Das entfernt die Sandbox von diesem Gerät. Die Dateien und die Historie der Sandbox lassen sich noch eine Woche lang wiederherstellen: Führen Sie auf diesem Computer ic sandbox restore {slug} aus, um sie zurückzuholen.",
-        "runningOnDeviceKeeps": "Läuft auf diesem Gerät: es macht weiter, auch wenn Sie dieses Fenster schließen.",
+        "removesSandboxKeepsFiles": "Das entfernt die Sandbox von diesem Computer. Die Dateien und die Historie der Sandbox lassen sich noch eine Woche lang wiederherstellen: Führen Sie auf diesem Computer ic sandbox restore {slug} aus, um sie zurückzuholen.",
+        "runningOnDeviceKeeps": "Läuft auf diesem Computer: es macht weiter, auch wenn Sie dieses Fenster schließen.",
         "sandbox": "Ihre Sandbox",
         "sandboxRunsInDocker": "Ihre Sandbox läuft in Docker, und das läuft noch nicht. Zuerst wird geprüft, was Ihr PC braucht, und vor jeder Änderung wird gefragt.",
         "sandboxRunsInDocker2": "Ihre Sandbox läuft in Docker, und das läuft noch nicht. Die Einrichtung installiert es zuerst, deshalb fragt Ihr System einmal nach Ihrem Passwort.",
-        "sandboxesOnDevice": "Sandboxes auf diesem Gerät",
+        "sandboxesOnDevice": "Sandboxes auf diesem Computer",
         "saysPairingAlreadyUsed": "Wenn dort steht, die Kopplung sei schon benutzt oder abgelaufen, erzeugen Sie sie in Ihrem Workspace neu.",
         "seeAllDevices": "Alle Ihre Geräte ansehen",
         "settingUp": "Wird eingerichtet:",
-        "setupCodeRanOut": "Ihr Einrichtungscode ist abgelaufen, während dieses Gerät weg war. Alles, wofür der Neustart war, ist bereits erledigt; es braucht nur einen neuen Code, um weiterzumachen.",
-        "setupCodeRanOutHere": "Ihr Einrichtungscode ist abgelaufen, bevor dieses Gerät ihn verwenden konnte, und ein neuer ließ sich von hier aus nicht holen. Nichts bisher Erledigte geht verloren; es braucht nur einen neuen Code, um weiterzumachen.",
+        "setupCodeRanOut": "Ihr Einrichtungscode ist abgelaufen, während dieser Computer weg war. Alles, wofür der Neustart war, ist bereits erledigt; es braucht nur einen neuen Code, um weiterzumachen.",
+        "setupCodeRanOutHere": "Ihr Einrichtungscode ist abgelaufen, bevor dieser Computer ihn verwenden konnte, und ein neuer ließ sich von hier aus nicht holen. Nichts bisher Erledigte geht verloren; es braucht nur einen neuen Code, um weiterzumachen.",
         "showLog": "Protokoll anzeigen",
         "startDocker": "Docker starten",
-        "startingOnDevice": "Wird auf diesem Gerät gestartet…",
-        "stoppedInstallNothingElse": "Sie haben diese Installation gestoppt. Auf diesem Gerät läuft sonst nichts.",
+        "startingOnDevice": "Wird auf diesem Computer gestartet…",
+        "stoppedInstallNothingElse": "Sie haben diese Installation gestoppt. Auf diesem Computer läuft sonst nichts.",
         "stopping": "Wird gestoppt…",
         "updateRestart": "Aktualisieren und neu starten",
         "yourSandbox": "Ihrer Sandbox",
         "newerIntenticInstalled": "Eine neuere Version von Intentic ist installiert. Starten Sie Intentic neu, um sie zu verwenden.",
         "restartIntentic": "Intentic neu starten",
-        "startEngine": "Engine starten"
+        "startEngine": "Engine starten",
+        "pcSetupFirst": "Dieser PC braucht Docker, bevor Ihre Sandbox darauf laufen kann, deshalb wartet die Einrichtung der Sandbox auf die Einrichtung dieses PCs. Sobald dieser PC bereit ist, geht es von selbst weiter.",
+        "pcSetupChecking": "Es wird geprüft, was dieser PC braucht…",
+        "setUpThisPc": "Diesen PC einrichten",
+        "pcSetupAdminDeclined": "Windows hat keine Administratorberechtigung erhalten, daher hat sich nichts geändert. Richten Sie diesen PC erneut ein und wählen Sie „Ja“, wenn Windows fragt.",
+        "pcSetupFailed": "Die Einrichtung dieses PCs ist vor dem Abschluss stehen geblieben."
     },
     "closeConfirm": {
         "alwaysDoDontAsk": "Immer so machen: nicht mehr fragen",
@@ -58,7 +63,7 @@
     },
     "deviceAgent": {
         "latestUnknown": "Neueste unbekannt",
-        "servingInstalledBuild": "Läuft mit der auf diesem Gerät installierten Version.",
+        "servingInstalledBuild": "Läuft mit der auf diesem Computer installierten Version.",
         "workspaceChecksUpdates": "Workspace prüft Updates"
     },
     "docker": {
@@ -92,32 +97,351 @@
         "tryOpeningItYourself": "Versuchen Sie, es selbst zu öffnen, und prüfen Sie dann erneut.",
         "waitedOf": "Wartet seit {elapsed} · gibt nach {limit} auf"
     },
+    "fix": {
+        "didntStart": "Die Reparatur ist nicht gestartet",
+        "failed": "Eine Reparatur hat nicht funktioniert",
+        "finished": "Die Reparatur ist abgeschlossen",
+        "fixed": "{sandbox} ist repariert",
+        "fixing": "{sandbox} wird repariert",
+        "healthy": "Mit {sandbox} war auf diesem Computer alles in Ordnung",
+        "icCantFixYet": "Der ic-Befehl auf diesem Computer kann noch keine Reparatur ausführen",
+        "needsYou": "Einiges davon braucht Sie",
+        "needsYourYes": "Manche Reparaturen warten auf Ihr Ja. Klicken Sie unten auf eine, und ic führt sie aus.",
+        "ranTooLong": "Sie lief {minutes} Minuten, ohne fertig zu werden, und wurde deshalb gestoppt. Versuchen Sie es von Ihrem Workspace aus erneut.",
+        "restartToFinish": "Starten Sie diesen Computer neu oder melden Sie sich ab, um abzuschließen.",
+        "somethingLeft": "Die Reparatur ist abgeschlossen, aber etwas ist noch offen",
+        "stageAsking": "Wartet auf eine Antwort",
+        "stageChecking": "Dieser Computer wird geprüft",
+        "stageDone": "Wird abgeschlossen",
+        "stageFixing": "Gefundenes wird behoben",
+        "stageStarting": "Wird gestartet",
+        "stateFail": "fehlgeschlagen",
+        "stateFixing": "wird behoben",
+        "stateSkip": "übersprungen",
+        "stateWarn": "Warnung",
+        "stopped": "Die Reparatur wurde gestoppt",
+        "updateIc": "Richten Sie diese Sandbox hier erneut ein, um ic zu aktualisieren, und versuchen Sie es dann von Ihrem Workspace aus erneut.",
+        "waitingForOtherRun": "Wartet, bis das, was auf diesem Computer bereits läuft, fertig ist."
+    },
     "requirements": {
+        "badge": {
+            "done": "erledigt",
+            "failed": "hat nicht funktioniert",
+            "needsRestart": "Neustart nötig",
+            "needsSignOut": "Abmeldung nötig",
+            "onHost": "auf der Host-Maschine",
+            "unsupported": "nicht unterstützt",
+            "waitingForYou": "wartet auf Sie",
+            "weDoIt": "erledigen wir",
+            "working": "in Arbeit",
+            "youDoIt": "müssen Sie erledigen"
+        },
         "beforeSandboxRunHere": "Bevor Ihre Sandbox hier laufen kann:",
         "checkAgain": "Erneut prüfen",
-        "deviceCantRunSandbox": "Dieses Gerät kann noch keine Sandbox betreiben:",
+        "deviceCantRunSandbox": "Dieser Computer kann noch keine Sandbox betreiben:",
+        "doTheseAndContinue": "Diese Schritte erledigen und fortfahren",
+        "doThisAndContinue": "Das erledigen und fortfahren",
         "hideSteps": "Schritte ausblenden",
         "restartNow": "Jetzt neu starten",
         "runOnMachineWe": "Auf einer Maschine laufen lassen, die wir betreiben",
+        "setupSaved": "Ihre Einrichtung ist gespeichert: Dieses Fenster macht damit weiter, sobald Sie zurück sind.",
         "showMeHow": "Zeig mir, wie",
+        "signOutAgain": "Ab- und wieder Anmelden hat es auf diesem PC nicht aktualisiert. Ein Neustart klappt immer: Ihre Einrichtung ist gespeichert und geht von selbst weiter, sobald Sie zurück sind.",
+        "signOutExhausted": "Selbst ein Neustart hat es nicht übernommen. Wer diesen PC betreut, muss Ihr Konto eventuell von Hand zur Docker-Gruppe hinzufügen; bis dahin kann Ihre Sandbox auf einer Maschine laufen, die wir betreiben.",
         "signOutNow": "Jetzt abmelden",
+        "tryAgain": "Erneut versuchen",
         "windowsAskPermissionOnce": "Windows fragt einmal nach einer Berechtigung."
     },
     "setupPlan": {
+        "aboutMinutes": "etwa {count} Minute | etwa {count} Minuten",
         "checkAnswers": "Prüfen, ob sie antwortet",
-        "checkDevice": "Dieses Gerät prüfen",
-        "connectDevice": "Dieses Gerät verbinden",
+        "checkDevice": "Diesen Computer prüfen",
+        "checkDocker": "Docker prüfen",
+        "checkDockerNeeds": "Prüfen, was Docker braucht",
+        "connectDevice": "Diesen Computer verbinden",
         "downloadSandboxImage": "Sandbox-Image herunterladen",
         "fetchInstaller": "Installationsprogramm holen",
+        "installDocker": "Docker installieren",
+        "lessThanMinute": "weniger als eine Minute",
         "redeemSetupCode": "Einrichtungscode einlösen",
+        "setUpDocker": "Docker einrichten",
         "setUpFolderSync": "Ordner-Synchronisierung einrichten",
         "startSandbox": "Ihre Sandbox starten",
+        "stepOf": "Schritt {index} von {total}",
         "useSandboxImage": "Sandbox-Image von diesem Computer verwenden",
-        "waitToComeUp": "Warten, bis sie hochkommt"
+        "waitToComeUp": "Warten, bis sie hochkommt",
+        "downloadedOf": "{done} von {total} heruntergeladen",
+        "loadingImage": "Das Image wird in Docker geladen…"
     },
     "setupProgress": {
+        "allDone": "Alles erledigt",
+        "gettingStarted": "Es geht los",
         "hideSteps": "Schritte ausblenden",
         "pausedAt": "Angehalten bei {toLowerCase}",
-        "seeAllSteps": "Alle {count} Schritte ansehen"
+        "seeAllSteps": "Alle {count} Schritte ansehen",
+        "stopped": "Gestoppt",
+        "stoppedAt": "Gestoppt bei {position}",
+        "stoppedAtThisStep": "Bei diesem Schritt gestoppt",
+        "waitingForYou": "Wartet auf Sie"
+    },
+    "device": {
+        "title": "Dieser Computer",
+        "lead": "Die Sandboxes, die auf diesem Computer laufen, sein Maschinen-Agent und die Docker-Engine, in der sie laufen.",
+        "thisDevice": "dieser Computer",
+        "agentHeading": "Agent auf diesem Computer",
+        "dockerIsntRunning": "Docker läuft nicht, also laufen auch die Sandboxes auf diesem Computer nicht.",
+        "oursIsntRunning": "Die Intentic-Engine läuft nicht, also laufen auch die Sandboxes auf diesem Computer nicht.",
+        "oursHeld": "Die Intentic-Engine wurde absichtlich gestoppt (ic engine stop), daher laufen die Sandboxes auf diesem Computer nicht. Nichts startet sie wieder, bis Sie es tun.",
+        "noSandboxTitle": "Auf diesem Computer läuft keine Sandbox",
+        "noSandboxLead": "Agenten arbeiten in einer Sandbox: einem eigenen Computer mit Ihren Repositories, Tools und Konten. Sie kann hier in Docker laufen oder auf einer Maschine, die wir betreiben. Ihre Dateien auf diesem Computer brauchen keine.",
+        "setOneUp": "Eine einrichten",
+        "signInToSetUp": "Melden Sie sich an, um eine einzurichten",
+        "folderHolds": "Er enthält bereits {count} Element, und auch die eigenen Dateien der Sandbox landen darin. | Er enthält bereits {count} Elemente, und auch die eigenen Dateien der Sandbox landen darin.",
+        "folderUnread": "Was er bereits enthält, ließ sich nicht lesen ({error}); alles darin wird ebenfalls synchronisiert.",
+        "syncsBothWays": "Alles in diesem Ordner wird in beide Richtungen mit {what} synchronisiert: Änderungen, die Agenten in der Sandbox vornehmen, erscheinen hier, ohne dass sie sich rückgängig machen lassen.",
+        "startSyncing": "Synchronisierung starten",
+        "settingUpBadge": "{name} wird eingerichtet",
+        "needsYouBadge": "braucht Sie",
+        "startingDockerBadge": "Docker wird gestartet",
+        "updateReadyBadge": "ein Update ist bereit",
+        "machineBadge": "Sandbox dieses Computers wird eingerichtet",
+        "keptBy": "Betreut von {place}",
+        "keptByNote": "Starten, Stoppen und Neustarten funktionieren hier",
+        "keptByTitle": "Die Wartung läuft dort",
+        "agentsElsewhere": "Der Maschinen-Agent von Intentic läuft auf diesem Computer auch in {places} und kümmert sich um die dort eingerichteten Sandboxes.",
+        "pcSettingUpBadge": "dieser PC wird eingerichtet",
+        "pcSetupBadge": "dieser PC kann für Agenten eingerichtet werden"
+    },
+    "machineSandbox": {
+        "title": "Die Sandbox dieses Computers",
+        "state": {
+            "signedOut": "wird nach der Anmeldung erstellt",
+            "needsDocker": "braucht Docker",
+            "creating": "wird eingerichtet",
+            "waiting": "braucht Ihr OK",
+            "ready": "bereit",
+            "stopped": "gestoppt",
+            "failed": "nicht eingerichtet",
+            "interrupted": "macht dort weiter, wo sie aufgehört hat",
+            "gone": "nicht mehr da"
+        },
+        "detail": {
+            "signedOut": "Melden Sie sich an, und Intentic erstellt auf diesem Computer eine Sandbox für die Ordner, an denen Sie mit einem Agenten arbeiten.",
+            "needsDocker": {
+                "notInstalled": "Sie läuft in Docker, das nicht auf diesem Computer ist. Installieren Sie Docker Desktop, und Intentic richtet die Sandbox ein, sobald es läuft.",
+                "notRunning": "Sie läuft in Docker, und Docker läuft nicht. Starten Sie es, dann macht Intentic von selbst weiter.",
+                "notAllowed": "Docker läuft, weist dieses Konto aber ab. Fügen Sie Ihr Konto der Docker-Gruppe hinzu (docker-users unter Windows), und melden Sie sich dann ab und wieder an."
+            },
+            "creating": "Intentic richtet sie im Hintergrund ein. Ihre Ordner kommen hinein, sobald sie bereit ist.",
+            "interrupted": "Intentic wurde während der Einrichtung geschlossen, deshalb geht es dort weiter, wo es aufgehört hat.",
+            "waiting": "Dieser Computer braucht noch ein paar Dinge, bevor er eine Sandbox betreiben kann.",
+            "ready": "Die Ordner, an denen Sie mit einem Agenten arbeiten, kommen hinein, jeder in einen eigenen Ordner.",
+            "stopped": "Sie ist auf diesem Computer, läuft aber nicht. Starten Sie sie, um mit einem Agenten an Ihren Ordnern zu arbeiten.",
+            "failed": "Ihre Einrichtung ist stehen geblieben. Das Protokoll zeigt, woran sie gerade war.",
+            "gone": "Sie ist nicht mehr auf diesem Computer. Richten Sie sie erneut ein, dann kommen Ihre Ordner wieder hinein, mit ihren Dateien, falls dieser Computer sie noch hat."
+        },
+        "percent": "{percent} %",
+        "open": "Öffnen",
+        "signIn": "Anmelden",
+        "getDocker": "Docker Desktop holen",
+        "showLog": "Protokoll anzeigen",
+        "start": "Starten",
+        "recreate": "Erneut einrichten",
+        "folder": {
+            "queued": "wartet",
+            "attaching": "wird hinzugefügt",
+            "copying": "wird kopiert",
+            "ready": "hinzugefügt",
+            "failed": "konnte nicht hinzugefügt werden"
+        },
+        "waitsForPc": "Sie wird erstellt, sobald dieser PC für Agenten eingerichtet ist."
+    },
+    "engine": {
+        "runsOn": {
+            "dockerDesktop": "Ihre Sandboxes laufen auf Docker Desktop",
+            "intentic": "Ihre Sandboxes laufen auf der Intentic-Engine"
+        },
+        "offerTitle": "Ihre Sandboxes auf die Intentic-Engine verschieben",
+        "why": "Die eigene Engine von Intentic betreibt sie ohne Docker Desktop, und Intentic hält sie aktuell und am Laufen.",
+        "what": "Jede Sandbox stoppt, während ihre Dateien kopiert werden. Docker Desktop behält 7 Tage lang eine Kopie, und Sie können zurückwechseln.",
+        "gpu": "Der Umzug auf die Intentic-Engine ist nicht möglich: Eine Sandbox hier nutzt die Grafikkarte (GPU) dieses Computers, und die kann ihr nur Docker Desktop geben.",
+        "keptRunning": "Intentic hält sie aktuell und am Laufen.",
+        "moveToIntentic": "Auf die Intentic-Engine verschieben",
+        "notNow": "Nicht jetzt",
+        "moveBack": "Zurück zu Docker Desktop verschieben",
+        "confirm": {
+            "toIntenticTitle": "Ihre Sandboxes auf die Intentic-Engine verschieben?",
+            "toIntentic": "Jede Sandbox stoppt, während ihre Dateien kopiert werden, was pro Sandbox einige Minuten dauern kann. Docker Desktop behält 7 Tage lang eine Kopie, und Sie können zurückwechseln.",
+            "toDockerDesktopTitle": "Ihre Sandboxes zurück zu Docker Desktop verschieben?",
+            "toDockerDesktop": "Jede Sandbox stoppt, während ihre Dateien kopiert werden, was pro Sandbox einige Minuten dauern kann. Die Intentic-Engine behält 7 Tage lang eine Kopie.",
+            "move": "Verschieben"
+        },
+        "movingTo": {
+            "intentic": "Ihre Sandboxes werden auf die Intentic-Engine verschoben",
+            "dockerDesktop": "Ihre Sandboxes werden zurück zu Docker Desktop verschoben",
+            "other": "Ihre Sandboxes werden verschoben"
+        },
+        "whileMoving": "Jede Sandbox stoppt, während ihre Dateien kopiert werden. Wenn etwas schiefgeht, wird jede Sandbox wieder so hergestellt, wie sie war.",
+        "step": {
+            "engine": "Zuerst wird die Intentic-Engine installiert",
+            "begin": "Wird vorbereitet",
+            "stopping": "Wird gestoppt",
+            "image": "Image wird kopiert",
+            "volume": "Dateien werden kopiert",
+            "starting": "Wird wieder gestartet",
+            "moved": "Verschoben"
+        },
+        "position": "Sandbox {index} von {count}",
+        "copied": "{done} von {total}",
+        "copiedAbout": "{done} von etwa {total}",
+        "copiedSoFar": "{done} kopiert",
+        "keepsGoing": "Das Schließen dieses Fensters hält den Vorgang nicht an.",
+        "moved": {
+            "intentic": "Fertig: Ihre Sandboxes laufen jetzt auf der Intentic-Engine.",
+            "dockerDesktop": "Fertig: Ihre Sandboxes laufen jetzt auf Docker Desktop."
+        },
+        "didntFinish": "Der Umzug wurde nicht abgeschlossen",
+        "putBack": "Alles ist wieder, wo es war.",
+        "stoppedPartWay": "Er ist auf halbem Weg stehen geblieben, daher ist eine Sandbox möglicherweise noch gestoppt. Das Protokoll zeigt, wie weit er gekommen ist.",
+        "showLog": "Protokoll anzeigen",
+        "busy": "Auf diesem Computer läuft bereits ein anderer Umzug. Versuchen Sie es erneut, sobald er fertig ist.",
+        "didntStart": "Der Umzug ist nicht gestartet",
+        "kept": {
+            "dockerDesktop": "Docker Desktop behält bis zum {date} eine Kopie Ihrer Sandbox. | Docker Desktop behält bis zum {date} eine Kopie Ihrer Sandboxes.",
+            "intentic": "Die Intentic-Engine behält bis zum {date} eine Kopie Ihrer Sandbox. | Die Intentic-Engine behält bis zum {date} eine Kopie Ihrer Sandboxes."
+        },
+        "removeNow": "Jetzt entfernen",
+        "removing": "Wird entfernt…",
+        "removeCopies": {
+            "title": "Die Kopien jetzt entfernen?",
+            "body": "Sie sind der Weg zurück zu dem Zustand Ihrer Sandboxes vor dem Umzug. Die Sandboxes, die Sie jetzt nutzen, bleiben unberührt.",
+            "remove": "Entfernen"
+        },
+        "copiesStay": {
+            "dockerDesktop": "Docker Desktop muss laufen, um seine Kopien zu entfernen. Starten Sie es und versuchen Sie es dann erneut.",
+            "intentic": "Die Intentic-Engine ist nicht gestartet, daher bleiben ihre Kopien erhalten. Versuchen Sie es später erneut."
+        },
+        "movingBadge": "Sandboxes werden verschoben"
+    },
+    "account": {
+        "profileUpdateFailed": "Das Profil konnte nicht aktualisiert werden.",
+        "sessionCheckFailed": "Ihre Sitzung konnte nicht geprüft werden.",
+        "signOutFailed": "Abmelden fehlgeschlagen."
+    },
+    "setup": {
+        "stuckInstallerNotStopped": "Das hängende Installationsprogramm konnte nicht gestoppt werden: {error}"
+    },
+    "onboarding": {
+        "needsYou": "Windows bittet um Ihre Erlaubnis",
+        "machineSep": ", ",
+        "machineMemory": "{gb} GB Arbeitsspeicher",
+        "machineFree": "{gb} GB frei",
+        "rows": {
+            "wsl-features": "Windows-Subsystem für Linux",
+            "virtualization": "Virtualisierung in der Firmware",
+            "memory": "Genug Arbeitsspeicher",
+            "windows-edition": "Windows-Edition",
+            "engine": "Container-Engine",
+            "engine-start": "Container-Engine läuft",
+            "docker-desktop": "Docker Desktop",
+            "docker-path": "Docker im PATH",
+            "docker-users": "Docker-Berechtigung für dieses Konto",
+            "wsl": "Linux-Unterstützung für Windows (WSL 2)",
+            "wsl-kernel": "Linux-Kernel für WSL",
+            "disk-space": "Genug freier Speicherplatz",
+            "docker-running": "Docker Desktop läuft",
+            "docker-linux-containers": "Docker auf Linux-Container eingestellt",
+            "docker-own": "Ihr eigenes Docker",
+            "arch": "Ein 64-Bit-Prozessor von Intel oder AMD",
+            "windows-version": "Windows-Version",
+            "slat": "Virtualisierungsfunktionen des Prozessors",
+            "nested-virtualization": "Virtualisierung in dieser virtuellen Maschine",
+            "pending-restart": "Ein Neustart, auf den Windows wartet",
+            "check": "Dieser PC wird ausgelesen"
+        }
+    },
+    "pcSetup": {
+        "title": "Agenten auf diesem PC einrichten",
+        "state": {
+            "checkUnknown": "konnte nicht geprüft werden",
+            "needsSetup": "noch nicht eingerichtet",
+            "settingUp": "wird eingerichtet",
+            "restart": "Neustart nötig",
+            "admin": "braucht die Erlaubnis von Windows",
+            "signOut": "Abmeldung nötig",
+            "setupFailed": "angehalten",
+            "cantRun": "kann keine Agenten ausführen"
+        },
+        "passed": "{met} von {total} Prüfungen bestanden",
+        "cost": {
+            "minutes": "Etwa {count} Minuten",
+            "restart": "ein Neustart",
+            "download": "{size} Download",
+            "admin": "Windows fragt einmal nach einer Berechtigung"
+        },
+        "unknown": "Etwas hat Intentic daran gehindert auszulesen, ob dieser PC Agenten ausführen kann. Prüfen Sie erneut, oder richten Sie ihn trotzdem ein: Die Einrichtung findet es selbst heraus.",
+        "needsYou": "Windows bittet um Ihre Erlaubnis. Wählen Sie „Ja“, um fortzufahren.",
+        "minutesLeft": "noch {count} Min.",
+        "quiet": {
+            "title": "Seit {count} Minuten keine Rückmeldung von der Einrichtung",
+            "body": "Windows wartet vielleicht in einem Fenster hinter diesem auf eine Antwort, schauen Sie also zuerst in die Taskleiste. Wartet dort nichts, zeigt das Protokoll, was die Einrichtung zuletzt getan hat, und Sie können sie erneut starten.",
+            "again": "Erneut starten"
+        },
+        "restart": {
+            "body": "Ein Neustart schließt die Einrichtung dieses PCs ab: Windows braucht ihn, um die Linux-Unterstützung einzuschalten. Intentic öffnet sich danach von selbst und ist in etwa zwei Minuten fertig.",
+            "at": "Neustart um {time}.",
+            "cancel": "Neustart abbrechen",
+            "in10Minutes": "In 10 Minuten",
+            "later": "Später",
+            "save": "Speichern Sie zuerst Ihre Arbeit in anderen Apps."
+        },
+        "signOut": "Melden Sie sich bei Windows ab und wieder an, um die Einrichtung dieses PCs abzuschließen. Sie geht von selbst weiter, sobald Sie zurück sind.",
+        "repair": "Repair fragen",
+        "hosted": "Stattdessen kann ein Computer, den wir betreiben, Ihre Agenten ausführen.",
+        "cloud": "Intentic in der Cloud nutzen",
+        "ready": "Dieser PC ist bereit für Agenten.",
+        "signIn": {
+            "now": "Melden Sie sich an, und Intentic erstellt die Sandbox, in der Ihre Agenten arbeiten.",
+            "meanwhile": "Agenten arbeiten unter Ihrem Konto. Melden Sie sich an, wann Sie möchten: Die Einrichtung dieses PCs wartet nicht darauf."
+        },
+        "prefetch": {
+            "label": "Was Agenten brauchen, wird heruntergeladen",
+            "todo": "{total} herunterzuladen",
+            "progress": "{done} von {total}",
+            "paused": "pausiert",
+            "metered": "wartet auf eine nicht getaktete Verbindung",
+            "yielded": "pausiert, während auf diesem Computer eine Sandbox eingerichtet wird",
+            "failed": "Der Download ist vor dem Ende stehen geblieben.",
+            "retrying": "Gleich ein neuer Versuch.",
+            "later": "Was bereits da ist, bleibt erhalten, und die Einrichtung lädt den Rest herunter, wenn sie läuft.",
+            "pause": "Pausieren",
+            "resume": "Fortsetzen",
+            "anyway": "Trotzdem herunterladen"
+        },
+        "task": {
+            "title": "Geben Sie Agenten eine erste Aufgabe",
+            "lead": "Wählen Sie einen Ordner und sagen Sie, was erledigt werden soll.",
+            "placeholder": "Beschreiben Sie die Aufgabe für Ihre Agenten…",
+            "pickFolder": "Ordner wählen",
+            "changeFolder": "Ordner ändern",
+            "queue": "Aufgabe einreihen",
+            "keptTitle": "Ihre erste Aufgabe",
+            "edit": "Bearbeiten",
+            "sending": "Wird gesendet…",
+            "failedTitle": "Ihre erste Aufgabe ist nicht gestartet",
+            "starts": {
+                "pc": "Sie startet von selbst, sobald dieser PC bereit ist.",
+                "pcAndSignIn": "Sie startet von selbst, sobald dieser PC bereit ist und Sie angemeldet sind.",
+                "signIn": "Sie startet, sobald Sie sich anmelden.",
+                "now": "Sie startet sofort."
+            }
+        }
+    },
+    "leftovers": {
+        "title": "{count} alte Sandbox von diesem Computer ist noch in Ihrem Konto | {count} alte Sandboxes von diesem Computer sind noch in Ihrem Konto",
+        "detail": "{names}. Nichts betreibt sie mehr: Dieser Computer hat jetzt nur noch eine Sandbox.",
+        "remove": "Entfernen",
+        "confirmHeader": "{count} alte Sandbox entfernen? | {count} alte Sandboxes entfernen?",
+        "confirmDetail": "Wir nehmen {names} aus Ihrem Konto. Sie können sie 7 Tage lang aus dem Papierkorb wiederherstellen."
     }
 }

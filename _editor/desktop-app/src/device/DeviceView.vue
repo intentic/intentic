@@ -27,6 +27,7 @@ import { openUrl, revealLog, signIn, workspaceOpen } from "../desktop";
 import LeftoverSandboxes from "./machineSandbox/LeftoverSandboxes.vue";
 import MachineSandboxSection from "./machineSandbox/MachineSandboxSection.vue";
 import { machineSandbox } from "./machineSandbox";
+import { followOnScreen, onScreen } from "../onScreen";
 import PcSetupCard from "./pcSetup/PcSetupCard.vue";
 import { pcCardShown } from "./pcSetup/livePcCard";
 import { DEVICES_PATH, DOCKER_DOCS, REFRESH_EVERY_MS, useDevice } from "./useDevice";
@@ -194,15 +195,16 @@ const toSetup = async (): Promise<void> => {
 const backTip = computed((): Tip => ({ title: t(`desktop.app.openWorkspace`), note: running.value ? t(`desktop.app.installKeepsRunning`) : `` }));
 
 // Read on arrival and then again while the page is on screen, so a sandbox started from the workspace or an agent that
-// came back shows up without a press. A hidden window reads nothing, and reads at once when it is shown again. One read
-// at a time: a docker that is not there can hold a read past the next tick, which then waits for it instead of piling on.
+// came back shows up without a press. A hidden window reads nothing, and reads at once when it is shown again: hidden as
+// the app says it (onScreen.ts), since a Windows webview in the tray still calls itself visible. One read at a time: a
+// docker that is not there can hold a read past the next tick, which then waits for it instead of piling on.
+followOnScreen();
 const reading = usePoll({
     everyMs: REFRESH_EVERY_MS,
+    visible: onScreen,
     check: async () => {
-        if (document.visibilityState === `visible`) {
-            await refresh();
-            followEngine();
-        }
+        await refresh();
+        followEngine();
     },
 });
 onMounted(() => {
@@ -581,6 +583,7 @@ onMounted(() => {
                  needs a command to go and type. Absent on a computer that has none, which is an ordinary state. -->
             <DeviceAgentGroup
                 v-if="agentPanel"
+                :label="t(`desktop.device.agentHeading`)"
                 :panel="agentPanel"
                 :subject="machineName"
                 :busy="running || busy !== undefined"

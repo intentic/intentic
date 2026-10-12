@@ -22,15 +22,9 @@ import {
     workspaceOpen,
 } from "./desktop";
 import { deviceBadge } from "./device/badge";
-import {
-    machineFolderOf,
-    machineSandbox,
-    recreateMachine,
-    retryMachine,
-    revealMachineLog,
-    startMachine,
-    startMachineSandbox,
-} from "./device/machineSandbox";
+import { startDockerAndSay } from "./device/docker";
+import { machineFolderOf, machineSandbox, machineVerbs, startMachineSandbox } from "./device/machineSandbox";
+import { followOnScreen } from "./onScreen";
 import { folderOf, machineOf, machineStateOf, projectPathOf } from "./device/projectBuild";
 import { useDevice } from "./device/useDevice";
 
@@ -81,14 +75,16 @@ const folderPath = (): string | undefined => {
     return face === undefined || face.file !== undefined ? undefined : face.path;
 };
 
+// Each rejects with the sentence the card says under its press (localHost.ts `LocalHost`): the app's refusal, or how a
+// start of the engine ended.
 const MACHINE_ACTIONS: Readonly<Record<LocalMachineAction, () => Promise<void>>> = {
     signIn: () => signIn(),
     // This window's own start of the engine, the one This device's card draws; the app looks again once it answers.
-    startDocker: () => useDevice().startDocker(`card`),
-    retry: () => retryMachine(),
-    start: () => startMachine(),
-    recreate: () => recreateMachine(),
-    log: () => revealMachineLog(),
+    startDocker: () => startDockerAndSay(),
+    retry: () => machineVerbs.retry(),
+    start: () => machineVerbs.start(),
+    recreate: () => machineVerbs.recreate(),
+    log: () => machineVerbs.log(),
 };
 
 const PROJECT: LocalProjectHost = {
@@ -157,6 +153,8 @@ export const installHost = (face: LocalFace): void => {
         return;
     }
     window.__INTENTIC_LOCAL_HOST__ = nativeHost();
+    // Whether the window is on screen, heard from before the app first says it (onScreen.ts).
+    followOnScreen();
     void startReading(face.home === true);
     // Every window follows this computer's own sandbox: its card is in each of them while it is not ready.
     void startMachineSandbox();

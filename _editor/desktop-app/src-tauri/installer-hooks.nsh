@@ -1,19 +1,17 @@
-; WHOSE INSTALLER THIS IS, SAID ON THE INSTALLER — the one line of branding that is reachable from here.
+; WHOSE INSTALLER THIS IS, SAID ON THE INSTALLER.
 ;
 ; MUI stamps a footer across the bottom of every page of the wizard and, left alone, fills it with its own
 ; name and build: a first-run install of this product spent five screens captioned
-; "Nullsoft Install System v3.08-3+deb12u1". Two things are wrong with that and only one of them is vanity.
-; The user is being asked to run an UNSIGNED binary they downloaded — the one moment in onboarding where they
-; are actively looking for a reason to trust or distrust what is on screen — and the only proper noun on the
-; window is a build toolchain they have never heard of, wearing a Debian package version, because this
-; installer is cross-built on a Linux runner. It reads as somebody else's software.
+; "Nullsoft Install System v3.08-3+deb12u1", with NSIS's own icon in the title bar and its stock artwork on the
+; first and last page. The user is being asked to run an UNSIGNED binary they downloaded, the one moment in
+; onboarding where they are looking for a reason to trust or distrust what is on screen, and the only proper noun
+; on the window was a build toolchain they have never heard of. It reads as somebody else's software.
 ;
-; Tauri includes this file at the top of its template (ahead of everything MUI draws) and defines
-; MUI_BRANDINGTEXT nowhere itself, so defining it here is simply the supported way to set it: MUI's own
-; default is `!ifndef`-guarded and yields to whatever is already defined. It is a literal rather than
-; "Intentic ${VERSION}" on purpose — PRODUCTNAME and VERSION are defined further DOWN the template than this
-; include, so referencing them here would name nothing.
-!define MUI_BRANDINGTEXT "Intentic"
+; None of that is set from here. Tauri's template writes `BrandingText "${COPYRIGHT}"` AFTER including this file,
+; and an empty BrandingText is NSIS's "use the default", so a `!define MUI_BRANDINGTEXT` here changed nothing: the
+; 1.332.0 installer still said "Nullsoft Install System v3.11-1" (2026-10-12). The footer is `bundle.copyright` in
+; tauri.conf.json, and the icon and the side artwork are its `bundle.windows.nsis` `installerIcon`,
+; `uninstallerIcon` and `sidebarImage` (icons/installer-sidebar.bmp, 164x314, the app's canvas and its mark).
 
 ; Whether the machine agent is still on this PC once the uninstall hook has asked about it (1) or not (0): the last
 ; page says what stays, and the agent is part of that only when it stayed. Declared here, at the top level, because
@@ -97,6 +95,8 @@ Var IntenticAgentKept
       Sleep 500
     ${Loop}
     Delete "$APPDATA\${BUNDLEID}\roster.json"
+    ; The terminal command's PATH entry the app was to finish (src/cli_path.rs): there is no app left to finish it.
+    Delete "$APPDATA\${BUNDLEID}\cli-path-pending"
     ; A setup parked for the next sign-in (resume.rs), and the entry that would start it: left behind, Windows would try
     ; a missing program at every sign-in, and a reinstall would resume a setup the reader walked away from. An update
     ; keeps both, since the entry names the same program and the setup is still the reader's.
@@ -169,6 +169,12 @@ Var IntenticAgentKept
   ${OrIf} ${Silent}
     StrCpy $1 "quiet"
   ${EndIf}
+  ; The one step that may stop for an administrator, and Windows' prompt names its own rundll32, not Intentic: said
+  ; on the progress line first, so the reader knows what is asking and why the install is waiting on it (2026-10-12:
+  ; the prompt came up under "Extract: intentic-desktop.exe" with nothing on the page about it).
+  ${If} $1 == "interactive"
+    DetailPrint "Adding $\"Open with Intentic$\" to Explorer's menu. Windows may ask once for permission, as $\"Windows host process (Rundll32)$\"."
+  ${EndIf}
   !insertmacro INTENTIC_REGSVR32 "/s /n /i:$1"
   ${If} $0 == 0
     DeleteRegKey HKCU "Software\Classes\Directory\shell\Intentic"
@@ -198,7 +204,9 @@ Var IntenticAgentKept
 ; connect.ps1 puts `ic` on that PATH. Only the entry itself is added or removed, matched as a whole entry; the rest of
 ; the value is left as it was. The folder goes by an environment variable rather than inside the command, so no
 ; character in a user's folder name can end a quoted string. A failure leaves the PATH alone and the launchers where
-; they are, and is written in the install's details: the command is a convenience, the app is the install.
+; they are, and is written in the install's details: the command is a convenience, the app is the install. A failed add
+; also leaves `cli-path-pending` in the app's config folder, and the app adds the folder at its next launch
+; (src/cli_path.rs), so the command does not stay missing behind an install that said it completed.
 ;
 ; The broadcast is the one the Control Panel's editor sends: without it, a terminal started from Explorer would not see
 ; the new PATH until the next sign-in. A terminal open already keeps the PATH it had.
@@ -213,8 +221,22 @@ Var IntenticAgentKept
   Pop $0
   ${If} $0 == 0
     SendMessage ${HWND_BROADCAST} ${WM_SETTINGCHANGE} 0 "STR:Environment" /TIMEOUT=5000
+    !if "${VERB}" == "add"
+      Delete "$APPDATA\${BUNDLEID}\cli-path-pending"
+    !endif
   ${Else}
-    DetailPrint "Could not ${VERB} $INSTDIR\bin on your PATH ($0). The intentic command is in that folder."
+    !if "${VERB}" == "add"
+      ; PowerShell can take longer than the minute just to start on a busy PC (2026-10-12: "(timeout)", and an install
+      ; that still said it completed). The marker is the app's to finish at its next launch (src/cli_path.rs).
+      Push $3
+      CreateDirectory "$APPDATA\${BUNDLEID}"
+      FileOpen $3 "$APPDATA\${BUNDLEID}\cli-path-pending" w
+      FileClose $3
+      Pop $3
+      DetailPrint "Could not add $INSTDIR\bin to your PATH yet ($0). Intentic adds it the next time it starts."
+    !else
+      DetailPrint "Could not ${VERB} $INSTDIR\bin on your PATH ($0). The intentic command is in that folder."
+    !endif
   ${EndIf}
 !macroend
 

@@ -3,6 +3,7 @@ mod agent_status;
 mod agents;
 mod auth;
 mod badge;
+mod cli_path;
 mod commands;
 mod drop_copy;
 mod engine;
@@ -246,6 +247,8 @@ pub fn run() {
             app.manage(notice::Notices::default());
             app.manage(machine_sandbox::MachineSandbox::load(app.handle())?);
             create_tray(app.handle())?;
+            // `intentic .` onto PATH, where the installer's own attempt ran out of time (cli_path.rs).
+            cli_path::finish_pending(app.handle());
             // After the tray exists: the refresh loop retitles the agent row this row-handle now points at.
             agent_status::start(app.handle());
 

@@ -15,6 +15,7 @@ import WorkspaceSearchResults from "../features/workspace/search/WorkspaceSearch
 import { matchToggles } from "../features/workspace/search/useSearchOptions";
 import { type SearchScope, useWorkspaceSearch } from "../features/workspace/search/useWorkspaceSearch";
 import CloseGuardDialog from "../features/workspace/tabs/CloseGuardDialog.vue";
+import { useCloseGuard } from "../features/workspace/tabs/useCloseGuard";
 import { useWorkspaceTabs } from "../features/workspace/tabs/useWorkspaceTabs";
 import { isApplePlatform } from "../workbench/commands/keybindings";
 import QuickOpen from "../shell/commands/QuickOpen.vue";
@@ -30,7 +31,6 @@ import { type LocalChord, localChord } from "./localKeys";
 import { folderButtonOf } from "./machineCard";
 import { nameOf } from "./places";
 import { useLocalProject } from "./useLocalProject";
-import { useUnsavedGuard } from "./useUnsavedGuard";
 
 // A desktop window on a folder of the user's own disk: the workspace's own explorer and editor pane, reading through the
 // app's sidecar (app/environments/local.ts), and nothing that needs a sandbox. A document opened on its own shows alone
@@ -82,9 +82,10 @@ watch(
 onUnmounted(() => clearTimeout(slowTimer));
 
 const { activeId, activeTab, openFile, openAtLine, openDirectory, selectTab, keepTab } = useWorkspaceTabs();
-// Every close that would lose unsaved edits asks first, the window's and a tab's alike (useUnsavedGuard.ts): the pane
-// shows a closed tab's edits nowhere else, so a tab holding some closes only once the reader agrees.
-const { dirty, unsavedPaths, ask: askToClose, question, asking, closeTab, closeAnyway, keepOpen } = useUnsavedGuard();
+// Every close of a tab that would lose unsaved edits asks first (useCloseGuard.ts): the pane shows a closed tab's edits
+// nowhere else, so a tab holding some closes only once the reader agrees. The window's own close asks from the shell
+// (LocalShell.vue, unsaved/useUnsavedGuard.ts), which stands whichever screen the window is on.
+const { dirty, unsavedPaths, ask: askToClose, question, asking, closeTab, closeAnyway, keepOpen } = useCloseGuard();
 // Another folder in this window's place (LocalFolderMenu.vue) takes the unsaved edits with the folder it leaves, so it is
 // asked about as a close is.
 const leaving = (go: () => void): void => {

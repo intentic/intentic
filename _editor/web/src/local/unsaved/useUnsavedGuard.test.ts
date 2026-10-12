@@ -2,9 +2,9 @@ import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { type App, createApp, nextTick } from "vue";
-import { externalDirtyPaths, setExternalDirty } from "../features/workspace/files/externalDirty";
-import { useEditBuffers } from "../features/workspace/files/useEditBuffers";
-import { useWorkspaceTabs } from "../features/workspace/tabs/useWorkspaceTabs";
+import { externalDirtyPaths, setExternalDirty } from "../../features/workspace/files/externalDirty";
+import { useEditBuffers } from "../../features/workspace/files/useEditBuffers";
+import { useWorkspaceTabs } from "../../features/workspace/tabs/useWorkspaceTabs";
 import { useUnsavedGuard } from "./useUnsavedGuard";
 
 // Pins a local window's side of the app's close guard: the app hears every turn from clean to dirty and back, and a
@@ -55,7 +55,7 @@ afterEach(() => {
     setExternalDirty(`c.docx`, false);
 });
 
-// The guard as LocalFiles.vue holds it: set up with the component, listening once it is mounted.
+// The guard as LocalShell.vue holds it: set up with the component, listening once it is mounted.
 const mountGuard = (): ReturnType<typeof useUnsavedGuard> => {
     let guard: ReturnType<typeof useUnsavedGuard> | undefined;
     app = createApp({

@@ -154,7 +154,8 @@ flowchart LR
   `resume-setup.json` with the time its code was minted (the link's arrival, since a link does not say), and the
   `HKCU\…\CurrentVersion\Run` value `IntenticResumeSetup` starts the app at the next sign-in with `--resume-setup`
   (`src-tauri/src/resume.rs`). Windows keeps a Run value until the app takes it away: when that setup's run ends,
-  however it ends, when the setup is given up, and at any launch that finds nothing parked. So a launch that crashed
+  however it ends, when the setup is given up, and at any launch that finds nothing parked (this PC's own setup parked
+  for a restart that has not come yet counts as parked, below). So a launch that crashed
   gets another, and a finished setup never starts the app again. A resumed setup whose code is older than 20 minutes
   runs on a fresh code the app mints itself with the workspace's session (`setup_fresh_code`, as for this computer's
   own sandbox), and so does a run whose claim the platform refused as invalid or expired. The card says the code ran
@@ -478,7 +479,8 @@ flowchart LR
   app, is such a command, on folders, the space inside one and the document types the app opens, and the installer
   hooks register the identity package that declares it (`regsvr32 /n /i:<mode>`). A release that holds the code-signing
   certificate ships that package signed and it registers silently; otherwise the first interactive install signs one
-  on the PC behind one UAC prompt. Updates and passive installs never prompt. Wherever the package is not in place
+  on the PC behind one UAC prompt, which Windows labels as its own rundll32, so the progress line says first that it may
+  come and what it is for. Updates and passive installs never prompt. Wherever the package is not in place
   (Windows 10, a declined prompt, a failure), the classic verb is written instead, so the entry is in one menu or the
   other and never both.
 - **`intentic .` in a terminal** ([src-tauri/cli](src-tauri/cli), 2026-10-11), the way `code .` opens VS Code. The
@@ -494,7 +496,11 @@ flowchart LR
   WSL or a full path. The PATH edit is PowerShell's as well (`INTENTIC_CLI_PATH`): NSIS strings stop at 1024
   characters, and a longer user PATH read and written back by NSIS would come back cut short. Every install adds the
   entry (so an existing install gets the command with its next update) and the uninstall removes it, leaving the rest of
-  the value and its registry type as they were. A terminal that was already open keeps its old PATH. Linux gets no
+  the value and its registry type as they were. A terminal that was already open keeps its old PATH. When the PATH edit
+  fails (on a loaded PC PowerShell can outlast its minute), the installer leaves `cli-path-pending` in the app's config
+  folder and the app adds the entry itself at its next launch (`src-tauri/src/cli_path.rs`), the same way: whole
+  entries, unexpanded, under the value's own type. _(2026-10-12) The failure was only a line in the install's details,
+  under an install that said it completed, and the command stayed missing._ Linux gets no
   launcher: the deb and rpm put `intentic-desktop` itself on PATH, and it reads the same path arguments.
 - **Deletes go to the Recycle Bin.** A delete in a local window reaches the sidecar, which asks the app (`ask`,
   `verb: trash`); the app moves the entry to the OS's Recycle Bin or Trash (the `trash` crate) when it lies strictly
@@ -745,7 +751,9 @@ card waits on the PC setup and offers a hosted machine when this PC cannot run a
 
 Restarts use `/r /t 0` only — never a timed `/t` above zero, because Windows then implies `/f` and force-closes unsaved
 work elsewhere (`commands.rs` `end_session`). A restart the reader schedules (`in10Minutes`, `later`) is parked in
-`~/.intentic/onboarding-pc-parked.json` and resumed on the next launch.
+`~/.intentic/onboarding-pc-parked.json` and resumed on the next launch. `later` writes the sign-in entry too (above), and it
+stays through any launch before the restart: the launch the restart makes (`--resume-setup`) marks the park `resumed`,
+and only then does the entry go (`onboarding.rs` `waits_for_restart`).
 
 Product events from the first launch (`onboarding_launched`, `onboarding_check`, `onboarding_prefetch`,
 `onboarding_setup`, `onboarding_cloud`) are sent from `src/onboarding/pc.ts` through `analytics.ts`, keyed to the

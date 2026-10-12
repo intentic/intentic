@@ -11,6 +11,7 @@ export const BINARY_EXTENSIONS = new Set([
     "webp",
     "avif",
     "ico",
+    "bmp",
     "icns",
     "pdf",
     "woff",

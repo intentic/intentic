@@ -2,6 +2,7 @@
 import { Button, Notice, useNow } from "@intentic/ui";
 import { computed } from "vue";
 import type { DockerStart } from "../desktop";
+import { dockerEnding } from "./dockerWords";
 import { formatDuration } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 
@@ -52,79 +53,26 @@ const hinted = computed(() => props.starting && waited.value >= HINT_AFTER_SECON
 const outcome = computed(() => props.report?.outcome);
 const windows = computed(() => props.os === `windows`);
 
+// Once a start has ended, or before one has begun, the words are the ending's (dockerWords.ts), the same a press made
+// from a folder window's card is answered with.
+const ending = computed(() => dockerEnding(outcome.value, { ours: props.ours === true, windows: windows.value }));
+
 const heading = computed(() => {
-    if (props.ours) {
-        return oursHeading();
+    if (!props.starting) {
+        return ending.value.heading;
     }
-    if (props.starting) {
-        return t(`desktop.docker.startingDockerDesktop`);
-    }
-    switch (outcome.value) {
-        case `notInstalled`:
-            return t(`desktop.docker.dockerIsntOnThisComputer`);
-        case `wouldNotStart`:
-            return t(`desktop.docker.dockerWouldntStart`);
-        case `notAllowed`:
-            return windows.value ? t(`desktop.docker.accountNotAllowedWindows`) : t(`desktop.docker.accountNotAllowed`);
-        case `tookTooLong`:
-            return t(`desktop.docker.dockerHasntFinishedStarting`);
-        // Up, and answering every request with an error: a wait would only have run out the clock on it.
-        case `broken`:
-            return t(`desktop.docker.engineIsBroken`);
-        // Nothing has been tried yet: the engine is down and this screen was reached before a start began.
-        default:
-            return t(`desktop.docker.dockerIsntRunning`);
-    }
+    return props.ours ? t(`desktop.docker.oursStarting`) : t(`desktop.docker.startingDockerDesktop`);
 });
 
-// Intentic's engine, in its own name: what a start of it waits on is WSL, never a window of Docker Desktop's.
-const oursHeading = (): string => {
-    if (props.starting) {
-        return t(`desktop.docker.oursStarting`);
-    }
-    switch (outcome.value) {
-        case `wouldNotStart`:
-            return t(`desktop.docker.oursWouldntStart`);
-        case `tookTooLong`:
-            return t(`desktop.docker.oursTakingLong`);
-        case `broken`:
-            return t(`desktop.docker.oursBroken`);
-        default:
-            return t(`desktop.docker.oursIsntRunning`);
-    }
-};
-const oursBody = (): string => {
-    if (hinted.value) {
-        return t(`desktop.docker.oursSlowStart`);
-    }
-    if (props.starting) {
-        return t(`desktop.docker.oursStartingBody`);
-    }
-    return outcome.value === `broken` ? t(`desktop.docker.oursRestartComputer`) : t(`desktop.docker.oursCheckAgain`);
-};
-
 const body = computed(() => {
+    if (!props.starting) {
+        return ending.value.body;
+    }
+    // Intentic's engine, in its own name: what a start of it waits on is WSL, never a window of Docker Desktop's.
     if (props.ours) {
-        return oursBody();
+        return hinted.value ? t(`desktop.docker.oursSlowStart`) : t(`desktop.docker.oursStartingBody`);
     }
-    if (hinted.value) {
-        return t(`desktop.docker.mayBeAskingYou`);
-    }
-    if (props.starting) {
-        return t(`desktop.docker.sandboxRunsInDockerStarting`);
-    }
-    switch (outcome.value) {
-        case `notInstalled`:
-            return t(`desktop.docker.nothingToStartUntilInstalled`);
-        case `notAllowed`:
-            return windows.value ? t(`desktop.docker.signOutAndBackIn`) : t(`desktop.docker.addToDockerGroup`);
-        case `tookTooLong`:
-            return t(`desktop.docker.mayBeWaitingForYou`);
-        case `broken`:
-            return t(`desktop.docker.quitAndOpenAgain`);
-        default:
-            return t(`desktop.docker.tryOpeningItYourself`);
-    }
+    return hinted.value ? t(`desktop.docker.mayBeAskingYou`) : t(`desktop.docker.sandboxRunsInDockerStarting`);
 });
 
 // Docker's own last words, kept for after the start.

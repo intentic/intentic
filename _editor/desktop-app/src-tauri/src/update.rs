@@ -26,9 +26,11 @@ const CHECK_EVERY: Duration = Duration::from_secs(6 * 60 * 60);
 /// night asleep with this app in the tray wakes with a timer that has not fired.
 const RECHECK_ON_SHOW_AFTER: Duration = Duration::from_secs(60 * 60);
 
-/// After this many consecutive failures the app stops trying and says so. The population this exists for is
-/// not having a bad afternoon — it is holding a pubkey that can never verify another release — and retrying
-/// forever would only mean never telling them.
+/// After this many consecutive failures that a retry cannot fix ([`lasting`]) the app stops trying and says so. The
+/// population this exists for is not having a bad afternoon — it is holding a pubkey that can never verify another
+/// release — and retrying forever would only mean never telling them. A failure that passes (no network, a server
+/// that did not answer) is not counted: it used to be, so a laptop offline for an afternoon gave up updating for the
+/// rest of the run and offered a download "because Intentic couldn't install its own update" (2026-10-12).
 const GIVE_UP_AFTER: u32 = 3;
 
 /* WHAT THE APP IS DOING ABOUT ITS OWN VERSION, as one value that every surface renders. */
@@ -332,7 +334,9 @@ async fn check_now(app: &AppHandle) {
 
     let updater = match app.updater() {
         Ok(updater) => updater,
-        Err(error) => return record_failure(app, settled, None, &error.to_string()),
+        Err(error) => {
+            return record_failure(app, settled, None, &error.to_string(), lasting(&error))
+        }
     };
     let found = match updater.check().await {
         Ok(Some(update)) => update,
@@ -340,7 +344,9 @@ async fn check_now(app: &AppHandle) {
             *app.state::<UpdateState>().failures.lock().unwrap() = 0;
             return set(app, Stage::Current);
         }
-        Err(error) => return record_failure(app, settled, None, &error.to_string()),
+        Err(error) => {
+            return record_failure(app, settled, None, &error.to_string(), lasting(&error))
+        }
     };
 
     // Already holding this one: a check that fires while the same version sits staged must not download it
@@ -403,20 +409,30 @@ async fn check_now(app: &AppHandle) {
         .await;
     let bytes = match bytes {
         Ok(bytes) => bytes,
-        Err(error) => return record_failure(app, settled, Some(version), &error.to_string()),
+        Err(error) => {
+            return record_failure(
+                app,
+                settled,
+                Some(version),
+                &error.to_string(),
+                lasting(&error),
+            )
+        }
     };
 
+    // A disk with no room or no cache directory is this machine's, and passes: the next check tries again.
     let Some(dir) = staging_dir(app) else {
         return record_failure(
             app,
             settled,
             Some(version),
             "this device has no writable cache directory",
+            false,
         );
     };
     let file = dir.join(format!("intentic-{version}"));
     if let Err(error) = std::fs::write(&file, &bytes) {
-        return record_failure(app, settled, Some(version), &error.to_string());
+        return record_failure(app, settled, Some(version), &error.to_string(), false);
     }
     *app.state::<UpdateState>().failures.lock().unwrap() = 0;
     *app.state::<UpdateState>().ready.lock().unwrap() = Some(Staged {
@@ -427,15 +443,22 @@ async fn check_now(app: &AppHandle) {
 }
 
 /* One failed check is a laptop on a train. */
-fn record_failure(app: &AppHandle, settled: Stage, version: Option<String>, reason: &str) {
+fn record_failure(
+    app: &AppHandle,
+    settled: Stage,
+    version: Option<String>,
+    reason: &str,
+    lasting: bool,
+) {
     eprintln!("intentic: update check failed: {reason}");
-    let failures = {
+    let give_up = {
         let state = app.state::<UpdateState>();
         let mut count = state.failures.lock().unwrap();
-        *count += 1;
-        *count
+        let (failures, give_up) = counted(*count, lasting);
+        *count = failures;
+        give_up
     };
-    if failures < GIVE_UP_AFTER {
+    if !give_up {
         // Back to whatever was true before this pass — an unfinished check is not a fact about the version.
         set(app, settled);
         return;
@@ -444,16 +467,47 @@ fn record_failure(app: &AppHandle, settled: Stage, version: Option<String>, reas
         app,
         Stage::Manual {
             version,
-            reason:
-                "Intentic couldn't install its own update. Download the new version to move up."
-                    .to_string(),
+            reason: UNVERIFIED.to_string(),
             url: DOWNLOADS_URL.to_string(),
         },
     );
 }
 
+/// What the offer says once the app has stopped trying: the one kind of failure it stops for, said as what it is.
+const UNVERIFIED: &str =
+    "Intentic couldn't verify the update it downloaded, so it won't install it. Download the new version instead.";
+
+/// Whether an updater error is one a later try cannot fix: the release's signature does not verify against the key this
+/// build carries, or does not decode, or names another version. Everything else (no network, a timeout, a server error,
+/// a manifest that did not arrive whole) passes, and the next check tries again.
+fn lasting(error: &tauri_plugin_updater::Error) -> bool {
+    use tauri_plugin_updater::Error;
+    matches!(
+        error,
+        Error::Minisign(_)
+            | Error::Base64(_)
+            | Error::SignatureUtf8(_)
+            | Error::SignedVersionMismatch { .. }
+            | Error::MissingSignedVersion
+    )
+}
+
+/// A failed pass, counted: the lasting failures in a row after it, and whether the app stops trying. A failure that
+/// passes leaves the count as it was, neither closer to giving up nor further from it. Pure.
+fn counted(failures: u32, lasting: bool) -> (u32, bool) {
+    if !lasting {
+        return (failures, false);
+    }
+    let failures = failures.saturating_add(1);
+    (failures, failures >= GIVE_UP_AFTER)
+}
+
 /// What the refusal for unsaved changes says, compared by [`act`] to know it is one the user can act on.
 const UNSAVED: &str = "Save or close the windows with unsaved changes first.";
+
+/// What the refusal for work under way says. It used to promise "Intentic will update once it finishes", which
+/// nothing did: an install is only ever started by the offer being taken, or by a Quit on its way out.
+const BUSY: &str = "Something is still running on this computer. Update again once it has finished, or quit Intentic then and it updates on its way out.";
 
 /// What an update that is installed but held from restarting says: the restart is the user's to give once their
 /// changes are saved, from the same offer.
@@ -482,7 +536,7 @@ pub fn refusal(app: &AppHandle) -> Option<&'static str> {
                 &folders
             )
         );
-        return Some("Something is running on this device. Intentic will update once it finishes.");
+        return Some(BUSY);
     }
     if crate::windows::unsaved_windows() > 0 {
         return Some(UNSAVED);
@@ -542,7 +596,12 @@ pub fn install(app: &AppHandle, restart: bool) -> Result<(), String> {
         .installing
         .store(true, Ordering::SeqCst);
     let _ = std::fs::remove_file(&staged.file);
-    if let Err(error) = staged.update.install(bytes) {
+    // Windows' installer starts the app again by itself unless told not to (the updater's default hands the passive
+    // installer `/R`): right for "Restart to update", wrong for the install a Quit carries out on its way out, after which
+    // Intentic came back on its own half a minute after the reader had quit it (2026-10-12). Elsewhere this changes
+    // nothing: Linux restarts below, and only when asked.
+    let update = staged.update.restart_after_install(restart);
+    if let Err(error) = update.install(bytes) {
         if resume_prefetch {
             let _ = crate::onboarding::onboarding_pause(app.clone(), false);
         }
@@ -626,23 +685,33 @@ pub fn take_offer(app: &AppHandle) -> Result<(), String> {
     }
 }
 
-/// The tray row and the `intentic://update` link, which have nowhere to show a refusal but the log — except the ones
-/// the user has to act on before anything can happen, unsaved changes, which are said in a dialog.
+/// The tray row and the `intentic://update` link, which have nowhere to show a refusal but a dialog of their own. The
+/// ones the reader can act on are said there: unsaved changes, and work under way, which used to go to the log alone,
+/// so a press on "Restart to update" while a setup ran did nothing anyone could see (2026-10-12).
 pub fn act(app: &AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         if let Err(error) = take_offer(&app) {
             eprintln!("intentic: {error}");
-            if error == UNSAVED || error == RESTART_HELD {
+            if let Some(title) = refusal_title(&error) {
                 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
                 app.dialog()
                     .message(error)
-                    .title("Save your changes first")
+                    .title(title)
                     .kind(MessageDialogKind::Info)
                     .show(|_| {});
             }
         }
     });
+}
+
+/// The dialog's title for a refusal the reader can act on, or none for one that is the log's alone. Pure.
+fn refusal_title(error: &str) -> Option<&'static str> {
+    match error {
+        UNSAVED | RESTART_HELD => Some("Save your changes first"),
+        BUSY => Some("Intentic is still busy"),
+        _ => None,
+    }
 }
 
 /* THE INVISIBLE PATH, AND THE ONE THAT MAKES "ALWAYS ON THE NEWEST VERSION" TRUE. */
@@ -750,6 +819,52 @@ mod tests {
     #[test]
     fn a_running_binary_still_in_place_is_not_replaced() {
         assert!(!replaced_on_disk());
+    }
+
+    /// Only a release that cannot verify against this build's key is a failure a retry cannot fix; a network that
+    /// is not there, a timeout or a manifest that did not arrive is tried again at the next check.
+    #[test]
+    fn only_a_signature_that_cannot_verify_is_a_lasting_failure() {
+        use tauri_plugin_updater::Error;
+        assert!(lasting(&Error::SignatureUtf8("not base64".into())));
+        assert!(lasting(&Error::MissingSignedVersion));
+        assert!(lasting(&Error::SignedVersionMismatch {
+            signed: "1.0.0".into(),
+            announced: "1.0.1".into(),
+        }));
+        assert!(!lasting(&Error::Network("connection timed out".into())));
+        assert!(!lasting(&Error::ReleaseNotFound));
+        assert!(!lasting(&Error::Io(std::io::Error::other("disk full"))));
+    }
+
+    /// Failures that pass never add up to giving up, however many; three lasting ones in a row do.
+    #[test]
+    fn a_day_offline_never_gives_up_and_three_unverifiable_releases_do() {
+        let mut failures = 0;
+        for _ in 0..50 {
+            let (count, give_up) = counted(failures, false);
+            assert!(!give_up);
+            failures = count;
+        }
+        assert_eq!(failures, 0);
+        assert_eq!(counted(0, true), (1, false));
+        assert_eq!(counted(1, true), (2, false));
+        assert_eq!(counted(2, true), (3, true));
+        // A network failure between two that did not verify neither resets the count nor adds to it.
+        assert_eq!(counted(2, false), (2, false));
+        assert!(UNVERIFIED.contains("verify"), "{UNVERIFIED}");
+    }
+
+    /// The refusals the reader can do something about are said in a dialog from the tray, work under way among them.
+    #[test]
+    fn the_tray_says_why_an_update_is_held() {
+        assert_eq!(refusal_title(BUSY), Some("Intentic is still busy"));
+        assert_eq!(refusal_title(UNSAVED), Some("Save your changes first"));
+        assert_eq!(refusal_title(RESTART_HELD), Some("Save your changes first"));
+        assert_eq!(
+            refusal_title("there is no downloaded update to install"),
+            None
+        );
     }
 
     #[test]

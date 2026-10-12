@@ -7,6 +7,7 @@ import { LOCAL_NAVIGATE_EVENT } from "../app/environments/local";
 import { type LocalView, localHost } from "../app/environments/localHost";
 import { useAccount } from "../client/auth/useAccount";
 import { useSandbox } from "../client/sandbox/useSandbox";
+import CloseGuardDialog from "../features/workspace/tabs/CloseGuardDialog.vue";
 import AccountPanel from "../shell/AccountPanel.vue";
 import { railFrame } from "../shell/rail/railFrame";
 import RailTile from "../shell/rail/RailTile.vue";
@@ -16,6 +17,7 @@ import { takeFolderSwitches } from "./folderSwitch";
 import LocalAccountTile from "./LocalAccountTile.vue";
 import LocalPlaceSwitcher from "./LocalPlaceSwitcher.vue";
 import LocalProject from "./LocalProject.vue";
+import { useUnsavedGuard } from "./unsaved/useUnsavedGuard";
 
 // THE SHELL OF A DESKTOP WINDOW ON A FOLDER OF THIS COMPUTER: the sandbox shell's rail and page, holding what needs no
 // sandbox and no account. At the top, the place this window shows and every other one, the account's sandboxes
@@ -71,6 +73,12 @@ const onNavigate = (event: Event): void => {
 onMounted(() => window.addEventListener(LOCAL_NAVIGATE_EVENT, onNavigate));
 onUnmounted(() => window.removeEventListener(LOCAL_NAVIGATE_EVENT, onNavigate));
 
+// THE WINDOW'S CLOSE, asked about from whichever screen it is on: unsaved edits outlive Files (the buffers are the
+// folder's, not the page's), so a close the app holds back for them is answered here, where the shell stands for the
+// window's whole life. Held by Files until 2026-10-12, a folder window left on This computer or Settings with an edit
+// unsaved ignored its × and Alt+F4 until the reader went back to Files.
+const { asking: closeAsked, question: closeQuestion, closeAnyway: closeWindow, keepOpen: keepWindow } = useUnsavedGuard();
+
 // Another folder in this window's place moves the page in place while the shell is up; before it is, the app reloads.
 let stopTaking: (() => void) | undefined;
 onMounted(() => {
@@ -117,6 +125,8 @@ onUnmounted(() => stopTaking?.());
         </main>
         <!-- The folder's own sandbox: its dialog, and its build's card, in sight from every screen of this window. -->
         <LocalProject v-if="host.project !== undefined" />
+        <!-- The window's close, held back for unsaved edits: asked over any screen, Files or not. -->
+        <CloseGuardDialog :open="closeAsked" :question="closeQuestion" @cancel="keepWindow" @confirm="closeWindow" />
     </div>
 </template>
 

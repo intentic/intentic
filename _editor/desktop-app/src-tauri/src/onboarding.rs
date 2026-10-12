@@ -418,6 +418,12 @@ pub fn begin(app: &AppHandle) {
     });
     if resume_wanted() {
         let parked_at = parked_at();
+        // The launch Windows made from the sign-in entry (resume.rs `ARG`) is the restart this setup waited for, come:
+        // marked here, before the launch settles the entry, so the entry goes with this launch (resume.rs `settle`).
+        // Any other launch leaves the park as it is, still waiting, and the entry with it.
+        if std::env::args().any(|arg| arg == crate::resume::ARG) {
+            write_ledger(PARK_FILE, &json!({ "at": parked_at, "resumed": true }));
+        }
         let handle = app.clone();
         std::thread::spawn(move || {
             if SETUP_RUNNING.swap(true, Ordering::SeqCst) {
@@ -1678,6 +1684,25 @@ fn parse_parked(text: &str) -> Option<u64> {
     serde_json::from_str::<Value>(text).ok()?["at"].as_u64()
 }
 
+/// Whether this PC's setup is parked for a restart that has not come yet: what keeps the sign-in entry that resumes it
+/// (resume.rs `settle`). The reader's "Restart later" writes that entry, and every launch after it used to take it away
+/// again, since only a handed-over setup counted as parked: a reader who reopened Intentic before restarting, or whose
+/// Intentic updated meanwhile, restarted to an app that never came back to finish the setup (2026-10-12).
+pub fn waits_for_restart() -> bool {
+    park_path()
+        .and_then(|path| std::fs::read_to_string(path).ok())
+        .is_some_and(|text| park_waits(&text))
+}
+
+/// A park the restart it waited for has not yet answered: not marked `resumed` by the launch that restart made. One that
+/// does not read (an older app's `1`, a file cut short) still waits, so the entry is kept until that launch. Pure.
+fn park_waits(text: &str) -> bool {
+    match serde_json::from_str::<Value>(text) {
+        Ok(park) => park["resumed"].as_bool() != Some(true),
+        Err(_) => true,
+    }
+}
+
 fn write_running_ledger(started_at: u64, row: Option<&str>) {
     write_ledger(
         RUNNING_FILE,
@@ -2375,6 +2400,21 @@ intentic-prefetch: {\"state\":\"failed\",\"done\":0,\"total\":0}
         // An older app's park says nothing of when; it still resumes.
         assert_eq!(parse_parked("1"), None);
         assert_eq!(parse_parked(""), None);
+        // Marked by the launch its restart made, it still says when.
+        assert_eq!(
+            parse_parked("{\"at\":1791000000,\"resumed\":true}"),
+            Some(1_791_000_000)
+        );
+    }
+
+    /// A park keeps the sign-in entry until the launch its restart made marks it; one that does not read keeps it too.
+    #[test]
+    fn a_park_waits_for_its_restart_until_the_launch_it_made_marks_it() {
+        assert!(park_waits("{\"at\":1791000000}"), "parked, no restart yet");
+        assert!(!park_waits("{\"at\":1791000000,\"resumed\":true}"));
+        assert!(park_waits("{\"at\":null,\"resumed\":false}"));
+        assert!(park_waits("1"), "an older app's park");
+        assert!(park_waits(""), "a park cut short");
     }
 
     #[test]

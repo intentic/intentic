@@ -6,9 +6,10 @@
  * somebody thought to open the app. The value now lives under `Run`, which Windows leaves alone, so every sign-in tries
  * again until this app takes it away: when the setup it was for has run (commands.rs `setup_run`, whichever way it
  * ended), when that setup is given up (`forget_resumable_setup`, a code that ran out included), and at any launch that
- * finds nothing parked ([`settle`]). An app that went on starting itself at every sign-in after its setup
- * was done would be a worse bug than the one this fixes, so every one of those ends in [`settle`]. A RunOnce value of
- * the same name, from a version before this, goes whenever this one is written or taken away. */
+ * finds nothing parked, a PC setup still waiting for its restart counting as parked ([`settle`]). An app that went on
+ * starting itself at every sign-in after its setup was done would be a worse bug than the one this fixes, so every one
+ * of those ends in [`settle`]. A RunOnce value of the same name, from a version before this, goes whenever this one is
+ * written or taken away. */
 
 use std::path::Path;
 
@@ -50,11 +51,13 @@ pub fn delete_args(key: &str) -> Vec<String> {
 }
 
 /// Whether the next sign-in still has something to start this app for: a setup parked across the session's end
-/// (state.rs `ParkedSetup`). This computer's own sandbox ends the session the same way (machine_sandbox.rs
+/// (state.rs `ParkedSetup`), or this PC's own setup parked for a restart that has not come yet (onboarding.rs
+/// `waits_for_restart`: its "Restart later" writes the entry, and the launch that restart makes marks the park, so the
+/// entry goes with that launch). This computer's own sandbox ends the session the same way (machine_sandbox.rs
 /// `resume_on_launch`) but is not counted: its record can wait on a sign-in to the platform indefinitely, and an entry
 /// kept for that would start the app at every sign-in. For it the entry does what RunOnce did: one launch.
-pub const fn wanted(parked_setup: bool) -> bool {
-    parked_setup
+pub const fn wanted(parked_setup: bool, pc_setup_parked: bool) -> bool {
+    parked_setup || pc_setup_parked
 }
 
 /// Ask Windows to start this app at the next sign-in, and take an older version's RunOnce of the same name away, which
@@ -103,7 +106,7 @@ pub fn settle(app: &AppHandle) {
         .state::<crate::state::AppState>()
         .parked_setup()
         .is_some();
-    if !wanted(parked) {
+    if !wanted(parked, crate::onboarding::waits_for_restart()) {
         remove();
     }
 }
@@ -159,8 +162,11 @@ mod tests {
 
     #[test]
     fn the_entry_stays_only_while_a_setup_waits_for_a_sign_in() {
-        assert!(wanted(true));
+        assert!(wanted(true, false));
+        // This PC's setup parked for a restart the reader put off: a launch before that restart keeps the entry.
+        assert!(wanted(false, true));
+        assert!(wanted(true, true));
         // Nothing parked: the app must not start at the next sign-in, nor at any after it.
-        assert!(!wanted(false));
+        assert!(!wanted(false, false));
     }
 }

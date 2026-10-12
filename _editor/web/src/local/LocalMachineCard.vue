@@ -32,24 +32,25 @@ const label = (action: MachineCardAction): string => t(`local.machine.action.${a
 const APP_VERBS: ReadonlySet<MachineCardAction> = new Set<LocalMachineAction>([`signIn`, `startDocker`, `retry`, `log`, `start`, `recreate`]);
 const isAppVerb = (action: MachineCardAction): action is LocalMachineAction => APP_VERBS.has(action);
 
-const run = (action: MachineCardAction): void => {
+// Handed back to the button, whose press lock holds it for as long as the press runs: a start of the engine takes minutes,
+// and a second press meanwhile would only start it again. What it came to is said on the card (`actionFailure`).
+const run = (action: MachineCardAction): Promise<void> | undefined => {
     if (action === `details`) {
         if (project !== undefined) {
             void router.push(project.detailsPath);
         }
-        return;
+        return undefined;
     }
     if (action === `open`) {
-        void open();
-        return;
+        return open();
     }
     if (action === `retryFolder`) {
-        void retryFolder();
-        return;
+        return retryFolder();
     }
     if (project !== undefined && isAppVerb(action)) {
-        void pressed(() => project.act(action));
+        return pressed(() => project.act(action));
     }
+    return undefined;
 };
 </script>
 

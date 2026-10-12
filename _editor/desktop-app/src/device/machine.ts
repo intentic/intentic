@@ -17,6 +17,7 @@ import {
 } from "../desktop";
 import { desktopAgentPanel } from "../deviceAgent";
 import { keptBy, otherAgents } from "./keeper";
+import { osNameOf } from "../osName";
 
 // THIS COMPUTER, AS THE APP READS IT: what the app is, what it remembers, whether the Docker engine answers, the
 // sandboxes `ic` lists here and the machine agent's own report. Read again on every `refresh` (the page's arrival, its
@@ -163,9 +164,10 @@ export const groups = computed(() => sandboxGroups(status.value?.sync.pairings ?
 export const agentPanel = computed(() => desktopAgentPanel(status.value));
 
 // The machine's own facts in the quietest ink: what identifies this computer among several enrolled ones. Only once the
-// machine agent has named it: the OS alone tells the reader nothing about which computer this is.
+// machine agent has named it: the OS alone tells the reader nothing about which computer this is. The OS by its product
+// name (osName.ts), never the agent's `win32`.
 export const hardware = computed(() =>
-    status.value === undefined ? `` : [status.value.sync.hostname, status.value.sync.os].filter((fact) => fact !== ``).join(` · `),
+    status.value === undefined ? `` : [status.value.sync.hostname, osNameOf(status.value.sync.os)].filter((fact) => fact !== ``).join(` · `),
 );
 // Named rather than "this device" wherever the machine can name itself; the hover sentence reads as prose.
 export const machineName = computed(() => status.value?.sync.hostname ?? t(`desktop.device.thisDevice`));

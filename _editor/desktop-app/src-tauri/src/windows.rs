@@ -246,18 +246,60 @@ enum Keyboard {
 /// whether it is maximised. The two faces are one window to the reader, who moved and sized it once. A face with
 /// nothing on screen to take over keeps the frame it has (the platform remembers a hidden window's).
 fn take_frame(window: &WebviewWindow, from: Option<&WebviewWindow>) {
-    let Some(from) = from.filter(|from| from.is_visible().unwrap_or(false)) else {
+    let Some(from) = from else {
         return;
     };
-    if from.is_maximized().unwrap_or(false) {
-        let _ = window.maximize();
-        return;
+    // "Not minimised" is what is asked, so a face that cannot answer is treated as minimised and hands over nothing.
+    let taken = frame_taken(
+        from.is_visible().unwrap_or(false),
+        !matches!(from.is_minimized(), Ok(false)),
+        from.is_maximized().unwrap_or(false),
+    );
+    match taken {
+        FrameTaken::Nothing => {}
+        FrameTaken::Maximized => {
+            let _ = window.maximize();
+        }
+        FrameTaken::Place => {
+            let _ = window.unmaximize();
+            if let (Ok(position), Ok(size)) = (from.outer_position(), from.inner_size()) {
+                let _ = window.set_position(position);
+                let _ = window.set_size(size);
+            }
+        }
     }
-    let _ = window.unmaximize();
-    if let (Ok(position), Ok(size)) = (from.outer_position(), from.inner_size()) {
-        let _ = window.set_position(position);
-        let _ = window.set_size(size);
+}
+
+/// What the face coming up takes from the face going ([`take_frame`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FrameTaken {
+    /// The face going is not on screen: the one coming up keeps its own frame.
+    Nothing,
+    /// The face going is maximised: so is the one coming up, wherever it was.
+    Maximized,
+    /// Its place and its size.
+    Place,
+}
+
+/// Pure, for the tests. A face minimised to the taskbar is NOT on screen, though Windows calls it visible: its frame is
+/// where Windows parks a minimised window, (-32000, -32000) at nothing by nothing, and a face that took it opened there,
+/// off every screen, frameless and out of reach until Quit (2026-10-12). And a minimised window is never maximised as
+/// far as tao says, so it handed over neither its place nor its maximised state.
+fn frame_taken(visible: bool, minimized: bool, maximized: bool) -> FrameTaken {
+    if !visible || minimized {
+        return FrameTaken::Nothing;
     }
+    if maximized {
+        FrameTaken::Maximized
+    } else {
+        FrameTaken::Place
+    }
+}
+
+/// Whether a face is where the reader can see it: shown, and not minimised to the taskbar. A face that cannot answer
+/// counts as not on screen, so nothing is placed against a frame that was never read.
+fn on_screen(window: &WebviewWindow) -> bool {
+    window.is_visible().unwrap_or(false) && matches!(window.is_minimized(), Ok(false))
 }
 
 /// The face on screen, the one a dialog about closing stands over: the workspace or the main local window.
@@ -438,6 +480,11 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
         None => base,
     };
     if let Some(window) = app.get_webview_window(WORKSPACE) {
+        // Out of the taskbar first, as the main window comes back (`show_home_at`): `show` does nothing to a window
+        // Windows already counts as visible, and `set_focus` nothing to a minimised one, so a minimised workspace stayed
+        // minimised through the tray's "Open Intentic", a second launch and a notification's press (2026-10-12).
+        // Before its frame is set, which a minimised window would only keep for when it is restored.
+        let _ = window.unminimize();
         let home = app.get_webview_window(HOME);
         take_frame(&window, home.as_ref());
         swap_in(&window, home, Keyboard::Take);
@@ -574,9 +621,10 @@ fn show_home_at(app: &AppHandle, route: Option<&str>, keyboard: Keyboard) {
         crate::local::open_home_later(app, route.map(str::to_string));
         return;
     };
+    // Out of the taskbar before its frame is set, which a minimised window would only keep for when it is restored.
+    let _ = window.unminimize();
     let workspace = app.get_webview_window(WORKSPACE);
     take_frame(&window, workspace.as_ref());
-    let _ = window.unminimize();
     swap_in(&window, workspace, keyboard);
     if let Some(route) = route {
         crate::local::navigate(&window, route);
@@ -1112,8 +1160,57 @@ static ASKING_QUIT: AtomicBool = AtomicBool::new(false);
 /// on its own, and is not asked about again.
 static RUNS_ANSWERED: AtomicBool = AtomicBool::new(false);
 
-/// The runs question's "Quit when it's done" is being waited out.
-static WAITING_TO_QUIT: AtomicBool = AtomicBool::new(false);
+/// The runs question's "Quit when it's done", while it is waited out.
+static QUIT_WAIT: LazyLock<Mutex<QuitWait>> = LazyLock::new(Mutex::default);
+
+/// "Quit when it's done", as one wait at a time with a number of its own, so a Cancel can take it back. It used to be a
+/// flag the waiting thread never looked at again: a later Quit's "Cancel" left the app to quit anyway the moment the
+/// work ended, and a wait that ended in a Cancel at the unsaved-changes question left the flag set, so "Quit when it's
+/// done" did nothing at all from then on (2026-10-12).
+#[derive(Debug, Default)]
+struct QuitWait {
+    waiting: Option<u64>,
+    last: u64,
+}
+
+impl QuitWait {
+    /// A wait starts, with its number; none when one is already being waited out, which this one joins.
+    fn begin(&mut self) -> Option<u64> {
+        if self.waiting.is_some() {
+            return None;
+        }
+        self.last += 1;
+        self.waiting = Some(self.last);
+        self.waiting
+    }
+
+    /// Whether wait `id` is still the one being waited out: a Cancel since, or a later wait, says no.
+    fn holds(&self, id: u64) -> bool {
+        self.waiting == Some(id)
+    }
+
+    /// Wait `id` saw the work end: true when it is still the one waited out, which then quits.
+    fn finish(&mut self, id: u64) -> bool {
+        let holds = self.holds(id);
+        if holds {
+            self.waiting = None;
+        }
+        holds
+    }
+
+    fn cancel(&mut self) {
+        self.waiting = None;
+    }
+}
+
+/// "Cancel" on either Quit question: the app stays, and nothing of a quit under way is left for the next one to trip
+/// over. "Quit anyway" no longer stands (its windows' changes count again, and an update waits for them), the work under
+/// way is asked about again, and a "Quit when it's done" being waited out is let go.
+fn quit_cancelled() {
+    QUITTING.store(false, Ordering::SeqCst);
+    RUNS_ANSWERED.store(false, Ordering::SeqCst);
+    QUIT_WAIT.lock().unwrap().cancel();
+}
 
 /// Only local windows keep the question: the workspace's × hides it and a floating panel's docks, so neither loses
 /// anything by closing. The main window's × hides it too, but Quit still ends it, so it keeps the question as well.
@@ -1231,6 +1328,8 @@ pub fn hold_quit(app: &AppHandle, code: i32) -> bool {
             if quit {
                 QUITTING.store(true, Ordering::SeqCst);
                 handle.exit(code);
+            } else {
+                quit_cancelled();
             }
         });
     true
@@ -1341,7 +1440,8 @@ fn hold_quit_for_runs(app: &AppHandle, code: i32) -> bool {
                 MessageDialogResult::Custom(said) if said == WAIT => wait_then_quit(handle, code),
                 MessageDialogResult::No => quit_now(&handle, code),
                 MessageDialogResult::Custom(said) if said == NOW => quit_now(&handle, code),
-                _ => {}
+                // Cancel, or the dialog closed: stays, and an earlier "Quit when it's done" no longer stands.
+                _ => quit_cancelled(),
             }
         });
     true
@@ -1398,14 +1498,27 @@ fn tell_quitting(app: &AppHandle, limit: Duration) -> bool {
     answered
 }
 
-/// Wait out the work under way, then quit with `code`. Once: a second "Quit when it's done" joins the first.
+/// Wait out the work under way in the tray, then quit with `code`. The faces go to the tray at once, as the ×'s "Keep
+/// Intentic in the tray" puts them, which is where the question promised the wait would be (it left them on screen, and
+/// the app then vanished from under whoever had gone on using it). Once: a second "Quit when it's done" joins the
+/// first. A later Quit's Cancel takes the wait back ([`quit_cancelled`]), and then this thread lets go without quitting.
 fn wait_then_quit(app: AppHandle, code: i32) {
-    if WAITING_TO_QUIT.swap(true, Ordering::SeqCst) {
+    hide_faces(&app);
+    let Some(id) = QUIT_WAIT.lock().unwrap().begin() else {
         return;
-    }
+    };
     std::thread::spawn(move || {
-        while !quit_waits_for(&crate::scripts::running_ids(), crate::project::busy()).is_empty() {
+        loop {
+            if !QUIT_WAIT.lock().unwrap().holds(id) {
+                return;
+            }
+            if quit_waits_for(&crate::scripts::running_ids(), crate::project::busy()).is_empty() {
+                break;
+            }
             std::thread::sleep(Duration::from_secs(1));
+        }
+        if !QUIT_WAIT.lock().unwrap().finish(id) {
+            return;
         }
         RUNS_ANSWERED.store(true, Ordering::SeqCst);
         app.exit(code);
@@ -1422,8 +1535,15 @@ fn quit_question(count: usize) -> String {
     format!("{windows} unsaved changes. If you quit now, those changes are lost.")
 }
 
-/// Bring a window back in front of the reader, as the tray or a second double-click on the same file asks.
-pub fn raise_window(window: &WebviewWindow) {
+/// Bring a local window back in front of the reader, as the tray or a second double-click on the same file asks. The
+/// main window is a face, so it comes up in the workspace's place, as the tray's "This computer" brings it: raised on
+/// its own, a double-click on a file in its folder or `intentic .` there stood it beside the workspace, two faces of
+/// the one window on screen at once (2026-10-12). Shown by the reader's own doing, so it is the face in use from then.
+pub fn raise_window(app: &AppHandle, window: &WebviewWindow) {
+    if window.label() == HOME {
+        show_home(app);
+        return;
+    }
     raise(window);
 }
 
@@ -1644,15 +1764,18 @@ fn request_close(app: &AppHandle) {
 /// on the way out exactly as it would there. Both faces step aside: only one is ever on screen, and the × was its.
 fn apply_close(app: &AppHandle, action: CloseAction) {
     match action {
-        CloseAction::Tray => {
-            for label in [WORKSPACE, HOME] {
-                if let Some(window) = app.get_webview_window(label) {
-                    let _ = window.hide();
-                    crate::shown::tell(&window, false);
-                }
-            }
-        }
+        CloseAction::Tray => hide_faces(app),
         CloseAction::Quit => app.exit(0),
+    }
+}
+
+/// Both faces to the tray, from where "Open Intentic" brings back the one last in use.
+fn hide_faces(app: &AppHandle) {
+    for label in [WORKSPACE, HOME] {
+        if let Some(window) = app.get_webview_window(label) {
+            let _ = window.hide();
+            crate::shown::tell(&window, false);
+        }
     }
 }
 
@@ -1662,11 +1785,23 @@ fn apply_close(app: &AppHandle, action: CloseAction) {
 /// Every failure here falls through to the tray rather than leaving the × doing nothing: a close that seems to
 /// be ignored is the worst outcome available, and the app staying up is the recoverable one.
 fn ask_before_closing(app: &AppHandle) {
+    let face = face_to_ask_over(app);
     if let Some(window) = app.get_webview_window(CONFIRM_CLOSE) {
+        // Asked again while the question is up: put it back over the face, on screen, rather than only focusing it
+        // wherever it is. A question nobody can see that every × only focuses is a × that does nothing.
+        let size = window
+            .outer_size()
+            .ok()
+            .zip(window.scale_factor().ok())
+            .map(|(size, scale)| size.to_logical::<f64>(scale))
+            .unwrap_or_else(|| LogicalSize::new(CONFIRM_WIDTH, CONFIRM_OPENING_HEIGHT));
+        center_over(&window, face.as_ref(), size);
+        let _ = window.show();
         let _ = window.set_focus();
         return;
     }
-    let parent = shown_face(app);
+    // Owned by the face only while that face is on screen: a dialog owned by a minimised window is hidden with it.
+    let parent = face.filter(on_screen);
     let mode = app.state::<crate::state::AppState>().ui_mode();
     let mut builder =
         WebviewWindowBuilder::new(app, CONFIRM_CLOSE, WebviewUrl::App("index.html".into()))
@@ -1718,17 +1853,30 @@ fn ask_before_closing(app: &AppHandle) {
     }
 }
 
+/// The face a close question stands over, brought back from the taskbar first. A × reaches a minimised face from its
+/// taskbar button ("Close window"), and the question used to be centred on where Windows parks a minimised window,
+/// (-32000, -32000): off every screen, and every × after it only focused that question again, so the × did nothing for
+/// the rest of the run (2026-10-12). The reader asked about this window, so it comes back to be asked about.
+fn face_to_ask_over(app: &AppHandle) -> Option<WebviewWindow> {
+    let face = shown_face(app)?;
+    if !matches!(face.is_minimized(), Ok(false)) {
+        let _ = face.unminimize();
+    }
+    Some(face)
+}
+
 /// The middle of the window being asked about, not the middle of the screen — a window that opens away from
 /// the thing it is about reads as belonging to something else. Falls back to the middle of the screen when
 /// there is nothing to be about, which is an ordinary state for both callers: a confirmation with no workspace
-/// behind it, and a setup started from a link that opened this app cold.
+/// behind it, and a setup started from a link that opened this app cold. A window that is not on screen is nothing
+/// to be about: a minimised one's frame is Windows' parking place for it, off every screen.
 ///
 /// `size` is what the window will be WEARING when it is shown, passed in rather than read back off it. A
 /// window that has just been asked to resize does not answer with its new size on every platform — GTK
 /// resizes on its own clock — and a setup placed against the size it is leaving lands half a window off.
 fn center_over(window: &WebviewWindow, over: Option<&WebviewWindow>, size: LogicalSize<f64>) {
     let own: PhysicalSize<u32> = size.to_physical(window.scale_factor().unwrap_or(1.0));
-    let placed = over.and_then(|over| {
+    let placed = over.filter(|over| on_screen(over)).and_then(|over| {
         Some(centered(
             over.outer_position().ok()?,
             over.outer_size().ok()?,
@@ -2298,6 +2446,30 @@ mod unsaved_tests {
         assert!(unsaved.dirty.is_empty() && unsaved.asking.is_empty());
     }
 
+    /// "Quit when it's done" is one wait at a time, which a Cancel takes back: the thread waiting it out then lets go
+    /// rather than quitting, and a new "Quit when it's done" after a Cancel waits again.
+    #[test]
+    fn a_wait_to_quit_is_taken_back_by_a_cancel() {
+        let mut wait = QuitWait::default();
+        let first = wait.begin().expect("nothing was waiting");
+        assert_eq!(wait.begin(), None, "a second joins the first");
+        assert!(wait.holds(first));
+        wait.cancel();
+        assert!(!wait.holds(first), "cancelled");
+        assert!(!wait.finish(first), "the cancelled wait does not quit");
+        let second = wait.begin().expect("waits again after a Cancel");
+        assert_ne!(first, second);
+        assert!(
+            !wait.finish(first),
+            "the old wait's thread does not quit for the new one"
+        );
+        assert!(wait.finish(second));
+        assert!(
+            wait.begin().is_some(),
+            "a wait that ended leaves room for the next"
+        );
+    }
+
     #[test]
     fn only_local_windows_keep_the_question() {
         assert!(is_local_window("files-3"));
@@ -2496,6 +2668,21 @@ mod floating_tests {
 #[cfg(test)]
 mod frame_tests {
     use super::*;
+
+    /* WHAT A FACE COMING UP TAKES FROM THE FACE GOING. */
+    #[test]
+    fn a_face_takes_the_frame_only_of_a_face_on_screen() {
+        assert_eq!(frame_taken(true, false, false), FrameTaken::Place);
+        assert_eq!(frame_taken(true, false, true), FrameTaken::Maximized);
+        assert_eq!(
+            frame_taken(false, false, false),
+            FrameTaken::Nothing,
+            "hidden in the tray"
+        );
+        // Minimised to the taskbar: Windows calls it visible, and its frame is (-32000, -32000) at nothing by nothing.
+        assert_eq!(frame_taken(true, true, false), FrameTaken::Nothing);
+        assert_eq!(frame_taken(true, true, true), FrameTaken::Nothing);
+    }
 
     /// A screen to open onto, as the platform would describe it: a work area starting at the top-left with a
     /// taskbar taken off the bottom.

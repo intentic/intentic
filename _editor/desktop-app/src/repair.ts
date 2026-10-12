@@ -29,6 +29,8 @@ interface RawMessage {
 interface RawSession {
     readonly state: string;
     readonly messages: readonly RawMessage[];
+    /** While Repair's daily allowance is spent: when it resets (repair/mod.rs `allowance_resets_at`). */
+    readonly allowanceResetsAt?: string;
 }
 
 const asTool = (tool: RawTool | undefined): LocalRepairTool | undefined => {
@@ -52,17 +54,27 @@ const asSessionState = (state: string): LocalRepairSession[`state`] => {
     return state as LocalRepairSession[`state`];
 };
 
-const asSession = (raw: RawSession): LocalRepairSession => ({
-    state: asSessionState(raw.state),
-    messages: raw.messages.map(
-        (message): LocalRepairMessage => ({
-            id: message.id,
-            role: message.role as LocalRepairMessage[`role`],
-            text: message.text,
-            tool: asTool(message.tool),
-        }),
-    ),
-});
+/**
+ * The session as the app sends it, in the shape the Repair view draws. The allowance's reset rides along: dropped here
+ * until 2026-10-12, a spent allowance read as Repair saying nothing back, with no word of when it would again.
+ */
+export const asSession = (raw: RawSession): LocalRepairSession => {
+    const session: LocalRepairSession = {
+        state: asSessionState(raw.state),
+        messages: raw.messages.map(
+            (message): LocalRepairMessage => ({
+                id: message.id,
+                role: message.role as LocalRepairMessage[`role`],
+                text: message.text,
+                tool: asTool(message.tool),
+            }),
+        ),
+    };
+    if (raw.allowanceResetsAt === undefined) {
+        return session;
+    }
+    return { ...session, allowanceResetsAt: raw.allowanceResetsAt };
+};
 
 export const repairHost = (): LocalRepairHost => {
     const session: Ref<LocalRepairSession> = ref({ state: `idle`, messages: [] });

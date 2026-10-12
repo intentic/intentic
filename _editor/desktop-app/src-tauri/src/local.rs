@@ -577,13 +577,13 @@ fn open_path(app: &AppHandle, path: &Path) -> Result<(), Trouble> {
     match destination {
         Destination::Shown(label) => {
             if let Some(window) = app.get_webview_window(&label) {
-                crate::windows::raise_window(&window);
+                crate::windows::raise_window(app, &window);
             }
             Ok(())
         }
         Destination::Inside { label, path } => {
             if let Some(window) = app.get_webview_window(&label) {
-                crate::windows::raise_window(&window);
+                crate::windows::raise_window(app, &window);
                 let _ = window.eval(open_in_window(&path));
                 app.state::<AppState>().remember_recent(&asked, false);
             }
@@ -823,7 +823,7 @@ pub fn point(app: &AppHandle, label: &str, path: &Path) -> Result<(), Trouble> {
     if let Some(shows) = shown {
         if shows != label {
             if let Some(window) = app.get_webview_window(&shows) {
-                crate::windows::raise_window(&window);
+                crate::windows::raise_window(app, &window);
             }
         }
         return Ok(());

@@ -19,32 +19,37 @@
         "installKeepsRunning": "La instalación sigue",
         "intenticDownloadedInstallsQuit": "Intentic {version} está descargado. Se instala al salir, o ahora mismo:",
         "keepFolderInSync": "¿Mantener esta carpeta sincronizada con {what}?",
-        "mirroringPortsFrom": "Replicando los puertos de {sandbox} en este dispositivo",
+        "mirroringPortsFrom": "Replicando los puertos de {sandbox} en este ordenador",
         "nothingOnComputerChanges": "Nada de este ordenador cambia hasta que tú lo digas.",
         "openFolder": "Abrir su carpeta",
         "openWorkspace": "Abrir el espacio de trabajo",
         "pickingUpWhereRestart": "Retomando donde lo dejó el reinicio. No hay nada que hacer: esta ventana continúa sola.",
-        "removesSandboxKeepsFiles": "Esto quita el sandbox de este dispositivo. Sus archivos y su historial se pueden recuperar durante una semana: ejecuta ic sandbox restore {slug} en este ordenador para recuperarlo.",
-        "runningOnDeviceKeeps": "En marcha en este dispositivo: sigue funcionando aunque cierres esta ventana.",
+        "removesSandboxKeepsFiles": "Esto quita el sandbox de este ordenador. Sus archivos y su historial se pueden recuperar durante una semana: ejecuta ic sandbox restore {slug} en este ordenador para recuperarlo.",
+        "runningOnDeviceKeeps": "En marcha en este ordenador: sigue funcionando aunque cierres esta ventana.",
         "sandbox": "tu sandbox",
         "sandboxRunsInDocker": "Tu sandbox se ejecuta en Docker, que todavía no está en marcha. Esto comprueba primero lo que necesita tu PC, y pregunta antes de cambiar nada.",
         "sandboxRunsInDocker2": "Tu sandbox se ejecuta en Docker, que todavía no está en marcha. La instalación lo instala primero, así que tu sistema te pedirá la contraseña una vez.",
-        "sandboxesOnDevice": "Sandboxes en este dispositivo",
+        "sandboxesOnDevice": "Sandboxes en este ordenador",
         "saysPairingAlreadyUsed": "Si dice que el emparejamiento ya se usó o caducó, vuelve a generarlo en tu espacio de trabajo.",
         "seeAllDevices": "Ver todos tus dispositivos",
         "settingUp": "Preparando",
-        "setupCodeRanOut": "Tu código de instalación caducó mientras este dispositivo estaba ausente. Todo aquello para lo que era el reinicio ya está hecho; solo necesita un código nuevo para continuar.",
-        "setupCodeRanOutHere": "Tu código de instalación caducó antes de que este dispositivo pudiera usarlo, y no se pudo obtener uno nuevo desde aquí. No se pierde nada de lo ya hecho; solo necesita un código nuevo para continuar.",
+        "setupCodeRanOut": "Tu código de instalación caducó mientras este ordenador estaba ausente. Todo aquello para lo que era el reinicio ya está hecho; solo necesita un código nuevo para continuar.",
+        "setupCodeRanOutHere": "Tu código de instalación caducó antes de que este ordenador pudiera usarlo, y no se pudo obtener uno nuevo desde aquí. No se pierde nada de lo ya hecho; solo necesita un código nuevo para continuar.",
         "showLog": "Mostrar el registro",
         "startDocker": "Iniciar Docker",
-        "startingOnDevice": "Iniciando en este dispositivo…",
-        "stoppedInstallNothingElse": "Has detenido esta instalación. No hay nada más en marcha en este dispositivo.",
+        "startingOnDevice": "Iniciando en este ordenador…",
+        "stoppedInstallNothingElse": "Has detenido esta instalación. No hay nada más en marcha en este ordenador.",
         "stopping": "Deteniendo…",
         "updateRestart": "Actualizar y reiniciar",
         "yourSandbox": "tu sandbox",
         "newerIntenticInstalled": "Hay una versión más reciente de Intentic instalada. Reinicia Intentic para usarla.",
         "restartIntentic": "Reiniciar Intentic",
-        "startEngine": "Iniciar el motor"
+        "startEngine": "Iniciar el motor",
+        "pcSetupFirst": "Este PC necesita Docker antes de que tu sandbox pueda ejecutarse en él, así que la configuración del sandbox espera a que termine la preparación de este PC. Cuando este PC esté listo, seguirá solo.",
+        "pcSetupChecking": "Comprobando lo que necesita este PC…",
+        "setUpThisPc": "Preparar este PC",
+        "pcSetupAdminDeclined": "Windows no obtuvo permiso de administrador, así que no ha cambiado nada. Vuelve a preparar este PC y elige «Sí» cuando Windows lo pregunte.",
+        "pcSetupFailed": "La preparación de este PC se detuvo antes de terminar."
     },
     "closeConfirm": {
         "alwaysDoDontAsk": "Hacer siempre esto: no volver a preguntar",
@@ -58,7 +63,7 @@
     },
     "deviceAgent": {
         "latestUnknown": "Última desconocida",
-        "servingInstalledBuild": "Sirviendo la versión instalada en este dispositivo.",
+        "servingInstalledBuild": "Sirviendo la versión instalada en este ordenador.",
         "workspaceChecksUpdates": "El espacio busca novedades"
     },
     "docker": {
@@ -92,32 +97,351 @@
         "tryOpeningItYourself": "Prueba a abrirlo tú mismo y vuelve a comprobarlo.",
         "waitedOf": "Esperando {elapsed} · se rinde a los {limit}"
     },
+    "fix": {
+        "didntStart": "La reparación no se inició",
+        "failed": "Una reparación no funcionó",
+        "finished": "La reparación ha terminado",
+        "fixed": "{sandbox} está reparado",
+        "fixing": "Reparando {sandbox}",
+        "healthy": "{sandbox} no tenía ningún problema en este ordenador",
+        "icCantFixYet": "El comando ic de este ordenador todavía no puede ejecutar una reparación",
+        "needsYou": "Parte de esto te necesita",
+        "needsYourYes": "Algunas reparaciones esperan tu sí. Pulsa una abajo e ic la hará.",
+        "ranTooLong": "Estuvo {minutes} minutos sin terminar, así que se detuvo. Vuelve a intentarlo desde tu espacio de trabajo.",
+        "restartToFinish": "Reinicia este ordenador o cierra sesión en él para terminar.",
+        "somethingLeft": "La reparación ha terminado, pero queda algo pendiente",
+        "stageAsking": "Esperando una respuesta",
+        "stageChecking": "Comprobando este ordenador",
+        "stageDone": "Terminando",
+        "stageFixing": "Arreglando lo que encontró",
+        "stageStarting": "Iniciando",
+        "stateFail": "falló",
+        "stateFixing": "arreglando",
+        "stateSkip": "omitido",
+        "stateWarn": "aviso",
+        "stopped": "La reparación se detuvo",
+        "updateIc": "Vuelve a configurar este sandbox aquí para actualizar ic y luego inténtalo de nuevo desde tu espacio de trabajo.",
+        "waitingForOtherRun": "Esperando a que termine lo que ya se está ejecutando en este ordenador."
+    },
     "requirements": {
+        "badge": {
+            "done": "hecho",
+            "failed": "no funcionó",
+            "needsRestart": "necesita un reinicio",
+            "needsSignOut": "necesita cerrar sesión",
+            "onHost": "en la máquina anfitriona",
+            "unsupported": "no compatible",
+            "waitingForYou": "esperándote",
+            "weDoIt": "lo hacemos nosotros",
+            "working": "en curso",
+            "youDoIt": "tendrás que hacerlo tú"
+        },
         "beforeSandboxRunHere": "Antes de que tu sandbox pueda ejecutarse aquí:",
         "checkAgain": "Comprobar de nuevo",
-        "deviceCantRunSandbox": "Este dispositivo todavía no puede ejecutar un sandbox:",
+        "deviceCantRunSandbox": "Este ordenador todavía no puede ejecutar un sandbox:",
+        "doTheseAndContinue": "Hacer estos pasos y continuar",
+        "doThisAndContinue": "Hacer esto y continuar",
         "hideSteps": "Ocultar los pasos",
         "restartNow": "Reiniciar ahora",
         "runOnMachineWe": "Ejecutarlo en una máquina que alojamos nosotros",
+        "setupSaved": "Tu configuración está guardada: esta ventana la retoma cuando vuelvas.",
         "showMeHow": "Enséñame cómo",
+        "signOutAgain": "Cerrar sesión y volver a entrar no lo actualizó en este PC. Un reinicio siempre lo hace: tu configuración está guardada y seguirá sola cuando vuelvas.",
+        "signOutExhausted": "Ni siquiera un reinicio lo aplicó. Puede que quien administra este PC tenga que añadir tu cuenta al grupo de Docker a mano; mientras tanto, tu sandbox puede ejecutarse en una máquina que alojamos nosotros.",
         "signOutNow": "Cerrar sesión ahora",
+        "tryAgain": "Intentar de nuevo",
         "windowsAskPermissionOnce": "Windows pedirá permiso una vez."
     },
     "setupPlan": {
+        "aboutMinutes": "aproximadamente {count} minuto | aproximadamente {count} minutos",
         "checkAnswers": "Comprobar que responde",
-        "checkDevice": "Comprobar este dispositivo",
-        "connectDevice": "Conectar este dispositivo",
+        "checkDevice": "Comprobar este ordenador",
+        "checkDocker": "Comprobar Docker",
+        "checkDockerNeeds": "Comprobar lo que necesita Docker",
+        "connectDevice": "Conectar este ordenador",
         "downloadSandboxImage": "Descargar la imagen del sandbox",
         "fetchInstaller": "Obtener el instalador",
+        "installDocker": "Instalar Docker",
+        "lessThanMinute": "menos de un minuto",
         "redeemSetupCode": "Canjear tu código de instalación",
+        "setUpDocker": "Configurar Docker",
         "setUpFolderSync": "Configurar la sincronización de carpetas",
         "startSandbox": "Iniciar tu sandbox",
+        "stepOf": "Paso {index} de {total}",
         "useSandboxImage": "Usar la imagen del sandbox que ya está aquí",
-        "waitToComeUp": "Esperar a que arranque"
+        "waitToComeUp": "Esperar a que arranque",
+        "downloadedOf": "{done} de {total} descargados",
+        "loadingImage": "Cargando la imagen en Docker…"
     },
     "setupProgress": {
+        "allDone": "Todo listo",
+        "gettingStarted": "Empezando",
         "hideSteps": "Ocultar los pasos",
         "pausedAt": "En pausa en {toLowerCase}",
-        "seeAllSteps": "Ver los {count} pasos"
+        "seeAllSteps": "Ver los {count} pasos",
+        "stopped": "Detenido",
+        "stoppedAt": "Detenido en {position}",
+        "stoppedAtThisStep": "Detenido en este paso",
+        "waitingForYou": "Esperándote"
+    },
+    "device": {
+        "title": "Este ordenador",
+        "lead": "Los sandboxes que se ejecutan en este ordenador, su agente de máquina y el motor de Docker en el que se ejecutan.",
+        "thisDevice": "este ordenador",
+        "agentHeading": "Agente en este ordenador",
+        "dockerIsntRunning": "Docker no está en marcha, así que los sandboxes de este ordenador tampoco.",
+        "oursIsntRunning": "El motor de Intentic no está en marcha, así que los sandboxes de este ordenador tampoco.",
+        "oursHeld": "El motor de Intentic se detuvo a propósito (ic engine stop), así que los sandboxes de este ordenador no están en marcha. Nada lo vuelve a iniciar hasta que lo hagas tú.",
+        "noSandboxTitle": "Ningún sandbox se ejecuta en este ordenador",
+        "noSandboxLead": "Los agentes trabajan en un sandbox: un ordenador propio, con tus repositorios, herramientas y cuentas. Puede ejecutarse aquí en Docker o en una máquina que alojamos nosotros. Tus archivos de este ordenador no lo necesitan.",
+        "setOneUp": "Configurar uno",
+        "signInToSetUp": "Inicia sesión para configurar uno",
+        "folderHolds": "Ya contiene {count} elemento, y los propios archivos del sandbox también acaban en ella. | Ya contiene {count} elementos, y los propios archivos del sandbox también acaban en ella.",
+        "folderUnread": "No se pudo leer lo que ya contiene ({error}); todo lo que haya dentro también se sincroniza.",
+        "syncsBothWays": "Todo lo que hay en esta carpeta se sincroniza en ambos sentidos con {what}: los cambios que hacen los agentes en el sandbox aparecen aquí, sin posibilidad de deshacerlos.",
+        "startSyncing": "Empezar a sincronizar",
+        "settingUpBadge": "preparando {name}",
+        "needsYouBadge": "te necesita",
+        "startingDockerBadge": "iniciando Docker",
+        "updateReadyBadge": "hay una actualización lista",
+        "machineBadge": "preparando el sandbox de este ordenador",
+        "keptBy": "Mantenido por {place}",
+        "keptByNote": "Iniciar, detener y reiniciar funcionan aquí",
+        "keptByTitle": "El mantenimiento se hace allí",
+        "agentsElsewhere": "El agente de máquina de Intentic también se ejecuta en {places} en este ordenador, y se ocupa de los sandboxes configurados allí.",
+        "pcSettingUpBadge": "preparando este PC",
+        "pcSetupBadge": "este PC se puede preparar para agentes"
+    },
+    "machineSandbox": {
+        "title": "El sandbox de este ordenador",
+        "state": {
+            "signedOut": "se crea al iniciar sesión",
+            "needsDocker": "necesita Docker",
+            "creating": "preparándose",
+            "waiting": "necesita tu OK",
+            "ready": "listo",
+            "stopped": "detenido",
+            "failed": "sin configurar",
+            "interrupted": "retomando donde lo dejó",
+            "gone": "ya no está"
+        },
+        "detail": {
+            "signedOut": "Inicia sesión e Intentic crea un sandbox en este ordenador para las carpetas en las que trabajas con un agente.",
+            "needsDocker": {
+                "notInstalled": "Se ejecuta en Docker, que no está en este ordenador. Instala Docker Desktop e Intentic configurará el sandbox en cuanto esté en marcha.",
+                "notRunning": "Se ejecuta en Docker, que no está en marcha. Inícialo e Intentic seguirá solo.",
+                "notAllowed": "Docker está en marcha pero rechaza esta cuenta. Añade tu cuenta al grupo de Docker (docker-users en Windows) y luego cierra sesión y vuelve a entrar."
+            },
+            "creating": "Intentic lo está configurando en segundo plano. Tus carpetas entran en él en cuanto esté listo.",
+            "interrupted": "Intentic se cerró mientras se estaba configurando, así que retoma donde lo dejó.",
+            "waiting": "Este ordenador necesita algunas cosas antes de poder ejecutar un sandbox.",
+            "ready": "Las carpetas en las que trabajas con un agente entran en él, cada una en su propia carpeta.",
+            "stopped": "Está en este ordenador pero no está en marcha. Inícialo para trabajar en tus carpetas con un agente.",
+            "failed": "Su configuración se detuvo. El registro indica qué estaba haciendo.",
+            "gone": "Ya no está en este ordenador. Vuelve a configurarlo y tus carpetas volverán a entrar en él, con sus archivos si este ordenador aún los tiene."
+        },
+        "percent": "{percent} %",
+        "open": "Abrir",
+        "signIn": "Iniciar sesión",
+        "getDocker": "Conseguir Docker Desktop",
+        "showLog": "Mostrar el registro",
+        "start": "Iniciar",
+        "recreate": "Configurarlo de nuevo",
+        "folder": {
+            "queued": "en espera",
+            "attaching": "añadiendo",
+            "copying": "copiando",
+            "ready": "dentro",
+            "failed": "no se pudo añadir"
+        },
+        "waitsForPc": "Se crea en cuanto este PC esté preparado para agentes."
+    },
+    "engine": {
+        "runsOn": {
+            "dockerDesktop": "Tus sandboxes se ejecutan en Docker Desktop",
+            "intentic": "Tus sandboxes se ejecutan en el motor de Intentic"
+        },
+        "offerTitle": "Mueve tus sandboxes al motor de Intentic",
+        "why": "El motor propio de Intentic los ejecuta sin Docker Desktop, e Intentic lo mantiene actualizado y en marcha.",
+        "what": "Cada sandbox se detiene mientras se copian sus archivos. Docker Desktop guarda una copia durante 7 días, y puedes volver atrás.",
+        "gpu": "No se pueden mover al motor de Intentic: un sandbox de aquí usa la tarjeta gráfica (GPU) de este ordenador, que solo Docker Desktop puede darle.",
+        "keptRunning": "Intentic lo mantiene actualizado y en marcha.",
+        "moveToIntentic": "Mover al motor de Intentic",
+        "notNow": "Ahora no",
+        "moveBack": "Volver a Docker Desktop",
+        "confirm": {
+            "toIntenticTitle": "¿Mover tus sandboxes al motor de Intentic?",
+            "toIntentic": "Cada sandbox se detiene mientras se copian sus archivos, lo que puede tardar unos minutos por cada uno. Docker Desktop guarda una copia durante 7 días, y puedes volver atrás.",
+            "toDockerDesktopTitle": "¿Devolver tus sandboxes a Docker Desktop?",
+            "toDockerDesktop": "Cada sandbox se detiene mientras se copian sus archivos, lo que puede tardar unos minutos por cada uno. El motor de Intentic guarda una copia durante 7 días.",
+            "move": "Moverlos"
+        },
+        "movingTo": {
+            "intentic": "Moviendo tus sandboxes al motor de Intentic",
+            "dockerDesktop": "Devolviendo tus sandboxes a Docker Desktop",
+            "other": "Moviendo tus sandboxes"
+        },
+        "whileMoving": "Cada sandbox se detiene mientras se copian sus archivos. Si algo sale mal, todos los sandboxes vuelven a quedar como estaban.",
+        "step": {
+            "engine": "Instalando primero el motor de Intentic",
+            "begin": "Preparando",
+            "stopping": "Deteniéndolo",
+            "image": "Copiando su imagen",
+            "volume": "Copiando sus archivos",
+            "starting": "Iniciándolo de nuevo",
+            "moved": "Movido"
+        },
+        "position": "sandbox {index} de {count}",
+        "copied": "{done} de {total}",
+        "copiedAbout": "{done} de unos {total}",
+        "copiedSoFar": "{done} copiados",
+        "keepsGoing": "Cerrar esta ventana no lo detiene.",
+        "moved": {
+            "intentic": "Hecho: tus sandboxes ahora se ejecutan en el motor de Intentic.",
+            "dockerDesktop": "Hecho: tus sandboxes ahora se ejecutan en Docker Desktop."
+        },
+        "didntFinish": "El traslado no terminó",
+        "putBack": "Todo ha vuelto a como estaba.",
+        "stoppedPartWay": "Se detuvo a medio camino, así que puede que algún sandbox siga detenido. El registro indica hasta dónde llegó.",
+        "showLog": "Mostrar el registro",
+        "busy": "Ya hay otro traslado en marcha en este ordenador. Vuelve a intentarlo cuando termine.",
+        "didntStart": "El traslado no se inició",
+        "kept": {
+            "dockerDesktop": "Docker Desktop guarda una copia de tu sandbox hasta el {date}. | Docker Desktop guarda una copia de tus sandboxes hasta el {date}.",
+            "intentic": "El motor de Intentic guarda una copia de tu sandbox hasta el {date}. | El motor de Intentic guarda una copia de tus sandboxes hasta el {date}."
+        },
+        "removeNow": "Eliminar ahora",
+        "removing": "Eliminando…",
+        "removeCopies": {
+            "title": "¿Eliminar las copias ahora?",
+            "body": "Son la forma de volver a como estaban tus sandboxes antes del traslado. Los sandboxes que usas ahora no se tocan.",
+            "remove": "Eliminarlas"
+        },
+        "copiesStay": {
+            "dockerDesktop": "Docker Desktop tiene que estar en marcha para eliminar sus copias. Inícialo y vuelve a intentarlo.",
+            "intentic": "El motor de Intentic no se inició, así que sus copias se quedan. Vuelve a intentarlo más tarde."
+        },
+        "movingBadge": "moviendo sandboxes"
+    },
+    "account": {
+        "profileUpdateFailed": "No se pudo actualizar el perfil.",
+        "sessionCheckFailed": "No se pudo comprobar tu sesión.",
+        "signOutFailed": "No se pudo cerrar la sesión."
+    },
+    "setup": {
+        "stuckInstallerNotStopped": "No se pudo detener el instalador atascado: {error}"
+    },
+    "onboarding": {
+        "needsYou": "Windows te está pidiendo permiso",
+        "machineSep": ", ",
+        "machineMemory": "{gb} GB de memoria",
+        "machineFree": "{gb} GB libres",
+        "rows": {
+            "wsl-features": "Subsistema de Windows para Linux",
+            "virtualization": "Virtualización en el firmware",
+            "memory": "Memoria suficiente",
+            "windows-edition": "Edición de Windows",
+            "engine": "Motor de contenedores",
+            "engine-start": "Motor de contenedores en marcha",
+            "docker-desktop": "Docker Desktop",
+            "docker-path": "Docker en el PATH",
+            "docker-users": "Permiso de Docker para esta cuenta",
+            "wsl": "Compatibilidad con Linux para Windows (WSL 2)",
+            "wsl-kernel": "Kernel de Linux para WSL",
+            "disk-space": "Espacio libre en disco suficiente",
+            "docker-running": "Docker Desktop en marcha",
+            "docker-linux-containers": "Docker configurado para contenedores Linux",
+            "docker-own": "Tu propio Docker",
+            "arch": "Un procesador Intel o AMD de 64 bits",
+            "windows-version": "Versión de Windows",
+            "slat": "Funciones de virtualización del procesador",
+            "nested-virtualization": "Virtualización dentro de esta máquina virtual",
+            "pending-restart": "Un reinicio que Windows está esperando",
+            "check": "Leyendo este PC"
+        }
+    },
+    "pcSetup": {
+        "title": "Preparar este PC para los agentes",
+        "state": {
+            "checkUnknown": "no se pudo comprobar",
+            "needsSetup": "todavía sin preparar",
+            "settingUp": "preparándose",
+            "restart": "necesita un reinicio",
+            "admin": "necesita el permiso de Windows",
+            "signOut": "necesita cerrar sesión",
+            "setupFailed": "detenido",
+            "cantRun": "no puede ejecutar agentes"
+        },
+        "passed": "{met} de {total} comprobaciones superadas",
+        "cost": {
+            "minutes": "Unos {count} minutos",
+            "restart": "un reinicio",
+            "download": "{size} de descarga",
+            "admin": "Windows pide permiso una vez"
+        },
+        "unknown": "Algo impidió a Intentic comprobar si este PC puede ejecutar agentes. Vuelve a comprobarlo, o prepáralo de todos modos: la preparación lo averigua por sí misma.",
+        "needsYou": "Windows te está pidiendo permiso. Elige «Sí» para continuar.",
+        "minutesLeft": "quedan {count} min",
+        "quiet": {
+            "title": "La preparación lleva {count} minutos sin dar señales",
+            "body": "Puede que Windows esté esperando una respuesta en una ventana detrás de esta, así que mira primero en la barra de tareas. Si no hay nada esperando allí, el registro muestra lo último que hizo la preparación, y puedes empezarla de nuevo.",
+            "again": "Empezar de nuevo"
+        },
+        "restart": {
+            "body": "Un reinicio termina de preparar este PC: Windows lo necesita para activar la compatibilidad con Linux. Intentic se abre solo después y termina en unos dos minutos.",
+            "at": "Reinicio a las {time}.",
+            "cancel": "Cancelar el reinicio",
+            "in10Minutes": "En 10 minutos",
+            "later": "Más tarde",
+            "save": "Guarda primero tu trabajo en otras aplicaciones."
+        },
+        "signOut": "Cierra sesión en Windows y vuelve a entrar para terminar de preparar este PC. Seguirá solo cuando vuelvas.",
+        "repair": "Preguntar a Repair",
+        "hosted": "Un ordenador que alojamos nosotros puede ejecutar tus agentes en su lugar.",
+        "cloud": "Usar Intentic en la nube",
+        "ready": "Este PC está listo para los agentes.",
+        "signIn": {
+            "now": "Inicia sesión e Intentic crea el sandbox en el que trabajan tus agentes.",
+            "meanwhile": "Los agentes trabajan con tu cuenta. Inicia sesión cuando quieras: la preparación de este PC no espera a eso."
+        },
+        "prefetch": {
+            "label": "Descargando lo que necesitan los agentes",
+            "todo": "{total} por descargar",
+            "progress": "{done} de {total}",
+            "paused": "en pausa",
+            "metered": "esperando una conexión sin uso medido",
+            "yielded": "en pausa mientras se configura un sandbox en este ordenador",
+            "failed": "La descarga se detuvo antes de terminar.",
+            "retrying": "Se volverá a intentar en un momento.",
+            "later": "Lo que ya tiene se conserva, y la preparación descarga el resto cuando se ejecute.",
+            "pause": "Pausar",
+            "resume": "Reanudar",
+            "anyway": "Descargar de todos modos"
+        },
+        "task": {
+            "title": "Da a los agentes una primera tarea",
+            "lead": "Elige una carpeta y di lo que quieres que se haga.",
+            "placeholder": "Describe la tarea para tus agentes…",
+            "pickFolder": "Elegir carpeta",
+            "changeFolder": "Cambiar carpeta",
+            "queue": "Poner la tarea en cola",
+            "keptTitle": "Tu primera tarea",
+            "edit": "Editar",
+            "sending": "Enviando…",
+            "failedTitle": "Tu primera tarea no se inició",
+            "starts": {
+                "pc": "Empieza sola en cuanto este PC esté listo.",
+                "pcAndSignIn": "Empieza sola en cuanto este PC esté listo y hayas iniciado sesión.",
+                "signIn": "Empieza en cuanto inicies sesión.",
+                "now": "Empieza ahora mismo."
+            }
+        }
+    },
+    "leftovers": {
+        "title": "{count} sandbox antiguo de este ordenador sigue en tu cuenta | {count} sandboxes antiguos de este ordenador siguen en tu cuenta",
+        "detail": "{names}. Ya nada los ejecuta: este ordenador ahora tiene un solo sandbox.",
+        "remove": "Eliminar",
+        "confirmHeader": "¿Eliminar {count} sandbox antiguo? | ¿Eliminar {count} sandboxes antiguos?",
+        "confirmDetail": "Quitaremos {names} de tu cuenta. Puedes restaurarlos desde la papelera durante 7 días."
     }
 }

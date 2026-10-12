@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { useGettingStarted } from "../features/gettingStarted/useGettingStarted";
 import type { Disposable } from "@intentic/extension-api";
-import { AnchoredOverlay, Avatar, browserOwnsClick, StatusBadge, useHoverMenu, vAction } from "@intentic/ui";
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { AnchoredOverlay, Avatar, browserOwnsClick, Notice, StatusBadge, useHoverMenu, vAction } from "@intentic/ui";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { ACCOUNT } from "../workbench/commands/categories";
 import { registerCommand } from "../workbench/commands/useCommands";
@@ -55,8 +55,26 @@ const dismiss = (event: MouseEvent): void => {
     }
 };
 
+// Why the last Sign out did not sign anybody out, in the words it came back with (the platform's, or the desktop app's
+// for a local window it could not carry the call for). Until 2026-10-12 a refused or unreachable sign-out left the menu
+// as it was and said nothing, and the reader stayed signed in without knowing it.
+const signOutFailure = ref<string | undefined>(undefined);
+watch(open, (isOpen) => {
+    if (!isOpen) {
+        signOutFailure.value = undefined;
+    }
+});
+
 const logout = async (): Promise<void> => {
-    await account.signOut();
+    signOutFailure.value = undefined;
+    try {
+        await account.signOut();
+    } catch (error) {
+        signOutFailure.value = error instanceof Error ? error.message : String(error);
+        // Said in the menu, pinned open: the palette's Sign out has no menu up to say it in.
+        open.value = true;
+        return;
+    }
     if (account.local) {
         // A window on a folder stays on its folder: what signing out ends there is the account, not the window's work.
         open.value = false;
@@ -190,6 +208,7 @@ onUnmounted(() => {
                 <span class="flex h-5 w-5 shrink-0 items-center justify-center"><Icon name="sign-out" class="text-base text-muted" /></span>
                 {{ t(`shell.words.signOut`) }}
             </button>
+            <Notice v-if="signOutFailure" tone="danger" class="m-1 text-2xs" data-test="sign-out-failure">{{ signOutFailure }}</Notice>
         </div>
     </AnchoredOverlay>
 </template>
