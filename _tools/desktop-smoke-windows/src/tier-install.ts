@@ -1,7 +1,7 @@
 // Tier 1: does the Windows installer install, launch, and answer a deep link, with no Docker or credentials (loopback
 // stand-ins), so it can gate every release.
 // 1. install, including a WebView2 fetch on a runtime-less machine
-// 2. on disk: the executable and the scripts it spawns
+// 2. on disk: the executable and the scripts it spawns, and the `intentic` terminal command on the user's PATH
 // 3. intentic:// registered before the app's first run, since the app rewrites it after
 // 4. the deep link, with the app not running and already running (different mechanisms)
 // 5. uninstall while the app is running (the ordinary state, since it lives in the tray)
@@ -15,8 +15,8 @@ import { appExecutable, appRunning, installSilently, launchApp, quitApp, uninsta
 import { APP_IDENTIFIER, CONFIRM_TITLE, PRODUCT_NAME, SCHEME, SETUP_LINK, SETUP_TITLE, WORKSPACE_TITLE } from "./constants.js";
 import type { Harness } from "./harness.js";
 import { prepareHermeticDesktop } from "./hermetic.js";
-import { ownedBy } from "./parse.js";
-import { answerConfirm, appWindowTitled, appWindows, findInstalledApp, openLink, schemeCommand, webView2, windows } from "./probe.js";
+import { ownedBy, pathHolds } from "./parse.js";
+import { answerConfirm, appWindowTitled, appWindows, findInstalledApp, openLink, schemeCommand, userPath, webView2, windows } from "./probe.js";
 
 export interface InstallTierOptions {
     /** The Intentic-<version>-x64-setup.exe under test. */
@@ -98,6 +98,24 @@ const assertCarriesIc = (harness: Harness, installLocation: string): void => {
     }
 };
 
+// `intentic .` in a terminal: the launchers in bin/ (tauri.windows.conf.json) and that folder on the user's PATH, which
+// the installer's hooks add with PowerShell (installer-hooks.nsh INTENTIC_CLI_PATH). verify-desktop-bundle.sh finds the
+// launchers in the archive; this checks the install placed them and the hook ran.
+const assertTerminalCommand = async (harness: Harness, installLocation: string): Promise<void> => {
+    const bin = join(installLocation, `bin`);
+    const missing = [`intentic.cmd`, `intentic`].filter((launcher) => !existsSync(join(bin, launcher)));
+    if (missing.length === 0) {
+        harness.pass(`the terminal command installed at ${bin}`);
+    } else {
+        harness.fail(`the terminal command is not on disk after install: ${missing.join(`, `)}`);
+    }
+    if (pathHolds(await userPath(), bin)) {
+        harness.pass(`${bin} is on the user's PATH`);
+    } else {
+        harness.fail(`${bin} is not on the user's PATH`, `\`intentic .\` would not be found in a new terminal; the install's details say why.`);
+    }
+};
+
 export const runInstallTier = async (harness: Harness, options: InstallTierOptions): Promise<void> => {
     if (!existsSync(options.installer)) {
         harness.fail(`the installer is not at ${options.installer}`);
@@ -169,6 +187,7 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
             harness.fail(`the bundled scripts are not on disk after install: ${missing.join(`, `)}`);
         }
         assertCarriesIc(harness, installed.installLocation);
+        await assertTerminalCommand(harness, installed.installLocation);
 
         // 3. scheme registration, before first launch
         harness.section(`scheme registration, before first launch`);
@@ -288,6 +307,12 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
         }
         await harness.untilTrue(60, `Windows no longer lists it`, async () => (await findInstalledApp(PRODUCT_NAME)) === undefined);
         await harness.untilTrue(30, `no process is left running`, async () => !(await appRunning(executable)));
+        // An entry left behind would point every terminal at a folder that is gone.
+        if (pathHolds(await userPath(), join(installed.installLocation, `bin`))) {
+            harness.fail(`the uninstall left the terminal command's folder on the user's PATH`);
+        } else {
+            harness.pass(`the terminal command's folder is off the user's PATH`);
+        }
     } finally {
         await hermetic.close();
     }

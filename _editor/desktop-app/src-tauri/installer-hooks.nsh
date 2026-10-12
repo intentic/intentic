@@ -181,6 +181,41 @@ Var IntenticAgentKept
     WriteRegStr HKCU "Software\Classes\Directory\Background\shell\Intentic" "Icon" "$INSTDIR\${MAINBINARYNAME}.exe"
     WriteRegStr HKCU "Software\Classes\Directory\Background\shell\Intentic\command" "" '"$INSTDIR\${MAINBINARYNAME}.exe" "%V"'
   ${EndIf}
+  !insertmacro INTENTIC_CLI_PATH add
+!macroend
+
+; `intentic .` IN A TERMINAL, the way `code .` opens VS Code (2026-10-11). `$INSTDIR\bin` holds two launchers
+; (src-tauri/cli, bundled by tauri.windows.conf.json): intentic.cmd for cmd and PowerShell, and `intentic`, a sh script
+; that WSL and Git Bash find on the same PATH and that turns a Linux path into its Windows name before handing it over.
+; Both start ${MAINBINARYNAME}.exe beside them with the path, which the app opens like any other it is handed
+; (src/local.rs `open_args`). Every install puts the folder on the user's PATH, so an existing install gets the command
+; with its next update, and the uninstall takes it off again.
+;
+; The edit is PowerShell's, not this script's. NSIS strings stop at NSIS_MAX_STRLEN, 1024 characters in the build
+; that makes this installer, and a user PATH is often longer: read, appended and written back here, it would come back
+; cut short, and every tool past the cut would vanish from the user's shell. PowerShell reads HKCU\Environment without
+; expanding it and writes it back under the kind it had, so %USERPROFILE%-style entries keep expanding: the same way
+; connect.ps1 puts `ic` on that PATH. Only the entry itself is added or removed, matched as a whole entry; the rest of
+; the value is left as it was. The folder goes by an environment variable rather than inside the command, so no
+; character in a user's folder name can end a quoted string. A failure leaves the PATH alone and the launchers where
+; they are, and is written in the install's details: the command is a convenience, the app is the install.
+;
+; The broadcast is the one the Control Panel's editor sends: without it, a terminal started from Explorer would not see
+; the new PATH until the next sign-in. A terminal open already keeps the PATH it had.
+!macro INTENTIC_CLI_PATH VERB
+  !if "${VERB}" == "add"
+    !define /redef INTENTIC_CLI_PS `$$ErrorActionPreference = 'Stop'; $$d = $$env:INTENTIC_CLI_DIR; $$k = Get-Item -LiteralPath 'HKCU:\Environment'; $$p = [string]$$k.GetValue('Path', '', 'DoNotExpandEnvironmentNames'); if (@($$p -split ';') -notcontains $$d) { $$t = if ($$k.GetValueNames() -contains 'Path') { $$k.GetValueKind('Path') } else { 'ExpandString' }; $$v = if ($$p.TrimEnd(';')) { $$p.TrimEnd(';') + ';' + $$d } else { $$d }; Set-ItemProperty -LiteralPath 'HKCU:\Environment' -Name Path -Type $$t -Value $$v -ErrorAction Stop }`
+  !else
+    !define /redef INTENTIC_CLI_PS `$$ErrorActionPreference = 'Stop'; $$d = $$env:INTENTIC_CLI_DIR; $$k = Get-Item -LiteralPath 'HKCU:\Environment'; if ($$k.GetValueNames() -contains 'Path') { $$e = @(([string]$$k.GetValue('Path', '', 'DoNotExpandEnvironmentNames')) -split ';'); if ($$e -contains $$d) { Set-ItemProperty -LiteralPath 'HKCU:\Environment' -Name Path -Type $$k.GetValueKind('Path') -Value (@($$e | Where-Object { $$_ -ne $$d }) -join ';') -ErrorAction Stop } }`
+  !endif
+  System::Call 'kernel32::SetEnvironmentVariable(t "INTENTIC_CLI_DIR", t "$INSTDIR\bin")'
+  nsExec::Exec /TIMEOUT=60000 `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "${INTENTIC_CLI_PS}"`
+  Pop $0
+  ${If} $0 == 0
+    SendMessage ${HWND_BROADCAST} ${WM_SETTINGCHANGE} 0 "STR:Environment" /TIMEOUT=5000
+  ${Else}
+    DetailPrint "Could not ${VERB} $INSTDIR\bin on your PATH ($0). The intentic command is in that folder."
+  ${EndIf}
 !macroend
 
 ; regsvr32 on the menu's DLL, its exit code in $0 (0 is success). The 64-bit regsvr32 for a 64-bit DLL: this installer
@@ -204,6 +239,9 @@ Var IntenticAgentKept
 !macro NSIS_HOOK_POSTUNINSTALL
   DeleteRegKey HKCU "Software\Classes\Directory\shell\Intentic"
   DeleteRegKey HKCU "Software\Classes\Directory\Background\shell\Intentic"
+  ; The terminal command's folder is gone (INTENTIC_CLI_PATH), so is its PATH entry. On an update too: the install that
+  ; follows puts it back, under whatever folder it installs to.
+  !insertmacro INTENTIC_CLI_PATH remove
   ; Copies of the menu's DLL an earlier update stepped aside from (INTENTIC_EXPLORER_MENU_STEP_ASIDE).
   Delete "$INSTDIR\intentic_explorer_menu.dll.*.old"
   ${If} $UpdateMode <> 1

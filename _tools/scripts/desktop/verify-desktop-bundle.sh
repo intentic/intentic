@@ -273,6 +273,16 @@ check_nsis() {
     else
         echo "  ✓ nsis: explorer menu DLL present"
     fi
+    # `intentic .` in a terminal: the two launchers in bin/ (tauri.windows.conf.json), the folder the installer's hooks
+    # put on the user's PATH. Missing, the hooks still add the folder and the command is not there.
+    local launcher
+    for launcher in intentic intentic.cmd; do
+        if [ -z "$(find "$out" -maxdepth 3 -type f -path "*/bin/$launcher" -print -quit)" ]; then
+            fail "nsis: the terminal command's bin/$launcher did not ship"
+        else
+            echo "  ✓ nsis: bin/$launcher present"
+        fi
+    done
     # The release-signed package ships only when this build could sign it (stage-local-files.sh); a signing build
     # without it means WINDOWS_SIGN_PUBLISHER was not given, and users meet a UAC prompt instead of nothing.
     if [ -n "${WINDOWS_SIGN_TOOL:-}" ] && [ -z "$(find "$out" -maxdepth 2 -type f -name intentic-explorer-menu.msix -print -quit)" ]; then

@@ -191,6 +191,14 @@ export const sameStore = (written: string, readBack: string): boolean => {
     }
 };
 
+// Whether a PATH value holds a folder as one of its entries: Windows compares paths without case, and a trailing
+// backslash names the same folder. A longer entry that starts with the folder's name is another folder.
+export const pathHolds = (path: string, folder: string): boolean => {
+    const plain = (entry: string): string => entry.trim().replace(/\\+$/, ``).toLowerCase();
+    const wanted = plain(folder);
+    return path.split(`;`).some((entry) => entry.trim() !== `` && plain(entry) === wanted);
+};
+
 /** Launcher's own slug rule: everything before the first dot. */
 export const sandboxSlug = (hostname: string): string => hostname.split(`.`)[0] ?? hostname;
 

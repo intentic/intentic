@@ -57,6 +57,15 @@ export const schemeCommand = async (scheme: string): Promise<string | undefined>
     return command === `` ? undefined : command;
 };
 
+/** The user's own PATH as the registry keeps it (HKCU\Environment), %VARIABLES% unexpanded; empty when there is none. */
+export const userPath = async (): Promise<string> => {
+    const result = await powershell(
+        `$ErrorActionPreference='SilentlyContinue'
+         (Get-Item -LiteralPath 'HKCU:\\Environment').GetValue('Path', '', 'DoNotExpandEnvironmentNames')`,
+    );
+    return result.stdout.trim();
+};
+
 /** WebView2 runtime's version, or undefined on a machine with none (Windows Server's usual state). */
 export const webView2 = async (): Promise<string | undefined> => {
     const result = await powershell(

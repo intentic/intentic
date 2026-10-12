@@ -456,6 +456,21 @@ flowchart LR
   on the PC behind one UAC prompt. Updates and passive installs never prompt. Wherever the package is not in place
   (Windows 10, a declined prompt, a failure), the classic verb is written instead, so the entry is in one menu or the
   other and never both.
+- **`intentic .` in a terminal** ([src-tauri/cli](src-tauri/cli), 2026-10-11), the way `code .` opens VS Code. The
+  Windows installer puts two launchers in `$INSTDIR\bin` and that folder on the user's PATH: `intentic.cmd` for cmd and
+  PowerShell, and `intentic`, a sh script that WSL (which appends the Windows PATH to its own) and Git Bash find on
+  the same PATH. Each hands its paths to `intentic-desktop.exe` beside it, which opens them like any launch argument
+  (`open_args`): a folder gets its window, or the window already showing it is raised. The sh script turns a Linux
+  path into its Windows name first (`wslpath -w`: `~/project` becomes `\\wsl.localhost\<distro>\home\…\project`,
+  `/mnt/c/x` becomes `C:\x`; `cygpath -w` in Git Bash). Both return the prompt at once and leave the app none of the
+  terminal's handles: the `.cmd` starts it through PowerShell's `Start-Process`, since cmd's `start` would hand it the
+  caller's redirected or captured output, and a captured `intentic .` would then wait until the app quit. cmd.exe cannot
+  stand in a `\\…` folder and falls back to `C:\Windows`, so the `.cmd` refuses a relative path there and says to use
+  WSL or a full path. The PATH edit is PowerShell's as well (`INTENTIC_CLI_PATH`): NSIS strings stop at 1024
+  characters, and a longer user PATH read and written back by NSIS would come back cut short. Every install adds the
+  entry (so an existing install gets the command with its next update) and the uninstall removes it, leaving the rest of
+  the value and its registry type as they were. A terminal that was already open keeps its old PATH. Linux gets no
+  launcher: the deb and rpm put `intentic-desktop` itself on PATH, and it reads the same path arguments.
 - **Deletes go to the Recycle Bin.** A delete in a local window reaches the sidecar, which asks the app (`ask`,
   `verb: trash`); the app moves the entry to the OS's Recycle Bin or Trash (the `trash` crate) when it lies strictly
   inside the folder of an open folder window, and answers.
@@ -623,6 +638,7 @@ reloaded onto their new address and token.
 - [src-tauri/src/project.rs](src-tauri/src/project.rs) — a folder and its sandbox: what its dialog draws, the folder put in line for this computer's sandbox, and the project verbs its window runs.
 - [src-tauri/src/machine_sandbox.rs](src-tauri/src/machine_sandbox.rs) — this computer's own sandbox: the record every window hears, the thread that makes and watches it, and the folders it attaches.
 - [explorer-menu](explorer-menu) — "Open with Intentic" in Windows 11's own context menu: the menu command and the identity package it needs.
+- [src-tauri/cli](src-tauri/cli) — `intentic .` in a terminal on Windows: the launchers for cmd/PowerShell and for WSL/Git Bash that the installer puts on PATH.
 - [src/host.ts](src/host.ts) — this app's half of the local shell: its places, the account and its sandboxes, and the This device view it adds to the rail.
 - [src/device/useDevice.ts](src/device/useDevice.ts) — This device's store: the machine's sandboxes, agent and engine, and the setups, recreates and syncs the app runs here.
 - [src-tauri/src/engine.rs](src-tauri/src/engine.rs) and [src/components/EngineCard.vue](src/components/EngineCard.vue) — which engine this PC's sandboxes run on (Docker Desktop or Intentic's own), and the move between them (`ic engine move`), step by step on the card.

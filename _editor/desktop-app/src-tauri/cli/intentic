@@ -1,0 +1,60 @@
+#!/usr/bin/env sh
+# `intentic .` from WSL or Git Bash: opens the folder (or document) in the Intentic app installed on Windows, the way
+# `code .` opens VS Code. It lives in the app's `bin` folder, which the installer puts on the user's PATH; WSL appends
+# the Windows PATH to its own, and Windows finds `intentic.cmd` beside it from cmd and PowerShell.
+#
+# The app takes the paths it opens as arguments (src/local.rs `open_args`), at a cold start or handed to the running
+# one, but it is a Windows program: a Linux path means nothing to it. So each argument that names something here is
+# turned into its Windows name first: `wslpath -w` makes `/home/me/project` into `\\wsl.localhost\<distro>\home\me\
+# project` and `/mnt/c/x` into `C:\x`, and Git Bash's `cygpath -w` does the same for `/c/x`. Flags and links go as they
+# are.
+#
+# The app is started in the background from its own folder and the shell gets its prompt back at once. From its own
+# folder, because a Windows program started from a Linux folder would keep `\\wsl.localhost\...` as its working directory
+# for as long as it runs; in the background, because WSL waits for a Windows program to exit, and this one lives on in
+# the tray.
+set -eu
+
+self=$0
+if real=$(readlink -f -- "$0" 2>/dev/null); then
+    self=$real
+fi
+home=$(cd -- "$(dirname -- "$self")/.." && pwd)
+app="$home/intentic-desktop.exe"
+if [ ! -f "$app" ]; then
+    echo "intentic: the Intentic app is not where this command expects it ($app). Reinstall Intentic." >&2
+    exit 1
+fi
+
+if command -v wslpath >/dev/null 2>&1; then
+    windows_path() { wslpath -a -w "$1"; }
+elif command -v cygpath >/dev/null 2>&1; then
+    windows_path() { cygpath -a -w "$1"; }
+else
+    windows_path() { printf '%s\n' "$1"; }
+fi
+
+count=$#
+while [ "$count" -gt 0 ]; do
+    arg=$1
+    shift
+    count=$((count - 1))
+    case $arg in
+        -* | *://*) ;;
+        *)
+            if [ ! -e "$arg" ]; then
+                echo "intentic: $arg: no such file or folder" >&2
+                exit 1
+            fi
+            arg=$(windows_path "$arg")
+            ;;
+    esac
+    set -- "$@" "$arg"
+done
+
+cd -- "$home"
+if command -v setsid >/dev/null 2>&1; then
+    setsid "$app" "$@" </dev/null >/dev/null 2>&1 &
+else
+    "$app" "$@" </dev/null >/dev/null 2>&1 &
+fi

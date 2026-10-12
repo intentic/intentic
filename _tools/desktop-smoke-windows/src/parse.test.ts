@@ -13,6 +13,7 @@ import {
     missingEnvNames,
     nonEmpty,
     ownedBy,
+    pathHolds,
     publishedPort,
     runnerSupervision,
     sameStore,
@@ -274,4 +275,13 @@ test("both lock screen programs count, whatever case Windows spells them in", ()
     expect(lockScreenHolds({ locked: true, foreground: { id: "3", title: "", app: "logonui" } })).toBe(true);
     expect(lockScreenHolds({ locked: false, foreground: { id: "4", title: "Intentic", app: "intentic" } })).toBe(false);
     expect(lockScreenHolds(idle)).toBe(false);
+});
+
+test("the terminal command's folder is on a PATH only as a whole entry, whatever its case or trailing backslash", () => {
+    const bin = `C:\\Users\\a\\AppData\\Local\\Intentic\\bin`;
+    expect(pathHolds(`C:\\x;${bin};%USERPROFILE%\\y`, bin)).toBe(true);
+    expect(pathHolds(`C:\\x;${bin.toUpperCase()}\\`, bin)).toBe(true);
+    expect(pathHolds(`C:\\x;${bin}\\extra`, bin)).toBe(false);
+    expect(pathHolds(``, bin)).toBe(false);
+    expect(pathHolds(`;;`, bin)).toBe(false);
 });
