@@ -111,9 +111,19 @@ describe("overlap resolution", () => {
     });
 });
 
+// The CPU time `work` took, user and system, in milliseconds. Not wall time: on a runner several jobs share, waiting for
+// a core is most of the wall clock (the megabyte below read in 110ms on an idle machine, 400ms and then 1650ms on the CI
+// fleet with the detector unchanged), while what the bounds are for, a backtracking pattern, is work and shows as such.
+const cpuMsOf = (work: () => void): number => {
+    const before = process.cpuUsage();
+    work();
+    const spent = process.cpuUsage(before);
+    return (spent.user + spent.system) / 1000;
+};
+
 describe("speed", () => {
     // A request carries whole transcripts; masking must not be what the turn waits on. The bound is loose on purpose
-    // (a busy CI runner is several times slower than an idle one); a backtracking pattern would blow far past it.
+    // (over ten times what an idle machine spends); a backtracking pattern would blow far past it.
     test("a megabyte of mixed text is read well inside the budget", () => {
         const visa = luhn("411111111111111");
         const chunk = [
@@ -126,12 +136,13 @@ describe("speed", () => {
             "aGVsbG8gd29ybGQgdGhpcyBpcyBiYXNlNjQgZW5jb2RlZCBkYXRhIEFubmEgS293YWxza2E=",
         ].join("\n");
         const text = chunk.repeat(Math.ceil(1_000_000 / chunk.length));
-        const started = performance.now();
-        const spans = detectPersonalData(text, { classes: everything });
-        const elapsed = performance.now() - started;
+        let spans: ReturnType<typeof detectPersonalData> = [];
+        const spent = cpuMsOf(() => {
+            spans = detectPersonalData(text, { classes: everything });
+        });
         expect(text.length).toBeGreaterThanOrEqual(1_000_000);
         expect(spans.length).toBeGreaterThan(10_000);
-        expect(elapsed).toBeLessThan(1500);
+        expect(spent).toBeLessThan(1500);
     });
 
     // The inputs a backtracking pattern or a per-word rescan of the line would turn quadratic: one long minified line,
@@ -149,9 +160,10 @@ describe("speed", () => {
             "12-345 ".repeat(size / 7),
         ];
         for (const text of inputs) {
-            const started = performance.now();
-            detectPersonalData(text, { classes: everything });
-            expect(performance.now() - started, text.slice(0, 20)).toBeLessThan(1500);
+            expect(
+                cpuMsOf(() => detectPersonalData(text, { classes: everything })),
+                text.slice(0, 20),
+            ).toBeLessThan(1500);
         }
     });
 });

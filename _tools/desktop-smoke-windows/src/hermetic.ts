@@ -35,6 +35,45 @@ const restore = (key: string, value: string | undefined): void => {
     process.env[key] = value;
 };
 
+/* THE FILES THE APP DECIDES A BARE LAUNCH BY, pinned for the run and put back after it (2026-10-12). The runner is a PC
+ * that is also used, by its owner's own installs and by the nightly's deeper tiers, which connect real sandboxes, and an
+ * uninstall leaves the app's config directory where it is: so whatever that directory last held decided which window
+ * this tier's launch opened. A PC that hosts sandboxes, launched while Docker Desktop is down (it does not start itself
+ * at sign-in), opens This device for the engine rather than the workspace (lib.rs `opening`), and the launch's check of
+ * the workspace page waited out its 30 seconds for a request that was never coming (run 38301566644, after the run
+ * before it lost its runner mid-tier). `undefined` names a file that must not exist. */
+export const launchState = (workspaceUrl: string, platformUrl: string): ReadonlyMap<string, string | undefined> =>
+    new Map([
+        // Settings come before environment defaults in the app, so a developer setting kept across an uninstall would win.
+        [`settings.json`, JSON.stringify({ appUrl: workspaceUrl, platformUrl }, undefined, 2)],
+        // The face a bare launch opens (state.rs `Face`): the workspace, which is what the launch section checks.
+        [`last-face.json`, JSON.stringify(`workspace`)],
+        // No sandbox hosted here, so the launch never waits on this PC's engine.
+        [`hosts-sandboxes.json`, JSON.stringify(false)],
+        // No setup an earlier run left parked: one outranks every other face at launch.
+        [`resume-setup.json`, undefined],
+    ]);
+
+// Writes each file as `files` says (or removes it), and answers what puts every one back exactly as it was.
+export const pinFiles = async (directory: string, files: ReadonlyMap<string, string | undefined>): Promise<() => Promise<void>> => {
+    await mkdir(directory, { recursive: true });
+    const put = async (name: string, content: string | Buffer | undefined): Promise<void> => {
+        const path = join(directory, name);
+        await (content === undefined ? rm(path, { force: true }) : writeFile(path, content));
+    };
+    const before = new Map<string, Buffer | undefined>();
+    for (const [name, content] of files) {
+        const path = join(directory, name);
+        before.set(name, existsSync(path) ? await readFile(path) : undefined);
+        await put(name, content);
+    }
+    return async () => {
+        for (const [name, content] of before) {
+            await put(name, content);
+        }
+    };
+};
+
 /* The cold OS launch inherits this process's environment through PowerShell's Start-Process. */
 export const prepareHermeticDesktop = async (configuredAppUrl: string | undefined): Promise<HermeticDesktop> => {
     let workspaceRequested = false;
@@ -55,16 +94,13 @@ export const prepareHermeticDesktop = async (configuredAppUrl: string | undefine
     await writeFile(docker, `@echo off\r\nexit /b 0\r\n`);
     await writeFile(ic, `@echo off\r\n> "${marker}" echo started\r\nexit /b 1\r\n`);
 
-    // Settings intentionally precede environment defaults in the app. Writing the real Tauri config location
-    // makes the cold launch hermetic even when this runner preserved a developer setting across an uninstall.
+    // Written where the installed app reads them (its Tauri config directory), so the cold launch is this run's own
+    // whatever the runner kept across an uninstall (launchState).
     const appData = process.env[`APPDATA`];
     if (appData === undefined || appData === ``) {
         throw new Error(`APPDATA is unavailable; the installed app's settings location cannot be prepared`);
     }
-    const settingsPath = join(appData, APP_IDENTIFIER, `settings.json`);
-    const previousSettings = existsSync(settingsPath) ? await readFile(settingsPath) : undefined;
-    await mkdir(join(appData, APP_IDENTIFIER), { recursive: true });
-    await writeFile(settingsPath, JSON.stringify({ appUrl: workspaceUrl, platformUrl: origin }, undefined, 2));
+    const restoreState = await pinFiles(join(appData, APP_IDENTIFIER), launchState(workspaceUrl, origin));
 
     const pathKey = Object.keys(process.env).find((key) => key.toLowerCase() === `path`) ?? `Path`;
     const previous = {
@@ -91,11 +127,7 @@ export const prepareHermeticDesktop = async (configuredAppUrl: string | undefine
             restore(`INTENTIC_PLATFORM_URL`, previous.platformUrl);
             restore(`IC_BIN`, previous.icBin);
             restore(`INTENTIC_DISABLE_UPDATE_CHECK`, previous.disableUpdateCheck);
-            if (previousSettings === undefined) {
-                await rm(settingsPath, { force: true });
-            } else {
-                await writeFile(settingsPath, previousSettings);
-            }
+            await restoreState();
             await new Promise<void>((resolve, reject) => {
                 server.close((error) => (error === undefined ? resolve() : reject(error)));
             });

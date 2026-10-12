@@ -1,4 +1,5 @@
 import { type ChildProcess, type SpawnOptions, type SpawnSyncOptions, spawn, spawnSync } from "node:child_process";
+import { readdirSync, readFileSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
 import { sleep } from "../async.js";
 import { errnoCode } from "../errors.js";
@@ -142,15 +143,66 @@ const signalGroup = (pid: number, signal: NodeJS.Signals): void => {
 
 const GROUP_POLL_MS = 25;
 
+// The states /proc gives a process that has exited and only waits to be reaped (zombie, dead).
+const EXITED_STATES = new Set(["Z", "X", "x"]);
+const NUMERIC = /^\d+$/;
+
+// One process as Linux describes it in /proc/<pid>/stat: its state and process group, or `gone` when it ended between
+// the listing and the read. The command name before them is in parentheses and may hold spaces and parentheses of its
+// own, so the fields are read after the LAST `)`: state, parent, group.
+const procStatOf = (pid: string): { readonly state: string; readonly group: number } | "gone" => {
+    let stat: string;
+    try {
+        stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    } catch (error) {
+        const code = errnoCode(error);
+        if (code === "ENOENT" || code === "ESRCH") {
+            return "gone";
+        }
+        throw error;
+    }
+    const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+    return { state: fields[0] ?? "", group: Number(fields[2]) };
+};
+
+// Whether the group holds a process that has not exited. A member that has exited but is not yet reaped still answers
+// signal 0, and where its parent is a PID 1 that never reaps (a container started without an init, as a CI job's
+// `tail -f /dev/null` is), it answers for as long as the container lives: a `sh -c` whose forked child died of the
+// SIGTERM with it left the whole grace waited out for a group that had done what it was asked. Newest first, since a
+// group's members are the most recent processes and one living member is the answer. Undefined where /proc cannot say.
+const groupHasLivingMember = (pgid: number): boolean | undefined => {
+    let names: string[];
+    try {
+        names = readdirSync("/proc").filter((name) => NUMERIC.test(name));
+    } catch {
+        // allow(silent-catch): no readable /proc (a sandboxed runtime) is "cannot say", which keeps signal 0's answer.
+        return undefined;
+    }
+    for (const name of names.toReversed()) {
+        let stat: ReturnType<typeof procStatOf>;
+        try {
+            stat = procStatOf(name);
+        } catch {
+            // allow(silent-catch): a process this one may not read (a hidepid mount) is "cannot say", the stricter side.
+            return undefined;
+        }
+        if (stat !== "gone" && stat.group === pgid && !EXITED_STATES.has(stat.state)) {
+            return true;
+        }
+    }
+    return false;
+};
+
 // Signal 0 asks only whether the group still has a member: ESRCH is the answer "none"; EPERM means a member exists
-// that this process may not signal, so it is still there.
+// that this process may not signal, so it is still there. A member that answers may only be waiting to be reaped, which
+// Linux can tell apart (groupHasLivingMember); elsewhere signal 0's answer stands.
 const groupAlive = (pid: number): boolean => {
     try {
         process.kill(-pid, 0);
-        return true;
     } catch (error) {
         return errnoCode(error) !== "ESRCH";
     }
+    return process.platform === "linux" ? (groupHasLivingMember(pid) ?? true) : true;
 };
 
 // Everything the command started, not only its direct child: SIGTERM to its process group, then SIGKILL to what is

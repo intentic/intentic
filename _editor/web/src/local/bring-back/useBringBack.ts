@@ -87,8 +87,8 @@ const listen = (): void => {
 };
 
 // When each folder was last checked on the window's own initiative, so a reader flicking between windows asks the app
-// once a minute at most: every check starts the machine agent, flushes the sync and lists the sandbox's copy.
-// allow(module-state): per folder, for as long as the window lives, as the exchange itself is
+// once a minute at most: every check starts the machine agent, flushes the sync and lists the sandbox's copy. Kept per
+// folder for as long as the window lives, as the exchange itself is; a plain Map, since nothing draws from it.
 const quietAt = new Map<string, number>();
 const QUIET_EVERY_MS = 60_000;
 // A quiet check the app never answered (a folder it no longer keeps) gives way to the next one after this; the machine
