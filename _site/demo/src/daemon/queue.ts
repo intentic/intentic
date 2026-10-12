@@ -1,6 +1,6 @@
 import { type AgentSummary, type ConversationQueue, deriveTitle, type SandboxHandlerInput, type SandboxHandlerOutput } from "@intentic/sandbox-contract";
 import { refuse } from "@intentic/contract-serve";
-import { amendAgent, FEATURED_ID, roster } from "./roster";
+import { amendAgent, broadcastRoster, FEATURED_ID, roster } from "./roster";
 import { startTurn } from "./turns";
 
 // What waits for a conversation's next turn, as the daemon's queue holds it (conversation-queue.ts): messages booked to
@@ -140,6 +140,24 @@ export const sayOrBook = (input: SandboxHandlerInput<`agent`, `run`>): { deliver
     return startTurn({ ...input, conversationId: id });
 };
 
+// A conversation that exists only for the message just taken back: no turn ran in it, no session, nothing else waits, and
+// no booking elsewhere waits on its land. Forgotten here, as the daemon forgets its entry.
+const unopened = (id: string, left: ConversationQueue): boolean => {
+    const card = roster.agents.find((agent) => agent.id === id);
+    if (
+        card === undefined ||
+        left.items.length > 0 ||
+        (card.turns ?? 0) > 0 ||
+        card.sessionId !== undefined ||
+        roster.agents.some((agent) => (agent.queue?.items ?? []).some((waiting) => waiting.after === id))
+    ) {
+        return false;
+    }
+    roster.agents = roster.agents.filter((agent) => agent.id !== id);
+    broadcastRoster();
+    return true;
+};
+
 // The queue's four doors, each refused as the daemon refuses it: nothing waiting, a message named that has gone, or one
 // changed since it was read. Re-timing and letting go act on the messages named, or on every one when none are.
 export const queueDoors = {
@@ -173,20 +191,23 @@ export const queueDoors = {
         }
         return answer;
     },
-    queueRemove: ({ conversationId, id, revision }: SandboxHandlerInput<`agent`, `queueRemove`>): ConversationQueue => {
+    // Taking back the message that opened its conversation, with nothing else in it since, takes the conversation too,
+    // as the daemon's turn-admission does (`unopened`): its card leaves the board and the answer says so.
+    queueRemove: ({ conversationId, id, revision }: SandboxHandlerInput<`agent`, `queueRemove`>): SandboxHandlerOutput<`agent`, `queueRemove`> => {
         const queue = queueOf(conversationId);
         const item = queue.items.find((waiting) => waiting.id === id) ?? refuse(`That message is no longer waiting.`, 404);
         if (item.revision !== revision) {
             return refuse(`That message was changed since you read it.`, 412);
         }
         armBooking(conversationId, id, undefined);
-        return writeQueue(
+        const left = writeQueue(
             conversationId,
             queueFromMessages(
                 queue.items.filter((waiting) => waiting !== item),
                 queue.revision + 1,
             ),
         );
+        return unopened(conversationId, left) ? { ...left, unopened: true } : left;
     },
     queueEdit: ({ conversationId, id, revision, text }: SandboxHandlerInput<`agent`, `queueEdit`>): ConversationQueue => {
         const queue = queueOf(conversationId);

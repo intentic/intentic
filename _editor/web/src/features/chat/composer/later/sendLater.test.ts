@@ -1,5 +1,5 @@
 import { formatUntil } from "@intentic/ui/time";
-import { bookable, bookingOf, LATEST_SEND_MS, laterLabel, laterOfQueue, SOONEST_SEND_MS, timeChoices } from "./sendLater";
+import { bookable, bookingOf, HOUR_CHOICES, hourChoices, LATEST_SEND_MS, laterLabel, laterOfQueue, SOONEST_SEND_MS, timeChoices, waitText } from "./sendLater";
 
 // When the next message goes, when not now: the quick times the panel offers against the reader's own clock, how a
 // picked time is said, the bounds the sandbox keeps a booking within, and the wire's spelling of a pick. Every instant
@@ -36,6 +36,30 @@ describe(`the quick times`, () => {
         expect(timeChoices(at(3, 10)).find((choice) => choice.key === `monday`)?.at).toBe(at(5, 9));
         expect(timeChoices(at(4, 10)).map((choice) => choice.key)).not.toContain(`monday`);
         expect(timeChoices(at(7, 10)).map((choice) => choice.key)).not.toContain(`monday`);
+    });
+});
+
+// The send menu's first choice is an hour: half a day of whole hours, the night ones too, a later day said once.
+describe(`the hours`, () => {
+    it(`offers the next twelve whole hours, marking the ones past midnight`, () => {
+        const hours = hourChoices(at(FRIDAY, 18, 21));
+        expect(hours).toHaveLength(HOUR_CHOICES);
+        expect(hours.map((hour) => new Date(hour.at).getHours())).toEqual([19, 20, 21, 22, 23, 0, 1, 2, 3, 4, 5, 6]);
+        expect(hours.map((hour) => hour.nextDay)).toEqual([false, false, false, false, false, true, true, true, true, true, true, true]);
+        expect(hours[5]?.at).toBe(at(3, 0));
+    });
+
+    // Closer than the soonest a booking may be, the next hour is "now" with extra steps: the grid starts one later.
+    it(`skips an hour less than a minute away`, () => {
+        expect(hourChoices(at(FRIDAY, 13, 59) + 30_000)[0]?.at).toBe(at(FRIDAY, 15));
+        expect(hourChoices(at(FRIDAY, 13, 58))[0]?.at).toBe(at(FRIDAY, 14));
+    });
+
+    it(`says the wait under each hour in hours and minutes`, () => {
+        const now = at(FRIDAY, 18, 21);
+        expect(waitText(at(FRIDAY, 19), now)).toBe(`39m`);
+        expect(waitText(at(FRIDAY, 20, 21), now)).toBe(`2h`);
+        expect(waitText(at(3, 2), now)).toBe(`7h 39m`);
     });
 });
 

@@ -980,6 +980,56 @@ describe(`the queue's doors`, () => {
         expect(host.standing.value).toBeUndefined();
         // The conversation it opens next counts its queue afresh, which a kept revision would read as older.
         expect(host.queue.value).toBeUndefined();
+        // Still leaving until the roster stops listing the old conversation (latchRegistered), or this chat sends again.
+        expect(client.takingBack.value).toBe(`m-open`);
+    });
+
+    // Forgetting the conversation a message opened takes the sandbox seconds before it answers; the words are in the
+    // box and out of the chat's queue from the press, not from the answer.
+    it(`puts the words back and takes the message out of line at the press, before the sandbox answers`, async () => {
+        const { client, host } = clientOf();
+        const at = Date.now() + 60 * 60 * 1000;
+        const opening = { id: `m-open`, text: `analyse the transcripts`, voice: `person` as const, queuedAt: 1_000, revision: 1, until: at };
+        host.queue.value = { items: [opening], revision: 1, paused: `scheduled`, until: at };
+        host.registered.value = true;
+        let answer: (left: { items: never[]; revision: number; unopened?: true }) => void = () => {};
+        queueRemove.mockImplementation(() => new Promise((resolve) => (answer = resolve)));
+
+        const taking = client.unqueue(opening);
+        expect(host.draft.value).toBe(`analyse the transcripts`);
+        expect(host.sendLater.value).toEqual({ kind: `at`, at });
+        expect(client.takingBack.value).toBe(`m-open`);
+
+        answer({ items: [], revision: 2 });
+        expect(await taking).toBe(true);
+        // The conversation stayed (it had more than the message), so nothing is leaving.
+        expect(client.takingBack.value).toBeUndefined();
+        expect(host.registered.value).toBe(true);
+    });
+
+    // A refused take-back puts back what the press moved, unless the person has already made the words their own: then
+    // they stay, under the error line, rather than vanish from under the caret.
+    it(`puts the box back as it was when the take-back is refused, unless the words were already changed`, async () => {
+        const message = { id: `m-wait`, text: `and the docs`, voice: `person` as const, queuedAt: 1_000, revision: 1 };
+        const untouched = clientOf();
+        untouched.host.queue.value = { items: [message], revision: 1 };
+        untouched.host.draft.value = `also the readme`;
+        queueRemove.mockImplementationOnce(async () => {
+            throw new SandboxHttpError(412, `Changed since.`);
+        });
+        expect(await untouched.client.unqueue(message)).toBe(false);
+        expect(untouched.host.draft.value).toBe(`also the readme`);
+        expect(untouched.client.takingBack.value).toBeUndefined();
+
+        const edited = clientOf();
+        edited.host.queue.value = { items: [message], revision: 1 };
+        let refuse: (error: Error) => void = () => {};
+        queueRemove.mockImplementationOnce(() => new Promise((_, reject) => (refuse = reject)));
+        const taking = edited.client.unqueue(message);
+        edited.host.draft.value = `and the docs, briefly`;
+        refuse(new SandboxHttpError(404, `Gone.`));
+        expect(await taking).toBe(false);
+        expect(edited.host.draft.value).toBe(`and the docs, briefly`);
     });
 
     it(`says a change against an older copy was refused, and one to a message already gone`, async () => {

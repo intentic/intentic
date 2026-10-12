@@ -110,11 +110,18 @@ const withPending = (agents: AgentSummary[]): AgentSummary[] => {
 };
 
 // Latches `registered` from the server's own list (before pending projection), so a tab stops being a draft even
-// after archiving or a dropped stream removes the roster entry.
+// after archiving or a dropped stream removes the roster entry. Never for a chat whose conversation went with the
+// message it took back (TurnClient.takingBack, unlatched by `unopened`): a frame can still list the old row after the
+// answer, and filing the chat back under it stood an empty card in Finished. The first frame without it ends that.
 const latchRegistered = (agents: readonly AgentSummary[]): void => {
     const known = new Set(agents.map((agent) => agent.id));
     for (const conversation of useChat().conversations.value) {
-        if (known.has(conversation.conversationId)) {
+        const leaving = conversation.turn.takingBack.value !== undefined && !conversation.registered.value;
+        if (!known.has(conversation.conversationId)) {
+            if (leaving) {
+                conversation.turn.takingBack.value = undefined;
+            }
+        } else if (!leaving) {
             conversation.registered.value = true;
         }
     }

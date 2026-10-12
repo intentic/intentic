@@ -78,7 +78,9 @@ describe(`a message sent later`, () => {
         chat.draft.value = `tag the release`;
 
         expect(send.intent.value).toBe(`later`);
-        expect(send.scheduledLabel.value).toBe(`Schedule`);
+        // The press says when it goes, as a spent allowance's reopen does: no pill beside it repeats the time.
+        // The press names the clock it was booked for, the hour the send menu marks; a later day adds its weekday.
+        expect(send.scheduledLabel.value).toMatch(/^(?:\S+ )?\d{2}:\d{2}$/u);
         expect(send.scheduledIcon.value).toBe(`clock`);
         send.submit();
 
@@ -95,7 +97,7 @@ describe(`a message sent later`, () => {
         chat.sendLater.value = { kind: `after`, conversationId: `brave-otter` };
         chat.draft.value = `update the docs for it`;
 
-        expect(send.scheduledLabel.value).toBe(`Schedule`);
+        expect(send.scheduledLabel.value).toBe(`Fix the login bug`);
         expect(send.scheduledIcon.value).toBe(`link`);
         expect(send.scheduledWhen.value).toBe(`After Fix the login bug lands`);
         expect(send.sendHint.value).toEqual({

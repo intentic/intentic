@@ -181,7 +181,7 @@ it(`marks the placed box or runner current, not This sandbox`, () => {
 // panel, since no token holds a date), or after another agent's work lands.
 it(`drills the send kind to now, the quick times, a time of one's own, then the agents to wait for`, () => {
     const rows = quickRows(ALL, { kind: `send`, query: `` });
-    expect(rows.map((row) => row.label)).toEqual([`Now`, `In an hour`, `Tomorrow morning`, `Pick a date and time…`, `Fix the login bug`]);
+    expect(rows.map((row) => row.label)).toEqual([`Now`, `In an hour`, `Tomorrow morning`, `Another day or time…`, `Fix the login bug`]);
     expect(rows.map((row) => (row.kind === `send` ? row.to : undefined))).toEqual([
         `now`,
         { kind: `at`, at: NOON + HOUR },

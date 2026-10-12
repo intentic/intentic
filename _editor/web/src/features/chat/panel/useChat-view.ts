@@ -27,7 +27,7 @@ import { loadProviderModels } from "../models/useChat-catalog";
 import { accountsOf } from "../accounts/useChat-accounts";
 import { track } from "../../../app/analytics";
 import { waitKindOf } from "./pane/pendingDecision";
-import { bookedGroups, holdOfQueue, unbookedOf } from "../composer/later/bookings";
+import { bookedGroups, holdOfQueue, unbookedOf, withoutMessage } from "../composer/later/bookings";
 
 // The board's card for a conversation (useAgents.agentById), handed to a view by its pane so the facade stays clear of
 // the fleet store; a view handed none reads only what its own window saw.
@@ -60,15 +60,16 @@ const waitingView = (conversation: ComputedRef<Conversation>, cardOf: CardOf | u
     return { waitsOn, waitingOnYou: computed(() => waitsOn.value !== undefined) };
 };
 
-// What waits in the conversation's queue for its next turn, the same in every window, and why it is held if it is.
-// `queued` is all of it; `waiting` what no booking holds back, which `queuePaused` holds (a Stop, a refusal; `scheduled`
+// What waits in the conversation's queue for its next turn, the same in every window, less a message this window is
+// taking back (its words are already in the composer), and why it is held if it is. `queued` is all of it; `waiting` what no booking holds back, which `queuePaused` holds (a Stop, a refusal; `scheduled`
 // only from a sandbox that books the whole queue); `bookedGroups` the messages booked for later, each group on its own
 // time (bookings.ts).
+const shownQueue = (conversation: Conversation) => withoutMessage(conversation.queue.value, conversation.turn.takingBack.value);
 const queueReadings = (conversation: ComputedRef<Conversation>) => ({
-    queued: computed<readonly QueuedMessage[]>(() => conversation.value.queue.value?.items ?? []),
-    waiting: computed(() => unbookedOf(conversation.value.queue.value)),
-    queuePaused: computed(() => holdOfQueue(conversation.value.queue.value)),
-    bookedGroups: computed(() => bookedGroups(conversation.value.queue.value)),
+    queued: computed<readonly QueuedMessage[]>(() => shownQueue(conversation.value)?.items ?? []),
+    waiting: computed(() => unbookedOf(shownQueue(conversation.value))),
+    queuePaused: computed(() => holdOfQueue(shownQueue(conversation.value))),
+    bookedGroups: computed(() => bookedGroups(shownQueue(conversation.value))),
 });
 
 // One conversation, as a panel binds it: the facade every chat surface renders through. Built per pane rather than over
@@ -208,10 +209,10 @@ export const conversationView = (conversation: ComputedRef<Conversation>, cardOf
         return conversation.value.turn.say(prompt, staged, editorContext);
     },
     // The queue's door, acting on the message as this window read it, and letting a held queue go. A person's message is
-    // edited in the composer, so it comes back there (TurnClient.takenBack) and the caret goes where its words are.
-    unqueue: async (message: QueuedMessage): Promise<boolean> => {
-        const taken = await conversation.value.turn.unqueue(message);
-        if (taken && message.voice === `person`) {
+    // edited in the composer: its words are there from the press (TurnClient.unqueue), so the caret goes there with them.
+    unqueue: (message: QueuedMessage): Promise<boolean> => {
+        const taken = conversation.value.turn.unqueue(message);
+        if (message.voice === `person`) {
             focusComposer();
         }
         return taken;

@@ -1959,6 +1959,15 @@
             "agentTold": "der Agent weiß davon",
             "askFix": "Um Korrektur bitten",
             "fixRequest": "Die Seite \"{title}\" (id \"{id}\") hat in meinem Chat Fehler geworfen:\n{errors}\n\nBehebe sie und zeige sie erneut mit replaces: \"{id}\"."
+        },
+        "sendLater": {
+            "sendAt": "Senden um",
+            "tomorrow": "Morgen",
+            "waitMinutes": "{minutes} Min.",
+            "waitHours": "{hours} Std.",
+            "waitHoursMinutes": "{hours} Std. {minutes} Min.",
+            "pickTime": "Anderer Tag oder Uhrzeit",
+            "caretNote": "Stunde, Tag wählen oder auf einen anderen Agenten warten"
         }
     },
     "common": {

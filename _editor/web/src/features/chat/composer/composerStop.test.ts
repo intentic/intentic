@@ -100,9 +100,11 @@ const mountPanel = async (): Promise<void> => {
 
 const sendButton = (): HTMLButtonElement | null => document.querySelector<HTMLButtonElement>(`button[aria-label="Send"]`);
 const stopButton = (): HTMLButtonElement | null => document.querySelector<HTMLButtonElement>(`button.composer-stop`);
-// The round buttons at the end of the row, in DOM order.
+// The round buttons at the end of the row, in DOM order. The send's caret is half of the send (its split), not a button
+// of its own in the row's order, so it is read with the send it hangs on.
 const roundButtons = (): string[] =>
-    [...document.querySelectorAll<HTMLButtonElement>(`button.composer-send`)].map((element) => element.ariaLabel ?? ``);
+    [...document.querySelectorAll<HTMLButtonElement>(`button.composer-send:not(.composer-split-caret)`)].map((element) => element.ariaLabel ?? ``);
+const sendCaret = (): HTMLButtonElement | null => document.querySelector<HTMLButtonElement>(`button.composer-split-caret`);
 
 beforeEach(async () => {
     app?.unmount();
@@ -125,10 +127,20 @@ afterEach(() => {
 
 // The settled chat, for contrast: one button, and it is Send.
 it(`ends the row with Send while nothing is running`, async () => {
+    const conversation = useChat().active.value;
     await mountPanel();
 
     expect(roundButtons()).toEqual([`Send`]);
     expect(stopButton()).toBeNull();
+    // An empty box's press is the continue strip's, which a time picked there would only fight: no caret yet.
+    expect(sendCaret()).toBeNull();
+
+    // Split once there is something to send: the press sends now, and the caret joined to it is when else.
+    conversation.draft.value = `write the release notes`;
+    await settle();
+    expect(roundButtons()).toEqual([`Send`]);
+    expect(sendCaret()?.ariaLabel).toBe(`Send later`);
+    expect(sendButton()?.classList.contains(`composer-split-main`)).toBe(true);
 });
 
 // A live turn with an empty box: Send would be unpressable, so it disappears and Stop inherits its slot.

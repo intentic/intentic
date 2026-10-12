@@ -208,6 +208,13 @@ export class TurnClient {
         () => this.streaming.value && this.ending.value === undefined && !this.host.transcript.awaitingDecision.value,
     );
 
+    // The waiting message this window is taking back, from the press until the sandbox answers: the queue this chat
+    // shows leaves it out (useChat-view), and the board reads it off the tab (TabFacts.takingBack) to keep the card as
+    // the composer's draft when the conversation goes with it, rather than drawing the sandbox's half-forgotten row.
+    // When the conversation did go with it, kept until the roster stops listing the old one (latchRegistered), which
+    // can come after the answer, or until this chat sends again: a frame still listing it must not file the chat back.
+    readonly takingBack = shallowRef<string | undefined>();
+
     // Resolves once the daemon's detached run has settled after a Stop; else the next send could race its cleanup.
     private stopping: Promise<void> | undefined;
 
@@ -282,6 +289,10 @@ export class TurnClient {
         if (trimmed.length === 0 && attachments.length === 0) {
             await this.resume();
             return;
+        }
+        // The chat a taken-back message left behind opens afresh with these words: the old conversation is no longer leaving.
+        if (!this.host.registered.value) {
+            this.takingBack.value = undefined;
         }
         const queue = this.host.queue.value;
         if (repeatsNudge({ text: trimmed, attachments }, queue?.items.at(-1))) {
@@ -830,27 +841,49 @@ export class TurnClient {
     // Takes a waiting message back before it goes out, as this window read it: refused when another window changed it
     // since, which the error line says. A person's words come back into this composer (takenBack), and when they were
     // all the conversation ever held, the conversation went with them and this chat is a new one again (unopened).
+    //
+    // Done from the press, not from the answer. A conversation its message opened is forgotten before the sandbox
+    // answers, which takes it seconds (its checkout and records go), and for all of them the words were nowhere: the
+    // composer empty, the message gone from the chat, the card standing in Finished as the idle row on its way out.
+    // So the words are in the composer and out of the queue at once (takingBack), and a refusal puts back what the
+    // press moved, unless the person has already made the words their own; then they stay, under the error line.
     // False when nothing changed.
     async unqueue(message: QueuedMessage): Promise<boolean> {
         const { host } = this;
         // The booking as this window read it, before the answer replaces the queue it is read off.
         const booking = bookingOfMessage(host.queue.value, message);
-        const left = await orRefusal(
-            sandboxRpc.agent.queueRemove(
-                { conversationId: host.conversationId, id: message.id, revision: message.revision },
-                { context: { at: host.box.value } },
-            ),
-        );
-        if (!this.heard(left) || left instanceof SandboxHttpError) {
-            return false;
-        }
+        const before = { draft: host.draft.value, attachments: host.attachments.value, sendLater: host.sendLater.value };
+        this.takingBack.value = message.id;
         if (message.voice === `person`) {
             this.takenBack(message, booking);
         }
-        if (left.unopened === true) {
-            this.unopened();
+        const placed = { draft: host.draft.value, attachments: host.attachments.value };
+        let wentWithIt = false;
+        try {
+            const left = await orRefusal(
+                sandboxRpc.agent.queueRemove(
+                    { conversationId: host.conversationId, id: message.id, revision: message.revision },
+                    { context: { at: host.box.value } },
+                ),
+            );
+            if (!this.heard(left) || left instanceof SandboxHttpError) {
+                if (host.draft.value === placed.draft && host.attachments.value === placed.attachments) {
+                    host.draft.value = before.draft;
+                    host.attachments.value = before.attachments;
+                    host.sendLater.value = before.sendLater;
+                }
+                return false;
+            }
+            if (left.unopened === true) {
+                wentWithIt = true;
+                this.unopened();
+            }
+            return true;
+        } finally {
+            if (!wentWithIt && this.takingBack.value === message.id) {
+                this.takingBack.value = undefined;
+            }
         }
-        return true;
     }
 
     // A person's message taken back goes back where it was written, the inverse of the press that sent it: its words

@@ -1968,6 +1968,15 @@
             "agentTold": "el agente ya lo sabe",
             "askFix": "Pedir que lo arregle",
             "fixRequest": "La página \"{title}\" (id \"{id}\") lanzó errores en mi chat:\n{errors}\n\nArréglala y vuelve a mostrarla con replaces: \"{id}\"."
+        },
+        "sendLater": {
+            "sendAt": "Enviar a las",
+            "tomorrow": "Mañana",
+            "waitMinutes": "{minutes} min",
+            "waitHours": "{hours} h",
+            "waitHoursMinutes": "{hours} h {minutes} min",
+            "pickTime": "Otro día u hora",
+            "caretNote": "Elige una hora, un día o espera a otro agente"
         }
     },
     "common": {

@@ -325,8 +325,8 @@
 .chat-spine-node-failed:hover {
     color: var(--color-danger);
 }
-/* THE ONE THING ON THE SPINE THAT MOVES: the figure of the row still being written breathes. Never a spinner — the
-   turn's status at the column's foot already says what is running, and two spinners side by side said it twice. */
+/* The figure of the row still being written breathes. Never a spinner — the turn's status at the column's foot
+   already says what is running, and two spinners side by side said it twice. */
 .chat-spine-node-live {
     animation: chat-spine-breathe 1.8s ease-in-out infinite;
 }
@@ -373,10 +373,32 @@
 .chat-spine-wash-failed {
     --wash-ink: var(--color-danger);
 }
+/* A brief blade of light crosses the live band, then rests for most of the cycle. Only the sheen's transform
+   moves: the band itself stays steady, and the clipped gradient needs no per-frame paint or layout. */
 .chat-spine-wash-live {
-    animation: chat-spine-breathe 1.8s ease-in-out infinite;
+    position: relative;
+    overflow: hidden;
 }
-:root[data-motion="reduced"] .chat-spine-wash-live {
+.chat-spine-wash-live::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(105deg, transparent 43%, color-mix(in oklab, var(--wash-ink) 12%, transparent) 50%, transparent 57%);
+    transform: translateX(-100%);
+    animation: chat-spine-shine 6s ease-in-out infinite;
+}
+@keyframes chat-spine-shine {
+    0% {
+        transform: translateX(-100%);
+    }
+    20%,
+    100% {
+        transform: translateX(100%);
+    }
+}
+:root[data-motion="reduced"] .chat-spine-wash-live::after {
+    content: none;
     animation: none;
 }
 /* A band is space the row takes on purpose: shut, it keeps the gap between it and the words, and a thought mark beside
@@ -1078,8 +1100,9 @@
         width: 2.75rem;
     }
 }
-/* A spent account's schedule: the same send, widened to carry the time it goes, and split when a caret offers ways that
-   skip the wait. Declared after the coarse-pointer size so its width wins there too. */
+/* A send that goes later: the same send, widened to carry the time it goes. THE SEND IS SPLIT whenever it can go later
+   (ChatPane's caretShown): the press sends now, a narrow caret joined to it opens when else. Declared after the
+   coarse-pointer size so their widths win there too. */
 .composer-send.composer-scheduled {
     width: auto;
     gap: 0.375rem;
@@ -1093,10 +1116,19 @@
     border-end-end-radius: 0;
 }
 .composer-send.composer-split-caret {
+    width: auto;
     margin-inline-start: 1px;
-    padding-inline: 0.375rem 0.5rem;
+    padding-inline: 0.3125rem 0.4375rem;
     border-start-start-radius: 0;
     border-end-start-radius: 0;
+}
+.composer-send.composer-split-caret svg {
+    translate: none;
+}
+/* The round send keeps its left half round and gives the right to the caret, so the pair reads as one pill. */
+.composer-send.composer-split-main:not(.composer-scheduled) {
+    width: 2.125rem;
+    padding-inline-start: 0.125rem;
 }
 .composer-stop {
     background: var(--color-overlay);

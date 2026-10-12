@@ -40,7 +40,6 @@ const rowOf = () => {
         mode: ref<HTMLElement>(document.createElement(`button`)),
         persona: ref<HTMLElement>(),
         runThrough: ref<HTMLElement>(),
-        later: ref<HTMLElement>(),
         more: ref<HTMLElement>(document.createElement(`button`)),
     };
     let row: ReturnType<typeof useComposerControls> | undefined;
@@ -76,20 +75,21 @@ afterEach(() => {
 describe(`the row and its overflow`, () => {
     it(`keeps each control in the overflow at this chat's default, and brings a set one into the row`, () => {
         const { chat, mode, runState, row } = rowOf();
-        expect(keys(row)).toEqual([`mode`, `persona`, `runThrough`, `land`, `later`]);
-        expect(row.inRow.value).toEqual({ mode: false, persona: false, runThrough: false, voice: false, land: false, later: false });
+        expect(keys(row)).toEqual([`mode`, `persona`, `runThrough`, `land`]);
+        expect(row.inRow.value).toEqual({ mode: false, persona: false, runThrough: false, voice: false, land: false });
+        expect(row.laterOffered.value).toBe(true);
 
         mode.value = `plan`;
         chat.selection.apply({ kind: `set`, picks: { actsAs: `backend` } });
         chat.autoLandDraft.value = true;
-        chat.sendLater.value = { kind: `at`, at: Date.now() + 60 * 60 * 1_000 };
         expect(keys(row)).toEqual([`runThrough`]);
-        expect(row.inRow.value).toEqual({ mode: true, persona: true, runThrough: false, voice: false, land: true, later: true });
+        expect(row.inRow.value).toEqual({ mode: true, persona: true, runThrough: false, voice: false, land: true });
 
-        // A loop takes the send somewhere a booking cannot follow: the time picked waits, unshown, until it is gone.
+        // A loop takes the send somewhere a booking cannot follow: the send's caret offers no later then.
         runState.value = `loop`;
         expect(keys(row)).toEqual([]);
-        expect(row.inRow.value).toEqual({ mode: true, persona: true, runThrough: true, voice: false, land: true, later: false });
+        expect(row.inRow.value).toEqual({ mode: true, persona: true, runThrough: true, voice: false, land: true });
+        expect(row.laterOffered.value).toBe(false);
     });
 
     it(`offers writing as the agent once the chat has somewhere to place the words`, () => {
@@ -98,12 +98,12 @@ describe(`the row and its overflow`, () => {
 
         // On the roster: the daemon has an entry to place into, whatever this tab has latched.
         rostered.value = [`c1`];
-        expect(keys(row)).toEqual([`mode`, `persona`, `runThrough`, `voice`, `land`, `later`]);
+        expect(keys(row)).toEqual([`mode`, `persona`, `runThrough`, `voice`, `land`]);
 
         // Registered, landing is the card's to answer: with no card on its branch in this window, it is not offered.
         rostered.value = [];
         chat.registered.value = true;
-        expect(keys(row)).toEqual([`mode`, `persona`, `runThrough`, `voice`, `later`]);
+        expect(keys(row)).toEqual([`mode`, `persona`, `runThrough`, `voice`]);
 
         row.voiceAgent.value = true;
         expect(row.inRow.value.voice).toBe(true);
@@ -120,7 +120,7 @@ describe(`the row and its overflow`, () => {
 
     it(`hands a row to the picker that owns it, closing itself first; the voice and landing rows are the press`, () => {
         const { chat, runThrough, row } = rowOf();
-        const picks = [`mode`, `persona`, `runThrough`, `voice`, `land`, `later`] as const;
+        const picks = [`mode`, `persona`, `runThrough`, `voice`, `land`] as const;
         for (const control of picks) {
             row.moreOpen.value = true;
             row.openFromMore(control);
@@ -133,7 +133,6 @@ describe(`the row and its overflow`, () => {
         expect(row.voiceAgent.value).toBe(true);
         // Unregistered, the chat holds its own answer until its opening message carries it.
         expect(chat.autoLandDraft.value).toBe(true);
-        expect(row.laterOpen.value).toBe(true);
     });
 
     it(`opens a picker over its own chip while that rides the row, and over the overflow button otherwise`, () => {

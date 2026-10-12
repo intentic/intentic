@@ -8,13 +8,14 @@ import { t } from "@intentic/ui/i18n";
 // menu; set to anything else, it becomes a chip on the row. A pure, testable table; placement, model
 // and effort aren't here since the row places them itself (effort draws nothing at all under Auto).
 
-export type ComposerControl = `mode` | `persona` | `runThrough` | `voice` | `land` | `later`;
+// When the message goes is not one of them: it is the send's own caret (ChatPane), beside the press it changes.
+export type ComposerControl = `mode` | `persona` | `runThrough` | `voice` | `land`;
 
 /**
- * Order the controls read in, row and menu alike, so muscle memory doesn't depend on which half they're on. The two
- * about when the work moves come last, beside the Send they change: whether it lands by itself, and when it goes.
+ * Order the controls read in, row and menu alike, so muscle memory doesn't depend on which half they're on. Whether the
+ * work lands by itself comes last, beside the Send it follows.
  */
-export const CONTROL_ORDER: readonly ComposerControl[] = [`mode`, `persona`, `runThrough`, `voice`, `land`, `later`];
+export const CONTROL_ORDER: readonly ComposerControl[] = [`mode`, `persona`, `runThrough`, `voice`, `land`];
 
 export interface ComposerControlSituation {
     /** The posture the next turn starts in, or the running turn's if the agent has moved itself. */
@@ -34,10 +35,6 @@ export interface ComposerControlSituation {
     readonly lands: boolean;
     /** Whether that answer is the chat's own rather than the sandbox's. */
     readonly landOwn: boolean;
-    /** Booking a message for later needs a sandbox that holds one, and a send nothing else claims (a workflow, a loop). */
-    readonly laterOffered: boolean;
-    /** A time or an agent to wait for is picked for the next message. */
-    readonly later: boolean;
 }
 
 export interface ComposerMoreRow {
@@ -60,7 +57,6 @@ const offeredIn = (situation: ComposerControlSituation): Record<ComposerControl,
     runThrough: true,
     voice: situation.voiceOffered,
     land: situation.landOffered,
-    later: situation.laterOffered,
 });
 
 // Whether a control is doing something to the next send; the whole rule turns on this predicate. A
@@ -71,7 +67,6 @@ const setIn = (situation: ComposerControlSituation): Record<ComposerControl, boo
     runThrough: situation.runThrough !== `idle`,
     voice: situation.voiceAgent,
     land: situation.landOwn,
-    later: situation.later,
 });
 
 /** Controls that ride the row as chips: offered and set to something other than default. */
@@ -84,7 +79,6 @@ export const ridesRow = (situation: ComposerControlSituation): Record<ComposerCo
         runThrough: offered.runThrough && set.runThrough,
         voice: offered.voice && set.voice,
         land: offered.land && set.land,
-        later: offered.later && set.later,
     };
 };
 
@@ -133,14 +127,6 @@ const rowFor = (control: ComposerControl, situation: ComposerControlSituation): 
                 label: t(`chat.composerMore.landWhenDone`),
                 value: situation.lands ? t(`chat.composerMore.on`) : t(`chat.composerMore.off`),
                 description: situation.lands ? t(`chat.composerMore.holdOnBranchNote`) : t(`chat.composerMore.landWhenDoneNote`),
-            };
-        case `later`:
-            return {
-                key: control,
-                icon: `clock`,
-                label: t(`chat.composerMore.sendLater`),
-                value: t(`chat.composerMore.sendLaterNow`),
-                description: t(`chat.composerMore.sendLaterNote`),
             };
     }
 };

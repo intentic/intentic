@@ -2,8 +2,9 @@ import { t } from "@intentic/ui/i18n";
 import { formatUntil } from "@intentic/ui/time";
 
 // When the composer's next message goes, when not now: at an instant the reader chose, or once another agent's work
-// has landed in the workspace. A setting of the composer like its model or mode, not words in the message: it rides
-// the row as a pill while set, turns Send into a booking, and is spent by that booking. Where the message waits after
+// has landed in the workspace. Picked from the send's own caret (ChatPane), where a pick is the send itself: the words
+// go to the queue booked for it. Held on the composer only when it came back with words being edited (TurnClient's
+// takenBack) or from a typed token (composerQuickPick), and then the send says when it goes and its press books it. Where the message waits after
 // that is the conversation's queue, the daemon's, which every window draws as scheduled and where it can be sent
 // sooner, re-timed, or taken back into the composer to be edited, each booked message on its own time (bookings.ts). Pure and value-typed;
 // the clock is always handed in.
@@ -87,6 +88,49 @@ export const timeChoices = (now: number): readonly TimeChoice[] => {
         choices.push({ key: `monday`, label: t(`chat.sendLater.mondayMorning`), at: clockOn(now, weekday === FRIDAY ? 3 : 2, MORNING_HOUR) });
     }
     return choices;
+};
+
+/** One whole hour on the send-later menu's grid: the instant, and whether it falls on a later day than now's. */
+export interface HourChoice {
+    readonly at: number;
+    readonly nextDay: boolean;
+}
+
+// How many hours the grid offers: half a day, four to a row. A later day, or a minute that is not on the hour, is the
+// panel's other time (LaterTimePicker), one row below.
+export const HOUR_CHOICES = 12;
+
+/**
+ * THE SEND MENU'S FIRST CHOICE IS AN HOUR. People schedule against the clock ("at 2, when the limit is back", "at 9,
+ * when I am in"), and half a day of whole hours covers nearly every booking in one press, the night ones included. The
+ * next whole hour still a minute ahead, then each one after it, on the reader's own clock (summer time moves the
+ * instants, never the labels). A date is the advanced case, behind its own row.
+ */
+export const hourChoices = (now: number, count: number = HOUR_CHOICES): readonly HourChoice[] => {
+    const cursor = new Date(now);
+    cursor.setMinutes(0, 0, 0);
+    cursor.setHours(cursor.getHours() + 1);
+    if (!bookable(cursor.getTime(), now)) {
+        cursor.setHours(cursor.getHours() + 1);
+    }
+    const today = new Date(now).toDateString();
+    const hours: HourChoice[] = [];
+    while (hours.length < count) {
+        hours.push({ at: cursor.getTime(), nextDay: cursor.toDateString() !== today });
+        cursor.setHours(cursor.getHours() + 1);
+    }
+    return hours;
+};
+
+/** A wait as the hour grid says it under each hour: "45m", "2h", "2h 15m". */
+export const waitText = (at: number, now: number): string => {
+    const minutes = Math.max(1, Math.round((at - now) / MINUTE));
+    const hours = Math.floor(minutes / 60);
+    const rest = minutes % 60;
+    if (hours === 0) {
+        return t(`chat.sendLater.waitMinutes`, { minutes: rest });
+    }
+    return rest === 0 ? t(`chat.sendLater.waitHours`, { hours }) : t(`chat.sendLater.waitHoursMinutes`, { hours, minutes: rest });
 };
 
 /**

@@ -1,6 +1,7 @@
 import type { EditorContext } from "@intentic/sandbox-contract";
 import type { IconName, TooltipValue } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
+import { formatClock, formatDayMonthTime, formatWeekdayTime } from "@intentic/ui/format";
 import { t as translate, useT } from "@intentic/ui/i18n";
 import { computed, nextTick, type Ref } from "vue";
 import {
@@ -69,7 +70,7 @@ export interface SendHost {
     // Whether that answer already sends a held turn again by itself: then a bare press on a spent account has nothing
     // left to set, and its button says the turn goes by itself instead.
     readonly limitArmed: Readonly<Ref<boolean>>;
-    // Whether this composer may book a message for a time or another agent's land (composerMore's `later` control).
+    // Whether this composer may book a message for a time or another agent's land (the send's own caret, ChatPane).
     readonly laterOffered: Readonly<Ref<boolean>>;
     // The title an agent's card goes by, for a message booked to wait for it.
     readonly titleOf: (conversationId: string) => string | undefined;
@@ -144,6 +145,15 @@ const planAnswers = (
 const laterPick = (host: Pick<SendHost, "view" | "laterOffered">) =>
     computed(() => (host.laterOffered.value ? host.view.conversation.value.sendLater.value : undefined));
 
+// A booked instant as the send says it: the clock on its own day, the weekday beside it within the week, else the date.
+const WEEK = 7 * 24 * 60 * 60 * 1_000;
+const bookedClock = (at: number, now: number): string => {
+    if (new Date(at).toDateString() === new Date(now).toDateString()) {
+        return formatClock(at);
+    }
+    return at - now < WEEK ? formatWeekdayTime(at) : formatDayMonthTime(at);
+};
+
 // The scheduled press as the row draws it: a time-labelled button for a spent account's reopen or a booked message.
 const scheduledPress = (press: {
     readonly intent: Readonly<Ref<SendIntent>>;
@@ -151,15 +161,20 @@ const scheduledPress = (press: {
     readonly spentUntil: Readonly<Ref<number | undefined>>;
     readonly now: Readonly<Ref<number>>;
     readonly words: Readonly<Ref<ComposerWords>>;
+    readonly titleOf: (conversationId: string) => string | undefined;
 }) => {
     const booked = computed(() => (press.intent.value === `later` ? press.later.value : undefined));
     return {
-        // The button's label: when a spent allowance's reopen sends it ("40m", "14:20", "Sun 08:20"), or "Schedule" for a
-        // message booked for later, whose pill beside it already says when, in the words the panel used. Undefined for
-        // every other press.
+        // The button's label: when it goes, in the few characters the send has, or the agent whose land it waits for.
+        // A booked time reads as the clock it was picked as ("21:00", "Tue 09:00"), the hour the menu marks; a spent
+        // allowance's reopen counts down while it is near ("40m"), since nobody picked it. The send says it alone: no
+        // pill beside it repeats it. Undefined for every other press.
         scheduledLabel: computed(() => {
-            if (booked.value !== undefined) {
-                return translate(`chat.composerIntent.hintLater`);
+            const picked = booked.value;
+            if (picked !== undefined) {
+                return picked.kind === `at`
+                    ? bookedClock(picked.at, press.now.value)
+                    : (press.titleOf(picked.conversationId) ?? translate(`chat.sendLater.anotherAgent`));
             }
             const until = press.spentUntil.value;
             return press.intent.value === `scheduled` && until !== undefined ? pickUpShort(until, press.now.value) : undefined;
@@ -472,7 +487,7 @@ export const useComposerSend = (host: SendHost) => {
 
     return {
         intent,
-        ...scheduledPress({ intent, later, spentUntil, now: paneNow, words }),
+        ...scheduledPress({ intent, later, spentUntil, now: paneNow, words, titleOf: host.titleOf }),
         refusal,
         continueOffer,
         canSend,

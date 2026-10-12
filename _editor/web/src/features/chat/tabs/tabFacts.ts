@@ -45,6 +45,10 @@ export interface TabFacts {
     // The words of a failure that took back a resume the sandbox had promised in the same turn (TurnFailures
     // .resumeWithdrawn): the chat shows that stop, while the roster keeps reading `resuming`. Until the next turn starts.
     readonly resumeWithdrawn?: string;
+    // The waiting message this chat is taking back, from the press until the sandbox answers (TurnClient.takingBack):
+    // when it is the last thing in a conversation that never ran, the conversation goes with it, and the board draws
+    // the card as this composer's draft (useAgents-fleet.leavesWithItsMessage) instead of the row on its way out.
+    readonly takingBack?: string;
 }
 
 // A sent turn the registry hasn't filed yet, replaced by the registry's own version once it lands. Zero
@@ -142,6 +146,7 @@ export const tabFacts = (conversation: Conversation): TabFacts => {
         turn: standing === `starting` ? turnFacts(conversation) : undefined,
         ending: endedHere(conversation),
         resumeWithdrawn: conversation.failures.resumeWithdrawn.value,
+        takingBack: conversation.turn.takingBack.value,
     };
 };
 

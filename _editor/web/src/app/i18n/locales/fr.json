@@ -1959,6 +1959,15 @@
             "agentTold": "l'agent est prévenu",
             "askFix": "Demander une correction",
             "fixRequest": "La page \"{title}\" (id \"{id}\") a levé des erreurs dans mon chat :\n{errors}\n\nCorrige-la et affiche-la de nouveau avec replaces: \"{id}\"."
+        },
+        "sendLater": {
+            "sendAt": "Envoyer à",
+            "tomorrow": "Demain",
+            "waitMinutes": "{minutes} min",
+            "waitHours": "{hours} h",
+            "waitHoursMinutes": "{hours} h {minutes}",
+            "pickTime": "Autre jour ou heure",
+            "caretNote": "Choisir une heure, un jour, ou attendre un autre agent"
         }
     },
     "common": {

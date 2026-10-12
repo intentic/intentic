@@ -69,6 +69,8 @@ export interface ScheduledWaysHost {
     readonly accounts: ComputedRef<readonly OauthAccount[]>;
     // The composer's press; `now` skips the scheduling, since each way here has just made room itself.
     readonly submit: (options?: { readonly now?: boolean }) => void;
+    // The menu the ways are listed in (the send's caret, ChatPane), closed by a way that sent.
+    readonly open: Ref<boolean>;
 }
 
 export const useScheduledWays = (host: ScheduledWaysHost) => {
@@ -99,17 +101,11 @@ export const useScheduledWays = (host: ScheduledWaysHost) => {
     watch(resetAccount, (id) => void askLimitReset(id, host.conversation().box.value), { immediate: true });
     const canReset = computed(() => resetAccount.value !== undefined && limitResetFor(resetAccount.value)?.available === true);
 
-    const open = ref(false);
+    const { open } = host;
     const resetting = ref(false);
     // Why the last reset didn't open the window, until the reader tries something else.
     const note = ref<string>();
     const ways = computed(() => fallback.value !== undefined || canReset.value);
-    // An emptied menu closes, so nothing floats over a composer that has gone back to a plain Send.
-    watch(ways, (any) => {
-        if (!any) {
-            open.value = false;
-        }
-    });
     watch(scheduled, () => {
         note.value = undefined;
     });
@@ -148,7 +144,6 @@ export const useScheduledWays = (host: ScheduledWaysHost) => {
     };
 
     return {
-        open,
         ways,
         fallbackName: computed(() => (fallback.value === undefined ? undefined : fallbackLabel(fallback.value))),
         canReset,

@@ -25,7 +25,6 @@ export interface ControlPills {
     readonly mode: Readonly<Ref<HTMLElement | undefined>>;
     readonly persona: Readonly<Ref<HTMLElement | undefined>>;
     readonly runThrough: Readonly<Ref<HTMLElement | undefined>>;
-    readonly later: Readonly<Ref<HTMLElement | undefined>>;
     readonly more: Readonly<Ref<HTMLElement | undefined>>;
 }
 
@@ -61,9 +60,6 @@ const openersOf = (flags: Record<Exclude<ComposerControl, `land`>, Ref<boolean>>
             flags.voice.value = true;
         },
         land: toggleLanding,
-        later: () => {
-            flags.later.value = true;
-        },
     }) satisfies Record<ComposerControl, () => void>;
 
 export interface ControlsHost {
@@ -86,6 +82,7 @@ export const useComposerControls = (host: ControlsHost) => {
     const modeOpen = ref(false);
     const personaOpen = ref(false);
     const placementOpen = ref(false);
+    // The send's caret menu: when the message goes (a time, another agent's land), and the ways around a spent allowance.
     const laterOpen = ref(false);
     const moreOpen = ref(false);
     // Armed, the next Send places the words into the transcript as the agent's (no turn) and disarms itself.
@@ -132,18 +129,17 @@ export const useComposerControls = (host: ControlsHost) => {
         landOffered: landing.offered.value,
         lands: landing.lands.value,
         landOwn: landing.own.value,
-        // A booking is held by this sandbox's own daemon, for a send nothing else claims: a workflow or a loop takes the
-        // message somewhere a booking cannot follow.
-        laterOffered: supportsRoute(`agent.queueSchedule`) && !remote.value && runThrough.state.value === `idle`,
-        later: conversation().sendLater.value !== undefined,
     }));
+    // Whether the send's caret may book this message for later: a booking is held by this sandbox's own daemon, for a
+    // send nothing else claims (a workflow or a loop takes the message somewhere a booking cannot follow).
+    const laterOffered = computed(() => supportsRoute(`agent.queueSchedule`) && !remote.value && runThrough.state.value === `idle`);
     const inRow = computed(() => ridesRow(controlSituation.value));
     const moreRows = computed(() => overflowRows(controlSituation.value));
     // Each picker opens over whichever element it was reached from, so nothing anchors to an element that has gone.
     const anchorOf = (control: ComposerControl, own: Readonly<Ref<HTMLElement | undefined>>) =>
         computed(() => (inRow.value[control] ? own.value : host.pills.more.value));
 
-    const OPENERS = openersOf({ mode: modeOpen, persona: personaOpen, runThrough: runThrough.open, voice: voiceAgent, later: laterOpen }, landing.toggle);
+    const OPENERS = openersOf({ mode: modeOpen, persona: personaOpen, runThrough: runThrough.open, voice: voiceAgent }, landing.toggle);
 
     // Only one answer to "what does send do" can hold, and an armed edit wins as the most specific act; cleared visibly
     // rather than disabled, so the precedence is seen rather than discovered by pressing Send.
@@ -179,6 +175,7 @@ export const useComposerControls = (host: ControlsHost) => {
         voiceAgent,
         landing,
         controlSituation,
+        laterOffered,
         conversationBox,
         remote,
         pairedRunners,
@@ -201,7 +198,6 @@ export const useComposerControls = (host: ControlsHost) => {
         modeAnchor: anchorOf(`mode`, host.pills.mode),
         personaAnchor: anchorOf(`persona`, host.pills.persona),
         runThroughAnchor: anchorOf(`runThrough`, host.pills.runThrough),
-        laterAnchor: anchorOf(`later`, host.pills.later),
         // A row hands off to the control that owns the choice, closing the overflow first so the next panel's
         // dismissal never catches the same press; voice and landing have nothing to pick, so their rows are the press.
         openFromMore: (control: ComposerControl): void => {

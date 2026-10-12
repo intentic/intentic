@@ -198,6 +198,21 @@ const setAsideTabs = computed<readonly StoredTab[]>(() => {
     return [...closedDrafts.value, ...draftsInTransit.value.filter((tab) => !kept.has(tab.conversationId))];
 });
 
+// A conversation that never ran, leaving with the last message it waited to send, which this window has taken back into
+// its composer: from the press its card is that composer's draft, where it stood (Active), and never the sandbox's row
+// on its way out. That row goes idle with an empty queue first and is forgotten only once the conversation's records
+// are gone, seconds later, and read alone it stood in Finished for them, then vanished, then came back as a draft.
+// Also after the answer, for a row a roster frame still lists (TurnClient.takingBack). A conversation that has run, or
+// that keeps anything else waiting, is more than the message, and its row is the card.
+export const leavesWithItsMessage = (
+    tab: Pick<TabFacts, "standing" | "takingBack">,
+    row: Pick<AgentSummary, "turns" | "sessionId" | "queue"> | undefined,
+): boolean =>
+    tab.standing === `draft` &&
+    tab.takingBack !== undefined &&
+    (row === undefined ||
+        ((row.turns ?? 0) === 0 && row.sessionId === undefined && (row.queue?.items ?? []).every((item) => item.id === tab.takingBack)));
+
 // Unsent words in this browser: open composers plus chats closed with the message still in them; composers win any race.
 const unsentTabs = computed<ReadonlyMap<string, UnsentTab>>(
     () =>
@@ -216,10 +231,14 @@ export const fleet = computed<FleetAgent[]>(() => {
     // Every open tab by conversation, for what only this browser knows about a registered agent: that a turn just went
     // (`sendingNow`), or that a person just ended one (`endedHere`).
     const live: ReadonlyMap<string, TabFacts> = new Map(strip.tabs.map((tab) => [tab.id, tab]));
-    // Draft = unregistered tab; `carded` stops an id the registry already rendered from rendering twice.
-    // Excludes an empty placeholder tab (`unasked`); it joins the board itself once anything happens in it.
+    // Draft = unregistered tab; `carded` stops an id the registry already rendered from rendering twice, unless the
+    // conversation is leaving with the message this tab took back (leavesWithItsMessage), when the tab's draft stands
+    // for it instead of the row. Excludes an empty placeholder tab (`unasked`); it joins the board itself once anything
+    // happens in it.
+    const rows = new Map(registry.value.map((agent) => [agent.id, agent] as const));
+    const leaving = new Set(strip.tabs.filter((tab) => leavesWithItsMessage(tab, rows.get(tab.id))).map((tab) => tab.id));
     const drafts = strip.tabs
-        .filter((tab) => !tab.registered && !carded.has(tab.id) && !unasked(tab))
+        .filter((tab) => (leaving.has(tab.id) || (!tab.registered && !carded.has(tab.id))) && !unasked(tab))
         .map((tab): FleetAgent => endedHere(draftCard(tab, unsent.get(tab.id)), tab));
     // An archived agent stays off the board whatever its composer held; the words wait with it (withKeptWords).
     const archivedIds = new Set(archived.value.map((agent) => agent.id));
@@ -230,6 +249,9 @@ export const fleet = computed<FleetAgent[]>(() => {
         .map((tab): FleetAgent => closedCard(tab));
     const built = [
         ...registry.value.flatMap((agent): FleetAgent[] => {
+            if (leaving.has(agent.id)) {
+                return [];
+            }
             const tab = unsent.get(agent.id);
             const card: FleetAgent = {
                 ...agent,

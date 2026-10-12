@@ -53,6 +53,23 @@ export interface BookedGroup {
 const sameLater = (a: SendLater, b: SendLater): boolean =>
     a.kind === `at` ? b.kind === `at` && a.at === b.at : b.kind === `after` && a.conversationId === b.conversationId;
 
+// The queue without one message, as this window shows it while that message is being taken back (TurnClient.takingBack):
+// what is left is read again, so a booking that went with the message stops holding the rest. A queue an older sandbox
+// booked whole keeps its booking on what remains; nothing left is nothing waiting.
+export const withoutMessage = (queue: ConversationQueue | undefined, id: string | undefined): ConversationQueue | undefined => {
+    if (queue === undefined || id === undefined || !queue.items.some((item) => item.id === id)) {
+        return queue;
+    }
+    const items = queue.items.filter((item) => item.id !== id);
+    if (items.length === 0) {
+        return { items, revision: queue.revision };
+    }
+    if (!perMessage(queue)) {
+        return { ...queue, items };
+    }
+    return queueFromMessages(items, queue.revision, queue.paused === `scheduled` ? undefined : queue.paused);
+};
+
 /**
  * The booked messages, in the queue's order, gathered where neighbours share one booking: what one line, one Change and
  * one Send now act on. A queue booked as a whole by an older sandbox is one group.

@@ -1242,6 +1242,71 @@ describe("draft cards", () => {
         expect(useAgents().lanes.value.finished.map((entry) => entry.id)).toEqual([`a1`]);
     });
 
+    // Edit on the message a scheduled conversation was opened by: the sandbox empties the queue (an idle row), forgets the
+    // conversation seconds later once its records are gone, and only then answers. Read alone, those frames drew the
+    // card in Finished, then nowhere, then a draft again. From the press the card is the composer's draft, in Active,
+    // through every one of them.
+    it("keeps a conversation leaving with its taken-back message as the composer's draft, in Active, throughout", () => {
+        const conversation = new Conversation(`booked`);
+        useChat().conversations.value = [...useChat().conversations.value, conversation];
+        const waiting = { id: `m-1`, text: `write the release notes`, voice: `person`, queuedAt: 1_000, revision: 1, until: 90_000 } as const;
+        setAgents([{ ...registered(`booked`), status: `idle`, queue: { items: [waiting], revision: 1, paused: `scheduled`, until: 90_000 } }], 1);
+        expect(activeIds()).toEqual([`booked`]);
+        const standing = (): unknown => useAgents().lanes.value.active.map((card) => ({ id: card.id, status: card.status, unsent: card.unsent }));
+        const asDraft = [{ id: `booked`, status: `draft`, unsent: true }];
+
+        // The press: the words are in the composer and the message is on its way out.
+        conversation.turn.takingBack.value = `m-1`;
+        conversation.draft.value = waiting.text;
+        expect(standing()).toEqual(asDraft);
+        // The sandbox's queue emptied: an idle row that has never run.
+        setAgents([{ ...registered(`booked`), status: `idle` }], 2);
+        expect(standing()).toEqual(asDraft);
+        expect(useAgents().lanes.value.finished).toEqual([]);
+        // Forgotten, before the answer reaches this window. An id leaving the roster re-reads the archive list.
+        daemon.archived.mockResolvedValueOnce(AgentsListSchema.parse({ agents: [], rev: 3 }));
+        setAgents([], 3);
+        expect(standing()).toEqual(asDraft);
+        // The answer: the conversation went with the message, and this chat is a new one again.
+        conversation.registered.value = false;
+        expect(standing()).toEqual(asDraft);
+    });
+
+    // The answer can beat the roster's own news of the forget: a frame still listing the old row neither files the chat
+    // back under it nor draws it, and the first frame without it ends the take-back.
+    it("neither re-files nor draws the row a frame still lists after the conversation went with its message", () => {
+        const conversation = new Conversation(`booked`);
+        useChat().conversations.value = [...useChat().conversations.value, conversation];
+        setAgents([{ ...registered(`booked`), status: `idle`, queue: { items: [], revision: 2 } }], 1);
+        conversation.turn.takingBack.value = `m-1`;
+        conversation.draft.value = `write the release notes`;
+        conversation.registered.value = false;
+
+        setAgents([{ ...registered(`booked`), status: `idle`, queue: { items: [], revision: 2 } }], 2);
+        expect(conversation.registered.value).toBe(false);
+        expect(activeIds()).toEqual([`booked`]);
+        expect(useAgents().lanes.value.finished).toEqual([]);
+
+        daemon.archived.mockResolvedValueOnce(AgentsListSchema.parse({ agents: [], rev: 3 }));
+        setAgents([], 3);
+        expect(conversation.turn.takingBack.value).toBeUndefined();
+        expect(activeIds()).toEqual([`booked`]);
+    });
+
+    // A conversation that has run is more than its waiting message: its row stays the card, wherever the row stands.
+    it("leaves a conversation that has run to its own row when its waiting message is taken back", () => {
+        const conversation = new Conversation(`ran`);
+        conversation.session.value = { id: `sess-1`, provider: `claude`, account: undefined, harness: `native` };
+        useChat().conversations.value = [...useChat().conversations.value, conversation];
+        setAgents([{ ...registered(`ran`), status: `idle`, turns: 2, sessionId: `sess-1` }], 1);
+
+        conversation.turn.takingBack.value = `m-1`;
+        conversation.draft.value = `and the changelog`;
+
+        expect(activeIds()).toEqual([]);
+        expect(useAgents().lanes.value.finished.map((card) => ({ id: card.id, unsent: card.unsent }))).toEqual([{ id: `ran`, unsent: true }]);
+    });
+
     // Archiving from the board while its chat is open must close both views, not leave a phantom draft behind.
     it("takes the chat tab with the card, leaving nothing behind in either view", async () => {
         useChat().conversations.value = [...useChat().conversations.value, new Conversation(`a1`)];
