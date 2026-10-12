@@ -140,7 +140,12 @@
         --card-ledge: inset 0 0 #0000;
         --card-lift: 0 0 #0000;
         --card-drop: 0 0 #0000;
+/* The wash a selected card lays OVER whatever its ground paints, rather than a fill that replaces it: a skin that repaints the card (Sanctum's gradient) would otherwise paint straight over the selection. */
+        --card-tint: transparent;
         box-shadow: var(--card-accent), var(--card-ring), var(--card-ledge), var(--card-lift), var(--card-drop);
+/* The selection's blade (::before) lies under the card's words and over its fill, inside the card's own stacking context. */
+        position: relative;
+        isolation: isolate;
 /* The shadows transition WITH the colours: selecting a card used to fade its border over 150ms while the ring snapped in on the first frame. */
         transition:
             color var(--motion-hover),
@@ -162,12 +167,37 @@
         --card-fill: var(--color-overlay);
         transition: none;
     }
-/* Selection owns the warm fill and soft left edge; attention is already named by its lane and status. This follows the
-   pointer rules so hovering or pressing an open session never replaces its selected appearance. */
+/* Selection owns a soft wash, the left edge and a blade of light that crosses it now and then; attention is already
+   named by its lane and status. The wash is a layer over the card's own fill, so hovering or pressing an open session
+   moves the fill under it and never replaces its selected appearance. */
     .session-card.session-card-on {
         color: var(--color-content);
-        --card-fill: color-mix(in oklab, var(--color-primary-500) 8%, var(--color-overlay));
+        --card-tint: color-mix(in oklab, var(--color-selection-edge) 5%, transparent);
         --card-accent: inset 1px 0 0 0 var(--color-selection-edge);
+        background-image: linear-gradient(var(--card-tint), var(--card-tint));
+    }
+/* THE BLADE: a slanted band of the selection's hue sweeps across the card in 1.5s, then rests 6.5s, so the open session
+   catches the eye without the board ever standing still around a card that never does. Drawn like the skeleton's sheen
+   (utilities.css says why): the band is SMIL in the SVG the mask is drawn from, not a CSS animation, because selection
+   follows the route and a CSS animation started on every navigation rebuilds an open DevTools Styles editor. */
+    .session-card.session-card-on::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        border-radius: inherit;
+        pointer-events: none;
+        background-color: color-mix(in oklab, var(--color-selection-edge) 22%, transparent);
+        mask-image: var(--session-card-blade);
+        mask-size: 100% 100%;
+        mask-repeat: no-repeat;
+    }
+    :root {
+        --session-card-blade: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1' preserveAspectRatio='none'%3E%3ClinearGradient id='b' x1='-.9' x2='-.3' y2='.25'%3E%3Cstop offset='0' stop-opacity='0'/%3E%3Cstop offset='.5'/%3E%3Cstop offset='1' stop-opacity='0'/%3E%3Canimate attributeName='x1' values='-.9;1.5;1.5' keyTimes='0;.19;1' calcMode='spline' keySplines='.45 0 .25 1;0 0 1 1' dur='8s' repeatCount='indefinite'/%3E%3Canimate attributeName='x2' values='-.3;2.1;2.1' keyTimes='0;.19;1' calcMode='spline' keySplines='.45 0 .25 1;0 0 1 1' dur='8s' repeatCount='indefinite'/%3E%3C/linearGradient%3E%3Crect width='1' height='1' fill='url(%23b)'/%3E%3C/svg%3E");
+    }
+/* Reduced motion: no blade; the wash and the edge still say which card is open. */
+    :root[data-motion="reduced"] .session-card.session-card-on::before {
+        content: none;
     }
 /* NO RULE HERE REPAINTS A CHIP ON A SELECTED CARD, and that absence is the fix rather than the gap in it. */
 /* THE FILTER NAMED THIS CARD BY ITS ID: a halo outside the edge, where the selection ring (inset) never draws, so the card that is found and also open wears both and neither hides the other. An outline, not one more shadow in the stack: it costs no layout and no other rule writes it. */
@@ -196,8 +226,10 @@
     border-radius: 20px;
 }
 :is(.agents-board, .ground-card, .ground-canvas) .session-card {
+    /* The selection's wash (`--card-tint`, transparent at rest) rides over the ground's gradient as its own layer. */
+    --session-card-paint: linear-gradient(var(--card-tint), var(--card-tint)), linear-gradient(145deg, var(--session-card-fill-hi), var(--session-card-fill-lo));
     background-color: transparent;
-    background-image: linear-gradient(145deg, var(--session-card-fill-hi), var(--session-card-fill-lo));
+    background-image: var(--session-card-paint);
     transition:
         color var(--motion-hover),
         background-color var(--motion-hover),
@@ -222,11 +254,15 @@
         background-color: var(--card-fill);
     }
 }
-:is(.agents-board, .ground-card, .ground-canvas) .session-card:active,
-:is(.agents-board, .ground-card, .ground-canvas) .session-card.session-card-on {
+:is(.agents-board, .ground-card, .ground-canvas) .session-card:active {
     background-image: none;
     background-color: var(--card-fill);
 }
+/* A selected card keeps its ground's gradient under the wash, pointed at or not. */
+:is(.agents-board, .ground-card, .ground-canvas) .session-card.session-card-on {
+    background-image: var(--session-card-paint);
+    background-color: transparent;
+}
 [data-skin="sanctum"] :is(.agents-board, .ground-card, .ground-canvas) .session-card {
-    background-image: linear-gradient(145deg, var(--session-card-fill-hi), var(--session-card-fill-lo));
+    background-image: var(--session-card-paint);
 }
