@@ -29,7 +29,7 @@ describe("every provider/harness pair declares what it can do", () => {
     it.each(pairs)("$provider on the $harness harness", ({ provider, harness }) => {
         const capabilities = capabilitiesOf(provider, harness);
 
-        expect(["claude-code", "codex", "cursor", "opencode", "opencode-gemini", "acp", "pi"]).toContain(capabilities.runtime);
+        expect(["claude-code", "codex", "cursor", "opencode", "opencode-gemini", "acp", "devin", "pi"]).toContain(capabilities.runtime);
         expect(["modes", "plan"]).toContain(capabilities.permissions);
         expect(["full", "tools", "http", "none"]).toContain(capabilities.mcp);
         expect(capabilities.execution).toContain("shell");

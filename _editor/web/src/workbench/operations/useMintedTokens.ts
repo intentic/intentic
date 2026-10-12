@@ -1,7 +1,7 @@
 import { type NoticeModel, noticeFrom } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { computed, shallowRef, watch } from "vue";
-import { useOperation } from "../workbench/operations/operations";
+import { useOperation } from "./operations";
 
 // A credential list where minting answers the raw value once and the server keeps only its digest.
 export interface TokenSource<Token, Request, Minted> {

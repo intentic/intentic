@@ -1,7 +1,7 @@
 import { capabilitiesOf, PROVIDERS } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
 
-// Groups providers by what they do with the system prompt (replace vs. append), read from the daemon's own
+// Groups providers by what they do with the system prompt (replace, append, or nothing at all), read from the daemon's own
 // AgentCapabilities.instructions so the sentence can't drift from what a turn does. Derived rather than
 // hand-written, so a new provider lands in the right group automatically; asks each provider's own native runtime.
 
@@ -10,11 +10,15 @@ export interface PromptReach {
     readonly replaces: string[];
     // Providers that keep their own prompt and take this as an addition to it.
     readonly adds: string[];
+    // Providers whose runtime takes no system prompt at all (an ACP agent owns its instructions): the setting never
+    // reaches them, only the persona and memory notes riding the message do.
+    readonly ignores: string[];
 }
 
 export const promptReach = (): PromptReach => {
     const replaces: string[] = [];
     const adds: string[] = [];
+    const ignores: string[] = [];
     for (const provider of PROVIDERS) {
         const { instructions } = capabilitiesOf(provider.value, `native`);
         if (instructions === `replace`) {
@@ -23,8 +27,11 @@ export const promptReach = (): PromptReach => {
         if (instructions === `append`) {
             adds.push(provider.label);
         }
+        if (instructions === `none`) {
+            ignores.push(provider.label);
+        }
     }
-    return { replaces, adds };
+    return { replaces, adds, ignores };
 };
 
 // Joins as "A, B and C"; an empty list renders as nothing rather than a dangling "and".

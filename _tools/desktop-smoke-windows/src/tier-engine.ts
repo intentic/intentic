@@ -6,6 +6,7 @@
 // tier's own (engine.ts), so nothing here touches this runner's own ~/.intentic, a real engine, or the Run key.
 
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
+import { shellQuote } from "@intentic/sandbox-run/quote";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -188,7 +189,7 @@ const moveBothWays = async (harness: Harness, context: MoveContext): Promise<voi
     }
     harness.pass(`${container} answers on Docker Desktop`);
     const stamp = `moved ${Date.now()}`;
-    const wrote = await run(`docker`, [`exec`, container, `sh`, `-c`, `printf '%s' '${stamp}' > ${MARKER}`]);
+    const wrote = await run(`docker`, [`exec`, container, `sh`, `-c`, `printf '%s' ${shellQuote(stamp)} > ${shellQuote(MARKER)}`]);
     if (wrote.code !== 0) {
         harness.fail(`could not write a file into the sandbox`, said(wrote));
         return;

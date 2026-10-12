@@ -4,6 +4,7 @@ import type { Context } from "hono";
 import { antiBotAccepted, mintChallenge, type AntiBotAnswer } from "../auth/antibot.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
+import { remoteIpOf } from "../http/remote-ip.js";
 import { threadKey } from "../seams/thread-key.js";
 import { dailyBudget } from "../store/daily-budget.js";
 import { rateWindow } from "../store/rate-window.js";
@@ -46,10 +47,6 @@ export type Resolved<Config> = { readonly automation: AutomationRecord; readonly
 
 const RATE_WINDOW_MS = 60_000;
 const CONVERSATION_ID_MAX = 60;
-
-// Client address for Turnstile's optional remoteip check; behind the tunnel the socket is Cloudflare's, so only the
-// forwarded header carries the visitor's, advisory either way.
-export const remoteIpOf = (c: Context<AppEnv>): string | undefined => c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for")?.split(",")[0]?.trim();
 
 export interface PublicDoor<Config> {
     readonly resolve: (id: string, origin: string | undefined, key?: string) => Promise<Resolved<Config>>;

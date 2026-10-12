@@ -3,7 +3,7 @@ import { CONTROL_SCOPE_REACH, type ControlScope } from "@intentic/sandbox-contra
 import { Button, Code, CopyButton, Notice, Picker, type PickerOption, Row, RowGroup, RowNote, StatusBadge, ui } from "@intentic/ui";
 import { formatDate, timeAgo } from "@intentic/ui/format";
 import { computed, ref } from "vue";
-import { useMintedTokens } from "../../../lib/useMintedTokens";
+import { useMintedTokens } from "../../../workbench/operations/useMintedTokens";
 import { jsonBody } from "../../../client/sandbox/jsonBody";
 import { sandboxJson } from "../../../client/sandbox/sandboxClient";
 import { useSandbox } from "../../../client/sandbox/useSandbox";

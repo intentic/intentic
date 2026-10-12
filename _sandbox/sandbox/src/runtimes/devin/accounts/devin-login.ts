@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ChildProcessByStdio } from "node:child_process";
 import type { Readable, Writable } from "node:stream";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { plainText } from "@intentic/base/plain-text";
 import { parse as parseToml } from "smol-toml";
 import { detachedStamp } from "../../../seams/workload-stamp.js";
@@ -66,19 +67,18 @@ export const signInUrlOf = (output: string): string | undefined => plainOf(outpu
 // Where the page sends the browser back to, read off the URL the CLI opened: its loopback `redirect_uri` and its state.
 // Undefined for a page that does not come back to loopback (the manual flow's).
 export const landingOf = (url: string): DevinLanding | undefined => {
-    try {
-        const page = new URL(url);
-        const redirect = new URL(page.searchParams.get("redirect_uri") ?? "");
-        const port = Number(redirect.port);
-        const state = page.searchParams.get("state") ?? "";
-        const host = redirect.hostname;
-        if (redirect.protocol !== "http:" || (host !== "localhost" && host !== "127.0.0.1") || !Number.isInteger(port) || port < 1 || state === "") {
-            return undefined;
-        }
-        return { host, port, path: redirect.pathname, state };
-    } catch {
+    const page = URL.parse(url);
+    const redirect = page === null ? null : URL.parse(page.searchParams.get("redirect_uri") ?? "");
+    if (page === null || redirect === null) {
         return undefined;
     }
+    const port = Number(redirect.port);
+    const state = page.searchParams.get("state") ?? "";
+    const host = redirect.hostname;
+    if (redirect.protocol !== "http:" || (host !== "localhost" && host !== "127.0.0.1") || !Number.isInteger(port) || port < 1 || state === "") {
+        return undefined;
+    }
+    return { host, port, path: redirect.pathname, state };
 };
 
 // The key `devin auth login` wrote, from its credentials.toml; undefined when the file holds none.
@@ -214,7 +214,7 @@ export const startDevinLogin = async (binary: string, mode: DevinLoginMode): Pro
         if (mode === "manual") {
             return signInUrlOf(attempt.output);
         }
-        const opened = (await readFile(openedFile(dir), "utf8").catch(() => "")).trim();
+        const opened = ((await readFile(openedFile(dir), "utf8").catch(undefinedIfMissing)) ?? "").trim();
         return opened !== "" ? opened : signInUrlOf(attempt.output);
     };
     const deadline = Date.now() + URL_WAIT_MS;
@@ -302,7 +302,7 @@ export const finishDevinLogin = async (handshake: string, grant: string): Promis
         if (exit === "slow") {
             throw new Error("Devin's CLI did not finish signing in in time. Start the sign-in again.");
         }
-        const toml = await readFile(join(attempt.dir, "data", "devin", "credentials.toml"), "utf8").catch(() => "");
+        const toml = (await readFile(join(attempt.dir, "data", "devin", "credentials.toml"), "utf8").catch(undefinedIfMissing)) ?? "";
         const apiKey = toml === "" ? undefined : keyOf(toml);
         if (exit !== 0 || apiKey === undefined) {
             const said = lastWords(attempt.output);

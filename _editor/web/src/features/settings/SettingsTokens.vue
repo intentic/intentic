@@ -4,7 +4,7 @@ import { Button, Code, CopyButton, Notice, Row, RowGroup, RowNote, ui } from "@i
 import { formatDate, timeAgo } from "@intentic/ui/format";
 import { computed, ref } from "vue";
 import { apiClient } from "../../lib/useApi";
-import { useMintedTokens } from "../../lib/useMintedTokens";
+import { useMintedTokens } from "../../workbench/operations/useMintedTokens";
 import { useT } from "@intentic/ui/i18n";
 
 // ACCOUNT tokens: what acts for this person outside a browser. One scope exists — `provision`, which a sandbox holds

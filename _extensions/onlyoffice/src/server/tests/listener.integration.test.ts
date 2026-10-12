@@ -45,6 +45,8 @@ beforeAll(async () => {
     fakeServer.on(`upgrade`, (req, socket) => {
         socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n`);
         socket.on(`error`, () => socket.destroy());
+        // A client that lets go is let go of, as socket.io does: an upgraded socket keeps its half open otherwise.
+        socket.once(`end`, () => socket.end());
         // The server's own end of a session (its idle timeout, a drop): it closes, the browser never says a word.
         if (req.url?.startsWith(`/server-ends`) === true) {
             setTimeout(() => socket.end(), 20);

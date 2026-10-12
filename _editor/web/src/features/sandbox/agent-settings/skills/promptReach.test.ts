@@ -4,16 +4,17 @@ import { promptReach, spokenList } from "./promptReach";
 /* The sentence under the System prompt control, asserted by SHAPE rather than by its words. */
 
 test("every provider the composer offers is named, and named once", () => {
-    const { replaces, adds } = promptReach();
+    const { replaces, adds, ignores } = promptReach();
 
-    expect([...replaces, ...adds].toSorted()).toEqual(PROVIDERS.map((provider) => provider.label).toSorted());
+    expect([...replaces, ...adds, ...ignores].toSorted()).toEqual(PROVIDERS.map((provider) => provider.label).toSorted());
 });
 
 test("each provider is grouped by what its own runtime does with the prompt", () => {
-    const { replaces, adds } = promptReach();
+    const groups = promptReach();
+    const byInstructions = { replace: groups.replaces, append: groups.adds, none: groups.ignores };
 
     for (const provider of PROVIDERS) {
-        const group = capabilitiesOf(provider.value, `native`).instructions === `replace` ? replaces : adds;
+        const group = byInstructions[capabilitiesOf(provider.value, `native`).instructions];
         expect(group, `${provider.label} on its own runtime`).toContain(provider.label);
     }
 });

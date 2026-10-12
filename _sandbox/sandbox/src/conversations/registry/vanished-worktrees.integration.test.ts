@@ -12,6 +12,7 @@ import { openConversationsDb } from "../../store/conversations-db.js";
 import { createPerfTracker } from "../../system/resources/perf.js";
 import { fleetStoreOver, isolatedAgent, memoryFleet, noIsolation } from "../../testing.js";
 import { workspacePaths } from "../../workspace/workspace.js";
+import { NO_QUEUE } from "../actor/conversation-queue.js";
 import { createAgentWorktrees, type AgentWorktrees } from "../worktrees/worktrees.js";
 import type { AgentsRegistry } from "./agents-registry.js";
 import { worktreeOf } from "./agents-store.js";
@@ -76,7 +77,11 @@ const board = async (count: number): Promise<Board> => {
         agents,
         agentWorktrees: worktrees,
         logger,
-        conversations: unstubbed<VanishedWorktreeDeps["conversations"]>("conversations", { running: (id) => running.has(id) }),
+        conversations: unstubbed<VanishedWorktreeDeps["conversations"]>("conversations", {
+            running: (id) => running.has(id),
+            // Nothing booked for later: the archive's teardown asks, and has nothing to cancel.
+            queued: () => NO_QUEUE,
+        }),
         reaper: { reapConversation: async (id) => void reaped.push(id) },
         turnJournal: { list: async () => journal },
     };

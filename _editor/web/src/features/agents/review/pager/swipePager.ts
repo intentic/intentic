@@ -1,6 +1,6 @@
 import { onBeforeUnmount, onMounted, type Ref, watch } from "vue";
 import { commits, lockAxis, rubberBand, SETTLE, springTiming, velocityTracker } from "@intentic/ui/motion";
-import { EDGE_PX } from "../../../../shell/edgeBack";
+import { EDGE_PX } from "../../../../lib/edgeZone";
 import { swipeBelongsElsewhere } from "./swipeYields";
 
 // PAGES SIDE BY SIDE, UNDER A THUMB. A phone's agent screen is two pages, the chat and its changes, and the switch

@@ -2,7 +2,7 @@
 import { Button, Code, type CommandOs, commandLang, formatElapsed, osOptions, SegmentedControl, useOsPreference } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import ScriptSourceSwitch from "../features/capabilities/connect/ScriptSourceSwitch.vue";
+import ScriptSourceSwitch from "./ScriptSourceSwitch.vue";
 
 // "RUN THIS ON YOUR DEVICE", drawn one way everywhere: the shell choice (the shared preference, so every command on
 // every screen follows one pick), the command with its copy button, an optional one-sentence explanation, and for a
