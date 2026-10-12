@@ -2,8 +2,9 @@ import { type FileHandle, open, readdir, rm, stat, writeFile } from "node:fs/pro
 import { join, relative, sep } from "node:path";
 import type { LogFileEntry } from "@intentic/sandbox-contract";
 import { forkedExec } from "@intentic/base/git";
-import { MARKER_FILE } from "../system/boot/boot-marker.js";
-import { RESTART_INTENT_FILE, RESTARTS_FILE } from "../system/boot/restart-record.js";
+import { MARKER_FILE } from "../system/boot/restarts/boot-marker.js";
+import { RESTART_INTENT_FILE, RESTARTS_FILE } from "../system/boot/restarts/restart-record.js";
+import { logsRoot } from "../seams/logs-root.js";
 import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
 
 // Daemon-owned debug logs under historyRoot/logs: terminal captures (terminals/), intentic CLI runs (intentic-runs/),
@@ -57,7 +58,7 @@ const capFor = (root: string, path: string): { readonly maxBytes: number; readon
 /** The older segment a rotated log keeps beside itself; readers go on into it once the live file is exhausted. */
 export const rotatedSegment = (path: string): string => `${path}.1`;
 
-export const logsRoot = (historyRoot: string): string => join(historyRoot, "logs");
+export { logsRoot };
 
 const walkFiles = async (root: string): Promise<string[]> => {
     try {

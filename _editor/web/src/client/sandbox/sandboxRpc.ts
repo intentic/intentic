@@ -3,7 +3,7 @@ import { REQUEST_ID_HEADER, sandboxAnswerSchema, sandboxContract } from "@intent
 import { createORPCClient, type InferClientInputs, type InferClientOutputs, ORPCError } from "@orpc/client";
 import type { ContractRouterClient } from "@orpc/contract";
 import { OpenAPILink, type OpenAPILinkOptions } from "@orpc/openapi-client/fetch";
-import { trackPerf } from "../../app/perf";
+import { trackPerf } from "../../app/perf/perf";
 import { uuid } from "../../lib/uuid";
 import { driftedRouteReason, staleDaemonReason } from "./useDaemonRoutes";
 import { sandboxAuthenticatedFetch, SandboxUnaddressedError } from "./sandboxAuthFetch";

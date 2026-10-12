@@ -38,7 +38,6 @@ flowchart LR
 | [pi-agent](pi-agent) | The Pi coding agent as a chat provider. |
 | [pipelines](pipelines) | Rail view of CI runs on the workspace repositories' remotes. |
 | [preview](preview) | Sandbox tabs for exposed ports and the served `public/` directory. |
-| [projects](projects) | The workspace's repositories as a dashboard of tiles. |
 | [repo-apps](repo-apps) | Per-repository panels for a monorepo's apps, tests and dependencies. |
 | [slack](slack) | Slack card plus a Socket Mode gateway. |
 | [social](social) | Browser cards for acting as the owner on Reddit, X and YouTube. |

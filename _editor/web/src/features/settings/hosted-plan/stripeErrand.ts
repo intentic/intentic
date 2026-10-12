@@ -55,7 +55,7 @@ export const waitForStripe = async (left: string, read: () => Promise<HostedPlan
                     resolve();
                 };
             });
-            // A read that fails is "not yet", which the next tick asks again.
+            // allow(silent-catch): a read that fails is "not yet", which the next tick asks again.
             const state = dropped ? undefined : await read().catch(() => undefined);
             if (!dropped && state !== undefined && planMark(state) !== left) {
                 return true;

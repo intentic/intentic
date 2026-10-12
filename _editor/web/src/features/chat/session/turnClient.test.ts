@@ -931,7 +931,7 @@ describe(`the queue's doors`, () => {
 
     it(`leaves the box alone for words nobody here wrote`, async () => {
         const { client, host } = clientOf();
-        const message = { id: `m-agent`, text: `the build is green`, voice: `agent` as const, queuedAt: 1_000, revision: 1 };
+        const message = { id: `m-agent`, text: `the build passes`, voice: `agent` as const, queuedAt: 1_000, revision: 1 };
         host.queue.value = { items: [message], revision: 1 };
         queueRemove.mockImplementation(async () => ({ items: [], revision: 2 }));
 

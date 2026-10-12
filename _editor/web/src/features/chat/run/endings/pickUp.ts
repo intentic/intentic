@@ -195,12 +195,19 @@ export const pickUpShort = (at: number, now: number = Date.now()): string => {
     return new Date(at).toDateString() === new Date(now).toDateString() ? formatClock(at) : formatWeekdayTime(at);
 };
 
+/** The "at" and the "in" form of one sentence about a reopen, each given the instant as pickUpShort words it. */
+export interface ReopenPhrases {
+    readonly at: (when: string) => string;
+    readonly in: (when: string) => string;
+}
+
 /**
- * A press that goes at an instant, worded around pickUpShort: "Continue at 02:00", "Continue in 40m". The two keys are
- * the "at" and the "in" form of the same sentence, so every press that waits for a reopen reads the same way.
+ * A press that goes at an instant, worded around pickUpShort: "Continue at 02:00", "Continue in 40m". Each caller words
+ * the two forms with its own `t()` calls, so every press that waits for a reopen reads the same way and each message is
+ * asked for where the i18n check can see it.
  */
-export const atReopenPhrase = (keys: { readonly at: string; readonly in: string }, at: number, now: number = Date.now()): string =>
-    t(shortIsWait(at, now) ? keys.in : keys.at, { when: pickUpShort(at, now) });
+export const atReopenPhrase = (phrases: ReopenPhrases, at: number, now: number = Date.now()): string =>
+    (shortIsWait(at, now) ? phrases.in : phrases.at)(pickUpShort(at, now));
 
 // The strip's one status line: what happened, and what survived. Built here rather than in the template so the wording
 // is tested directly and the several endings can't drift apart. What happens NEXT is deliberately not in it — that is

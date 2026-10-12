@@ -78,7 +78,7 @@ import { stateRegroupStep } from "../store/evolution/steps/state-regroup.js";
 import { issueInstallsDocument, webchatInstallsDocument } from "../store/installs.js";
 import { newestRunDocument } from "../store/newest-run.js";
 import { bootFailureDocument } from "../system/boot/boot-failure.js";
-import { bootHistoryDocument } from "../system/boot/boot-history.js";
+import { bootHistoryDocument } from "../system/boot/restarts/boot-history.js";
 import { choreClockDocument } from "../system/chore-clock.js";
 import { attachedProjectsDocument } from "../system/projects-registry.js";
 import { restartResumeDocument } from "../system/restart-resume.js";

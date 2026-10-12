@@ -4,9 +4,9 @@ import { join } from "node:path";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import { writeFileAtomicSync } from "@intentic/base/fs";
 import type { Logger } from "pino";
-import { opt } from "../../opt.js";
-import { processIdentity, type ProcessIdentity, sameProcess } from "../resources/proc-stat.js";
-import { buildInfo, buildText } from "./build-info.js";
+import { opt } from "../../../opt.js";
+import { processIdentity, type ProcessIdentity, sameProcess } from "../../resources/proc-stat.js";
+import { buildInfo, buildText } from "../build-info.js";
 import {
     describePreviousRun,
     type PreviousRun,

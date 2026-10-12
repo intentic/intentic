@@ -12,7 +12,7 @@ import type { Services } from "../composition.js";
 import type { PersistedAgent } from "../conversations/registry/agents-store.js";
 import type { Said, Steer, TurnInput } from "../seams/turn-starter.js";
 import { fileCiStore } from "./ci-store.js";
-import { ciLogsRoot, jobLogPath } from "./job-logs.js";
+import { ciLogsRoot, jobLogPath } from "./logs/job-logs.js";
 import {
     type FailedJob,
     fixerSettled,

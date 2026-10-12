@@ -79,7 +79,14 @@ const allowanceWall = computed(() => ending.value === `limit` || (spent.value &&
 const continueAtLabel = computed(() =>
     props.spentUntil === undefined
         ? ``
-        : atReopenPhrase({ at: `chat.chatContinueStrip.continueAt`, in: `chat.chatContinueStrip.continueIn` }, props.spentUntil, now.value),
+        : atReopenPhrase(
+              {
+                  at: (when) => t(`chat.chatContinueStrip.continueAt`, { when }),
+                  in: (when) => t(`chat.chatContinueStrip.continueIn`, { when }),
+              },
+              props.spentUntil,
+              now.value,
+          ),
 );
 const continueAtHint = computed((): Tip => ({
     title: t(`chat.composerIntent.hintContinueAtReopen`),

@@ -4,7 +4,7 @@ import { QueryClient } from "@tanstack/vue-query";
 // that such a read is reported once, past its budget, and that an answered or offline one is not.
 
 const reports: { event: string; message: string; fields?: Record<string, unknown> }[] = [];
-jest.mock(`./clientDiagnostics`, () => ({
+jest.mock(`../clientDiagnostics`, () => ({
     reportClient: (event: string, message: string, options: { fields?: Record<string, unknown> } = {}) =>
         reports.push({ event, message, fields: options.fields }),
 }));

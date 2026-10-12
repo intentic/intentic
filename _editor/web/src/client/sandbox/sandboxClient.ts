@@ -1,7 +1,7 @@
 import { sandboxRouteName } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
 import { driftedRouteReason, staleDaemonReason } from "./useDaemonRoutes";
-import { trackPerf } from "../../app/perf";
+import { trackPerf } from "../../app/perf/perf";
 import { CHUNK_BYTES } from "../../lib/files/uploadChunking";
 import { sandboxAuthenticatedFetch, uploadsBody } from "./sandboxAuthFetch";
 import { refusalText, SandboxHttpError, wordsOf } from "./sandboxHttpError";

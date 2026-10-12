@@ -1,7 +1,7 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import { posix } from "node:path";
-import type { DependencyIssue } from "../../workspace/deps/reconcile-deps.js";
-import { agentCommand, commandWords, toolResultText } from "../providers/agent-installs.js";
+import type { DependencyIssue } from "../../../workspace/deps/reconcile-deps.js";
+import { agentCommand, commandWords, toolResultText } from "../../providers/agent-installs.js";
 import { outputNoticeMatcher } from "./agent-output-notices.js";
 
 // Speaks only when a command actually fails on a package name, naming that package rather than a standing paragraph

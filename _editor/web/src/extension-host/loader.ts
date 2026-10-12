@@ -7,6 +7,7 @@ import { extensionApiVersion, satisfiesEngines } from "@intentic/extension-api";
 import { extensionIdOf } from "@intentic/extension-manifest";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import { shallowRef } from "vue";
+import { type ExtensionHostStatus, extensionStatuses } from "../features/extensions/extensionStatuses";
 import { extensionSettingsStore } from "../features/extensions/useExtensionSettings";
 import { sandboxError, sandboxRequest } from "../client/sandbox/sandboxClient";
 import { sandboxRpc } from "../client/sandbox/sandboxRpc";
@@ -22,25 +23,7 @@ import { type ReportFields, reportClient } from "../app/clientDiagnostics";
 // A daemon-fetched bundle goes through Blob URL import() (bare import() can't carry the Bearer header), which forces
 // single-file ESM bundles.
 // Each extension's failure is contained and recorded on a status the Extensions tab renders; the shell never crashes on
-// a bad bundle or silently drops one.
-
-export interface ExtensionHostStatus {
-    // id is the daemon's capability-entry handle; extensionId is the manifest-derived publisher.name identity.
-    readonly id: string;
-    readonly extensionId: string;
-    // active: running.
-    // agent-only: no UI contributions; nothing to activate.
-    // disabled: switched off by the owner; the toggle's target state.
-    // incompatible / error: engines mismatch, or activate() threw.
-    // missing / unlisted: image and bundle disagree, a manifest with no module here, or a module here the daemon
-    // doesn't list (still activated, but unswitchable).
-    readonly state: "active" | "agent-only" | "disabled" | "incompatible" | "missing" | "unlisted" | "error";
-    readonly detail?: string | undefined;
-    // Which code ran, for a report from the extension's views to name: the revision the list gave (codeRevisionOf),
-    // and whether it came compiled into this app or as a bundle fetched from the daemon. Absent where nothing ran.
-    readonly revision?: string | undefined;
-    readonly bundle?: "compiled-in" | "daemon" | undefined;
-}
+// a bad bundle or silently drops one. What each one came to is recorded in extensionStatuses (features/extensions).
 
 // An extension whose code did not run, said to the daemon's client log: the Extensions tab shows it only to whoever
 // opens it, and a view that then never draws (a skeleton forever) otherwise left no record anywhere.
@@ -55,8 +38,6 @@ const reportLoadFailure = (status: ExtensionHostStatus, listSource: string): voi
     reportClient(`extension.loadError`, `${status.extensionId} ${status.state}: ${status.detail ?? `no detail`}`, { level: `warn`, fields });
 };
 
-// allow(module-state): the extension host's load record, retired with the activations on a switch and on a relocale (retireExtensions)
-export const extensionStatuses = shallowRef<readonly ExtensionHostStatus[]>([]);
 
 // Revision each extension loaded at, per handle (codeRevisionOf: the pinned commit, or a dev checkout's bundle
 // fingerprint); divergence from the list's current one triggers the reload prompt.

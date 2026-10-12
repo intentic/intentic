@@ -39,7 +39,7 @@ A module takes `Pick<Services, …>` of the seams it uses, so its dependencies a
 readiness gate; then workspace apps, sweeps, restores, schedulers, resumes, version watches and change reactions.
 Every subsystem registers its own teardown in one `DisposableStore`, so shutdown enumerates nothing. Shutdown stops
 them newest first, so the netd door and the phases built last stop before the services they read, and it waits for
-the asynchronous stops for at most 10 s (`system/boot/daemon-stop.ts`), well inside the 25 s netd allows. A phase past
+the asynchronous stops for at most 10 s (`system/boot/restarts/daemon-stop.ts`), well inside the 25 s netd allows. A phase past
 the gate that throws is logged by name and the phases after it still start; a boot step with a `failure` sentence reads
 `failed` on `/health` and `/events` while the chain goes on. When netd's control link drops unasked, the daemon exits
 75 so netd starts Node again rather than ending the container.

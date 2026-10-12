@@ -26,6 +26,7 @@ export const BUILD_COMMIT = ((): string | null => {
         }).trim();
         return sha === `` ? null : sha;
     } catch {
+        // allow(silent-catch): a build outside a git checkout (a source archive, no git on PATH) has no commit to stamp.
         return null;
     }
 })();

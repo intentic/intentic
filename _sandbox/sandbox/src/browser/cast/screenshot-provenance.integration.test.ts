@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { unstubbed } from "@intentic/testing";
 import type { Page } from "playwright";
 import type { RpcMessage } from "../../agent/tools/turn-mounts.js";
@@ -15,7 +16,7 @@ const answerNaming = (link: string): RpcMessage => ({
     result: { content: [{ type: "text", text: `### Result\n- [Screenshot of viewport](${link})\n### Ran Playwright code\n` }] },
 });
 
-const root = "/work";
+const root = WORKSPACE_ROOT;
 const outputDir = browserOutputDir(root);
 
 test("the file an answer names is found inside the output directory, whatever directory the backend linked it from", () => {

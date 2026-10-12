@@ -24,10 +24,11 @@ import {
     viewerPlaceholder,
 } from "../../composer/composerIntent";
 import type { InputHistory } from "../../drafts/inputHistory";
+import { continueKeyHintOf } from "./continueKeyHint";
 import { bookingOf, laterLabel, type SendLater, type TurnBooking } from "../../composer/later/sendLater";
 import type { RunThrough } from "../../models/run-settings/useRunThrough";
 import type { ChatRouting } from "../../routing/chatRoute";
-import { atReopenPhrase, type ContinueOptions, type PickUp, pickUpReady, pickUpShort, wakesHeldUntil } from "../../run/endings/pickUp";
+import { type ContinueOptions, type PickUp, pickUpReady, pickUpShort, wakesHeldUntil } from "../../run/endings/pickUp";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { formatReset } from "../../session/usageStatus";
 import { planFeedback } from "../../session/cardReplies";
@@ -207,21 +208,6 @@ const barePressOf = (offered: boolean, press: ReopenPress | undefined, madeRoom:
         return `now`;
     }
     return press === undefined ? undefined : `reopen`;
-};
-
-// What Enter does on the empty box, said under it: continue now, or at the reopen the button beside it names.
-const continueKeyHintOf = (offered: boolean, until: number | undefined, press: ReopenPress | undefined, now: number): string | undefined => {
-    if (offered) {
-        return translate(`chat.chatPane.enterToContinue`);
-    }
-    if (until === undefined || press === undefined) {
-        return undefined;
-    }
-    const keys =
-        press === `book`
-            ? { at: `chat.chatPane.enterToContinueAt`, in: `chat.chatPane.enterToContinueIn` }
-            : { at: `chat.chatPane.enterToSendAgainAt`, in: `chat.chatPane.enterToSendAgainIn` };
-    return atReopenPhrase(keys, until, now);
 };
 
 // Continuing at the reopen, which is what the strip's "Continue at 02:00" and the time-labelled button both say: a held

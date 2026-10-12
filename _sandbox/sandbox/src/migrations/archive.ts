@@ -2,7 +2,7 @@ import { Readable } from "node:stream";
 import { createGunzip } from "node:zlib";
 import { extract, type Header } from "tar-stream";
 import { ArrivalFormatError } from "../arrival-error.js";
-import { drain, extractAll, memberPath } from "../tar-extract.js";
+import { drain, extractAll, memberPath } from "../store/tar-extract.js";
 import { skipReason } from "./scan-policy.js";
 import { nodeStream } from "@intentic/base/web-stream";
 

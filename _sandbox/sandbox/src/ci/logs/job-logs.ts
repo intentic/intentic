@@ -1,6 +1,7 @@
 import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { undefinedIfMissing } from "@intentic/base/errors";
 
 // WHERE A FAILED JOB'S WHOLE LOG IS KEPT FOR ITS FIX AGENT. The digest (failure-digest.ts) is what an agent reads first,
 // but a cause it cut off used to cost the agent a log download through the forge's API (21 MB for one verify group,
@@ -28,9 +29,9 @@ export const jobLogPath = (root: string, repo: string, runId: number, jobId: num
 // The runs past the newest RUNS_KEPT of a repository's directory, removed. A run directory that vanishes meanwhile (a
 // second prune) is simply gone.
 const pruneRuns = async (repoDir: string): Promise<void> => {
-    const names = await readdir(repoDir).catch(() => [] as string[]);
+    const names = (await readdir(repoDir).catch(undefinedIfMissing)) ?? [];
     const runs = await Promise.all(
-        names.map(async (name) => ({ name, modified: (await stat(join(repoDir, name)).catch(() => undefined))?.mtimeMs ?? 0 })),
+        names.map(async (name) => ({ name, modified: (await stat(join(repoDir, name)).catch(undefinedIfMissing))?.mtimeMs ?? 0 })),
     );
     const stale = runs.toSorted((a, b) => b.modified - a.modified).slice(RUNS_KEPT);
     await Promise.all(stale.map((run) => rm(join(repoDir, run.name), { recursive: true, force: true })));

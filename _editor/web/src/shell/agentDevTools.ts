@@ -1,8 +1,8 @@
 import { useTheme } from "@intentic/ui/theme";
 import { isRef, nextTick } from "vue";
 import { buildId } from "../app/buildEpoch";
-import { perfSpans, perfTable, resetPerf } from "../app/perf";
-import type { RenderTrace } from "../app/renderTrace";
+import { perfSpans, perfTable, resetPerf } from "../app/perf/perf";
+import type { RenderTrace } from "../app/perf/renderTrace";
 import { readContractFreshness, uncompiledRoutes } from "../client/sandbox/contractFreshness";
 import { daemonReady } from "../client/sandbox/useDaemonBoot";
 import { driftedRoutes, driftScope, missingRoutes, unknownDaemonRoutes } from "../client/sandbox/useDaemonRoutes";

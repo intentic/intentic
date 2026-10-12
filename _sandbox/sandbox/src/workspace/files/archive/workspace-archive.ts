@@ -2,7 +2,7 @@ import { mkdir, stat } from "node:fs/promises";
 import { dirname } from "node:path";
 import { Readable } from "node:stream";
 import { extract, type Header } from "tar-stream";
-import { drain, extractAll, memberPath } from "../../../tar-extract.js";
+import { drain, extractAll, memberPath } from "../../../store/tar-extract.js";
 import { isControlPlanePath, resolveWithin } from "../workspace-files-paths.js";
 import { MAX_UPLOAD_BYTES, writeStreamCounted } from "../workspace-files-upload.js";
 import { setWorkspaceMtime } from "../workspace-files.js";

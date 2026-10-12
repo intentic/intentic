@@ -1,5 +1,5 @@
 import type { DeviceScopes } from "@intentic/sandbox-contract";
-import { ScopeError } from "../policy.js";
+import { ScopeError } from "../../policy.js";
 import { type DeviceLog, deviceLogs, filterLines, icLogDir, listingText } from "./logs.js";
 
 const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({

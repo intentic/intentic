@@ -10,7 +10,7 @@ import { restartExpected } from "../live/sandboxRestart";
 import { type ConnectionNotice, connectionNotice, stalledBody } from "./connectionNotice";
 import SandboxRecovery from "./SandboxRecovery.vue";
 import { useDiagnosisNotice, useRecoveryDue, useVisibleOutage } from "./useVisibleOutage";
-import { stalledPaths } from "../../../app/perf";
+import { stalledPaths } from "../../../app/perf/perf";
 import { DEADLINE_MS } from "../../../client/sandbox/sandboxAuthFetch";
 import { useT } from "@intentic/ui/i18n";
 

@@ -3,7 +3,7 @@ import { computed, type MaybeRefOrGetter, toValue } from "vue";
 import { queryClient } from "../../lib/queryPersistence";
 import { readFailure } from "./useDaemonRoutes";
 import { useSandbox } from "./useSandbox";
-import { trackPerf } from "../../app/perf";
+import { trackPerf } from "../../app/perf/perf";
 
 // Daemon-backed vue-query wrapper: every read gates on the active daemon being reachable, and a failure
 // surfaces as the message the daemon threw.

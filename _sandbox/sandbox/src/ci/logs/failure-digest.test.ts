@@ -1,3 +1,4 @@
+import { HISTORY_ROOT } from "@intentic/constants";
 import { digestOf, excerptOf, type FailedJobLog, type JobExcerpt, normalizeErrorLine } from "./failure-digest.js";
 
 // What a fix agent is handed for a failed run is read out of logs it never sees whole, so each shape a failure takes in
@@ -232,7 +233,7 @@ test("how a task ended is said first: a heap that ran out, an exit code that is 
             githubLog(...step("pnpm turbo run typecheck $FILTERS", outOfHeap, 1), ...step("pnpm turbo run build test $FILTERS", ocrKilled, 1)),
             ["Run pnpm turbo run typecheck $FILTERS", "Run pnpm turbo run build test $FILTERS"],
         ),
-        logPath: "/history/ci-logs/intentic/37498216889/1-verify-core-verify.log",
+        logPath: `${HISTORY_ROOT}/ci-logs/intentic/37498216889/1-verify-core-verify.log`,
     });
     expect(excerpt.ends).toEqual([
         "@intentic/web: FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory",

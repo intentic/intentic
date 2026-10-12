@@ -2,7 +2,7 @@ import { serialLock } from "@intentic/base/async";
 import type { Logger } from "pino";
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
 import type { CiStore } from "./ci-store.js";
-import { createCiFailureLog, vendorStatusOf } from "./ci-failure-log.js";
+import { createCiFailureLog, vendorStatusOf } from "./logs/ci-failure-log.js";
 import { ciClientFor, CiRateLimited, type FetchFn } from "./providers.js";
 import { ciProjects, type CiProject } from "./projects.js";
 

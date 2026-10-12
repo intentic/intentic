@@ -39,7 +39,7 @@ import { sandboxEnv } from "../../conversations/worktrees/turn-sandbox.js";
 import { worktreeRedirectHooks } from "../../conversations/worktrees/worktree-redirect.js";
 import { browserArtifactHooks } from "../../browser/cast/browser-artifacts.js";
 import { browserSessionHooks } from "../../browser/sessions/browser-sessions.js";
-import { depsNoticeHooks } from "../tools/agent-deps.js";
+import { depsNoticeHooks } from "../tools/notices/agent-deps.js";
 import { searchNoticeHooks } from "../verification/agent-search.js";
 import { editDiagnosticsHooks } from "../verification/agent-diagnostics.js";
 import { createShellEditTracker } from "../tools/agent-shell-edits.js";

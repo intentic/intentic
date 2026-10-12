@@ -66,7 +66,11 @@ const spentHint = computed((): Tip | undefined =>
     reopenAt.value === undefined ? undefined : { title: t(`chat.chatHeld.sendNowTitle`), note: t(`chat.chatHeld.sendNowSpent`) },
 );
 const sendAtLabel = computed(() =>
-    reopenAt.value === undefined ? `` : atReopenPhrase({ at: `chat.chatHeld.sendAt`, in: `chat.chatHeld.sendIn` }, reopenAt.value, now.value),
+    reopenAt.value === undefined ? `` : atReopenPhrase(
+              { at: (when) => t(`chat.chatHeld.sendAt`, { when }), in: (when) => t(`chat.chatHeld.sendIn`, { when }) },
+              reopenAt.value,
+              now.value,
+          ),
 );
 const sendAtHint = computed((): Tip => ({
     title: t(`chat.chatHeld.sendAtTitle`),

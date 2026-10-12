@@ -1,7 +1,7 @@
 import { errnoCode, errorMessage } from "@intentic/base/errors";
 import type { Logger } from "pino";
-import { createRepeatGate } from "../logs/repeat-gate.js";
-import { CiRateLimited } from "./providers.js";
+import { createRepeatGate } from "../../logs/repeat-gate.js";
+import { CiRateLimited } from "../providers.js";
 
 // The CI loops (the runs backfill, the poll, the webhook reconcile) call the forge for every mapped repo every few
 // minutes, so one revoked token wrote the same `401 Bad credentials` warn, stack and all, about a thousand times in five

@@ -61,7 +61,7 @@ export const screenshotFileOf = (answer: RpcMessage, outputDir: string): string 
 const ToolCallMeta = z.looseObject({ _meta: z.looseObject({ "claudecode/toolUseId": z.string() }) });
 
 export const toolCallIdOf = (params: Record<string, unknown> | undefined): string | undefined =>
-    ToolCallMeta.safeParse(params).data?._meta["claudecode/toolUseId"];
+    ToolCallMeta.safeParse(params).data?.["_meta"]["claudecode/toolUseId"];
 
 const PageState = z.object({ url: z.string(), readyState: z.string(), width: z.number(), height: z.number(), deviceScaleFactor: z.number() });
 

@@ -7,7 +7,7 @@ import { type Logger, pino } from "pino";
 import { claimBootMarker as claim, previousRun, previousRunDied, resetStopNoted, writeRestartIntent } from "./boot-marker.js";
 import { announceStop } from "./daemon-stop.js";
 import { RESTART_INTENT_FILE, type RestartRecord, RESTARTS_FILE } from "./restart-record.js";
-import { processIdentity, type ProcessIdentity } from "../resources/proc-stat.js";
+import { processIdentity, type ProcessIdentity } from "../../resources/proc-stat.js";
 
 const setup = async (): Promise<{ dir: string; lines: Record<string, unknown>[]; logger: Logger }> => {
     const dir = await mkdtemp(join(tmpdir(), "boot-marker-"));

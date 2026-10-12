@@ -1,5 +1,5 @@
 import type { HookCallback, HookCallbackMatcher } from "@anthropic-ai/claude-agent-sdk";
-import { agentCommand, commandWords, toolResultText } from "../providers/agent-installs.js";
+import { agentCommand, commandWords, toolResultText } from "../../providers/agent-installs.js";
 
 // One line under a command's output when that output shows a failure whose cause is not in the code the agent is
 // reading: a package's dist older than its source, or a GitHub token placeholder sent past the credential gateway. Both

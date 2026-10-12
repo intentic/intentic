@@ -51,8 +51,8 @@ import { opt } from "../../../opt.js";
 import type { VerificationStanding } from "../../verification/agent-verification.js";
 import { spentRung } from "../../models/role-model-quota.js";
 import { recordInterrupted } from "./interrupted-ledger.js";
-import { previousRun } from "../../../system/boot/boot-marker.js";
-import { restartCost } from "../../../system/boot/restart-record.js";
+import { previousRun } from "../../../system/boot/restarts/boot-marker.js";
+import { restartCost } from "../../../system/boot/restarts/restart-record.js";
 
 // Re-runs a turn once its blocker clears. Two kinds live here and should not be confused: the daemon's own bookkeeping
 // (a rotated token, a restart, a session past its window), which needs nobody's permission, and the three walls the

@@ -134,7 +134,7 @@ import { type CiSlice, createCiSlice } from "./ci/ci-slice.js";
 import { createDepsSlice, type DepsSlice, type QueueMembers } from "./workspace/deps/deps-slice.js";
 import { createResourcesSlice, type ResourcesSlice } from "./system/resources/resources-slice.js";
 import { createProvidersSlice, type ProvidersSlice } from "./agent/providers/providers-slice.js";
-import { previousRunDied } from "./system/boot/boot-marker.js";
+import { previousRunDied } from "./system/boot/restarts/boot-marker.js";
 import { createConversationsSlice, type ConversationsSlice } from "./conversations/conversations-slice.js";
 import { createWorkspaceSlice, type DerivedMembers, type WorkspaceSlice } from "./workspace/workspace-slice.js";
 import { createSessionsSlice, type SessionsSlice } from "./sessions/sessions-slice.js";
