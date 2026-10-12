@@ -2763,7 +2763,7 @@
             "archivedOffBoardSending": "Archived: off the board. Sending a message restores it.",
             "billing": "Billing",
             "connectTitle": "Your own model",
-            "connectWays": "Google, local, or subscription",
+            "connectWays": "Google (free), local, or subscription",
             "privacyFound": "The privacy shield didn't send this to {provider}: it found personal data in what {provider} reads where the shield can't mask it.",
             "privacyGrantFailed": "That didn't save.",
             "privacyGranted": "{provider} reads this conversation as it is: the privacy shield doesn't cover it here.",
@@ -2778,13 +2778,16 @@
             "privacyTakeBackTitle": "Shielded here again",
             "resumesIfAnswers": "Resumes if it answers",
             "retryTrial": "Retry trial",
-            "trialLastAnswer": "Last answer: {model}.",
-            "trialLeft": "{count} free message left today. | {count} free messages left today.",
-            "trialPassesThrough": "Trial messages pass through intentic. Connect an account to chat directly.",
-            "trialSpent": "Free trial used up for today. Connect a model to keep going — one of them is free.",
-            "trialStepCost": "Each agent step costs one.",
-            "trialStrained": "Trial capacity is tight right now, so answers can be slower.",
-            "trialUnavailable": "Free trial isn't answering right now. Failed messages are not counted."
+            "trialCount": "{remaining} of {allowance} free messages left today",
+            "trialFreeWays": "Some models connect for free",
+            "trialLastAnswer": "Last answer: {model}",
+            "trialNotCounted": "Failed messages aren't counted",
+            "trialResets": "Resets {when}",
+            "trialRouted": "Sent via intentic",
+            "trialSpent": "Today's free messages are used up",
+            "trialStepCost": "Each agent step uses one",
+            "trialStrained": "Busy now, answers may be slower",
+            "trialUnavailable": "Free trial isn't answering right now"
         },
         "chatPaneTurns": {
             "couldntOpen": "Couldn't open this conversation.",
@@ -3181,7 +3184,9 @@
             "chooseModel": "Choose a model",
             "fromNextMessage": "{model} answers from your next message. This reply keeps running on {running}.",
             "model": "Model: {modelLabelText}",
-            "nextMessage": "from next message"
+            "nextMessage": "from next message",
+            "trialNote": "Switch models or connect yours.",
+            "trialServed": "Last answer: {model}."
         },
         "composerMore": {
             "howMuchMayDo": "How much it may do before asking.",

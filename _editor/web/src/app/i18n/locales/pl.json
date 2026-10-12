@@ -2763,7 +2763,7 @@
             "archivedOffBoardSending": "Zarchiwizowane: zdjęte z tablicy. Wysłanie wiadomości je przywraca.",
             "billing": "Rozliczenia",
             "connectTitle": "Własny model",
-            "connectWays": "Google, lokalnie lub abonament",
+            "connectWays": "Google (darmowo), lokalnie lub abonament",
             "privacyFound": "Osłona prywatności nie wysłała tego do {provider}: znalazła dane osobowe w tym, co {provider} czyta tam, gdzie osłona nie może ich zamaskować.",
             "privacyGrantFailed": "Nie udało się zapisać.",
             "privacyGranted": "{provider} czyta tę rozmowę bez maskowania: osłona prywatności jej tu nie obejmuje.",
@@ -2778,13 +2778,16 @@
             "privacyTakeBackTitle": "Znów pod osłoną",
             "resumesIfAnswers": "Wznawia, gdy odpowie",
             "retryTrial": "Ponów wersję próbną",
-            "trialLastAnswer": "Ostatnia odpowiedź: {model}.",
-            "trialLeft": "Na dziś została {count} darmowa wiadomość. | Na dziś zostały {count} darmowe wiadomości. | Na dziś zostało {count} darmowych wiadomości.",
-            "trialPassesThrough": "Wiadomości w wersji próbnej przechodzą przez intentic. Podłącz konto, żeby czatować bezpośrednio.",
-            "trialSpent": "Darmowa wersja próbna na dziś się wyczerpała. Podłącz model, żeby działać dalej — jeden z nich jest darmowy.",
-            "trialStepCost": "Każdy krok agenta zużywa jedną.",
-            "trialStrained": "Wersja próbna jest teraz mocno obciążona, więc odpowiedzi mogą przychodzić wolniej.",
-            "trialUnavailable": "Darmowa wersja próbna teraz nie odpowiada. Nieudane wiadomości nie są liczone."
+            "trialCount": "Darmowe wiadomości na dziś: {remaining} z {allowance}",
+            "trialFreeWays": "Niektóre modele podłączysz za darmo",
+            "trialLastAnswer": "Ostatnia odpowiedź: {model}",
+            "trialNotCounted": "Nieudane wiadomości nie są liczone",
+            "trialResets": "Odnowienie {when}",
+            "trialRouted": "Przechodzi przez intentic",
+            "trialSpent": "Dzisiejsze darmowe wiadomości się skończyły",
+            "trialStepCost": "Każdy krok agenta zużywa jedną",
+            "trialStrained": "Duży ruch, odpowiedzi mogą przyjść wolniej",
+            "trialUnavailable": "Darmowa wersja próbna teraz nie odpowiada"
         },
         "chatPaneTurns": {
             "couldntOpen": "Nie udało się otworzyć tej rozmowy.",
@@ -3181,7 +3184,9 @@
             "chooseModel": "Wybierz model",
             "fromNextMessage": "{model} odpowie od twojej następnej wiadomości. Ta odpowiedź nadal działa na {running}.",
             "model": "Model: {modelLabelText}",
-            "nextMessage": "od następnej wiadomości"
+            "nextMessage": "od następnej wiadomości",
+            "trialNote": "Zmień model lub podłącz własny.",
+            "trialServed": "Ostatnia odpowiedź: {model}."
         },
         "composerMore": {
             "howMuchMayDo": "Ile może zrobić, zanim zapyta.",

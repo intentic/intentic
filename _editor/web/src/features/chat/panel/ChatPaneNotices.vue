@@ -1,21 +1,18 @@
 <script setup lang="ts">
 import { Button, Icon, Notice, toneTint } from "@intentic/ui";
-import { computed, ref, watch } from "vue";
+import { computed, watch } from "vue";
 import { RouterLink } from "vue-router";
-import { isTrialProvider, TRIAL_PROVIDER } from "@intentic/sandbox-contract";
-import { trialExhausted, trialPhase } from "../session/access";
 import { useAgents } from "../../agents/fleet/useAgents";
-import { modelLabelFor, trialStatus } from "../accounts/providerCatalog";
-import { loadTrialStatus } from "../models/useChat-catalog";
 import { usePaneView } from "./useChat-view";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { lowHoursNotice } from "../../settings/hosted-plan/hostedHours";
 import { useHostedPlan } from "../../settings/hosted-plan/useHostedPlan";
 import ChatAccountPanel from "../accounts/ChatAccountPanel.vue";
 import ChatPrivacyStrip from "./privacy/ChatPrivacyStrip.vue";
+import ChatTrialStrip from "./ChatTrialStrip.vue";
 import NeedsStrip from "../../needs/NeedsStrip.vue";
 import { useT } from "@intentic/ui/i18n";
-import { MODELS_PATH, modelsPath } from "../../../lib/routes/modelsPath";
+import { modelsPath } from "../../../lib/routes/modelsPath";
 
 // What this chat's standing is, above the composer: strips for a state the conversation arrived at by itself
 // (archived; then what it can send with — account gate, trial, expired credential), each with its one answering
@@ -24,7 +21,7 @@ import { MODELS_PATH, modelsPath } from "../../../lib/routes/modelsPath";
 
 const t = useT();
 
-const { conversation, provider, accounts, streaming } = usePaneView();
+const { conversation, provider, accounts } = usePaneView();
 const { reachable, active } = useSandbox();
 
 // The last of the hours THIS sandbox spends, above the composer, to the person spending them: only on a hosted
@@ -52,52 +49,6 @@ const activeArchived = computed(() => {
     const agent = agentById(conversation.value.conversationId);
     return agent?.archivedAt === undefined ? undefined : agent;
 });
-
-// What the trial strip says, or nothing off the trial: leads with the remaining count while there's allowance (it
-// counts model calls, not turns, so one turn can spend several), then discloses routing through intentic; once
-// spent, the only thing left to say is where the next model comes from.
-
-// Not answering is an interruption; working for it is not — conflating the two put "Failed messages are not
-// counted" over answers that had just worked. `unavailable` means no key answered (the turn is held and refunded,
-// Retry is real); `degraded` means the pool answered after failing over, the ladder working as designed.
-const trialUnavailable = computed(() => trialStatus.value.health === `unavailable`);
-// Spent is this strip's alone to say: the account gate would otherwise report the trial as "not connected", which
-// is false and contradicts the sentence under it.
-const trialSpent = computed(() => trialExhausted(provider.value));
-const trialNotice = computed(() => {
-    if (!isTrialProvider(provider.value)) {
-        return undefined;
-    }
-    if (trialSpent.value) {
-        // Names no single vendor: free-and-uncapped is a Google sign-in, a model on this machine, or a subscription the
-        // reader may already hold, and the view that offers all three is one press away.
-        return t(`chat.chatPaneNotices.trialSpent`);
-    }
-    if (trialUnavailable.value) {
-        return t(`chat.chatPaneNotices.trialUnavailable`);
-    }
-    const remaining = trialStatus.value.remaining;
-    // Not a warning until it is one: shown once the trial is past fresh (trialPhase) or the pool is straining, not from
-    // the first message, since a fresh count read as an imminent limit.
-    if (trialPhase(provider.value) === `fresh` && trialStatus.value.health !== `degraded`) {
-        return undefined;
-    }
-    const left = t(`chat.chatPaneNotices.trialLeft`, { count: remaining }, remaining);
-    // Which model answered, once one has: the trial serves a different real model per message (trial-ladder.ts), so
-    // this is the only way to tell a weak answer from a fallback rung. Leads the sentence only after a turn has run.
-    const served = trialStatus.value.servedModel;
-    const answered = served === undefined ? [] : [t(`chat.chatPaneNotices.trialLastAnswer`, { model: modelLabelFor(TRIAL_PROVIDER, served) })];
-    // The pool working for its answer, said last and mildly: it explains a slower or weaker turn.
-    const strained = trialStatus.value.health === `degraded` ? [t(`chat.chatPaneNotices.trialStrained`)] : [];
-    return [...answered, left, t(`chat.chatPaneNotices.trialStepCost`), t(`chat.chatPaneNotices.trialPassesThrough`), ...strained].join(` `);
-});
-const retryTrial = async (): Promise<void> => {
-    if (!reachable.value) {
-        return;
-    }
-    await loadTrialStatus();
-    await conversation.value.turn.resume();
-};
 
 // The credential the next turn runs on can no longer refresh; surfaced pre-send, before an opaque mid-turn failure.
 // Asked of the account the turn will actually run on (servingAccount), never the first listed: on auto, an expired
@@ -136,44 +87,8 @@ const activeAccountReauth = computed(() => {
             <Button :as="RouterLink" to="/settings/billing" size="small" thumb tier="quiet">{{ t(`chat.chatPaneNotices.billing`) }}</Button>
         </template>
     </Notice>
-    <!-- The trial's standing disclosure: the picker says it once at the moment of choosing. -->
-    <div
-        v-if="trialNotice"
-        class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl bg-card shadow-sm px-3 py-2 text-left text-2xs text-muted"
-    >
-        <Icon name="sparkles" class="shrink-0 text-link" />
-        <!-- A floor, not `min-w-0` (ChatContinueStrip's own lesson): every control beside this is `shrink-0`. -->
-        <span class="min-w-[14rem] flex-1">{{ trialNotice }}</span>
-        <!-- Notice actions share one button style and baseline. -->
-        <div class="flex max-w-full shrink-0 flex-wrap items-center gap-1">
-            <Button
-                v-if="trialUnavailable"
-                size="small"
-                thumb
-                tier="quiet"
-                :disabled="!reachable || streaming"
-                v-tooltip.top="{ title: t(`chat.chatPaneNotices.retryTrial`), note: t(`chat.chatPaneNotices.resumesIfAnswers`) }"
-                @click="retryTrial"
-            >
-                {{ t(`ui.action.retry`) }}
-            </Button>
-            <!-- One action, not two: the spent trial's question is "what now", and the model list was the same answer
-                 arrived at sideways. Standing whenever this strip does, not only once spent — somebody halfway through
-                 the day's allowance who wants to connect now should not have to run out first. A place, so a link drawn
-                 as a button: Ctrl/Cmd-click keeps this conversation. -->
-            <Button
-                :as="RouterLink"
-                :to="MODELS_PATH"
-                size="small"
-                thumb
-                tier="quiet"
-                tone="accent"
-                v-tooltip.top="{ title: t(`chat.chatPaneNotices.connectTitle`), note: t(`chat.chatPaneNotices.connectWays`) }"
-            >
-                {{ t(`chat.words.connectAModel`) }}
-            </Button>
-        </div>
-    </div>
+    <!-- The trial's standing: what is left of the day's allowance, and the way off it. -->
+    <ChatTrialStrip />
     <!-- Proactive re-auth: the credential exists but can no longer refresh, surfaced here (before an opaque mid-turn failure) with a jump to reconnect. -->
     <RouterLink
         v-if="activeAccountReauth"

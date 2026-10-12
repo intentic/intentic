@@ -349,6 +349,9 @@ const scheduledWays = useScheduledWays({
 const wideActions = computed(
     () => (sendShown.value && scheduledLabel.value !== undefined && scheduledLabel.value !== ``) || inRow.value.persona || inRow.value.runThrough,
 );
+// The model pill whose words are its meaning, kept at every width: the press to choose one, and the free trial (see the
+// pill's own note in the template).
+const pillNamed = computed(() => modelReading.value.unset || onTrial.value);
 // A narrow composer gives the mic and Send one slot (`composer-yields` hides the other there): Send steps aside while there is
 // nothing to send and the mic is there to take it, since a greyed Send is the row's one press that does nothing.
 const micShares = computed(() => canDrive.value && !props.strip && !staged.value);
@@ -618,23 +621,25 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                     <div class="flex min-w-0 items-center gap-1 @max-md:shrink-0 @max-md:gap-0.5">
                                         <!-- With nothing that could run here there is no provider to announce: the name is the press itself, and it
                                              keeps its label at every width. A narrow composer drops a model's name to its logo and still reads;
-                                             dropping "Choose a model" leaves a bare glyph with nothing saying to press it. -->
+                                             dropping "Choose a model" leaves a bare glyph with nothing saying to press it. The free trial keeps
+                                             its name too: its mark is a gift box no vendor owns, which alone read as a stray decoration rather
+                                             than as the model, and the one press that leads off the trial. -->
                                         <ComposerModelPill
                                             ref="modelPill"
                                             :conversation="conversation"
                                             :class="{
                                                 'composer-steered': pickedWorkflow !== undefined,
                                                 'composer-flash': flashed === 'model',
-                                                'composer-glyph': !modelReading.unset,
+                                                'composer-glyph': !pillNamed,
                                             }"
                                             :disabled="pickedWorkflow !== undefined"
                                             :expanded="modelOpen"
                                             :aria-label="
-                                                modelReading.unset
+                                                pillNamed
                                                     ? modelLabelText
                                                     : t(`chat.chatPane.providerModel`, { providerName, modelLabelText })
                                             "
-                                            :label-class="modelReading.unset ? `` : wideActions ? `@max-xl:hidden` : `@max-md:hidden`"
+                                            :label-class="pillNamed ? `` : wideActions ? `@max-xl:hidden` : `@max-md:hidden`"
                                             @click="modelOpen = !modelOpen"
                                         />
 

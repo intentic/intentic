@@ -1,7 +1,10 @@
 <!-- Model pill (provider mark, name, chevron) that opens <ChatModelPicker>, shared by both composers. -->
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { isTrialProvider } from "@intentic/sandbox-contract";
 import type { Conversation } from "../session/conversation";
+import { trialBadge } from "../session/access";
+import { modelLabelFor, trialStatus } from "../accounts/providerCatalog";
 import { composerModelReading, stillRunningOn } from "./composerModelLabel";
 import ProviderLogo from "../accounts/ProviderLogo.vue";
 import { useT } from "@intentic/ui/i18n";
@@ -38,6 +41,19 @@ const runningOn = computed(() => stillRunningOn(choice.value, { streaming: strea
 const nextHint = computed(() =>
     runningOn.value === undefined ? undefined : t(`chat.composerModelPill.fromNextMessage`, { model: modelLabelText.value, running: runningOn.value }),
 );
+// On the free trial the pill is where a reader goes to leave it, so it says so under the pointer: what is left today,
+// which real model answered last (the trial picks one per message, trial-ladder.ts), and that this press is the way to
+// another model or one of their own. Not over the press to choose one (spent), which already says it in its own words,
+// and never over the running reply's own note.
+const trialHint = computed(() => {
+    const badge = reading.value.unset || !isTrialProvider(provider.value) ? undefined : trialBadge(provider.value);
+    if (badge === undefined) {
+        return undefined;
+    }
+    const served = trialStatus.value.servedModel;
+    const lastAnswer = served === undefined ? [] : [t(`chat.composerModelPill.trialServed`, { model: modelLabelFor(provider.value, served) })];
+    return { title: badge, note: [...lastAnswer, t(`chat.composerModelPill.trialNote`)].join(` `) };
+});
 
 // The button itself: see the note above on why the anchor has to be this element and not a stand-in.
 const el = ref<HTMLButtonElement>();
@@ -53,7 +69,7 @@ defineExpose({ el, label: modelLabelText });
         :aria-expanded="expanded"
         :aria-label="ariaLabel ?? t(`chat.composerModelPill.model`, { modelLabelText })"
         :aria-description="nextHint"
-        v-tooltip.top="nextHint"
+        v-tooltip.top="nextHint ?? trialHint"
     >
         <!-- A vendor's mark over a chat that vendor cannot answer is the same lie as its name; the list's own mark stands there. -->
         <Icon v-if="reading.unset" name="th-large" class="shrink-0 text-2xs text-link" aria-hidden="true" />
