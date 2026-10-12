@@ -1,5 +1,8 @@
-import { peerMessagePrompt } from "@intentic/sandbox-contract";
+import { capabilitiesOf, peerMessagePrompt } from "@intentic/sandbox-contract";
+import { parentOfActor } from "../../auth/principal.js";
 import type { Services } from "../../composition.js";
+import { conversationTaintSource, PEER_SOURCE, taintWords } from "../../guard/turn-taint.js";
+import { opt } from "../../opt.js";
 import type { Holding, Holdings } from "../actor/conversation-holdings.js";
 import { conversationProfile, type PersistedAgent } from "../registry/agents-store.js";
 import { resolveHandle } from "./fleet-recall.js";
@@ -10,7 +13,8 @@ import { resolveHandle } from "./fleet-recall.js";
 // have: between them, an agent that needed to tell a peer something had to ask the human to copy a message across.
 //
 // A message lands the same two ways the daemon's own wakes do: steered into a live turn, or opening one on the
-// conversation's own routing. Either way it is a peer's words, never the owner's: drawn as the peer's and tainting the turn.
+// conversation's own routing. Either way it is a peer's words, never the owner's: drawn as the peer's. Whether it taints
+// the turn it lands in depends on who the peer is (messageTaint).
 
 // Ping-pong between two agents is the one way this door spends real money with nobody asking, so each sender gets an
 // hourly budget of turns it may START elsewhere. Steering a live turn costs nothing and is not counted.
@@ -32,6 +36,56 @@ const spendTurn = (starts: Holdings<readonly number[]>, from: string | undefined
     }
     starts.hold(from, sender, [...recent, now]);
     return true;
+};
+
+// How far up the `startedBy` links a family is walked. Nesting is capped far below this; it only stops a corrupt
+// registry's loop.
+const FAMILY_WALK = 32;
+
+// The conversation a family of spawned agents grew from: up the `startedBy` links to the one a person, a program or the
+// sandbox opened. A conversation nobody spawned is its own root.
+const rootOf = (entry: (id: string) => PersistedAgent | undefined, id: string): string => {
+    let at = id;
+    for (let step = 0; step < FAMILY_WALK; step += 1) {
+        const parent = parentOfActor(entry(at)?.identity.startedBy);
+        if (parent === undefined) {
+            return at;
+        }
+        at = parent;
+    }
+    return at;
+};
+
+export interface MessageTaintDeps {
+    readonly entry: (id: string) => PersistedAgent | undefined;
+    // What first brought outside content into a conversation's live turn, or undefined for a clean or idle one.
+    readonly taintOf: (id: string) => string | undefined;
+}
+
+/**
+ * What a message makes of the turn it lands in: the taint source that turn files, or undefined for none.
+ *
+ * A stranger's words taint it: a conversation outside the target's own family, or a shell with no conversation stamp.
+ * Its own family's words (a subagent it started, the parent that started it, a sibling) are the owner's work relayed,
+ * read as a child's report is, which taints nothing. Two exceptions carry taint across: a sender whose own live turn took
+ * in outside content passes that on, and a sender on a runtime with no permission rules of its own is never clean.
+ * Without this a subagent saying "done, here is the diff" to its parent made every later spawn and send in that turn ask
+ * the owner, on a card blaming a runtime that had rules.
+ */
+export const messageTaint = (deps: MessageTaintDeps, from: string | undefined, target: string): string | undefined => {
+    if (from === undefined) {
+        return "a message from an agent shell outside any conversation";
+    }
+    const sender = deps.entry(from);
+    if (sender === undefined || rootOf(deps.entry, from) !== rootOf(deps.entry, target)) {
+        return `${PEER_SOURCE}${from}`;
+    }
+    const { provider, harness } = sender.profile;
+    if (capabilitiesOf(provider, harness).rulebook === "none") {
+        return `a message from \`${from}\`, which runs on ${provider}, a runtime with no permission rules of its own`;
+    }
+    const carried = deps.taintOf(from);
+    return carried === undefined ? undefined : `${taintWords(carried)}, relayed by \`${from}\``;
 };
 
 // The four ways this is refused, as the status each answers with: unusable request, no such conversation, a handle or
@@ -89,7 +143,12 @@ export const messageConversation = async (services: Services, from: string | und
     }
     const sender = from ?? UNSTAMPED;
     const peer = `agent:${sender}`;
-    const steer = { text: peerMessagePrompt({ from: sender, title: entry.social.title?.text, message }), voice: "agent", outside: peer } as const;
+    const outside = messageTaint({ entry: (id) => services.agents.entry(id), taintOf: conversationTaintSource }, from, entry.id);
+    const steer = {
+        text: peerMessagePrompt({ from: sender, title: entry.social.title?.text, message }),
+        voice: "agent",
+        ...opt("outside", outside),
+    } as const;
     // A live turn takes it between tool calls, which costs nothing and lands sooner than a turn of its own would.
     if ((await services.turns.steer(entry.id, steer)) === true) {
         services.logger.info({ from, to: entry.id }, "fleet message: steered into the live turn");
@@ -110,8 +169,9 @@ export const messageConversation = async (services: Services, from: string | und
         prompt: steer.text,
         // Who asked, in the same vocabulary the registry already uses for a spawned child's starter.
         actor: peer,
-        // What makes the sandbox treat the turn as carrying somebody else's words rather than the owner's.
-        outsideWake: peer,
+        // What makes the sandbox treat the turn as carrying somebody else's words rather than the owner's. Absent for its
+        // own family's clean words, so a parent its child woke may still spawn and steer children.
+        ...opt("outsideWake", outside),
     });
     if (run === "archived") {
         return archivedRefusal(entry.id);

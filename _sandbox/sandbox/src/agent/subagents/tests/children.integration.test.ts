@@ -361,7 +361,7 @@ describe("the spawn rulebook and the floors", () => {
                 provider: "pi",
             });
             expect(result.ok).toBe(true);
-            expect(conversationTaintSource(parent.conversationId)).toBe("agent:pi");
+            expect(conversationTaintSource(parent.conversationId)).toBe("runtime:pi");
             if (result.ok) {
                 await settled(result.id);
                 // Every later move is held, and the parent is told why in words it can act on, not a bare source key.
@@ -1398,6 +1398,53 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
             const ended = await waitForSubagent(actors, parent.conversationId, { target: result.id, until: ["finished"], timeoutMs: 5_000 });
             expect(ended.matched).toMatchObject({ status: "failed", error: expect.stringContaining("refused by the action rules") });
             expect(turns).toEqual([]);
+        } finally {
+            live.release();
+        }
+    });
+
+    // Starts held side by side are one decision: the turn-long allow on one card answers the others already up on that
+    // provider, and leaves a card on another provider waiting.
+    it("the owner's turn-long allow also answers the cards already waiting on that provider", async () => {
+        const turns: AgentTurn[] = [];
+        const live = liveParent();
+        // The newest pending card that is not one already seen, since each start raises its card after it returns.
+        const nextCard = async (seen: readonly string[]): Promise<string> => {
+            for (let attempt = 0; attempt < 200; attempt += 1) {
+                const card = turnRunOf(actors, parent.conversationId)
+                    ?.rows.map((row) => row.permission)
+                    .findLast((permission) => permission !== undefined && permission.status === "pending" && !seen.includes(permission.requestId));
+                if (card !== undefined) {
+                    return card.requestId;
+                }
+                await new Promise((resolve) => setTimeout(resolve, 5));
+            }
+            throw new Error("no new permission card was raised on the parent's turn");
+        };
+        try {
+            const services = heldServices(HOLD, fakeTurn(turns));
+            const one = await spawnChild(services, parent, { prompt: "one", provider: "claude", model: "claude-sonnet-4-6" });
+            const first = await nextCard([]);
+            const two = await spawnChild(services, parent, { prompt: "two", provider: "claude", model: "claude-sonnet-4-6" });
+            const second = await nextCard([first]);
+            const other = await spawnChild(services, parent, { prompt: "three", provider: "cursor", model: "composer-2.5" });
+            const third = await nextCard([first, second]);
+            expect([one, two, other]).toEqual([
+                expect.objectContaining({ ok: true, held: true }),
+                expect.objectContaining({ ok: true, held: true }),
+                expect.objectContaining({ ok: true, held: true }),
+            ]);
+            cards.resolve({ kind: "permission", requestId: first, decision: "always" });
+            for (const started of [one, two]) {
+                if (started.ok) {
+                    await settled(started.id);
+                }
+            }
+            expect(cardOf(first)?.status).toBe("always");
+            expect(cardOf(second)?.status).toBe("always");
+            expect(turns).toHaveLength(2);
+            expect(cardOf(third)?.status).toBe("pending");
+            cards.resolve({ kind: "permission", requestId: third, decision: "deny" });
         } finally {
             live.release();
         }

@@ -170,6 +170,16 @@ describe("agents.spawn", () => {
         expect(guard(childSpawn, { provider: "claude", rules: { "agents.spawn": "allow" }, outsideSource: "webchat" }).effect).toBe("allow");
         expect(guard(childSpawn, { provider: "claude", rules: { "agents.spawn": "deny" }, outsideSource: "webchat" }).effect).toBe("deny");
     });
+
+    // The reason is the card's whole explanation to the owner, so a terse source must never read as a different one: a
+    // message from a conversation once read as "a subagent on <its id>, a runtime with no permission rules".
+    test("names where the outside content came from in plain words", () => {
+        const reasonFor = (outsideSource: string): string | undefined => guard(childSpawn, { provider: "claude", rules: {}, outsideSource }).reason;
+        expect(reasonFor("runtime:pi")).toContain("(the report of a subagent on pi, a runtime with no permission rules of its own)");
+        expect(reasonFor("agent:clear-marsh-8c46")).toContain("(a message from another conversation, `clear-marsh-8c46`)");
+        expect(reasonFor("agent:clear-marsh-8c46")).not.toContain("runtime");
+        expect(reasonFor("a fetched page")).toContain("(a fetched page)");
+    });
 });
 
 // The host guard's whole table. No judge in the input, so none can move a row: a judge that allowed, was off, or could
@@ -179,7 +189,10 @@ describe("secret.send", () => {
     const askable = { canPark: true };
 
     test("a secret whose guard is off, or a use whose every host is on the list, goes", () => {
-        expect(guard(secretSend, { guarded: false, destination: "outside", ...askable })).toEqual({ effect: "allow", reason: "no secret this spends has its host guard on" });
+        expect(guard(secretSend, { guarded: false, destination: "outside", ...askable })).toEqual({
+            effect: "allow",
+            reason: "no secret this spends has its host guard on",
+        });
         expect(guard(secretSend, { guarded: true, destination: "inside", ...askable })).toEqual({
             effect: "allow",
             reason: "every host this names is on the secret's list",

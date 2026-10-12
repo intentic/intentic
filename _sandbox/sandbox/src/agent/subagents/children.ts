@@ -3,6 +3,7 @@ import type { WorkPlace } from "../../workload/resource-budget.js";
 import { conversationProfile, isIsolated, worktreeOf } from "../../conversations/registry/agents-store.js";
 import { landByHandLeased } from "../../conversations/land/land-by-hand.js";
 import { landTargetOf } from "../../conversations/land/land-target.js";
+import type { Caller } from "../../auth/auth.js";
 import { parentOfActor } from "../../auth/principal.js";
 import type {
     AgentEvent,
@@ -25,7 +26,7 @@ import type { Services } from "../../composition.js";
 import { steerTurn } from "../checkpoints/agent-steering.js";
 import { childSpawn } from "../../guard/actions.js";
 import { guard } from "../../guard/guard.js";
-import { conversationTaintSource, markConversationTaint } from "../../guard/turn-taint.js";
+import { conversationTaintSource, markConversationTaint, RUNTIME_SOURCE } from "../../guard/turn-taint.js";
 import { killCauseOf, killNote, runtimeKilled } from "./child-death.js";
 import { noteChildWork } from "./child-verification.js";
 import { type SpawnableProvider, spawnableProviders } from "./spawn-catalog.js";
@@ -170,6 +171,9 @@ const SUPERVISORS: Holding<ChildSupervisor> = { name: "child supervisors" };
 // The owner's "for the rest of this turn" on a child-agent card: the parent's run it was given in, so it lapses with that
 // turn, and the providers it covers. Held by the parent under its own id.
 const TURN_GRANTS: Holding<{ readonly run: string; readonly providers: readonly string[] }> = { name: "child move grants" };
+// Every child-agent card still up, by request id, held by the parent: which run raised it and on which provider, so the
+// owner's "for the rest of this turn" on one answers the others it covers.
+const HELD_MOVES: Holding<{ readonly requestId: string; readonly run: string; readonly provider: string }> = { name: "held child moves" };
 
 // Where a conversation's children, seats and supervisor are held: each conversation's actor.
 type Actors = Pick<ConversationActors, "holdings">;
@@ -211,6 +215,7 @@ export const resetChildrenForTest = (actors: Actors): void => {
     actors.holdings(SEATS).clear();
     actors.holdings(SUPERVISORS).clear();
     actors.holdings(TURN_GRANTS).clear();
+    actors.holdings(HELD_MOVES).clear();
     actors.holdings(PERSON_RUNS).clear();
 };
 
@@ -788,6 +793,22 @@ const grantTurn = (actors: Actors, parent: string, run: string, provider: string
     actors.holdings(TURN_GRANTS).hold(parent, parent, { run, providers: [...new Set([...providers, provider])] });
 };
 
+// The grant answers the cards already up on that provider in that turn as well as the moves still to come: four starts
+// held side by side are one decision, not four presses of the same caret.
+const releaseHeldMoves = (
+    services: Pick<Services, "conversations" | "cards">,
+    parent: string,
+    run: string,
+    provider: string,
+    caller: Caller | undefined,
+): void => {
+    for (const held of services.conversations.holdings(HELD_MOVES).of(parent)) {
+        if (held.run === run && held.provider === provider) {
+            services.cards.resolve({ kind: "permission", requestId: held.requestId, decision: "always" }, caller);
+        }
+    }
+};
+
 // Consulted before every supervisor mutation (spawn, send, answer): the owner's action rules plus the taint floor. A hold
 // the owner already allowed for the rest of this turn lets the move through.
 const judgeMove = async (services: Services, parent: string, provider: string): Promise<MoveVerdict> => {
@@ -845,31 +866,43 @@ const askOwner = async (services: Services, parent: string, run: LiveRun, ask: C
     const { move, provider } = ask;
     const ended = new AbortController();
     void run.waitUntilFinished().then(() => ended.abort());
-    const { decision, reply } = await raiseRequest(
+    let held: string | undefined;
+    const settled = raiseRequest(
         cardDeps(services),
         { conversationId: parent, push: (event) => run.push(event) },
         {
             kind: "permission",
             onAbort: { kind: "permission", requestId: "", decision: "deny", feedback: "The turn ended before you answered." },
-            raised: (requestId) => ({
-                kind: "permission",
-                requestId,
-                toolName: "agents.spawn",
-                title: `${MOVE_TITLE[move]} on ${labelOf(provider)}?`,
-                displayName: MOVE_BUTTON[move],
-                reason,
-                alwaysLabel: ALWAYS_LABEL,
-                child: ask,
-            }),
+            raised: (requestId) => {
+                // Filed as the card goes up, which is the one moment its id is known before the answer.
+                held = requestId;
+                services.conversations.holdings(HELD_MOVES).hold(parent, requestId, { requestId, run: run.id, provider });
+                return {
+                    kind: "permission",
+                    requestId,
+                    toolName: "agents.spawn",
+                    title: `${MOVE_TITLE[move]} on ${labelOf(provider)}?`,
+                    displayName: MOVE_BUTTON[move],
+                    reason,
+                    alwaysLabel: ALWAYS_LABEL,
+                    child: ask,
+                };
+            },
             approves: (answer) => answer.decision !== "deny",
             signal: ended.signal,
             deadlineMs: SUPERVISION_DEADLINE_MS,
         },
     );
+    const { decision, reply, caller } = await settled.finally(() => {
+        if (held !== undefined) {
+            services.conversations.holdings(HELD_MOVES).drop(held);
+        }
+    });
     switch (decision) {
         case "approved": {
             if (reply.decision === "always") {
                 grantTurn(services.conversations, parent, run.id, provider);
+                releaseHeldMoves(services, parent, run.id, provider, caller);
             }
             // Only a start can be re-pointed: a child already running keeps the run it was started on (childProfile).
             const picked = move === "spawn" ? reply.child : undefined;
@@ -889,7 +922,7 @@ const askOwner = async (services: Services, parent: string, run: LiveRun, ask: C
 // a fetched page.
 const composeRuntimeFloor = (parent: string, provider: AgentProvider, harness: AgentHarness): void => {
     if (capabilitiesOf(provider, harness).rulebook === "none") {
-        markConversationTaint(parent, `agent:${provider}`);
+        markConversationTaint(parent, `${RUNTIME_SOURCE}${provider}`);
     }
 };
 

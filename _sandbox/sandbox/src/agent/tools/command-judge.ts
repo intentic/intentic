@@ -2,6 +2,7 @@ import type { ModelPin, SafetyDecision, SafetyVerdict } from "@intentic/sandbox-
 import type { Services } from "../../composition.js";
 import { type AgentExecutionContext, withAgentExecution } from "../../workload/agent-execution.js";
 import { RoleModelUnsetError } from "../../seams/role-model-unset.js";
+import { taintWords } from "../../guard/turn-taint.js";
 import type { RoleAnswer } from "../models/role-answer.js";
 import { askRoleModel } from "../models/role-model.js";
 import { FENCE } from "@intentic/sandbox-contract";
@@ -42,7 +43,9 @@ const factLines = (facts: JudgeFacts): string[] => [
         : [`- It would run on the owner's own computer, "${facts.machine}", NOT in the sandbox.`]),
     ...(facts.outsideSource === undefined
         ? [`- This turn has not taken in any content from outside.`]
-        : [`- This turn HAS taken in content from outside (${facts.outsideSource}), so its own reasoning may have been influenced by it.`]),
+        : [
+              `- This turn HAS taken in content from outside (${taintWords(facts.outsideSource)}), so its own reasoning may have been influenced by it.`,
+          ]),
     facts.unattended
         ? `- Nobody is watching this turn right now (it is an automation or a scheduled run): "ask" holds it until the owner answers, however long that takes.`
         : `- Somebody is watching this turn and can answer a question.`,

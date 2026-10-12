@@ -22,6 +22,23 @@ export const createTurnTaint = (born?: string): TurnTaint => {
     };
 };
 
+// Two sources are filed terse, by prefix, and only `taintWords` reads them back: a child on a runtime with no rulebook
+// of its own (children.ts) and a message from a conversation outside this one's family (fleet-message.ts). Every other
+// source is filed as the words a person reads.
+export const RUNTIME_SOURCE = "runtime:";
+export const PEER_SOURCE = "agent:";
+
+// Where outside content came from, in the words a card, an agent and the safety judge read.
+export const taintWords = (source: string): string => {
+    if (source.startsWith(RUNTIME_SOURCE)) {
+        return `the report of a subagent on ${source.slice(RUNTIME_SOURCE.length)}, a runtime with no permission rules of its own`;
+    }
+    if (source.startsWith(PEER_SOURCE)) {
+        return `a message from another conversation, \`${source.slice(PEER_SOURCE.length)}\``;
+    }
+    return source;
+};
+
 // A turn that never taints (bench run, helper one-shot); its own object keeps consult sites branch-free.
 export const NO_TAINT: TurnTaint = { tainted: () => false, source: () => undefined, mark: () => {} };
 
@@ -60,4 +77,3 @@ export const conversationTaintSource = (conversationId: string): string | undefi
 export const markConversationTaint = (conversationId: string, source: string): void => {
     live.get(conversationId)?.mark(source);
 };
-
