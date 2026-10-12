@@ -1,19 +1,26 @@
+import { errorMessage } from "@intentic/base/errors";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import type { ProviderWarm, WarmReplay, WarmTurn } from "../../agent/providers/provider-module.js";
-import type { TurnHooks, TurnSpec } from "../../agent/providers/agent-request.js";
+import type { HarnessCredential, TurnHooks, TurnSpec } from "../../agent/providers/agent-request.js";
 import { SteeringQueue } from "../../agent/checkpoints/agent-steering.js";
 import type { HarnessRequest } from "../../agent/run/agent.js";
 import type { Services } from "../../composition.js";
 import type { IsolationAnchor } from "../../conversations/worktrees/isolation.js";
 import { opt } from "../../opt.js";
+import { shieldHarnessCredential } from "../../privacy/harness-route.js";
 import { ensureFreshToken, holdAccount } from "./claude-credentials.js";
 import { agentExecutionScope, assertAgentExecution, requireRootAgentExecution, type AgentExecutionContext } from "../../workload/agent-execution.js";
 
 // Keeping a Claude conversation's prompt cache warm: one forked, unsaved request on the subscription account that served
 // the last turn, carrying that turn's prefix (system prompt, tools, model, reasoning) and a one-word prompt. The Claude
 // Code loop turns `policy.keepWarm` into the refresh's own options (agent/run/agent.ts keepWarmOptions).
+//
+// A refresh resends the whole session the CLI keeps on disk, which holds every value as it really is (the gateway gives
+// the runtime back what it masked), so it is routed exactly as a turn is: behind the privacy shield's gateway while the
+// shield is on or watching, decided by the policy in force when the refresh goes, never by the one the turn ran under.
+// Until 2026-10-12 it went straight to the provider whatever the shield said.
 
-export type ClaudeWarmDeps = Pick<Services, "agent" | "claudeStore" | "agentExecution">;
+export type ClaudeWarmDeps = Pick<Services, "agent" | "claudeStore" | "agentExecution" | "privacyShield">;
 
 // What a refresh says; the model reads it, answers in a word, and nothing of it is saved.
 export const KEEP_WARM_PROMPT = "Automated prompt-cache refresh, not a message from the user. Reply with only: ok";
@@ -61,11 +68,20 @@ interface ClaudeWarmRecipe {
     readonly account: string;
     readonly sessionId: string;
     readonly anchor: WarmTurn["anchor"];
+    // Whose session it is, for the shield alone (a grant made for this conversation, its log); the refresh itself is
+    // attached to no conversation.
+    readonly conversationId: string | undefined;
 }
 
-// The refresh request: the recipe forked from its session under a fresh token, in a namespace of its own when the turn
-// had one, attached to no conversation.
-const refreshRequest = (recipe: ClaudeWarmRecipe, execution: AgentExecutionContext, token: string, anchor: IsolationAnchor | undefined, signal: AbortSignal): HarnessRequest => ({
+// The refresh request: the recipe forked from its session under a fresh token, routed as the shield says, in a namespace
+// of its own when the turn had one, attached to no conversation.
+const refreshRequest = (
+    recipe: ClaudeWarmRecipe,
+    execution: AgentExecutionContext,
+    credential: HarnessCredential,
+    anchor: IsolationAnchor | undefined,
+    signal: AbortSignal,
+): HarnessRequest => ({
     execution,
     spec: {
         ...recipe.spec,
@@ -77,7 +93,7 @@ const refreshRequest = (recipe: ClaudeWarmRecipe, execution: AgentExecutionConte
     policy: { ...recipe.policy, keepWarm: true },
     tools: recipe.tools,
     hooks: { cards: recipe.cards },
-    credential: { kind: "claude-oauth", token },
+    credential,
     signal,
 });
 
@@ -95,13 +111,21 @@ async function* sendRefresh(deps: ClaudeWarmDeps, recipe: ClaudeWarmRecipe, sign
             yield { kind: "error", message: "The account is signed out." };
             return;
         }
+        // A policy that cannot be read refuses the refresh, as it refuses a turn, rather than sending it unshielded.
+        let credential: HarnessCredential;
+        try {
+            credential = await shieldHarnessCredential(deps.privacyShield, { kind: "claude-oauth", token }, { provider: "claude", conversationId: recipe.conversationId });
+        } catch (error) {
+            yield { kind: "error", message: `The privacy shield's policy could not be read, so the cache was not refreshed. ${errorMessage(error)}`.trim() };
+            return;
+        }
         requireRootAgentExecution(gateContext, "Claude cache refresh");
         const release = holdAccount(recipe.account);
         try {
             const anchor = recipe.placement?.anchor === undefined ? undefined : await recipe.anchor(recipe.placement.plan);
             const isolation = recipe.placement === undefined ? undefined : { plan: recipe.placement.plan, ...opt("anchor", anchor) };
             const execution = scope.acquire({ localCwd: recipe.spec.cwd, ...opt("isolation", isolation) });
-            yield* deps.agent(refreshRequest(recipe, execution, token, anchor, signal));
+            yield* deps.agent(refreshRequest(recipe, execution, credential, anchor, signal));
         } finally {
             release();
         }
@@ -131,6 +155,7 @@ export const claudeKeepable = (deps: ClaudeWarmDeps, turn: WarmTurn): WarmReplay
         account,
         sessionId,
         anchor,
+        conversationId: request.spec.conversationId,
     };
     return { model: request.spec.model, send: (signal) => sendRefresh(deps, recipe, signal) };
 };

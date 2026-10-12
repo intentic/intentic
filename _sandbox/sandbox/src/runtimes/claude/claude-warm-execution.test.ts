@@ -16,6 +16,8 @@ afterEach(() => { for (const reference of references.splice(0)) { forgetNamespac
 const fixture = async (options: {
     readonly runtime?: ClaudeWarmDeps["agent"];
     readonly staleAnchor?: boolean;
+    readonly credential?: HarnessRequest["credential"];
+    readonly shield?: ClaudeWarmDeps["privacyShield"]["baseUrlFor"];
 } = {}) => {
     let policy: AgentDomainPolicy = { agentDomain: "root" };
     const service = createAgentExecutionService(async () => policy);
@@ -28,9 +30,9 @@ const fixture = async (options: {
     const oldLease = service.acquire(admission, { localCwd: plan.worktree, isolation: { plan, anchor: oldAnchor } });
     const request: HarnessRequest = {
         execution: oldLease.context,
-        spec: { cwd: VIEW, prompt: "old words", model: "unchanged-model", isolation: { plan, anchor: oldAnchor } },
+        spec: { cwd: VIEW, prompt: "old words", model: "unchanged-model", conversationId: "synthetic-conversation", isolation: { plan, anchor: oldAnchor } },
         policy: {}, tools: {}, hooks: { cards: unstubbed("cards", {}) },
-        credential: { kind: "claude-oauth", token: "synthetic-old-token" }, signal: new AbortController().signal,
+        credential: options.credential ?? { kind: "claude-oauth", token: "synthetic-old-token" }, signal: new AbortController().signal,
     };
     const contexts: AgentExecutionContext[] = [];
     const finalized: AgentExecutionContext[] = [];
@@ -48,6 +50,8 @@ const fixture = async (options: {
     });
     const deps = unstubbed<ClaudeWarmDeps>("warm", {
         agentExecution: service, agent,
+        // The shield off unless a test says otherwise: the refresh goes to the provider as it is.
+        privacyShield: unstubbed<ClaudeWarmDeps["privacyShield"]>("privacyShield", { baseUrlFor: options.shield ?? (async () => undefined) }),
         claudeStore: unstubbed<ClaudeWarmDeps["claudeStore"]>("claudeStore", { read }),
     });
     const dispose = jest.fn();
@@ -148,4 +152,38 @@ test.each(["forged", "changed cwd"] as const)("replay capture refuses %s authori
             .toThrow(kind === "forged" ? "Agent execution context is not registered or has been released." : "Agent request placement does not match its admitted execution context.");
         expect(anchor).not.toHaveBeenCalled();
     } finally { lease.release(); service.close(admission); }
+});
+
+
+// A refresh resends the session the CLI keeps on disk, every value in it as it really is, so it goes where a turn would:
+// through the shield's gateway while the shield says so, decided when the refresh goes, not when the turn ran.
+describe("a refresh and the privacy shield", () => {
+    const GATEWAY = "http://127.0.0.1:8787/privacy/gateway/refresh-session.sig";
+    const sentWith = async (options: Parameters<typeof fixture>[0]) => {
+        const seen: HarnessRequest[] = [];
+        const turn = await fixture({ ...options, async *runtime (refresh) { seen.push(refresh); yield { kind: "done" }; } });
+        const events = await collect(turn.replay.send(new AbortController().signal));
+        return { events, seen, turn };
+    };
+
+    test("with the shield on, the refresh goes through its gateway, named for the turn's conversation", async () => {
+        const asked: unknown[] = [];
+        const { seen } = await sentWith({ shield: async (session) => { asked.push(session); return GATEWAY; } });
+        expect(seen.map((refresh) => refresh.credential)).toEqual([{ kind: "claude-oauth", token: "synthetic-fresh-token", gateway: GATEWAY }]);
+        expect(asked).toEqual([{ provider: "claude", upstream: "https://api.anthropic.com", conversationId: "synthetic-conversation" }]);
+        // Attached to no conversation all the same: only the shield is told whose session it is.
+        expect(seen[0]?.spec.conversationId).toBeUndefined();
+    });
+
+    test("the shield turned off since the turn sends the refresh as it is, though the turn went through the gateway", async () => {
+        const { seen } = await sentWith({ credential: { kind: "claude-oauth", token: "synthetic-old-token", gateway: "http://127.0.0.1:8787/privacy/gateway/turn-session.sig" } });
+        expect(seen.map((refresh) => refresh.credential)).toEqual([{ kind: "claude-oauth", token: "synthetic-fresh-token" }]);
+    });
+
+    test("a policy that cannot be read refuses the refresh rather than sending it unshielded", async () => {
+        const { events, seen, turn } = await sentWith({ shield: async () => { throw new Error("synthetic unreadable policy"); } });
+        expect(seen).toEqual([]);
+        expect(events).toEqual([{ kind: "error", message: "The privacy shield's policy could not be read, so the cache was not refreshed. synthetic unreadable policy" }]);
+        expect(turn.anchor).not.toHaveBeenCalled();
+    });
 });

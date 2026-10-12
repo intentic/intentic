@@ -266,18 +266,24 @@ Nothing the sandbox runs checks a push, and nothing is kept about one. The app p
   message), which is how stored secrets are masked: only the Claude Code loop can rewrite a tool's result before the model
   reads it, and a source-side filter misses every door nobody listed (resume, compaction, a runtime handoff's replayed
   transcript, files a CLI loads itself, helper prompts). At the request the doors no longer matter.
-- (2026-10-12) Tool-result clearing at the gateway was tried and removed. Past an estimated 100k tokens, a native
-  Claude conversation's oldest tool results became a one-line placeholder, 20 kept whole, the boundary moving a 40k-token
-  chunk at a time so the cache broke once per chunk; the API's own `clear_tool_uses_20250919` had been rejected first
+- (2026-10-12) A keep-warm refresh is routed as a turn is
+  ([`claude-warm.ts`](../../_sandbox/sandbox/src/runtimes/claude/claude-warm.ts)): through the gateway while the shield
+  is on or watching, by the policy in force when the refresh goes, and refused when that policy cannot be read. Before,
+  it rebuilt its credential without the turn's gateway and went straight to the provider. A refresh forks the session
+  the CLI keeps on disk, which holds every value unmasked (the gateway gives the runtime back what it masked), so each
+  refresh resent the conversation's personal data to an untrusted provider, unlogged.
+- (2026-10-12) Tool-result clearing at the gateway was tried and removed. Past an estimated 100k tokens, a native Claude
+  conversation's oldest tool results became a one-line placeholder, 20 kept whole, the boundary moving a 40k-token chunk
+  at a time so the cache broke once per chunk; the API's own `clear_tool_uses_20250919` had been rejected first
   (2026-10-04), since its boundary moves on every call and a simulation on 543 sessions read 20% to 196% more prompt
   cost. Measured live against a half holdout (78 conversations each, 2026-10-07 to 2026-10-12, all Opus), the chunked
   form shrank the prompt per call by 25% and saved nothing: cache writes per call rose 50%, so cost per call came out
   level (+1%, 95% interval −21% to +31%), and failed tool calls per turn rose 58% (+15% to +122%) as the model reached
-  for what had been cleared. Keep-warm made it worse: its refresh goes straight to the provider, so it kept the
-  uncleared prefix warm and the next real turn rewrote the cleared one (31% of a follow-up turn's opening prompt
-  written to cache, against 18.5% kept). Stale `toolResultClearing` settings and `clearingArm` ledger stamps are
-  dropped on read, and a gateway address still carrying the clearing flag verifies without it. Context growth is left
-  to the CLI's own compaction.
+  for what had been cleared. Keep-warm made it worse: its refresh went straight to the provider (the bypass above), so
+  it kept the uncleared prefix warm and the next real turn rewrote the cleared one (31% of a follow-up turn's opening
+  prompt written to cache, against 18.5% kept). Stale `toolResultClearing` settings and `clearingArm` ledger stamps are
+  dropped on read, and a gateway address still carrying the clearing flag verifies without it. Context growth is left to
+  the CLI's own compaction.
 
 ## Leftovers and housekeeping
 
