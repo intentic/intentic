@@ -19,7 +19,7 @@ const t = useT();
 const props = defineProps<{
     thinking?: string;
     tools?: readonly TranscriptTool[];
-    // Whether the turn is still being written: the only state in which a node may breathe or open itself.
+    // Whether the turn is still being written: the only state in which its band may breathe.
     live: boolean;
 }>();
 
@@ -28,28 +28,18 @@ const { showToolCalls } = useToolCalls();
 const thought = computed(() => (props.thinking === undefined || props.thinking === `` ? undefined : props.thinking));
 const run = computed(() => (showToolCalls.value ? undefined : summarizeRun(props.tools ?? [])));
 
-// What stands open under the node: the thought alone, which a live row opens by itself as it is written, or the whole
-// of it, which only the reader asks for — a run is not opened for them, since hiding it is what they chose.
-type Shown = `thought` | `all`;
-// Unset until pressed, so a live thought keeps opening itself; null is the reader having shut it.
-const override = ref<Shown | null>();
-const shown = computed<Shown | undefined>(() =>
-    override.value === undefined ? (thought.value !== undefined && props.live ? `thought` : undefined) : (override.value ?? undefined),
-);
+// A thought is a step like any call: it stands under the same shut band and opens only when the reader asks, live or
+// not, so no row of the transcript unfolds itself while the reader is reading another.
+const shown = ref(false);
 // Opened by find-in-page: shown at once, since the browser scrolls to the match before a reveal would finish.
 const found = ref(false);
 const toggle = (): void => {
     found.value = false;
-    override.value = shown.value === undefined ? `all` : null;
-};
-// A thought that opened itself shows the thought alone; its run's band stays under it, the way on to the calls.
-const showAll = (): void => {
-    found.value = false;
-    override.value = `all`;
+    shown.value = !shown.value;
 };
 const onFound = (): void => {
     found.value = true;
-    override.value = `all`;
+    shown.value = true;
 };
 
 const KIND_LABELS = {
@@ -65,7 +55,9 @@ const KIND_LABELS = {
 // How hard the run worked, felt rather than counted: the seam above the words grows a step taller and a step deeper
 // per call (`.chat-spine-wash` in chat.css), capped so a long run is a band, not a wall. The figure is on hover.
 const WASH_CAP = 16;
-const calls = computed(() => (run.value === undefined ? undefined : Math.min(run.value.count, WASH_CAP)));
+// The thought counts as one step of the band, so a row that only thought still has one to press.
+const steps = computed(() => (run.value?.count ?? 0) + (thought.value === undefined ? 0 : 1));
+const calls = computed(() => (steps.value === 0 ? undefined : Math.min(steps.value, WASH_CAP)));
 
 // For the screen reader and for a node the pointer has not reached: what a press opens.
 const label = computed(() => {
@@ -98,22 +90,19 @@ const tip = computed((): TooltipValue => {
 
 <template>
     <!-- The row's first child, so its zero-height bar sits on the row's top edge and the figure centres on the seam above
-         the row's words. Shut, a thought alone costs the row nothing (chat.css cancels the gap after it); a run is a band
-         in that seam, as tall as the run was busy. -->
+         the row's words. Shut, the thought and the hidden run are one band in that seam, as tall as the row was busy. -->
     <div
-        v-if="thought !== undefined || run !== undefined"
+        v-if="calls !== undefined"
         class="chat-spine flex w-full flex-col gap-1"
         :class="shown ? `chat-spine-open` : `chat-spine-shut`"
-        :style="calls === undefined ? undefined : { '--wash-calls': calls }"
+        :style="{ '--wash-calls': calls }"
     >
         <div class="chat-spine-bar">
-            <!-- Shut, a row that ran calls is its band alone: the thought folds into it like any other step, so no mark
-                 stands beside it. A thought with no run has no band, so its mark is the control. Open, the band gives way
-                 to the material and one quiet mark in the gutter, sticky down it, is the way to fold it again. -->
+            <!-- Open, the band gives way to the material and one quiet mark in the gutter, sticky down it, folds it again. -->
             <ChatSpineNode
-                v-if="(thought !== undefined && run === undefined) || shown !== undefined"
-                :icon="thought !== undefined && (run === undefined || shown === `thought`) ? `sparkles` : `chevron-up`"
-                :open="shown !== undefined"
+                v-if="shown"
+                icon="chevron-up"
+                :open="true"
                 :label="label"
                 :tip="tip"
                 :failed="(run?.failed ?? 0) > 0"
@@ -121,17 +110,16 @@ const tip = computed((): TooltipValue => {
                 @toggle="toggle"
             />
         </div>
-        <!-- The run's weight as the seam itself, never a number, and the one control for the thought and the calls. -->
+        <!-- The row's weight as the seam itself, never a number, and the one control for the thought and the calls. -->
         <button
-            v-if="calls !== undefined && shown === undefined"
+            v-if="!shown"
             type="button"
             class="chat-spine-wash"
             :class="{
-                'chat-spine-wash-on': shown !== undefined,
                 'chat-spine-wash-failed': (run?.failed ?? 0) > 0,
                 'chat-spine-wash-live': live,
             }"
-            :aria-expanded="shown !== undefined"
+            :aria-expanded="false"
             :aria-label="label"
             v-tooltip.top="tip"
             @click="toggle"
@@ -149,25 +137,9 @@ const tip = computed((): TooltipValue => {
             <!-- A thought is prose, so it is set in the reading face: a <pre> keeps its line breaks, not its code font. -->
             <pre class="px-2.5 py-1.5 font-sans text-2xs leading-relaxed whitespace-pre-wrap text-muted italic">{{ thought }}</pre>
         </div>
-        <!-- A thought open by itself is not the whole row: the run it led to keeps its band under the thought, so the
-             same mark never stands for "everything" and hides the calls behind a second press. -->
-        <div v-if="calls !== undefined && shown === `thought`" class="chat-spine-material">
-            <button
-                type="button"
-                class="chat-spine-wash"
-                :class="{
-                    'chat-spine-wash-failed': (run?.failed ?? 0) > 0,
-                    'chat-spine-wash-live': live,
-                }"
-                :aria-expanded="false"
-                :aria-label="label"
-                v-tooltip.top="tip"
-                @click="showAll"
-            />
-        </div>
         <!-- The calls are not text worth the page's weight: absent until pressed, and faded in where they land. -->
         <Transition name="chat-mark-reveal">
-            <div v-if="shown === `all` && run" class="chat-spine-material flex flex-col gap-1">
+            <div v-if="shown && run" class="chat-spine-material flex flex-col gap-1">
                 <ChatToolRows :tools="tools ?? []" :live="live" />
             </div>
         </Transition>

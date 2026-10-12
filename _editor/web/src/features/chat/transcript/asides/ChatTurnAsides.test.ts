@@ -186,37 +186,29 @@ describe(`ChatTurnAsides thought on the node`, () => {
         expect(nodes(element)[0]?.querySelector(`[data-icon="chevron-up"]`)).not.toBeNull();
     });
 
-    it(`stands alone as a thought when the row ran nothing`, () => {
-        const node = nodes(mount({ thinking }))[0];
-        expect(node?.getAttribute(`aria-label`)).toBe(`Thinking`);
-        expect(node?.textContent?.trim()).toBe(``);
+    it(`stands as a band of its own when the row ran nothing`, () => {
+        const element = mount({ thinking });
+        expect(nodes(element)).toHaveLength(0);
+        expect(wash(element)?.getAttribute(`aria-label`)).toBe(`Thinking`);
+        expect(element.querySelector<HTMLElement>(`.chat-spine`)?.style.getPropertyValue(`--wash-calls`)).toBe(`1`);
     });
 
-    it(`reads as it is written and puts itself away once the turn lands, without opening the run`, async () => {
+    it(`counts as one step of the band`, () => {
+        const element = mount({ thinking, tools: reads(3) });
+        expect(element.querySelector<HTMLElement>(`.chat-spine`)?.style.getPropertyValue(`--wash-calls`)).toBe(`4`);
+    });
+
+    it(`never opens itself, even while the turn is being written`, () => {
         const live = mount({ thinking, tools: [read(`a.ts`)], live: true });
-        expect(shownText(live)).toContain(thinking);
-        // Hiding the run is what the reader chose; only the thought opens itself.
+        expect(shownText(live)).not.toContain(thinking);
         expect(live.textContent).not.toContain(`a.ts`);
+        expect(wash(live)?.classList.contains(`chat-spine-wash-live`)).toBe(true);
 
         app?.unmount();
         app = undefined;
         document.body.innerHTML = ``;
 
-        const settled = mount({ thinking, live: false });
-        expect(shownText(settled)).not.toContain(thinking);
-    });
-
-    it(`keeps the run's band under a thought that opened itself, and opens the calls from it`, async () => {
-        const element = mount({ thinking, tools: [read(`a.ts`), read(`b.ts`)], live: true });
-        expect(shownText(element)).toContain(thinking);
-        const band = wash(element);
-        expect(band).not.toBeNull();
-        expect(band?.getAttribute(`aria-label`)).toBe(`Show thinking and 2 steps`);
-        band?.click();
-        await settle();
-        expect(element.textContent).toContain(`a.ts`);
-        expect(shownText(element)).toContain(thinking);
-        expect(wash(element)).toBeNull();
+        expect(shownText(mount({ thinking, live: true }))).not.toContain(thinking);
     });
 
     it(`keeps a shut thought in the page for find-in-page, and opens it when a match lands inside`, async () => {
@@ -249,8 +241,11 @@ describe(`ChatTurnAsides thought on the node`, () => {
         expect(scrollersUnderShut(settled)).toEqual([]);
     });
 
-    it(`keeps a reader's own answer over the turn's: a shut thought stays shut as the turn settles`, async () => {
+    it(`opens and shuts a lone thought from its band`, async () => {
         const element = mount({ thinking, live: true });
+        wash(element)!.click();
+        await nextTick();
+        expect(shownText(element)).toContain(thinking);
         nodes(element)[0]!.click();
         await settle();
         expect(shownText(element)).not.toContain(thinking);
