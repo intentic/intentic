@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { mkdir, readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -39,6 +38,7 @@ import {
     upsertPairing,
 } from "./config.js";
 import { type TransportAsk, transportFor } from "./endpoint.js";
+import { runProcess } from "./exec.js";
 import { overlappingPairing } from "./folders.js";
 import { realBridgeExec, runGitBridge } from "./git-bridge.js";
 import { retireMirroredPort, retirePairingMirror, teardownAllForwards } from "./mirror.js";
@@ -603,7 +603,7 @@ const proveTransport = async (out: Log, warn: Log, sandboxId: string, container:
         warn(`The sync transport for ${sandboxId} isn't listening on 127.0.0.1:${port} yet; syncing starts as soon as it is.`);
     }
     const ssh = mutagenSshPath(process.platform, process.env["MUTAGEN_SSH_PATH"]);
-    assertSshConfigVisible(ssh, alias, port);
+    await assertSshConfigVisible(ssh, alias, port);
     await probeSshTransport(ssh, alias, out);
 };
 
@@ -980,11 +980,8 @@ export const syncUninstall = async (say: Narration, sandbox?: string, { forGood 
         if (pairing.mode === "sync" && syncSessionNames(pairing).length > 0) {
             // The pair goes together: a surviving backup session would keep mirroring a sandbox this device has just
             // unpaired, writing into a folder the owner considers released.
-            spawnSync(mutagen, ["sync", "terminate", ...syncSessionNames(pairing)], {
-                stdio: "ignore",
-                windowsHide: true,
-                timeout: MUTAGEN_CALL_TIMEOUT_MS,
-            });
+            // oxlint-disable-next-line eslint/no-await-in-loop -- state is a single file; serial keeps the writes ordered
+            await runProcess(mutagen, ["sync", "terminate", ...syncSessionNames(pairing)], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS });
         }
         if (firstOfSandbox) {
             // oxlint-disable-next-line eslint/no-await-in-loop -- state is a single file; serial keeps the writes ordered
@@ -1017,7 +1014,7 @@ export const syncUninstall = async (say: Narration, sandbox?: string, { forGood 
     const ownCopy = isOwnMutagen(mutagen) && userMutagenOnPath() === undefined;
     if (ownCopy) {
         unregisterMutagenAutostart(mutagen);
-        spawnSync(mutagen, ["daemon", "stop"], { stdio: "ignore", windowsHide: true, timeout: MUTAGEN_CALL_TIMEOUT_MS });
+        await runProcess(mutagen, ["daemon", "stop"], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS });
         say.note("Removed the ssh-config include, and stopped and unregistered the Mutagen daemon.");
     } else {
         if (process.platform === "win32") {

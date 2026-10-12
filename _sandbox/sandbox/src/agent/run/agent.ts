@@ -52,6 +52,7 @@ import { outboundGuardHooks } from "../../guard/outbound-guard.js";
 import { outsideResultHooks } from "../../guard/outside-results.js";
 import { createTurnTaint, publishTurnTaint } from "../../guard/turn-taint.js";
 import { personaScopeHooks } from "../../personas/persona-scope.js";
+import { toolAllowlistHooks } from "../tools/tool-allowlist.js";
 import { jsExecutionServer } from "../../execution/js-tool.js";
 import { JS_TOOL_ALIAS, JS_TOOL_NAME } from "../../seams/js-tool-names.js";
 import { mcpServersOf } from "../tools/agent-tools.js";
@@ -452,6 +453,13 @@ const reasoningOptions = (request: HarnessRequest): { effort?: EffortLevel; thin
     };
 };
 
+// The turn policy's own boundaries, each the only layer between an unattended wake and what it must not do: the persona's
+// folder limit and config-edit permission, and the turn's tool list, a call off which is refused before it runs.
+const policyBoundaryHooks = (policy: HarnessRequest["policy"]): ReturnType<typeof personaScopeHooks>[] => [
+    policy.personaScope === undefined ? {} : personaScopeHooks(policy.personaScope),
+    policy.allowedTools === undefined ? {} : toolAllowlistHooks(policy.allowedTools),
+];
+
 // Base SDK options for the turn.
 const baseOptions = (
     request: HarnessRequest,
@@ -541,9 +549,7 @@ const baseOptions = (
                 // Checks classified outbound calls against owner action rules before they run, even under
                 // bypassPermissions.
                 hasRules(request.policy.actionRules) ? outboundGuardHooks(request.policy.actionRules) : {},
-                // Persona's folder limit and config-edit permission; the only layer between an unattended wake and a bad
-                // path.
-                request.policy.personaScope !== undefined ? personaScopeHooks(request.policy.personaScope) : {},
+                ...policyBoundaryHooks(request.policy),
                 // The harness's own ask: a checklist about to be left open is said back once, since
                 // the board reads that list to tell a finished session from one that stopped short.
                 checklistCloseHooks({ sessionStore: request.spec.sessionStore }),

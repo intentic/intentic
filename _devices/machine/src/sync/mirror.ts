@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import net from "node:net";
 import { sleep } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
@@ -23,6 +22,7 @@ import {
     updateState,
 } from "./config.js";
 import { pairingEndpoint } from "./endpoint.js";
+import { runProcess, runProcessSync } from "./exec.js";
 import { candidateBases, createDaemonBases, type DaemonBases, type Dialed, dialedPairings } from "../daemon-base.js";
 import { answeredGone, goneStep, SandboxGoneError } from "./gone.js";
 import { checkContainers, checkKeptHere, type FateSeams, sandboxAnswered, sandboxSaidGone } from "./gone-watch.js";
@@ -155,10 +155,9 @@ export interface ForwardExecutor {
 // and one pairing's teardown can't reach another's. `terminate` stays blocking, a local call to the daemon.
 const mutagenExecutor = (mutagen: string, pairing: Pairing, log: Log): ForwardExecutor => ({
     terminate: (port) =>
-        void spawnSync(mutagen, ["forward", "terminate", forwardSessionName(pairing.sandboxId, port)], {
-            stdio: "ignore",
-            windowsHide: true,
-            timeout: MUTAGEN_CALL_TIMEOUT_MS,
+        void runProcessSync(mutagen, ["forward", "terminate", forwardSessionName(pairing.sandboxId, port)], {
+            timeoutMs: MUTAGEN_CALL_TIMEOUT_MS,
+            quiet: true,
         }),
     create: async (summary) =>
         await runMutagenAsync(
@@ -329,11 +328,7 @@ const sweepStrandedForwards = (mutagen: string, sandboxId: string, mirrored: rea
     // A listing that did not answer is not "nothing held": nothing is swept on it.
     const held = forwardedPorts(mutagen, sandboxId);
     for (const port of held === undefined ? [] : strandedForwards(held, mirrored)) {
-        spawnSync(mutagen, ["forward", "terminate", forwardSessionName(sandboxId, port)], {
-            stdio: "ignore",
-            windowsHide: true,
-            timeout: MUTAGEN_CALL_TIMEOUT_MS,
-        });
+        runProcessSync(mutagen, ["forward", "terminate", forwardSessionName(sandboxId, port)], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS, quiet: true });
         log(`  localhost:${port}: stopped (this device was still holding a forward for it)`);
     }
 };
@@ -1430,7 +1425,7 @@ const teardownForwards = async (mutagen: string, sandboxId?: string): Promise<nu
             .flatMap((held) => (held.mirroredPorts ?? []).map((port) => forwardSessionName(held.sandboxId, port.port)));
     const names = ourForwardSessions(mutagen, sandboxId) ?? (await recorded());
     if (names.length > 0) {
-        spawnSync(mutagen, ["forward", "terminate", ...names], { stdio: "ignore", windowsHide: true, timeout: MUTAGEN_CALL_TIMEOUT_MS });
+        await runProcess(mutagen, ["forward", "terminate", ...names], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS });
     }
     // A stale baseline would make the next reconcile treat gone forwards as already mirrored. The skip set clears
     // too: mirroring-off isn't the same as losing a contest. `ignoredPorts` survives, being a choice rather than a
@@ -1454,11 +1449,7 @@ export const retirePairingMirror = async (mutagen: string, sandboxId: string): P
 // that way. Answers whether anything was actually taken down, which is the difference between "your localhost is
 // yours again" and "that port was never on it".
 export const retireMirroredPort = async (mutagen: string, sandboxId: string, port: number): Promise<boolean> => {
-    spawnSync(mutagen, ["forward", "terminate", forwardSessionName(sandboxId, port)], {
-        stdio: "ignore",
-        windowsHide: true,
-        timeout: MUTAGEN_CALL_TIMEOUT_MS,
-    });
+    await runProcess(mutagen, ["forward", "terminate", forwardSessionName(sandboxId, port)], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS });
     let wasMirrored = false;
     await updateState((state) => ({
         pairings: state.pairings.map((held) => {

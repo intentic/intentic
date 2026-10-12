@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { mkdir, rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
+import { runBounded } from "@intentic/base/process";
 import { renameOver } from "@intentic/base/fs";
 import { homeDir, type Log } from "@intentic/local-agent";
 import { DEV_VERSION } from "@intentic/sandbox-contract";
@@ -51,6 +52,8 @@ export const realSelfUpdateIo = (out: Log): SelfUpdateIo => ({
     installed: MACHINE_VERSION,
     installedAgent: runningAsInstalledAgent,
     upgrade: async () => await upgradeHereToMachine(out),
+    // The person's own `setup`, re-run on the new build in their terminal and for as long as it takes, so no deadline of
+    // this process's own: setup bounds its own steps, and in this process's group their Ctrl-C reaches it.
     reexec: (args, version) => {
         const child = spawnSync(agentPath, [...args], { stdio: "inherit", env: { ...process.env, [UPGRADE_ENV]: version }, windowsHide: true });
         process.exit(child.status ?? 1);
@@ -117,37 +120,34 @@ export const windowsPathFrom = (listing: string): { readonly kind: string; reado
 // HKCU\Environment is read and written through reg.exe, which neither expands REG_EXPAND_SZ on query nor
 // changes a value's kind on add, the property [Environment]::SetEnvironmentVariable lacks. The whole key is listed,
 // since `/v Path` exits 1 alike for a value that is absent and for a query that failed.
-const readWindowsPath = (): { readonly kind: string; readonly stored: string } => {
-    const query = spawnSync("reg", ["query", "HKCU\\Environment"], { encoding: "utf8", windowsHide: true, timeout: 15_000 });
-    if (query.error !== undefined) {
-        throw query.error;
+const readWindowsPath = async (): Promise<{ readonly kind: string; readonly stored: string }> => {
+    const query = await runBounded("reg", ["query", "HKCU\\Environment"], { timeoutMs: 15_000 });
+    if (query.spawnError !== undefined) {
+        throw query.spawnError;
     }
-    if (query.status !== 0) {
-        throw new Error(query.stderr.trim() === "" ? `reg query exited ${String(query.status)}` : query.stderr.trim());
+    if (query.exitCode !== 0) {
+        throw new Error(query.stderr.text.trim() === "" ? `reg query exited ${String(query.exitCode)}` : query.stderr.text.trim());
     }
-    return windowsPathFrom(query.stdout);
+    return windowsPathFrom(query.stdout.text);
 };
 
-const writeWindowsPath = (kind: string, value: string): void => {
-    const add = spawnSync("reg", ["add", "HKCU\\Environment", "/v", "Path", "/t", kind, "/d", value, "/f"], {
-        encoding: "utf8",
-        windowsHide: true,
-        timeout: 15_000,
-    });
-    if (add.status !== 0) {
-        throw new Error(add.stderr.trim() === "" ? `reg add exited ${String(add.status)}` : add.stderr.trim());
+const writeWindowsPath = async (kind: string, value: string): Promise<void> => {
+    const add = await runBounded("reg", ["add", "HKCU\\Environment", "/v", "Path", "/t", kind, "/d", value, "/f"], { timeoutMs: 15_000 });
+    if (add.exitCode !== 0) {
+        throw new Error(add.stderr.text.trim() === "" ? `reg add exited ${String(add.exitCode)}` : add.stderr.text.trim());
     }
-    spawnSync("powershell", ["-NoProfile", "-NonInteractive", "-Command", WINDOWS_ENV_BROADCAST], { windowsHide: true, timeout: 15_000 });
+    // Add-Type compiles through csc.exe, a child of PowerShell's own: the deadline ends that too.
+    await runBounded("powershell", ["-NoProfile", "-NonInteractive", "-Command", WINDOWS_ENV_BROADCAST], { timeoutMs: 15_000 });
 };
 
-const windowsPathRepair = (out: Log): void => {
+const windowsPathRepair = async (out: Log): Promise<void> => {
     try {
-        const { kind, stored } = readWindowsPath();
+        const { kind, stored } = await readWindowsPath();
         const next = addToWindowsPathValue(stored, binDir);
         if (next === undefined) {
             return;
         }
-        writeWindowsPath(kind, next);
+        await writeWindowsPath(kind, next);
         out(`${binDir} was added to your PATH: a new terminal runs intentic-machine by name.`);
     } catch (error) {
         // Best-effort: PATH is the convenience, connecting is the job.
@@ -182,7 +182,7 @@ export const prepareSetup = async (out: Log, args: readonly string[]): Promise<v
         return;
     }
     if (process.platform === "win32") {
-        windowsPathRepair(out);
+        await windowsPathRepair(out);
         await ensureWindowsLauncher(out);
         return;
     }

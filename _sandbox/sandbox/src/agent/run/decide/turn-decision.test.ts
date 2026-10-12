@@ -377,6 +377,21 @@ test("a window that cannot hold the loop refuses, and the log says how short it 
     ]);
 });
 
+// A tool list is kept only by a runtime that checks every call against it; any other would run the turn with its whole
+// toolbox, so the turn is turned away before anything spawns.
+test("a turn held to a tool list is turned away on a runtime that cannot keep one, and runs on one that can", () => {
+    const refused = decideTurn(FACTS, turn({ agent: "codex", allowedTools: ["Read", "Grep"] }), context);
+    expect(refused).toMatchObject({ ok: false, code: "tools-unenforced", message: expect.stringContaining("Read, Grep"), spawn: false });
+    expect(refused.warnings).toEqual([
+        {
+            fields: { provider: "codex", harness: "native", tools: 2 },
+            message: "tools: the turn carries a tool list its runtime cannot keep, refused before sending",
+        },
+    ]);
+    expect(decideTurn(FACTS, turn({ agent: "codex", harness: "claude-code", allowedTools: ["Read"] }), context)).not.toMatchObject({ code: "tools-unenforced" });
+    expect(decideTurn(FACTS, turn({ agent: "codex" }), context)).not.toMatchObject({ code: "tools-unenforced" });
+});
+
 // The privacy shield's refusal is a fact gathered before the decision; deciding on it sends nothing and holds the words.
 test("a turn the privacy shield cannot cover is turned away at the door, before any context is composed", () => {
     const decision = decideTurn(

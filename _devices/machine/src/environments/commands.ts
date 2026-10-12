@@ -4,7 +4,7 @@ import { buildRouteMap, type CommandContext } from "@stricli/core";
 import { buildCommand, machineUi } from "../cli-ui.js";
 import { ensureResident } from "../resident/resident.js";
 import { listDistros, WINDOWS_SIDE } from "./wsl.js";
-import { heldDistros, type MachineConfig, readMachineConfig, runOnWindows, updateMachineConfig, windowsRoot, withChild } from "./machine.js";
+import { handToWindows, heldDistros, type MachineConfig, readMachineConfig, updateMachineConfig, windowsRoot, withChild } from "./machine.js";
 
 // The commands that act on the PC as a whole rather than on this one environment of it.
 
@@ -143,7 +143,7 @@ export const updates = buildCommand<UpdatesFlags>({
         const root = await windowsRoot();
         if (root !== undefined) {
             // The Windows side draws its own answer, and its own stop, on this terminal.
-            if (runOnWindows(root, ["updates", ...updatesArgs(flags)], { inherit: true }).status !== 0) {
+            if (handToWindows(root, ["updates", ...updatesArgs(flags)]) !== 0) {
                 process.exitCode = 1;
             }
             return;

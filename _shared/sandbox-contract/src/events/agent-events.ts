@@ -303,6 +303,9 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
                 // The privacy shield is on, the provider is untrusted, and the runtime is one it cannot read by content at
                 // all (an ACP agent, Pi), refused before sending; the words wait for a covered provider.
                 "privacy-unshielded",
+                // The turn carries a tool list (an automation's `allowedTools`) and its runtime cannot keep one
+                // (AgentCapabilities.toolAllowlist), refused before sending; the words wait for a runtime that can.
+                "tools-unenforced",
                 // The protected execution-domain policy is unsupported or unreadable; refused before any model/helper ran.
                 "agent-domain-refused",
                 // The privacy shield found personal data in instructions the runtime loads itself, past every channel it

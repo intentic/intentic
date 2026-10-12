@@ -500,6 +500,34 @@ test("the automation's own ladder resolves onto the wake, tier and all, with no 
     expect(inputs.every((turn) => turn.unattended === true)).toBe(true);
 });
 
+// A fire held to a tool list runs only on a rung whose runtime checks every call against it (AgentCapabilities
+// .toolAllowlist): codex's own loop cannot, the Claude Code loop running codex can.
+test("a fire held to a tool list passes over rungs that cannot keep it, and records why when none can", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
+    const inputs: AgentTurn[] = [];
+    const capture: TurnStarter["stream"] = async function* (input) {
+        inputs.push(input);
+        yield { kind: "done" };
+    };
+    await services.automations.upsert(
+        automationConfig("listed", {
+            allowedTools: ["Read"],
+            models: [
+                { provider: "codex", model: "gpt-5-codex" },
+                { provider: "codex", model: "gpt-5-codex", harness: "claude-code" },
+            ],
+        }),
+    );
+    await fireAutomation(drivenBy(services, capture), (await services.automations.get("listed")) as AutomationRecord);
+    expect(inputs).toHaveLength(1);
+    expect(inputs[0]).toMatchObject({ agent: "codex", harness: "claude-code", allowedTools: ["Read"] });
+
+    await services.automations.upsert(automationConfig("unkept", { allowedTools: ["Read"], models: [{ provider: "codex", model: "gpt-5-codex" }] }));
+    await fireAutomation(drivenBy(services, capture), (await services.automations.get("unkept")) as AutomationRecord);
+    expect(inputs).toHaveLength(1);
+    expect((await services.automations.get("unkept"))?.runs[0]).toMatchObject({ outcome: "error", detail: expect.stringContaining("tool") });
+});
+
 test("outside and scheduled fires both open isolated conversations, and only provenance differs", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
     await services.automations.upsert(automationConfig("support"));

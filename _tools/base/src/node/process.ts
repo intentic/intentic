@@ -1,4 +1,4 @@
-import { type ChildProcess, type SpawnOptions, spawn } from "node:child_process";
+import { type ChildProcess, type SpawnOptions, type SpawnSyncOptions, spawn, spawnSync } from "node:child_process";
 import { StringDecoder } from "node:string_decoder";
 import { sleep } from "../async.js";
 import { errnoCode } from "../errors.js";
@@ -381,3 +381,163 @@ export const execBounded = async (
     }
     return { stdout: result.stdout.text, stderr: result.stderr.text };
 };
+
+// THE SAME BOUND FOR A CALLER THAT CANNOT AWAIT: a module's load, an exit hook, a CLI's synchronous path, a loop whose
+// every caller is synchronous. Node's own `spawnSync` with a `timeout` signals only its direct child, so a shell, a
+// `docker`, a `wsl.exe` or a PowerShell it started outlives the deadline, and a grandchild holding the pipe keeps the
+// call waiting until the deadline even after the command itself is done. Here the command gets a process group of its
+// own, as `runBounded` gives it, and the deadline ends the whole group. The call still blocks for as long as the
+// command runs: this bounds a synchronous call, it does not make one cheap.
+
+export interface SyncRunOptions {
+    readonly cwd?: string | undefined;
+    // The child's whole environment, as spawnSync takes it; absent inherits this process's.
+    readonly env?: NodeJS.ProcessEnv | undefined;
+    // Required: a synchronous call with no deadline is the hang this exists to prevent.
+    readonly timeoutMs: number;
+    // Written to stdin, which is then closed. Absent, stdin is closed from the start, as for `runBounded`.
+    readonly input?: string | Buffer | undefined;
+    // Characters kept per stream, half from the start and half from the end.
+    readonly maxOutput?: number | undefined;
+    readonly killGraceMs?: number | undefined;
+    // "ignore" discards both streams, for a caller that reads only the exit code.
+    readonly output?: "pipe" | "ignore" | undefined;
+}
+
+export interface SyncProcessResult<Out = CollectedOutput> extends ProcessResult<Out> {
+    // The command printed more than spawnSync's buffer holds (four bytes a kept character, at least 1 MiB) and was
+    // stopped for it, the way a deadline stops it; what it printed up to then is kept.
+    readonly overflowed: boolean;
+}
+
+// How long the Windows sweep of a stopped command's descendants may take; PowerShell's own start is most of it.
+const WINDOWS_SWEEP_TIMEOUT_MS = 15_000;
+
+const sleepSync = (ms: number): void => {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+};
+
+// Windows has no process group, and by the time spawnSync returns it has already ended the direct child, so
+// `taskkill /T` has no root left to walk from. What the child started still names it as its parent, so the sweep walks
+// that record instead, and only through processes created since the call began: a pid Windows has since handed to
+// something unrelated is not this command's.
+const windowsDescendantSweep = (pid: number, since: number): string =>
+    [
+        "$ErrorActionPreference='SilentlyContinue'",
+        `$since=[DateTime]::Parse('${new Date(since - 1_000).toISOString()}').ToUniversalTime()`,
+        "$all=@(Get-CimInstance Win32_Process | Where-Object { $_.CreationDate.ToUniversalTime() -ge $since })",
+        `$queue=[System.Collections.Generic.Queue[uint32]]::new(); $queue.Enqueue(${pid})`,
+        "while($queue.Count -gt 0){ $parent=$queue.Dequeue(); foreach($p in $all){ if($p.ParentProcessId -eq $parent){ $queue.Enqueue($p.ProcessId); Stop-Process -Id $p.ProcessId -Force } } }",
+    ].join("; ");
+
+// Everything the stopped command left of its group: SIGTERM, a grace while any of it is left, then SIGKILL. On
+// Windows, the sweep above.
+const stopGroupSync = (pid: number, since: number, killGraceMs: number): void => {
+    if (process.platform === "win32") {
+        const powershell = `${process.env["SystemRoot"] ?? "C:\\Windows"}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`;
+        spawnSync(powershell, ["-NoProfile", "-NonInteractive", "-Command", windowsDescendantSweep(pid, since)], {
+            stdio: "ignore",
+            windowsHide: true,
+            timeout: WINDOWS_SWEEP_TIMEOUT_MS,
+        });
+        return;
+    }
+    signalGroup(pid, "SIGTERM");
+    const until = Date.now() + killGraceMs;
+    while (groupAlive(pid) && Date.now() < until) {
+        sleepSync(GROUP_POLL_MS);
+    }
+    signalGroup(pid, "SIGKILL");
+};
+
+// `detached` is missing from Node's typings for spawnSync, but both Node and Bun honour it there as they do for spawn:
+// the child leads a process group of its own.
+const syncSpawnOptions = (options: SyncRunOptions, maxOutput: number): SpawnSyncOptions & { readonly detached: boolean } => {
+    const output = options.output === "ignore" ? "ignore" : "pipe";
+    const spawned: SpawnSyncOptions & { detached: boolean } = {
+        stdio: [options.input === undefined ? "ignore" : "pipe", output, output],
+        // A process group of its own, which the deadline ends whole; see spawnOptions for why not on Windows.
+        detached: process.platform !== "win32",
+        windowsHide: true,
+        timeout: options.timeoutMs,
+        maxBuffer: Math.max(maxOutput * 4, 1024 * 1024),
+    };
+    if (options.input !== undefined) {
+        spawned.input = options.input;
+    }
+    if (options.cwd !== undefined) {
+        spawned.cwd = options.cwd;
+    }
+    if (options.env !== undefined) {
+        spawned.env = options.env;
+    }
+    return spawned;
+};
+
+interface SyncSpawn {
+    readonly pid: number;
+    readonly stdout: Buffer | string | null;
+    readonly stderr: Buffer | string | null;
+    readonly status: number | null;
+    readonly signal: NodeJS.Signals | null;
+    readonly error?: Error | undefined;
+}
+
+// spawnSync throws, rather than answering, for arguments it refuses (a NUL byte); that is a spawn failure too.
+const startSync = (command: string, args: readonly string[], spawned: SpawnSyncOptions): SyncSpawn => {
+    try {
+        return spawnSync(command, [...args], spawned);
+    } catch (error) {
+        return { pid: 0, stdout: null, stderr: null, status: null, signal: null, error: error instanceof Error ? error : new Error(String(error)) };
+    }
+};
+
+// No encoding is asked for, so a stream that was piped comes back as bytes and one that was not as null.
+const bytesOf = (stream: Buffer | string | null): Buffer | undefined => (Buffer.isBuffer(stream) ? stream : undefined);
+
+const runSync = <Out>(
+    command: string,
+    args: readonly string[],
+    options: SyncRunOptions,
+    collect: (bytes: Buffer | undefined) => Out,
+): SyncProcessResult<Out> => {
+    const maxOutput = options.maxOutput ?? DEFAULT_MAX_OUTPUT;
+    const since = Date.now();
+    const result = startSync(command, args, syncSpawnOptions(options, maxOutput));
+    const code = result.error === undefined ? undefined : errnoCode(result.error);
+    const timedOut = code === "ETIMEDOUT";
+    const overflowed = code === "ENOBUFS";
+    // Both are spawnSync stopping the direct child, which is all it does; the rest of the group goes here.
+    if ((timedOut || overflowed) && result.pid > 0) {
+        stopGroupSync(result.pid, since, options.killGraceMs ?? KILL_GRACE_MS);
+    }
+    const ran: SyncProcessResult<Out> = {
+        exitCode: result.status,
+        exitSignal: result.signal,
+        stdout: collect(bytesOf(result.stdout)),
+        stderr: clipText(bytesOf(result.stderr)?.toString("utf8") ?? "", maxOutput),
+        timedOut,
+        aborted: false,
+        // The command had exited on its own when the deadline came: something it left behind held the pipe.
+        lingering: timedOut && result.status !== null,
+        overflowed,
+    };
+    return result.error === undefined || timedOut || overflowed ? ran : { ...ran, spawnError: result.error };
+};
+
+// Runs a command to its end, synchronously, never throwing: the result says a non-zero exit, a deadline and a spawn
+// failure the way `runBounded` says them.
+export const runBoundedSync = (command: string, args: readonly string[], options: SyncRunOptions): SyncProcessResult =>
+    runSync(command, args, options, (bytes) => clipText(bytes?.toString("utf8") ?? "", options.maxOutput ?? DEFAULT_MAX_OUTPUT));
+
+// The same, with stdout kept as raw bytes up to `maxStdoutBytes`: for a tool whose output is not UTF-8 (a Windows
+// tool answering in UTF-16).
+export const runBoundedSyncBytes = (
+    command: string,
+    args: readonly string[],
+    options: SyncRunOptions & { readonly maxStdoutBytes: number },
+): SyncProcessResult<CollectedBytes> =>
+    runSync(command, args, options, (bytes) => {
+        const whole = bytes ?? Buffer.alloc(0);
+        return { bytes: whole.subarray(0, options.maxStdoutBytes), dropped: Math.max(whole.length - options.maxStdoutBytes, 0) };
+    });

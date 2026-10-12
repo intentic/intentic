@@ -299,7 +299,10 @@ flowchart LR
   restart's re-fire runs on the persona the sender was given and settles the same thread.
 - Every automation fire runs inside the automation's own `allowedTools`, whichever door it came through (2026-10-12):
   `runFire` reads it off the record, so schedules, webhooks, channel listeners, approved holds and restart re-fires
-  are bound the same as the Visitor chat and bug intake. Channel listeners hold the same two ceilings as the other
+  are bound the same as the Visitor chat and bug intake. The list is a boundary, not a permission hint: on the Claude
+  Code loop a PreToolUse hook refuses every call off it (`agent/tools/tool-allowlist.ts`), and a runtime with no check
+  before every call (`toolAllowlist: false`: Codex, OpenCode, Cursor, ACP agents, Pi) never runs a turn that carries
+  one. The model ladder passes such rungs over, and with none left the run is recorded as refused, saying why. Channel listeners hold the same two ceilings as the other
   doors (`automations/door-admission.ts`: messages a minute per sender, wakes a day per automation), and every door
   caps its body while reading it (`http/bounded-body.ts`), so a chunked body with no length is still refused at the
   limit. Rejecting a held wake withdraws its approval push, records a skipped run and tells the channel or visitor it

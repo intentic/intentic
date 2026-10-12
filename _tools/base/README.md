@@ -68,7 +68,11 @@ flowchart LR
   output kept as head and tail with a `… [N characters cut] …` marker, decoded so a split UTF-8 character arrives
   whole. `execBounded` throws execFile's rejection shape, so a `promisify(execFile)` caller moves over unchanged
   (2026-10-12; the device agent's shell and adb runners each had a copy, and its sync runner had none of it and could
-  hang past its own timeout).
+  hang past its own timeout). `runBoundedSync` / `runBoundedSyncBytes` are the same bound for a caller that cannot
+  await (a module's load, an exit hook, a CLI's synchronous path): Node's `spawnSync` timeout signals only the direct
+  child, so these give the command its own group and end the rest of it once spawnSync returns from a deadline or a
+  full buffer. A run that hands over the person's own terminal (`stdio: "inherit"`) stays on `spawnSync`, so Ctrl-C
+  reaches it.
 - `fetch-json.ts` (`./fetch-json`) is one JSON call over HTTP: a deadline of its own combined with the caller's signal,
   a refusal's body quoted in the error and cut at 300 characters, and a `kind` that tells a timeout from a server that
   could not be reached. No schema library, like `cloudflare.ts`: each caller validates the body with its own.

@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { posix } from "node:path";
-import { execBounded } from "@intentic/base/process";
+import { execBounded, runBounded } from "@intentic/base/process";
 import { STATE_DIR } from "@intentic/constants";
 import { writeSecretFile } from "@intentic/local-agent";
 import { wslPathOf } from "@intentic/sandbox-contract";
@@ -104,21 +104,32 @@ export const windowsRoot = (): Promise<string | undefined> =>
         return agent !== undefined && existsSync(agent) ? agent : undefined;
     })());
 
-// Runs the Windows side's agent from a distro; `vars` cross by WSLENV and `inherit` hands it this terminal.
-export const runOnWindows = (
+// How long the Windows side's agent may take to answer a question from a distro (its version, whether it takes this
+// distro over). WSL interop starts it cold, which on a loaded laptop takes seconds, not a minute; past that it is
+// wedged, and this side carries on as though there were no Windows agent rather than waiting on it.
+const WINDOWS_ASK_TIMEOUT_MS = 60_000;
+
+// What a command handed this terminal may take. The longest is the Windows side's upgrade of every environment on the
+// PC, downloads included; the bound is there so a wedged one ends rather than holding the terminal for good.
+const WINDOWS_HANDOFF_TIMEOUT_MS = 30 * 60_000;
+
+// Asks the Windows side's agent from a distro and reads its answer; `vars` cross by WSLENV. Not blocking, and the
+// deadline ends what the interop started with it, so a Windows agent that never answers costs this side a minute.
+export const runOnWindows = async (
     agent: string,
     args: readonly string[],
-    { vars = {}, inherit = false }: { readonly vars?: Readonly<Record<string, string>>; readonly inherit?: boolean } = {},
-): { readonly status: number; readonly output: string } => {
-    const result = spawnSync(agent, [...args], {
-        cwd: interopCwd(),
-        env: crossEnv(vars, "w"),
-        encoding: "utf8",
-        stdio: inherit ? "inherit" : "pipe",
-        windowsHide: true,
-    });
-    return { status: result.status ?? 1, output: `${result.stdout ?? ""}${result.stderr ?? ""}`.trim() };
+    { vars = {} }: { readonly vars?: Readonly<Record<string, string>> } = {},
+): Promise<{ readonly status: number; readonly output: string }> => {
+    const result = await runBounded(agent, args, { cwd: interopCwd(), env: crossEnv(vars, "w"), timeoutMs: WINDOWS_ASK_TIMEOUT_MS });
+    return { status: result.exitCode ?? 1, output: `${result.stdout.text}${result.stderr.text}`.trim() };
 };
+
+// Hands this terminal to the Windows side's agent, which draws its own answer and its own stop on it, and answers its
+// exit code. Blocking, and in this process's own group, so the person's Ctrl-C reaches it; with the terminal as its
+// output nothing it leaves behind can hold a pipe open.
+export const handToWindows = (agent: string, args: readonly string[]): number =>
+    spawnSync(agent, [...args], { cwd: interopCwd(), env: crossEnv({}, "w"), stdio: "inherit", windowsHide: true, timeout: WINDOWS_HANDOFF_TIMEOUT_MS })
+        .status ?? 1;
 
 export const attachArgs = (distro: string): readonly string[] => ["environment", "attach", distro];
 
@@ -128,7 +139,7 @@ export const attachToWindows = async (log: (message: string) => void): Promise<b
     if (agent === undefined || distro === undefined) {
         return false;
     }
-    const attached = runOnWindows(agent, attachArgs(distro));
+    const attached = await runOnWindows(agent, attachArgs(distro));
     if (attached.status !== 0) {
         log(`The Windows side's agent would not take this distro over (${attached.output.split("\n")[0] ?? "no reason given"}); this distro starts its own.`);
         return false;

@@ -163,11 +163,12 @@ test("every axis a record can lack has words for it", () => {
         rulebook: "none",
         secrets: "none",
         privacy: "none",
+        toolAllowlist: false,
     };
 
-    // Thirteen disclosable axes, thirteen sentences; `fastMode` is disclosed via fastAllowed, and `warm` (keep-warm, off by
+    // Fourteen disclosable axes, fourteen sentences; `fastMode` is disclosed via fastAllowed, and `warm` (keep-warm, off by
     // default) is no limit on the turn itself.
-    expect(limitationsOf(nothing)).toHaveLength(13);
+    expect(limitationsOf(nothing)).toHaveLength(14);
     expect(limitationsOf(nothing).join(" ")).not.toContain("fast");
 });
 

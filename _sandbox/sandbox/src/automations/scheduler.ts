@@ -1,6 +1,6 @@
 import { Cron } from "croner";
 import type { AgentOrigin, AgentTurn, Automation, AutomationApproval, ModelPin, Trigger, Zone } from "@intentic/sandbox-contract";
-import { cronOptions, wallClockIn } from "@intentic/sandbox-contract";
+import { capabilitiesOf, cronOptions, wallClockIn } from "@intentic/sandbox-contract";
 import { TranscriptFold } from "@intentic/sandbox-contract/transcript-fold";
 import { openingRows, openTurnTranscript, recordTurnTranscript } from "../sessions/turn-transcript.js";
 import type { Services } from "../composition.js";
@@ -257,10 +257,31 @@ const pinFields = (
     ...(pin.harness !== undefined ? { harness: pin.harness } : {}),
 });
 
+// Whether a rung's runtime keeps a turn to its tool list (AgentCapabilities.toolAllowlist); a rung naming no loop runs on
+// its provider's own.
+const keepsToolList = (rung: ModelPin): boolean => capabilitiesOf(rung.provider, rung.harness ?? "native").toolAllowlist;
+
+
 // Walks the automation's model ladder for the first rung this sandbox can run; undefined means no wake, already
 // recorded. A fully disconnected ladder is an `error` run, counted toward the failure streak.
-const wakeModel = async (services: Services, automation: AutomationRecord, stream: TurnStream | undefined): Promise<ModelPin | undefined> => {
-    const ladder = automation.models ?? [];
+const wakeModel = async (
+    services: Services,
+    automation: AutomationRecord,
+    stream: TurnStream | undefined,
+    allowedTools: readonly string[] | undefined,
+): Promise<ModelPin | undefined> => {
+    const configured = automation.models ?? [];
+    // A fire held to a tool list runs only on a rung whose runtime checks every call against it; any other rung would
+    // run with its whole toolbox, so it is passed over here rather than refused at the door after a model was spent on
+    // choosing it.
+    const ladder = allowedTools === undefined ? configured : configured.filter(keepsToolList);
+    if (allowedTools !== undefined && configured.length > 0 && ladder.length === 0) {
+        const reason =
+            "This automation may use only the tools on its list, and none of its models runs on a loop that can hold a turn to one: pin a model that runs on the Claude Code loop, or take the tool list off.";
+        await services.automations.recordRun(automation.id, { at: Date.now(), outcome: "error", detail: reason });
+        stream?.failed(reason);
+        return undefined;
+    }
     // Upsert refuses a new-agent automation naming no model; one hand-edited into that state says so rather than guessing.
     if (ladder.length === 0) {
         const reason =
@@ -511,7 +532,11 @@ const runFire = async (
             return {};
         }
         // What this wake runs on, walked before anything is spent or written down (see `wakeModel`).
-        const pin = await wakeModel(services, automation, stream);
+        // The automation's own allowlist is the boundary for every door, read off the record as it is now rather than as
+        // it was when a queued or held fire was set up, so narrowing it takes effect on the very next turn. A caller's
+        // own list replaces it only where it was given.
+        const allowedTools = narrowedTools ?? (await currentAllowedTools(services, automation));
+        const pin = await wakeModel(services, automation, stream, allowedTools);
         if (pin === undefined) {
             return {};
         }
@@ -523,10 +548,6 @@ const runFire = async (
             .recordFire(journalledFire(automation.id, conversationId, attempts, { payload: capped, origin, title, lane, thread, sessionId: resumedSessionId }))
             .catch((error: unknown) => services.logger.warn({ err: error, automation: automation.id }, "turn journal: fire not recorded"));
         const body = wakeBody(automation, capped, late, observed);
-        // The automation's own allowlist is the boundary for every door, read off the record as it is now rather than as
-        // it was when a queued or held fire was set up, so narrowing it takes effect on the very next turn. A caller's
-        // own list replaces it only where it was given.
-        const allowedTools = narrowedTools ?? (await currentAllowedTools(services, automation));
         let failure: string | undefined;
         let runtimeSessionId: string | undefined;
         // Every fire lands in a conversation; a channel or visitor keeps one active, a schedule wake mints a fresh one.

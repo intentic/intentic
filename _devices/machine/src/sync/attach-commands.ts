@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { homeDir, type Log } from "@intentic/local-agent";
@@ -9,6 +8,7 @@ import { baseDir } from "../config.js";
 import { ensureResident } from "../resident/resident.js";
 import { attachedKey, isAttachedPairing, type Pairing, pairingKey, pairingTransport, readState, removePairing, upsertPairing } from "./config.js";
 import { transportFor } from "./endpoint.js";
+import { runProcess } from "./exec.js";
 import { canonicalFolder, folderRefusal, overlappingPairing, sameFolder } from "./folders.js";
 import { ensureMutagen, existingSyncSessions, MUTAGEN_CALL_TIMEOUT_MS, syncSessionNames } from "./mutagen.js";
 import { answer, projectPairingFor } from "./project/project-commands.js";
@@ -181,7 +181,8 @@ const terminateSessions = async (names: readonly string[]): Promise<void> => {
     const mutagen = await ensureMutagen();
     const live = existingSyncSessions(mutagen, names);
     for (const batch of live === undefined ? names.map((name) => [name]) : live.length > 0 ? [live] : []) {
-        spawnSync(mutagen, ["sync", "terminate", ...batch], { stdio: "ignore", windowsHide: true, timeout: MUTAGEN_CALL_TIMEOUT_MS });
+        // oxlint-disable-next-line eslint/no-await-in-loop -- one batch at a time, as the blocking call ran them
+        await runProcess(mutagen, ["sync", "terminate", ...batch], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS });
     }
 };
 

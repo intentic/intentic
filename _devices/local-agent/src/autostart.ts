@@ -1,9 +1,9 @@
-import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
+import { runBoundedSync, runBoundedSyncBytes, type SyncProcessResult } from "@intentic/base/process";
 import { LOG_ROTATE_BYTES } from "./detached.js";
 import { type CliLauncher, quotedCommandLine, stubCommand, WINDOWS_LAUNCH_STUB, windowsLaunchStub } from "./launcher.js";
 import type { Log } from "./home.js";
@@ -49,16 +49,28 @@ const regExe = (): string => join(process.env["SystemRoot"] ?? "C:\\Windows", "S
 
 const reason = (error: unknown): string => errorMessage(error);
 
+// What one registration tool (reg, schtasks, systemctl, loginctl, launchctl) may take. Each is a local call that answers
+// in well under a second; one waiting on a service manager that never replies would otherwise hold the agent's start,
+// or the person's setup, with it. These run where nothing can await, so through the blocking runner, which ends the
+// tool with anything it started at the deadline.
+const TOOL_TIMEOUT_MS = 30_000;
+
+const runTool = (command: string, args: readonly string[], output: "pipe" | "ignore" = "pipe"): SyncProcessResult =>
+    runBoundedSync(command, args, { timeoutMs: TOOL_TIMEOUT_MS, output });
+
 // Surfaces what the tool actually said instead of a generic exit-code guess. Checks both stdout and stderr (tools
 // differ on which carries the message), and a spawn that never ran throws its own error.
 const register = (command: string, args: readonly string[]): void => {
-    const result = spawnSync(command, args, { encoding: "utf8", windowsHide: true });
-    if (result.error !== undefined) {
-        throw result.error;
+    const result = runTool(command, args);
+    if (result.spawnError !== undefined) {
+        throw result.spawnError;
     }
-    if (result.status !== 0) {
-        const said = `${result.stdout}${result.stderr}`.trim();
-        throw new Error(said === "" ? `${basename(command)} exited ${result.status}` : said);
+    if (result.timedOut) {
+        throw new Error(`${basename(command)} did not answer within ${TOOL_TIMEOUT_MS / 1000} s`);
+    }
+    if (result.exitCode !== 0) {
+        const said = `${result.stdout.text}${result.stderr.text}`.trim();
+        throw new Error(said === "" ? `${basename(command)} exited ${result.exitCode}` : said);
     }
 };
 
@@ -223,7 +235,7 @@ export const setWindowsRunValue = (name: string, commandLine: string): void => r
 
 // `reg delete` exits non-zero when the value is already gone; ignored here for a repeat uninstall.
 export const clearWindowsRunValue = (name: string): void => {
-    spawnSync(regExe(), windowsRunValueDeleteArgs(name), { stdio: "ignore", windowsHide: true });
+    runTool(regExe(), windowsRunValueDeleteArgs(name), "ignore");
 };
 
 export const windowsTaskQueryArgs = (spec: AutostartSpec): string[] => ["/query", "/tn", spec.windowsRunValue];
@@ -231,7 +243,7 @@ export const windowsTaskExportArgs = (spec: AutostartSpec): string[] => ["/query
 export const windowsTaskRunArgs = (spec: AutostartSpec): string[] => ["/run", "/tn", spec.windowsRunValue];
 
 const quietly = (command: string, args: readonly string[]): boolean =>
-    spawnSync(command, args, { stdio: "ignore", windowsHide: true }).status === 0;
+    runTool(command, args, "ignore").exitCode === 0;
 
 const windowsTaskExists = (spec: AutostartSpec): boolean => quietly(schtasksExe(), windowsTaskQueryArgs(spec));
 const windowsRunValueExists = (spec: AutostartSpec): boolean => quietly(regExe(), ["query", WINDOWS_RUN_KEY, "/v", spec.windowsRunValue]);
@@ -307,8 +319,9 @@ const readWindowsTaskXml = (spec: AutostartSpec): string | undefined => {
         [schtasksExe(), windowsTaskExportArgs(spec)],
     ];
     for (const [command, args] of tries) {
-        const result = spawnSync(command, args, { windowsHide: true, timeout: 30_000 });
-        const text = result.status === 0 && result.stdout.length > 0 ? decodeToolOutput(result.stdout) : "";
+        // PowerShell is the one here that can start children of its own; the blocking runner ends them with it.
+        const result = runBoundedSyncBytes(command, args, { timeoutMs: TOOL_TIMEOUT_MS, maxStdoutBytes: 4 * 1024 * 1024 });
+        const text = result.exitCode === 0 && result.stdout.bytes.length > 0 ? decodeToolOutput(result.stdout.bytes) : "";
         if (text.includes("<Task")) {
             return text;
         }
@@ -349,12 +362,13 @@ const inspectWindowsTask = (spec: AutostartSpec, launcher: CliLauncher, stub: st
 const SYSTEMD_LIVE_STATES = new Set(["running", "degraded", "starting", "maintenance", "stopping", "initializing"]);
 
 const systemdUserAvailable = (): boolean => {
-    const result = spawnSync("systemctl", ["--user", "is-system-running"], { encoding: "utf8" });
-    if (result.error !== undefined) {
+    const result = runTool("systemctl", ["--user", "is-system-running"]);
+    if (result.spawnError !== undefined) {
         return false; // no systemctl on PATH
     }
-    // Non-zero exit is normal for "degraded"; the printed state decides, not the exit status.
-    return SYSTEMD_LIVE_STATES.has(result.stdout.trim());
+    // Non-zero exit is normal for "degraded"; the printed state decides, not the exit status. One that did not answer
+    // printed nothing, which is no live state either.
+    return SYSTEMD_LIVE_STATES.has(result.stdout.text.trim());
 };
 
 // A systemd unit argument: double quotes with C escapes, the quoting systemd's own command-line parser reads.
@@ -493,7 +507,7 @@ const windowsAutostart = (spec: AutostartSpec, launcher: CliLauncher, log: Log):
     // IgnoreNew makes a second /run while one runs a no-op, so the caller may repeat it while it waits.
     start: async () => await Promise.resolve(windowsTaskExists(spec) && quietly(schtasksExe(), windowsTaskRunArgs(spec))),
     unregister: async () => {
-        spawnSync(schtasksExe(), windowsTaskDeleteArgs(spec), { stdio: "ignore", windowsHide: true });
+        runTool(schtasksExe(), windowsTaskDeleteArgs(spec), "ignore");
         clearWindowsRunValue(spec.windowsRunValue);
         return await Promise.resolve();
     },
@@ -553,9 +567,9 @@ const linuxAutostart = (spec: AutostartSpec, launcher: CliLauncher, log: Log): A
             await rm(linuxDesktopPath(spec), { force: true });
             await mkdir(dirname(unit), { recursive: true });
             await writeFile(unit, wanted, { mode: 0o644 });
-            spawnSync("loginctl", ["enable-linger"], { stdio: "ignore" });
+            runTool("loginctl", ["enable-linger"], "ignore");
             // daemon-reload so a rewritten unit is picked up, not the version systemd already parsed.
-            spawnSync("systemctl", ["--user", "daemon-reload"], { stdio: "ignore" });
+            runTool("systemctl", ["--user", "daemon-reload"], "ignore");
             register("systemctl", ["--user", "enable", systemdUnitName(spec)]);
             log(`${systemdUnitName(spec)} is registered to run at boot. Follow it with: tail -f ${spec.logPath}`);
             return "systemd";
@@ -577,9 +591,9 @@ const linuxAutostart = (spec: AutostartSpec, launcher: CliLauncher, log: Log): A
         systemdUserAvailable() && (await currentEntry(systemdUnitPath(spec))) !== undefined && quietly("systemctl", ["--user", "start", systemdUnitName(spec)]),
     // Both mechanisms, unconditionally: the one left behind would resurrect the agent at the next boot. `--now` stops it.
     unregister: async () => {
-        spawnSync("systemctl", ["--user", "disable", "--now", systemdUnitName(spec)], { stdio: "ignore" });
+        runTool("systemctl", ["--user", "disable", "--now", systemdUnitName(spec)], "ignore");
         await rm(systemdUnitPath(spec), { force: true });
-        spawnSync("systemctl", ["--user", "daemon-reload"], { stdio: "ignore" });
+        runTool("systemctl", ["--user", "daemon-reload"], "ignore");
         await rm(linuxDesktopPath(spec), { force: true });
     },
 });
@@ -603,8 +617,8 @@ const macAutostart = (spec: AutostartSpec, agent: LaunchAgentSpec, launcher: Cli
         start: async () =>
             await Promise.resolve(quietly("launchctl", ["bootstrap", domain, plist]) || quietly("launchctl", ["kickstart", `${domain}/${agent.label}`])),
         unregister: async () => {
-            spawnSync("launchctl", ["bootout", `${domain}/${agent.label}`], { stdio: "ignore" });
-            spawnSync("launchctl", ["unload", plist], { stdio: "ignore" });
+            runTool("launchctl", ["bootout", `${domain}/${agent.label}`], "ignore");
+            runTool("launchctl", ["unload", plist], "ignore");
             await rm(plist, { force: true });
         },
     };

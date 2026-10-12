@@ -5,6 +5,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { writeFileAtomic } from "@intentic/base/fs";
+import { runBounded } from "@intentic/base/process";
 import { withManagedInclude, withoutManagedIncludes } from "@intentic/base/ssh-config";
 import { REFERENCE_DIR, STATE_DIR } from "@intentic/constants";
 import { homeDir, type Log, writeSecretFile } from "@intentic/local-agent";
@@ -235,6 +236,7 @@ export const ensureSshKey = async (): Promise<string> => {
     // This machine's name and which environment of it this is (environment.ts `keyComment`), one authorized_keys token;
     // the daemon shows it as the "Syncing from X" label. Only a new key: an existing one keeps its comment.
     const comment = keyComment();
+    // Left blocking and on the terminal: ssh-keygen starts nothing of its own, so its own timeout ends all of it.
     const result = spawnSync("ssh-keygen", ["-t", "ed25519", "-N", "", "-C", comment, "-f", sshKeyPath], {
         stdio: "inherit",
         timeout: SSH_CALL_TIMEOUT_MS,
@@ -317,13 +319,13 @@ export const resolvedEndpoint = (sshGOutput: string): { hostname?: string; port?
 
 // Fails here, where the cause is knowable, rather than three layers down in Mutagen as an unreadable "unable to
 // receive server magic number" EOF.
-export const assertSshConfigVisible = (ssh: string, alias: string, expectedPort: number): void => {
-    // `windowsHide`: a console-less parent (the watcher) would otherwise pop a window for this child on Windows.
-    const result = spawnSync(ssh, ["-G", alias], { encoding: "utf8", windowsHide: true, timeout: SSH_CALL_TIMEOUT_MS });
-    if (result.error !== undefined) {
-        throw new Error(`could not run "${ssh}", the SSH client Mutagen drives the sync transport with: ${result.error.message}`);
+// Not blocking, and bounded as a group: `ssh -G` runs the shell commands of any `Match exec` in the owner's own config.
+export const assertSshConfigVisible = async (ssh: string, alias: string, expectedPort: number): Promise<void> => {
+    const result = await runBounded(ssh, ["-G", alias], { timeoutMs: SSH_CALL_TIMEOUT_MS });
+    if (result.spawnError !== undefined) {
+        throw new Error(`could not run "${ssh}", the SSH client Mutagen drives the sync transport with: ${result.spawnError.message}`);
     }
-    const resolved = resolvedEndpoint(result.stdout);
+    const resolved = resolvedEndpoint(result.stdout.text);
     if (resolved.hostname === "127.0.0.1" && resolved.port === expectedPort) {
         return;
     }
@@ -333,7 +335,7 @@ export const assertSshConfigVisible = (ssh: string, alias: string, expectedPort:
             `"${ssh}": the SSH client Mutagen uses, resolves ${alias} to "${resolved.hostname ?? "nothing"}:${resolved.port ?? "?"}" instead of ${expected},`,
             `so it is not reading ${sshConfigPath}, which ${userSshConfigPath} includes. Most often that client resolves`,
             `~ to a home directory other than ${homeDir()}.`,
-            ...(result.stderr.trim() === "" ? [] : [result.stderr.trim()]),
+            ...(result.stderr.text.trim() === "" ? [] : [result.stderr.text.trim()]),
             ...(process.platform === "win32"
                 ? [`Point Mutagen at the Windows OpenSSH client and re-run: setx MUTAGEN_SSH_PATH "C:\\Windows\\System32\\OpenSSH"`]
                 : []),

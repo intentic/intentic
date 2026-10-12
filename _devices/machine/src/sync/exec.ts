@@ -1,8 +1,9 @@
-import { runBounded } from "@intentic/base/process";
+import { runBounded, runBoundedSync } from "@intentic/base/process";
 
 // Children of the mirror watcher spawn asynchronously: spawnSync would block the event agent serving the SSH transport
-// (tunnel.ts) they ride, deadlocking every sync/forward/git-bridge call. spawnSync remains correct for one-shot CLI
-// commands (setup, status, uninstall), which hold no listener.
+// (tunnel.ts) they ride, deadlocking every sync/forward/git-bridge call. A blocking call remains correct for a local
+// one (a Mutagen listing, a terminate) from a caller that cannot await, and for the one-shot CLI commands (setup,
+// status, uninstall), which hold no listener: those go through runProcessSync below, never a bare spawnSync.
 
 export interface ExecResult {
     // Null when the process was killed by timeout or signal; never a real exit code.
@@ -28,4 +29,34 @@ export const runProcess = async (
     // A spawn failure (e.g. a missing binary) resolves as a failed result with its reason after stderr, not a throw.
     const failure = result.spawnError?.message ?? "";
     return { status: result.exitCode, stdout: result.stdout.text, stderr: `${result.stderr.text}${failure}` };
+};
+
+// spawnSync's own answer, as the blocking callers here already read it: `error` is set for a command that could not
+// start and for one stopped at its deadline (`code` ETIMEDOUT), as spawnSync sets it.
+export interface SyncExecResult extends ExecResult {
+    readonly error?: Error;
+}
+
+// THE BLOCKING DOOR, for a caller that cannot await. The deadline is required, and it ends the command's whole process
+// group (a shell's, Mutagen's, PowerShell's children with it), where spawnSync's own `timeout` signals only the direct
+// child and leaves the rest running.
+export const runProcessSync = (
+    command: string,
+    args: readonly string[],
+    options: { readonly timeoutMs: number; readonly cwd?: string | undefined; readonly env?: NodeJS.ProcessEnv | undefined; readonly quiet?: boolean },
+): SyncExecResult => {
+    const result = runBoundedSync(command, args, {
+        timeoutMs: options.timeoutMs,
+        cwd: options.cwd,
+        env: options.env,
+        output: options.quiet === true ? "ignore" : "pipe",
+    });
+    const stopped = result.timedOut
+        ? Object.assign(new Error(`${command} ran past its ${options.timeoutMs} ms deadline and was stopped`), { code: "ETIMEDOUT" })
+        : result.overflowed
+          ? Object.assign(new Error(`${command} printed more than it may and was stopped`), { code: "ENOBUFS" })
+          : undefined;
+    const error = result.spawnError ?? stopped;
+    const answer = { status: result.exitCode, stdout: result.stdout.text, stderr: result.stderr.text };
+    return error === undefined ? answer : { ...answer, error };
 };

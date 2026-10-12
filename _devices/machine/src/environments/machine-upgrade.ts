@@ -11,7 +11,7 @@ import { machineLauncher, readResident, restartResident, waitOutSwaps } from "..
 import { realUpgradeExec, runUpgrade, type UpgradeOutcome, upgradeLanded, upgradeMessage } from "../upgrade.js";
 import { MACHINE_VERSION } from "../version.js";
 import { agentInDistro, crossEnv, NO_AGENT_EXIT } from "./crossing.js";
-import { heldDistros, type MachineConfig, readMachineConfig, runOnWindows, updateMachineConfig, windowsRoot } from "./machine.js";
+import { handToWindows, heldDistros, type MachineConfig, readMachineConfig, runOnWindows, updateMachineConfig, windowsRoot } from "./machine.js";
 
 // A PC upgrades as one: whichever side is asked, every environment ends on the same exact release or says why it did not.
 
@@ -224,7 +224,7 @@ const recordFailure = async (failedTarget: string | undefined): Promise<void> =>
 export const realMachineIo = (ask: MachineUpgradeAsk, log: Log): MachineIo => ({
     leg: process.env[UPGRADE_ENV],
     windowsRoot,
-    delegate: (agent, args) => runOnWindows(agent, args, { inherit: true }).status,
+    delegate: (agent, args) => handToWindows(agent, args),
     children: heldDistros,
     published: publishedVersion,
     installedHere: installedBuild,
@@ -238,7 +238,7 @@ export const realMachineIo = (ask: MachineUpgradeAsk, log: Log): MachineIo => ({
 const siblingVersions = async (): Promise<readonly (string | undefined)[]> => {
     const root = await windowsRoot();
     if (root !== undefined) {
-        const answer = runOnWindows(root, ["version"]);
+        const answer = await runOnWindows(root, ["version"]);
         return [answer.status === 0 ? /^\d+\.\d+\.\d+$/.exec(answer.output)?.[0] : undefined];
     }
     return await Promise.all((await heldDistros()).map(installedIn));

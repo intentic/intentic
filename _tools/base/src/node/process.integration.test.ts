@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { clipText, execBounded, ProcessError, runBounded, runBoundedBytes, textCollector } from "./process.js";
+import { clipText, execBounded, ProcessError, runBounded, runBoundedBytes, runBoundedSync, runBoundedSyncBytes, textCollector } from "./process.js";
 
 // Real processes under /bin/sh: the guarantees are about process groups and pipes, which no fake can stand in for.
 
@@ -126,5 +126,55 @@ describe("stopping", () => {
         const result = await runBounded("/bin/sh", ["-c", "sleep 30"], { timeoutMs: 100, killGraceMs: 5_000 });
         expect(result.timedOut).toBe(true);
         expect(Date.now() - started).toBeLessThan(2_000);
+    });
+});
+
+describe("runBoundedSync", () => {
+    it("answers a command's exit code and output", () => {
+        const result = runBoundedSync("/bin/sh", ["-c", "echo out; echo err >&2; exit 3"], { timeoutMs: 10_000 });
+        expect(result).toMatchObject({ exitCode: 3, timedOut: false, lingering: false, overflowed: false });
+        expect(result.stdout.text).toBe("out\n");
+        expect(result.stderr.text).toBe("err\n");
+    });
+
+    it("reports a missing binary in the result rather than throwing", () => {
+        const result = runBoundedSync("/no/such/binary-anywhere", [], { timeoutMs: 10_000 });
+        expect(result.exitCode).toBe(null);
+        expect(result.spawnError).toMatchObject({ code: "ENOENT" });
+    });
+
+    it("kills the whole process group at the deadline, grandchildren included", () => {
+        const pidFile = join(mkdtempSync(join(tmpdir(), "process-")), "pid");
+        const started = Date.now();
+        const result = runBoundedSync("/bin/sh", ["-c", `sleep 30 & echo $! > ${pidFile}; wait`], { timeoutMs: 300, killGraceMs: 100 });
+        expect(result).toMatchObject({ timedOut: true, lingering: false });
+        expect(Date.now() - started).toBeLessThan(10_000);
+        expect(alive(Number(readFileSync(pidFile, "utf8").trim()))).toBe(false);
+    });
+
+    it("ends a grandchild that holds the pipe after the command itself exited, at the deadline", () => {
+        const pidFile = join(mkdtempSync(join(tmpdir(), "process-")), "pid");
+        const started = Date.now();
+        // The shell exits at once; the background sleep inherits stdout and would hold it for 30 s.
+        const result = runBoundedSync("/bin/sh", ["-c", `sleep 30 & echo $! > ${pidFile}; echo done`], { timeoutMs: 500, killGraceMs: 100 });
+        expect(result).toMatchObject({ exitCode: 0, timedOut: true, lingering: true });
+        expect(result.stdout.text).toBe("done\n");
+        expect(Date.now() - started).toBeLessThan(10_000);
+        expect(alive(Number(readFileSync(pidFile, "utf8").trim()))).toBe(false);
+    });
+
+    it("discards output when asked to and feeds stdin when given input", () => {
+        expect(runBoundedSync("/bin/sh", ["-c", "echo hidden"], { timeoutMs: 10_000, output: "ignore" }).stdout.text).toBe("");
+        expect(runBoundedSync("/bin/sh", ["-c", "cat"], { timeoutMs: 10_000, input: "fed\n" }).stdout.text).toBe("fed\n");
+    });
+
+    it("keeps the head and tail of output past its cap", () => {
+        const result = runBoundedSync("/bin/sh", ["-c", "printf 'a%.0s' $(seq 1 50); printf 'b%.0s' $(seq 1 50)"], { timeoutMs: 10_000, maxOutput: 20 });
+        expect(result.stdout).toEqual({ text: `aaaaaaaaaa\n… [80 characters cut] …\nbbbbbbbbbb`, dropped: 80 });
+    });
+
+    it("keeps stdout as bytes up to its limit in the bytes variant", () => {
+        const result = runBoundedSyncBytes("/bin/sh", ["-c", "printf 'abcdef'"], { timeoutMs: 10_000, maxStdoutBytes: 4 });
+        expect(result.stdout).toEqual({ bytes: Buffer.from("abcd"), dropped: 2 });
     });
 });

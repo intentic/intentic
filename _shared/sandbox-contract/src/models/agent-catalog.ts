@@ -106,19 +106,21 @@ export const modesFor = (capabilities: AgentCapabilities): readonly PermissionMo
 export const clampMode = (mode: PermissionMode, capabilities: AgentCapabilities): PermissionMode =>
     modesFor(capabilities).includes(mode) ? mode : "bypassPermissions";
 
+// What each reach of `mcp` leaves out, said once per answer.
+const MCP_LIMITS = {
+    none: ["no MCP tools or plugins"],
+    http: ["MCP servers only, none of the daemon's own tools, no plugins"],
+    tools: ["no plugins"],
+    full: [],
+} as const satisfies Record<AgentCapabilities["mcp"], readonly string[]>;
+
 // What this pair cannot do, phrased for the sender; empty means the full ceiling. `fastMode` is deliberately not
 // disclosed here, since it also depends on the route and model; fastAllowed answers that instead.
 export const limitationsOf = (capabilities: AgentCapabilities): string[] => [
     ...(capabilities.permissions === "plan" ? ["no per-tool approvals"] : []),
     ...(capabilities.questions ? [] : ["no clarifying questions"]),
     ...(capabilities.steering ? [] : ["no mid-turn steering"]),
-    ...(capabilities.mcp === "none"
-        ? ["no MCP tools or plugins"]
-        : capabilities.mcp === "http"
-          ? ["MCP servers only, none of the daemon's own tools, no plugins"]
-          : capabilities.mcp === "tools"
-            ? ["no plugins"]
-            : []),
+    ...MCP_LIMITS[capabilities.mcp],
     ...(capabilities.execution.includes("js") ? [] : ["no code runs, shell only"]),
     ...(capabilities.effort ? [] : ["no effort control"]),
     ...(capabilities.commands ? [] : ["no slash commands"]),
@@ -131,6 +133,7 @@ export const limitationsOf = (capabilities: AgentCapabilities): string[] => [
     ...(capabilities.rulebook === "refuse-only" ? ["command rules can refuse but not hold"] : []),
     ...(capabilities.rulebook === "none" ? ["command rules not applied"] : []),
     ...(capabilities.secrets === "none" ? ["secrets reach the model unmasked"] : []),
+    ...(capabilities.toolAllowlist ? [] : ["no tool lists: an automation limited to some tools won't run here"]),
 ];
 
 // Claude's compile-time model floor, shared by daemon and web pre-load; versioned ids only, never a tier alias.

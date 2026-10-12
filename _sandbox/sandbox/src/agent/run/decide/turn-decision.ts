@@ -179,6 +179,21 @@ const personaWarnings = (persona: TurnPersona, input: AgentTurn): TurnWarning[] 
         ? [{ fields: { actsAs: input.actsAs }, message: "persona: no such card, this turn reaches no account and no tools" }]
         : [];
 
+// A tool list (an automation's `allowedTools`) is a boundary only where the runtime checks every call against it
+// (AgentCapabilities.toolAllowlist); anywhere else the turn would run with that runtime's whole toolbox, so it is turned
+// away before anything spawns and the words wait for a runtime that can keep the list.
+const toolListRefusal = (input: RoutedAgentTurn, runtime: ReturnType<typeof turnRuntime>): DecidedRefusal | undefined => {
+    if (input.allowedTools === undefined || runtime.capabilities.toolAllowlist) {
+        return undefined;
+    }
+    const said = { provider: runtime.provider, harness: runtime.harness, tools: input.allowedTools.length };
+    const warning = { fields: said, message: "tools: the turn carries a tool list its runtime cannot keep, refused before sending" };
+    const message =
+        `This turn may use only ${input.allowedTools.length === 0 ? "no tools" : input.allowedTools.join(", ")}, and ${runtime.provider} on this runtime cannot hold a turn to a tool list, ` +
+        "so it was not sent. Run it on a model that runs on the Claude Code loop, or take the tool list off.";
+    return { ok: false, code: "tools-unenforced", message, warnings: [warning], spawn: false };
+};
+
 export const decideTurn = (facts: TurnFacts, input: RoutedAgentTurn, context: TurnContext): TurnDecision | DecidedRefusal => {
     if ("held" in facts) {
         // Spread whole: the reading rides through to the composer's notice, which can only size a raise it was told.
@@ -205,6 +220,10 @@ export const decideTurn = (facts: TurnFacts, input: RoutedAgentTurn, context: Tu
         const said = { provider: runtime.provider, harness: runtime.harness };
         const warning = { fields: said, message: "privacy: the shield can't cover this runtime and the provider is untrusted, refused before sending" };
         return { ok: false, code: "privacy-unshielded", message: facts.privacyRefusal, warnings: [warning], spawn: false };
+    }
+    const unkept = toolListRefusal(input, runtime);
+    if (unkept !== undefined) {
+        return unkept;
     }
     const { capabilities } = runtime;
     const premise = premiseOf(facts, input, runtime);

@@ -1,9 +1,17 @@
 import { join } from "node:path";
+import { isRecord } from "@intentic/base/escape";
 import { exec, GIT_GLOBAL_ARGS } from "@intentic/base/git";
 import type { FileEntry, RankedGroup, RankedHit } from "../types.js";
 import { isIqDenied } from "../workspace/floor.js";
 
 const DEFAULT_SINCE = "7d";
+
+// A query is somebody waiting at a prompt: a git read that is still going after this long is waiting on a lock or a
+// history far larger than an answer needs, and is stopped and named rather than left to hang the query. Long enough for
+// a log over a large repository's recent weeks, which is the heaviest read here.
+const GIT_READ_TIMEOUT_MS = 30_000;
+// `rev-parse --verify HEAD` reads one ref; a few seconds is already a stuck repository.
+const UNBORN_TIMEOUT_MS = 5_000;
 
 // "2d" | "12h" | "1w" | "3m" → milliseconds.
 const parseSince = (since: string): number => {
@@ -32,7 +40,7 @@ const reposOf = (entries: readonly FileEntry[]): string[] => [...new Set(entries
 
 // `rev-parse --verify` exits 1 exactly when HEAD names no commit yet; anything else (not a repo, no git) is not that.
 const unborn = (cwd: string): Promise<boolean> =>
-    exec("git", [...GIT_GLOBAL_ARGS, "-C", cwd, "rev-parse", "--verify", "--quiet", "HEAD"]).then(
+    exec("git", [...GIT_GLOBAL_ARGS, "-C", cwd, "rev-parse", "--verify", "--quiet", "HEAD"], { timeout: UNBORN_TIMEOUT_MS }).then(
         () => false,
         (error: unknown) => (error as { code?: unknown }).code === 1,
     );
@@ -45,8 +53,14 @@ const unborn = (cwd: string): Promise<boolean> =>
 const git = async (root: string, repo: string, args: string[]): Promise<string> => {
     const cwd = join(root, repo);
     try {
-        return (await exec("git", [...GIT_GLOBAL_ARGS, "-C", cwd, ...args], { maxBuffer: 16 * 1024 * 1024 })).stdout;
+        return (await exec("git", [...GIT_GLOBAL_ARGS, "-C", cwd, ...args], { maxBuffer: 16 * 1024 * 1024, timeout: GIT_READ_TIMEOUT_MS })).stdout;
     } catch (error) {
+        // A read stopped at its deadline says so by name, rather than reading as a repository git refused.
+        if (isRecord(error) && error["killed"] === true) {
+            throw new Error(`iq: git ${args[0] ?? ""} in ${repo === "" ? "the workspace root" : repo} took longer than ${GIT_READ_TIMEOUT_MS / 1000}s and was stopped`, {
+                cause: error,
+            });
+        }
         if (await unborn(cwd)) {
             return "";
         }

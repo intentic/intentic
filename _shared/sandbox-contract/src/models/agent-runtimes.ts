@@ -59,6 +59,10 @@ export interface AgentCapabilities {
     // configuration the daemon does not own and reads files it never sees. Only a `none` loop on an untrusted provider is
     // refused while the shield is on.
     readonly privacy: "gateway" | "hooks" | "none";
+    // Whether a turn's tool list (TurnPolicy.allowedTools, an automation's `allowedTools`) is a real boundary here:
+    // every tool call the loop makes passes a check the daemon answers, or the loop is built with only the listed tools.
+    // A runtime that runs some tool without asking anyone cannot keep it, so a turn carrying a list never starts on one.
+    readonly toolAllowlist: boolean;
 }
 
 // The Claude Code Agent SDK loop, the ceiling every other runtime is measured against: the only one that owns the whole
@@ -85,6 +89,9 @@ export const CLAUDE_CODE: AgentCapabilities = {
     secrets: "masked",
     // Every request goes to ANTHROPIC_BASE_URL, which the daemon sets per turn.
     privacy: "gateway",
+    // A PreToolUse hook refuses every call off the list, under bypassPermissions and in subagents too
+    // (agent/tools/tool-allowlist.ts).
+    toolAllowlist: true,
 };
 
 // Codex app-server: item-level events, the turn's remote MCP servers over http, and four seams (steer, a question
@@ -112,6 +119,9 @@ export const CODEX: AgentCapabilities = {
     secrets: "none",
     // Its model provider's base_url is the daemon's, written into the per-thread config.
     privacy: "gateway",
+    // Codex runs the commands it judges read-only without asking (its known-safe list), and every tool it has is the
+    // shell, so no answer the daemon gives can keep a call off a list.
+    toolAllowlist: false,
 };
 
 // OpenCode (the Grok runtime): its own agentic loop and tools, with the turn's remote MCP servers mounted on the shared
@@ -140,6 +150,10 @@ export const OPENCODE: AgentCapabilities = {
     secrets: "none",
     // The shared server's provider baseURLs are written by the daemon at spawn.
     privacy: "gateway",
+    // Its session rules could deny every action off the list, but they apply after the server's and the last match wins,
+    // so allowing a listed shell command there would override the owner's rulebook asking about it. Not kept until the
+    // permission judge (opencode-permissions.ts) checks the list on every call instead.
+    toolAllowlist: false,
 };
 
 // The same OpenCode loop, serving Gemini instead of xAI, identical abilities. The Claude Code loop announces itself in
@@ -173,6 +187,8 @@ export const ACP: AgentCapabilities = {
     secrets: "none",
     // The agent picks its own provider and endpoint from its own login and environment.
     privacy: "none",
+    // Which calls the agent asks permission for is its own choice, and most run reads without asking.
+    toolAllowlist: false,
 };
 
 // Devin's own CLI (`devin acp`), the ACP floor with one seam an installed agent lacks: the daemon picks the model, from
@@ -207,6 +223,8 @@ export const PI: AgentCapabilities = {
     secrets: "none",
     // Pi calls its provider from its own login; the daemon names no endpoint.
     privacy: "none",
+    // No seam before a tool runs.
+    toolAllowlist: false,
 };
 
 // Cursor's own runtime, driven through `@cursor/sdk` from this daemon's process; an embedding surface, so most seams
@@ -250,4 +268,7 @@ export const CURSOR: AgentCapabilities = {
     // to mask the output, the tools that read past both (grep, ls, glob, semantic search, fetch, lints) are withheld,
     // and MCP goes through the masking proxy (runtimes/cursor/cursor-shield.ts).
     privacy: "hooks",
+    // Its hooks are installed only for a shielded turn, and a hook that cannot tell which turn is asking allows; the
+    // built-in tool set is withheld by name, not granted. None of that is a list nothing gets past.
+    toolAllowlist: false,
 };

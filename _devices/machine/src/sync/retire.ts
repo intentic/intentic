@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { rm } from "node:fs/promises";
 import { errorMessage } from "@intentic/base/errors";
 import type { Log } from "@intentic/local-agent";
@@ -6,6 +5,7 @@ import { sandboxNames } from "@intentic/sandbox-run";
 import { baseDir } from "../config.js";
 import { isProjectPairing, type Pairing, pairingKey, pairingTransport, readState, removeSandboxPairings } from "./config.js";
 import { realBridgeExec, realUnbridgeFs, unbridgeRepos } from "./git-bridge.js";
+import { runProcessSync } from "./exec.js";
 import { existingSyncSessions, MUTAGEN_CALL_TIMEOUT_MS, ourForwardSessions, forwardSessionName, syncSessionNames } from "./mutagen.js";
 import { listingRecordPath } from "./project/project-local.js";
 import { forgetKnownHost, pairingSshConfig, sanitizeId, sshAlias, writeManagedSshConfig } from "./ssh.js";
@@ -60,7 +60,7 @@ export interface RetireSeams {
 const terminateSyncSessions = (mutagen: string, names: readonly string[]): void => {
     const live = existingSyncSessions(mutagen, names);
     for (const batch of live === undefined ? names.map((name) => [name]) : live.length > 0 ? [live] : []) {
-        spawnSync(mutagen, ["sync", "terminate", ...batch], { stdio: "ignore", windowsHide: true, timeout: MUTAGEN_CALL_TIMEOUT_MS });
+        runProcessSync(mutagen, ["sync", "terminate", ...batch], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS, quiet: true });
     }
 };
 
@@ -70,7 +70,7 @@ const terminateForwards = (mutagen: string, sandboxId: string, recorded: readonl
         ourForwardSessions(mutagen, sandboxId) ??
         recorded.flatMap((pairing) => (pairing.mirroredPorts ?? []).map((port) => forwardSessionName(sandboxId, port.port)));
     for (const name of held) {
-        spawnSync(mutagen, ["forward", "terminate", name], { stdio: "ignore", windowsHide: true, timeout: MUTAGEN_CALL_TIMEOUT_MS });
+        runProcessSync(mutagen, ["forward", "terminate", name], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS, quiet: true });
     }
 };
 

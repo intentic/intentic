@@ -22,7 +22,7 @@ import { adoptFolder } from "./project/adopt.js";
 import { clearAdoptFolder, isProjectPairing, mutagenDaemonLogPath, type Pairing, pairingKey, pairingRemoteDir, projectDirection } from "./config.js";
 import { dockerEndpointAnswers, liveIdentity, mutagenForwardUrl, mutagenUrl, pairingEndpoint, type SandboxEndpoint } from "./endpoint.js";
 import { labelValue, sessionOwner } from "./environment.js";
-import { runProcess } from "./exec.js";
+import { runProcess, runProcessSync, type SyncExecResult } from "./exec.js";
 import { projectShell, realProjectRunner, sandboxCopy } from "./project/project-remote.js";
 import { clearConflictResidue, type ResidueOutcome, sweepDerivedResidue } from "./residue.js";
 import { BACKUP_IGNORES, ignoresFor, mutagenSshPath, sanitizeId, sshTransportAnswers } from "./ssh.js";
@@ -34,7 +34,8 @@ const MUTAGEN_VERSION = "0.18.1";
 // How long one blocking Mutagen call may run before it is abandoned. Generous, since a loaded laptop's daemon can take
 // a while to answer a list, but bounded: the mirror loop makes these calls in the same process as the device links and
 // the keeper, and a spawnSync on a wedged Mutagen daemon would freeze every one of them with it. A call that runs out
-// comes back with a null status (`error.code` ETIMEDOUT), which every caller already reads as the call having failed.
+// is ended with everything it started (exec.ts `runProcessSync`) and comes back with a null status (`error.code`
+// ETIMEDOUT), which every caller already reads as the call having failed.
 export const MUTAGEN_CALL_TIMEOUT_MS = 60_000;
 
 // (2026-10-05) What a create may take, which no call had a bound for: a first `sync create` installs Mutagen's agent in
@@ -233,8 +234,8 @@ const recoverDaemon = (mutagen: string, stderr: string): boolean => {
     }
     daemonRestartedAt = now;
     // `daemon stop` connects without the version check, so it reaches a daemon of any version.
-    spawnSync(mutagen, ["daemon", "stop"], { stdio: "ignore", windowsHide: true, timeout: MUTAGEN_CALL_TIMEOUT_MS });
-    const started = spawnSync(mutagen, ["daemon", "start"], { stdio: "ignore", windowsHide: true, timeout: MUTAGEN_CALL_TIMEOUT_MS });
+    runProcessSync(mutagen, ["daemon", "stop"], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS, quiet: true });
+    const started = runProcessSync(mutagen, ["daemon", "start"], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS, quiet: true });
     daemonLog?.(
         `the Mutagen daemon running here is another version than this agent's (${mutagen}); ${started.status === 0 ? "restarted it with this agent's copy" : "could not restart it"}. Its sessions are kept on disk and come back with it.`,
     );
@@ -244,13 +245,12 @@ const recoverDaemon = (mutagen: string, stderr: string): boolean => {
 // One blocking Mutagen listing: stdout when it answered, undefined when it did not. A version mismatch restarts the
 // daemon (above) and asks once more.
 const listCall = (mutagen: string, args: readonly string[]): string | undefined => {
-    const run = (): SpawnSyncReturns<string> =>
-        spawnSync(mutagen, [...args], { encoding: "utf8", windowsHide: true, timeout: MUTAGEN_CALL_TIMEOUT_MS });
+    const run = (): SyncExecResult => runProcessSync(mutagen, args, { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS });
     const first = run();
     if (first.status === 0) {
         return first.stdout;
     }
-    if (!recoverDaemon(mutagen, first.stderr ?? "")) {
+    if (!recoverDaemon(mutagen, first.stderr)) {
         return undefined;
     }
     const again = run();
@@ -712,7 +712,7 @@ export const pauseRunningSync = (mutagen: string, pairing: Pairing): boolean => 
     if (names === undefined || names.every((name) => readSessionState(mutagen, name).paused === true)) {
         return false;
     }
-    const result = spawnSync(mutagen, ["sync", "pause", ...names], { stdio: "ignore", windowsHide: true, timeout: MUTAGEN_CALL_TIMEOUT_MS });
+    const result = runProcessSync(mutagen, ["sync", "pause", ...names], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS, quiet: true });
     return result.status === 0;
 };
 
@@ -724,7 +724,7 @@ export const resumeSwapPausedSync = (mutagen: string, pairing: Pairing): boolean
     if (names === undefined || names.length === 0) {
         return false;
     }
-    return spawnSync(mutagen, ["sync", "resume", ...names], { stdio: "ignore", windowsHide: true, timeout: MUTAGEN_CALL_TIMEOUT_MS }).status === 0;
+    return runProcessSync(mutagen, ["sync", "resume", ...names], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS, quiet: true }).status === 0;
 };
 
 export const resumeAutoPausedSync = (mutagen: string, pairing: Pairing): boolean => {
@@ -735,7 +735,7 @@ export const resumeAutoPausedSync = (mutagen: string, pairing: Pairing): boolean
     if (names === undefined || names.length === 0) {
         return false;
     }
-    const result = spawnSync(mutagen, ["sync", "resume", ...names], { stdio: "ignore", windowsHide: true, timeout: MUTAGEN_CALL_TIMEOUT_MS });
+    const result = runProcessSync(mutagen, ["sync", "resume", ...names], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS, quiet: true });
     return result.status === 0;
 };
 
@@ -901,7 +901,7 @@ const retireStrayBackup = (mutagen: string, pairing: Pairing, log: Log): void =>
     if (stray.length === 0) {
         return;
     }
-    spawnSync(mutagen, ["sync", "terminate", ...stray], { stdio: "ignore", windowsHide: true, timeout: MUTAGEN_CALL_TIMEOUT_MS });
+    runProcessSync(mutagen, ["sync", "terminate", ...stray], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS, quiet: true });
     log(
         `${pairingKey(pairing)}: its folder is a project of yours, which carries no copy of the sandbox's state; terminated the state backup that was writing one into it.`,
     );
@@ -923,7 +923,7 @@ const retireSurplus = (mutagen: string, name: string, log: Log): LiveSession[] |
     if (sessions === undefined || surplus.length === 0) {
         return sessions;
     }
-    spawnSync(mutagen, ["sync", "terminate", ...surplus], { stdio: "ignore", windowsHide: true, timeout: MUTAGEN_CALL_TIMEOUT_MS });
+    runProcessSync(mutagen, ["sync", "terminate", ...surplus], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS, quiet: true });
     log(
         `${name}: ${sessions.length} sync sessions shared this name and flagged each other's writes as conflicts; kept the oldest and terminated the rest.`,
     );
@@ -1093,11 +1093,7 @@ const convergeSession = async (
                 ? `${spec.name}: made before this agent labelled its sessions, and Mutagen cannot label a session that exists: recreating it with this machine's ownership labels, as ${spec.mode}. Both sides are rescanned; nothing that already matches is copied.`
                 : `${spec.name}: the running sync session does not match this build's rules (its ignores, its folder, which way it syncs, or what it does with symbolic links): recreating it so they apply, as ${spec.mode}. This starts the comparison from scratch.`,
         );
-        spawnSync(mutagen, ["sync", "terminate", ...terminationTargets(sessions, spec.name)], {
-            stdio: "ignore",
-            windowsHide: true,
-            timeout: MUTAGEN_CALL_TIMEOUT_MS,
-        });
+        await runProcess(mutagen, ["sync", "terminate", ...terminationTargets(sessions, spec.name)], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS });
     }
     await runMutagenAsync(mutagen, mutagenCreateArgs(spec, live?.paused === true), log);
     return true;
@@ -1151,10 +1147,9 @@ export const retireOrphanSessions = (mutagen: string, pairings: readonly Pairing
                   owner,
               );
     if (listedSync !== undefined && sessions.length > 0) {
-        spawnSync(mutagen, ["sync", "terminate", ...terminateTargetsIn(listedSync, sessions, SESSION_PREFIX, owner)], {
-            stdio: "ignore",
-            windowsHide: true,
-            timeout: MUTAGEN_CALL_TIMEOUT_MS,
+        runProcessSync(mutagen, ["sync", "terminate", ...terminateTargetsIn(listedSync, sessions, SESSION_PREFIX, owner)], {
+            timeoutMs: MUTAGEN_CALL_TIMEOUT_MS,
+            quiet: true,
         });
         log(`retired ${plural(sessions.length, "file-sync session")} belonging to sandboxes this machine no longer pairs.`);
     }
@@ -1168,10 +1163,9 @@ export const retireOrphanSessions = (mutagen: string, pairings: readonly Pairing
                   owner,
               );
     if (listedForwards !== undefined && forwards.length > 0) {
-        spawnSync(mutagen, ["forward", "terminate", ...terminateTargetsIn(listedForwards, forwards, FORWARD_PREFIX, owner)], {
-            stdio: "ignore",
-            windowsHide: true,
-            timeout: MUTAGEN_CALL_TIMEOUT_MS,
+        runProcessSync(mutagen, ["forward", "terminate", ...terminateTargetsIn(listedForwards, forwards, FORWARD_PREFIX, owner)], {
+            timeoutMs: MUTAGEN_CALL_TIMEOUT_MS,
+            quiet: true,
         });
         log(`released ${plural(forwards.length, "port forward")} left holding localhost for sandboxes this machine no longer pairs.`);
     }
@@ -1179,20 +1173,24 @@ export const retireOrphanSessions = (mutagen: string, pairings: readonly Pairing
 
 // The installed version, or undefined if missing/broken. Matters most on Windows, where a resident daemon's
 // binary can be neither unlinked nor overwritten, so checking first avoids re-extracting over it.
-const installedVersion = (binary: string, versionArgs: string[]): string | undefined => {
-    const result = spawnSync(binary, versionArgs, { encoding: "utf8", windowsHide: true, timeout: MUTAGEN_CALL_TIMEOUT_MS });
-    if (result.error !== undefined || result.status !== 0) {
+const installedVersion = async (binary: string, versionArgs: string[]): Promise<string | undefined> => {
+    const result = await runProcess(binary, versionArgs, { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS });
+    if (result.status !== 0) {
         return undefined;
     }
     return /\d+\.\d+\.\d+/.exec(result.stdout)?.[0];
 };
 
 // Extract a gzipped tarball into this agent's own bin using the system `tar` (bsdtar on macOS/Windows 10+).
-const extractTarball = (tarball: string): void => {
-    // Bounded under the agent's own hang watchdog (watchdog.ts), since a blocking call here holds its event loop.
-    const extract = spawnSync("tar", ["-xzf", tarball, "-C", binDir], { stdio: "inherit", windowsHide: true, timeout: 2 * 60_000 });
+// Not blocking, since GNU tar runs gzip as a child of its own and a stuck one would hold the agent's event loop; the
+// deadline ends both. tar's own reason, which it printed to the terminal while this call inherited it, is in the error.
+const extractTarball = async (tarball: string): Promise<void> => {
+    const extract = await runProcess("tar", ["-xzf", tarball, "-C", binDir], { timeoutMs: 2 * 60_000 });
     if (extract.status !== 0) {
-        throw new Error(`failed to extract ${tarball}: tar's own reason is above (no \`tar\` on PATH, or a file it must replace is in use)`);
+        const said = extract.stderr.trim();
+        throw new Error(
+            `failed to extract ${tarball}: ${said === "" ? "no `tar` on PATH, or a file it must replace is in use" : said.split("\n").join(" / ")}`,
+        );
     }
 };
 
@@ -1206,7 +1204,8 @@ const resolveOnPath = (command: string): string | undefined => {
     const found =
         process.platform === "win32"
             ? spawnSync(whereExe, [command], { encoding: "utf8", windowsHide: true, timeout: PATH_LOOKUP_TIMEOUT_MS })
-            : spawnSync("sh", ["-c", `command -v ${command}`], { encoding: "utf8", timeout: PATH_LOOKUP_TIMEOUT_MS });
+            : // `command -v` is a shell builtin: the shell starts nothing that could outlive its timeout.
+              spawnSync("sh", ["-c", `command -v ${command}`], { encoding: "utf8", timeout: PATH_LOOKUP_TIMEOUT_MS });
     // `where` lists every match, best first; `command -v` prints the single one it would run.
     const first = found.status === 0 ? found.stdout.split("\n")[0]?.trim() : undefined;
     return first === undefined || first === "" || !existsSync(first) ? undefined : first;
@@ -1238,7 +1237,7 @@ export const userMutagenOnPath = (): string | undefined => {
 // (offline at first start), so a machine with Mutagen installed still syncs while the download keeps failing.
 export const ensureMutagen = async (): Promise<string> => {
     const dest = ownMutagenPath();
-    if (installedVersion(dest, ["version"]) === MUTAGEN_VERSION) {
+    if ((await installedVersion(dest, ["version"])) === MUTAGEN_VERSION) {
         return dest;
     }
     try {
@@ -1246,7 +1245,7 @@ export const ensureMutagen = async (): Promise<string> => {
         return dest;
     } catch (error) {
         const onPath = resolveOnPath("mutagen");
-        if (onPath !== undefined && installedVersion(onPath, ["version"]) !== undefined) {
+        if (onPath !== undefined && (await installedVersion(onPath, ["version"])) !== undefined) {
             daemonLog?.(`this agent's own Mutagen ${MUTAGEN_VERSION} could not be fetched (${errorMessage(error)}); using ${onPath} until it can.`);
             return onPath;
         }
@@ -1256,7 +1255,7 @@ export const ensureMutagen = async (): Promise<string> => {
 
 const installPinnedMutagen = async (dest: string): Promise<void> => {
     // Stops any daemon from our copy first; on Windows that's what holds the file open. Best-effort.
-    spawnSync(dest, ["daemon", "stop"], { stdio: "ignore", windowsHide: true, timeout: MUTAGEN_CALL_TIMEOUT_MS });
+    await runProcess(dest, ["daemon", "stop"], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS });
     const tarball = join(binDir, "mutagen.tar.gz");
     await download(
         `https://github.com/mutagen-io/mutagen/releases/download/v${MUTAGEN_VERSION}/mutagen_${osToken()}_${archToken()}_v${MUTAGEN_VERSION}.tar.gz`,
@@ -1265,7 +1264,7 @@ const installPinnedMutagen = async (dest: string): Promise<void> => {
     // Extraction writes in place, so the running copy is set aside first and dropped once the new one lands.
     const displaced = `${dest}.old`;
     await renameIfPresent(dest, displaced);
-    extractTarball(tarball);
+    await extractTarball(tarball);
     await chmod(dest, 0o755);
     await rm(displaced, { force: true }).catch(() => undefined);
     await rm(tarball, { force: true }).catch(() => undefined);
@@ -1287,7 +1286,9 @@ export const runMutagenAsync = async (mutagen: string, args: readonly string[], 
 };
 
 // Runs a mutagen subcommand, inheriting stdio, throwing on failure. One-shot CLI commands only, never the
-// resident watcher.
+// resident watcher. Left on spawnSync, which ends only Mutagen itself at the deadline: its output is the person's
+// terminal, so nothing it leaves behind can hold a pipe open, and a process group of its own would take it out of
+// reach of their Ctrl-C.
 export const runMutagen = (mutagen: string, args: string[]): SpawnSyncReturns<Buffer> => {
     const result = spawnSync(mutagen, args, { stdio: "inherit", windowsHide: true, timeout: MUTAGEN_CREATE_TIMEOUT_MS });
     if (result.error !== undefined) {
@@ -1315,7 +1316,7 @@ export const registerMutagenAutostart = (mutagen: string, launcher: CliLauncher,
             runMutagen(mutagen, ["daemon", "register"]);
             return;
         }
-        spawnSync(mutagen, ["daemon", "unregister"], { stdio: "ignore", windowsHide: true, timeout: MUTAGEN_CALL_TIMEOUT_MS });
+        runProcessSync(mutagen, ["daemon", "unregister"], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS, quiet: true });
         setWindowsRunValue(MUTAGEN_RUN_VALUE, quotedCommandLine(stubCommand(stub, mutagenDaemonLogPath, [mutagen, "daemon", "start"])));
     } catch (error) {
         log(`Could not register the Mutagen daemon for autostart (${errorMessage(error)}); it still runs while you're signed in.`);
@@ -1329,6 +1330,6 @@ export const unregisterMutagenAutostart = (mutagen: string): void => {
         clearWindowsRunValue(MUTAGEN_RUN_VALUE);
     }
     if (process.platform !== "linux") {
-        spawnSync(mutagen, ["daemon", "unregister"], { stdio: "ignore", windowsHide: true, timeout: MUTAGEN_CALL_TIMEOUT_MS });
+        runProcessSync(mutagen, ["daemon", "unregister"], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS, quiet: true });
     }
 };

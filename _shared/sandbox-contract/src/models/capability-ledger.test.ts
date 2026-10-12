@@ -37,6 +37,10 @@ const LEDGER: Record<keyof AgentCapabilities, Backing> = {
     // agent/run/decide/turn-decision.ts refuses a "none" runtime on an untrusted provider while the privacy shield is
     // on; "gateway" runtimes get the daemon's gateway as their base URL (privacy/gateway).
     privacy: "enforced",
+    // agent/run/decide/turn-decision.ts refuses a turn carrying a tool list on a runtime that cannot keep one, the
+    // automation ladder passes such rungs over, and agent/tools/tool-allowlist.ts refuses every off-list call on the
+    // Claude Code loop.
+    toolAllowlist: "enforced",
 
     // Descriptive: true of the runtime but nothing consults these; wiring one up moves it to enforced.
     questions: "descriptive",
