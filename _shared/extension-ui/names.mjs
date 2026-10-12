@@ -93,7 +93,7 @@ export const extensionUiNames = [
     "ProgressRing",
     "ProjectChip",
     "ProseField",
-    "RepoRail",
+    "RepoPicker",
     "ResizeSeam",
     "ResponsiveOverlay",
     "Row",

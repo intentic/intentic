@@ -150,9 +150,6 @@
         "couldntSaveName": "Ce nom n'a pas pu être enregistré.",
         "unnamed": "Sans nom"
     },
-    "layoutRepoRail": {
-        "allRepositories": "Tous les dépôts"
-    },
     "noteEditor": {
         "copyMarkdown": "Copier le markdown",
         "editNote": "Modifier cette note",
@@ -175,7 +172,7 @@
         "project": "Projet",
         "projectFilter": "Filtre de projet"
     },
-    "repoRail": {
+    "repoPicker": {
         "allRepositories": "Tous les dépôts",
         "repository": "Dépôt"
     },

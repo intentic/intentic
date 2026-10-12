@@ -81,7 +81,6 @@
         "passRate": "{rate} % de réussite"
     },
     "pipelinesView": {
-        "allRepositories": "Tous les dépôts",
         "connectedRepos": "l'un des {count} dépôts connectés",
         "failingRepeatedly": "Échoue à répétition",
         "keepsFailing": "Échoue encore",
@@ -91,7 +90,6 @@
         "noWorkspaceRepoMaps": "Aucun dépôt de l'espace de travail ne correspond à un compte GitHub/GitLab connecté : clonez un dépôt depuis votre hébergeur connecté, ou connectez la capacité correspondante sur la page +.",
         "openPipelines": "Ouvrir les pipelines de {project}",
         "openRepo": "Ouvrir le dépôt",
-        "repository": "Dépôt",
         "runs": "{runs} exécutions",
         "thisRepo": "ce dépôt"
     },

@@ -218,9 +218,6 @@
         "couldntSaveName": "Couldn't save that name.",
         "unnamed": "Unnamed"
     },
-    "layoutRepoRail": {
-        "allRepositories": "All repositories"
-    },
     "markdownDocument": {
         "document": "Document",
         "notSavedYet": "Not saved yet",
@@ -257,7 +254,7 @@
         "project": "Project",
         "projectFilter": "Project filter"
     },
-    "repoRail": {
+    "repoPicker": {
         "allRepositories": "All repositories",
         "repository": "Repository"
     },

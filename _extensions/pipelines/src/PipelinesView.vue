@@ -7,15 +7,15 @@ import {
     Notice,
     noticeOf,
     PageAction,
-    Picker,
+    type PickerGroup,
     type PickerOption,
-    type PickerOptions,
+    RepoPicker,
+    type RepoPickerAll,
     RowGroup,
     SkeletonSnapshot,
     SplitView,
     toneTint,
     useNarrow,
-    useRailMemory,
     vSkeletonSource,
     type AgentRunChoice,
     type TallyItem,
@@ -54,26 +54,20 @@ const projectHidden = computed(() => allRepos.value.length - repos.value.length)
 // workspace no longer maps resolves against current standings and falls back to the whole board.
 const standings = computed(() => repoStandings(repos.value, runs.value));
 const scope = computed(() => standings.value.find((standing) => standing.repo.repo === api.route.query()[`repo`]));
-// Remembered across visits (useRailMemory): the rail tile opens this view at its bare address, which would otherwise
-// throw the pick away on every return. Picks go through `scopeRepo` so choosing "all" is remembered as "all".
-const scopeRepo = useRailMemory(
-    `pipelines.repo`,
-    computed<string | undefined>({
-        get: () => scope.value?.repo.repo,
-        set: (value) => api.route.setQuery({ repo: value }),
-    }),
-    () => standings.value.map((standing) => standing.repo.repo),
-);
+// <RepoPicker memory> remembers the pick across visits: the rail tile opens this view at its bare address, which would
+// otherwise throw the pick away on every return.
+const scopeRepo = computed<string | undefined>({
+    get: () => scope.value?.repo.repo,
+    set: (value) => api.route.setQuery({ repo: value }),
+});
 
-// Under 'all repositories', a runless repo with no hook warning is dropped from the body (rail row only); one with a
+// Under 'all repositories', a runless repo with no hook warning is dropped from the body (picker row only); one with a
 // warning stays, to explain the silence. Scoping to one repository always shows it, empty state included.
 const sections = computed(() => (scope.value === undefined ? standings.value.filter((standing) => !standing.silent) : [scope.value]));
 const scopedRuns = computed<readonly PipelineRun[]>(() => (scope.value === undefined ? runs.value : scope.value.runs));
 
-// Repository choice lives in the top bar, not a rail column, so the wide job-graph body isn't squeezed by permanent
-// chrome. The failing-branch count survives as the picker row's own annotation.
-const ALL_REPOS = ``;
-
+// Repository choice lives in the top bar like every repo-scoped view's, so the wide job-graph body isn't squeezed by
+// permanent chrome. The failing-branch count survives as the picker row's own annotation.
 const repoOption = (standing: RepoStanding): PickerOption => ({
     value: standing.repo.repo,
     label: standing.repo.repo,
@@ -84,16 +78,18 @@ const repoOption = (standing: RepoStanding): PickerOption => ({
     mono: true,
 });
 
-const repoOptions = computed<PickerOptions>(() => {
-    const reporting = standings.value.filter((standing) => !standing.silent);
-    const silent = standings.value.filter((standing) => standing.silent);
+// Empty groups are the picker's to drop.
+const repoOptions = computed<PickerGroup[]>(() => [
+    { options: standings.value.filter((standing) => !standing.silent).map(repoOption) },
+    { label: t(`pipelinesView.noRunsYet2`), options: standings.value.filter((standing) => standing.silent).map(repoOption) },
+]);
+
+const everyRepo = computed<RepoPickerAll>(() => {
     const failing = standings.value.reduce((sum, standing) => sum + standing.failing, 0);
-    const everywhere = failing === 0 ? t(`extension.nothingFailing`) : t(`extension.branchCountFailing`, { count: failing }, failing);
-    return [
-        { options: [{ value: ALL_REPOS, label: t(`pipelinesView.allRepositories`), icon: `bolt`, description: everywhere }] },
-        ...(reporting.length > 0 ? [{ options: reporting.map(repoOption) }] : []),
-        ...(silent.length > 0 ? [{ label: t(`pipelinesView.noRunsYet2`), options: silent.map(repoOption) }] : []),
-    ];
+    return {
+        icon: `bolt`,
+        description: failing === 0 ? t(`extension.nothingFailing`) : t(`extension.branchCountFailing`, { count: failing }, failing),
+    };
 });
 
 // Which jobs keep breaking; no extra requests, the rows already load these same job lists.
@@ -292,16 +288,7 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume
                 noun="repositories"
                 @clear="api.workspace.setProject(undefined)"
             />
-            <!-- Only where there's a choice: over one repository this would point at the only thing on screen. -->
-            <Picker
-                v-if="repos.length > 1"
-                :model-value="scopeRepo ?? ALL_REPOS"
-                :options="repoOptions"
-                variant="ghost"
-                :aria-label="t(`pipelinesView.repository`)"
-                :placeholder="t(`pipelinesView.repository`)"
-                @update:model-value="(next) => (scopeRepo = next === ALL_REPOS ? undefined : next)"
-            />
+            <RepoPicker v-model="scopeRepo" :repos="repoOptions" :all="everyRepo" memory="pipelines.repo" />
             <!-- No `hint`: the glyph already names the vendor, the label already names the project. -->
             <PageAction
                 v-for="standing in sections"

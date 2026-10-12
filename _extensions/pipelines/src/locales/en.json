@@ -113,7 +113,6 @@
         "passRate": "{rate}% pass rate"
     },
     "pipelinesView": {
-        "allRepositories": "All repositories",
         "connectedRepos": "any of the {count} connected repos",
         "failingRepeatedly": "Failing repeatedly",
         "keepsFailing": "Keeps failing",
@@ -124,7 +123,6 @@
         "openPipelines": "Open {project} pipelines",
         "openRepo": "Open repo",
         "pipelines": "Pipelines",
-        "repository": "Repository",
         "runs": "{runs} runs",
         "thisRepo": "this repo"
     },

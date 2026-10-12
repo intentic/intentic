@@ -258,10 +258,9 @@ export { default as ProgressRing } from "./components/charts/ProgressRing.vue";
 // Borderless writing field, `ui.input()`'s counterpart for prose; grows with its content.
 export { default as ProseField } from "./components/forms/ProseField.vue";
 export { default as PullToRefresh } from "./components/layout/PullToRefresh.vue";
-// Repository-narrowing rail: a pinned "all" row, one count per repository, folds into a <Picker> when the split
-// is too narrow.
-export { default as RepoRail } from "./components/layout/RepoRail.vue";
-export { type RepoRailAll, type RepoRailGroup, type RepoRailRow } from "./components/layout/repoRail.js";
+// The header picker a view narrows to one repository with: an optional "All repositories" row, a remembered pick.
+export { default as RepoPicker } from "./components/forms/RepoPicker.vue";
+export { type RepoPickerAll } from "./components/forms/repoPicker.js";
 // Drag strip between two panes.
 export { default as ResizeSeam } from "./components/layout/ResizeSeam.vue";
 // Anchored panel on desktop, bottom sheet on a phone, behind one open flag.

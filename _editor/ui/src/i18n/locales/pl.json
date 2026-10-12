@@ -218,9 +218,6 @@
         "couldntSaveName": "Nie udało się zapisać tej nazwy.",
         "unnamed": "Bez nazwy"
     },
-    "layoutRepoRail": {
-        "allRepositories": "Wszystkie repozytoria"
-    },
     "markdownDocument": {
         "document": "Dokument",
         "notSavedYet": "Jeszcze nie zapisano",
@@ -257,7 +254,7 @@
         "project": "Projekt",
         "projectFilter": "Filtr projektu"
     },
-    "repoRail": {
+    "repoPicker": {
         "allRepositories": "Wszystkie repozytoria",
         "repository": "Repozytorium"
     },

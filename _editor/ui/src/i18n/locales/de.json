@@ -152,9 +152,6 @@
         "couldntSaveName": "Dieser Name ließ sich nicht speichern.",
         "unnamed": "Ohne Namen"
     },
-    "layoutRepoRail": {
-        "allRepositories": "Alle Repositorys"
-    },
     "markdownDocument": {
         "document": "Dokument"
     },
@@ -187,8 +184,9 @@
         "project": "Projekt",
         "projectFilter": "Projektfilter"
     },
-    "repoRail": {
-        "allRepositories": "Alle Repositorys"
+    "repoPicker": {
+        "allRepositories": "Alle Repositorys",
+        "repository": "Repository"
     },
     "sandboxDeviceDetail": {
         "devicesAgentDoesntReport": "Der Agent dieses Geräts meldet nicht, welche Pfade das sind. Nach einem Update stehen sie hier."

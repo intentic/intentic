@@ -122,11 +122,10 @@ export {
     type PickerOption,
     type PickerOptions,
     ProgressRing,
-    // A workspace board scoped to one repo; always includes a pinned "All repositories" row outside the groups.
-    RepoRail,
-    type RepoRailAll,
-    type RepoRailGroup,
-    type RepoRailRow,
+    // How a view scopes what it shows to one repository: in <SplitView>'s #actions after <ProjectChip>, bound to the
+    // URL's `?repo=` through `api.route`, left out when the host bound the view to a repository. Never a rail column.
+    RepoPicker,
+    type RepoPickerAll,
     // Prose typeset as a document (`ProseField`) and a pane the reader can resize (`ResizeSeam`).
     ProseField,
     ResizeSeam,

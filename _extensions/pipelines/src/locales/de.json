@@ -81,7 +81,6 @@
         "passRate": "{rate} % Erfolgsquote"
     },
     "pipelinesView": {
-        "allRepositories": "Alle Repositorys",
         "connectedRepos": "eines der {count} verbundenen Repos",
         "failingRepeatedly": "Fällt wiederholt durch",
         "keepsFailing": "Scheitert wiederholt",
