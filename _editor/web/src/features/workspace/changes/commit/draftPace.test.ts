@@ -1,0 +1,65 @@
+import type { LandedMessageDraft } from "@intentic/sandbox-contract";
+import { draftPace, mergeSamples, paceSample, type PaceSample } from "./draftPace";
+
+// The commit field's ring fills against how long drafts usually take. What is pinned: which drafts teach it, which of
+// them a running draft is measured against, and that a wait past the usual time stops promising instead of sitting
+// at 99%.
+
+const written = (startedAt: number, ms: number, model = `sonnet`): LandedMessageDraft => ({
+    startedAt,
+    steps: [{ provider: `claude`, model, status: `answered`, at: startedAt + 500, ms: ms - 500 }],
+    outcome: `written`,
+    finishedAt: startedAt + ms,
+});
+
+const sample = (startedAt: number, ms: number, model = `claude/sonnet`): PaceSample => ({ model, startedAt, ms });
+
+test(`only a written draft is a sample, timed start to sentence and named for the model that answered`, () => {
+    expect(paceSample(written(1000, 8000))).toEqual(sample(1000, 8000));
+    expect(paceSample(undefined)).toBeUndefined();
+    expect(paceSample({ startedAt: 1, steps: [] })).toBeUndefined();
+    expect(paceSample({ startedAt: 1, steps: [], outcome: `failed`, reason: `no model`, finishedAt: 9 })).toBeUndefined();
+});
+
+test(`samples merge one per draft, oldest first, and an unchanged roster keeps the very same records`, () => {
+    const stored = [sample(1, 5000), sample(2, 6000)];
+    const merged = mergeSamples(stored, [sample(2, 6000), sample(3, 7000)]);
+    expect(merged.map((entry) => entry.startedAt)).toEqual([1, 2, 3]);
+    expect(merged[1]).toBe(stored[1]);
+    expect(mergeSamples([], Array.from({ length: 40 }, (_, index) => sample(index, 1000))).length).toBe(24);
+});
+
+test(`a running draft fills against the median of recent drafts, preferring the model being asked`, () => {
+    const samples = [sample(1, 4000), sample(2, 30_000, `codex/gpt`), sample(3, 6000), sample(4, 8000)];
+    const running: LandedMessageDraft = {
+        startedAt: 10_000,
+        steps: [{ provider: `claude`, model: `sonnet`, status: `asking`, at: 10_400 }],
+    };
+    // claude/sonnet's own drafts: 4s, 6s, 8s → 6s.
+    expect(draftPace(running, 13_000, samples)).toEqual({ fraction: 0.5, overdue: false, typicalMs: 6000 });
+    // Still reading the diff, no model yet: every recent draft counts (4, 30, 6, 8 → 7s).
+    expect(draftPace({ startedAt: 10_000, steps: [] }, 13_500, samples)).toEqual({ fraction: 0.5, overdue: false, typicalMs: 7000 });
+});
+
+test(`past the usual time the ring stops promising`, () => {
+    const pace = draftPace({ startedAt: 0, steps: [] }, 9000, [sample(1, 6000)]);
+    expect(pace).toEqual({ fraction: 1, overdue: true, typicalMs: 6000 });
+});
+
+test(`time spent on a model that refused is added, so the fallback starts its own stretch`, () => {
+    const draft: LandedMessageDraft = {
+        startedAt: 0,
+        steps: [
+            { provider: `codex`, model: `gpt`, status: `refused`, at: 1000, ms: 5000, reason: `quota` },
+            { provider: `claude`, model: `sonnet`, status: `asking`, at: 6000 },
+        ],
+    };
+    // Expected 4s usual + 5s detour = 9s; 4.5s in is half.
+    expect(draftPace(draft, 4500, [sample(1, 4000)])?.fraction).toBe(0.5);
+});
+
+test(`nothing learned yet, or nothing running, leaves the mark to spin`, () => {
+    expect(draftPace({ startedAt: 0, steps: [] }, 1000, [])).toBeUndefined();
+    expect(draftPace(written(0, 1000), 2000, [sample(1, 4000)])).toBeUndefined();
+    expect(draftPace(undefined, 2000, [sample(1, 4000)])).toBeUndefined();
+});

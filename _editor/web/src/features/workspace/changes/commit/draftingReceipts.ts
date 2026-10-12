@@ -4,6 +4,7 @@ import { useAgents } from "../../../agents/fleet/useAgents";
 import { useNotifications } from "../../../../workbench/notifications/notifications";
 import { commitMessageOf } from "../changeOrigins";
 import { fillCommitMessage, namedAfter } from "./commitMessage";
+import { startDraftPace } from "./draftPace";
 import { t } from "@intentic/ui/i18n";
 
 // Watches every landing's drafted commit message from module scope, not from ReviewPanel (which is destroyed
@@ -54,6 +55,7 @@ const titleOf = (id: string): string => useAgents().fleet.value.find((agent) => 
 // Started once and never stopped; a workspace report belongs to the session, not to whichever component is mounted.
 export const startDraftingReceipts = (): void => {
     const { say, warn } = useNotifications();
+    startDraftPace();
 
     watch(phases, (now, was) => {
         // One line per receipt; two agents landing together is uncommon but real.

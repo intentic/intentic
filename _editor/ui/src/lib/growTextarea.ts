@@ -6,7 +6,9 @@
 //
 // Not for <ProseField>, which sizes itself with a CSS grid replica instead.
 
-// The text each box was last sized for: text that only gained characters cannot need a shorter box.
+// The text each box was last sized for: text that only gained characters cannot need a shorter box. An empty box is
+// sized for its placeholder, so that is what is kept for it: the first keystroke into a box a two-line placeholder grew
+// is not an insertion into what was measured, and must shrink it back to one line.
 const sizedFor = new WeakMap<HTMLTextAreaElement, string>();
 
 /** Whether `next` is `previous` with characters inserted at one place and none removed. */
@@ -25,17 +27,18 @@ export const growTextarea = (element: HTMLTextAreaElement | null | undefined, ma
     if (element === null || element === undefined) {
         return;
     }
+    const throughPlaceholder = element.value === `` && element.placeholder !== ``;
+    const text = throughPlaceholder ? element.placeholder : element.value;
     const previous = sizedFor.get(element);
-    sizedFor.set(element, element.value);
+    sizedFor.set(element, text);
     // Skipping the reset saves the layout it forces, once per keystroke; unchanged text (a resize) still resets, since
     // a wider box may need fewer lines.
-    const grown = previous !== undefined && previous !== element.value && element.style.height !== `` && onlyInserted(previous, element.value);
+    const grown = previous !== undefined && previous !== text && element.style.height !== `` && onlyInserted(previous, text);
     if (!grown) {
         element.style.height = `auto`;
     }
     const style = getComputedStyle(element);
     const oneLine = Number.parseFloat(style.lineHeight) + Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
-    const throughPlaceholder = element.value === `` && element.placeholder !== ``;
     if (throughPlaceholder) {
         element.value = element.placeholder;
     }

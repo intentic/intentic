@@ -35,6 +35,8 @@ export const closedDraftsKey = sandboxKeys(`intentic.closedDrafts.`);
 export const questionDraftKey = accountKeys(`intentic.questionDraft.`);
 // The commit message being written, per sandbox (features/workspace/changes/commit/commitMessage.ts).
 export const commitMessageKey = sandboxKeys(`intentic.commitMessage.`);
+// How long the last commit messages took to draft, for the field's progress ring (features/workspace/changes/commit/draftPace.ts).
+export const commitDraftPaceKey = accountKey(`intentic.commitDraftPace`);
 
 // The transcript mirror (features/chat/transcript/transcriptCache.ts): up to its last few hundred messages per
 // conversation, in IndexedDB. Deleted whole on sign-out; a window holding it open closes on the version change, so the

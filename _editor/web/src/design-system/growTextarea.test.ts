@@ -71,3 +71,27 @@ it(`leaves an unmeasurable box at its one-row default`, () => {
     growTextarea(sliced, 192);
     expect(sliced.style.height).toBe(`auto`);
 });
+
+// An empty box grown to a two-line placeholder, then typed into: the first keystroke is not an insertion into what was
+// measured (the placeholder), so the box must reset and shrink to the one line it now holds. A real `scrollHeight` never
+// reports under the box's set height, which is how the skipped reset kept a phantom second row.
+it(`shrinks back to the typed text once a long placeholder gives way`, () => {
+    const element = document.createElement(`textarea`);
+    Object.assign(element.style, { lineHeight: `20px`, paddingTop: `4px`, paddingBottom: `4px` });
+    const content = (): number => (element.value === element.placeholder ? 48 : 28);
+    Object.defineProperty(element, `scrollHeight`, {
+        get: () => Math.max(content(), element.style.height === `auto` ? 0 : Number.parseFloat(element.style.height) || 0),
+    });
+    element.placeholder = `No message written for /workspace view · remove duplicate sandbox cards`;
+
+    growTextarea(element, 192);
+    expect(element.style.height).toBe(`48px`);
+
+    element.value = `f`;
+    growTextarea(element, 192);
+    expect(element.style.height).toBe(`28px`);
+
+    element.value = `fi`;
+    growTextarea(element, 192);
+    expect(element.style.height).toBe(`28px`);
+});

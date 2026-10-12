@@ -5,6 +5,8 @@ import { useNow } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { useLayout } from "../../../../workbench/window/useLayout";
 import { draftReport, draftRunning, type DraftReportRow } from "../changeOrigins";
+import { t } from "@intentic/ui/i18n";
+import { draftPace, paceSamples } from "./draftPace";
 
 // The field at the top of the Changes sidebar, shared by both halves of it: the developer's commit message
 // (ReviewPanel.vue) and the maker's version name (save/SavePanel.vue). The two used to grow apart, one a field with
@@ -12,7 +14,9 @@ import { draftReport, draftRunning, type DraftReportRow } from "../changeOrigins
 // one design.
 //
 // The field reports a message being drafted for it inside itself: the newest step's glyph and clock sit at its right
-// edge, the whole report rides that mark's hover, and the placeholder (the caller's words) names who is writing. A list
+// edge, the whole report rides that mark's hover, and the placeholder (the caller's words) names who is writing. While
+// a model is out, the glyph is a ring filling against how long drafts usually take (draftPace.ts), so the wait has an
+// end in sight; past that, it stops promising and turns into a slow arc. A list
 // of steps under the field used to grow a row per model asked and vanish with the message, so whatever sat under it
 // jumped as it was reached.
 
@@ -39,20 +43,32 @@ const rows = computed<readonly DraftReportRow[]>(() => {
     return draft === undefined || draft.outcome === `written` ? [] : draftReport(draft, clock.value);
 });
 const line = computed<DraftReportRow | undefined>(() => rows.value.at(-1));
+// Undefined until a draft has been timed, or between a refusal and the next ask: the step's own glyph says it then.
+const pace = computed(() =>
+    line.value?.status === `reading` || line.value?.status === `asking` ? draftPace(props.draft, clock.value, paceSamples.value) : undefined,
+);
+const seconds = (ms: number): string => `~${Math.max(1, Math.round(ms / 1000))}s`;
 // The mark's words for a screen reader, which gets neither its glyph nor its hover.
 const spoken = computed<string>(() =>
-    line.value === undefined ? `` : [line.value.model, line.value.detail, line.value.elapsed].filter((part) => part !== undefined).join(` `),
+    line.value === undefined
+        ? ``
+        : [line.value.model, line.value.detail, line.value.elapsed, pace.value === undefined || pace.value.overdue ? undefined : `${Math.round(pace.value.fraction * 100)}%`]
+              .filter((part) => part !== undefined)
+              .join(` `),
 );
 const tip = computed((): Tip | undefined =>
     rows.value.length === 0
         ? undefined
         : {
               title: props.draftTitle ?? ``,
-              rows: rows.value.map((row) => ({
-                  label: row.model ?? row.detail ?? ``,
-                  value: [row.model === undefined ? undefined : row.detail, row.elapsed].filter((part) => part !== undefined).join(` · `),
-                  tone: row.status === `failed` ? `warning` : undefined,
-              })),
+              rows: [
+                  ...rows.value.map((row) => ({
+                      label: row.model ?? row.detail ?? ``,
+                      value: [row.model === undefined ? undefined : row.detail, row.elapsed].filter((part) => part !== undefined).join(` · `),
+                      tone: row.status === `failed` ? (`warning` as const) : undefined,
+                  })),
+                  ...(pace.value === undefined ? [] : [{ label: t(`workspace.changeOrigins.usually`), value: seconds(pace.value.typicalMs), tone: undefined }]),
+              ],
           },
 );
 
@@ -66,6 +82,9 @@ const STEP_MARKS: Record<DraftReportRow[`status`], { icon: IconName; spin?: bool
     skipped: { icon: `forward`, tone: `text-subtle` },
     failed: { icon: `exclamation-triangle`, tone: `text-warning` },
 };
+
+// The ring's circle: r 6 in a 16 box, stroked 2, so it sits in the glyph's own 1em square.
+const RING = 2 * Math.PI * 6;
 
 // A textarea, not an input, since a message can carry a release-note trailer as a body. Measured via `scrollHeight`,
 // not counted newlines — a single wrapped line is still one line to `split`. Eight lines at this box's font/padding,
@@ -103,7 +122,37 @@ defineExpose({ focus: (): void => box.value?.focus() });
             v-tooltip.right="tip"
             @click="box?.focus()"
         >
-            <Icon :name="STEP_MARKS[line.status].icon" :spin="STEP_MARKS[line.status].spin" class="text-2xs" :class="STEP_MARKS[line.status].tone" />
+            <svg v-if="pace" viewBox="0 0 16 16" class="size-[1.1em] -rotate-90 text-2xs" :class="STEP_MARKS[line.status].tone" aria-hidden="true">
+                <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="2" class="opacity-25" />
+                <!-- Past the usual time a quarter arc turns instead: still working, no longer a promise. -->
+                <circle
+                    v-if="pace.overdue"
+                    cx="8"
+                    cy="8"
+                    r="6"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    :stroke-dasharray="`${RING / 4} ${RING}`"
+                    class="origin-center motion-safe:animate-spin"
+                />
+                <!-- Eased over the clock's one-second tick, so the fill moves continuously rather than in steps. -->
+                <circle
+                    v-else
+                    cx="8"
+                    cy="8"
+                    r="6"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    :stroke-dasharray="RING"
+                    :stroke-dashoffset="RING * (1 - pace.fraction)"
+                    class="transition-[stroke-dashoffset] duration-1000 ease-linear"
+                />
+            </svg>
+            <Icon v-else :name="STEP_MARKS[line.status].icon" :spin="STEP_MARKS[line.status].spin" class="text-2xs" :class="STEP_MARKS[line.status].tone" />
             <span v-if="line.elapsed !== undefined" class="tabular-nums text-subtle" aria-hidden="true">{{ line.elapsed }}</span>
             <span class="sr-only">{{ spoken }}</span>
         </span>
