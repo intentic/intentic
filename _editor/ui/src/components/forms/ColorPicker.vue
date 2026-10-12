@@ -32,11 +32,12 @@ const presets = PRESETS.value.map((preset) => ({ label: preset.label, hex: accen
 </script>
 
 <template>
-    <!-- The swatches form one exclusive, keyboard-focusable choice. -->
+    <!-- The swatches form one exclusive, keyboard-focusable choice. One line, never wrapped: on a narrow pane the swatches
+         shrink a little (square, by aspect-ratio) rather than strand the last one alone on a second row. -->
     <div
         role="radiogroup"
         :aria-label="t(`ui.colorPicker.accentColour`)"
-        class="flex flex-wrap items-center"
+        class="flex min-w-0 items-center"
         :class="size === `sm` ? `gap-1.5` : `gap-2.5`"
     >
         <button
@@ -47,10 +48,10 @@ const presets = PRESETS.value.map((preset) => ({ label: preset.label, hex: accen
             :aria-checked="model === preset.hex"
             :aria-label="preset.label"
             v-tooltip.bottom="preset.label"
-            class="shrink-0 cursor-pointer rounded-full border transition-transform hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60"
+            class="aspect-square min-w-0 shrink cursor-pointer rounded-full border transition-transform hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60"
             :class="
                 [
-                    size === `sm` ? `size-6` : `size-7`,
+                    size === `sm` ? `w-6` : `w-7`,
                     model === preset.hex
                         ? // A ring held OFF the swatch by the row's own background, rather than an outline drawn on
                           // its edge: half these colours are pale and half are deep, and only a gap reads as

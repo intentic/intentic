@@ -804,7 +804,7 @@
             "asked": "What you asked",
             "prompt": "Add a dark-mode toggle to the header and remember the choice.",
             "did": "What it says it did",
-            "reply": "Added a theme store that reads the system setting and saves your choice, a toggle in the header, and dark colours for the page. I ran the tests; they pass.",
+            "reply": "Added a theme store that reads the system setting and saves your choice, a toggle in the header, and dark colors for the page. I ran the tests; they pass.",
             "changed": "What changed",
             "landTitle": "Then you land it",
             "landLine": "The agent worked on its own copy, so your workspace hasn't changed yet. Land brings these changes in. If they aren't right, tell the agent what to fix in its chat instead.",
@@ -8091,7 +8091,7 @@
                 "vivid": "Vivid"
             },
             "look": {
-                "colour": "Colour",
+                "colour": "Color",
                 "group": "Look",
                 "iconRail": "Icon rail",
                 "language": "Language",
@@ -8823,7 +8823,7 @@
             "sessionNeedsAttention": "This browser's sandbox session needs attention",
             "signInAgain": "Sign in again",
             "signedIntoGoogle": "Signed into Google as {presented}",
-            "somethingFetchesGoesNever": "Something it fetches as it goes never arrived, so a file may show without its colours or a viewer may stay blank. Reload to get it.",
+            "somethingFetchesGoesNever": "Something it fetches as it goes never arrived, so a file may show without its colors or a viewer may stay blank. Reload to get it.",
             "transportHint": "HTTP/1.1: 6 live streams at once · re-checked every minute",
             "uploadedFailed": "Uploaded {done} of {count} · {failed} failed",
             "uploading": "Uploading {done} of {count}",

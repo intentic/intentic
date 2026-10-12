@@ -133,7 +133,10 @@ const picked = as === `button`;
             class="flex min-w-0 grow items-center"
             :class="[
                 TIERS[tier].gap,
-                TIERS[tier].headline,
+                // A title alone can't be squeezed into one word per line by its own max-content, so it claims only
+                // the room it needs: a one-word title then keeps its control beside it on a phone instead of
+                // reserving the tier's floor and pushing the control onto a line of its own.
+                description === undefined && !$slots[`description`] ? `basis-auto` : TIERS[tier].headline,
                 headerButton
                     ? `cursor-pointer rounded-sm text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary-500`
                     : ``,

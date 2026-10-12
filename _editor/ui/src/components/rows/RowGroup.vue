@@ -50,12 +50,14 @@ provideRowDensity(computed(() => density));
             </div>
         </div>
         <!-- Equal rows: each child stretches to the tallest and centres what it holds by `align-content`, which a <Row> (a
-             wrapping flex line) and a plain block child (a note, a skeleton) both answer, without being made a column. -->
+             wrapping flex line) and a plain block child (a note, a skeleton) both answer, without being made a column. The one
+             column is `minmax(0,1fr)`, not the implicit `auto`, so a row's widest control can never widen the card past its
+             pane: it wraps inside the row instead, as it would in a plain block group. -->
         <div
             :class="[
                 undivided === true ? `` : `divide-y divide-line-subtle`,
                 flat === true ? `` : `overflow-hidden rounded-xl bg-card shadow-sm`,
-                equalRows ? `grid md:auto-rows-fr *:content-center` : ``,
+                equalRows ? `grid grid-cols-[minmax(0,1fr)] md:auto-rows-fr *:content-center` : ``,
             ]"
         >
             <slot />
