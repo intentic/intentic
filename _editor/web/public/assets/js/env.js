@@ -12,7 +12,7 @@
   // ../../_tools/constants/dist/one-liner.js
   var SETUP_CODE_PATTERN = /^[A-Za-z0-9]{6,64}$/;
   var SYNC_LEAF_PATTERN = /^[a-z0-9][a-z0-9-]{0,80}$/;
-  var FIX_CODE_PATTERN = /^[A-Za-z0-9-]{1,64}$/;
+  var FIX_CODE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9-]{0,63}$/;
   var SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{1,62}$/;
   var IMAGE_HASH_PATTERN = /^[a-f0-9]{8,64}$/;
   var SHORT_CODE_PATTERN = /^[0-9A-Za-z]{4}-?[0-9A-Za-z]{4}$/;
