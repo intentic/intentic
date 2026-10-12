@@ -1,3 +1,4 @@
+import { slugOfDaemonUrl } from "@intentic/sandbox-run/slug";
 import { hostRunningSandbox } from "@intentic/sandbox-contract";
 import { type DeviceSandboxResources, type DeviceSandboxRow, type EngineFacts, type NoticeModel, type ResourcesForm, runningShape } from "@intentic/ui";
 import { computed, type ComputedRef } from "vue";
@@ -50,10 +51,6 @@ export interface SelfResources {
     readonly refetch: () => void;
 }
 
-// The slug docker knows this container by: the first label of the daemon's own hostname, the same derivation
-// `deviceOps.ts` uses for the Devices tab's self-row and the setup CLI uses on the way in.
-const slugOfDaemon = (daemonUrl: string | undefined): string | undefined => (daemonUrl === undefined ? undefined : new URL(daemonUrl).hostname.split(`.`)[0]);
-
 // One key for reshaping the sandbox on screen, whichever surface asks; the ledger already files it per sandbox.
 const RESHAPE = `devices/self/reshape`;
 
@@ -63,7 +60,9 @@ export function useSelfResources(): SelfResources {
     // is not a reason to wake every connected laptop every ten seconds.
     const { devices, refetch } = useDevices({ poll: false });
 
-    const slug = computed(() => slugOfDaemon(daemonUrl.value));
+    // The slug docker knows this container by, off the daemon's own hostname; undefined rather than a throw for an address
+    // that does not parse, since this is read inside a render.
+    const slug = computed(() => slugOfDaemonUrl(daemonUrl.value));
     const hostId = computed(() => hostRunningSandbox(devices.value, slug.value));
     // Read off the door that answered, not off any device carrying the slug: only a connected, online one reports
     // a share, and `hostRunningSandbox` already picked which door that is.

@@ -10,7 +10,7 @@ import { loopbackPreviewTarget } from "../../features/preview/previewModel";
 import { BROWSERS_SIDE_VIEW, browsersFront, markBrowsersOpened, openBrowsers, showTab } from "../../workbench/browsers/browsersSurface";
 import { browsersPath, parseTabKey, tabKey, type LiveTab } from "../../workbench/browsers/browsersPaths";
 import { openInWorkspace } from "../../features/workspace/files/refs/openFileRef";
-import { PORTS } from "../../lib/queryKeys";
+import { rpcKey } from "../../lib/queryKeys";
 import { queryClient } from "../../lib/queryPersistence";
 import { router } from "../../router";
 import { handOffToMainWindow } from "../../workbench/window/mainWindow";
@@ -35,7 +35,8 @@ const targetName = (id: string): string | undefined => {
 };
 
 // The ports the shell already holds (usePorts, at the rail), read at the click rather than fetched for it.
-const heldPorts = (): readonly PortSummary[] => queryClient.getQueryData<{ readonly ports: readonly PortSummary[] }>(PORTS.of())?.ports ?? [];
+const heldPorts = (): readonly PortSummary[] =>
+    queryClient.getQueryData<{ readonly ports: readonly PortSummary[] }>(rpcKey(`ports.list`))?.ports ?? [];
 
 const frontName = (tab: LiveTab): string | undefined =>
     tab.kind === `preview` ? targetName(tab.id) : tab.kind === `desktop` ? t(`shared.desktop`) : undefined;

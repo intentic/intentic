@@ -1,5 +1,5 @@
 import { parseEnv } from "node:util";
-import { envLine, shellQuote, sqlLiteral, UnquotableValueError } from "./quote.js";
+import { envLine, powershellQuote, shellQuote, sqlLiteral, UnquotableValueError } from "./quote.js";
 
 // Each case is a value that broke a real call site, asserted through the parser it broke (parseEnv, a shell), not the
 // emitted text: text alone would pass a wrong escaping scheme.
@@ -86,4 +86,38 @@ test("a .env line written BY a shell command needs both layers too", () => {
     const word = shellQuote(envLine("ADMIN_PASSWORD", value));
     expect(unquoteShell(word)).toBe(envLine("ADMIN_PASSWORD", value));
     expect(parseEnv(unquoteShell(word))).toEqual({ ADMIN_PASSWORD: value });
+});
+
+// PowerShell's own reading of a single-quoted literal, kept off a real PowerShell for the same reason as unquoteShell:
+// any of its five single-quote characters ends the string unless the next character is one of them too, and then the
+// pair is one literal quote. Answers the decoded text and how many characters the literal took, so a test sees whether
+// the literal ran to the end of the word or something after its close would be read as code.
+const POWERSHELL_QUOTES = new Set(["'", "\u2018", "\u2019", "\u201A", "\u201B"]);
+const readPowershellLiteral = (word: string) => {
+    let text = "";
+    for (let index = 1; index < word.length; index += 1) {
+        const char = word[index] ?? "";
+        if (POWERSHELL_QUOTES.has(char)) {
+            if (!POWERSHELL_QUOTES.has(word[index + 1] ?? "")) {
+                return { text, length: index + 1 };
+            }
+            index += 1;
+        }
+        text += char;
+    }
+    return { text, length: word.length + 1 };
+};
+
+test("powershellQuote doubles every character PowerShell reads as a single quote, typographic ones included", () => {
+    expect(powershellQuote("plain")).toBe("'plain'");
+    expect(powershellQuote("it's")).toBe("'it''s'");
+    for (const quote of ["'", "\u2018", "\u2019", "\u201A", "\u201B"]) {
+        const hostile = `x${quote}; calc; ${quote}`;
+        const word = powershellQuote(hostile);
+        // The literal ends at the word's last character, so nothing of the value is left outside it as a statement.
+        expect(readPowershellLiteral(word)).toEqual({ text: hostile, length: word.length });
+    }
+    // Nothing else inside a single-quoted literal is syntax: `$(...)`, backticks and double quotes stay text.
+    const expanding = 'a$(calc)`n"\u201C$env:X\u201D';
+    expect(readPowershellLiteral(powershellQuote(expanding))).toEqual({ text: expanding, length: powershellQuote(expanding).length });
 });

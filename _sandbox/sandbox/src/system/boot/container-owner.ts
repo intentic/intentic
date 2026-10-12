@@ -1,7 +1,9 @@
-import { readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { sleep } from "@intentic/base/async";
+import { writeFileAtomicSync } from "@intentic/base/fs";
+import { z } from "zod";
+import { readJsonMarkerSync } from "../../store/plain-files/json-marker.js";
 import type { Logger } from "pino";
 import { processIdentity, type ProcessIdentity, sameProcess } from "../resources/proc-stat.js";
 
@@ -30,20 +32,10 @@ export interface ContainerRole {
 
 const claimPath = (home: string): string => join(home, CLAIM_FILE);
 
-const readClaim = (home: string): ContainerClaim | undefined => {
-    try {
-        const claim = JSON.parse(readFileSync(claimPath(home), "utf8")) as Partial<ContainerClaim>;
-        return typeof claim.pid === "number" &&
-            typeof claim.startTimeTicks === "number" &&
-            typeof claim.workspaceRoot === "string" &&
-            typeof claim.historyRoot === "string"
-            ? (claim as ContainerClaim)
-            : undefined;
-    } catch {
-        // No parseable claim exists yet; this run is free to take the container.
-        return undefined;
-    }
-};
+const ContainerClaimSchema = z.object({ pid: z.number(), startTimeTicks: z.number(), workspaceRoot: z.string(), historyRoot: z.string() });
+
+// No parseable claim means none exists yet, and this run is free to take the container.
+const readClaim = (home: string): ContainerClaim | undefined => readJsonMarkerSync(claimPath(home), ContainerClaimSchema);
 
 // Reads who holds the container right now, for anyone re-checking after boot.
 export const claimHolder = (home: string = homedir()): ContainerClaim | undefined => readClaim(home);
@@ -106,7 +98,9 @@ export const claimContainer = async (
         return { container: false, roots: true };
     }
     try {
-        writeFileSync(claimPath(home), JSON.stringify({ ...identity, ...roots }), { mode: 0o600 });
+        // Whole or not at all: a daemon starting beside this one must never read a torn claim as no claim and take the
+        // container too. The mode is set on every write, so a claim file left wider by an older build is closed again.
+        writeFileAtomicSync(claimPath(home), JSON.stringify({ ...identity, ...roots }), 0o600);
     } catch (error) {
         logger.warn({ err: error }, "could not claim this container, not converging session state or ssh hosts onto it");
         return { container: false, roots: true };

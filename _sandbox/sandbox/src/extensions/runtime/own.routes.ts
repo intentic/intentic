@@ -1,3 +1,4 @@
+import { serialLock } from "@intentic/base/async";
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { EXTENSION_EVENTS_HEARTBEAT_MS, type ExtensionEvent, type ExtensionOwnSettings } from "@intentic/sandbox-contract/extension-protocol";
 import type { Context } from "hono";
@@ -78,9 +79,9 @@ export const createExtensionOwnRoutes = (services: Services) => ({
                 }
             };
             // One comparison at a time, in the order the triggers came.
-            let checking: Promise<void> = Promise.resolve();
+            const inOrder = serialLock();
             const recheck = (): void => {
-                checking = checking.then(compare);
+                void inOrder(compare);
             };
             const settingsFile = extensionSettingsDocument.path;
             const stops = [

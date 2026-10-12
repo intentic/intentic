@@ -30,22 +30,41 @@ export const workingReviewKeys: readonly (readonly string[])[] = WORKING_REVIEW.
 export const AGENT_REVIEW: readonly ProcedureName[] = [`agents.diff`, `agents.fileDiff`, `agents.history`];
 export const agentReviewPrefixes: readonly (readonly string[])[] = AGENT_REVIEW.map(rpcPrefix);
 
-// The contract reads each name the daemon pushes stands for (WORKSPACE_STATE_FILES, RUNTIME_DOMAIN_BINDINGS, runtime
-// paths joined by `/`), since the daemon's tables name cache entries and a read is filed under its route name.
+// The contract reads each name the daemon pushes stands for (WORKSPACE_STATE_FILES, RUNTIME_DOMAIN_BINDINGS, an
+// extension's `contributes.files`, runtime paths joined by `/`), since the daemon's tables name cache entries and a read
+// is filed under its route name, the shell's and an extension's `api.sandbox.readKey(...)` alike.
 const PUSHED_READS: Readonly<Record<string, readonly ProcedureName[]>> = {
+    // The activity extension's status card: the daemon's activity domain, and the config files its manifest names.
+    "activity-status": [`activity.status`],
+    // A dev server starting or stopping: each monorepo's app list.
+    apps: [`workspace.appsList`],
+    // The approvals queue, by its directory's write or the daemon's own domain; hook sets ride it, living off /work.
+    approvals: [`approvals.list`, `approvals.hookRequests`],
+    // A held automation wake parked, approved or rejected.
+    "automation-approvals": [`automations.pendingList`],
     areas: [`areas.list`],
+    // The automations extension's manifest names its own files by this.
+    automations: [`automations.list`],
     browsers: [`system.browsers`],
     capabilities: [`capabilities.list`],
+    // The CI sweep's board, which the pipelines board, its rail badge and the CI trigger's delivery note all read.
+    "ci-runs": [`ci.runs`],
     desktop: [`system.desktop`],
     devices: [`system.devices`],
     extensions: [`extensions.list`],
     "git/changes": WORKING_REVIEW,
+    // A standing yes written by a card or taken back, outside any need's answer: only the Allowed list reads them.
+    grants: [`needs.grants`],
     "loop-designs": [`loops.designs`],
     manifests: [`system.manifestProblems`],
     // What agents wait on people for: the chat's need cards, the conversation strip, the board and the inbox share it.
     needs: [`needs.list`, `needs.grants`],
     panels: [`panels.list`],
     personas: [`personas.list`, `personas.kit`],
+    // The forward table moving: the rail's exposure indicator, Preview's targets and the preview extension's ports view.
+    ports: [`ports.list`],
+    // A write under `public/`, through the preview extension's manifest: its outbox view and the shell's Preview target.
+    public: [`public.list`],
     "privacy-log": [`privacy.log`],
     "rule-firings": [`settings.firings`],
     "safety-log": [`safety.log`],
@@ -114,21 +133,17 @@ export const SANDBOX_TRASH = family(`sandbox-trash`);
 
 // ---- sandbox surfaces ----
 
-// Per-repo app lists (`of(repo)`); the daemon's runtime push invalidates the bare `apps` prefix on any dev-server
-// change, reaching every per-repo variant at once.
+// Every monorepo's apps for the preview list (`of([...repos])`), one per-repo read each; the daemon's runtime push
+// invalidates the bare `apps` prefix on any dev-server change. The repo list rides as ONE array element, so no key made
+// of plain names (an extension's `api.sandbox.key("apps", repo)`) can ever equal it and store another shape under it.
 export const APPS = family(`apps`);
 export const BUNDLE_EXPORTS = family(`bundle-exports`);
 export const DEPLOYMENTS = family(`deployments`);
 export const ENGINES = family(`engines`);
 export const ENVIRONMENT = family(`environment`);
 export const ENVIRONMENT_CONTENTS = family(`environment-contents`);
-// Shared with the preview extension's ports view by exact key, as `PUBLIC` is below.
-export const PORTS = family(`ports`);
 // This sandbox's runners: the machines it can hand a conversation to.
 export const RUNNERS = family(`runners`);
-// Shared with the preview extension by exact path: its manifest binds `public/` to the name `public`, so
-// `family("public").of()` and its `api.key("public")` produce the identical key and share one push.
-export const PUBLIC = family(`public`);
 export const REGISTRY = family(`registry`);
 export const SANDBOX_MEMBERS = family(`members`);
 export const SYNC_HEALTH = family(`sync-health`);

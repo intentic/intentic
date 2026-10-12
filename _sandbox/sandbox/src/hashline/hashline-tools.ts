@@ -1,11 +1,11 @@
-import { readFile, realpath, stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
 import { errorMessage } from "@intentic/base/errors";
 import { queueOnFile, writeFileAtomic } from "@intentic/base/fs";
 import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { sdk } from "../engines/claude-sdk.js";
 import { z } from "zod";
-import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
+import { realWithin, resolveWithin } from "../workspace/files/workspace-files-paths.js";
 import { applyEdit, type HashlineEdit, type HashlineOp, renderForEdit, renderForRead } from "./hashline.js";
 
 // The hashline file tools (in-process SDK MCP server, the uiServer/discord-voice pattern). Registered, and the native
@@ -23,8 +23,14 @@ const opSchema = z.discriminatedUnion("op", [
     z.object({ op: z.literal("delete"), from: z.string(), to: z.string().optional() }),
 ]);
 
-// The file a write lands in: a symlink's target, since a rename over the link would replace it with a plain file.
-const writeTarget = (abs: string): Promise<string> => realpath(abs).catch(() => abs);
+// The file a path really names, or undefined when it is not inside the workspace. Checked twice: lexically, so `../`
+// and absolute paths elsewhere are refused, and on disk, because a symlink inside the root can point anywhere and the
+// write follows it (a rename over the link itself would replace it with a plain file). A missing file resolves
+// through its deepest existing folder, so creating one is judged by where it would land.
+const fileWithin = async (root: string, path: string): Promise<string | undefined> => {
+    const abs = resolveWithin(root, path);
+    return abs === undefined ? undefined : realWithin(root, abs);
+};
 
 // Atomic, and an existing file keeps its mode.
 const replaceFile = async (target: string, content: string): Promise<void> => {
@@ -48,7 +54,7 @@ export const createHashlineServer = (root: string): McpSdkServerConfigWithInstan
                     limit: z.number().int().min(1).optional().describe("Most lines to show (default 2000)"),
                 },
                 async ({ path, offset, limit }) => {
-                    const abs = resolveWithin(root, path);
+                    const abs = await fileWithin(root, path);
                     if (abs === undefined) {
                         return fail(`path is outside the workspace: ${path}`);
                     }
@@ -69,11 +75,10 @@ export const createHashlineServer = (root: string): McpSdkServerConfigWithInstan
                     ops: z.array(opSchema).min(1).describe("Anchored edit ops, applied together"),
                 },
                 async ({ path, anchor, ops }) => {
-                    const abs = resolveWithin(root, path);
-                    if (abs === undefined) {
+                    const target = await fileWithin(root, path);
+                    if (target === undefined) {
                         return fail(`path is outside the workspace: ${path}`);
                     }
-                    const target = await writeTarget(abs);
                     // Queued per file, so of two edits built on one anchor the second is refused as stale, not lost.
                     return queueOnFile(target, async () => {
                         let content: string;
@@ -99,11 +104,10 @@ export const createHashlineServer = (root: string): McpSdkServerConfigWithInstan
                 "Create a new file or overwrite an existing one with the given content; an existing file keeps its mode. Use this for new files; use hashline_edit to change part of an existing file (far fewer output tokens).",
                 { path: z.string().describe("Absolute or workspace-relative path"), content: z.string().describe("Full file content") },
                 async ({ path, content }) => {
-                    const abs = resolveWithin(root, path);
-                    if (abs === undefined) {
+                    const target = await fileWithin(root, path);
+                    if (target === undefined) {
                         return fail(`path is outside the workspace: ${path}`);
                     }
-                    const target = await writeTarget(abs);
                     await queueOnFile(target, () => replaceFile(target, content));
                     return ok(`wrote ${path} (${content.length} bytes)`);
                 },

@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pollUntil, sleep } from "@intentic/base/async";
+import { oneLine } from "@intentic/base/one-line";
 import { type AgentJob, profileOf, type TurnProfile, TurnProfileSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
@@ -49,17 +51,12 @@ const END_POLL_MS = 30_000;
 // Ended jobs a conversation's card keeps, newest last.
 export const ENDINGS_KEPT = 8;
 
-const oneLine = (text: string): string => {
-    const line = text.replaceAll(/\s+/gu, " ").trim();
-    return line.length <= COMMAND_LINE_CHARS ? line : `${line.slice(0, COMMAND_LINE_CHARS - 1)}…`;
-};
-
 /** The job's command as one readable line. */
-export const jobCommandLine = (command: string): string => oneLine(command);
+export const jobCommandLine = (command: string): string => oneLine(command, COMMAND_LINE_CHARS);
 
 /** What a person is shown the job as: the agent's own description of the call, else its command. */
 export const jobLabel = (description: string | undefined, command: string): string => {
-    const said = oneLine(description ?? "");
+    const said = oneLine(description ?? "", COMMAND_LINE_CHARS);
     return said === "" ? jobCommandLine(command) : said;
 };
 
@@ -722,10 +719,7 @@ export const portJobOf = (actors: Holders, port: number): { readonly conversatio
 
 // The runner publishes the status once its command is gone; this gives it the moment that takes.
 const untilFinished = async (job: BackgroundJob, ms: number): Promise<void> => {
-    const deadline = Date.now() + ms;
-    while (!jobFinished(job) && Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, 50).unref());
-    }
+    await pollUntil(() => jobFinished(job), { intervalMs: 50, timeoutMs: ms, wait: (wait) => sleep(wait, { unref: true }) });
 };
 
 /**

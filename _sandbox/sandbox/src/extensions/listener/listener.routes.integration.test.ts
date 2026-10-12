@@ -14,6 +14,7 @@ import { automationConfig } from "../../harness/route-stores.testing.js";
 import type { Services } from "../../composition.js";
 import { fileThreadSessionsStore } from "../../sessions/thread-sessions.js";
 import { unstubbed } from "@intentic/testing";
+import { PAYLOAD_MAX } from "../../automations/scheduler.js";
 import { listenerStateOf } from "./listener-state.js";
 import { listenerStatus } from "./listener-status.js";
 import { createListenerRoutes } from "./listener.routes.js";
@@ -140,6 +141,30 @@ test("a message whose provider mismatches the route path is rejected", async () 
     const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-route-")));
     const res = await postJson(appFor(services, fakeWake([])), "/listeners/discord/dispatch", message({ provider: "slack" }));
     expect(res.status).toBe(400);
+});
+
+// A chunked body declares no length, so the old header check let it through to be read whole. This one never ends: only
+// a read that counts what arrives can answer it, and it must stop pulling soon after the cap.
+test("dispatch refuses an oversized chunked body with 413, reading little past the cap", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-route-")));
+    const prompts: string[] = [];
+    let pulled = 0;
+    const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+            pulled += 4096;
+            controller.enqueue(new Uint8Array(4096).fill(0x20));
+        },
+    });
+    const res = await appFor(services, fakeWake(prompts)).request("/listeners/discord/dispatch", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-intentic-extension": "discord-token" },
+        body,
+        // SAFETY: `duplex` is required by the runtime for a stream body but missing from the DOM RequestInit type.
+        duplex: "half",
+    } as RequestInit);
+    expect(res.status).toBe(413);
+    expect(pulled).toBeLessThan(PAYLOAD_MAX + 4 * 4096);
+    expect(prompts).toEqual([]);
 });
 
 test("failure records an error run on the provider's listener automations", async () => {

@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { cachedAsync } from "@intentic/base/held";
 import type { ListeningPort } from "../ports/port-scan.js";
 import { oneServerPerDir, panelKey } from "./panels.js";
 
@@ -94,32 +95,14 @@ export const createPanelUpstreamResolver = (deps: {
 }): PanelUpstreamResolver => {
     const ttl = deps.ttlMs ?? 2000;
     type Snapshot = { readonly repos: readonly string[]; readonly listeners: readonly ListeningPort[] };
-    let fresh: { readonly at: number; readonly snapshot: Snapshot } | undefined;
-    let reading: Promise<Snapshot> | undefined;
-    const state = (): Promise<Snapshot> => {
-        if (fresh !== undefined && Date.now() - fresh.at <= ttl) {
-            return Promise.resolve(fresh.snapshot);
-        }
-        // Coalesced by the in-flight read, not the window: callers within one tick share the running walk's answer.
-        if (reading !== undefined) {
-            return reading;
-        }
-        const walk = Promise.all([deps.repos(), deps.listeners()]).then(([repos, listeners]) => {
-            const snapshot: Snapshot = { repos, listeners };
-            // Only a successful scan is cached; a failure leaves nothing, so the next request retries instead of an
-            // error.
-            fresh = { at: Date.now(), snapshot };
-            return snapshot;
+    // Coalesced by the in-flight read as well as the window: callers within one tick share the running walk's answer.
+    // Only a successful scan is cached; a failure leaves nothing, so the next request retries instead of an error.
+    const scans = cachedAsync<undefined, Snapshot>({ ttlMs: ttl });
+    const state = (): Promise<Snapshot> =>
+        scans.get(undefined, async () => {
+            const [repos, listeners] = await Promise.all([deps.repos(), deps.listeners()]);
+            return { repos, listeners };
         });
-        const settled = (): void => {
-            if (reading === walk) {
-                reading = undefined;
-            }
-        };
-        walk.then(settled, settled);
-        reading = walk;
-        return walk;
-    };
     return async (key) => {
         const assigned = deps.portOf(key);
         // The scan enriches, not answers: without it, the assignment alone says whether the daemon runs this panel.

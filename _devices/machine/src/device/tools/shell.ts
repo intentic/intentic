@@ -1,9 +1,8 @@
-import { type ChildProcess, spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
-import { StringDecoder } from "node:string_decoder";
 import { homeDir } from "@intentic/local-agent";
-import { sleep } from "@intentic/base/async";
-import { COMMAND_CLASS_LABELS, type CommandClass, type DeviceScopes, matchCommand } from "@intentic/sandbox-contract";
+import { COMMAND_CLASS_LABELS, type CommandClass, type DeviceScopes, matchCommand, hardRuleClasses } from "@intentic/sandbox-contract";
+import { type CollectedOutput, runBounded, stopProcessTree } from "@intentic/base/process";
 import { assertPath, assertScope, rootsOf, ScopeError } from "../policy.js";
 import { crossInterpreter, type Interpreter, POWERSHELL_FLAGS, targetOf } from "../../environments/crossing.js";
 import { thisSide } from "../../environments/wsl.js";
@@ -23,11 +22,6 @@ export const MAX_TIMEOUT_MS = 10 * 60 * 1000;
 // Characters kept per stream, half from the start and half from the end: the head says what the command did, the
 // tail says how it ended, and the megabyte of progress bars between them is counted rather than kept.
 const MAX_OUTPUT = 100_000;
-// How long the pipes may stay open once the command has exited. Whatever holds them after that was left running in
-// the background, and does not get to hold the call open until it ends.
-const PIPE_GRACE_MS = 1_000;
-// How long a timed-out command's processes get to act on SIGTERM before SIGKILL.
-const KILL_GRACE_MS = 2_000;
 
 export const shellFor = (
     platform: NodeJS.Platform,
@@ -49,11 +43,7 @@ export const shellFor = (
     return { command: shell, args: (script) => ["-lc", script], label: shell };
 };
 
-export interface CollectedOutput {
-    readonly text: string;
-    // Characters left out of the middle; the text marks where.
-    readonly dropped: number;
-}
+export type { CollectedOutput };
 
 export interface CommandResult {
     readonly exitCode: number | null;
@@ -64,122 +54,63 @@ export interface CommandResult {
     readonly lingering: boolean;
 }
 
-// One stream in bounded memory: the head, a rolling tail, and a count of what fell between. Decoded as a stream, so a
-// character split across two chunks arrives whole.
-const collector = (): { readonly write: (chunk: Buffer) => void; readonly end: () => CollectedOutput } => {
-    const decoder = new StringDecoder("utf8");
-    const half = MAX_OUTPUT / 2;
-    let head = "";
-    let tail = "";
-    let dropped = 0;
-    const take = (text: string): void => {
-        const room = Math.max(half - head.length, 0);
-        head += text.slice(0, room);
-        tail += text.slice(room);
-        if (tail.length > half) {
-            dropped += tail.length - half;
-            tail = tail.slice(-half);
-        }
-    };
-    return {
-        write: (chunk) => take(decoder.write(chunk)),
-        end: () => {
-            take(decoder.end());
-            return { text: dropped === 0 ? `${head}${tail}` : `${head}\n… [${dropped} characters cut] …\n${tail}`, dropped };
-        },
-    };
-};
-
-const signalGroup = (pid: number, signal: NodeJS.Signals): void => {
-    try {
-        process.kill(-pid, signal);
-    } catch {
-        // Nothing of the group is left to signal.
-    }
-};
-
-// Everything the command started, not only its shell: SIGTERM to its process group, then SIGKILL to what is left.
-// Windows has no process groups, and no SIGTERM a console program hears, so taskkill ends the whole tree at once.
-const stopTree = async (child: ChildProcess): Promise<void> => {
-    const pid = child.pid;
-    if (pid === undefined) {
-        return;
-    }
-    if (process.platform === "win32") {
-        await new Promise<void>((resolve) => {
-            spawn("taskkill", ["/pid", String(pid), "/T", "/F"], { stdio: "ignore", windowsHide: true })
-                .once("exit", () => resolve())
-                .once("error", () => resolve());
-        });
-        // The shell at least, should taskkill have failed; a no-op once it has done its job.
-        child.kill();
-        return;
-    }
-    signalGroup(pid, "SIGTERM");
-    await sleep(KILL_GRACE_MS);
-    signalGroup(pid, "SIGKILL");
-};
-
 // Every command running right now. The agent's supervisor no longer takes them down with it (KillMode=process, so an
 // ic mid-swap outlives a restart), so a stopping agent ends them itself: nobody is left to read their answer, and their
 // deadline dies with it. One the agent dies under is ended by the next agent instead (command-ledger.ts).
 const inFlight = new Set<ChildProcess>();
 
 export const stopRunningCommands = async (): Promise<void> => {
-    await Promise.all([...inFlight].map(stopTree));
+    await Promise.all([...inFlight].map(async (child) => await stopProcessTree(child)));
 };
 
+// The command's process as it spawns, and its entry in the ledger: a holder rather than two `let`s, which the compiler
+// would read as still unset once the run is over.
+interface Spawned {
+    child?: ChildProcess;
+    recorded?: Promise<void>;
+}
+
 // Resolves once the command has exited and its output is in, not when the last process holding its pipes lets go:
-// a server it started in the background would otherwise hold the call until the device call's own deadline.
+// a server it started in the background would otherwise hold the call until the device call's own deadline. The
+// runner gives it a process group of its own, which the deadline ends whole, and no stdin, so anything that asks a
+// question reads EOF and fails fast instead of waiting out the timeout. No shell:true: the argv is already an
+// interpreter invocation, and a second shell parsing it would mean two layers of quoting rules.
 const execute = async (interpreter: Interpreter, timeout: number): Promise<CommandResult> => {
-    const child = spawn(interpreter.command, [...interpreter.args], {
-        ...(interpreter.cwd === undefined ? {} : { cwd: interpreter.cwd }),
+    const spawned: Spawned = {};
+    const result = await runBounded(interpreter.command, interpreter.args, {
+        cwd: interpreter.cwd,
         env: interpreter.env,
-        // No stdin: anything that asks a question reads EOF and fails fast instead of waiting out the timeout.
-        stdio: ["ignore", "pipe", "pipe"],
-        // A process group of its own, which a timeout ends whole. On Windows this would open a console window instead.
-        detached: process.platform !== "win32",
-        // No shell:true; the argv is already an interpreter invocation, and a second shell parsing it would mean
-        // two layers of quoting rules.
-        windowsHide: true,
+        timeoutMs: timeout,
+        maxOutput: MAX_OUTPUT,
+        onSpawn: (child) => {
+            spawned.child = child;
+            inFlight.add(child);
+            // Written down before it can be crossed off: a command that ends at once must not leave its entry behind.
+            if (child.pid !== undefined && process.platform !== "win32") {
+                spawned.recorded = recordCommand(child.pid);
+            }
+        },
     });
-    inFlight.add(child);
-    const pid = child.pid;
-    // Written down before it can be crossed off: a command that ends at once must not leave its entry behind.
-    const recorded = pid === undefined || process.platform === "win32" ? Promise.resolve() : recordCommand(pid);
-    const stdout = collector();
-    const stderr = collector();
-    child.stdout.on("data", stdout.write);
-    child.stderr.on("data", stderr.write);
-    // Listened for from the start: `close` can follow `exit` within the same tick.
-    const closed = new Promise<true>((resolve) => child.once("close", () => resolve(true)));
-    let stopping: Promise<void> | undefined;
-    const deadline = setTimeout(() => {
-        stopping = stopTree(child);
-    }, timeout);
-    const exitCode = await new Promise<number | null>((resolve, reject) => {
-        child.once("exit", (code) => resolve(code));
-        child.once("error", reject);
-    }).finally(() => {
-        clearTimeout(deadline);
+    const { child, recorded = Promise.resolve() } = spawned;
+    if (child !== undefined) {
         inFlight.delete(child);
+        const pid = child.pid;
         if (pid !== undefined) {
             void recorded.then(async () => await forgetCommand(pid));
         }
-    });
-    await stopping;
-    const drained = await Promise.race([closed, sleep(PIPE_GRACE_MS, { unref: true }).then(() => false)]);
-    if (!drained) {
-        child.stdout.destroy();
-        child.stderr.destroy();
     }
-    return { exitCode, stdout: stdout.end(), stderr: stderr.end(), timedOut: stopping !== undefined, lingering: !drained };
+    // A command that could not start at all (a missing interpreter) is the call's failure, as it always was.
+    if (result.spawnError !== undefined) {
+        throw result.spawnError;
+    }
+    return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr, timedOut: result.timedOut, lingering: result.lingering };
 };
 
 // The classes that need `destructive` on top of `shell`: each spends something this machine cannot get back
-// (untracked files, a whole disk, a named container volume that on somebody's own computer IS the database).
-// The rest of the catalog is deliberately not gated here.
-const GATED_CLASSES: ReadonlySet<CommandClass> = new Set<CommandClass>(["files.destructive", "system.destructive", "container.state"]);
+// (untracked files, a whole disk, a named container volume that on somebody's own computer IS the database). The
+// contract's hard rule for a device is that set, so the Safety page's panel and this gate cannot disagree. The rest of
+// the catalog is deliberately not gated here.
+const GATED_CLASSES: ReadonlySet<CommandClass> = hardRuleClasses("device");
 
 // The refusal a destructive command earns, naming what the classifier saw so the user can judge the ask.
 export const destructiveRefusal = (classes: readonly CommandClass[]): string =>

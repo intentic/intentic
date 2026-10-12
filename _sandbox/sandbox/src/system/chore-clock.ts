@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import type { Logger } from "pino";
+import { startPeriodic } from "@intentic/base/async";
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDocument } from "../store/open-document.js";
@@ -79,18 +80,17 @@ export const startChoreClock = (deps: ChoreClockDeps, chores: readonly Chore[]):
         const due = chores.filter((chore) => !running.has(chore.name) && choreDue(ran[chore.name], chore.everyMs, now()) && (chore.when?.() ?? true));
         await Promise.all(due.map(runOne));
     };
-    let interval: NodeJS.Timeout | undefined;
-    const warmup = setTimeout(() => {
-        void tick();
-        interval = setInterval(() => void tick(), deps.tickMs ?? TICK_MS);
-        interval.unref();
-    }, deps.warmupMs ?? WARMUP_MS);
-    warmup.unref();
+    const loop = startPeriodic({
+        warmupMs: deps.warmupMs ?? WARMUP_MS,
+        everyMs: deps.tickMs ?? TICK_MS,
+        // Not awaited: the clock keeps one run per chore itself, so a daily chore still going must not hold back an
+        // hourly one that falls due meanwhile, which skipping the whole tick would.
+        run: () => {
+            void tick();
+        },
+    });
     return {
         tick,
-        stop: () => {
-            clearTimeout(warmup);
-            clearInterval(interval);
-        },
+        stop: () => loop.dispose(),
     };
 };

@@ -207,6 +207,44 @@ const addressFor = async (route: number, upstream: string, conversationId = "c1"
     `http://127.0.0.1:8790/${await sessions.sign({ capability: "service", route, upstream, conversationId })}`;
 
 describe("the credential gateway", () => {
+    // Hop-by-hop headers describe the agent's connection to the gateway and the service's to it, never the request.
+    test("passes on no hop-by-hop header, nor any the Connection header names, either way", async () => {
+        const upstream = await upstreamServer(() => ({
+            status: 200,
+            headers: { "content-type": "application/json", connection: "x-upstream-hop", "x-upstream-hop": "1", "x-kept": "yes" },
+            body: "{}",
+        }));
+        try {
+            const card: GatewayCard = {
+                name: "Service (service)",
+                config: { token: "real-secret", url: upstream.origin },
+                broker: { routes: [{ upstream: "${url}/api", env: "SERVICE_URL", headers: { authorization: "Bearer ${token}" } }] },
+            };
+            const base = await addressFor(0, `${upstream.origin}/api`);
+            const response = await createGateway(harness(card).deps)(
+                new Request(`${base}/x`, {
+                    headers: {
+                        connection: "x-agent-hop",
+                        "x-agent-hop": "1",
+                        "proxy-authorization": "Basic cHJveHk6cGFzcw",
+                        te: "trailers",
+                        "x-kept": "yes",
+                    },
+                }),
+            );
+            const sent = upstream.seen[0]?.headers;
+            expect(sent?.["x-agent-hop"]).toBeUndefined();
+            expect(sent?.["proxy-authorization"]).toBeUndefined();
+            expect(sent?.["te"]).toBeUndefined();
+            expect(sent?.["x-kept"]).toBe("yes");
+            expect(sent?.["authorization"]).toBe("Bearer real-secret");
+            expect(response.headers.has("x-upstream-hop")).toBe(false);
+            expect(response.headers.get("x-kept")).toBe("yes");
+        } finally {
+            await upstream.close();
+        }
+    });
+
     test("attaches the credential, drops the placeholder, and forwards to the declared upstream only", async () => {
         const upstream = await upstreamServer();
         try {

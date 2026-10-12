@@ -1,6 +1,5 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { rm, writeFile } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
-import { undefinedIfMissing } from "@intentic/base/errors";
 import { pathExists } from "@intentic/base/fs";
 import { STATE_DIR } from "@intentic/constants";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
@@ -12,6 +11,7 @@ import { commitIndex, stageAll } from "../changes/changes-index.js";
 import { scratchOf, scratchScopeOf } from "../changes/scratch.js";
 import { AGENT_GIT_AUTHOR } from "../../git-identity.js";
 import { ignoreFileMode } from "./repo-git-dirs.js";
+import { ensureLines } from "../../store/plain-files/text-file.js";
 
 // The whole /work workspace under version control, not just nested repos, so root files commit/discard like any repo's.
 // Git dir lives on /history; the in-worktree `.git` is a pointer reconverged if deleted. Idempotent: init runs once;
@@ -170,20 +170,14 @@ export const ensureRootRepo = async (
     return false;
 };
 
-// Appends the daemon's state dir and reference shelf to $GIT_DIR/info/exclude (git's local-only ignores), grown once
-// rather than rewritten. Uses `--git-common-dir`, not `.git`, since the folder may itself be a worktree.
-const LOCAL_EXCLUDE_BLOCK = `# intentic: local workspace state, not project files\n/${STATE_DIR}/\n/${REFERENCE_DIR}/\n`;
+// Appends the daemon's state dir and reference shelf to $GIT_DIR/info/exclude (git's local-only ignores), grown
+// rather than rewritten: the user's own excludes live there too. Uses `--git-common-dir`, not `.git`, since the folder
+// may itself be a worktree.
+const LOCAL_EXCLUDE_NOTE = "# intentic: local workspace state, not project files";
 const ensureLocalStateExcluded = async (root: string, git: GitRunner): Promise<void> => {
     const printed = (await git(root, ["rev-parse", "--git-common-dir"])).stdout.trim();
     const gitDir = isAbsolute(printed) ? printed : join(root, printed);
-    const target = join(gitDir, "info", "exclude");
-    // Only absence reads as empty: the write below replaces the file, and these are the user's own excludes.
-    const existing = (await readFile(target, "utf8").catch(undefinedIfMissing)) ?? "";
-    if (existing.includes(`/${STATE_DIR}/`)) {
-        return;
-    }
-    await mkdir(join(gitDir, "info"), { recursive: true });
-    await writeFile(target, `${existing === "" || existing.endsWith("\n") ? existing : `${existing}\n`}${LOCAL_EXCLUDE_BLOCK}`);
+    await ensureLines(join(gitDir, "info", "exclude"), [`/${STATE_DIR}/`, `/${REFERENCE_DIR}/`], { note: LOCAL_EXCLUDE_NOTE });
 };
 
 // For a workspace the user owns: an existing repo is left exactly as it stands, no init, no pointer, no index surgery.

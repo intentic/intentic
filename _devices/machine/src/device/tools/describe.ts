@@ -1,7 +1,6 @@
-import { execFile } from "node:child_process";
 import { arch, hostname, platform, release, type } from "node:os";
+import { execBounded } from "@intentic/base/process";
 import { homeDir } from "@intentic/local-agent";
-import { promisify } from "node:util";
 import { DEVICE_FEATURE_LOOPBACK_CATCH, DEVICE_FEATURE_PROGRAMS, DEVICE_FEATURE_PROJECT_DELIVERY, type DeviceFacts, type DeviceScopes } from "@intentic/sandbox-contract";
 import { type LinkReading, readLinkStates, unreachableIn } from "../config.js";
 import { rootsOf, rootsText } from "../policy.js";
@@ -17,22 +16,20 @@ import { readUpkeepSummary } from "../../upkeep/reconcile.js";
 // boundary) and reports the refusal as a bug. Sent unprompted in the hello frame and on the sandbox's
 // capability card.
 
-const exec = promisify(execFile);
-
 const osName = async (): Promise<string> => {
     if (platform() === "win32") {
-        const { stdout } = await exec(
+        const { stdout } = await execBounded(
             "powershell.exe",
             ["-NoProfile", "-NonInteractive", "-Command", "(Get-CimInstance Win32_OperatingSystem).Caption"],
-            // The agent that calls this has no console (see tools/sandboxes.ts), so this asks for its own windowless one
-            // rather than being given a visible console by Windows.
-            { windowsHide: true },
+            // The agent that calls this has no console (see tools/sandboxes.ts); the runner asks for a windowless one
+            // rather than being given a visible console by Windows. A WMI that does not answer must not hold the report.
+            { timeoutMs: 30_000 },
         ).catch(() => ({ stdout: "" }));
         const caption = stdout.trim();
         return caption === "" ? `Windows (${release()})` : `${caption} (build ${release()})`;
     }
     // /etc/os-release is the one file every modern distribution has, and PRETTY_NAME is the line humans use.
-    const { stdout } = await exec("sh", ["-c", '. /etc/os-release 2>/dev/null && printf %s "$PRETTY_NAME"']).catch(() => ({ stdout: "" }));
+    const { stdout } = await execBounded("sh", ["-c", '. /etc/os-release 2>/dev/null && printf %s "$PRETTY_NAME"'], { timeoutMs: 10_000 }).catch(() => ({ stdout: "" }));
     const pretty = stdout.trim();
     return pretty === "" ? `${type()} ${release()}` : `${pretty} (kernel ${release()})`;
 };
@@ -41,7 +38,7 @@ const osName = async (): Promise<string> => {
 // host). Read via `docker info` since on two of the three platforms that's a different computer from this
 // one's own /proc. Bounded by a short timeout; absent, never guessed.
 const engineFacts = async (): Promise<DeviceFacts["engine"]> => {
-    const { stdout } = await exec("docker", ["info", "--format", "{{.MemTotal}} {{.NCPU}}"], { timeout: 5_000, windowsHide: true }).catch(() => ({
+    const { stdout } = await execBounded("docker", ["info", "--format", "{{.MemTotal}} {{.NCPU}}"], { timeoutMs: 5_000 }).catch(() => ({
         stdout: "",
     }));
     const [memoryBytes, cpus] = stdout.trim().split(/\s+/).map(Number);

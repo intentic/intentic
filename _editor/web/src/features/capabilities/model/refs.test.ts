@@ -30,6 +30,11 @@ describe(`refGroups`, () => {
         expect(labels(refs, `Releases`)).toEqual([`v1.2.0`, `v1.2.0-rc.2`, `v1.2.0-rc.1`]);
     });
 
+    test(`prereleases order by semver, so rc.10 follows rc.9`, () => {
+        const refs = repo(`main`, tag(`v1.2.0-rc.9`), tag(`v1.2.0-rc.10`));
+        expect(labels(refs, `Releases`)).toEqual([`v1.2.0-rc.10`, `v1.2.0-rc.9`]);
+    });
+
     test(`tags that are not versions sort newest-name-first, after the ones that are`, () => {
         const refs = repo(`main`, tag(`nightly`), tag(`2024-05-01`), tag(`v1.0.0`), tag(`2024-06-01`));
         expect(labels(refs, `Releases`)).toEqual([`v1.0.0`, `nightly`, `2024-06-01`, `2024-05-01`]);

@@ -1,6 +1,7 @@
-import { sleep } from "@intentic/base/async";
+import { anySignal } from "@intentic/base/async";
 import type { Log } from "@intentic/local-agent";
 import { SANDBOX_ID, sandboxIdFromUrl } from "@intentic/sandbox-contract";
+import { redeemWhileWarming } from "@intentic/sandbox-contract/pairing-redeem";
 import { localDaemonUrlInsecure } from "@intentic/sandbox-run";
 
 // Resolves which address reaches a sandbox's daemon: loopback when the container publishes one, else the public URL.
@@ -84,28 +85,36 @@ export interface WarmingAsk {
     readonly delayMs?: number | undefined;
 }
 
+// One try's ceiling: a warming sandbox answers 5xx in seconds, so a try past this is a connection nobody will answer.
+const REDEEM_ATTEMPT_TIMEOUT_MS = 30_000;
+
 // A POST through a tunnel that may still be warming: a network error or a 5xx is retried, anything else is the caller's.
 export const postWhileWarming = async (sandboxUrl: string, path: string, init: RequestInit, ask: WarmingAsk): Promise<Response> => {
     const { doing, expired, say = () => undefined, attempts = 10, delayMs = 3000 } = ask;
-    for (let attempt = 1; ; attempt++) {
-        // Resolved per attempt, since loopback may only appear partway through the retries.
-        const { base } = await resolveDaemonBase(sandboxUrl);
-        const response = await fetch(`${base}${path}`, { ...init, method: "POST" }).catch((error: unknown) => {
-            if (attempt >= attempts) {
-                throw error;
-            }
-            return undefined;
-        });
-        if (response?.status === 401) {
-            throw new Error(expired);
-        }
-        if (response !== undefined && (response.status < 500 || attempt >= attempts)) {
-            return response;
-        }
-        const why = response === undefined ? "the sandbox isn't reachable yet" : `the sandbox is warming up (HTTP ${response.status})`;
-        say(`${doing}: ${why}, retrying (${attempt}/${attempts})…`);
-        await sleep(delayMs);
+    const outcome = await redeemWhileWarming(
+        async (_attempt, signal) => {
+            // Resolved per attempt, since loopback may only appear partway through the retries.
+            const { base } = await resolveDaemonBase(sandboxUrl);
+            return fetch(`${base}${path}`, { ...init, method: "POST", signal: anySignal(signal, init.signal ?? undefined) });
+        },
+        {
+            attempts,
+            delayMs,
+            // A tunnel that accepts the connection and never answers would otherwise hold the pairing forever.
+            timeoutMs: REDEEM_ATTEMPT_TIMEOUT_MS,
+            onRetry: (attempt, why) => {
+                const said = why.kind === "unreachable" ? "the sandbox isn't reachable yet" : `the sandbox is warming up (HTTP ${why.status})`;
+                say(`${doing}: ${said}, retrying (${attempt}/${attempts})…`);
+            },
+        },
+    );
+    if (outcome.kind === "unreachable") {
+        throw outcome.error;
     }
+    if (outcome.response.status === 401) {
+        throw new Error(expired);
+    }
+    return outcome.response;
 };
 
 // The sync half's caching policy for resolve; the device half resolves once per dial and skips all of this

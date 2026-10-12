@@ -13,6 +13,7 @@ import type {
     WorkflowStepRun,
 } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
+import type { RestartResume } from "../agent/run/turn/restart-resume-policy.js";
 import { resumeCapped, resumeLoops, runLoop, stopLoop } from "../loops/loop-runner.js";
 import { resolvedBranches } from "./handover-branches.js";
 import { briefForStep, type Handover, stepConversations } from "./workflow-brief.js";
@@ -347,25 +348,19 @@ export const runWorkflow = async (services: Services, run: WorkflowRun): Promise
 
 // A run still `running` here is one the daemon died under; container recreation is the main way that happens. Past
 // RESUME_MAX tries, the run settles as `error` instead of coming back forever.
-const resumeWorkflowRuns = async (services: Services, candidates?: readonly WorkflowRun[]): Promise<string[]> => {
+const resumeWorkflowRuns = async (services: Services, policy: RestartResume, candidates?: readonly WorkflowRun[]): Promise<string[]> => {
     const stranded = (candidates ?? (await services.workflowRuns.list())).filter((run) => run.state === "running" && !running.has(run.runId));
-    const resumed = await resumeCapped(stranded, {
+    const resumed = await resumeCapped(stranded, policy, {
         count: (run) => services.workflowRuns.countResume(run.runId),
+        stop: async (run, detail) => {
+            await settleStepLoops(services, run, "stopped", detail);
+            const unfinished = run.steps.filter((step) => step.state === "running" || step.state === "pending").map((step) => step.stepId);
+            await services.workflowRuns.markSteps(run.runId, unfinished, "stopped", detail);
+            await services.workflowRuns.settle(run.runId, "stopped", Date.now(), detail);
+            services.logger.info({ runId: run.runId, detail }, "workflow: settled stopped, this boot resumes nothing");
+        },
         abandon: async (counted) => {
-            const conversations = new Set(counted.steps.map((step) => step.conversationId));
-            await Promise.all(
-                [...conversations].map(async (conversationId) => {
-                    const loop = await services.loops.get(conversationId);
-                    if (loop?.state === "running") {
-                        await services.loops.settle(
-                            conversationId,
-                            "error",
-                            Date.now(),
-                            `Its workflow was abandoned after ${counted.resumed} daemon restarts.`,
-                        );
-                    }
-                }),
-            );
+            await settleStepLoops(services, counted, "error", `Its workflow was abandoned after ${counted.resumed} daemon restarts.`);
             await services.workflowRuns.settle(
                 counted.runId,
                 "error",
@@ -379,10 +374,25 @@ const resumeWorkflowRuns = async (services: Services, candidates?: readonly Work
     return resumed.map((run) => run.runId);
 };
 
+// A run's step loops still marked running, settled with the run that will no longer drive them.
+const settleStepLoops = async (services: Services, run: WorkflowRun, state: "stopped" | "error", detail: string): Promise<void> => {
+    const conversations = new Set(run.steps.map((step) => step.conversationId));
+    await Promise.all(
+        [...conversations].map(async (conversationId) => {
+            const loop = await services.loops.get(conversationId);
+            if (loop?.state === "running") {
+                await services.loops.settle(conversationId, state, Date.now(), detail);
+            }
+        }),
+    );
+};
+
 // One boot coordinator for both journals: workflow steps are loops, so launching the two recovery passes separately
-// would give one loop two drivers. Conversations owned by a running workflow are claimed first.
-export const resumeWorkflowExecution = async (services: Services): Promise<void> => {
+// would give one loop two drivers. Conversations owned by a running workflow are claimed first. `policy` is the boot's
+// one answer to whether anything the restart cut comes back (bootstrap/boot-resumes.ts), the same the turns and the
+// automation fires are given.
+export const resumeWorkflowExecution = async (services: Services, policy: RestartResume): Promise<void> => {
     const runs = (await services.workflowRuns.list()).filter((run) => run.state === "running");
     const owned = new Set(runs.flatMap((run) => run.steps.map((step) => step.conversationId)));
-    await Promise.all([resumeWorkflowRuns(services, runs), resumeLoops(services, owned)]);
+    await Promise.all([resumeWorkflowRuns(services, policy, runs), resumeLoops(services, policy, owned)]);
 };

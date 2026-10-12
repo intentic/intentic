@@ -1,4 +1,5 @@
 import { posix } from "node:path";
+import { cachedAsync } from "@intentic/base/held";
 import type { WorkspaceDepEdge, WorkspaceDepUsage, WorkspaceGraph } from "@intentic/sandbox-contract";
 import { importsOf } from "./import-scan.js";
 import { packageFiles, readSources } from "./package-files.js";
@@ -143,21 +144,12 @@ const commandsOf = (name: string, bin: unknown): string[] => {
 // A read reads every file of every dependent, a few hundred milliseconds on a large monorepo: one in flight per
 // repository, and its answer kept a few seconds, so a view and its refetch on focus share one.
 const KEEP_MS = 15_000;
-const recent = new Map<string, { readonly at: number; readonly graph: Promise<WorkspaceGraph> }>();
+const recent = cachedAsync<string, WorkspaceGraph>({ ttlMs: KEEP_MS });
 
 /** The repository's package graph, each edge with its usage. */
-export const readUsedPackageGraph = (repoDir: string): Promise<WorkspaceGraph> => {
-    const held = recent.get(repoDir);
-    if (held !== undefined && Date.now() - held.at < KEEP_MS) {
-        return held.graph;
-    }
-    const graph = (async () => {
+export const readUsedPackageGraph = (repoDir: string): Promise<WorkspaceGraph> =>
+    recent.get(repoDir, async () => {
         const manifests = readWorkspaceManifests(repoDir);
         const declared = readPackageGraph(repoDir, manifests);
         return { ...declared, edges: await withUsage(repoDir, manifests, declared.edges) };
-    })();
-    recent.set(repoDir, { at: Date.now(), graph });
-    // A failed read is not kept: the next ask tries again.
-    graph.catch(() => recent.delete(repoDir));
-    return graph;
-};
+    });

@@ -1,8 +1,8 @@
-import { execFile, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { posix } from "node:path";
-import { promisify } from "node:util";
+import { execBounded } from "@intentic/base/process";
 import { STATE_DIR } from "@intentic/constants";
 import { writeSecretFile } from "@intentic/local-agent";
 import { wslPathOf } from "@intentic/sandbox-contract";
@@ -11,8 +11,6 @@ import { registeredDistro, WINDOWS_SIDE } from "./wsl.js";
 import { crossEnv } from "./crossing.js";
 
 // A PC is one version and one supervisor tree: its Windows side is the root, and every distro with an agent is its child.
-
-const exec = promisify(execFile);
 
 // Set by the Windows side on the agent it runs in a distro: that process has a supervisor, so it registers none.
 export const SUPERVISOR_ENV = "INTENTIC_MACHINE_SUPERVISOR";
@@ -78,7 +76,7 @@ const CMD_EXE = ["cmd.exe", "/mnt/c/Windows/System32/cmd.exe"];
 const windowsProfile = async (): Promise<string | undefined> => {
     for (const cmd of CMD_EXE) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- candidates in order, the first that answers wins
-        const answer = await exec(cmd, ["/c", "echo %USERPROFILE%"], { timeout: 10_000, cwd: interopCwd() }).catch(() => undefined);
+        const answer = await execBounded(cmd, ["/c", "echo %USERPROFILE%"], { timeoutMs: 10_000, cwd: interopCwd() }).catch(() => undefined);
         const profile = answer?.stdout.trim();
         if (profile !== undefined && /^[A-Za-z]:\\/.test(profile)) {
             return profile;
@@ -88,7 +86,7 @@ const windowsProfile = async (): Promise<string | undefined> => {
 };
 
 const linuxPathOf = async (windowsPath: string): Promise<string | undefined> => {
-    const answer = await exec("wslpath", ["-u", windowsPath], { timeout: 5_000 }).catch(() => undefined);
+    const answer = await execBounded("wslpath", ["-u", windowsPath], { timeoutMs: 5_000 }).catch(() => undefined);
     const mapped = answer?.stdout.trim();
     return mapped === undefined || mapped === "" ? wslPathOf(windowsPath) : mapped;
 };

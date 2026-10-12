@@ -34,6 +34,12 @@ test("a long message is truncated rather than sent whole", () => {
     expect(crumbs.all()[0]?.message.endsWith("…")).toBe(true);
 });
 
+test("a message is kept as one line, without the controls and bidi overrides a page could hide in it", () => {
+    const crumbs = start();
+    crumbs.add("test", "failed\n  at render\u202e (app.js)\u0000");
+    expect(crumbs.all()[0]?.message).toBe("failed at render (app.js)");
+});
+
 test("console.warn and console.error are recorded and still reach the original", () => {
     const original = console.error;
     const seen: unknown[][] = [];

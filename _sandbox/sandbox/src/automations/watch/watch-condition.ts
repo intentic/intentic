@@ -4,6 +4,7 @@ import type { WatchState } from "@intentic/sandbox-contract";
 import { classifyCommand } from "@intentic/sandbox-contract";
 import { WORKSPACE_ROOT_EXCLUDE_ENV } from "@intentic/sandbox-contract/chores";
 import { wrapOutsideContent } from "@intentic/base/outside-text";
+import { oneLine } from "@intentic/base/one-line";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import type { Services } from "../../composition.js";
 import { statePath } from "../../state-paths.js";
@@ -45,14 +46,7 @@ export const conditionLabel = (automation: Pick<AutomationRecord, "source" | "gu
 // The file a guard may keep between runs; the daemon makes its directory and never reads it.
 export const guardStateFile = (root: string, id: string): string => statePath(root, ".intentic/records/automation-state/", id);
 
-const firstLine = (text: string, max = 160): string => {
-    const line =
-        text
-            .split("\n")
-            .find((entry) => entry.trim() !== "")
-            ?.trim() ?? "";
-    return line.length <= max ? line : `${line.slice(0, max - 1)}…`;
-};
+const firstLine = (text: string, max = 160): string => oneLine(text.split("\n").find((entry) => entry.trim() !== "") ?? "", max);
 
 // A guard's environment: the daemon's own, what the trigger carried, its state file and last output, and the connector
 // credentials an unattended turn of this automation would get (guard-env.ts). Credentials that cannot be resolved are

@@ -9,6 +9,7 @@ import { rpcQuery } from "../../../client/sandbox/rpcQuery";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { queryClient } from "../../../lib/queryPersistence";
 import { rpcKey } from "../../../lib/queryKeys";
+import { optimisticUpdate, restoreChanged } from "../../../lib/optimistic";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 
 // Active sandbox's agent settings (.intentic/config/settings.json), read/written via the daemon's settings routes. All
@@ -43,23 +44,17 @@ export function useSandboxSettings() {
 
     const save = useMutation(
         {
-            mutationFn: (settings: SandboxSettings) => sandboxRpc.settings.set(settings),
             // Writes into the cache before the request lands, since every control on the page reads its value and
-            // disabled state from this object; otherwise a click shows the old value until the round-trip completes.
-            onMutate: async (settings) => {
+            // disabled state from this object; otherwise a click shows the old value until the round-trip completes. A
+            // refusal takes back the fields this click changed, so a switch never claims a setting the sandbox refused,
+            // and a second click still in flight keeps its own.
+            mutationFn: (settings: SandboxSettings) =>
+                optimisticUpdate(QUERY_KEY, (_held: SandboxSettings) => settings, () => sandboxRpc.settings.set(settings), {
+                    undo: restoreChanged(settings),
+                    client: queryClient,
+                }),
+            onMutate: () => {
                 dropped.value = undefined;
-                // A refetch in flight could otherwise land after this write and overwrite it with pre-click state.
-                await queryClient.cancelQueries({ queryKey: QUERY_KEY });
-                const previous = queryClient.getQueryData<SandboxSettings>(QUERY_KEY);
-                queryClient.setQueryData<SandboxSettings>(QUERY_KEY, settings);
-                return { previous };
-            },
-            // Puts back exactly what was on screen before the click, so a switch never claims a setting the sandbox
-            // refused.
-            onError: (_error, _settings, context) => {
-                if (context?.previous !== undefined) {
-                    queryClient.setQueryData<SandboxSettings>(QUERY_KEY, context.previous);
-                }
             },
             // Reconciles with what the daemon actually stored either way; a dropped field snaps back silently, so name
             // it once the reconciling read lands (droppedFieldsReason).

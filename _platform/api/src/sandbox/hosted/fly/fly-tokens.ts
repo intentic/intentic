@@ -1,12 +1,11 @@
 import { z } from "zod";
-import { FlyError } from "./fly.js";
+import { FlyError, flyRequest, flyTokenRejected, isFlyOk } from "./fly.js";
 
 // Mints an app-scoped Fly deploy token per build; the org token (config.hosted.flyApiToken) creates the builder but
 // never enters it, so an escaped RUN step can at worst touch the recipe's own app for the token's lifetime. Uses Fly's
 // GraphQL API, the one exception to the Machines API contract.
 
 const GRAPHQL = `https://api.fly.io/graphql`;
-const TIMEOUT_MS = 30_000;
 
 // Fly's token profile for a token that may deploy (push to the registry, run machines) in exactly one app.
 const DEPLOY_PROFILE = `deploy`;
@@ -17,27 +16,23 @@ const graphqlSchema = z.object({
 });
 
 const graphql = async (token: string, query: string, variables: Record<string, unknown>): Promise<unknown> => {
-    let response: Response;
-    try {
-        response = await fetch(GRAPHQL, {
-            method: `POST`,
-            headers: { authorization: `Bearer ${token}`, "content-type": `application/json` },
-            body: JSON.stringify({ query, variables }),
-            signal: AbortSignal.timeout(TIMEOUT_MS),
-        });
-    } catch (error) {
-        throw new FlyError(`Fly's GraphQL API could not be reached: ${error instanceof Error ? error.message : `transport failure`}`);
+    const response = await flyRequest(GRAPHQL, {
+        method: `POST`,
+        token,
+        json: { query, variables },
+        unanswered: {
+            timedOut: (seconds) => `Fly's GraphQL API did not answer within ${seconds}s`,
+            unreachable: (detail) => `Fly's GraphQL API could not be reached: ${detail}`,
+        },
+    });
+    const rejected = flyTokenRejected(response.status);
+    if (rejected !== undefined) {
+        throw rejected;
     }
-    if (response.status === 401 || response.status === 403) {
-        throw new FlyError(
-            `Fly rejected the platform's API token (HTTP ${response.status}): check HOSTED_FLY_API_TOKEN / HOSTED_FLY_ORG.`,
-            response.status,
-        );
-    }
-    if (!response.ok) {
+    if (!isFlyOk(response)) {
         throw new FlyError(`Fly's GraphQL API answered HTTP ${response.status}`, response.status);
     }
-    const parsed = graphqlSchema.parse(await response.json());
+    const parsed = graphqlSchema.parse(response.json);
     if (parsed.errors !== undefined && parsed.errors.length > 0) {
         throw new FlyError(`Fly refused: ${parsed.errors.map((entry) => entry.message).join(`; `)}`);
     }

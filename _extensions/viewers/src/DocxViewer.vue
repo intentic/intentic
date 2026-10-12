@@ -1,28 +1,24 @@
 <script setup lang="ts">
-import { Icon, useLatest } from "@intentic/extension-ui";
 import { onMounted, onUnmounted, ref, watch } from "vue";
 import { fitPages, keepFitted } from "./docxFit.js";
 import { t } from "./i18n.js";
+import ViewerStatus from "./load/ViewerStatus.vue";
+import { useViewerLoad } from "./load/useViewerLoad.js";
 
 /* DOCX preview: renders a Word document into HTML via docx-preview (lazy-imported so its ~jszip payload stays out of the initial bundle). */
 
 const { blob } = defineProps<{ blob: Blob }>();
 
 const container = ref<HTMLElement>();
-const loading = ref(true);
-const error = ref<string>();
-const latest = useLatest();
+const { loading, error, start } = useViewerLoad(() => t(`common.couldNotRenderDocument`));
 
 const render = async (source: Blob): Promise<void> => {
     const host = container.value;
     if (host === undefined) {
         return;
     }
-    const isLatest = latest();
-    loading.value = true;
-    error.value = undefined;
-    host.replaceChildren();
-    try {
+    await start(async (isLatest) => {
+        host.replaceChildren();
         const { renderAsync } = await import("docx-preview");
         if (!isLatest()) {
             return;
@@ -32,16 +28,7 @@ const render = async (source: Blob): Promise<void> => {
             return;
         }
         fitPages(host);
-    } catch (err) {
-        if (!isLatest()) {
-            return;
-        }
-        error.value = err instanceof Error ? err.message : t(`common.couldNotRenderDocument`);
-    } finally {
-        if (isLatest()) {
-            loading.value = false;
-        }
-    }
+    });
 };
 
 // Parses on the main thread; bounded by the viewer's 25 MiB raw cap. If a huge .docx janks the UI, move the
@@ -63,13 +50,7 @@ watch(
 <template>
     <div class="relative h-full min-h-0">
         <div ref="container" class="docx-host h-full overflow-auto bg-muted/20"></div>
-        <div v-if="loading" class="absolute inset-0 flex items-center justify-center bg-canvas text-muted">
-            <Icon name="spinner" class="text-xl" spin />
-        </div>
-        <div v-else-if="error" class="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-canvas px-6 text-center">
-            <Icon name="exclamation-triangle" class="text-3xl text-danger" />
-            <p class="text-sm text-danger">{{ error }}</p>
-        </div>
+        <ViewerStatus overlay :loading="loading" :error="error" />
     </div>
 </template>
 

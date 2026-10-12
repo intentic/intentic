@@ -2,7 +2,8 @@ import { t } from "@intentic/ui/i18n";
 import type { WorkspaceSearchMode, WorkspaceSearchResult } from "@intentic/sandbox-contract";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/vue-query";
 import type { Ref } from "vue";
-import { computed, onScopeDispose, ref, watch } from "vue";
+import { useSettled } from "@intentic/ui/async";
+import { computed } from "vue";
 import { type ProcedureInput, sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { useSearchOptions } from "./useSearchOptions";
 import { workspaceAgent, workspaceDir } from "../../../app/workspaceScope";
@@ -27,21 +28,8 @@ export function useWorkspaceSearch(filter: Ref<string>, scope: Ref<SearchScope>,
     const { includeIgnored, useRegex, matchCase, wholeWord, include } = useSearchOptions();
 
     // Both fields are typed a character at a time, so both wait out the same burst before a search goes out.
-    const debounce = (source: Ref<string>): Ref<string> => {
-        const settled = ref(source.value.trim());
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        watch(source, (value) => {
-            clearTimeout(timer);
-            timer = setTimeout(() => {
-                settled.value = value.trim();
-            }, debounceMs);
-        });
-        // Timer dies with the surface, or closing mid-type could still fire a stale search after the fact.
-        onScopeDispose(() => clearTimeout(timer));
-        return settled;
-    };
-    const debounced = debounce(filter);
-    const debouncedInclude = debounce(include);
+    const debounced = useSettled(filter, debounceMs, { trim: true });
+    const debouncedInclude = useSettled(include, debounceMs, { trim: true });
 
     // The daemon rejects queries under 2 chars (contract's min length); short input just disables the query.
     const enabled = computed(() => reachable.value && active.value && debounced.value.length >= 2);

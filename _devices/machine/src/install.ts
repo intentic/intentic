@@ -1,8 +1,9 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, rename, rm, symlink } from "node:fs/promises";
+import { mkdir, rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
+import { renameOver } from "@intentic/base/fs";
 import { homeDir, type Log } from "@intentic/local-agent";
 import { DEV_VERSION } from "@intentic/sandbox-contract";
 import { binDir } from "./config.js";
@@ -159,11 +160,12 @@ const ensureWindowsLauncher = async (out: Log): Promise<void> => {
     if (process.platform !== "win32" || MACHINE_VERSION === DEV_VERSION || existsSync(launcherPath)) {
         return;
     }
+    // A fixed name, not stagingOf: the bin/ sweep (release.ts LEFTOVER) knows it, so a download a crash cut short is cleared.
     const staged = `${launcherPath}.tmp`;
     try {
         await rm(staged, { force: true });
         await download(launcherAssetUrl(MACHINE_VERSION), staged);
-        await rename(staged, launcherPath);
+        await renameOver(staged, launcherPath);
     } catch (error) {
         await rm(staged, { force: true }).catch(() => undefined);
         out(

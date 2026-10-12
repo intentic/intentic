@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { unzipParts } from "./zip/unzip";
-import { useLatest } from "@intentic/extension-ui";
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import DocumentPaper from "./DocumentPaper.vue";
 import { t } from "./i18n.js";
+import { useViewerLoad } from "./load/useViewerLoad.js";
 import { readTextDocument } from "./odf/document";
 import { openOdf, type OdfPackage } from "./odf/pkg";
 import { renderBlocks } from "./odf/render";
@@ -13,10 +13,8 @@ import { renderBlocks } from "./odf/render";
 const { blob } = defineProps<{ blob: Blob }>();
 
 const paper = ref<InstanceType<typeof DocumentPaper>>();
-const loading = ref(true);
-const error = ref<string>();
+const { loading, error, start } = useViewerLoad(() => t(`common.couldNotRenderDocument`));
 const empty = ref(false);
-const latest = useLatest();
 // The package holds blob URLs for the document's pictures; they leak until it is disposed.
 let open: OdfPackage | undefined;
 
@@ -30,12 +28,9 @@ const render = async (source: Blob): Promise<void> => {
     if (host === undefined) {
         return;
     }
-    const isLatest = latest();
-    loading.value = true;
-    error.value = undefined;
-    empty.value = false;
-    host.replaceChildren();
-    try {
+    await start(async (isLatest) => {
+        empty.value = false;
+        host.replaceChildren();
         const parts = await unzipParts(new Uint8Array(await source.arrayBuffer()));
         if (!isLatest()) {
             return;
@@ -55,16 +50,7 @@ const render = async (source: Blob): Promise<void> => {
             renderBlocks(blocks, page, host.ownerDocument);
             host.append(page);
         }
-    } catch (caught) {
-        if (!isLatest()) {
-            return;
-        }
-        error.value = caught instanceof Error ? caught.message : t(`common.couldNotRenderDocument`);
-    } finally {
-        if (isLatest()) {
-            loading.value = false;
-        }
-    }
+    });
 };
 
 // Parses on the main thread, bounded by the viewer's 25 MiB raw cap; a 750 KiB content.xml parses in about 20ms.

@@ -1,10 +1,7 @@
 import { errorMessage } from "@intentic/base/errors";
 import { onScopeDispose, ref, type Ref, watch } from "vue";
-import { z } from "zod";
 import { keyMessage, pointerMessage, wheelGauge, type DesktopKey, type DesktopMouse, type DesktopPointerAction, type DesktopText } from "./desktopInput";
-import { videoTag } from "../browsers/frameUrls";
-import { canDecodeVideo, videoSink } from "../browsers/videoSink";
-import { useLiveSocket, webSocketChannel } from "../../client/session/liveSocket";
+import { type ScreencastMessage, useScreencast } from "../browsers/useScreencast";
 import { socketUrl } from "../sandbox/session/wsTicket";
 
 // The sandbox's own desktop over /system/desktop-view (the daemon's desktop/desktop-view.ts): H.264 of the whole
@@ -12,11 +9,6 @@ import { socketUrl } from "../sandbox/session/wsTicket";
 // One desktop per sandbox, so the only thing followed is which sandbox is active; nothing reaches the desktop until the
 // owner takes over.
 
-// The desktop's size (agent-desktop.ts DESKTOP_SIZE), assumed only until `ready` says.
-const DESKTOP_WIDTH = 1280;
-const DESKTOP_HEIGHT = 800;
-// One display frame; each move is a few dozen bytes of JSON.
-const MOVE_THROTTLE_MS = 16;
 // How long the hold outlives the owner's last input (agent-desktop.ts OWNER_IDLE_MS). The daemon announces a hold when
 // it starts and never when it lapses, so the view lets it lapse by the same clock rather than show one that is gone.
 export const HOLD_MS = 20_000;
@@ -28,23 +20,8 @@ export type DesktopStatus =
     | { readonly kind: `connecting` | `reconnecting` | `unreachable` | `waiting` | `unsupported` | `refused` | `gone` }
     | { readonly kind: `authFailed` | `failed`; readonly detail: string };
 
-// Everything this view says to the daemon.
-type Outgoing =
-    | { readonly type: `ping` | `pause` | `resume` }
-    | { readonly type: `control`; readonly driving: boolean }
-    | DesktopMouse
-    | DesktopKey
-    | DesktopText;
-
-// Everything the daemon says besides a picture, read loosely: a field this build does not know is ignored, not refused.
-const Incoming = z.object({
-    type: z.string(),
-    width: z.number().optional(),
-    height: z.number().optional(),
-    codec: z.string().optional(),
-    owner: z.boolean().optional(),
-    message: z.string().optional(),
-});
+// Everything this view says to the daemon besides what every screencast says (useScreencast.ts).
+type Outgoing = { readonly type: `control`; readonly driving: boolean } | DesktopMouse | DesktopKey | DesktopText;
 
 export interface DesktopView {
     readonly status: Ref<DesktopStatus | undefined>;
@@ -103,19 +80,13 @@ export interface DesktopViewOptions {
 // the new one's desktop. Undefined dials nothing.
 export const useDesktopView = (sandbox: Ref<string | undefined>, options: DesktopViewOptions = {}): DesktopView => {
     const status = ref<DesktopStatus | undefined>({ kind: `connecting` });
-    const width = ref(DESKTOP_WIDTH);
-    const height = ref(DESKTOP_HEIGHT);
     const driving = ref(false);
     const held = ref(false);
     const hold = holdClock(held);
-    const video = videoSink(() => {
-        status.value = { kind: `unsupported` };
-    });
     const wheel = wheelGauge();
-    let lastMove = 0;
 
-    // The live socket below, declared ahead so every verb can say something on it.
-    const send = (message: Outgoing): void => live.send(message);
+    // The screencast below, declared ahead so every verb can say something on it.
+    const send = (message: Outgoing): void => cast.live.send(message);
 
     // Each input renews the daemon's hold, so the local one is renewed with it; a lapsed one comes back as `held`.
     const sendInput = (message: DesktopMouse | DesktopKey | DesktopText): void => {
@@ -128,120 +99,104 @@ export const useDesktopView = (sandbox: Ref<string | undefined>, options: Deskto
         }
     };
 
-    const handleJson = (raw: string): void => {
-        let parsed: unknown;
-        try {
-            parsed = JSON.parse(raw);
-        } catch {
-            // allow(silent-catch): a frame that is not JSON is none of the view's messages; the next one is read as usual.
-            return;
-        }
-        const read = Incoming.safeParse(parsed);
-        if (!read.success) {
-            return;
-        }
-        const message = read.data;
-        if (message.type === `ready`) {
-            width.value = message.width ?? width.value;
-            height.value = message.height ?? height.value;
-            if (canDecodeVideo()) {
-                video.configure(message.codec ?? ``);
-            }
-            status.value = { kind: canDecodeVideo() ? `waiting` : `unsupported` };
-        } else if (message.type === `held`) {
+    const onMessage = (message: ScreencastMessage): void => {
+        if (message.type === `held`) {
             hold.set(message.owner === true);
         } else if (message.type === `gone`) {
             // The window this view was of has closed; there is nothing left to dial.
-            live.end();
+            cast.live.end();
             driving.value = false;
             status.value = { kind: `gone` };
         } else if (message.type === `error`) {
             // The desktop could not start; dialling again would only ask the same question.
-            live.end();
+            cast.live.end();
             status.value = { kind: `failed`, detail: message.message ?? `` };
         }
     };
 
-    // One binary message: a tag byte (3 keyframe, 4 delta; videocast.ts encodeVideo) and the frame.
-    const takePicture = (data: ArrayBuffer): void => {
-        const bytes = new Uint8Array(data);
-        const coded = videoTag(bytes[0]);
-        if (coded !== undefined) {
-            video.push(bytes.subarray(1), coded.key, coded.quiet);
+    const windowId = options.window;
+    // H.264 of the display, or of one window on it (3 keyframe, 4 delta; videocast.ts encodeVideo), measured in the
+    // desktop's own pixels (agent-desktop.ts DESKTOP_SIZE until `ready` says otherwise).
+    const cast = useScreencast<DesktopPointerAction, DesktopMouse, Outgoing>({
+        mint: () => (windowId === undefined ? socketUrl(`/system/desktop-view`) : socketUrl(`/system/desktop-view`, { window: windowId })),
+        pointer: pointerMessage,
+        visible: options.visible,
+        onMessage,
+        onReady: () => {
+            status.value = { kind: `waiting` };
+        },
+        onUnsupported: () => {
+            status.value = { kind: `unsupported` };
+        },
+        onVideoError: () => {
+            status.value = { kind: `unsupported` };
+        },
+        onPicture: () => {
             status.value = undefined;
-        }
-    };
+        },
+        socket: {
+            onMintFailed: (error) => {
+                status.value = { kind: `authFailed`, detail: errorMessage(error) };
+            },
+            onUnreachable: () => {
+                status.value = { kind: `unreachable` };
+            },
+            onOpen: () => {
+                cast.syncVisibility();
+                // A drop handed the desktop back; an owner still driving takes it again rather than clicking into nothing.
+                if (driving.value) {
+                    send({ type: `control`, driving: true });
+                }
+            },
+            onDrop: (code) => {
+                hold.set(false);
+                if (code === CLOSE_REFUSED) {
+                    cast.live.end();
+                    status.value = { kind: `refused` };
+                    return;
+                }
+                status.value = { kind: `reconnecting` };
+            },
+        },
+    });
+    const { video } = cast;
 
-    // Nobody is looking: the daemon stops grabbing the display until the view is visible again.
-    const seen = (): boolean => !document.hidden && options.visible?.value !== false;
-    const syncVisibility = (): void => send({ type: seen() ? `resume` : `pause` });
-    document.addEventListener(`visibilitychange`, syncVisibility);
+    // Out of sight is out of hand: a hold nobody can see is the agent kept waiting for nothing. (The picture's own
+    // pause is the screencast's.)
     if (options.visible !== undefined) {
         watch(options.visible, (visible) => {
-            syncVisibility();
-            // Out of sight is out of hand: a hold nobody can see is the agent kept waiting for nothing.
             if (!visible && driving.value) {
                 driving.value = false;
                 send({ type: `control`, driving: false });
             }
         });
     }
-    const windowId = options.window;
-
-    const live = useLiveSocket<string, Outgoing>({
-        mint: () => (windowId === undefined ? socketUrl(`/system/desktop-view`) : socketUrl(`/system/desktop-view`, { window: windowId })),
-        open: webSocketChannel({ text: handleJson, binary: takePicture }),
-        onMintFailed: (error) => {
-            status.value = { kind: `authFailed`, detail: errorMessage(error) };
-        },
-        onUnreachable: () => {
-            status.value = { kind: `unreachable` };
-        },
-        onOpen: () => {
-            syncVisibility();
-            // A drop handed the desktop back; an owner still driving takes it again rather than clicking into nothing.
-            if (driving.value) {
-                send({ type: `control`, driving: true });
-            }
-        },
-        onDrop: (code) => {
-            hold.set(false);
-            if (code === CLOSE_REFUSED) {
-                live.end();
-                status.value = { kind: `refused` };
-                return;
-            }
-            status.value = { kind: `reconnecting` };
-        },
-    });
 
     watch(
         sandbox,
         () => {
-            live.close();
+            cast.live.close();
             // The old socket's close handed that desktop back; the next one is not being driven yet.
             driving.value = false;
             hold.set(false);
-            video.close();
+            cast.reset();
             status.value = sandbox.value === undefined ? undefined : { kind: `connecting` };
             if (sandbox.value !== undefined) {
-                live.connect();
+                cast.live.connect();
             }
         },
         { immediate: true },
     );
 
     onScopeDispose(() => {
-        document.removeEventListener(`visibilitychange`, syncVisibility);
         hold.set(false);
-        live.close();
-        video.close();
+        cast.live.close();
     });
 
     return {
         status,
-        width,
-        height,
+        width: cast.width,
+        height: cast.height,
         driving,
         held,
         attachCanvas: (canvas) => video.attach(canvas),
@@ -254,13 +209,7 @@ export const useDesktopView = (sandbox: Ref<string | undefined>, options: Deskto
             send({ type: `control`, driving: false });
         },
         onPointer: (action, event, picture) => {
-            // Enough to keep a 1000 Hz mouse from flooding the socket; a press carries its own position anyway.
-            const now = Date.now();
-            if (action === `move` && now - lastMove < MOVE_THROTTLE_MS) {
-                return;
-            }
-            lastMove = action === `move` ? now : lastMove;
-            const message = pointerMessage(action, event, picture, width.value, height.value);
+            const message = cast.pointerAt(action, event, picture);
             if (message !== undefined) {
                 sendInput(message);
             }
@@ -271,7 +220,7 @@ export const useDesktopView = (sandbox: Ref<string | undefined>, options: Deskto
             }
             event.preventDefault();
             const notches = wheel(event);
-            const at = notches === undefined ? undefined : pointerMessage(`move`, event, picture, width.value, height.value);
+            const at = notches === undefined ? undefined : pointerMessage(`move`, event, picture, cast.width.value, cast.height.value);
             if (notches !== undefined && at !== undefined) {
                 sendInput({ ...at, action: `wheel`, ...notches });
             }

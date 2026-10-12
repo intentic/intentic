@@ -1,6 +1,6 @@
-import { execFile, spawn } from "node:child_process";
-import { promisify } from "node:util";
+import { spawn } from "node:child_process";
 import { pollUntil } from "@intentic/base/async";
+import { execBounded } from "@intentic/base/process";
 import { claimPidFile, type Log, releasePidFile, spawnDetached } from "@intentic/local-agent";
 import { DEV_VERSION, isNewer } from "@intentic/sandbox-contract";
 import { rollBackIfCrashLooping } from "../agent-trial.js";
@@ -14,8 +14,6 @@ import { agentInDistro, crossEnv, NO_AGENT_EXIT } from "./crossing.js";
 import { heldDistros, type MachineConfig, readMachineConfig, runOnWindows, updateMachineConfig, windowsRoot } from "./machine.js";
 
 // A PC upgrades as one: whichever side is asked, every environment ends on the same exact release or says why it did not.
-
-const exec = promisify(execFile);
 
 // Set on one leg of a machine-wide upgrade (and on setup's re-exec): this environment only, to exactly this release.
 export const UPGRADE_ENV = "INTENTIC_MACHINE_UPGRADE";
@@ -84,7 +82,7 @@ export const upgradeHere = async (target: string, force: boolean, log: Log): Pro
 // A distro's installed agent, asked in that distro; undefined where none answers, which is not a version to compare.
 export const installedIn = async (distro: string): Promise<string | undefined> => {
     const { command, args } = agentInDistro(distro, ["version"]);
-    const answer = await exec(command, [...args], { timeout: 60_000, windowsHide: true }).catch(() => undefined);
+    const answer = await execBounded(command, [...args], { timeoutMs: 60_000 }).catch(() => undefined);
     return /^\d+\.\d+\.\d+$/.exec(answer?.stdout.trim() ?? "")?.[0];
 };
 

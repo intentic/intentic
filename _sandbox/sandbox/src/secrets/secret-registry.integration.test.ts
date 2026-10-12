@@ -4,11 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ENV_FILE, SECRETS_FILE } from "@intentic/scaffold";
 import { capabilitySecretsDocument, fileSecretVault } from "../capabilities/credentials/secret-vault.js";
-import { resolveSecretReferences, secretReference, secretRegistryOf } from "./secret-registry.js";
+import { hasSecretReferences, resolveSecretReferences, secretReference, secretRegistryOf } from "./secret-registry.js";
 import { fileSandboxSecrets } from "./sandbox-secrets.js";
 
-// Secrets live in three stores (capability vault, DevOps .env, deploy-generated values); pins that the registry unions
-// all three, each value keeps its reference name, and a store that fails fails the read: its values could not be masked.
+// Secrets live in four stores (SECRET_STORES: DevOps .env, the sandbox's own, deploy-generated values, capability
+// vault); pins that the registry unions them, each value keeps its reference name, and a store that fails fails the
+// read: its values could not be masked.
 
 const withStores = () => {
     const root = mkdtempSync(join(tmpdir(), "secret-registry-"));
@@ -87,6 +88,17 @@ test("resolution replaces known references, reports uses once, and names the unk
     expect(resolved.text).toContain(secretReference("NOPE"));
     expect(resolved.used).toEqual(["CLOUDFLARE_API_TOKEN"]);
     expect(resolved.unknown).toEqual(["NOPE"]);
+});
+
+test("a generated value that is not a string is left out rather than failing the read", async () => {
+    const { write, registry } = withStores();
+    await write(SECRETS_FILE, JSON.stringify({ GRAFANA_ADMIN_PASSWORD: "gen-a8f2k1m4p7q9", REPLICAS: 3 }));
+    expect((await registry()).map((secret) => secret.name)).toEqual(["GRAFANA_ADMIN_PASSWORD"]);
+});
+
+test("the reference pre-check answers the same however often it is asked", () => {
+    const command = `curl -H "x: ${secretReference("CLOUDFLARE_API_TOKEN")}"`;
+    expect([hasSecretReferences(command), hasSecretReferences(command), hasSecretReferences("echo plain")]).toEqual([true, true, false]);
 });
 
 test("a secret kept without DevOps resolves by its plain name, and the desired-state .env wins a name both hold", async () => {

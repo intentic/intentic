@@ -1,4 +1,4 @@
-import { sleep } from "@intentic/base/async";
+import { SingleFlight, sleep } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import type { ExitConfig, ExitLink, ExitObservation, IntenticLine } from "@intentic/sandbox-contract";
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
@@ -115,22 +115,17 @@ export async function* startExit(entry: ExitEntry, country: string | undefined):
 // interface and proxy port. Needed because a caller can abandon a start and leave it running (resolveProfileExit's
 // budget); the next turn must join the in-flight one rather than begin a second. Progress lines are dropped, not
 // buffered, callers wanting them stream `startExit` directly.
-const starting = new Map<string, Promise<void>>();
+const starting = new SingleFlight<string, void>();
 
 export const startExitOnce = (entry: ExitEntry, country: string | undefined): Promise<void> => {
-    const inFlight = starting.get(entry.id);
-    if (inFlight !== undefined) {
-        return inFlight;
-    }
-    const run = (async () => {
+    const run = starting.run(entry.id, async () => {
         for await (const line of startExit(entry, country)) {
             void line;
         }
-    })().finally(() => starting.delete(entry.id));
+    });
     // Marks the rejection handled for the abandoned case; without it, a start nobody is waiting on any more crashes
     // the daemon as an unhandled rejection.
     void run.catch(() => undefined);
-    starting.set(entry.id, run);
     return run;
 };
 

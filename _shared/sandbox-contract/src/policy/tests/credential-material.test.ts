@@ -202,6 +202,26 @@ describe("a credential token in text that is not a credential file", () => {
         expect(holdsCredentialToken("-----BEGIN PRIVATE KEY-----\nMIIEvQ")).toBe(true);
     });
 
+    // The issuers the terminal filter already knew; the two tables are one list now (ISSUERS).
+    test.each([
+        ["an opaque bearer", "curl -H 'Authorization: Bearer 8f3kQ2mZ9xLp4RtV7wNb' https://api.example.com", "curl -H 'Authorization: Bearer ***' https://api.example.com"],
+        // Prefixes split from bodies so push protection does not read these fixtures as live keys.
+        ["a shopify admin token", `token ${"shpat_"}0123456789abcdef0123456789abcdef in use`, "token *** in use"],
+        ["a sendgrid key", `key ${"SG."}aB3dE5fG7hJ9kL1mN3pQ5r.sT7uV9wX1yZ3aB5cD7eF9gH1jK3lM5nP7qR9sT1uV3w set`, "key *** set"],
+        ["a google oauth token", "refreshed ya29.a0AfB_byC3dE5fG7hJ9kL1mN3pQ5 ok", "refreshed *** ok"],
+        ["a public-prefixed key", "langfuse pk-lf-0a1b2c3d-4e5f-6a7b-8c9d now", "langfuse *** now"],
+    ])("names itself and masks: %s", (_label, text, masked) => {
+        expect(holdsCredentialToken(text)).toBe(true);
+        expect(maskCredentialMaterial(text)).toBe(masked);
+        expect(holdsCredentialToken(masked)).toBe(false);
+    });
+
+    test("a bearer in prose or a template is not one", () => {
+        for (const text of ["Authorization: Bearer <token>", "Authorization: Bearer YOUR_API_TOKEN_HERE", "Bearer ${TOKEN}", "the Bearer scheme"]) {
+            expect(holdsCredentialToken(text), text).toBe(false);
+        }
+    });
+
     test("is never a credential-named key beside a value", () => {
         expect(holdsCredentialToken("const config={apiKey:process.env.API_KEY,password:hunter22x}")).toBe(false);
         expect(holdsCredentialMaterial("const config={apiKey:process.env.API_KEY,password:hunter22x}")).toBe(true);

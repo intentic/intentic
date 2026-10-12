@@ -7,6 +7,7 @@ import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, createApp, h, nextTick, ref, type Ref } from "vue";
 import { CONFLICT_ICON } from "./conflictResolution";
 import { useAgentChanges } from "./useAgentChanges";
+import { useKeybindings } from "../../../workbench/commands/useKeybindings";
 import { queryClient } from "../../../lib/queryPersistence";
 import { rpcKey } from "../../../lib/queryKeys";
 import { modulesKey } from "../../workspace/health/useModules";
@@ -103,6 +104,8 @@ const mount = async (modules: readonly WorkspaceModule[] = [], seed?: AgentChang
     app = createApp({
         setup() {
             const review = useAgentChanges(ref(AGENT));
+            // The shell's keystroke dispatcher, which turns the review's registered keys (reviewKeys.ts) into moves.
+            useKeybindings();
             return () => h(AgentReviewPanel, { agentId: AGENT, changes: review, streaming: false, writing: false });
         },
     });

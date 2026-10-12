@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { HttpBindings } from "@hono/node-server";
-import { CONNECT_TOKEN_HEADER, REQUEST_ID_HEADER, type RouteMeta, sandboxRouteFor } from "@intentic/sandbox-contract";
+import { CONNECT_TOKEN_HEADER, type DaemonHealth, REQUEST_ID_HEADER, type RouteMeta, sandboxRouteFor } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { ORPCError } from "@orpc/server";
@@ -291,7 +291,8 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // The "is a daemon there" probe every flow uses (launch scripts, /setup, the browser's loopback probe).
     // The sandbox id lets a loopback probe confirm it reached this daemon, not an unrelated process; `boot` tells "not
     // answering" from "still converging".
-    // `announce` is the one signal for whether this daemon reached the platform; ic reads it via docker exec.
+    // `announce` is the one signal for whether this daemon reached the platform; ic reads it via docker exec. The answer
+    // is the contract's DaemonHealth, which every reader parses with its loose twin, DaemonHealthReadingSchema.
     serve("GET /health", (c) =>
         c.json({
             ok: true,
@@ -313,7 +314,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             }).by,
             // Which build answers (version, source commit, build time), so "is the fix live?" is one read.
             build: buildInfo(),
-        }),
+        } satisfies DaemonHealth),
     );
 
     // A browser opening this sandbox's own address lands in the app on it (system/boot/open-in-app.ts).

@@ -1,12 +1,11 @@
 import { errorMessage } from "@intentic/base/errors";
 import { t } from "@intentic/ui/i18n";
 import { onScopeDispose, ref, type Ref, watch } from "vue";
-import { FRAME_WEBP, frameUrls, videoTag } from "./frameUrls";
+import { z } from "zod";
 import { keyIntent, type BrowserCommand, type KeyFrame } from "./keyIntent";
 import { pointerFrame, type PointerAction } from "./pointerFrame";
 import { selectionCopy } from "./selectionCopy";
-import { canDecodeVideo, videoSink } from "./videoSink";
-import { useLiveSocket, webSocketChannel } from "../../client/session/liveSocket";
+import { type ScreencastMessage, useScreencast } from "./useScreencast";
 import { socketUrl as wsSocketUrl } from "../sandbox/session/wsTicket";
 
 // One live view of the agent's browser over /system/browser-view, with clicks/keys going back. `ready` picks video
@@ -15,21 +14,14 @@ import { socketUrl as wsSocketUrl } from "../sandbox/session/wsTicket";
 // wire. The chrome around the picture is the pane's own, steered by the verbs below. No scrollback to preserve like
 // a terminal, so this is plain reactive state, and nothing is sent to the page until the user takes control.
 
-// Assumed only between the socket opening and `ready` landing, when there's nothing to click on yet.
-const VIEW_WIDTH = 1280;
-const VIEW_HEIGHT = 800;
-// Roughly one display frame, the rate CDP can act on anyway; each move is a few dozen bytes of JSON.
-const MOVE_THROTTLE_MS = 16;
-// A size is asked once the box has held still this long: every step of a drag would otherwise restart the encoder.
-const RESIZE_DEBOUNCE_MS = 250;
-
 // Mirrors the daemon's SelectMenu (screencast.ts); the browser package can't import that contract, so it's
-// re-declared here.
-export interface SelectMenu {
-    readonly options: readonly { readonly label: string; readonly disabled: boolean }[];
-    readonly selected: number;
-    readonly rect: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
-}
+// re-declared here, and read as the daemon's word rather than trusted.
+const SelectMenuSchema = z.object({
+    options: z.array(z.object({ label: z.string(), disabled: z.boolean() })).readonly(),
+    selected: z.number(),
+    rect: z.object({ x: z.number(), y: z.number(), width: z.number(), height: z.number() }),
+});
+export type SelectMenu = z.infer<typeof SelectMenuSchema>;
 
 export interface BrowserView {
     // Which picture this is, so the pane mounts canvases or an img; undefined until `ready`.
@@ -104,147 +96,45 @@ export interface BrowserViewOptions {
 // token await, from one active-sandbox snapshot.
 const socketUrl = (name: string): Promise<string | undefined> => wsSocketUrl(`/system/browser-view`, { session: name });
 
-interface Size {
-    readonly width: number;
-    readonly height: number;
-}
-
-const sameSize = (left: Size | undefined, right: Size | undefined): boolean =>
-    left !== undefined && right !== undefined && left.width === right.width && left.height === right.height;
-
 // Follows `name` as the view switches browsers; a change tears the old socket down and opens a new one, with
 // nothing to preserve across the switch.
 export const useBrowserView = (name: Ref<string | undefined>, options: BrowserViewOptions = {}): BrowserView => {
-    const frame = ref<string | undefined>();
     const status = ref<string | undefined>(t(`browsers.browserView.connecting`));
     const driving = ref(false);
-    const kind = ref<"video" | "frames" | undefined>();
-    const viewWidth = ref(VIEW_WIDTH);
-    const viewHeight = ref(VIEW_HEIGHT);
-    const viewScale = ref(1);
     const cursor = ref(`default`);
     const select = ref<SelectMenu | undefined>();
-    // Turns each binary frame into an object URL, releasing ones the img has moved on from; frames path only, video
-    // decodes into a canvas.
-    const pictures = frameUrls();
-    const video = videoSink((message) => {
-        status.value = message;
-    });
     // The page the user picked, re-sent on every reconnect so a dropped socket doesn't silently switch them back to
     // the agent's tab.
     let pinned: string | undefined;
     // Keystrokes go to the display rather than the page while Chromium's find bar has them; see `find`.
     let rawKeys = false;
-    // The box's last measured size, and the last one asked of the daemon; a box the daemon already has is not asked
-    // again, and a box measured before `ready` is asked once the picture is known to be video.
-    let boxSize: Size | undefined;
-    let askedSize: Size | undefined;
-    let resizeTimer: number | undefined;
     // The device the page is rendered as, re-said on every reconnect like the pin; none is the page as itself.
     let device: EmulatedDevice | undefined;
 
-    // The live socket below; declared ahead so every verb can say something on it. The daemon pongs every ping, and a
-    // still page sends no frames, so its silence clock is the plain one.
-    const send = (message: object): void => live.send(message);
+    // The screencast below; declared ahead so every verb can say something on it.
+    const send = (message: object): void => cast.live.send(message);
     const copy = selectionCopy(send);
-
-    const askSize = (): void => {
-        if (device !== undefined || kind.value !== `video` || boxSize === undefined || sameSize(boxSize, askedSize)) {
-            return;
-        }
-        askedSize = boxSize;
-        send({ type: `resize`, ...boxSize });
-    };
-
-    // Tells the client which decoder to build and what a click's coordinates mean. Sent before any picture; on video,
-    // right as the codec is read out of the stream, just before the first keyframe, and again for every fresh stream
-    // (a resize, another window).
-    const onReady = (message: { kind?: string; width?: number; height?: number; scale?: number; codec?: string }): void => {
-        kind.value = message.kind === `video` ? `video` : `frames`;
-        viewWidth.value = message.width ?? viewWidth.value;
-        viewHeight.value = message.height ?? viewHeight.value;
-        viewScale.value = message.scale !== undefined && message.scale > 0 ? message.scale : 1;
-        if (kind.value === `video`) {
-            if (!canDecodeVideo()) {
-                status.value = t(`browsers.browserView.unsupported`);
-                return;
-            }
-            video.configure(message.codec ?? ``);
-        }
-        status.value = t(`browsers.browserView.waiting`);
-        askSize();
-    };
-
-    // What the remote page shows under the pointer, sent only on change (see `cursor` in the interface for why it
-    // must be sent at all).
-    const onCursor = (shape: string | undefined): void => {
-        cursor.value = shape ?? `default`;
-    };
-
-    // One binary message, either picture kind; the first byte is the daemon's own tag (screencast.ts/videocast.ts
-    // share the table). Read here rather than behind a mode flag, since a flag could go stale across a reconnect onto
-    // a browser whose display just appeared.
-    const takePicture = (data: ArrayBuffer): void => {
-        const bytes = new Uint8Array(data);
-        const tag = bytes[0];
-        const coded = videoTag(tag);
-        if (coded !== undefined) {
-            video.push(bytes.subarray(1), coded.key, coded.quiet);
-            status.value = undefined;
-            return;
-        }
-        if (tag === FRAME_WEBP && kind.value === `video`) {
-            // The settled page, sharp; laid over the video until it moves.
-            video.still(bytes.subarray(1));
-            return;
-        }
-        const picture = pictures.from(data);
-        if (picture !== undefined) {
-            frame.value = picture;
-            status.value = undefined;
-        }
-    };
 
     // The daemon knows this session is done for good; reconnecting would only ask the same dead question.
     const onError = (reason: string | undefined): void => {
-        live.end();
+        cast.live.end();
         status.value = reason ?? t(`browsers.browserView.sessionGone`);
-        frame.value = undefined;
+        cast.frame.value = undefined;
     };
 
-    // Everything on this socket besides a picture, kept separate so the message listener stays a two-way fork instead
-    // of branching per message type.
-    const handleJson = (raw: string): void => {
-        let message: {
-            type?: string;
-            kind?: string;
-            width?: number;
-            height?: number;
-            scale?: number;
-            codec?: string;
-            message?: string;
-            text?: string;
-            cursor?: string;
-            menu?: SelectMenu | null;
-        };
-        try {
-            message = JSON.parse(raw) as typeof message;
-        } catch {
-            return;
-        }
+    // Everything on this socket besides a picture and `ready`, kept separate so each message type is one branch.
+    const onMessage = (message: ScreencastMessage): void => {
         switch (message.type) {
-            case `ready`:
-                onReady(message);
-                break;
             case `cursor`:
-                onCursor(message.cursor);
+                // What the remote page shows under the pointer, sent only on change (see `cursor` in the interface).
+                cursor.value = message.cursor ?? `default`;
                 break;
             case `selection`:
                 copy.answer(message.text);
                 break;
             case `select`:
                 // Sent after every release: a menu to draw, or null to close one the user clicked away from.
-                select.value = message.menu ?? undefined;
+                select.value = SelectMenuSchema.nullable().catch(null).parse(message[`menu`]) ?? undefined;
                 break;
             case `gone`:
                 // The tab closed between relist and click; drop the pin so the stream follows the agent again.
@@ -258,49 +148,59 @@ export const useBrowserView = (name: Ref<string | undefined>, options: BrowserVi
         }
     };
 
-    // A background or unmounted-but-alive view would otherwise keep pulling every frame down the tunnel to nothing
-    // visible. The daemon holds the binding and pin across a pause, so resuming is one frame away, not a reconnect.
-    const syncVisibility = (): void => send({ type: document.hidden || options.visible?.value === false ? `pause` : `resume` });
-    document.addEventListener(`visibilitychange`, syncVisibility);
-    if (options.visible !== undefined) {
-        watch(options.visible, syncVisibility);
-    }
-
-    const live = useLiveSocket<string>({
+    // `ready` picks the picture (video, or the frames path's img) and its geometry; the daemon pongs every ping, and a
+    // still page sends no frames, so its silence clock is the plain one.
+    const cast = useScreencast({
         mint: async () => {
             const session = name.value;
             return session === undefined ? undefined : socketUrl(session);
         },
-        open: webSocketChannel({ text: handleJson, binary: takePicture }),
-        onMintFailed: (error) => {
-            // A session that couldn't be minted (sandbox restarting, network down) retries like a drop; nothing else would.
-            console.warn(`browser ${name.value ?? ``}: authorizing the view's socket failed`, error);
-            status.value = t(`browsers.browserView.authFailed`, { reason: errorMessage(error) });
+        pointer: pointerFrame,
+        frames: true,
+        visible: options.visible,
+        holdSize: () => device !== undefined,
+        onMessage,
+        onReady: () => {
+            status.value = t(`browsers.browserView.waiting`);
         },
-        onUnreachable: () => {
-            status.value = t(`browsers.browserView.unreachable`);
+        onUnsupported: () => {
+            status.value = t(`browsers.browserView.unsupported`);
         },
-        onOpen: () => {
-            // A fresh socket knows nothing of the box; the first `ready` asks again.
-            askedSize = undefined;
-            if (pinned !== undefined) {
-                send({ type: `bind`, pageId: pinned });
-            }
-            if (device !== undefined) {
-                send({ type: `emulate`, device });
-            }
-            // A newly (re)opened socket starts out streaming; the daemon can't know otherwise until told.
-            syncVisibility();
+        onVideoError: (message) => {
+            status.value = message;
         },
-        onDrop: () => {
-            status.value = t(`browsers.browserView.reconnecting`);
+        onPicture: () => {
+            status.value = undefined;
+        },
+        socket: {
+            onMintFailed: (error) => {
+                // A session that couldn't be minted (sandbox restarting, network down) retries like a drop; nothing else would.
+                console.warn(`browser ${name.value ?? ``}: authorizing the view's socket failed`, error);
+                status.value = t(`browsers.browserView.authFailed`, { reason: errorMessage(error) });
+            },
+            onUnreachable: () => {
+                status.value = t(`browsers.browserView.unreachable`);
+            },
+            onOpen: () => {
+                if (pinned !== undefined) {
+                    send({ type: `bind`, pageId: pinned });
+                }
+                if (device !== undefined) {
+                    send({ type: `emulate`, device });
+                }
+                // A newly (re)opened socket starts out streaming; the daemon can't know otherwise until told.
+                cast.syncVisibility();
+            },
+            onDrop: () => {
+                status.value = t(`browsers.browserView.reconnecting`);
+            },
         },
     });
+    const { video } = cast;
 
     const teardown = (): void => {
-        window.clearTimeout(resizeTimer);
         copy.cancel();
-        live.close();
+        cast.live.close();
     };
 
     watch(
@@ -309,14 +209,11 @@ export const useBrowserView = (name: Ref<string | undefined>, options: BrowserVi
             teardown();
             pinned = undefined;
             rawKeys = false;
-            askedSize = undefined;
             // Each window is its own; the next one starts as itself, and the caller says again if it should not.
             device = undefined;
-            frame.value = undefined;
             driving.value = false;
-            // A decoder holds state for the stream it was built for; the next browser's `ready` builds a new one.
-            video.close();
-            kind.value = undefined;
+            // Nothing of the browser being left carries over: its picture, its decoder, the box asked of it.
+            cast.reset();
             // A shape from the browser being left describes nothing in the next one, which isn't being driven yet
             // anyway.
             cursor.value = `default`;
@@ -324,30 +221,23 @@ export const useBrowserView = (name: Ref<string | undefined>, options: BrowserVi
             select.value = undefined;
             status.value = name.value === undefined ? undefined : t(`browsers.browserView.connecting`);
             if (name.value !== undefined) {
-                live.connect();
+                cast.live.connect();
             }
         },
         { immediate: true },
     );
 
-    onScopeDispose(() => {
-        document.removeEventListener(`visibilitychange`, syncVisibility);
-        teardown();
-        // An unreleased object URL holds its blob for the life of the document; a decoder holds buffers of its own.
-        pictures.release();
-        video.close();
-    });
+    onScopeDispose(teardown);
 
-    let lastMove = 0;
     // Every pointer event routes through here, so `driving` is checked once and a frame built in one place
-    // (pointerFrame); nothing reaches the page while only watching.
+    // (pointerFrame); nothing reaches the page while only watching. Moves are throttled to one display frame.
     const sendPointer = (action: PointerAction, event: MouseEvent, element: HTMLElement): void => {
         if (!driving.value) {
             return;
         }
         // Undefined while the picture has no box (a frames <img> before its first src): sending would aim at the
         // remote origin instead of where the user pointed.
-        const pointer = pointerFrame(action, event, element, viewWidth.value, viewHeight.value);
+        const pointer = cast.pointerAt(action, event, element);
         if (pointer !== undefined) {
             send(pointer);
         }
@@ -362,12 +252,12 @@ export const useBrowserView = (name: Ref<string | undefined>, options: BrowserVi
     };
 
     return {
-        kind,
-        viewWidth,
-        viewHeight,
-        viewScale,
+        kind: cast.kind,
+        viewWidth: cast.width,
+        viewHeight: cast.height,
+        viewScale: cast.scale,
         attachCanvases: video.attach,
-        frame,
+        frame: cast.frame,
         status,
         driving,
         cursor,
@@ -388,19 +278,7 @@ export const useBrowserView = (name: Ref<string | undefined>, options: BrowserVi
             send({ type: `selectOption`, index });
         },
         closeSelect: () => (select.value = undefined),
-        onMouseMove: (event, element) => {
-            if (!driving.value) {
-                return;
-            }
-            // Only enough to stop a 1000 Hz mouse flooding the socket; one frame at 60 Hz is the rate the far side can
-            // act on anyway.
-            const now = Date.now();
-            if (now - lastMove < MOVE_THROTTLE_MS) {
-                return;
-            }
-            lastMove = now;
-            sendPointer(`move`, event, element);
-        },
+        onMouseMove: (event, element) => sendPointer(`move`, event, element),
         onMouseDown: (event, element) => {
             // A click puts the keyboard back on the page, wherever the find bar left it.
             rawKeys = false;
@@ -454,15 +332,7 @@ export const useBrowserView = (name: Ref<string | undefined>, options: BrowserVi
             send({ type: `key`, key: `f`, ctrl: true, raw: true });
             rawKeys = true;
         },
-        requestSize: (width, height) => {
-            const size = { width: Math.round(width), height: Math.round(height) };
-            if (size.width <= 0 || size.height <= 0 || sameSize(size, boxSize)) {
-                return;
-            }
-            boxSize = size;
-            window.clearTimeout(resizeTimer);
-            resizeTimer = window.setTimeout(askSize, RESIZE_DEBOUNCE_MS);
-        },
+        requestSize: cast.requestSize,
         emulate: (next) => {
             const same =
                 next === device ||
@@ -480,8 +350,7 @@ export const useBrowserView = (name: Ref<string | undefined>, options: BrowserVi
             // Back to itself, the page is sized to the box again: the daemon has the box it had before, but asking is
             // what a fresh box is, so the last one asked is forgotten.
             if (next === undefined) {
-                askedSize = undefined;
-                askSize();
+                cast.askSizeAgain();
             }
         },
         answerDialog: (accept, text) => send(text === undefined ? { type: `dialog`, accept } : { type: `dialog`, accept, text }),

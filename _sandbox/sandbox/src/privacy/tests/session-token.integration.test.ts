@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sessionTokens } from "../gateway/session-token.js";
@@ -43,4 +43,16 @@ test("an edited payload, a foreign key and a malformed token are all refused", a
     expect(await sessionTokens(join(dir, "other-key")).verify(token)).toBeUndefined();
     expect(await signer.verify("nonsense")).toBeUndefined();
     expect(await signer.verify(`${token}.extra`)).toBeUndefined();
+});
+
+// Two signers' first use of one key file (spelled two ways, so neither shares the other's in-process load) keep one key:
+// whichever loses the publish reads the winner's back, so neither hands out addresses the other cannot verify.
+test("two concurrent first loads of the key agree, and the key is kept root-only", async () => {
+    const key = join(dir, "key");
+    const [a, b] = [sessionTokens(key), sessionTokens(`${dir}/./key`)];
+    const session = { provider: "claude", upstream: "https://api.anthropic.com", conversationId: "c-1" };
+    const [fromA, fromB] = await Promise.all([a.sign(session), b.sign(session)]);
+    expect(fromA).toBe(fromB);
+    expect(await sessionTokens(key).verify(fromA)).toEqual(session);
+    expect(((await stat(key)).mode & 0o777).toString(8)).toBe("600");
 });

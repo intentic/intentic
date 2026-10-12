@@ -1,4 +1,4 @@
-import { lstat, mkdir, readdir, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, readlink, rm, symlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { writeFileAtomic } from "@intentic/base/fs";
@@ -6,6 +6,7 @@ import { withManagedInclude } from "@intentic/base/ssh-config";
 import { publicLineOf } from "./credentials/ssh-keys.js";
 import { isKeyAlias, type SshKeyStore } from "./ssh-key-store.js";
 import { homeDir } from "../system/home-dir.js";
+import { textFile } from "../store/plain-files/text-file.js";
 
 // Managed ssh-config shared by the `ssh` capability and git-provider key access: `<alias>.conf` per alias, beside the
 // PUBLIC half of its key (`<alias>.pub`), or a password file for a machine that signs in with one. The private half is
@@ -31,18 +32,16 @@ const INCLUDE = `Include ${INCLUDED}`;
 
 // Ensures ~/.ssh/config Includes the managed dir, first, once; a relative Include resolves under ~/.ssh, so a bare glob
 // matches every alias file. Only a live line counts: one the user commented out is not an include. Written atomically
-// so a crash mid-write cannot truncate the user's config.
+// so a crash mid-write cannot truncate the user's config, and queued so two aliases written at once both see it.
+// textFile reads only absence as empty: the user's config that cannot be read is never rewritten as just the Include.
 const ensureInclude = async (): Promise<void> => {
     const sshDir = join(homeDir(), ".ssh");
-    const userConfig = join(sshDir, "config");
-    // Only absence reads as empty: the user's config that cannot be read is never rewritten as just the Include.
-    const current = (await readFile(userConfig, "utf8").catch(undefinedIfMissing)) ?? "";
-    const desired = withManagedInclude(current, INCLUDE, (path) => path === INCLUDED);
-    if (desired === current) {
-        return;
-    }
+    // ssh wants ~/.ssh private, which the write's own mkdir of a missing parent would not make it.
     await mkdir(sshDir, { recursive: true, mode: 0o700 });
-    await writeFileAtomic(userConfig, desired, 0o600);
+    await textFile(join(sshDir, "config"), 0o600).update((current) => {
+        const desired = withManagedInclude(current, INCLUDE, (path) => path === INCLUDED);
+        return desired === current ? undefined : desired;
+    });
 };
 
 // Boot: repoints the managed dir at the /history volume and re-ensures the Include, since ~/.ssh is container-local and
@@ -95,7 +94,9 @@ const configBlock = (alias: string, spec: SshHostSpec): string => {
 export const writeSshHost = async (alias: string, spec: SshHostSpec): Promise<void> => {
     await mkdir(hostsDir(), { recursive: true, mode: 0o700 });
     await ensureInclude();
-    await writeFile(hostConfPath(alias), configBlock(alias, spec));
+    // Atomic, since it also REPLACES an alias's block while an ssh may be reading it; the umask decides its mode, as ssh
+    // asks of a config only that others cannot write it.
+    await writeFileAtomic(hostConfPath(alias), configBlock(alias, spec));
 };
 
 // Writes the public half beside the alias's config; the line is what authorized_keys holds, so it is no secret. Atomic,
@@ -105,10 +106,11 @@ export const writeHostPublicKey = async (alias: string, publicLine: string): Pro
     await writeFileAtomic(hostPublicKeyPath(alias), publicLine.endsWith("\n") ? publicLine : `${publicLine}\n`, 0o644);
 };
 
-// Writes a key the agent cannot sign with (one with a passphrase) beside its alias, 0600 as ssh demands of a key file.
+// Writes a key the agent cannot sign with (one with a passphrase) beside its alias, 0600 as ssh demands of a key file:
+// set on the file written, so a key replacing one left 0644 does not inherit that mode and get refused by ssh.
 export const writeHostKeyFile = async (alias: string, privateKey: string): Promise<void> => {
     await mkdir(hostsDir(), { recursive: true, mode: 0o700 });
-    await writeFile(hostKeyFilePath(alias), privateKey.endsWith("\n") ? privateKey : `${privateKey}\n`, { mode: 0o600 });
+    await writeFileAtomic(hostKeyFilePath(alias), privateKey.endsWith("\n") ? privateKey : `${privateKey}\n`, 0o600);
 };
 
 // Drops an alias's config, its public key, password and key files; missing files are fine. The key store's copy is the
@@ -139,10 +141,8 @@ export const adoptLegacySshKey = async (alias: string, keys: SshKeyStore): Promi
     }
     await keys.put(alias, privateKey);
     await writeHostPublicKey(alias, publicLine);
-    const conf = await readFile(hostConfPath(alias), "utf8").catch(undefinedIfMissing);
-    if (conf !== undefined) {
-        await writeFile(hostConfPath(alias), repointedIdentity(conf, alias));
-    }
+    // An alias with no config (or an empty one) has nothing to repoint, and gets none made for it.
+    await textFile(hostConfPath(alias)).update((conf) => (conf === "" ? undefined : repointedIdentity(conf, alias)));
     await rm(hostKeyFilePath(alias), { force: true });
     await rm(`${hostKeyFilePath(alias)}.pub`, { force: true });
     return true;

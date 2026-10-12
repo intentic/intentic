@@ -72,3 +72,32 @@ test("every call rides the extension token header", async () => {
     expect(seen.map((headers) => headers.get("x-intentic-extension"))).toEqual(["ext-token", "ext-token"]);
     expect(seen.filter((headers) => headers.has("x-intentic-panel"))).toEqual([]);
 });
+
+// One bad line in a streamed reply used to throw out of JSON.parse and end the dispatch, losing every frame after it.
+test("a streamed dispatch skips and logs a line that is not JSON, and delivers the frames around it", async () => {
+    const bytes = new TextEncoder().encode(`{"automationId":"a1","delta":"héllo"}\nnot json\n\n{"automationId":"a1","end":true}`);
+    // The "é" is split across two chunks, as a network may deliver it.
+    const cut = bytes.indexOf(0xc3) + 1;
+    stubGlobal(
+        "fetch",
+        jest.fn(async () => {
+            const body = new ReadableStream<Uint8Array>({
+                start(controller) {
+                    controller.enqueue(bytes.subarray(0, cut));
+                    controller.enqueue(bytes.subarray(cut));
+                    controller.close();
+                },
+            });
+            return new Response(body, { status: 200 });
+        }),
+    );
+    const { log, warned } = recordingLog();
+    const received: unknown[] = [];
+    const message = { provider: "slack", type: "message", id: "m1", channelId: "c1", author: { id: "u1", name: "U" }, content: "hi", timestamp: "0" };
+    await createDaemonClient("slack", door, log).dispatchStreaming(message, (frame) => received.push(frame));
+    expect(received).toEqual([
+        { automationId: "a1", delta: "héllo" },
+        { automationId: "a1", end: true },
+    ]);
+    expect(warned.map((entry) => entry.fields)).toEqual([{ line: "not json" }]);
+});

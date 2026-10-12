@@ -1,3 +1,4 @@
+import { keyedLock } from "@intentic/base/async";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { materializedPaths } from "../../git/changes/changes-porcelain.js";
 
@@ -66,8 +67,9 @@ const addNew = (paths: Set<string>, incoming: readonly string[]): number => {
 };
 
 export const createExpiryTracker = (git: GitRunner = defaultGit): ExpiryTracker => {
-    // Per-repo head plus accumulated paths per landing; `chain` serializes updates so scans cannot interleave.
-    const repos = new Map<string, { head: string; entries: Map<string, Set<string>>; chain: Promise<unknown> }>();
+    // Per-repo head plus accumulated paths per landing; updates of one repo run one at a time so scans cannot interleave.
+    const repos = new Map<string, { head: string; entries: Map<string, Set<string>> }>();
+    const inOrder = keyedLock<string>();
     // Characters across every entry's paths, moved on each insert and drop; see PathLists for why it is not summed.
     let pathCharacters = 0;
 
@@ -78,11 +80,12 @@ export const createExpiryTracker = (git: GitRunner = defaultGit): ExpiryTracker 
         committedSince: (dir, repo, landedHead, head) => {
             let state = repos.get(repo);
             if (state === undefined) {
-                state = { head, entries: new Map(), chain: Promise.resolve() };
+                state = { head, entries: new Map() };
                 repos.set(repo, state);
             }
             const current = state;
-            const step = current.chain.then(async (): Promise<ReadonlySet<string>> => {
+            // A failed diff fails only its own caller; nothing is queued behind it.
+            return inOrder(repo, async (): Promise<ReadonlySet<string>> => {
                 // Shared increment before this landing's lookup, so entries advance together; a content diff, not
                 // ancestry.
                 if (current.head !== head) {
@@ -104,9 +107,6 @@ export const createExpiryTracker = (git: GitRunner = defaultGit): ExpiryTracker 
                 pathCharacters += listWeight(paths);
                 return paths;
             });
-            // A failed diff fails only its own caller; nothing is queued behind it.
-            current.chain = step.catch(() => undefined);
-            return step;
         },
         drop: (repo, landedHead) => {
             const entries = repos.get(repo)?.entries;

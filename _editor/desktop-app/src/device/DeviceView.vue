@@ -16,7 +16,8 @@ import {
     vAction,
 } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { computed, onMounted, onUnmounted } from "vue";
+import { usePoll } from "@intentic/ui/async";
+import { computed, onMounted } from "vue";
 import DockerCard from "../components/DockerCard.vue";
 import EngineCard from "../components/EngineCard.vue";
 import FixProgress from "../components/FixProgress.vue";
@@ -187,24 +188,21 @@ const toSetup = async (): Promise<void> => {
 const backTip = computed((): Tip => ({ title: t(`desktop.app.openWorkspace`), note: running.value ? t(`desktop.app.installKeepsRunning`) : `` }));
 
 // Read on arrival and then again while the page is on screen, so a sandbox started from the workspace or an agent that
-// came back shows up without a press. A hidden window reads nothing.
-let timer: ReturnType<typeof setInterval> | undefined;
-const readWhenShown = (): void => {
-    if (document.visibilityState === `visible`) {
-        void refresh();
-        followEngine();
-    }
-};
+// came back shows up without a press. A hidden window reads nothing, and reads at once when it is shown again. One read
+// at a time: a docker that is not there can hold a read past the next tick, which then waits for it instead of piling on.
+const reading = usePoll({
+    everyMs: REFRESH_EVERY_MS,
+    check: async () => {
+        if (document.visibilityState === `visible`) {
+            await refresh();
+            followEngine();
+        }
+    },
+});
 onMounted(() => {
-    void refresh();
     // The engine on opening, not on the timer: `ic engine status` asks WSL and docker, and changes only by a move.
     void loadEngine();
-    timer = setInterval(readWhenShown, REFRESH_EVERY_MS);
-    document.addEventListener(`visibilitychange`, readWhenShown);
-});
-onUnmounted(() => {
-    clearInterval(timer);
-    document.removeEventListener(`visibilitychange`, readWhenShown);
+    reading.start();
 });
 </script>
 

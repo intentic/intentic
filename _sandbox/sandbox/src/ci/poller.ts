@@ -1,4 +1,4 @@
-import { serialLock } from "@intentic/base/async";
+import { type Backoff, createBackoff, serialLock } from "@intentic/base/async";
 import { CI_POLL_INTERVAL_MS, isPipelineInFlight } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
@@ -17,13 +17,14 @@ import { ciProjects } from "./projects.js";
 const RUNS_PER_POLL = 20;
 
 // A refused token (401) is asked again after a pause that doubles up to this, rather than every pass for hours. A new
-// token for the account ends the pause at once, since nothing about the old refusal speaks for it.
+// token for the account ends the pause at once, since nothing about the old refusal speaks for it. The pause is
+// jittered so the repos one revoked token refused don't all come back on the same pass.
 const REFUSED_BACKOFF_MAX_MS = 30 * 60_000;
 
 interface Refusal {
     readonly token: string;
     readonly until: number;
-    readonly pauseMs: number;
+    readonly pause: Backoff;
 }
 
 export interface CiPoller {
@@ -38,6 +39,7 @@ export const createCiPoller = (
     fetchFn: FetchFn = fetch,
     intervalMs = CI_POLL_INTERVAL_MS,
     now: () => number = Date.now,
+    random: () => number = Math.random,
 ): CiPoller => {
     let timer: NodeJS.Timeout | undefined;
     const serially = serialLock();
@@ -107,9 +109,11 @@ export const createCiPoller = (
             } catch (error) {
                 failures.failed(project.repo, error);
                 if (vendorStatusOf(error) === 401) {
-                    const pauseMs =
-                        refusal?.token === project.account.token ? Math.min(refusal.pauseMs * 2, REFUSED_BACKOFF_MAX_MS) : intervalMs * 2;
-                    refusals.set(project.repo, { token: project.account.token, until: now() + pauseMs, pauseMs });
+                    const pause =
+                        refusal?.token === project.account.token
+                            ? refusal.pause
+                            : createBackoff({ floorMs: intervalMs * 2, capMs: REFUSED_BACKOFF_MAX_MS, random });
+                    refusals.set(project.repo, { token: project.account.token, until: now() + pause.next(), pause });
                 }
             }
         }

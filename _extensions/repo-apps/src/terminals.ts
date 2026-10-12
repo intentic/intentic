@@ -3,19 +3,19 @@ import { useQuery } from "@tanstack/vue-query";
 import { computed, type ComputedRef } from "vue";
 import { host } from "./host";
 
-// Daemon's tmux session list, used here to watch a one-shot job's `running` flag. Unpolled: shares the same key as the
-// entry core's own terminal panel and rail badge read, pushed by the daemon when a pane's state changes.
+// Daemon's tmux session list, used here to watch a one-shot job's `running` flag. Unpolled: keyed by its procedure, so it
+// is the entry core's own terminal panel and rail badge read, refreshed by the daemon's push when a pane's state changes.
 export type TerminalSession = TerminalsList["sessions"][number];
 
-// One key, one fetcher: this also feeds the entry core's terminal panel and rail badge, so it must return the whole
-// session shape, not just the fields this view uses, or a refetch would silently drop core's other fields.
+// The one-shot list, for mount recovery below; the query stores the procedure's whole answer, which core's panel shares.
 const fetchTerminals = async (): Promise<TerminalSession[]> => (await host().sandbox.rpc.system.terminals()).sessions;
 
 export function useTerminals(): { sessions: ComputedRef<TerminalSession[]> } {
     const api = host();
     const query = useQuery({
-        queryKey: api.sandbox.key(`terminals`),
-        queryFn: fetchTerminals,
+        queryKey: api.sandbox.readKey(`system.terminals`),
+        queryFn: () => api.sandbox.rpc.system.terminals(),
+        select: (list): TerminalSession[] => list.sessions,
         enabled: computed(() => api.sandbox.reachable()),
     });
     return { sessions: computed(() => query.data.value ?? []) };

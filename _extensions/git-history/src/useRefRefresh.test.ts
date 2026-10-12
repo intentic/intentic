@@ -10,7 +10,7 @@ test("an unnamed refs batch refreshes the open repository after reconnect", () =
     const dispose = jest.fn();
     bindHost(
         unstubbed<IntenticApi>("host", {
-            sandbox: unstubbed<IntenticApi["sandbox"]>("sandbox", { key: (...parts: unknown[]) => [...parts, "sandbox"] }),
+            sandbox: unstubbed<IntenticApi["sandbox"]>("sandbox", {}),
             workspace: unstubbed<IntenticApi["workspace"]>("workspace", {
                 onDidChangeRefs: (listener) => {
                     changed = listener;
@@ -25,9 +25,9 @@ test("an unnamed refs batch refreshes the open repository after reconnect", () =
     app.use(VueQueryPlugin, { queryClient: client });
     const scope = effectScope();
     try {
-        app.runWithContext(() => scope.run(() => useRefRefresh(ref("repo"), ["log"])));
+        app.runWithContext(() => scope.run(() => useRefRefresh(ref("repo"), [ref(["git.branches", { repo: "repo" }, "sandbox"])])));
         changed([]);
-        expect(invalidate).toHaveBeenCalledWith({ queryKey: ["git-history", "log", "repo", "sandbox"] });
+        expect(invalidate).toHaveBeenCalledWith({ queryKey: ["git.branches", { repo: "repo" }, "sandbox"] });
         invalidate.mockClear();
         changed(["other"]);
         expect(invalidate).toHaveBeenCalledTimes(0);

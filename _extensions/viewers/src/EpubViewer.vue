@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { unzipParts } from "./zip/unzip";
-import { Button, Icon, ui, useLatest } from "@intentic/extension-ui";
+import { Button, Icon, ui } from "@intentic/extension-ui";
 import { computed, onMounted, ref, watch } from "vue";
 import { openEpub, type EpubBook } from "./epub/book";
 import { renderChapter } from "./epub/page";
 import { t } from "./i18n.js";
+import ViewerStatus from "./load/ViewerStatus.vue";
+import { useViewerLoad } from "./load/useViewerLoad.js";
 
 /* EPUB preview: the book's own chapters, each rendered with its own stylesheet inside a frame that can neither run
    a script nor reach the network. */
@@ -14,10 +16,8 @@ const { blob } = defineProps<{ blob: Blob }>();
 const book = ref<EpubBook>();
 const index = ref(0);
 const source = ref(``);
-const loading = ref(true);
-const error = ref<string>();
+const { loading, error, start } = useViewerLoad(() => t(`epubViewer.couldNotOpen`));
 const showContents = ref(false);
-const latest = useLatest();
 
 const chapters = computed(() => book.value?.chapters ?? []);
 const current = computed(() => chapters.value[index.value]);
@@ -33,13 +33,10 @@ const show = (next: number): void => {
     source.value = chapter === undefined ? `` : renderChapter(opened, chapter.path);
 };
 
-const load = async (file: Blob): Promise<void> => {
-    const isLatest = latest();
-    loading.value = true;
-    error.value = undefined;
-    source.value = ``;
-    book.value = undefined;
-    try {
+const load = (file: Blob): Promise<void> =>
+    start(async (isLatest) => {
+        source.value = ``;
+        book.value = undefined;
         const parts = await unzipParts(new Uint8Array(await file.arrayBuffer()));
         if (!isLatest()) {
             return;
@@ -47,17 +44,7 @@ const load = async (file: Blob): Promise<void> => {
         book.value = openEpub(parts);
         index.value = 0;
         show(0);
-    } catch (caught) {
-        if (!isLatest()) {
-            return;
-        }
-        error.value = caught instanceof Error ? caught.message : t(`epubViewer.couldNotOpen`);
-    } finally {
-        if (isLatest()) {
-            loading.value = false;
-        }
-    }
-};
+    });
 
 onMounted(() => void load(blob));
 watch(
@@ -91,38 +78,35 @@ watch(
         </div>
 
         <div class="relative min-h-0 flex-1">
-            <div v-if="loading" class="flex h-full items-center justify-center text-muted"><Icon name="spinner" class="text-xl" spin /></div>
-            <div v-else-if="error !== undefined" class="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
-                <Icon name="exclamation-triangle" class="text-3xl text-danger" />
-                <p class="text-sm text-danger">{{ error }}</p>
-            </div>
-            <div v-else-if="chapters.length === 0" class="flex h-full items-center justify-center text-sm text-muted">
-                {{ t(`epubViewer.bookNoChaptersIn`) }}
-            </div>
-            <div v-else class="flex h-full min-h-0">
-                <!-- The book's own table of contents, beside the text rather than over it. -->
-                <nav v-if="showContents" class="w-64 shrink-0 overflow-auto border-r border-line-subtle py-2">
-                    <button
-                        v-for="(chapter, position) in chapters"
-                        :key="chapter.path"
-                        type="button"
-                        class="block w-full truncate px-3 py-1 text-left text-2xs hover:bg-overlay"
-                        :class="position === index ? `text-content font-medium` : `text-muted`"
-                        @click="show(position)"
-                    >
-                        {{ chapter.title }}
-                    </button>
-                </nav>
-                <!-- No allow-scripts and no allow-same-origin: the book's markup renders, and can do nothing else. -->
-                <iframe
-                    :key="current?.path"
-                    :srcdoc="source"
-                    sandbox=""
-                    referrerpolicy="no-referrer"
-                    :title="current?.title ?? t(`epubViewer.chapter`)"
-                    class="h-full min-w-0 flex-1 border-0 bg-white"
-                ></iframe>
-            </div>
+            <ViewerStatus :loading="loading" :error="error">
+                <div v-if="chapters.length === 0" class="flex h-full items-center justify-center text-sm text-muted">
+                    {{ t(`epubViewer.bookNoChaptersIn`) }}
+                </div>
+                <div v-else class="flex h-full min-h-0">
+                    <!-- The book's own table of contents, beside the text rather than over it. -->
+                    <nav v-if="showContents" class="w-64 shrink-0 overflow-auto border-r border-line-subtle py-2">
+                        <button
+                            v-for="(chapter, position) in chapters"
+                            :key="chapter.path"
+                            type="button"
+                            class="block w-full truncate px-3 py-1 text-left text-2xs hover:bg-overlay"
+                            :class="position === index ? `text-content font-medium` : `text-muted`"
+                            @click="show(position)"
+                        >
+                            {{ chapter.title }}
+                        </button>
+                    </nav>
+                    <!-- No allow-scripts and no allow-same-origin: the book's markup renders, and can do nothing else. -->
+                    <iframe
+                        :key="current?.path"
+                        :srcdoc="source"
+                        sandbox=""
+                        referrerpolicy="no-referrer"
+                        :title="current?.title ?? t(`epubViewer.chapter`)"
+                        class="h-full min-w-0 flex-1 border-0 bg-white"
+                    ></iframe>
+                </div>
+            </ViewerStatus>
         </div>
     </div>
 </template>

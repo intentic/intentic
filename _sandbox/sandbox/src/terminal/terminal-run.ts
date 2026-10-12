@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { promisify } from "node:util";
+import { keyedLock } from "@intentic/base/async";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 
 // Every user-triggered shell action runs inside a visible tmux session in the terminals panel, never an invisible
@@ -73,7 +74,7 @@ export const createTerminalRunner = (): TerminalRunner => {
     const visible = existsSync(TMUX_RUN_BIN);
     const inFlight = new Map<string, number>();
     // A session is a FIFO queue, one command at a time: a caller's choice of session is a choice of whose commands it waits behind.
-    const queues = new Map<string, Promise<unknown>>();
+    const inTurn = keyedLock<string>();
 
     const execute = async (session: string, command: string, options: TerminalRunOptions): Promise<TerminalRunResult> => {
         // Cancelled while it waited its turn: it never starts, so nothing announces a window that would only be killed.
@@ -120,10 +121,7 @@ export const createTerminalRunner = (): TerminalRunner => {
 
     const tryRun = (session: string, command: string, options: TerminalRunOptions): Promise<TerminalRunResult> => {
         inFlight.set(session, (inFlight.get(session) ?? 0) + 1);
-        const turn = (queues.get(session) ?? Promise.resolve()).then(
-            () => execute(session, command, options),
-            () => execute(session, command, options),
-        );
+        const turn = inTurn(session, () => execute(session, command, options));
         const settle = (): void => {
             const count = (inFlight.get(session) ?? 1) - 1;
             if (count <= 0) {
@@ -131,11 +129,8 @@ export const createTerminalRunner = (): TerminalRunner => {
             } else {
                 inFlight.set(session, count);
             }
-            if (queues.get(session) === turn) {
-                queues.delete(session);
-            }
         };
-        queues.set(session, turn.then(settle, settle));
+        void turn.then(settle, settle);
         return turn;
     };
 

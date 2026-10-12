@@ -135,8 +135,6 @@
         "unreadable": "Ta karta nie wskazuje żadnego przebiegu."
     },
     "statusVisual": {
-        "minutesSeconds": "{minutes} min {seconds} s",
-        "seconds": "{seconds} s",
         "status": {
             "canceled": "anulowano",
             "failed": "błąd",

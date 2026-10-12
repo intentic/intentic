@@ -1,4 +1,6 @@
 import { DAEMON_PORT } from "@intentic/constants";
+import { DaemonHealthReadingSchema } from "@intentic/sandbox-contract";
+import { slugOfDaemonUrl } from "@intentic/sandbox-run/slug";
 import { waitForAnnounce } from "../announce.js";
 import { findIcBinary } from "../ic-binary.js";
 import type { Provisioner, ProvisionContext } from "../provisioner.js";
@@ -13,14 +15,18 @@ import { type Completed, freshShellEnv, runTool } from "../shell.js";
 // itself is never run, only parsed for the code the page actually copied.
 const setupCodeOf = (command: string): string | undefined => /\bsh\s+(?:-s\s+--\s+)?(\S+)\s*$/u.exec(command.trim())?.[1];
 
-/** Slug every later command keys off: the leading label of the announced daemon address. */
-const slugOf = (daemonUrl: string): string | undefined => {
+// `reachedBy` off one /health answer, read with the contract's loose reading; undefined for output that is not an answer
+// (curl's own noise, a body cut short), which the posture check then reports as not a tunnel.
+const healthReachedBy = (output: string): string | undefined => {
+    let body: unknown;
     try {
-        const label = new URL(daemonUrl).hostname.split(`.`)[0];
-        return label === `` ? undefined : label;
+        body = JSON.parse(output);
     } catch {
+        // allow(silent-catch): not JSON is not the daemon's answer, which undefined says
         return undefined;
     }
+    const parsed = DaemonHealthReadingSchema.safeParse(body);
+    return parsed.success ? parsed.data.reachedBy : undefined;
 };
 
 // Only links expected to fail in a world with no edge; any other failing link fails the lane.
@@ -99,7 +105,7 @@ export const icProvisioner = (): Provisioner => {
         if (health.code !== 0) {
             throw new Error(`${container} did not answer /health after a setup that got this far:\n${health.output}`);
         }
-        const { reachedBy } = JSON.parse(health.output) as { reachedBy?: string };
+        const reachedBy = healthReachedBy(health.output);
         if (reachedBy !== `tunnel`) {
             throw new Error(
                 `the daemon reports it is reached by "${reachedBy}", not by a tunnel: the setup created a container that ` +
@@ -150,7 +156,8 @@ export const icProvisioner = (): Provisioner => {
 
             // Waits on the platform's registry, not screen text; returns the address the daemon claimed.
             const announced = await waitForAnnounce(databaseUrl, startedAt, 300_000);
-            slug = slugOf(announced.daemonUrl);
+            // The slug every later command keys off: the leading label of the announced daemon address.
+            slug = slugOfDaemonUrl(announced.daemonUrl);
             if (slug === undefined) {
                 throw new Error(`the platform recorded an unreadable daemon address for ${announced.id}: ${announced.daemonUrl}`);
             }

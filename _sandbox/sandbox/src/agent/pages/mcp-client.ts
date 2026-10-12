@@ -1,3 +1,5 @@
+import { readCappedText } from "@intentic/base/capped-read";
+import { parseSseText, sseJson } from "@intentic/sandbox-contract";
 import type { AgentTool } from "../tools/agent-tools.js";
 
 // The few MCP calls the daemon makes itself to host an MCP server's app (mcp-apps.ts): list the tools to learn which
@@ -24,20 +26,8 @@ interface Rpc {
 const answerIn = (body: string, contentType: string, id: number): Rpc | undefined => {
     const messages: unknown[] = [];
     if (contentType.includes("text/event-stream")) {
-        for (const event of body.split(/\r?\n\r?\n/)) {
-            const data = event
-                .split(/\r?\n/)
-                .filter((line) => line.startsWith("data:"))
-                .map((line) => line.slice(5).trimStart())
-                .join("\n");
-            if (data !== "") {
-                try {
-                    messages.push(JSON.parse(data));
-                } catch {
-                    // allow(silent-catch): a keep-alive or a line that is not a message is not an answer.
-                }
-            }
-        }
+        // A keep-alive, or data that is not JSON, reads as undefined, which the search below passes over.
+        messages.push(...parseSseText(body).map(sseJson));
     } else if (body.trim() !== "") {
         const parsed: unknown = JSON.parse(body);
         messages.push(...(Array.isArray(parsed) ? parsed : [parsed]));
@@ -79,12 +69,9 @@ export class McpClient {
         const id = this.next++;
         const response = await this.post({ jsonrpc: "2.0", id, method, params });
         this.session ??= response.headers.get("mcp-session-id") ?? undefined;
-        const length = Number(response.headers.get("content-length") ?? "0");
-        if (length > MAX_ANSWER_BYTES) {
-            throw new McpCallError(`${this.server.name}'s answer to ${method} is too large`);
-        }
-        const text = await response.text();
-        if (text.length > MAX_ANSWER_BYTES) {
+        // Counted as it streams: an event-stream answer declares no length, so a header check alone bounds nothing.
+        const { text, truncated } = await readCappedText(response, MAX_ANSWER_BYTES);
+        if (truncated) {
             throw new McpCallError(`${this.server.name}'s answer to ${method} is too large`);
         }
         const answer = answerIn(text, response.headers.get("content-type") ?? "", id);

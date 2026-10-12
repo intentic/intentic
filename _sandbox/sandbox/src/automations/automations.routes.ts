@@ -10,6 +10,7 @@ import { automationCatalog } from "./catalog.js";
 import { doorOf, refuseInvalidAutomation, refusePastEnd, refusePastMoment, saveAutomation } from "./automation-save.js";
 import type { AutomationRecord } from "./automations-store.js";
 import { sandboxZone } from "./schedule-zone.js";
+import { declineHeldWake, withdrawApprovalPush } from "./held-wake-answers.js";
 import { fireAutomation, nextRunOf, runHeldWake } from "./scheduler.js";
 import { ManifestUnreadableError } from "../store/json-file.js";
 import { guardStateFile, sourceEnv } from "./watch/watch-condition.js";
@@ -140,6 +141,8 @@ export const createAutomationsRoutes = (services: Services) => {
             if (!(await services.heldWakes.remove(input.id))) {
                 throw new ORPCError("NOT_FOUND", { message: "that approval was already released" });
             }
+            // The ask is answered, so it comes off the lock screen whatever happens next.
+            void withdrawApprovalPush(services, pending.automationId);
             if (automation === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "the automation for that approval no longer exists" });
             }
@@ -150,9 +153,15 @@ export const createAutomationsRoutes = (services: Services) => {
             );
             return { ok: true } as const;
         }),
+        // Reject a held wake: it never runs, and everyone it was waiting on hears so (held-wake-answers.ts). Read before
+        // the remove, which only says whether this caller took it, so the answer knows whose it was.
         reject: i.reject.handler(async ({ input }) => {
+            const pending = await services.heldWakes.get(input.id);
             if (!(await services.heldWakes.remove(input.id))) {
                 throw new ORPCError("NOT_FOUND", { message: "no pending approval with that id" });
+            }
+            if (pending !== undefined) {
+                await declineHeldWake(services, pending);
             }
             return { ok: true } as const;
         }),

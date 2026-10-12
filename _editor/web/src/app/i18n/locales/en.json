@@ -138,6 +138,7 @@
             "inHistory": "In history {count}",
             "markReviewed": "Mark reviewed",
             "markReviewed2": "Mark {label} as reviewed",
+            "markGroupReviewed": "Mark the whole group reviewed",
             "nextFile": "Next file",
             "notLanded": "not landed",
             "notLanded2": "Not landed {count}",
@@ -4595,10 +4596,11 @@
         },
         "grants": {
             "title": "What you have allowed",
-            "hint": "Reach given to conversations beyond their persona or area, credentials released to them, installs and secrets they may use without asking, and everything allowed at once. Taking one back applies from the conversation's next turn; installs, secrets and everything from the very next time it would ask.",
+            "hint": "Reach given to conversations beyond their persona or area, credentials released to them, installs, secrets and credential requests they may use without asking, and everything allowed at once. Taking one back applies from the conversation's next turn; installs, secrets, requests and everything from the very next time it would ask.",
             "installs": "Installs packages without asking",
             "secret": "Sends {what} past its host guard",
             "everything": "Allows everything without asking",
+            "rule": "Requests like {what}",
             "capability": "{what}, although its persona leaves it out",
             "folder": "Files in {what}",
             "shelf": "The {what} tools",
@@ -9391,6 +9393,7 @@
             "resolveFailed": "Resolve failed.",
             "resolveFailedStatus": "Resolve failed ({status}).",
             "resolving": "Resolving your configuration…",
+            "secretsUnreadable": "Couldn't read which secrets this sandbox holds: {reason}",
             "stalled": "The preview stalled, last activity: {activity}. Cancel-and-retry, or check the sandbox.",
             "starting": "starting"
         },

@@ -24,6 +24,10 @@ export interface SandboxCallContext {
     readonly background?: boolean;
     // `false` lifts the headers deadline for an answer that takes as long as the work it asks for (a land).
     readonly deadline?: false;
+    // Told of every chunk of a streamed answer as it arrives, the daemon's keep-alives included. Those keep-alives are
+    // comments the event iterator swallows, so a stream's frames alone cannot tell a quiet turn from a dead connection;
+    // the bytes can.
+    readonly heard?: () => void;
 }
 
 export type SandboxRpc = ContractRouterClient<typeof sandboxContract, SandboxCallContext>;
@@ -67,6 +71,22 @@ const refusalOf = (error: unknown, route: string | undefined): unknown => {
     return new SandboxHttpError(error.status, drift ?? refusalText(error.status, said), said);
 };
 
+/** The same answer, its body reporting each chunk to `heard` on the way through (SandboxCallContext.heard). */
+export const overheard = (response: Response, heard: () => void): Response => {
+    if (response.body === null) {
+        return response;
+    }
+    const body = response.body.pipeThrough(
+        new TransformStream<Uint8Array, Uint8Array>({
+            transform: (chunk, stream) => {
+                heard();
+                stream.enqueue(chunk);
+            },
+        }),
+    );
+    return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+};
+
 // Reaching the daemon, independent of caller: base, credentials, clock; shared by both clients below.
 const linkOptions: OpenAPILinkOptions<SandboxCallContext> = {
     url: ({ context }) => targetOf(context).base,
@@ -79,12 +99,14 @@ const linkOptions: OpenAPILinkOptions<SandboxCallContext> = {
         if (requestId !== undefined) {
             headers.set(REQUEST_ID_HEADER, requestId);
         }
-        return trackPerf(`rpc.request`, { path: new URL(request.url).pathname, method: request.method, requestId }, () =>
+        const answer = trackPerf(`rpc.request`, { path: new URL(request.url).pathname, method: request.method, requestId }, () =>
             sandboxAuthenticatedFetch(new Request(request, { headers }), targetOf(context), {
                 deadline: context.deadline !== false,
                 background: context.background === true,
             }),
         );
+        const { heard } = context;
+        return heard === undefined ? answer : answer.then((response) => overheard(response, heard));
     },
 };
 

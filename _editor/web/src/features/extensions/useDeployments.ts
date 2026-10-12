@@ -1,6 +1,6 @@
 import { type Deployment, DeploymentSchema } from "@intentic/api-contract";
 import { computed } from "vue";
-import { readIntenticLines } from "../../lib/intenticStream";
+import { untilResult } from "../../lib/intenticStream";
 import { SandboxHttpError } from "../../client/sandbox/sandboxHttpError";
 import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { DEPLOYMENTS } from "../../lib/queryKeys";
@@ -21,21 +21,15 @@ const fetchDeployments = async (): Promise<{ deployments: Deployment[]; komodoRe
             ? new Error(t(`extensions.useDeployments.couldNotLoad`, { status: error.status, message: error.message }))
             : error;
     });
-    let deployments: unknown;
-    let komodoReachable: boolean | undefined;
-    for await (const line of readIntenticLines(lines)) {
-        if (line[`kind`] === `error`) {
-            const message = line[`message`];
-            throw new Error(typeof message === `string` ? message : t(`extensions.useDeployments.listingFailed`));
-        }
-        if (line[`kind`] === `result` && Array.isArray(line[`deployments`])) {
-            deployments = line[`deployments`];
-            komodoReachable = typeof line[`komodoReachable`] === `boolean` ? line[`komodoReachable`] : undefined;
-        }
-    }
-    if (deployments === undefined) {
+    const result = await untilResult(lines, {
+        failed: () => t(`extensions.useDeployments.listingFailed`),
+        ended: () => t(`extensions.useDeployments.noAnswer`),
+    });
+    const deployments = result[`deployments`];
+    if (!Array.isArray(deployments)) {
         throw new Error(t(`extensions.useDeployments.noAnswer`));
     }
+    const komodoReachable = typeof result[`komodoReachable`] === `boolean` ? result[`komodoReachable`] : undefined;
     return { deployments: DeploymentSchema.array().parse(deployments), komodoReachable };
 };
 

@@ -147,11 +147,9 @@
     },
     "postText": {
         "anyMomentNow": "any moment now",
-        "minutesSeconds": "{minutes}m {seconds}s",
         "replyIn": "reply in",
         "replyOn": "reply on",
-        "replyToCommentIn": "reply to a comment in",
-        "seconds": "{seconds}s"
+        "replyToCommentIn": "reply to a comment in"
     },
     "scheduleControl": {
         "clickToSchedule": "Click to schedule",

@@ -2,28 +2,31 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseEnv } from "node:util";
 import { undefinedIfMissing } from "@intentic/base/errors";
-import { ENV_FILE, SECRETS_FILE } from "@intentic/scaffold";
-import type { SecretVault } from "../capabilities/credentials/secret-vault.js";
+import { SECRET_STORES, type SecretStore } from "@intentic/output-cleaners/cleaners";
+import { SECRET_REFERENCE } from "@intentic/sandbox-contract";
+import { z } from "zod";
+import type { SecretVault, SecretVaultContents } from "../capabilities/credentials/secret-vault.js";
 import type { SandboxSecrets } from "./sandbox-secrets.js";
 
 // Every credential value under a stable name (a `{{secret:name}}` token): masking replaces a value with its reference,
-// resolution replaces it back only where it leaves. Unions four stores (env, the sandbox's own, deploy-generated,
-// capability vault); env wins a name collision. Read fresh each call, never cached, so a mid-turn credential masks from the very next tool
-// result.
+// resolution replaces it back only where it leaves. Unions the stores the terminal filter reads (SECRET_STORES: env, the
+// sandbox's own, deploy-generated, capability vault) in that list's order, so env wins a name collision. Read fresh each
+// call, never cached, so a mid-turn credential masks from the very next tool result.
 
 export interface NamedSecret {
     // The reference name: an env key (`CLOUDFLARE_API_TOKEN`) or `<capability>/<field>` (`reddit/password`).
     readonly name: string;
     readonly value: string;
-    readonly source: "env" | "sandbox" | "generated" | "capability";
+    readonly source: SecretStore["source"];
 }
 
-// Double braces, not a value-lookalike, since substitution must be exact-match; a key-shaped token invites a model to
-// "fix" it or reason about its length.
-export const secretReference = (name: string): string => `{{secret:${name}}}`;
+// The reference a value masks to, and the forms a value can take by the time a reader sees it (raw, JSON-escaped,
+// percent-encoded), which masking matches all of. The terminal filter's own, so the two lanes cannot disagree about what
+// a secret looks like or what it masks to.
+export { secretReference, surfaceForms } from "@intentic/output-cleaners/cleaners";
 
-// Matches the name alphabet the three stores produce: env keys, capability ids, fields, and the joining `/`.
-const REFERENCE = /\{\{secret:([A-Za-z0-9_./-]+)\}\}/g;
+// The /g copy replace needs, built once; the shared pattern stays non-global, so no caller inherits a `lastIndex`.
+const REFERENCES = new RegExp(SECRET_REFERENCE.source, "g");
 
 export interface ResolvedReferences {
     readonly text: string;
@@ -39,7 +42,7 @@ export const resolveSecretReferences = (text: string, secrets: readonly NamedSec
     const byName = new Map(secrets.map((secret) => [secret.name, secret.value]));
     const used: string[] = [];
     const unknown: string[] = [];
-    const resolved = text.replace(REFERENCE, (token, name: string) => {
+    const resolved = text.replace(REFERENCES, (token, name: string) => {
         const value = byName.get(name);
         if (value === undefined) {
             if (!unknown.includes(name)) {
@@ -55,65 +58,75 @@ export const resolveSecretReferences = (text: string, secrets: readonly NamedSec
     return { text: resolved, used, unknown };
 };
 
-// The forms a value can take by the time a reader sees it (raw, JSON-escaped, percent-encoded), which masking matches
-// all of. The terminal filter's own, so the two lanes cannot disagree about what a secret looks like.
-export { surfaceForms } from "@intentic/output-cleaners/cleaners";
-
 // Cheap pre-check for any reference-shaped token, so callers skip the registry read on the common case of no secret.
-export const hasSecretReferences = (text: string): boolean => {
-    REFERENCE.lastIndex = 0;
-    return REFERENCE.test(text);
-};
+export const hasSecretReferences = (text: string): boolean => SECRET_REFERENCE.test(text);
 
 // A store the registry could not read; its message names the file and never quotes it, so it may reach a reader.
 export class SecretStoreUnreadableError extends Error {
     override name = "SecretStoreUnreadableError";
 }
 
+// One store's values, each under the name a reference resolves.
+type Entries = readonly (readonly [string, string])[];
+
+// What a deploy generated: {name: value}, a value that is not a string kept out rather than failing the store.
+const GeneratedSecretsSchema = z.record(z.string(), z.string().catch(""));
+
 // Only an absent store holds nothing: one that cannot be read or parsed holds values nobody could then mask.
-const readJson = async (path: string): Promise<Record<string, unknown>> => {
+const readJson = async (path: string): Promise<Entries> => {
     const text = await readFile(path, "utf8").catch(undefinedIfMissing);
     if (text === undefined) {
-        return {};
+        return [];
     }
+    let raw: unknown;
     try {
-        return JSON.parse(text) as Record<string, unknown>;
+        raw = JSON.parse(text);
     } catch {
         // The parse error is not kept: its message quotes the text around the fault, which is secret values.
         throw new SecretStoreUnreadableError(`${path} is not valid JSON`);
     }
+    const parsed = GeneratedSecretsSchema.safeParse(raw);
+    if (!parsed.success) {
+        throw new SecretStoreUnreadableError(`${path} is not a JSON object of values`);
+    }
+    return Object.entries(parsed.data);
 };
 
-export const secretRegistryOf = (vault: SecretVault, desiredStateRepo: () => string, sandbox: Pick<SandboxSecrets, "all">) => async (): Promise<readonly NamedSecret[]> => {
-    const [vaulted, envRaw, generated, kept] = await Promise.all([
-        vault.all(),
-        readFile(join(desiredStateRepo(), ENV_FILE), "utf8")
-            .catch(undefinedIfMissing)
-            .then((text) => text ?? ""),
-        readJson(join(desiredStateRepo(), SECRETS_FILE)),
-        sandbox.all(),
-    ]);
-    const byName = new Map<string, NamedSecret>();
-    const add = (name: string, value: unknown, source: NamedSecret["source"]): void => {
-        if (typeof value === "string" && value !== "" && !byName.has(name)) {
-            byName.set(name, { name, value, source });
+const readEnv = async (path: string): Promise<Entries> => {
+    const text = await readFile(path, "utf8").catch(undefinedIfMissing);
+    return text === undefined ? [] : Object.entries(parseEnv(text)).flatMap(([key, value]) => (value === undefined ? [] : [[key, value] as const]));
+};
+
+// A vault names each value `<id>/<field>`, the vault layout the terminal filter reads the same file with.
+const vaultEntries = (vaulted: SecretVaultContents): Entries =>
+    Object.entries(vaulted).flatMap(([id, fields]) => Object.entries(fields).map(([field, value]) => [`${id}/${field}`, value] as const));
+
+export const secretRegistryOf = (vault: SecretVault, desiredStateRepo: () => string, sandbox: Pick<SandboxSecrets, "all">) => {
+    // One reader per store the list names. The auth-root stores are read through their own documents (schema, mode,
+    // refusal of an unreadable file), the seams the daemon already holds; the desired-state files are read raw, as the
+    // terminal filter reads every store. Exhaustive over `source`, so a store added to the list cannot go unread here.
+    const entriesOf = async (store: SecretStore): Promise<Entries> => {
+        switch (store.source) {
+            case "env":
+                return readEnv(join(desiredStateRepo(), store.path));
+            case "sandbox":
+                return Object.entries(await sandbox.all());
+            case "generated":
+                return readJson(join(desiredStateRepo(), store.path));
+            case "capability":
+                return vaultEntries(await vault.all());
         }
     };
-    // parseEnv's Dict has only string values, which is all this reads.
-    for (const [key, value] of Object.entries(parseEnv(envRaw) as Record<string, string>)) {
-        add(key, value, "env");
-    }
-    // A person's own secrets without DevOps (sandbox-secrets.ts); the desired-state `.env` wins a name both hold.
-    for (const [key, value] of Object.entries(kept)) {
-        add(key, value, "sandbox");
-    }
-    for (const [key, value] of Object.entries(generated)) {
-        add(key, value, "generated");
-    }
-    for (const [id, fields] of Object.entries(vaulted)) {
-        for (const [field, value] of Object.entries(fields)) {
-            add(`${id}/${field}`, value, "capability");
+    return async (): Promise<readonly NamedSecret[]> => {
+        const read = await Promise.all(SECRET_STORES.map(async (store) => ({ store, entries: await entriesOf(store) })));
+        const byName = new Map<string, NamedSecret>();
+        for (const { store, entries } of read) {
+            for (const [name, value] of entries) {
+                if (value !== "" && !byName.has(name)) {
+                    byName.set(name, { name, value, source: store.source });
+                }
+            }
         }
-    }
-    return [...byName.values()];
+        return [...byName.values()];
+    };
 };

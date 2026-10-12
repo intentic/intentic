@@ -1,9 +1,9 @@
-import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { sleep } from "@intentic/base/async";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
+import { clipText, runBoundedBytes } from "@intentic/base/process";
 import { decodePng, downscale, encodePng, fitSize, type Frame, FrameLog, type Point, toDesktop, toImage } from "@intentic/desktop-automation";
 import { homeDir } from "@intentic/local-agent";
 import { COMMAND_CLASS_LABELS, type DeviceScopes } from "@intentic/sandbox-contract";
@@ -61,69 +61,20 @@ export type AdbRunner = (args: readonly string[], timeoutMs: number) => Promise<
 
 // The most of one answer held in memory: a screenshot of a big tablet fits many times over, a runaway `cat` does not.
 const MAX_STDOUT_BYTES = 64 * 1024 * 1024;
-const MAX_STDERR_BYTES = 1024 * 1024;
-// adb's first call starts its server, which can inherit the pipes and hold them for its whole life; once the command
-// has exited, output that has been quiet this long is all there is.
-const PIPE_QUIET_MS = 1_000;
-const PIPE_POLL_MS = 50;
+const MAX_STDERR_CHARS = 1024 * 1024;
 
-// A stream gathered up to `limit` bytes, noting when anything last arrived.
-const gather = (limit: number, heard: () => void) => {
-    const chunks: Buffer[] = [];
-    let bytes = 0;
-    return {
-        take: (chunk: Buffer): void => {
-            heard();
-            if (bytes < limit) {
-                chunks.push(chunk);
-                bytes += chunk.length;
-            }
-        },
-        all: (): Buffer => Buffer.concat(chunks),
-    };
-};
-
+// adb's first call starts its server, which can inherit the pipes and hold them for its whole life; the runner settles
+// once the command has exited and its output has gone quiet, and a deadline ends everything the call started. stdout
+// stays bytes, since a screenshot is a PNG and a cut middle would be a corrupt file rather than a shorter one.
 export const adbRunner =
     (binary: string): AdbRunner =>
     async (args, timeoutMs) => {
-        const child = spawn(binary, [...args], { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
-        let lastData = Date.now();
-        const heard = (): void => {
-            lastData = Date.now();
-        };
-        const out = gather(MAX_STDOUT_BYTES, heard);
-        const err = gather(MAX_STDERR_BYTES, heard);
-        child.stdout.on("data", out.take);
-        child.stderr.on("data", err.take);
-        // Listened for from the start: `close` can follow `exit` within the same tick.
-        const closed = new Promise<true>((resolve) => child.once("close", () => resolve(true)));
-        let timedOut = false;
-        const deadline = setTimeout(() => {
-            timedOut = true;
-            child.kill("SIGKILL");
-        }, timeoutMs);
-        // Done once the pipes close, or once they have gone quiet with the command already gone.
-        const drained = async (): Promise<void> => {
-            if (await Promise.race([closed, sleep(PIPE_POLL_MS, { unref: true }).then(() => false)])) {
-                return;
-            }
-            if (Date.now() - lastData >= PIPE_QUIET_MS) {
-                child.stdout.destroy();
-                child.stderr.destroy();
-                return;
-            }
-            await drained();
-        };
-        try {
-            const code = await new Promise<number | null>((resolve, reject) => {
-                child.once("exit", (exitCode) => resolve(exitCode));
-                child.once("error", reject);
-            });
-            await drained();
-            return { code, stdout: out.all(), stderr: err.all().toString("utf8"), timedOut };
-        } finally {
-            clearTimeout(deadline);
+        const result = await runBoundedBytes(binary, args, { timeoutMs, maxStdoutBytes: MAX_STDOUT_BYTES, maxOutput: MAX_STDERR_CHARS });
+        // An adb that could not start is the call's failure, as it always was, not an answer from the phone.
+        if (result.spawnError !== undefined) {
+            throw result.spawnError;
         }
+        return { code: result.exitCode, stdout: result.stdout.bytes, stderr: result.stderr.text, timedOut: result.timedOut };
     };
 
 // --- what the tools run against ------------------------------------------------------------------------------------------
@@ -169,14 +120,7 @@ const MAX_OUTPUT = 100_000;
 // How many identical confirming screenshots in a row are answered in words, as the desktop's confirming look does.
 const MAX_UNCHANGED = 2;
 
-const clip = (text: string): CollectedOutput => {
-    if (text.length <= MAX_OUTPUT) {
-        return { text, dropped: 0 };
-    }
-    const half = MAX_OUTPUT / 2;
-    const dropped = text.length - MAX_OUTPUT;
-    return { text: `${text.slice(0, half)}\n… [${dropped} characters cut] …\n${text.slice(-half)}`, dropped };
-};
+const clip = (text: string): CollectedOutput => clipText(text, MAX_OUTPUT);
 
 // What one phone has shown the agent: its screenshots as frames, and the refs of its newest element listing.
 interface PhoneView {

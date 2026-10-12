@@ -9,7 +9,7 @@ import { host } from "./host";
 export function useWorkspaceGraph(repo: Ref<string>) {
     const api = host();
     const query = useQuery({
-        queryKey: computed(() => api.sandbox.key(`package-graph`, repo.value)),
+        queryKey: computed(() => api.sandbox.readKey(`workspace.packageGraph`, { repo: repo.value })),
         queryFn: () => api.sandbox.rpc.workspace.packageGraph({ repo: repo.value }),
         enabled: computed(() => api.sandbox.reachable()),
     });
@@ -27,7 +27,7 @@ export function useWorkspaceGraph(repo: Ref<string>) {
 export function usePackageModules(repo: Ref<string>, name: Ref<string | undefined>) {
     const api = host();
     const query = useQuery({
-        queryKey: computed(() => api.sandbox.key(`package-modules`, repo.value, name.value ?? ``)),
+        queryKey: computed(() => api.sandbox.readKey(`workspace.packageModules`, { repo: repo.value, package: name.value ?? `` })),
         queryFn: () => api.sandbox.rpc.workspace.packageModules({ repo: repo.value, package: name.value ?? `` }),
         enabled: computed(() => api.sandbox.reachable() && name.value !== undefined),
     });

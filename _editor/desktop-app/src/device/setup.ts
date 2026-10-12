@@ -1,4 +1,5 @@
-import { computed, ref, watch } from "vue";
+import { computed, effectScope, ref, watch } from "vue";
+import { useNow } from "@intentic/ui/async";
 import { useCopied } from "@intentic/ui/clipboard";
 import { t } from "@intentic/ui/i18n";
 import { track, trackBeforeExit } from "../analytics";
@@ -137,21 +138,18 @@ const progress = ref<Progress | undefined>(undefined);
 const now = ref(Date.now());
 export const progressShown = computed(() => (progress.value === undefined ? undefined : progressView(progress.value, now.value)));
 
-let ticker: ReturnType<typeof setInterval> | undefined;
-const tickWhileRunning = (live: boolean): void => {
-    clearInterval(ticker);
-    ticker = undefined;
-    if (!live) {
+// The window's shared seconds clock, followed only while a setup runs here. Detached: the setup is this window's, not
+// any one component's. `run()` returns undefined only for a stopped scope; this one is never stopped.
+const setupClock = effectScope(true).run(() => useNow(() => activeRun.value === `setup`))!;
+watch(setupClock, (at) => {
+    if (activeRun.value !== `setup`) {
         return;
     }
-    ticker = setInterval(() => {
-        now.value = Date.now();
-        if (progress.value !== undefined) {
-            progress.value = tick(progress.value, now.value);
-        }
-    }, 1000);
-};
-watch(() => activeRun.value === `setup`, tickWhileRunning);
+    now.value = at;
+    if (progress.value !== undefined) {
+        progress.value = tick(progress.value, at);
+    }
+});
 
 /* A COMMAND THAT SAID IT FAILED cannot leave its setup alive indefinitely. */
 let commandFailureTimer: ReturnType<typeof setTimeout> | undefined;

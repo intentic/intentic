@@ -1,5 +1,6 @@
-import { createBackoff, sleep } from "@intentic/base/async";
+import { anySignal, createBackoff, sleep } from "@intentic/base/async";
 import type { AgentHarness, AgentProvider, AttachFrame } from "@intentic/sandbox-contract";
+import { watchdogRecoveryDelay } from "../../../client/sandbox/connection";
 import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import { type ProcedureInput, sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { acquireStreamSlot } from "../../../lib/streamBudget";
@@ -8,6 +9,13 @@ import type { ChatAttachment } from "../transcript/transcript";
 // Attach reads a running turn's rows from the daemon and every change after (/agent/attach); the side channel
 // (/agent/steer, /agent/reply) sends to it. This file owns the connection, slot budget, reconnect
 // backoff, and give-up rules; the Conversation decides what a fact means.
+
+// How long an attach may go without a single byte before it is taken for a dead connection and attached again. A turn
+// can be quiet for minutes (a long build, a model thinking), but the daemon's stream keep-alive is a comment every 5 s,
+// so a healthy connection is never silent for long; one that a sleeping laptop, a dropped Wi-Fi or a proxy left
+// half-open says nothing at all and would otherwise hang the chat on its last row forever. Sized like the sandbox
+// connection's patient watchdog (useSandboxLiveness.ts): six keep-alives missed, not one late.
+export const ATTACH_SILENCE_MS = 30_000;
 
 // What this window handed to a turn, kept so a refusal can put it back in the composer.
 export interface SentMessage {
@@ -52,22 +60,104 @@ export type FollowEnd = boolean | undefined;
 type AttachOpening = { readonly frames: AsyncIterable<AttachFrame> } | { readonly end: FollowEnd } | { readonly retry: true };
 
 // The daemon refusing ends the follow (the run finished, stopped, or never started), as does a stop. A network drop
-// between attaches: an engaged stream backs off and retries; an unengaged probe gives up, saying it never reached the
-// daemon (its caller retries).
+// between attaches, or a connect the silence watchdog gave up on: an engaged stream backs off and retries; an unengaged
+// probe gives up, saying it never reached the daemon (its caller retries).
 const openAttach = async (
     input: ProcedureInput<`agent.attach`>,
     controller: AbortController,
+    attempt: Silence,
     at: string | undefined,
     attached: boolean,
 ): Promise<AttachOpening> => {
     try {
-        return { frames: await sandboxRpc.agent.attach(input, { signal: controller.signal, context: { at } }) };
+        return { frames: await sandboxRpc.agent.attach(input, { signal: attempt.signal, context: { at, heard: attempt.heard } }) };
     } catch (error) {
         if (error instanceof SandboxHttpError || controller.signal.aborted) {
             return { end: attached };
         }
         return attached ? { retry: true } : { end: undefined };
     }
+};
+
+// One attach's silence watchdog: its signal is the follow's own and the watchdog's cut together, and anything heard
+// from the daemon (a frame, a keep-alive's bytes) puts the cut off again.
+interface Silence {
+    readonly signal: AbortSignal;
+    readonly heard: () => void;
+    // Whether this attach ended because it went silent, rather than because it closed, broke or was stopped.
+    readonly cut: () => boolean;
+    readonly dispose: () => void;
+}
+
+const watchSilence = (controller: AbortController): Silence => {
+    const silence = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const arm = (delayMs = ATTACH_SILENCE_MS): void => {
+        clearTimeout(timer);
+        const dueAt = performance.now() + delayMs;
+        timer = setTimeout(() => {
+            // A main thread that stalled past the deadline says nothing about the connection: bytes it has queued re-arm
+            // this before the grace runs out (connection.ts).
+            const grace = watchdogRecoveryDelay(performance.now() - dueAt);
+            if (grace > 0) {
+                arm(grace);
+                return;
+            }
+            silence.abort();
+        }, delayMs);
+    };
+    // Armed from before the connect, so a connect that hangs on a dead tunnel trips it too.
+    arm();
+    return {
+        signal: anySignal(controller.signal, silence.signal),
+        heard: () => {
+            if (!silence.signal.aborted) {
+                arm();
+            }
+        },
+        cut: () => silence.signal.aborted && !controller.signal.aborted,
+        dispose: () => clearTimeout(timer),
+    };
+};
+
+// A permit for holding a connection open for the turn's duration, since a few streaming agents would exhaust the
+// browser's per-origin connection limit (streamBudget.ts). Undefined means stopped while queued. The stop is checked
+// again once the permit is held, since waiting for it suspends and a stop landing then must not be missed: attaching
+// on an already-aborted signal would hang forever, since that event already fired.
+const takeSlot = async (signal: AbortSignal): Promise<(() => void) | undefined> => {
+    const slot = await acquireStreamSlot(`attach`, signal);
+    if (slot !== undefined && signal.aborted) {
+        slot();
+        return undefined;
+    }
+    return slot;
+};
+
+// Reads one attach's frames until the run ends there (the value followRun returns), or undefined once the stream stops
+// without saying so: closed, broken mid-read, or cut for silence. Every frame counts as hearing from the daemon.
+const drain = async (
+    frames: AsyncIterable<AttachFrame>,
+    heard: () => void,
+    apply: (frame: AttachFrame) => boolean | undefined,
+): Promise<boolean | undefined> => {
+    try {
+        for await (const frame of frames) {
+            heard();
+            // A frame with no body says nothing; skipped rather than read as the end of the run.
+            const parsed: unknown = frame;
+            if (typeof parsed !== `object` || parsed === null) {
+                continue;
+            }
+            const ended = apply(frame);
+            if (ended !== undefined) {
+                return ended;
+            }
+        }
+    } catch {
+        // allow(silent-catch): a stream that broke mid-read is a drop like any other; the caller attaches again.
+        return undefined;
+    }
+    return undefined;
 };
 
 // Renders a run by attaching, re-attaching on drops, until the daemon sends `end` or the run 404s (finished,
@@ -116,24 +206,15 @@ export const followRun = async (
         return undefined;
     };
     for (;;) {
-        if (controller.signal.aborted) {
-            return attached;
-        }
-        // A permit for holding a connection open for the turn's duration, since a few streaming agents would exhaust
-        // the browser's per-origin connection limit (streamBudget.ts). Undefined means aborted while queued.
-        const slot = await acquireStreamSlot(`attach`, controller.signal);
+        const slot = controller.signal.aborted ? undefined : await takeSlot(controller.signal);
         if (slot === undefined) {
             return attached;
         }
-        // Re-checked since acquiring a slot suspends; a stop landing during that must not be missed. Attaching on an
-        // already-aborted signal would hang forever, since that event already fired.
-        if (controller.signal.aborted) {
-            slot();
-            return attached;
-        }
-        const opening = await openAttach({ conversationId, ...(run !== undefined ? { run } : {}) }, controller, at, attached);
+        const attempt = watchSilence(controller);
+        const opening = await openAttach({ conversationId, ...(run !== undefined ? { run } : {}) }, controller, attempt, at, attached);
         if (!(`frames` in opening)) {
             // Slot releases before the follow ends or backs off.
+            attempt.dispose();
             slot();
             if (`end` in opening) {
                 return opening.end;
@@ -143,38 +224,31 @@ export const followRun = async (
             await sleep(ladder.next(), { signal: controller.signal });
             continue;
         }
-        const { frames } = opening;
         ladder.reset();
         const before = delivered;
+        let ended: boolean | undefined;
         try {
-            for await (const frame of frames) {
-                // A frame with no body says nothing; skipped rather than read as the end of the run.
-                const parsed: unknown = frame;
-                if (typeof parsed !== `object` || parsed === null) {
-                    continue;
-                }
-                const ended = applyFrame(frame);
-                if (ended !== undefined) {
-                    return ended;
-                }
-            }
-        } catch {
-            // The stream broke mid-read, fall through and re-attach.
+            ended = await drain(opening.frames, attempt.heard, applyFrame);
         } finally {
             // Slot releases however this attach ended: settled, superseded, torn, or returned mid-loop.
+            attempt.dispose();
             slot();
         }
-        // Reached only when the stream ended without `end`. No new entries either means nothing more is coming (done,
-        // or a stream that never ends); back off, and give up after a few empty rounds.
-        if (delivered === before) {
-            idleRounds += 1;
-            if (idleRounds >= 3) {
-                return attached;
-            }
-            await sleep(ladder.next(), { signal: controller.signal });
-        } else {
-            idleRounds = 0;
+        if (ended !== undefined) {
+            return ended;
         }
+        // Reached only when the stream ended without `end`. One cut for silence was a dead connection, not a quiet run,
+        // so like one that delivered rows it attaches again at once. No new entries otherwise means nothing more is
+        // coming (done, or a stream that never ends); back off, and give up after a few empty rounds.
+        if (delivered !== before || attempt.cut()) {
+            idleRounds = 0;
+            continue;
+        }
+        idleRounds += 1;
+        if (idleRounds >= 3) {
+            return attached;
+        }
+        await sleep(ladder.next(), { signal: controller.signal });
     }
 };
 

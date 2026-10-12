@@ -6,3 +6,4 @@ export type { NoticeAction, NoticeModel, NoticeTone } from "../components/feedba
 export { useNow } from "../composables/useNow.js";
 export { type Poll, type PollOptions, usePoll, usePollWhile } from "../composables/usePoll.js";
 export { useLatest } from "../composables/useLatest.js";
+export { type SettledOptions, useSettled } from "../composables/useSettled.js";

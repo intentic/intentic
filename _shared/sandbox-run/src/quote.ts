@@ -9,6 +9,14 @@ const PLAIN_WORD = /^[\w@%+=:,./-]+$/;
 // (close, escape, reopen: `'\''`).
 export const shellQuote = (word: string): string => (PLAIN_WORD.test(word) ? word : `'${word.replaceAll("'", `'\\''`)}'`);
 
+// Every character PowerShell's tokenizer reads as a single quote: the ASCII one and the typographic ‘ ’ ‚ ‛. Any of
+// them ends a single-quoted string, so doubling only `'` leaves three ways out of the literal.
+const POWERSHELL_SINGLE_QUOTES = /['‘’‚‛]/g;
+
+// One PowerShell single-quoted literal: nothing inside is expanded (no `$`, no backtick escapes), and a quote character
+// written twice is one literal quote. Always quoted, since a bare word in PowerShell can still be an expression.
+export const powershellQuote = (text: string): string => `'${text.replace(POWERSHELL_SINGLE_QUOTES, (quote) => quote + quote)}'`;
+
 // A Postgres string literal: interior quotes doubled, the SQL-standard escape psql honours without depending on
 // standard_conforming_strings. Backslashes are not escaped, since under the default setting one is one, not two.
 export const sqlLiteral = (value: string): string => `'${value.replaceAll("'", "''")}'`;

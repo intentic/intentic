@@ -2,6 +2,7 @@ import { sandboxShallowRef } from "@intentic/extension-api";
 import { computed, type ComputedRef, watch } from "vue";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
 import { floatingOwner, floatingWindowPanel, showsPanel } from "../../../workbench/window/floating";
+import { onScreen } from "../../../workbench/window/onScreen";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { type ChatNote, onChatNote, postChatNote } from "./chatChannel";
 import { traceFocus } from "./focusTrace";
@@ -103,8 +104,9 @@ watch([activeSandboxId, owner], reconcile, { immediate: true, flush: `post` });
 if (typeof window !== `undefined`) {
     window.addEventListener(`focus`, reconcile);
     window.addEventListener(`pageshow`, reconcile);
-    document.addEventListener(`visibilitychange`, () => {
-        if (document.visibilityState === `visible`) {
+    // onScreen rather than visibilitychange: a Windows webview coming back from the tray never reported going hidden.
+    watch(onScreen, (shown) => {
+        if (shown) {
             reconcile();
         }
     });

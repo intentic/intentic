@@ -1,8 +1,11 @@
 import type { AgentOrigin, ListenerMessage, Trigger } from "@intentic/sandbox-contract";
+import { Delayer } from "@intentic/base/async";
 import type { Services } from "../composition.js";
 import { CHANNEL_SESSION_TTL_MS } from "../sessions/thread-sessions.js";
 import { threadKey } from "../seams/thread-key.js";
-import { fireAutomation, mintConversationId, PAYLOAD_MAX, type TurnStream } from "./scheduler.js";
+import { FIRE_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
+import { doorAdmission } from "./door-admission.js";
+import { fireOnThread, mintConversationId, PAYLOAD_MAX, type TurnStream } from "./scheduler.js";
 import { TITLE_MAX } from "../seams/conversation-title.js";
 import { type SenderLane, senderLane } from "./senders.js";
 
@@ -47,7 +50,7 @@ export const createMessageBatcher = (
     // Context for the next fire; the newest message in the batch wins. Undefined means nothing is batched.
     let pendingContext: MessageContext | undefined;
     let running = false;
-    let timer: NodeJS.Timeout | undefined;
+    const quiet = new Delayer<void>(debounceMs);
     const flush = async (): Promise<void> => {
         if (running || pending.length === 0 || pendingContext === undefined) {
             return;
@@ -77,8 +80,7 @@ export const createMessageBatcher = (
             // Reply sink carries from the newest message with one; a follow-up can't drop an earlier held-open
             // response.
             pendingContext = context.stream === undefined && carried !== undefined ? { ...context, stream: carried } : context;
-            clearTimeout(timer);
-            timer = setTimeout(() => void flush(), debounceMs);
+            void quiet.trigger(flush);
         },
     };
 };
@@ -96,6 +98,15 @@ const joinNewestWithin = (lines: string[], max: number): string => {
 
 // Per-automation, per-lane queues, a module singleton so every dispatch path shares the same serialization.
 const batchers = new Map<string, MessageBatcher>();
+
+// A channel is a door strangers knock on too, so it holds the same two ceilings as the webhook and the public doors
+// (door-admission.ts): messages a minute per sender, so one person flooding a channel cannot drive a wake per line, and
+// wakes a day per automation, since each one is billed to the owner. A module singleton like the batchers.
+const ceilings = doorAdmission();
+// Per sender per automation; a person typing fast stays well under it, a script looping on a channel does not.
+export const LISTENER_RATE_MAX = 30;
+// Wakes per UTC day per automation; a listener trigger names no ceiling of its own, so the webhook's default holds.
+export const LISTENER_DAILY_MAX = FIRE_DAILY_MAX_DEFAULT;
 
 // One batcher per (automation, persona): a message for one persona must never ride a wake wearing another.
 const batcherKey = (automationId: string, lane: SenderLane): string => (lane.actsAs === undefined ? automationId : `${automationId}:${lane.actsAs}`);
@@ -119,6 +130,63 @@ const triggerAdmits = (trigger: Extract<Trigger, { kind: "listener" }>, message:
     (trigger.eventType === undefined || trigger.eventType === message.type) &&
     (trigger.mentioned !== true || message.mentioned === true) &&
     (trigger.branch === undefined || trigger.branch === message.branch);
+
+// One automation-and-lane's batcher: each wake it lets through re-reads the automation, spends from the day, then fires
+// on the channel's thread.
+const listenerBatcher = (services: Services, id: string, provider: ListenerMessage["provider"], debounceMs: number): MessageBatcher =>
+    createMessageBatcher(
+        (payload, context) => fireBatch(services, id, payload, context),
+        (error) => {
+            services.logger.error({ err: error, automation: id }, "automation run failed");
+            void services.activity
+                .append({
+                    provider,
+                    direction: "system",
+                    type: "dispatch.failed",
+                    automationIds: [id],
+                    outcome: "error",
+                    error: String(error),
+                })
+                .catch((appendError: unknown) => services.logger.warn({ err: appendError }, "activity append failed"));
+        },
+        debounceMs,
+    );
+
+const fireBatch = async (services: Services, id: string, payload: string, context: MessageContext): Promise<void> => {
+    const fresh = await services.automations.get(id);
+    if (fresh === undefined || !fresh.enabled || fresh.trigger.kind !== "listener") {
+        // Disabled or deleted since dispatch: end the sink so a streamed caller isn't left awaiting a dead turn.
+        context.stream?.end();
+        return;
+    }
+    // The day's budget is spent per wake, not per message: a burst the batcher folds into one turn costs one. Over it,
+    // the batch is dropped and the run history says why.
+    if (ceilings.overDailyCeiling(id, LISTENER_DAILY_MAX, Date.now())) {
+        context.stream?.end();
+        await services.automations.recordRun(id, {
+            at: Date.now(),
+            outcome: "skipped",
+            detail: `It reached today's limit of ${LISTENER_DAILY_MAX} wakes from messages; the rest of today's go unanswered.`,
+        });
+        return;
+    }
+    // Reuses the channel's live conversation, or starts fresh past the TTL, keyed like the Visitor chat's chat.
+    const openedAt = Date.now();
+    await fireOnThread(
+        services,
+        fresh,
+        { key: context.thread, ttlMs: CHANNEL_SESSION_TTL_MS, mint: () => mintConversationId(id, openedAt) },
+        {
+            payload,
+            // Queues rather than drops: the blocking run may be an approved wake or a restart's re-fire, not the batcher's.
+            overlap: "queue",
+            lane: context.lane,
+            origin: context.origin,
+            title: context.title,
+            ...(context.stream !== undefined ? { stream: context.stream } : {}),
+        },
+    );
+};
 
 // Routes one event to every matching enabled listener automation's batcher. Matching re-reads automations so an edit,
 // disable or delete is honored immediately; the fire re-reads once more at wake time.
@@ -151,59 +219,16 @@ export const dispatchListenerMessage = async (
         if (lane === undefined) {
             continue;
         }
+        // Counted only for a message that would wake something: chatter the filters or the sender rules turn away
+        // costs the sender nothing.
+        if (ceilings.rateLimited(`${automation.id}:${message.provider}:${message.author.id}`, LISTENER_RATE_MAX, Date.now())) {
+            services.logger.warn({ automation: automation.id, provider: message.provider, author: message.author.id }, "listener: sender over the minute's limit, message dropped");
+            continue;
+        }
         const key = batcherKey(automation.id, lane);
         let batcher = batchers.get(key);
         if (batcher === undefined) {
-            const id = automation.id;
-            batcher = createMessageBatcher(
-                async (payload, context) => {
-                    const fresh = await services.automations.get(id);
-                    if (fresh === undefined || !fresh.enabled || fresh.trigger.kind !== "listener") {
-                        // Disabled or deleted since dispatch: end the sink so a streamed caller isn't left awaiting a
-                        // dead turn.
-                        context.stream?.end();
-                        return;
-                    }
-                    // Reuses the channel's live conversation, or starts fresh past the TTL, keyed like the Visitor chat's
-                    // chat.
-                    const openedAt = Date.now();
-                    const session = await services.threadSessions.open(
-                        context.thread,
-                        () => mintConversationId(id, openedAt),
-                        CHANNEL_SESSION_TTL_MS,
-                        openedAt,
-                    );
-                    const settled = await fireAutomation(services, fresh, {
-                        payload,
-                        // Queues rather than drops: the blocking run may be an approved wake or a restart's re-fire,
-                        // not the batcher's.
-                        overlap: "queue",
-                        conversationId: session.conversationId,
-                        // Resumes the provider session the channel's last message ran on.
-                        ...(session.sessionId !== undefined ? { sessionId: session.sessionId } : {}),
-                        thread: context.thread,
-                        lane: context.lane,
-                        origin: context.origin,
-                        title: context.title,
-                        ...(context.stream !== undefined ? { stream: context.stream } : {}),
-                    });
-                    await services.threadSessions.settle(context.thread, settled.sessionId, Date.now());
-                },
-                (error) => {
-                    services.logger.error({ err: error, automation: id }, "automation run failed");
-                    void services.activity
-                        .append({
-                            provider: message.provider,
-                            direction: "system",
-                            type: "dispatch.failed",
-                            automationIds: [id],
-                            outcome: "error",
-                            error: String(error),
-                        })
-                        .catch((appendError: unknown) => services.logger.warn({ err: appendError }, "activity append failed"));
-                },
-                debounceMs,
-            );
+            batcher = listenerBatcher(services, automation.id, message.provider, debounceMs);
             batchers.set(key, batcher);
         }
         const stream = makeStream?.(automation.id);

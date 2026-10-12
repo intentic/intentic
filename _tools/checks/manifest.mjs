@@ -145,6 +145,15 @@ export const CHECKS = [
         about: "the device agent (_devices/machine) reaches the home directory only through homeDir(), which follows a HOME set after startup",
     },
     {
+        id: "primitive-tiers",
+        ratchet: true,
+        file: "primitive-tiers.mjs",
+        needs: "checkout",
+        gate: "tidy",
+        scoped: true,
+        about: "no new hand-rolled copy of a job with one shared door: a header-only body cap, a local hop-by-hop list, a `..` prefix containment test, an inline sleep, a card deadline, raw browser storage, a promisified execFile (ratcheted)",
+    },
+    {
         id: "format-tiers",
         ratchet: true,
         file: "format-tiers.mjs",

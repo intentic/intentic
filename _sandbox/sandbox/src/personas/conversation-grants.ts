@@ -1,4 +1,4 @@
-import { type ConversationGrant, ConversationGrantSchema, GrantShelfSchema, type GrantSubject } from "@intentic/sandbox-contract";
+import { type BrokerRulePass, type ConversationGrant, ConversationGrantSchema, GrantShelfSchema, type GrantSubject } from "@intentic/sandbox-contract";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDocument } from "../store/open-document.js";
 
@@ -8,8 +8,10 @@ import { openDocument } from "../store/open-document.js";
 // (personas.ts widenPersona), so a grant reaches the next turn and never widens the one running. The one exception is
 // `installs`, answered on an install card mid-turn and read live by the command gate (agent/providers/project-installs.ts):
 // the yes is for the install that asked, and for every later one. `secrets` (a host guard card's "Allow <secret> anywhere
-// in this conversation") and `everything` (any permission card's "Allow everything in this conversation") are read live
-// too, by the host guard and the card registry.
+// in this conversation"), `everything` (any permission card's "Allow everything in this conversation") and `rules` (a
+// credential gateway card's "Allow requests like this with <name> in this conversation") are read live too, by the host
+// guard, the card registry and the gateway. Every write that changes something is announced (`onChange`), so the list
+// where a person takes a yes back moves when a card answer writes one, not only when a need closes.
 
 export const conversationGrantsDocument = defineDocument({ root: "auth", path: "conversation-grants.json", schema: ConversationGrantSchema, granularity: "record" });
 
@@ -31,8 +33,16 @@ export interface ConversationGrants {
     readonly everythingAllowed: (conversationId: string) => Promise<boolean>;
     // Whether there was one to take back.
     readonly revokeEverything: (conversationId: string) => Promise<boolean>;
+    // "Allow requests like this with <name> in this conversation": that capability's rule stops asking this conversation.
+    readonly allowRule: (conversationId: string, pass: BrokerRulePass, by: string | undefined) => Promise<void>;
+    readonly ruleAllowed: (conversationId: string, capability: string, rule: string) => Promise<boolean>;
+    // Whether there was one to take back.
+    readonly revokeRule: (conversationId: string, capability: string, rule: string) => Promise<boolean>;
     // A conversation that is gone takes its grants with it.
     readonly forget: (conversationId: string) => Promise<void>;
+    // Hears the conversation whose grants a write changed, after the write; a write that changed nothing is not news.
+    // Returns the unsubscribe.
+    readonly onChange: (listener: (conversationId: string) => void) => () => void;
 }
 
 const FIELDS = { capability: "capabilities", folder: "folders", shelf: "shelves", secret: "secrets" } as const;
@@ -45,6 +55,7 @@ const EMPTY = (now: number): ConversationGrant => ({
     installs: false,
     secrets: [],
     everything: false,
+    rules: [],
     updatedAt: now,
 });
 
@@ -54,8 +65,11 @@ const nothingLeft = (grant: ConversationGrant): boolean =>
     grant.folders.length === 0 &&
     grant.shelves.length === 0 &&
     grant.secrets.length === 0 &&
+    grant.rules.length === 0 &&
     !grant.installs &&
     !grant.everything;
+
+const samePass = (pass: BrokerRulePass, capability: string, rule: string): boolean => pass.capability === capability && pass.rule === rule;
 
 // The two whole-conversation switches, set and taken back alike.
 type Switch = "installs" | "everything";
@@ -101,7 +115,34 @@ export const memoryConversationGrants = (now: () => number = Date.now): Conversa
     );
 };
 
-const grantsOver = (file: GrantsFile, now: () => number): ConversationGrants => {
+const grantsOver = (store: GrantsFile, now: () => number): ConversationGrants => {
+    const listeners = new Set<(conversationId: string) => void>();
+    // Every write goes through here: a change that left the conversation's record as it was (the same object back) is
+    // no news, and anything else is announced once the write has landed.
+    const file: GrantsFile = {
+        read: store.read,
+        update: async (change) => {
+            const changed = new Set<string>();
+            await store.update((current) => {
+                const next = change(current);
+                for (const id of new Set([...Object.keys(current), ...Object.keys(next)])) {
+                    if (current[id] !== next[id]) {
+                        changed.add(id);
+                    }
+                }
+                return next;
+            });
+            for (const conversationId of changed) {
+                for (const listener of listeners) {
+                    try {
+                        listener(conversationId);
+                    } catch {
+                        // allow(silent-catch): a listener only refreshes a view; the grant is already written, and its failure must not undo or fail that.
+                    }
+                }
+            }
+        },
+    };
     const turnOn = async (conversationId: string, key: Switch, by: string | undefined): Promise<void> => {
         await file.update((current) => {
             const grant = current[conversationId] ?? EMPTY(now());
@@ -161,6 +202,33 @@ const grantsOver = (file: GrantsFile, now: () => number): ConversationGrants => 
         allowEverything: (conversationId, by) => turnOn(conversationId, "everything", by),
         everythingAllowed: (conversationId) => isOn(conversationId, "everything"),
         revokeEverything: (conversationId) => turnOff(conversationId, "everything"),
+        allowRule: async (conversationId, pass, by) => {
+            await file.update((current) => {
+                const grant = current[conversationId] ?? EMPTY(now());
+                if (grant.rules.some((kept) => samePass(kept, pass.capability, pass.rule))) {
+                    return current;
+                }
+                const next: ConversationGrant = { ...grant, rules: [...grant.rules, pass], updatedAt: now() };
+                if (by !== undefined) {
+                    next.by = by;
+                }
+                return { ...current, [conversationId]: next };
+            });
+        },
+        ruleAllowed: async (conversationId, capability, rule) =>
+            (await file.read())[conversationId]?.rules.some((pass) => samePass(pass, capability, rule)) === true,
+        revokeRule: async (conversationId, capability, rule) => {
+            let revoked = false;
+            await file.update((current) => {
+                const grant = current[conversationId];
+                if (grant === undefined || !grant.rules.some((pass) => samePass(pass, capability, rule))) {
+                    return current;
+                }
+                revoked = true;
+                return without(current, conversationId, { ...grant, rules: grant.rules.filter((pass) => !samePass(pass, capability, rule)), updatedAt: now() });
+            });
+            return revoked;
+        },
         forget: async (conversationId) => {
             await file.update((current) => {
                 if (!(conversationId in current)) {
@@ -169,6 +237,12 @@ const grantsOver = (file: GrantsFile, now: () => number): ConversationGrants => 
                 const { [conversationId]: _dropped, ...rest } = current;
                 return rest;
             });
+        },
+        onChange: (listener) => {
+            listeners.add(listener);
+            return () => {
+                listeners.delete(listener);
+            };
         },
     };
 };

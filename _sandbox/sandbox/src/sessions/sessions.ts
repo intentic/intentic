@@ -1,3 +1,4 @@
+import { cachedAsync } from "@intentic/base/held";
 import { sdk } from "../engines/claude-sdk.js";
 import {
     AskQuestionSchema,
@@ -136,16 +137,8 @@ export type RecentSessions = () => Promise<SessionSummary[]>;
 const LIST_TTL_MS = 400;
 
 export const createRecentSessions = (dir: string, naming: SessionNaming = sessionNaming()): RecentSessions => {
-    let listed: { at: number; sessions: SessionSummary[] } | undefined;
-    return async () => {
-        const held = listed;
-        if (held !== undefined && Date.now() - held.at < LIST_TTL_MS) {
-            return held.sessions;
-        }
-        const sessions = await listWorkspaceSessions(dir, naming);
-        listed = { at: Date.now(), sessions };
-        return sessions;
-    };
+    const listed = cachedAsync<undefined, SessionSummary[]>({ ttlMs: LIST_TTL_MS });
+    return async () => listed.get(undefined, async () => listWorkspaceSessions(dir, naming));
 };
 
 // Filters the history list by the fleet board's own rule (title, or what either side said), off the shared index, so

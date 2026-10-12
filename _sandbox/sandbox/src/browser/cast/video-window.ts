@@ -1,3 +1,4 @@
+import { sleep } from "@intentic/base/async";
 import type { CDPSession, Page } from "playwright";
 import { type Device, PHONE_BOX, type Phone, phoneFor, putPhoneOn, type Size, takePhoneOff } from "./emulation.js";
 import { phoneRegionOf, readGeometry, readRegion, resizeWindow, windowBoundsFor, type Region, type Screen, type WindowBounds, type WindowGeometry } from "./region.js";
@@ -14,7 +15,7 @@ import { phoneRegionOf, readGeometry, readRegion, resizeWindow, windowBoundsFor,
 // Chromium applies window bounds asynchronously; the geometry is re-read after this.
 const RESIZE_SETTLE_MS = 200;
 
-const settleWindow = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, RESIZE_SETTLE_MS));
+const settleWindow = (): Promise<void> => sleep(RESIZE_SETTLE_MS);
 
 // The window a page's session lives in, and where it is; undefined once the page is gone. CDP types every bound as
 // optional, and a window always has all four.

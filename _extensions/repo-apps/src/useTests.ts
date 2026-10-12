@@ -48,7 +48,7 @@ export const testProjects = (tree: readonly TreeEntry[], repo: string): string[]
 export function useTests(repo: Ref<string>) {
     const api = host();
     const treeQuery = useQuery({
-        queryKey: api.sandbox.key(`workspace`, `tree`),
+        queryKey: api.sandbox.readKey(`workspace.tree`, {}),
         queryFn: () => api.sandbox.rpc.workspace.tree({}),
         enabled: computed(() => api.sandbox.reachable()),
     });

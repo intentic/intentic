@@ -1,7 +1,7 @@
 import { stubGlobal } from "@intentic/testing/bun";
 import type { WebchatMessage } from "@intentic/sandbox-contract";
 import { EmbedError } from "@intentic/sandbox-contract/embed";
-import { fetchPending, parseSseBlock, sendMessage, splitSseBlocks } from "./transport.js";
+import { fetchPending, sendMessage } from "./transport.js";
 
 const ENDPOINT = { base: "https://sandbox-abc.example", automationId: "support" };
 const MESSAGE: WebchatMessage = { conversationId: "v-1", content: "hello" };
@@ -35,31 +35,25 @@ const collect = async (chunks: string[]): Promise<{ text: string; pending: strin
     return { text, pending, failed };
 };
 
-test(`a data line keeps everything past the single framing space`, () => {
-    expect(parseSseBlock(`event: delta\ndata:   indented`)?.data).toBe(`  indented`);
+test(`a data line keeps everything past the single framing space`, async () => {
+    const { text } = await collect([`event: delta\ndata:   indented\n\nevent: done\ndata: \n\n`]);
+    expect(text).toBe(`  indented`);
 });
 
-test(`hono splits a multi-line payload into one data line each: rejoining restores it exactly`, () => {
+test(`hono splits a multi-line payload into one data line each: rejoining restores it exactly`, async () => {
     // What writeSSE({event: "delta", data: "a\n\nb"}) puts on the wire.
-    expect(parseSseBlock(`event: delta\ndata: a\ndata: \ndata: b`)).toEqual({ event: `delta`, data: `a\n\nb` });
+    const { text } = await collect([`event: delta\ndata: a\ndata: \ndata: b\n\nevent: done\ndata: \n\n`]);
+    expect(text).toBe(`a\n\nb`);
 });
 
-test(`a block with no data line (a keepalive comment) is not a frame`, () => {
-    expect(parseSseBlock(`: keepalive`)).toBeUndefined();
+test(`a keepalive comment between frames is not a frame`, async () => {
+    const { text, failed } = await collect([`: keepalive\n\nevent: delta\ndata: hi\n\nevent: done\ndata: \n\n`]);
+    expect([text, failed]).toEqual([`hi`, []]);
 });
 
-test(`an event-less block defaults to "message", matching the SSE spec`, () => {
-    expect(parseSseBlock(`data: bare`)?.event).toBe(`message`);
-});
-
-test(`splitting keeps the unterminated tail back for the next chunk`, () => {
-    const { blocks, rest } = splitSseBlocks(`event: delta\ndata: one\n\nevent: delta\ndata: tw`);
-    expect(blocks).toEqual([`event: delta\ndata: one`]);
-    expect(rest).toBe(`event: delta\ndata: tw`);
-});
-
-test(`\\r\\n framing is accepted: some proxies rewrite line endings`, () => {
-    expect(splitSseBlocks(`event: delta\r\ndata: one\r\n\r\n`).blocks).toEqual([`event: delta\ndata: one`]);
+test(`\\r\\n framing is accepted, a \\r\\n split across chunks included: some proxies rewrite line endings`, async () => {
+    const { text, failed } = await collect([`event: delta\r\ndata: one\r\n\r`, `\nevent: done\r\ndata: \r\n\r\n`]);
+    expect([text, failed]).toEqual([`one`, []]);
 });
 
 test(`deltas arriving split mid-frame still reassemble in order`, async () => {

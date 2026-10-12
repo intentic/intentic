@@ -1,5 +1,6 @@
 import type { SandboxSummary } from "@intentic/api-contract";
-import { computed, type ComputedRef, shallowRef, watch } from "vue";
+import { usePoll } from "@intentic/ui/async";
+import { computed, type ComputedRef, effectScope, type EffectScope, shallowRef, watch } from "vue";
 import { onScreen } from "../../../workbench/window/onScreen";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { connectedSandboxes } from "./roster";
@@ -90,38 +91,32 @@ export const createAcrossStore = <T extends AcrossRecord>(options: AcrossOptions
     };
 
     let watchers = 0;
-    let timer: ReturnType<typeof setInterval> | undefined;
-
-    const syncLoop = (): void => {
-        if (watchers > 0 && onScreen.value) {
-            timer ??= setInterval(() => readAll(false), options.pollMs);
-            return;
-        }
-        if (timer !== undefined) {
-            clearInterval(timer);
-            timer = undefined;
-        }
-    };
-
-    // Registered per subscription, not at module scope, so merely importing this store starts nothing.
-    let watching: (() => void)[] = [];
+    // Registered per subscription, not at module scope, so merely importing this store starts nothing; stopping the
+    // scope ends the clock and every watch at once.
+    let watching: EffectScope | undefined;
 
     const startWatching = (): void => {
-        watching = [
-            // A window regaining focus reads immediately rather than waiting out the rest of a hidden interval.
+        watching = effectScope(true);
+        watching.run(() => {
+            // The clock, paused off-screen. A tick does not wait for the round before it: one box that hangs must not hold
+            // the others back, and readBox's in-flight guard already keeps a slow box from being asked twice.
+            usePoll({
+                everyMs: options.pollMs,
+                immediate: false,
+                visible: onScreen,
+                check: () => {
+                    readAll(false);
+                },
+            }).start();
+            // A window regaining focus reads every box now rather than waiting out the rest of a hidden interval.
             watch(onScreen, (visible) => {
-                syncLoop();
-                if (visible && watchers > 0) {
+                if (visible) {
                     readAll(true);
                 }
-            }),
+            });
             // Re-reads whatever newly enters `targets`; `force: false` skips boxes that answered seconds ago.
-            watch(targets, () => {
-                if (watchers > 0) {
-                    readAll(false);
-                }
-            }),
-        ];
+            watch(targets, () => readAll(false));
+        });
     };
 
     return {
@@ -144,7 +139,6 @@ export const createAcrossStore = <T extends AcrossRecord>(options: AcrossOptions
             if (watchers === 1) {
                 startWatching();
             }
-            syncLoop();
             readAll(false);
             let released = false;
             return () => {
@@ -154,12 +148,9 @@ export const createAcrossStore = <T extends AcrossRecord>(options: AcrossOptions
                 released = true;
                 watchers -= 1;
                 if (watchers === 0) {
-                    for (const stop of watching) {
-                        stop();
-                    }
-                    watching = [];
+                    watching?.stop();
+                    watching = undefined;
                 }
-                syncLoop();
             };
         },
     };

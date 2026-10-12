@@ -1,9 +1,9 @@
-import { type ChildProcess, execFile, spawn } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import { plural } from "@intentic/base/format";
+import { execBounded } from "@intentic/base/process";
 import { explain, homeDir } from "@intentic/local-agent";
 import {
     type DeviceSandbox,
@@ -26,8 +26,6 @@ import { inFlightMarks } from "../sandbox-rounds/in-flight.js";
 // split by what the action does: listing is a way of seeing (either grant), every verb that changes something
 // takes `sandboxes`. Every verb runs through the `ic` CLI rather than being reimplemented: ic owns what runs and
 // what should run after the next restart, and this file is a caller of it, one implementation for every door.
-
-const exec = promisify(execFile);
 
 // Long enough for a listing on a busy machine (ic bounds each docker read inside it at 20s); longer is a machine in
 // trouble, and every caller is a screen or a model waiting to draw.
@@ -87,7 +85,7 @@ export const fleet = async ({ current = true }: { readonly current?: boolean } =
     const candidates = icCandidates(process.platform, homeDir());
     for (const [index, binary] of candidates.entries()) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- candidates are tried in order; ENOENT means try the next
-        const answer = await exec(binary, ["sandbox", "list", "--json"], { timeout: LIST_TIMEOUT_MS, maxBuffer: MAX_BUFFER, windowsHide: true }).catch(
+        const answer = await execBounded(binary, ["sandbox", "list", "--json"], { timeoutMs: LIST_TIMEOUT_MS, maxOutput: MAX_BUFFER }).catch(
             (error: NodeJS.ErrnoException & { stderr?: string }) => {
                 if (error.code === "ENOENT" && index < candidates.length - 1) {
                     return undefined;

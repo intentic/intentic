@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { type Periodic, startPeriodic } from "@intentic/base/async";
 import { PROBES, type ProbeSpec, WORKSPACE_ROOT_EXCLUDE_ENV } from "@intentic/sandbox-contract/chores";
 import type { ProbeId, ProbeResult, RunningProbe } from "@intentic/sandbox-contract";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
@@ -200,22 +201,14 @@ export const createProbeRunner = (deps: ProbeRunnerDeps): ProbeRunner => {
         }
     };
 
-    let timer: NodeJS.Timeout | undefined;
+    let loop: Periodic | undefined;
     return {
         start: () => {
-            timer ??= setTimeout(() => {
-                void sweep();
-                timer = setInterval(() => void sweep(), TICK_MS);
-                timer.unref();
-            }, WARMUP_MS);
-            timer.unref();
+            loop ??= startPeriodic({ warmupMs: WARMUP_MS, everyMs: TICK_MS, run: sweep });
         },
         stop: () => {
-            if (timer !== undefined) {
-                clearTimeout(timer);
-                clearInterval(timer);
-                timer = undefined;
-            }
+            loop?.dispose();
+            loop = undefined;
         },
         refresh: async (repo, id) => {
             if (!PROBES.some((probe) => probe.id === id)) {

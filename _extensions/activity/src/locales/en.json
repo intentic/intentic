@@ -13,8 +13,6 @@
         "voiceMinutes": "{minutes} min: {speakers}"
     },
     "episodeRow": {
-        "durationMinutes": "{minutes}m {seconds}s",
-        "durationSeconds": "{seconds}s",
         "error": "error",
         "failed": "failed",
         "from": "from {author}",

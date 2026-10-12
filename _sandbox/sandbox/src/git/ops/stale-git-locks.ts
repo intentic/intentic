@@ -1,5 +1,6 @@
 import { lstat, readdir, rm } from "node:fs/promises";
 import { basename, join } from "node:path";
+import { sleep } from "@intentic/base/async";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { gitProcessRunning, STALE_LOCK_MS } from "@intentic/base/git";
 import type { Logger } from "pino";
@@ -118,7 +119,7 @@ export const waitForNoGit = async (probe: GitQuietProbe, polls: number, pollMs: 
         if (running === false || look === polls) {
             break;
         }
-        await new Promise((resolve) => setTimeout(resolve, pollMs));
+        await sleep(pollMs);
     }
     return running;
 };

@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import http from "node:http";
 import net from "node:net";
+import { errorMessage } from "@intentic/base/errors";
 import type { DocsState } from "../contract.js";
 import type { ContainerState, DockerEngine } from "./docker.js";
 
@@ -97,8 +98,6 @@ export const freeLoopbackPort = (): Promise<number> =>
             probe.close(() => (port === undefined ? reject(new Error("no port was assigned")) : resolve(port)));
         });
     });
-
-const errorMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 export class DocumentServer {
     private phase: Phase = { kind: "idle" };

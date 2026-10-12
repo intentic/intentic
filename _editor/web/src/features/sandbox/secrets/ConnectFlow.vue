@@ -7,6 +7,7 @@ import { useChat } from "../../chat/run/useChat";
 import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
 import { readClipboard, useCopied } from "@intentic/ui/clipboard";
 import { useT } from "@intentic/ui/i18n";
+import { onScreen } from "../../../workbench/window/onScreen";
 
 // One sign-in panel for every provider and mechanism (own account or translator subscription); branches only on
 // the handshake shape (device: read-only poll; redirect: paste back a code or address), never on the provider. Lives
@@ -255,7 +256,7 @@ watch(broughtBack, (now) => {
 });
 
 const onReturn = (): void => {
-    if (!wentToProvider.value || !awaitingPaste.value || document.visibilityState !== `visible` || accountBusy.value !== undefined) {
+    if (!wentToProvider.value || !awaitingPaste.value || !onScreen.value || accountBusy.value !== undefined) {
         return;
     }
     wentToProvider.value = false;
@@ -278,14 +279,18 @@ const arm = (on: boolean): void => {
     if (on) {
         window.addEventListener(`paste`, onWindowPaste);
         window.addEventListener(`focus`, onReturn);
-        document.addEventListener(`visibilitychange`, onReturn);
         return;
     }
     window.removeEventListener(`paste`, onWindowPaste);
     window.removeEventListener(`focus`, onReturn);
-    document.removeEventListener(`visibilitychange`, onReturn);
 };
 watch(awaitingPaste, arm, { immediate: true });
+// The window coming back on screen, as onScreen says it: a Windows webview back from the tray never reported hidden.
+watch(onScreen, () => {
+    if (armed) {
+        onReturn();
+    }
+});
 onUnmounted(() => arm(false));
 
 // Naming is a rename, not a required step (the daemon derives one when blank); folded away until asked for, and

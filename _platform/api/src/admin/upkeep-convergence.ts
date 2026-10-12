@@ -1,5 +1,6 @@
 import type { HostReport } from "@intentic/api-contract";
 import { Prisma, type PrismaClient } from "@intentic/prisma";
+import { compareVersions } from "@intentic/sandbox-contract";
 import type { AdminDigestLine } from "./admin-digest.js";
 import { DAY_MS } from "../durations.js";
 import { hostReportsOf, reporterOf } from "../sandbox/host-report.js";
@@ -24,20 +25,6 @@ export interface ConvergenceRow {
     readonly fixed: number;
     readonly kinds: Readonly<Record<string, number>>;
 }
-
-// "1.330.0" > "1.329.2" > "unknown", by numeric parts. Pure.
-const versionParts = (version: string): number[] => version.split(/[.-]/).map((part) => Number.parseInt(part, 10) || 0);
-
-export const newerVersion = (left: string, right: string): number => {
-    const [a, b] = [versionParts(left), versionParts(right)];
-    for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
-        const diff = (a[index] ?? 0) - (b[index] ?? 0);
-        if (diff !== 0) {
-            return diff;
-        }
-    }
-    return 0;
-};
 
 /** One row per agent version, newest first, from reports that carry an upkeep summary; each reporter counted once, by
  * its newest report, however many sandboxes it reports for. Pure. */
@@ -70,7 +57,8 @@ export const upkeepConvergence = (reports: readonly HostReport[]): ConvergenceRo
         }
         rows.set(version, row);
     }
-    return [...rows.entries()].map(([version, row]) => ({ version, ...row })).toSorted((left, right) => newerVersion(right.version, left.version));
+    // Semver order, so a prerelease sorts below its release and "unknown" (which does not parse) below everything.
+    return [...rows.entries()].map(([version, row]) => ({ version, ...row })).toSorted((left, right) => compareVersions(right.version, left.version));
 };
 
 /** The digest's line, when machines on the newest agent still hold leftovers their own pass could not clear. Pure. */

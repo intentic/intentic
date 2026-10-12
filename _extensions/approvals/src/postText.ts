@@ -2,6 +2,7 @@
 // unrecognised one just shows the words instead of a wrong answer. Rules live in one module since four sections must
 // agree on the same post.
 
+import { formatElapsed } from "@intentic/extension-ui/format";
 import { messageLimitOf } from "@intentic/sandbox-contract/message-limits";
 import { t } from "./i18n";
 
@@ -70,16 +71,9 @@ export const destinationOf = (target: string): Destination => {
 };
 
 // Time left in the unit the decision is made in: approving starts a hold, not a send. Never zero: the last tick reads
-// as "any moment now", since by then the executor already has the post.
-export const countdownWords = (msLeft: number): string => {
-    if (msLeft <= 0) {
-        return t(`postText.anyMomentNow`);
-    }
-    const seconds = Math.ceil(msLeft / 1_000);
-    return seconds < 60
-        ? t(`postText.seconds`, { seconds })
-        : t(`postText.minutesSeconds`, { minutes: Math.floor(seconds / 60), seconds: String(seconds % 60).padStart(2, `0`) });
-};
+// as "any moment now", since by then the executor already has the post. Rounded up to the second, so the countdown
+// never shows less than the post still has left.
+export const countdownWords = (msLeft: number): string => (msLeft <= 0 ? t(`postText.anyMomentNow`) : formatElapsed(Math.ceil(msLeft / 1_000)));
 
 // Character-count fold threshold, decided before paint: a screenful of body text; an ordinary post stays whole.
 export const LONG_POST = 900;

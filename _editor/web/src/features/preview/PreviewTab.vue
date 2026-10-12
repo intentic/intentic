@@ -16,6 +16,7 @@ import PreviewStage from "./PreviewStage.vue";
 import { useEndpoint } from "../../client/endpoint/useEndpoint";
 import { useTerminalPanel } from "../terminal/useTerminalPanel";
 import { useOperations } from "../../workbench/operations/operations";
+import { onScreen } from "../../workbench/window/onScreen";
 import { useT } from "@intentic/ui/i18n";
 
 export interface PreviewActions {
@@ -348,6 +349,7 @@ const STARTING_POLL_MS = 10_000;
 // Asks again for as long as the start is waited on; a refused read is "not yet", the next tick asks again.
 const startingPoll = usePoll({
     everyMs: STARTING_POLL_MS,
+    visible: onScreen,
     check: async () => {
         await actions.refresh();
     },

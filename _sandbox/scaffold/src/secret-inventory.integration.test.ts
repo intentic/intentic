@@ -1,7 +1,7 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { collectSecretInventory, readSyncState, secretDigest, writeSyncState } from "./secret-inventory.js";
+import { collectSecretInventory, readSyncState, SYNC_FILE, secretDigest, writeSyncState } from "./secret-inventory.js";
 
 const env = (key: string) => ({ $secret: { source: "env", key } });
 const gen = (key: string) => ({ $secret: { source: "generated", key } });
@@ -94,5 +94,15 @@ describe("sync state round-trip", () => {
         const root = await dir({ ".secrets-sync.json": `{"K": {"digest": "ab` });
         await expect(readSyncState(root)).rejects.toThrow(SyntaxError);
         await expect(collectSecretInventory(root)).rejects.toThrow(SyntaxError);
+    });
+
+    // The staged copy holds digests of secret values: a write that fails must not leave it beside the record.
+    it("a write that cannot land leaves no staged copy behind", async () => {
+        const root = await dir({});
+        // A directory holding a file where the record goes: nothing can be renamed over it.
+        await mkdir(join(root, SYNC_FILE));
+        await writeFile(join(root, SYNC_FILE, "occupied"), "");
+        await expect(writeSyncState(root, { K: { digest: secretDigest("v"), pushedAt: "2026-01-01T00:00:00.000Z" } })).rejects.toThrow();
+        expect(await readdir(root)).toEqual([SYNC_FILE]);
     });
 });

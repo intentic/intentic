@@ -1,5 +1,6 @@
 import { lstat, mkdir, readdir, readFile, readlink, rm, symlink } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
+import { keyedLock } from "@intentic/base/async";
 import type { Services } from "../composition.js";
 import { scanSkillFolders, SKILL_FILE, skillFolderNames } from "../skill-file.js";
 
@@ -92,17 +93,10 @@ const converge = async (root: string): Promise<void> => {
     }
 };
 
-// Per-root serialization; the stored chain swallows failure so one bad pass never blocks later writes.
-const chains = new Map<string, Promise<void>>();
+// One pass per root at a time; a failed pass fails only its own caller and never blocks later writes.
+const converging = keyedLock<string>();
 
-const queueConverge = (root: string): Promise<void> => {
-    const next = (chains.get(root) ?? Promise.resolve()).then(() => converge(root));
-    chains.set(
-        root,
-        next.catch(() => undefined),
-    );
-    return next;
-};
+const queueConverge = (root: string): Promise<void> => converging(root, async () => await converge(root));
 
 // Writes one loaded skill, then converges its loader projection; a runtime without a loader reads the canonical set via
 // `loadedSkillCatalogNote` on its next conversation.

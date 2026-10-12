@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { answeringFetch, streamedResponse } from "../../http/fetch.testing.js";
 import { carryPage, PAGE_CDN_HOSTS } from "./page-assets.js";
 
 // A one-pixel PNG, and the same bytes under a picture's name that are not a picture.
@@ -63,6 +64,19 @@ describe("carryPage", () => {
         expect(carried.html).toContain("<script>window.lib = 1;</script>");
         expect(carried.fetched).toEqual(["https://cdn.jsdelivr.net/npm/lib@1/lib.min.js"]);
         expect(carried.leftOut.toSorted()).toEqual(["http://cdn.jsdelivr.net/a.png", "https://evil.example.com/x.js"]);
+    });
+
+    it("leaves out a CDN file past its cap that declares no length, without downloading it all", async () => {
+        // 64 MiB offered in 1 MiB chunks; one file may be 10 MiB.
+        const { response, pulled } = streamedResponse(64, 1024 * 1024);
+        const html = `<script src="https://cdn.jsdelivr.net/npm/huge@1/huge.js"></script>`;
+
+        const carried = await carryPage(html, { ...context(), fetch: answeringFetch(() => response) });
+
+        expect(carried.html).toBe(html);
+        expect(carried.leftOut).toEqual(["https://cdn.jsdelivr.net/npm/huge@1/huge.js"]);
+        expect(pulled.cancelled).toBe(true);
+        expect(pulled.count).toBeLessThanOrEqual(12);
     });
 
     it("drops hints that point at the network, which the frame will never reach", async () => {

@@ -7,8 +7,10 @@ import { host } from "./host";
 export function usePersonas() {
     const api = host();
     const query = useQuery({
-        queryKey: api.sandbox.key(`personas`),
-        queryFn: async (): Promise<Persona[]> => (await api.sandbox.rpc.personas.list()).personas,
+        // The procedure's whole answer under its own key, shared with every other reader of the persona list.
+        queryKey: api.sandbox.readKey(`personas.list`),
+        queryFn: () => api.sandbox.rpc.personas.list(),
+        select: (answer): Persona[] => answer.personas,
         enabled: computed(() => api.sandbox.reachable()),
     });
     return { personas: computed<Persona[]>(() => query.data.value ?? []) };

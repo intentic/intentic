@@ -182,6 +182,18 @@ test("a path outside the workspace, or into its own state, is never run from", a
     expect((await installed()).dev?.held).toBe("the checkout at /nowhere/at/all is gone");
 });
 
+// `..wip` is a folder name, which a `startsWith("..")` test once took for a path outside the workspace.
+test("a checkout in a folder whose name starts with two dots is inside the workspace", async () => {
+    const { root, installed, point } = await setup();
+    const checkout = join(root, "..wip", "maintenance");
+    await writeExtension(checkout, manifest(), "x");
+    await point(checkout);
+
+    const extension = await installed();
+    expect(extension.dir).toBe(checkout);
+    expect(await devSummaryOf(extension)).toMatchObject({ path: "..wip/maintenance" });
+});
+
 test("a conversation's isolated copy of the workspace is a place to run from, and says whose it is", async () => {
     const { historyRoot, installed, point } = await setup();
     const checkout = join(worktreesRootOf(historyRoot), "conv-1", "extensions", "maintenance");

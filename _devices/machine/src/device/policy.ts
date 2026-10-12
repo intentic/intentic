@@ -1,5 +1,6 @@
 import { realpath } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { isInside } from "@intentic/base/contained";
 import { homeDir } from "@intentic/local-agent";
 import type { DeviceScopes } from "@intentic/sandbox-contract";
 
@@ -32,12 +33,9 @@ export const rootsOf = (scopes: DeviceScopes): string[] => {
 export const rootsText = (roots: readonly string[]): string =>
     roots.length === 0 ? `none, since no line of "Folders it may touch" is a full path` : roots.join(", ");
 
-// A separator-aware prefix test on normalized paths, so `/home/me/../etc/passwd` normalizes first and
-// `/home/meeting` isn't treated as inside `/home/me`. Links are assertPath's to resolve, before this is asked.
-export const withinRoots = (path: string, roots: readonly string[]): boolean => {
-    const target = resolve(path);
-    return roots.some((root) => target === root || target.startsWith(root.endsWith(sep) ? root : `${root}${sep}`));
-};
+// Lexical, on normalized paths, so `/home/me/../etc/passwd` normalizes first and `/home/meeting` isn't treated as
+// inside `/home/me`. Links are assertPath's to resolve, before this is asked.
+export const withinRoots = (path: string, roots: readonly string[]): boolean => roots.some((root) => isInside(root, path));
 
 // Where `path` really is, every symlink and junction on the way resolved. A path that does not exist yet is its
 // nearest existing ancestor, resolved, with the rest appended: a new file is judged by the folder it lands in.

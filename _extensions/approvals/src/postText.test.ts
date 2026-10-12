@@ -141,7 +141,9 @@ describe("countdownWords", () => {
     it("spells out the wider window the section covers", () => {
         // A post someone dated two minutes out is as imminent as a freshly approved one and shares the group.
         expect(countdownWords(90_000)).toBe(`1m 30s`);
-        expect(countdownWords(61_000)).toBe(`1m 01s`);
+        // The kit's span of time, as every other one reads: no padded second, and none at all on the minute.
+        expect(countdownWords(61_000)).toBe(`1m 1s`);
+        expect(countdownWords(120_000)).toBe(`2m`);
     });
 });
 

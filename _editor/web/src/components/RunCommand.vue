@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { Button, Code, type CommandOs, commandLang, formatElapsed, osOptions, SegmentedControl, useOsPreference } from "@intentic/ui";
+import { Button, Code, type CommandOs, commandLang, formatElapsed, osOptions, SegmentedControl, useNow, useOsPreference } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, ref } from "vue";
 import ScriptSourceSwitch from "./ScriptSourceSwitch.vue";
 
 // "RUN THIS ON YOUR DEVICE", drawn one way everywhere: the shell choice (the shared preference, so every command on
@@ -54,23 +54,7 @@ const shown = computed<CommandOs>({
 const text = computed(() => (typeof props.command === `string` ? props.command : props.command(shown.value)));
 
 // Ticks only while a lapsing command is on screen.
-const now = ref(Date.now());
-let timer: ReturnType<typeof setInterval> | undefined;
-watch(
-    () => props.expiresAt,
-    (expiresAt) => {
-        clearInterval(timer);
-        timer = undefined;
-        now.value = Date.now();
-        if (expiresAt !== undefined) {
-            timer = setInterval(() => {
-                now.value = Date.now();
-            }, 1000);
-        }
-    },
-    { immediate: true },
-);
-onBeforeUnmount(() => clearInterval(timer));
+const now = useNow(() => props.expiresAt !== undefined);
 
 const secondsLeft = computed(() => (props.expiresAt === undefined ? undefined : Math.max(0, Math.ceil((props.expiresAt - now.value) / 1000))));
 const expired = computed(() => secondsLeft.value === 0);

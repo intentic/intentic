@@ -5,6 +5,7 @@
 import type { SessionState, WindowInfo } from "@intentic/desktop-automation";
 import { posix } from "node:path";
 import { shellQuote } from "@intentic/sandbox-run/quote";
+import { SANDBOX_CONTAINER_PREFIX, slugOfHostname } from "@intentic/sandbox-run/slug";
 
 /** `ConvertTo-Json` output, as the list it was always meant to be. */
 export const asList = <T>(json: string): T[] => {
@@ -145,8 +146,8 @@ export const dockerOsType = (stdout: string): string | undefined => {
     return value === `` ? undefined : value;
 };
 
-/** Prefix every sandbox container name carries, whatever hostname produced its slug. */
-export const SANDBOX_CONTAINER_PREFIX = `intentic-sandbox-`;
+/** Prefix every sandbox container name carries, whatever hostname produced its slug: the run contract's own. */
+export { SANDBOX_CONTAINER_PREFIX };
 
 /** Container name every later flow (recreate, cleanup, the launcher's docker calls) keys off. */
 export const sandboxContainerName = (hostname: string): string => `${SANDBOX_CONTAINER_PREFIX}${sandboxSlug(hostname)}`;
@@ -199,8 +200,8 @@ export const pathHolds = (path: string, folder: string): boolean => {
     return path.split(`;`).some((entry) => entry.trim() !== `` && plain(entry) === wanted);
 };
 
-/** Launcher's own slug rule: everything before the first dot. */
-export const sandboxSlug = (hostname: string): string => hostname.split(`.`)[0] ?? hostname;
+/** Launcher's own slug rule, the run contract's: the first label, lowercased as DNS reads it. */
+export const sandboxSlug = (hostname: string): string => slugOfHostname(hostname) ?? hostname;
 
 // Whether a window title is the one being waited for: substring match on the distinctive half, so a wording change
 // doesn't turn into a failed build.

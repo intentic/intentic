@@ -4,6 +4,7 @@ import type { CredentialGatesStore } from "../credential-gates.js";
 import { createCredentialGrants } from "../credential-grants.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../../testing.js";
+import { createHeldCards } from "../../guard/held-cards.js";
 
 // Where a turn here parks its cards: one fleet's actors.
 const cards = parkedCards(memoryFleet().conversations);
@@ -41,13 +42,23 @@ interface Fake {
     readonly frames: AgentEvent[];
     readonly awaited: { readonly conversationId: string; readonly kind: string }[];
     readonly grants: ReturnType<typeof createCredentialGrants>;
+    // The turn the cards went up in: ending it settles a card nobody answered.
+    readonly endTurn: () => void;
+    readonly held: ReturnType<typeof createHeldCards>;
+    // What the conversation was woken with by a turn's close that held for a card.
+    readonly woken: string[];
 }
 
 const fake = (gates: readonly GatePolicy[], over: Partial<CredentialGateDeps> = {}, broken = false): Fake => {
     const frames: AgentEvent[] = [];
     const awaited: { conversationId: string; kind: string }[] = [];
     const grants = createCredentialGrants();
+    // Ending it starts the next, as a wake does.
+    let turn = Promise.withResolvers<void>();
+    const woken: string[] = [];
+    const held = createHeldCards(async (_conversationId, prompt) => void woken.push(prompt));
     const deps: CredentialGateDeps = {
+        hold: { held, finished: () => turn.promise },
         cards,
         gates: memoryGates(gates, broken),
         grants,
@@ -57,7 +68,11 @@ const fake = (gates: readonly GatePolicy[], over: Partial<CredentialGateDeps> = 
         now: () => 1_700_000_000_000,
         ...over,
     };
-    return { deps, frames, awaited, grants };
+    return { deps, frames, awaited, grants, endTurn: () => {
+            turn.resolve();
+            turn = Promise.withResolvers<void>();
+        },
+        held, woken };
 };
 
 const asked = (over: Partial<CredentialCheck> = {}): CredentialCheck => ({
@@ -157,7 +172,7 @@ it("a per-use release covers that use only: it records no grant, so the next use
     expect(frames.filter((frame) => frame.kind === "credential_offer")).toHaveLength(2);
 });
 
-it("tells a decline apart from a deadline, and receipts only the decline", async () => {
+it("tells a decline apart from a turn that ended unanswered, and receipts only the decline", async () => {
     const declined = fake([policy()]);
     const pendingDecline = createCredentialGate(declined.deps).check(asked());
     await answerCard(declined.frames, false, BOB);
@@ -172,9 +187,14 @@ it("tells a decline apart from a deadline, and receipts only the decline", async
         approvedBy: "bob@corp.com",
     });
 
-    const expired = fake([policy()], { deadlineMs: 1 });
-    const verdict = await createCredentialGate(expired.deps).check(asked());
-    expect(verdict).toEqual({ allow: false, reason: expect.stringContaining("went unanswered and expired") });
+    const expired = fake([policy()]);
+    const pendingExpiry = createCredentialGate(expired.deps).check(asked());
+    while (!expired.frames.some((frame) => frame.kind === "credential_offer")) {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+    expired.endTurn();
+    const verdict = await pendingExpiry;
+    expect(verdict).toEqual({ allow: false, reason: expect.stringContaining("The turn ended before anyone released") });
     expect((verdict as { reason: string }).reason).toContain("bob@corp.com");
     expect(expired.frames.some((frame) => frame.kind === "credential_receipt")).toBe(false);
 });
@@ -198,4 +218,60 @@ it("only a gate of the matching kind answers for a subject", async () => {
     const { deps, frames } = fake([policy({ kind: "capability" })]);
     expect(await createCredentialGate(deps).check(asked({ kind: "secret" }))).toEqual({ allow: true });
     expect(frames).toEqual([]);
+});
+
+it("waits for the approver however long it takes: no clock refuses the card", async () => {
+    jest.useFakeTimers();
+    try {
+        const { deps, frames } = fake([policy()]);
+        const pending = createCredentialGate(deps).check(asked());
+        // Well past the ten minutes a card used to be refused at.
+        jest.advanceTimersByTime(3 * 60 * 60_000);
+        jest.useRealTimers();
+        await answerCard(frames, true, BOB);
+        expect(await pending).toEqual({ allow: true, approvedBy: "bob@corp.com" });
+    } finally {
+        jest.useRealTimers();
+    }
+});
+
+it("keeps the card up when its caller stops waiting, and the same call again collects the release without a second card", async () => {
+    const { deps, frames, held } = fake([policy()]);
+    const gate = createCredentialGate(deps);
+    const gone = new AbortController();
+    const first = gate.check(asked({ signal: gone.signal }));
+    gone.abort();
+    expect(await first).toEqual({ allow: false, reason: expect.stringMatching(/^Still waiting for bob@corp.com to release "DATABASE_URL"/) });
+    expect(held.open("conv-1")).toHaveLength(1);
+
+    await answerCard(frames, true, BOB);
+    expect(await gate.check(asked())).toEqual({ allow: true, approvedBy: "bob@corp.com" });
+    expect(frames.filter((frame) => frame.kind === "credential_offer")).toHaveLength(1);
+    expect(held.open("conv-1")).toEqual([]);
+});
+
+it("wakes the conversation on a release given after its turn ended, and the repeated call passes once", async () => {
+    const { deps, frames, held, woken, endTurn } = fake([policy()]);
+    const gate = createCredentialGate(deps);
+    const gone = new AbortController();
+    const first = gate.check(asked({ signal: gone.signal }));
+    gone.abort();
+    await first;
+
+    // The turn's close holds for the card the call left up.
+    const closing = held.hold("conv-1", undefined);
+    await answerCard(frames, true, BOB);
+    await closing;
+    endTurn();
+    expect(woken).toHaveLength(1);
+    expect(woken[0]).toContain('bob@corp.com allowed releasing "DATABASE_URL" after your turn ended. It has not been used yet:');
+    expect(woken[0]).toContain("psql $DATABASE_URL -c 'select 1'");
+
+    // The wake's turn makes the same call: released once, with no second card.
+    expect(await gate.check(asked())).toEqual({ allow: true, approvedBy: "bob@corp.com" });
+    expect(frames.filter((frame) => frame.kind === "credential_offer")).toHaveLength(1);
+    const again = gate.check(asked());
+    await answerFrom(frames, frames.length, true, BOB);
+    expect(await again).toEqual({ allow: true, approvedBy: "bob@corp.com" });
+    expect(frames.filter((frame) => frame.kind === "credential_offer")).toHaveLength(2);
 });

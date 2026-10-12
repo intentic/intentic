@@ -1,10 +1,7 @@
-import { execFile } from "node:child_process";
 import { join } from "node:path";
-import { promisify } from "node:util";
+import { exec, GIT_GLOBAL_ARGS } from "@intentic/base/git";
 import type { FileEntry, RankedGroup, RankedHit } from "../types.js";
 import { isIqDenied } from "../workspace/floor.js";
-
-const exec = promisify(execFile);
 
 const DEFAULT_SINCE = "7d";
 
@@ -35,17 +32,20 @@ const reposOf = (entries: readonly FileEntry[]): string[] => [...new Set(entries
 
 // `rev-parse --verify` exits 1 exactly when HEAD names no commit yet; anything else (not a repo, no git) is not that.
 const unborn = (cwd: string): Promise<boolean> =>
-    exec("git", ["-C", cwd, "rev-parse", "--verify", "--quiet", "HEAD"]).then(
+    exec("git", [...GIT_GLOBAL_ARGS, "-C", cwd, "rev-parse", "--verify", "--quiet", "HEAD"]).then(
         () => false,
         (error: unknown) => (error as { code?: unknown }).code === 1,
     );
 
 // A repo with no commits has no history, so its failure reads as empty output; every other failure (a bad pattern,
 // output past maxBuffer, a repo git refuses) propagates, since an empty answer would claim the history has nothing.
+// GIT_GLOBAL_ARGS keeps these reads off index.lock: a `git diff` here would otherwise refresh the index of a repo an
+// agent is committing to and make its commit fail. Plain `exec` rather than `defaultGit`, whose resident forker is a
+// second node process a one-shot `iq` would start for a handful of reads.
 const git = async (root: string, repo: string, args: string[]): Promise<string> => {
     const cwd = join(root, repo);
     try {
-        return (await exec("git", ["-C", cwd, ...args], { maxBuffer: 16 * 1024 * 1024 })).stdout;
+        return (await exec("git", [...GIT_GLOBAL_ARGS, "-C", cwd, ...args], { maxBuffer: 16 * 1024 * 1024 })).stdout;
     } catch (error) {
         if (await unborn(cwd)) {
             return "";

@@ -1,3 +1,4 @@
+import { pollUntil } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import { type Capability, RESERVED_MCP_SERVER_NAMES } from "@intentic/sandbox-contract";
 import { type ToolServer, toolServerForCard, toolServersOf } from "@intentic/extension-manifest";
@@ -111,15 +112,14 @@ const RESTART_HOLD_MS = 15_000;
 const RESTART_POLL_MS = 200;
 
 const heldTarget = async (backend: Services["extensionBackend"], signal: AbortSignal): Promise<ReturnType<Services["extensionBackend"]["proxyTarget"]>> => {
-    const until = Date.now() + RESTART_HOLD_MS;
-    for (;;) {
-        const target = backend.proxyTarget();
-        const state = backend.status().state;
-        if (target !== undefined || (state !== "starting" && state !== "stopped") || Date.now() >= until || signal.aborted) {
-            return target;
-        }
-        await new Promise((resolve) => setTimeout(resolve, RESTART_POLL_MS));
-    }
+    await pollUntil(
+        () => {
+            const state = backend.status().state;
+            return backend.proxyTarget() !== undefined || (state !== "starting" && state !== "stopped");
+        },
+        { intervalMs: RESTART_POLL_MS, timeoutMs: RESTART_HOLD_MS, signal },
+    );
+    return backend.proxyTarget();
 };
 
 const backendDown = (backend: Services["extensionBackend"]): string => {

@@ -10,10 +10,13 @@ import {
     WEBCHAT_DAILY_MAX_DEFAULT,
 } from "@intentic/sandbox-contract";
 import { Hono } from "hono";
-import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
+import { stubGlobal, unstubAllGlobals, waitFor } from "@intentic/testing/bun";
 import { fileHeldWakesStore } from "../automations/held-wakes-store.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
-import { runHeldWake } from "../automations/scheduler.js";
+import { PAYLOAD_MAX, runHeldWake } from "../automations/scheduler.js";
+import { createAutomationsRoutes } from "../automations/automations.routes.js";
+import { HELD_WAKE_DECLINED } from "../automations/held-wake-answers.js";
+import { call } from "@orpc/server";
 import { sqliteTurnJournal } from "../agent/run/turn/turn-journal.js";
 import { conversationsDbPath, openConversationsDb } from "../store/conversations-db.js";
 import type { Services } from "../composition.js";
@@ -99,6 +102,9 @@ const setup = async (automation: Automation) => {
     await services.automations.upsert(automation);
     return { services, appends, archived };
 };
+
+// What a Request with a stream body needs besides RequestInit: without it the runtime refuses to send one.
+const STREAMED = { duplex: "half" };
 
 test("an allowed visitor message wakes the agent and streams the reply back as SSE", async () => {
     const { services, appends } = await setup(webchat("wc-ok"));
@@ -508,4 +514,57 @@ test("a probe for an id that is not a Visitor chat records nothing", async () =>
     const app = appFor(services, fakeWake([]));
     await app.request(`/webchat/not-a-visitor-chat/config`, { headers: { origin: ORIGIN } });
     expect((await (await app.request(`/webchat/not-a-visitor-chat/installs`)).json()).origins).toEqual([]);
+});
+
+// The declared length used to be the only check, so a chunked body (which declares none) was read whole before its
+// size was known.
+test("an oversized body sent chunked, with no length declared, is refused 413 before any wake", async () => {
+    const { services } = await setup(webchat("wc-chunked"));
+    const turns: AgentTurn[] = [];
+    const app = appFor(services, fakeWake(turns));
+    const huge = JSON.stringify({ conversationId: "c1", content: "x".repeat(PAYLOAD_MAX + 1) });
+    const body = new ReadableStream<Uint8Array>({
+        start: (controller) => {
+            const bytes = new TextEncoder().encode(huge);
+            for (let at = 0; at < bytes.length; at += 4096) {
+                controller.enqueue(bytes.slice(at, at + 4096));
+            }
+            controller.close();
+        },
+    });
+    // A stream body needs `duplex: "half"`, which this lib's RequestInit does not name, so it rides in from outside.
+    const init: RequestInit = { method: "POST", headers: { "content-type": "application/json", origin: ORIGIN }, body };
+    const request = new Request("http://door/webchat/wc-chunked/message", { ...init, ...STREAMED });
+    expect(request.headers.get("content-length")).toBeNull();
+    const res = await app.request(request);
+    expect(res.status).toBe(413);
+    expect(turns).toEqual([]);
+});
+
+// A rejected hold used to vanish: the owner's lock screen kept the ask, the run history had no trace of it, and the
+// visitor who was told a person would look never heard back.
+test("rejecting a held wake withdraws its push, records a run, and tells the visitor", async () => {
+    const { services } = await setup(webchat("wc-declined", { requireApproval: true }));
+    const app = appFor(services, fakeWake([]));
+    await (await post(app, "wc-declined", { conversationId: "visitor-3", content: "delete everything" })).text();
+    const [held] = await services.heldWakes.list();
+    const withdrawn: string[] = [];
+    const answering: Services = {
+        ...services,
+        pushSender: {
+            ...services.pushSender,
+            withdraw: async (replacement) => {
+                withdrawn.push(replacement.tag);
+                return { delivered: 1, failed: 0 };
+            },
+        },
+    };
+    await call(createAutomationsRoutes(answering).reject, { id: held?.id ?? "" }, { context: { headers: new Headers(), method: "POST", url: "/automations" } });
+
+    expect(await services.heldWakes.list()).toEqual([]);
+    expect(withdrawn).toEqual(["approval-wc-declined"]);
+    expect((await services.automations.get("wc-declined"))?.runs).toMatchObject([{ outcome: "skipped", detail: expect.stringContaining("declined") }]);
+    await waitFor(async () =>
+        expect(await (await collect(app, "wc-declined", "visitor-3")).json()).toMatchObject({ replies: [{ text: HELD_WAKE_DECLINED }] }),
+    );
 });

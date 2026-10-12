@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";
 import { type ProcedureOutput, sandboxRpc } from "../../../client/sandbox/sandboxRpc";
+import { optimisticUpdate } from "../../../lib/optimistic";
 import { pushedKeys, rpcKey } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 import { blocked, type FleetLane } from "./agentStatus";
@@ -14,6 +15,13 @@ import type { FleetAgent } from "./useAgents-fleet";
 
 // The ledger's own entry, which the writes below seed and file ahead of the daemon.
 const runsKey = rpcKey(`workflows.runs`);
+
+type Ledger = ProcedureOutput<`workflows.runs`>;
+
+// One run's filing date, set on the ledger as it is.
+const filed =
+    (runId: string, archivedAt: number | undefined) =>
+    (ledger: Ledger): Ledger => ({ ...ledger, runs: ledger.runs.map((run) => (run.runId === runId ? { ...run, archivedAt } : run)) });
 
 // Same three lanes as an agent, decided from the run's own state. `overspent`/`error` count as attention, not
 // finished, since those need a person's action.
@@ -79,7 +87,7 @@ export function useWorkflowRuns() {
     const start = useMutation({
         mutationFn: (input: { id: string; request?: string }): Promise<WorkflowRun> => sandboxRpc.workflows.run(input),
         onSuccess: (run) => {
-            queryClient.setQueryData<ProcedureOutput<`workflows.runs`>>(runsKey, (held) => ({
+            queryClient.setQueryData<Ledger>(runsKey, (held) => ({
                 ...held,
                 runs: [run, ...(held?.runs ?? []).filter((entry) => entry.runId !== run.runId)],
             }));
@@ -94,35 +102,25 @@ export function useWorkflowRuns() {
         onSuccess: invalidate,
     });
 
-    // Files one run in the cached ledger ahead of the daemon. A refusal puts back only that run's filing date: a
-    // whole-ledger snapshot put back would also undo whatever the ledger's own push brought in meanwhile.
-    const refile = (runId: string, archivedAt: number | undefined): void => {
-        queryClient.setQueryData<ProcedureOutput<`workflows.runs`>>(runsKey, (held) =>
-            held === undefined ? undefined : { ...held, runs: held.runs.map((run) => (run.runId === runId ? { ...run, archivedAt } : run)) },
-        );
-    };
-    // The row moves on the press. A ledger read already in flight would paint it back from before the press, so it is
-    // cancelled first; the read after the answer replaces the guess either way.
-    const fileOnPress = async (runId: string, archivedAt: number | undefined): Promise<{ readonly was: number | undefined }> => {
-        await queryClient.cancelQueries({ queryKey: runsKey });
-        const was = queryClient.getQueryData<ProcedureOutput<`workflows.runs`>>(runsKey)?.runs.find((run) => run.runId === runId)?.archivedAt;
-        refile(runId, archivedAt);
-        return { was };
-    };
+    // The row moves on the press, filed in the cached ledger ahead of the daemon (a ledger read already in flight is
+    // cancelled, or it would paint the row back from before the press). A refusal puts back only that run's filing
+    // date: a whole-ledger snapshot put back would also undo whatever the ledger's own push brought in meanwhile. The
+    // read after the answer replaces the guess either way.
+    const fileOnPress = <R>(runId: string, archivedAt: number | undefined, write: () => Promise<R>): Promise<R> =>
+        optimisticUpdate(runsKey, filed(runId, archivedAt), write, {
+            undo: (current: Ledger, before: Ledger) => filed(runId, before.runs.find((run) => run.runId === runId)?.archivedAt)(current),
+            client: queryClient,
+        });
 
     // Archives an ended run with its sessions (a step has no card of its own to archive separately). Lossless, like
     // an agent's archive; restore brings run and sessions back together.
     const archive = useMutation({
-        mutationFn: (runId: string) => sandboxRpc.workflows.archiveRun({ runId }),
-        onMutate: (runId: string) => fileOnPress(runId, Date.now()),
-        onError: (_error, runId, pressed) => refile(runId, pressed?.was),
+        mutationFn: (runId: string) => fileOnPress(runId, Date.now(), () => sandboxRpc.workflows.archiveRun({ runId })),
         onSettled: invalidate,
     });
 
     const unarchive = useMutation({
-        mutationFn: (runId: string) => sandboxRpc.workflows.unarchiveRun({ runId }),
-        onMutate: (runId: string) => fileOnPress(runId, undefined),
-        onError: (_error, runId, pressed) => refile(runId, pressed?.was),
+        mutationFn: (runId: string) => fileOnPress(runId, undefined, () => sandboxRpc.workflows.unarchiveRun({ runId })),
         onSettled: invalidate,
     });
 

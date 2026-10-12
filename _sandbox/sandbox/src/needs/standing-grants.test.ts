@@ -1,5 +1,6 @@
 import { memoryConversationGrants } from "../personas/conversation-grants.js";
 import { createCredentialGrants } from "../secrets/credential-grants.js";
+import { notifyingCredentialGrants } from "../secrets/secrets-slice.js";
 import { revokeGrant, standingGrants } from "./standing-grants.js";
 
 // The yeses still standing, as Needs you lists them: one row per conversation, carrying both what its grants widened and
@@ -22,7 +23,7 @@ test("a conversation's grants and its releases come back as one row, newest chan
 
     expect(await standingGrants(deps)).toEqual({
         conversations: [
-            { conversationId: "conv-new", capabilities: ["github"], folders: [], shelves: ["browser"], installs: false, secrets: [], everything: false, by: "bob@acme.dev", updatedAt: 300, releases: [] },
+            { conversationId: "conv-new", capabilities: ["github"], folders: [], shelves: ["browser"], installs: false, secrets: [], everything: false, rules: [], by: "bob@acme.dev", updatedAt: 300, releases: [] },
             {
                 conversationId: "conv-released",
                 capabilities: [],
@@ -31,9 +32,10 @@ test("a conversation's grants and its releases come back as one row, newest chan
                 installs: false,
                 secrets: [],
                 everything: false,
+                rules: [],
                 releases: [{ subject: "reddit-work", approvedBy: "bob@acme.dev", at: 200 }],
             },
-            { conversationId: "conv-old", capabilities: [], folders: ["refs/vendor"], shelves: [], installs: false, secrets: [], everything: false, by: "ada@acme.dev", updatedAt: 100, releases: [] },
+            { conversationId: "conv-old", capabilities: [], folders: ["refs/vendor"], shelves: [], installs: false, secrets: [], everything: false, rules: [], by: "ada@acme.dev", updatedAt: 100, releases: [] },
         ],
     });
 });
@@ -51,7 +53,7 @@ test("taking one back leaves the rest, and a conversation with nothing left drop
     expect(await revokeGrant(deps, { conversationId: "conv-2", kind: "release", what: "reddit-work" })).toBe(false);
 
     expect((await standingGrants(deps)).conversations).toEqual([
-        { conversationId: "conv-1", capabilities: [], folders: ["docs"], shelves: [], installs: false, secrets: [], everything: false, by: "ada@acme.dev", updatedAt: 100, releases: [] },
+        { conversationId: "conv-1", capabilities: [], folders: ["docs"], shelves: [], installs: false, secrets: [], everything: false, rules: [], by: "ada@acme.dev", updatedAt: 100, releases: [] },
     ]);
     expect(deps.credentialGrants.has("conv-2", "reddit-work")).toBeUndefined();
 });
@@ -64,7 +66,7 @@ test("a conversation's unasked installs are listed with its other yeses and take
     await deps.conversationGrants.allowInstalls("conv-1", undefined);
     expect(await deps.conversationGrants.installsAllowed("conv-1")).toBe(true);
     expect((await standingGrants(deps)).conversations).toEqual([
-        { conversationId: "conv-1", capabilities: [], folders: ["docs"], shelves: [], installs: true, secrets: [], everything: false, by: "ada@acme.dev", updatedAt: 200, releases: [] },
+        { conversationId: "conv-1", capabilities: [], folders: ["docs"], shelves: [], installs: true, secrets: [], everything: false, rules: [], by: "ada@acme.dev", updatedAt: 200, releases: [] },
     ]);
 
     expect(await revokeGrant(deps, { conversationId: "conv-1", kind: "install", what: "" })).toBe(true);
@@ -72,7 +74,7 @@ test("a conversation's unasked installs are listed with its other yeses and take
     expect(await deps.conversationGrants.installsAllowed("conv-1")).toBe(false);
     // The folder stands; only the installs yes went.
     expect((await standingGrants(deps)).conversations).toEqual([
-        { conversationId: "conv-1", capabilities: [], folders: ["docs"], shelves: [], installs: false, secrets: [], everything: false, by: "ada@acme.dev", updatedAt: 200, releases: [] },
+        { conversationId: "conv-1", capabilities: [], folders: ["docs"], shelves: [], installs: false, secrets: [], everything: false, rules: [], by: "ada@acme.dev", updatedAt: 200, releases: [] },
     ]);
 });
 
@@ -99,6 +101,7 @@ test("everything and a secret's pass are listed and taken back on their own", as
             installs: false,
             secrets: ["github/token"],
             everything: true,
+            rules: [],
             by: "ada@acme.dev",
             updatedAt: 100,
             releases: [],
@@ -112,4 +115,19 @@ test("everything and a secret's pass are listed and taken back on their own", as
 
     expect(await revokeGrant(deps, { conversationId: "conv-1", kind: "secret", what: "github/token" })).toBe(true);
     expect((await standingGrants(deps)).conversations).toEqual([]);
+});
+
+// Releases are announced by wrapping their store, so the Allowed list moves when one is made, taken back or forgotten;
+// a take-back or a forgetting that found nothing is no news.
+test("a release, its take-back and its conversation's forgetting are each announced once", () => {
+    const heard: string[] = [];
+    const releases = notifyingCredentialGrants(createCredentialGrants(), (conversationId) => heard.push(conversationId));
+    releases.grant("conv-1", "github", { approvedBy: "ada@acme.dev", at: 1 });
+    releases.grant("conv-2", "linear", { approvedBy: "ada@acme.dev", at: 2 });
+    expect(releases.revoke("conv-1", "github")).toBe(true);
+    expect(releases.revoke("conv-1", "github")).toBe(false);
+    releases.forget("conv-2");
+    releases.forget("conv-2");
+    expect(heard).toEqual(["conv-1", "conv-2", "conv-1", "conv-2"]);
+    expect(releases.all()).toEqual([]);
 });

@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { oneLine } from "@intentic/base/one-line";
 import { type ActivityEvent, ActivityEventSchema, type UsageTurn } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { activityLogDocument } from "../activity/activity-store.js";
@@ -20,11 +21,6 @@ const BUDGET_BYTES = 16_000_000;
 const TEXT_CHARS = 240;
 // Boots read off two records within this of each other are the same boot.
 const SAME_BOOT_MS = 120_000;
-
-const oneLine = (text: string, chars: number = TEXT_CHARS): string => {
-    const flat = text.replaceAll(/\s+/g, " ").trim();
-    return flat.length > chars ? `${flat.slice(0, chars)}…` : flat;
-};
 
 // ---- restarts ----
 
@@ -177,7 +173,7 @@ const namesConversation = (line: JsonObject, id: string): boolean => {
 const logText = (line: JsonObject): string => {
     const { time: _time, level, message, ctx: _ctx, ...rest } = compactRecord(line, false);
     const fields = Object.keys(rest).length === 0 ? "" : ` ${JSON.stringify(rest)}`;
-    return oneLine(`${String(level)} ${String(message ?? "")}${fields}`);
+    return oneLine(`${String(level)} ${String(message ?? "")}${fields}`, TEXT_CHARS);
 };
 
 const isNumber = (value: unknown): value is number => typeof value === "number";
@@ -191,6 +187,7 @@ const activityText = (event: ActivityEvent): string => {
     const said = event.error ?? event.content;
     return oneLine(
         `${event.type}${event.outcome === undefined ? "" : ` ${event.outcome}`}${event.turnId === undefined ? "" : ` turn ${event.turnId.slice(0, 8)}`}${facts === "" ? "" : ` (${facts})`}${said === undefined ? "" : `: ${said}`}`,
+        TEXT_CHARS,
     );
 };
 
@@ -198,6 +195,7 @@ const turnText = (row: UsageTurn): string => {
     const error = [row.errorCode, row.errorMessage].filter((part) => part !== undefined).join(": ");
     return oneLine(
         `turn ended ${row.outcome ?? "unrecorded"}${row.turnId === undefined ? "" : ` turn ${row.turnId.slice(0, 8)}`} on ${row.provider}${row.model === undefined ? "" : `/${row.model}`} after ${Math.round(row.durationMs / 1000)} s, $${row.costUsd.toFixed(2)}${row.verification === undefined ? "" : `, ${row.verification}`}${error === "" ? "" : `: ${error}`}`,
+        TEXT_CHARS,
     );
 };
 

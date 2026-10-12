@@ -1,5 +1,5 @@
 import type { Logger } from "pino";
-import { anySignal, Latest, sleep } from "@intentic/base/async";
+import { anySignal, createBackoff, Latest, sleep } from "@intentic/base/async";
 import { containerDrift } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Config } from "../../env.config.js";
@@ -20,7 +20,8 @@ interface HealthAnswer {
 
 // This runs on a loop, so one hung probe (a tunnel with nothing bound behind it) must not stall the whole report.
 const PROBE_TIMEOUT_MS = 10_000;
-// Backoff ceiling while unreachable; a cold box's share can take seconds to come up, so early misses are expected.
+// Backoff floor and ceiling while unreachable; a cold box's share can take seconds to come up, so early misses are expected.
+const MIN_BACKOFF_MS = 3_000;
 const MAX_BACKOFF_MS = 30_000;
 // How long the setup wizard waits before giving up; the two must agree, or the page waits on a report that stopped.
 const REACH_GIVE_UP_MS = 5 * 60_000;
@@ -156,7 +157,7 @@ export const createReachReporter = (
     // Probes until its own address answers or the give-up window is spent, backing off between misses.
     const watch = async (signal: AbortSignal): Promise<void> => {
         const deadline = Date.now() + REACH_GIVE_UP_MS;
-        let backoff = 3_000;
+        const backoff = createBackoff({ floorMs: MIN_BACKOFF_MS, capMs: MAX_BACKOFF_MS });
         // Says "checking" before the first probe resolves, so the page knows a daemon exists and is testing itself.
         await tell("checking", undefined, true);
         while (!signal.aborted) {
@@ -178,8 +179,7 @@ export const createReachReporter = (
             if (spent) {
                 return;
             }
-            await sleep(backoff, { signal });
-            backoff = Math.min(backoff * 2, MAX_BACKOFF_MS);
+            await sleep(backoff.next(), { signal });
         }
     };
 

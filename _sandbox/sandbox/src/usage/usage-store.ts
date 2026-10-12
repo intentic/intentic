@@ -51,21 +51,15 @@ const inWindow = (turn: UsageTurn, query: { from?: string | undefined; to?: stri
 const billed = (turn: UsageTurn): boolean => turn.turns > 0;
 
 export const fileUsageStore = (path: string, now: () => number = Date.now): UsageStore => {
-    let queue: Promise<unknown> = Promise.resolve();
-
-    // Only an absent ledger is empty; a torn line (crash mid-append) loses one turn's numbers, never the ledger.
-    const ledger = openLedger(usageLedgerDocument, path);
+    // Only an absent ledger is empty; a torn line (crash mid-append) loses one turn's numbers, never the ledger. Never
+    // capped: see the head of this file.
+    const ledger = openLedger(usageLedgerDocument, path, { cap: "never" });
     const read = (): Promise<UsageTurn[]> => ledger.read();
 
     return {
-        record: (turn) => {
-            const step = queue.then(async () => {
-                const at = now();
-                await ledger.append({ at, day: utcDay(at), ...turn });
-            });
-            // A failed step surfaces to its own caller; the queue chain never poisons later appends.
-            queue = step.catch(() => undefined);
-            return step;
+        record: async (turn) => {
+            const at = now();
+            await ledger.append({ at, day: utcDay(at), ...turn });
         },
         turns: async (query) => (await read()).filter((turn) => inWindow(turn, query)),
         rollup: async (query) => {

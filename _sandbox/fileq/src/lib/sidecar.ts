@@ -1,8 +1,9 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { readFile, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { estimateTokens } from "@intentic/base/format";
+import { writeFileAtomic } from "@intentic/base/fs";
 import { neutralizeOutsideText } from "@intentic/base/outside-text";
 import { STATE_DIR } from "@intentic/constants";
 import type { DerivedDoc } from "./derivers/deriver.js";
@@ -130,16 +131,8 @@ export const writeDerived = async (path: string, entry: DerivedEntry): Promise<{
         "---",
         "",
     ].join("\n");
-    await mkdir(dirname(path), { recursive: true });
     // Beside the target, then renamed over it: a concurrent reader sees the old file or the new one, never half of one.
-    const temp = `${path}.${process.pid}-${randomBytes(4).toString("hex")}.tmp`;
-    try {
-        await writeFile(temp, `${frontMatter}${body === "" ? "" : `${body}\n`}`);
-        await rename(temp, path);
-    } catch (error) {
-        await rm(temp, { force: true });
-        throw error;
-    }
+    await writeFileAtomic(path, `${frontMatter}${body === "" ? "" : `${body}\n`}`);
     return { path, body, tokens: estimateTokens(body) };
 };
 

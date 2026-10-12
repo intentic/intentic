@@ -133,7 +133,8 @@ export const provideDemoSecret = (id: string): Need =>
 
 // The yeses still standing, for the inbox's "What you have allowed": a folder the checkout agent was let into beyond its
 // persona's fence, its installs let run without asking, its Stripe key let past its host guard, and its key-rotation
-// helper allowed everything, by the same demo person who answers everything here.
+// helper allowed everything, plus one credential gateway rule it stopped asking, by the same demo person who answers
+// everything here.
 // Taking one back moves this store.
 let grants: StandingGrants[`conversations`] | undefined;
 
@@ -147,6 +148,7 @@ export const demoGrants = (now: number = Date.now()): StandingGrants => {
             installs: true,
             secrets: [`stripe/secret-key`],
             everything: false,
+            rules: [{ capability: `github`, rule: `ask GET api.github.com/repos/*`, said: `GET api.github.com/repos/… with GitHub` }],
             by: `demo@intentic.dev`,
             updatedAt: now - minutes(42),
             releases: [],
@@ -159,6 +161,7 @@ export const demoGrants = (now: number = Date.now()): StandingGrants => {
             installs: false,
             secrets: [],
             everything: true,
+            rules: [],
             by: `demo@intentic.dev`,
             updatedAt: now - minutes(1),
             releases: [],
@@ -175,6 +178,9 @@ const withoutGrant = (conversation: DemoGrantRow, grant: GrantRevoke): DemoGrant
     }
     if (grant.kind === `everything`) {
         return { ...conversation, everything: false };
+    }
+    if (grant.kind === `rule`) {
+        return { ...conversation, rules: conversation.rules.filter((rule) => rule.capability !== grant.capability || rule.rule !== grant.what) };
     }
     if (grant.kind === `release`) {
         return { ...conversation, releases: conversation.releases.filter((release) => release.subject !== grant.what) };

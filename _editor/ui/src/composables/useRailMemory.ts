@@ -1,4 +1,5 @@
 import { computed, type Ref, watch, type WritableComputedRef } from "vue";
+import { deviceKey, storedValue, storeValue } from "../lib/browserStorage";
 
 // Remembers a narrowing rail's last choice in localStorage and puts it back whenever the view stands on its bare
 // address: a rail tile always links there, so without this every return (and every click on the tile of the view
@@ -8,26 +9,17 @@ import { computed, type Ref, watch, type WritableComputedRef } from "vue";
 // "all", which is how a deliberately widened scope stays wide instead of the tile pulling last week's repo back.
 // A URL that names a choice (a pick, a shared link, Back) is remembered too; the URL going bare by itself is not.
 
-const keyOf = (id: string): string => `intentic.rail.${id}`;
+// This browser's, like a layout: signing out keeps it.
+const keyOf = (id: string): string => deviceKey(`intentic.rail.${id}`);
 
 // `` and undefined both mean unnarrowed (a Picker has no undefined to offer).
 const isEmpty = (value: string | undefined): value is `` | undefined => value === undefined || value === ``;
 
-const read = (id: string): string | undefined => {
-    try {
-        return localStorage.getItem(keyOf(id)) ?? undefined;
-    } catch {
-        // Storage may be unavailable (private mode); the rail opens on its default.
-        return undefined;
-    }
-};
+// Storage may be unavailable (private mode): the rail opens on its default, and a choice still holds for this visit.
+const read = (id: string): string | undefined => storedValue(keyOf(id));
 
 const write = (id: string, value: string): void => {
-    try {
-        localStorage.setItem(keyOf(id), value);
-    } catch {
-        // Storage may be unavailable; the choice still holds for this visit.
-    }
+    storeValue(keyOf(id), value);
 };
 
 /**

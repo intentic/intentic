@@ -1,16 +1,13 @@
-import { execFile } from "node:child_process";
 import { readdir } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
-import { promisify } from "node:util";
 import { errorMessage, isMissing } from "@intentic/base/errors";
+import { execBounded } from "@intentic/base/process";
 import { onPath } from "../tools.js";
 import { runsOf } from "./pages.js";
 
 // The two external steps of `fileq render`: an office document to PDF through LibreOffice, and PDF pages to PNG
 // through poppler's pdftoppm or MuPDF's mutool. fileq carries no renderer of its own: a faithful one is LibreOffice-sized,
 // and a missing tool is named with what installs it rather than papered over with a worse picture.
-
-const run = promisify(execFile);
 
 // A first conversion also builds LibreOffice's profile, which is most of its time; a long deck takes longer still.
 const CONVERT_TIMEOUT_MS = 180_000;
@@ -88,7 +85,7 @@ export const toPdf = async (binary: string, absPath: string, format: string, wor
     ];
     let output = "";
     try {
-        const result = await run(binary, args, { timeout: CONVERT_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024 });
+        const result = await execBounded(binary, args, { timeoutMs: CONVERT_TIMEOUT_MS, maxOutput: 4 * 1024 * 1024 });
         output = `${result.stdout}${result.stderr}`;
     } catch (cause) {
         throw new ConvertFailed(`LibreOffice could not convert it: ${errorMessage(cause).split("\n").slice(0, 3).join(" ")}`);
@@ -112,11 +109,11 @@ export const toPngs = async (tool: Rasterizer, pdf: string, pages: readonly numb
     try {
         if (tool === "pdftoppm") {
             for (const [first, last] of runsOf(pages)) {
-                await run("pdftoppm", ["-png", "-scale-to", String(size), "-f", String(first), "-l", String(last), pdf, prefix], { timeout: RASTER_TIMEOUT_MS });
+                await execBounded("pdftoppm", ["-png", "-scale-to", String(size), "-f", String(first), "-l", String(last), pdf, prefix], { timeoutMs: RASTER_TIMEOUT_MS });
             }
         } else {
-            await run("mutool", ["draw", "-q", "-F", "png", "-w", String(size), "-h", String(size), "-o", `${prefix}-%d.png`, pdf, pages.join(",")], {
-                timeout: RASTER_TIMEOUT_MS,
+            await execBounded("mutool", ["draw", "-q", "-F", "png", "-w", String(size), "-h", String(size), "-o", `${prefix}-%d.png`, pdf, pages.join(",")], {
+                timeoutMs: RASTER_TIMEOUT_MS,
             });
         }
     } catch (cause) {

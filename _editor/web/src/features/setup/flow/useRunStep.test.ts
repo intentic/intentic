@@ -1,5 +1,6 @@
 import "@intentic/testing/dom";
 import type { SandboxSummary, SetupCode } from "@intentic/api-contract";
+import { shellQuote } from "@intentic/sandbox-run/quote";
 import { syncFolder } from "@intentic/sandbox-contract";
 import { type EffectScope, effectScope, ref } from "vue";
 import { desktopSetupLink } from "../../../app/environments/desktop";
@@ -86,13 +87,13 @@ describe(`what rides with the command`, () => {
         const { mode, cfToken, step, ready } = stage();
         ready();
         const folder = syncFolder(`workspace`, minted.hostname);
-        const dev = ` PLATFORM_URL='http://localhost' INTENTIC_AGENT_AUTH_VOLUME='intentic-dev-agent-auth' SANDBOX_IMAGE='intentic-sandbox:dev'`;
-        const origin = step.webOrigin === undefined ? `` : ` WEB_ORIGIN='${step.webOrigin}'`;
-        expect(step.selectedCommand.value).toBe(bashCommand(`sh`, `env${dev}${origin} SYNC_DIR='${folder}' `, minted.code));
+        const dev = ` PLATFORM_URL=${shellQuote(`http://localhost`)} INTENTIC_AGENT_AUTH_VOLUME='intentic-dev-agent-auth' SANDBOX_IMAGE='intentic-sandbox:dev'`;
+        const origin = step.webOrigin === undefined ? `` : ` WEB_ORIGIN=${shellQuote(step.webOrigin)}`;
+        expect(step.selectedCommand.value).toBe(bashCommand(`sh`, `env${dev}${origin} SYNC_DIR=${shellQuote(folder)} `, minted.code));
         mode.value = `own`;
         cfToken.value = ` cf-token `;
         step.syncEnabled.value = false;
-        expect(step.selectedCommand.value).toBe(bashCommand(`sh`, `env CF_TOKEN='cf-token'${dev}${origin} `, minted.code));
+        expect(step.selectedCommand.value).toBe(bashCommand(`sh`, `env CF_TOKEN=${shellQuote(`cf-token`)}${dev}${origin} `, minted.code));
     });
 
     it(`offers sync only beside a command it can ride, and never on the compose tab`, () => {
@@ -166,8 +167,8 @@ describe(`a project setup`, () => {
     it(`builds no command that would sync /work, even with sync switched on`, () => {
         const { step, ready } = stage({ project });
         ready();
-        const dev = ` PLATFORM_URL='http://localhost' INTENTIC_AGENT_AUTH_VOLUME='intentic-dev-agent-auth' SANDBOX_IMAGE='intentic-sandbox:dev'`;
-        const origin = step.webOrigin === undefined ? `` : ` WEB_ORIGIN='${step.webOrigin}'`;
+        const dev = ` PLATFORM_URL=${shellQuote(`http://localhost`)} INTENTIC_AGENT_AUTH_VOLUME='intentic-dev-agent-auth' SANDBOX_IMAGE='intentic-sandbox:dev'`;
+        const origin = step.webOrigin === undefined ? `` : ` WEB_ORIGIN=${shellQuote(step.webOrigin)}`;
         expect(step.syncEnabled.value).toBe(true);
         expect(step.selectedCommand.value).toBe(bashCommand(`sh`, `env${dev}${origin} `, minted.code));
     });

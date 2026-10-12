@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -24,7 +24,7 @@ import { unstubbed } from "@intentic/testing";
 import { workspacePaths } from "./workspace.js";
 import { MAX_RAW_BYTES } from "./files/workspace-files-download.js";
 import { UnknownArchiveError } from "./files/archive/workspace-extract.js";
-import { UploadTooLargeError } from "./files/workspace-files-upload.js";
+import { UploadTooLargeError, writeWorkspaceFileStream } from "./files/workspace-files-upload.js";
 import { sha256Text, statWorkspaceFileSize } from "./files/workspace-files.js";
 import { createWorkspaceTrash } from "./files/trash/workspace-trash.js";
 
@@ -393,7 +393,11 @@ test("workspace.search round-trips the WorkspaceSearchResult from the resident e
 test("GET /workspace/raw streams bytes with a content-type, 404s missing, 400s escape, 413s oversize", async () => {
     const png = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
     const env = Buffer.from("SECRET=1");
-    const opened = (bytes: Buffer, size = bytes.byteLength) => ({ size, tag: `W/"${String(size)}"`, body: () => new Blob([new Uint8Array(bytes)]).stream() });
+    const opened = (bytes: Buffer, size = bytes.byteLength) => ({
+        size,
+        tag: `W/"${String(size)}"`,
+        body: () => new Blob([new Uint8Array(bytes)]).stream(),
+    });
     const app = createApp(
         services({
             files: fakeFiles({
@@ -602,6 +606,52 @@ test("POST /workspace/upload streams any contained path to disk, 400s escape, 41
         }),
     );
     expect((await capped.request("/workspace/upload?path=app/huge.bin", { method: "POST", body })).status).toBe(413);
+});
+
+// A folder already in the workspace that links elsewhere passes every lexical check, while the write follows the link:
+// out of /work, or into the vault. Both are refused on where the write really lands. Real directories, real symlinks.
+test("POST /workspace/upload refuses a write through a symlinked folder out of the workspace or into its control plane", async () => {
+    const workspace = tempWorkspace([]);
+    const outside = await mkdtemp(join(tmpdir(), "upload-outside-"));
+    await mkdir(join(workspace.root, STATE_DIR, "secrets/auth"), { recursive: true });
+    await mkdir(join(workspace.root, "notes"));
+    await symlink(outside, join(workspace.root, "notes/out"));
+    await symlink(join(workspace.root, STATE_DIR, "secrets/auth"), join(workspace.root, "notes/k"));
+    const app = createApp(services({ workspace, files: fakeFiles({ writeStream: writeWorkspaceFileStream }) }));
+    const body = new Uint8Array([1, 2, 3]);
+
+    expect((await app.request("/workspace/upload?path=notes/out/planted.sh", { method: "POST", body })).status).toBe(400);
+    expect(existsSync(join(outside, "planted.sh"))).toBe(false);
+    expect((await app.request("/workspace/upload?path=notes/k/acc.json", { method: "POST", body })).status).toBe(404);
+    expect(existsSync(join(workspace.root, STATE_DIR, "secrets/auth/acc.json"))).toBe(false);
+    // An ordinary folder still takes the write.
+    expect((await app.request("/workspace/upload?path=notes/ok.bin", { method: "POST", body })).status).toBe(200);
+    expect(new Uint8Array(await readFile(join(workspace.root, "notes/ok.bin")))).toEqual(body);
+});
+
+// A chunked upload declares no length, so the header check never sees it: the count as bytes reach disk is the cap, and
+// a refused upload leaves no file behind. The body never ends, so only a counted write can answer at all.
+test("POST /workspace/upload refuses an oversized chunked body with 413 and leaves no file on disk", async () => {
+    const workspace = tempWorkspace([]);
+    const cap = 64 * 1024;
+    const app = createApp(
+        services({
+            workspace,
+            files: fakeFiles({ writeStream: (absPath, body, _limit, offset) => writeWorkspaceFileStream(absPath, body, cap, offset) }),
+        }),
+    );
+    let pulled = 0;
+    const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+            pulled += 4096;
+            controller.enqueue(new Uint8Array(4096));
+        },
+    });
+    // SAFETY: `duplex` is required by the runtime for a stream body but missing from the DOM RequestInit type.
+    const response = await app.request("/workspace/upload?path=app/huge.bin", { method: "POST", body, duplex: "half" } as RequestInit);
+    expect(response.status).toBe(413);
+    expect(existsSync(join(workspace.root, "app/huge.bin"))).toBe(false);
+    expect(pulled).toBeLessThan(cap + 32 * 4096);
 });
 
 test("the daemon's control plane is unreachable through the generic file API; its feature subtrees are not", async () => {

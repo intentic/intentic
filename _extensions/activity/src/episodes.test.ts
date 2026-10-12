@@ -241,3 +241,29 @@ test("day dividers name the two days that carry the traffic and date the rest", 
         [formatDayMonth(now - 86_400_000 * 5), 1],
     ]);
 });
+
+// The reader's calendar decides "yesterday", and the day a clock change falls on is not 24 hours long. Pinned to a
+// zone with daylight saving so the two days of the year that broke the old "midnight minus 24 hours" are in reach.
+describe("day dividers across a clock change", () => {
+    const zone = process.env[`TZ`];
+    beforeAll(() => {
+        process.env[`TZ`] = `Europe/Warsaw`;
+    });
+    afterAll(() => {
+        process.env[`TZ`] = zone;
+    });
+    const local = (month: number, day: number, hour: number, minute = 0): number => new Date(2026, month, day, hour, minute).getTime();
+    // SAFETY: byDay reads only `at` off an episode, so a stub carrying it stands in for one, as in the test above.
+    const labels = (when: number, now: number): string[] => byDay([{ at: when, key: `a` }] as never, now).map(({ label }) => label);
+
+    test("the 25-hour day the clocks go back is still yesterday from its first minute", () => {
+        // 25 October 2026 is 25 hours long in Warsaw, so 00:30 on it is more than a day before the next midnight.
+        expect(labels(local(9, 25, 0, 30), local(9, 26, 9))).toEqual([`Yesterday`]);
+    });
+
+    test("the 23-hour day the clocks go forward does not reach back into the day before it", () => {
+        // 29 March 2026 is 23 hours long, so 23:30 on the 28th is less than a day before the 30th's midnight.
+        expect(labels(local(2, 28, 23, 30), local(2, 30, 9))).toEqual([formatDayMonth(local(2, 28, 23, 30))]);
+        expect(labels(local(2, 29, 0, 30), local(2, 30, 9))).toEqual([`Yesterday`]);
+    });
+});

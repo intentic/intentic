@@ -1,5 +1,6 @@
 import { realpath } from "node:fs/promises";
 import { basename, dirname, join, posix, resolve, win32 } from "node:path";
+import { isInside } from "@intentic/base/contained";
 import { type Pairing, pairingKey } from "./config.js";
 
 // ONE FOLDER, ONE SYNC. Two pairings over the same folder, or one inside the other, are two synchronizers writing the
@@ -34,15 +35,8 @@ const folded = (dir: string, platform: NodeJS.Platform): string => {
 
 // Whether two absolute folders are the same one, or one holds the other. Pure, the platform passed in, so the Windows and
 // macOS rules are checkable from any host.
-export const foldersOverlap = (first: string, second: string, platform: NodeJS.Platform = process.platform): boolean => {
-    const path = platform === "win32" ? win32 : posix;
-    const within = (inner: string, outer: string): boolean => {
-        const rel = path.relative(outer, inner);
-        return rel === "" || (rel !== ".." && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel));
-    };
-    const [a, b] = [folded(first, platform), folded(second, platform)];
-    return within(a, b) || within(b, a);
-};
+export const foldersOverlap = (first: string, second: string, platform: NodeJS.Platform = process.platform): boolean =>
+    within(first, second, platform) || within(second, first, platform);
 
 // Whether two absolute folders are the same one, by the same rules.
 export const sameFolder = (first: string, second: string, platform: NodeJS.Platform = process.platform): boolean =>
@@ -131,11 +125,8 @@ const distroRefusal = (folder: string, inside: string): string | undefined => {
 };
 
 // Whether `inner` is `outer` or inside it, by the platform's own comparison.
-const within = (inner: string, outer: string, platform: NodeJS.Platform): boolean => {
-    const path = platform === "win32" ? win32 : posix;
-    const rel = path.relative(folded(outer, platform), folded(inner, platform));
-    return rel === "" || (rel !== ".." && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel));
-};
+const within = (inner: string, outer: string, platform: NodeJS.Platform): boolean =>
+    isInside(outer, inner, { platform, foldCase: foldsCase(platform) });
 
 // The desktop app's own lists (project.rs), kept in step with it.
 // Windows' by name, on the drive of the folder asked about.

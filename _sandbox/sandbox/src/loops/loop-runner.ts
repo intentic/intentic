@@ -8,6 +8,7 @@ import {
     type LoopState,
     profileOf,
 } from "@intentic/sandbox-contract";
+import { notResumedDetail, type RestartResume } from "../agent/run/turn/restart-resume-policy.js";
 import { sumUsage, type UsageFrame } from "../agent/run/turn/turn-usage.js";
 import type { ConversationActors } from "../conversations/actor/conversation-actors.js";
 import type { Holding, Holdings } from "../conversations/actor/conversation-holdings.js";
@@ -277,15 +278,26 @@ export const runLoop = async (services: Services, record: LoopRecord): Promise<L
 const RESUME_MAX = 2;
 
 // Resumes every run still marked running that nothing drives (the ledger is the journal: `running` means no settle
-// landed), counting each resume; past RESUME_MAX it is abandoned, so a run that reliably kills the daemon ends.
+// landed), counting each resume; past RESUME_MAX it is abandoned, so a run that reliably kills the daemon ends. When
+// this boot resumes nothing (autoResumeOnRestart off, or a restart storm: agent/run/turn/restart-resume-policy.ts),
+// each is settled stopped instead, saying why, uncounted: like a cut turn, it stays on the record rather than coming back.
 export const resumeCapped = async <R extends { readonly resumed: number }>(
     candidates: readonly R[],
+    policy: RestartResume,
     run: {
         readonly count: (candidate: R) => Promise<R | undefined>;
         readonly abandon: (counted: R) => Promise<void>;
         readonly restart: (counted: R) => void;
+        readonly stop: (candidate: R, detail: string) => Promise<void>;
     },
 ): Promise<R[]> => {
+    if (!policy.resume) {
+        const detail = notResumedDetail(policy);
+        for (const candidate of candidates) {
+            await run.stop(candidate, detail);
+        }
+        return [];
+    }
     const resumed: R[] = [];
     for (const candidate of candidates) {
         const counted = await run.count(candidate);
@@ -302,13 +314,18 @@ export const resumeCapped = async <R extends { readonly resumed: number }>(
     return resumed;
 };
 
-export const resumeLoops = async (services: Services, ownedByWorkflow: ReadonlySet<string> = new Set()): Promise<string[]> => {
+export const resumeLoops = async (services: Services, policy: RestartResume, ownedByWorkflow: ReadonlySet<string> = new Set()): Promise<string[]> => {
     const stranded = (await services.loops.list()).filter(
         (record) =>
             record.state === "running" && !loopRunning(services.conversations, record.conversationId) && !ownedByWorkflow.has(record.conversationId),
     );
-    const resumed = await resumeCapped(stranded, {
+    const resumed = await resumeCapped(stranded, policy, {
         count: (record) => services.loops.countResume(record.conversationId),
+        stop: async (record, detail) => {
+            await services.loops.settle(record.conversationId, "stopped", Date.now(), detail);
+            publish(services, record, "stopped", record.iterations.length);
+            services.logger.info({ conversationId: record.conversationId, detail }, "loop: settled stopped, this boot resumes nothing");
+        },
         abandon: async (record) => {
             await services.loops.settle(record.conversationId, "error", Date.now(), `Abandoned after the daemon died under this loop ${record.resumed} times.`);
             publish(services, record, "error", record.iterations.length);

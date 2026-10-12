@@ -1,3 +1,5 @@
+import { escapeRegExp } from "@intentic/base/escape";
+
 // Whether a file's text actually holds a credential, the fact command-classes.ts's path table can only guess at from a
 // name. Pure over the text (no fs, no config), so it stays testable and works where there's no filesystem. Biased
 // toward yes: a false positive costs one card, a false negative un-gates a real credential read.
@@ -25,24 +27,62 @@ const STRUCTURAL_SHAPES = [
     /\b[a-z][a-z0-9+.-]*:\/\/[^\s/:@]+:(?!\*+@)[^\s/@]{3,}@/i,
 ];
 
-const ISSUED_TOKENS = [
-    /\bnpm_[A-Za-z0-9]{30,}/,
-    /\bgh[pousr]_[A-Za-z0-9]{20,}/,
-    /\bgithub_pat_[A-Za-z0-9_]{50,}/,
-    /\bglpat-[A-Za-z0-9_-]{16,}/,
-    /\bxox[baprs]-[A-Za-z0-9-]{10,}/,
-    /\bsk-[A-Za-z0-9_-]{20,}/,
-    /\b(?:sk|rk)_live_[A-Za-z0-9]{16,}/,
-    /\bAKIA[0-9A-Z]{16}\b/,
-    /\bASIA[0-9A-Z]{16}\b/,
-    /\bAIza[0-9A-Za-z_-]{35}\b/,
-    /\bhf_[A-Za-z0-9]{30,}/,
-    /\bdop_v1_[a-f0-9]{60,}/,
-    // A JWT: three base64url segments, the first two of which decode from {" and so always begin "ey".
-    /\bey[A-Za-z0-9_-]{10,}\.ey[A-Za-z0-9_-]{10,}\./,
-];
+// An issuer's literal prefix and the regex source of the body it mints after it.
+export interface CredentialIssuer {
+    readonly prefix: string;
+    readonly body: string;
+}
 
-const TOKEN_SHAPES = [...STRUCTURAL_SHAPES, ...ISSUED_TOKENS];
+// Credentials that name their own issuer. Kept as data, not regexes, so the terminal filter's copy
+// (CREDENTIAL_ISSUERS in _sandbox/output-cleaners/src/cleaners.mjs, builtins only, so it cannot import this) can be
+// compared entry by entry: the daemon's src/secrets/terminal-masking-parity.test.ts fails the moment the two part. Only
+// the whole shape counts here, never the prefix alone: the outbox reads text nobody said holds a credential, where a
+// bare `sk-` in prose is not one. The terminal side also takes the prefix alone beside a credential-shaped name, where
+// the name already said so.
+export const CREDENTIAL_ISSUERS: readonly CredentialIssuer[] = [
+    { prefix: "npm_", body: "[A-Za-z0-9]{30,}" },
+    { prefix: "ghp_", body: "[A-Za-z0-9]{20,}" },
+    { prefix: "gho_", body: "[A-Za-z0-9]{20,}" },
+    { prefix: "ghu_", body: "[A-Za-z0-9]{20,}" },
+    { prefix: "ghs_", body: "[A-Za-z0-9]{20,}" },
+    { prefix: "ghr_", body: "[A-Za-z0-9]{20,}" },
+    { prefix: "github_pat_", body: "[A-Za-z0-9_]{50,}" },
+    { prefix: "glpat-", body: "[A-Za-z0-9_-]{16,}" },
+    { prefix: "xoxa-", body: "[A-Za-z0-9-]{10,}" },
+    { prefix: "xoxb-", body: "[A-Za-z0-9-]{10,}" },
+    { prefix: "xoxo-", body: "[A-Za-z0-9-]{10,}" },
+    { prefix: "xoxp-", body: "[A-Za-z0-9-]{10,}" },
+    { prefix: "xoxr-", body: "[A-Za-z0-9-]{10,}" },
+    { prefix: "xoxs-", body: "[A-Za-z0-9-]{10,}" },
+    { prefix: "sk-", body: "[A-Za-z0-9_-]{20,}" },
+    { prefix: "pk-", body: "[A-Za-z0-9_-]{20,}" },
+    { prefix: "rk-", body: "[A-Za-z0-9_-]{20,}" },
+    { prefix: "sk_live_", body: "[A-Za-z0-9]{16,}" },
+    { prefix: "rk_live_", body: "[A-Za-z0-9]{16,}" },
+    { prefix: "AKIA", body: String.raw`[0-9A-Z]{16}\b` },
+    { prefix: "ASIA", body: String.raw`[0-9A-Z]{16}\b` },
+    { prefix: "AIza", body: String.raw`[0-9A-Za-z_-]{35}\b` },
+    { prefix: "ya29.", body: "[0-9A-Za-z_-]{20,}" },
+    { prefix: "hf_", body: "[A-Za-z0-9]{30,}" },
+    { prefix: "dop_v1_", body: "[a-f0-9]{60,}" },
+    { prefix: "shpat_", body: "[a-fA-F0-9]{32,}" },
+    // SendGrid: a key id and its secret, dot-separated.
+    { prefix: "SG.", body: String.raw`[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}` },
+    // A JWT: three base64url segments, the first two of which decode from `{"` and so always begin `eyJ` and `ey`.
+    { prefix: "eyJ", body: String.raw`[A-Za-z0-9_-]{9,}\.ey[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]*` },
+];
+export const CREDENTIAL_ISSUER_PREFIXES: readonly string[] = CREDENTIAL_ISSUERS.map(({ prefix }) => prefix);
+
+// Starts where no word or kebab-case word runs into it: `task-sk-runner-config-file` is a name, not a key. The other
+// side builds its patterns the same way.
+const ISSUED_TOKENS = CREDENTIAL_ISSUERS.map(({ prefix, body }) => new RegExp(String.raw`(?<![\w-])${escapeRegExp(prefix)}${body}`));
+
+// An opaque bearer credential, which names no issuer: the scheme word, then an RFC 6750 token holding a letter and a
+// digit and longer than prose puts after "Bearer" (`Bearer <token>`, `Bearer YOUR_TOKEN`, an already-masked `***`).
+const BEARER_VALUE = String.raw`(?=[\w.~+/-]*\d)(?=[\w.~+/-]*[A-Za-z])[\w.~+/-]{16,}=*`;
+const BEARER_TOKEN = new RegExp(String.raw`\bBearer[ \t]+${BEARER_VALUE}`, "i");
+
+const TOKEN_SHAPES = [...STRUCTURAL_SHAPES, BEARER_TOKEN, ...ISSUED_TOKENS];
 
 // Deferred references, stripped first: unstripped, each reads as a credential twice over.
 const DEFERRED_VALUE = /\{\{[^}\n]*\}\}|\$\{[^}\n]*\}/g;
@@ -91,6 +131,7 @@ const PRIVATE_KEY_BLOCK = new RegExp(
 );
 const PUTTY_KEY = new RegExp(String.raw`(PuTTY-User-Key-File-\d:)${MASKED_NEXT}[^\n\\]*${ARMOR_LINES}`, "g");
 const URL_PASSWORD = /(\b[a-z][a-z0-9+.-]*:\/\/[^\s/:@]+:)(?!\*+@)[^\s/@]{3,}@/gi;
+const BEARER_TOKEN_G = new RegExp(String.raw`(\bBearer[ \t]+)${BEARER_VALUE}`, "gi");
 
 // The truncated opener left once the bare-value arm stops at its first `}`, anchored at the start.
 const DEFERRED_OPENER = /^(?:\{\{|\$)/;
@@ -106,6 +147,7 @@ export const maskCredentialMaterial = (text: string): string =>
             .replace(PUTTY_KEY, `$1 ${MASK}`),
     )
         .replace(URL_PASSWORD, `$1${MASK}@`)
+        .replace(BEARER_TOKEN_G, `$1${MASK}`)
         // Masks just the value, leaving key/separator/quoting readable; skips mirror the detector's own.
         .replace(CREDENTIAL_ASSIGNMENT_G, (match, ...groups: unknown[]) => {
             const value = (groups[0] ?? groups[1] ?? groups[2] ?? "") as string;

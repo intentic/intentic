@@ -3,7 +3,7 @@ import type { AddCapabilityInput } from "@intentic/capability-catalog";
 import type { RemoteRefs, CapabilityProbe, CapabilityRecommendation, CapabilitySummary, Marketplace } from "@intentic/sandbox-contract";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
-import { readIntenticLines } from "../../../lib/intenticStream";
+import { untilResult } from "../../../lib/intenticStream";
 import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import { type ProcedureInput, sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { ENVIRONMENT, rpcKey } from "../../../lib/queryKeys";
@@ -91,18 +91,17 @@ export function useCapabilities() {
         ]);
     };
 
-    // Reads the streamed apply, calling onLine per frame and throwing on an error frame; refreshes the list on completion.
+    // Reads the streamed apply, calling onLine per frame and throwing on an error frame or an end with no result; refreshes
+    // the lists once it settles, failed or not, since an apply that failed part way may already have changed what they show.
     const add = async (input: AddCapabilityInput, onLine?: (line: Record<string, unknown>) => void): Promise<void> => {
         const lines = await sandboxRpc.capabilities.add(asDeclared(input)).catch((failure: unknown) => {
             throw failure instanceof SandboxHttpError ? new Error(failure.said.message ?? t(`capabilities.useCapabilities.couldNotAddStatus`, { status: failure.status })) : failure;
         });
-        for await (const line of readIntenticLines(lines)) {
-            onLine?.(line);
-            if (line[`kind`] === `error`) {
-                throw new Error(typeof line[`message`] === `string` ? (line[`message`] as string) : t(`capabilities.useCapabilities.applyFailed`));
-            }
+        try {
+            await untilResult(lines, { failed: () => t(`capabilities.useCapabilities.applyFailed`), onLine });
+        } finally {
+            await invalidate();
         }
-        await invalidate();
     };
 
     const remove = useMutation({

@@ -1,6 +1,7 @@
 import "@intentic/testing/dom";
 import { DEV_REBUILD_EXIT_MARK, DEV_REBUILD_QUIET_MARK } from "@intentic/sandbox-contract";
 import { advanceTimersByTimeAsync, freshImport } from "@intentic/testing/bun";
+import { effectScope } from "vue";
 import { SandboxHttpError } from "../../../../client/sandbox/sandboxHttpError";
 
 // A rebuild runs on another machine, detached, and ends by replacing the container this page is talking to. What is
@@ -11,7 +12,7 @@ import { SandboxHttpError } from "../../../../client/sandbox/sandboxHttpError";
 const runDeviceCommand = jest.fn();
 jest.mock(`../../devices/useDevices`, () => ({ runDeviceCommand }));
 
-const { OUT_OF_CONTACT_MS, outOfContact, rebuildRunning, useDevRebuild } = await import("./useDevRebuild");
+const { OUT_OF_CONTACT_MS, outOfContact, rebuildRunning, useDevRebuild: followRebuild } = await import("./useDevRebuild");
 // The same module evaluated a second time: the page after a reload, its memory gone and this browser's storage intact.
 // Imported here rather than inside the test that reloads, so the load is not charged to that test's clock.
 const reloaded = await freshImport<typeof import("./useDevRebuild")>(`./useDevRebuild`, import.meta.url);
@@ -38,6 +39,18 @@ const killed = {
 let counter = 0;
 const nextSlug = (): string => `box-${(counter += 1)}`;
 
+// Every follower inside the test's own scope, as a mounted card's is: the clock it draws with is the window's one shared
+// clock, which a follower left behind would keep running on the timers of a test long over.
+let scope = effectScope();
+const inScope = <T>(make: () => T): T => {
+    const made = scope.run(make);
+    if (made === undefined) {
+        throw new Error(`the test's scope has already been stopped`);
+    }
+    return made;
+};
+const useDevRebuild = (slug: string): ReturnType<typeof followRebuild> => inScope(() => followRebuild(slug));
+
 // One poll interval, with every promise it settles.
 const POLL_MS = 4_000;
 const nextPoll = async (times = 1): Promise<void> => {
@@ -47,12 +60,14 @@ const nextPoll = async (times = 1): Promise<void> => {
 };
 
 beforeEach(() => {
+    scope = effectScope();
     jest.useFakeTimers();
     runDeviceCommand.mockReset();
     localStorage.clear();
 });
 
 afterEach(() => {
+    scope.stop();
     jest.runOnlyPendingTimers();
     jest.useRealTimers();
 });
@@ -416,7 +431,7 @@ it(`resumes a reload in the restart step on the silence it already had, not a fr
     await nextPoll(75);
     const { heardAt, stageAt } = before.run;
 
-    const after = reloaded.useDevRebuild(slug);
+    const after = inScope(() => reloaded.useDevRebuild(slug));
     expect(after.run.phase).toBe(`idle`);
     after.adopt(HOST);
     expect(after.run.stage).toBe(`swap`);
@@ -444,7 +459,7 @@ it(`dates contact afresh for a reload that comes before the restart step`, async
     runDeviceCommand.mockResolvedValue(killed);
     await nextPoll(75);
 
-    const after = reloaded.useDevRebuild(slug);
+    const after = inScope(() => reloaded.useDevRebuild(slug));
     after.adopt(HOST);
     expect(after.run.stage).toBe(`compile`);
     expect(after.run.heardAt).toBe(Date.now());

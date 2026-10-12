@@ -1,6 +1,7 @@
 import { copyFile, mkdir, open, readFile, rename, rm, stat } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
+import { renameOver, stagingOf, syncDirectories } from "@intentic/base/fs";
 import { z } from "zod";
 import { stateRelPath } from "../../state-paths.js";
 import type { DocumentRoot } from "./documents.js";
@@ -155,24 +156,25 @@ export const rootOf = (roots: Readonly<Record<DocumentRoot, string>>, path: stri
         .filter(([, root]) => path === root || path.startsWith(root.endsWith(sep) ? root : `${root}${sep}`))
         .toSorted(([, a], [, b]) => b.length - a.length)[0]?.[0];
 
-// Copies a file into place atomically: a sibling temp copy, flushed to the disk, renamed over the target. The rename is
-// durable only once its directory is synced too, which the caller does for every directory an episode touched
-// (syncDirectories) before the journal names a pre-image or forgets one.
+// Copies a file into place atomically: a staging copy beside it, flushed to the disk, renamed over the target. The
+// staging name is unique per copy, so two copies into one directory never share it. The rename is durable only once its
+// directory is synced too, which the caller does for every directory an episode touched (syncDirectories) before the
+// journal names a pre-image or forgets one.
 const copyInto = async (from: string, to: string): Promise<void> => {
     await mkdir(dirname(to), { recursive: true });
-    const temp = join(dirname(to), `.converting.${process.pid}.tmp`);
+    const staging = stagingOf(to);
     try {
-        await copyFile(from, temp);
-        const handle = await open(temp, "r+");
+        await copyFile(from, staging);
+        const handle = await open(staging, "r+");
         try {
             await handle.sync();
         } finally {
             await handle.close();
         }
-        await rename(temp, to);
-    } catch (error) {
-        await rm(temp, { force: true });
-        throw error;
+        await renameOver(staging, to);
+    } finally {
+        // Already gone after the rename; after a failure, a partial copy nothing would ever reuse.
+        await rm(staging, { force: true });
     }
 };
 
@@ -186,28 +188,6 @@ const directoriesOf = (roots: Readonly<Record<DocumentRoot, string>>, path: stri
         directories.push(directory);
         if (directory.length <= top.length || dirname(directory) === directory) {
             return directories;
-        }
-    }
-};
-
-// Flushes each directory's entries to the disk once, whatever number of files an episode copied into it. A directory
-// gone since (an emptied tree a rollback removed) has nothing left to flush, and one on a filesystem that cannot flush a
-// directory, or on Windows, where a directory cannot be opened for it, has no better answer to give.
-const syncDirectories = async (directories: Iterable<string>): Promise<void> => {
-    if (process.platform === "win32") {
-        return;
-    }
-    for (const directory of new Set(directories)) {
-        const handle = await open(directory, "r").catch(undefinedIfMissing);
-        if (handle === undefined) {
-            continue;
-        }
-        try {
-            await handle.sync();
-        } catch {
-            // allow(silent-catch): the entries are written already; a filesystem that cannot flush a directory has no better answer
-        } finally {
-            await handle.close();
         }
     }
 };

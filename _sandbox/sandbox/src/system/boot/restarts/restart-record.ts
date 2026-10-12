@@ -1,7 +1,8 @@
-import { readFileSync, rmSync } from "node:fs";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import { opt } from "../../../opt.js";
+import { readJsonMarkerSync } from "../../../store/plain-files/json-marker.js";
 
 // WHY THE DAEMON LAST STOPPED, SAID ONCE AT THE NEXT BOOT (2026-10-11). A restart used to leave a bare "shutting down"
 // line and a boot timestamp, so whoever asked why a job died or /tmp emptied rebuilt it from uptime drops across two
@@ -50,15 +51,8 @@ const IntentOnDisk = z.object({
 });
 export type ReadIntent = z.infer<typeof IntentOnDisk>;
 
-export const readRestartIntent = (logsDir: string): ReadIntent | undefined => {
-    try {
-        const parsed = IntentOnDisk.safeParse(JSON.parse(readFileSync(join(logsDir, RESTART_INTENT_FILE), "utf8")));
-        return parsed.success ? parsed.data : undefined;
-    } catch {
-        // allow(silent-catch): an intent that is missing, torn or unreadable explains no stop, and the boot reads it as none
-        return undefined;
-    }
-};
+// An intent that is missing, torn or unreadable explains no stop, and the boot reads it as none.
+export const readRestartIntent = (logsDir: string): ReadIntent | undefined => readJsonMarkerSync(join(logsDir, RESTART_INTENT_FILE), IntentOnDisk);
 
 export const removeRestartIntent = (logsDir: string): void => {
     rmSync(join(logsDir, RESTART_INTENT_FILE), { force: true });

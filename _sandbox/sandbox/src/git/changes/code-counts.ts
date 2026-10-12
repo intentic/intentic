@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { LineStat } from "@intentic/code-read";
 import type { GitChange } from "@intentic/sandbox-contract";
 import { readWorkspaceFile, statWorkspaceSizeMtime } from "../../workspace/files/workspace-files.js";
+import { SingleFlight } from "@intentic/base/async";
 import { siblingModule, type WorkerCalls, workerPool } from "@intentic/base/worker-calls";
 import { readObject } from "./blob-reader.js";
 import { MAX_FILE_DIFF_BYTES } from "./diff-partial.js";
@@ -175,7 +176,7 @@ const textOf = async (dir: string, side: Side): Promise<string | undefined> => {
 };
 
 // Counts being taken, by key: a review opened while a warm-up is counting the same rows waits for those counts.
-const underway = new Map<string, Promise<LineStat | undefined>>();
+const underway = new SingleFlight<string, LineStat | undefined>();
 
 const countOne = async (dir: string, path: string, sides: Sides): Promise<LineStat | undefined> => {
     const [before, after] = await Promise.all([identify(sides.before), identify(sides.after)]);
@@ -186,13 +187,7 @@ const countOne = async (dir: string, path: string, sides: Sides): Promise<LineSt
     if (counted.has(key)) {
         return counted.get(key);
     }
-    const taking = underway.get(key);
-    if (taking !== undefined) {
-        return taking;
-    }
-    const taken = countFresh(dir, path, sides, key).finally(() => underway.delete(key));
-    underway.set(key, taken);
-    return taken;
+    return underway.run(key, () => countFresh(dir, path, sides, key));
 };
 
 const countFresh = async (dir: string, path: string, sides: Sides, key: string | undefined): Promise<LineStat | undefined> => {

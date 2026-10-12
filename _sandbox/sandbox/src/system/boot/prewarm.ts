@@ -1,12 +1,13 @@
 import { readdirSync } from "node:fs";
-import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { sleep } from "@intentic/base/async";
+import { pollFor } from "@intentic/base/async";
 import { STARTER_REPO } from "@intentic/sandbox-contract";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import type { Logger } from "pino";
 import type { ManagedProcesses } from "../../processes/managed-processes.js";
+import { z } from "zod";
 import { writeJsonFile } from "../../store/json-file.js";
+import { readJsonMarker } from "../../store/plain-files/json-marker.js";
 
 // Boots a pool machine (SANDBOX_PREWARM=1) through the ordinary boot chain before anyone owns it, so a claimed
 // machine's volume already has the starter copied, caches warmed, and a baseline committed. The env carries no owner
@@ -23,16 +24,10 @@ export interface PrewarmMarker {
     readonly at: string;
 }
 
-export const readPrewarmMarker = async (historyRoot: string): Promise<PrewarmMarker | undefined> => {
-    try {
-        const parsed = JSON.parse(await readFile(join(historyRoot, PREWARM_MARKER), "utf8")) as Partial<PrewarmMarker>;
-        return typeof parsed.image === "string" && typeof parsed.warmedUp === "boolean" && typeof parsed.at === "string"
-            ? { image: parsed.image, warmedUp: parsed.warmedUp, at: parsed.at }
-            : undefined;
-    } catch {
-        return undefined;
-    }
-};
+const PrewarmMarkerSchema = z.object({ image: z.string(), warmedUp: z.boolean(), at: z.string() });
+
+export const readPrewarmMarker = async (historyRoot: string): Promise<PrewarmMarker | undefined> =>
+    await readJsonMarker(join(historyRoot, PREWARM_MARKER), PrewarmMarkerSchema);
 
 // Whether this workspace arrived as a volume the daemon prepared rather than as a user's own content: the marker says
 // the daemon seeded it, and the directory listing confirms nothing else has been added since.
@@ -67,20 +62,17 @@ export const waitForStarter = async (
     deps: StarterProbe & { readonly processes: Pick<ManagedProcesses, "portOf"> },
     options: { readonly maxMs: number; readonly pollMs?: number },
 ): Promise<StarterReadiness> => {
-    const deadline = Date.now() + options.maxMs;
-    while (Date.now() < deadline) {
-        const port = deps.processes.portOf(deps.starterKey);
-        if (port === undefined) {
-            return "not-running";
-        }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- readiness requires observing sequential attempts
-        if (await deps.answers(port)) {
-            return "ready";
-        }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- readiness requires observing sequential attempts
-        await sleep(options.pollMs ?? WARMUP_POLL_MS);
-    }
-    return "timed-out";
+    const outcome = await pollFor(
+        async (): Promise<Exclude<StarterReadiness, "timed-out"> | undefined> => {
+            const port = deps.processes.portOf(deps.starterKey);
+            if (port === undefined) {
+                return "not-running";
+            }
+            return (await deps.answers(port)) ? "ready" : undefined;
+        },
+        { intervalMs: options.pollMs ?? WARMUP_POLL_MS, until: Date.now() + options.maxMs },
+    );
+    return outcome.kind === "found" ? outcome.value : "timed-out";
 };
 
 // Prewarm succeeds only after the starter has answered and written its first-run cache.

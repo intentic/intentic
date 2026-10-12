@@ -2,6 +2,7 @@
 import type { SubagentSession, TranscriptTool } from "@intentic/sandbox-contract";
 import { Icon } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
+import { usePollWhile } from "@intentic/ui/async";
 import { computed, nextTick, onBeforeUnmount, provide, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { agentDisplayTitle } from "../../../agents/fleet/agentStatus";
@@ -18,6 +19,7 @@ import ChatSubagentBar from "./ChatSubagentBar.vue";
 import { showRecord, subagentRecord } from "./subagentRecord";
 import { closeSubagent } from "./subagentView";
 import { conversationView, PANE_VIEW } from "../useChat-view";
+import { onScreen } from "../../../../workbench/window/onScreen";
 
 // A SUBAGENT ITS PARENT'S RUNTIME RAN IN-PROCESS, SHOWN IN THE PARENT'S COLUMN (subagentView.ts): its own transcript,
 // read from the daemon and drawn by the chat's own turns, with the subagent bar where the composer stands. Nothing here
@@ -109,7 +111,6 @@ const { pin, realizing } = usePaneScroll({
 const failed = ref(false);
 const drawn: { last: string | undefined } = { last: undefined };
 const POLL_MS = 3000;
-let timer: ReturnType<typeof setTimeout> | undefined;
 let mounted = true;
 const read = async (): Promise<void> => {
     const first = drawn.last === undefined;
@@ -130,24 +131,18 @@ const read = async (): Promise<void> => {
         record.transcript.loading.value = false;
     }
 };
-const schedule = (): void => {
-    clearTimeout(timer);
-    if (mounted && live.value) {
-        timer = setTimeout(() => void read().then(schedule), POLL_MS);
-    }
-};
 record.transcript.loading.value = true;
-void read().then(schedule);
-// Starting to work again polls again; settling reads the last of it once.
+void read();
+// Read again while it works. Out of sight the reads wait, and the window coming back reads at once.
+usePollWhile(live, { everyMs: POLL_MS, check: read, immediate: false, visible: onScreen });
+// Settling reads the last of it once.
 watch(live, (now, before) => {
     if (before && !now) {
         void read();
     }
-    schedule();
 });
 onBeforeUnmount(() => {
     mounted = false;
-    clearTimeout(timer);
 });
 
 // Focusing a pane is the panel's (it focuses the parent's tab), asked for only when the pane is not already the focus.

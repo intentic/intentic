@@ -1,6 +1,7 @@
 import type { Stats } from "node:fs";
 import { lstat, realpath, stat } from "node:fs/promises";
 import hostPath, { basename, dirname, join, type PlatformPath, relative } from "node:path";
+import { isInside, windowsHolds } from "@intentic/base/contained";
 
 // Every path a window names is root-relative with forward slashes, as the contract carries it, and is only ever
 // resolved here: lexically first (no `..`, no drive, no NUL), then on disk, where the real path of whatever exists must
@@ -14,14 +15,14 @@ export type Resolved = { readonly kind: "found"; readonly abs: string } | Unreso
 // Whether `abs` is `root` itself or somewhere under it; both real paths. `..name` is a legal file name, so only a
 // whole `..` segment counts as leaving. Read by this platform's path rules unless others are named: Windows compares
 // without case.
-export const within = (root: string, abs: string, rules: PlatformPath = hostPath): boolean => {
-    const rel = rules.relative(root, abs);
-    return rel === "" || (rel !== ".." && !rel.startsWith(`..${rules.sep}`) && !rules.isAbsolute(rel));
-};
+export const within = (root: string, abs: string, rules: PlatformPath = hostPath): boolean =>
+    // Only which path rules apply matters to isInside, so any POSIX platform stands for the rest.
+    isInside(root, abs, { platform: rules === hostPath.win32 ? `win32` : `linux` });
 
 // The path's segments once it is known not to leave the root by spelling alone; undefined when it tries to. A
 // backslash is refused rather than read: it is a separator on Windows and a name character elsewhere, and a path that
-// means two things is not one to guess at. On Windows, so is a name Windows cannot hold (`windowsHolds`).
+// means two things is not one to guess at. On Windows, so is a name Windows cannot hold: (2026-10-06) base's
+// `windowsHolds` keeps the rule and what NTFS was measured doing with such names.
 export const segmentsOf = (path: string, platform: NodeJS.Platform = process.platform): readonly string[] | undefined => {
     if (path.includes(`\0`) || path.includes(`\\`)) {
         return undefined;
@@ -32,14 +33,6 @@ export const segmentsOf = (path: string, platform: NodeJS.Platform = process.pla
     }
     return platform === `win32` && !segments.every(windowsHolds) ? undefined : segments;
 };
-
-// (2026-10-06) Whether Windows can hold a name: none of `<>:"|?*` or a control character, no trailing dot or space, and
-// no device name (`CON`, `NUL`, `COM1`…, with or without an extension). Measured on NTFS: `a.txt:ads` resolved to a
-// hidden stream of `a.txt`, `a.txt::$DATA` to `a.txt` itself, and a file made as `nul` could not be deleted by
-// PowerShell. The machine agent's project-files.ts holds the same rule.
-const WINDOWS_FORBIDDEN = /[<>:"|?*\u0000-\u001f]/;
-const WINDOWS_DEVICE = /^(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/i;
-const windowsHolds = (name: string): boolean => !WINDOWS_FORBIDDEN.test(name) && !/[. ]$/.test(name) && !WINDOWS_DEVICE.test(name);
 
 // The root-relative spelling of a path, `""` for the root: the key every grant and event speaks in.
 export const cleanRelPath = (path: string): string | undefined => segmentsOf(path)?.join(`/`);

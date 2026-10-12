@@ -1,6 +1,5 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { errorMessage } from "@intentic/base/errors";
+import { execBounded } from "@intentic/base/process";
 import type { Log } from "@intentic/local-agent";
 import type { CommandContext } from "@stricli/core";
 import { buildCommand } from "../cli-ui.js";
@@ -23,8 +22,6 @@ import { retireSandbox, type Retired, sandboxesNamed } from "./retire.js";
 //
 // With `--json`, one object on stdout: `{ ok: true, retired: [{ sandboxId, pairings, folders }], environments?: [{
 // environment, ok, retired?, error? }] }`, or `{ ok: false, error }` with exit code 1.
-
-const exec = promisify(execFile);
 
 // A distro's agent retiring its pairings: a Mutagen call or two and a few file writes, plus a cold distro's boot.
 const DISTRO_TIMEOUT_MS = 120_000;
@@ -74,9 +71,9 @@ export const distroAnswer = (environment: string, status: number, stdout: string
 
 const forgetInDistro = async (distro: string, name: string): Promise<EnvironmentForgot> => {
     const { command, args } = agentInDistro(distro, ["sync", "forget", name, "--here", "--json"]);
-    return await exec(command, [...args], { timeout: DISTRO_TIMEOUT_MS, windowsHide: true, env: { ...process.env, WSL_UTF8: "1" } }).then(
+    return await execBounded(command, [...args], { timeoutMs: DISTRO_TIMEOUT_MS, env: { ...process.env, WSL_UTF8: "1" } }).then(
         (ran) => distroAnswer(`wsl:${distro}`, 0, ran.stdout, ran.stderr),
-        // execFile's rejection carries the child's exit code and both streams; a spawn failure carries neither.
+        // The rejection carries the child's exit code and both streams (execFile's shape); a spawn failure carries neither.
         (error: { readonly code?: number | string; readonly stdout?: string; readonly stderr?: string; readonly message?: string }) =>
             distroAnswer(
                 `wsl:${distro}`,

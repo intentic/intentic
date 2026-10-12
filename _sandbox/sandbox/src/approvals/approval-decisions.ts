@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { join, resolve } from "node:path";
+import { insideRel } from "@intentic/base/contained";
 import { errnoCode } from "@intentic/base/errors";
 import type { ApprovalSummary } from "@intentic/sandbox-contract";
 import { z } from "zod";
@@ -39,8 +40,7 @@ const BOOKKEEPING: ReadonlySet<string> = new Set(["id", "status", "createdAt", "
 // pinned as that state, which the same file still unreadable later matches and anything else does not.
 const mediaFingerprint = async (workspaceRoot: string, path: string): Promise<string> => {
     const full = resolve(workspaceRoot, path);
-    const inside = relative(workspaceRoot, full);
-    if (inside === "" || inside.startsWith("..") || isAbsolute(inside)) {
+    if ((insideRel(workspaceRoot, full) ?? "") === "") {
         return "outside the workspace";
     }
     const handle = await open(full, constants.O_RDONLY | constants.O_NONBLOCK).catch((error: unknown) => {

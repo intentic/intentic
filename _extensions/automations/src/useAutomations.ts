@@ -12,7 +12,7 @@ const NO_SENDERS: readonly SenderSeen[] = [];
 export function useSenders(provider: Ref<string>, enabled: Ref<boolean>) {
     const api = host();
     const query = useQuery({
-        queryKey: computed(() => api.sandbox.key(`automation-senders`, provider.value)),
+        queryKey: computed(() => api.sandbox.readKey(`automations.senders`, { provider: provider.value })),
         queryFn: () => api.sandbox.rpc.automations.senders({ provider: provider.value }),
         enabled: computed(() => enabled.value && provider.value !== `` && api.sandbox.reachable()),
     });
@@ -96,9 +96,10 @@ const CONVERSATIONS_STALE_MS = 30_000;
 export function useConversations(enabled: Ref<boolean>) {
     const api = host();
     const query = useQuery({
-        queryKey: api.sandbox.key(`automation-conversations`),
-        queryFn: async (): Promise<readonly AgentSummary[]> =>
-            (await api.sandbox.rpc.agents.list()).agents.toSorted((a, b) => b.updatedAt - a.updatedAt),
+        // The fleet's own entry: the shell reads `agents.list` too, so this asks nothing new while the board is open.
+        queryKey: api.sandbox.readKey(`agents.list`),
+        queryFn: () => api.sandbox.rpc.agents.list(),
+        select: (answer): readonly AgentSummary[] => answer.agents.toSorted((a, b) => b.updatedAt - a.updatedAt),
         enabled: computed(() => enabled.value && api.sandbox.reachable()),
         staleTime: CONVERSATIONS_STALE_MS,
     });
@@ -123,8 +124,10 @@ export function useConversations(enabled: Ref<boolean>) {
 export function useSandboxZone(): ComputedRef<Zone> {
     const api = host();
     const query = useQuery({
-        queryKey: api.sandbox.key(`sandbox-timezone`),
-        queryFn: async (): Promise<string> => (await api.sandbox.rpc.settings.get()).timezone ?? ``,
+        // The sandbox settings' own entry, which the daemon's settings push refreshes when the zone is changed.
+        queryKey: api.sandbox.readKey(`settings.get`),
+        queryFn: () => api.sandbox.rpc.settings.get(),
+        select: (settings): string => settings.timezone ?? ``,
         enabled: computed(() => api.sandbox.reachable()),
     });
     return computed<Zone>(() => asZone(query.data.value) ?? UTC);
@@ -133,12 +136,13 @@ export function useSandboxZone(): ComputedRef<Zone> {
 export function useAutomations() {
     const api = host();
     const queryClient = useQueryClient();
-    const queryKey = api.sandbox.key(`automations`);
+    const queryKey = api.sandbox.readKey(`automations.list`);
     const enabled = computed(() => api.sandbox.reachable());
 
     const query = useQuery({
         queryKey,
-        queryFn: async (): Promise<AutomationSummary[]> => (await api.sandbox.rpc.automations.list()).automations,
+        queryFn: () => api.sandbox.rpc.automations.list(),
+        select: (answer): AutomationSummary[] => answer.automations,
         enabled,
     });
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey });

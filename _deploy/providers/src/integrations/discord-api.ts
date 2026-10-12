@@ -1,6 +1,8 @@
 import { setTimeout as sleep } from "node:timers/promises";
+import type { JsonValue } from "@intentic/base/fetch-json";
 import { z } from "zod";
 import { parseResponse } from "../core/inputs.js";
+import { vendorRequest } from "../core/rest-client.js";
 
 // Thin typed wrapper over the Discord REST API v10: guild CRUD, channel CRUD, webhook CRUD, and posting
 // messages to a webhook. Auth is a Bot token in the Authorization header.
@@ -41,29 +43,34 @@ const webhookSchema = z.object({
     token: z.string().nullable().default(""),
 });
 
-const headers = (botToken: string): Record<string, string> => ({
-    Authorization: `Bot ${botToken}`,
-    "Content-Type": "application/json",
-});
-
 const MAX_RETRIES = 3;
 
+const rateLimitSchema = z.object({ retry_after: z.number().optional() });
+
+interface DiscordCall {
+    readonly method?: string;
+    // Absent for a webhook execution, which its own token in the URL authorizes.
+    readonly botToken?: string;
+    // Sent as JSON.
+    readonly body?: unknown;
+}
+
 // Retries on HTTP 429 up to MAX_RETRIES, sleeping the response's `retry_after` seconds; every API call goes through
-// this.
-const discordFetch = async (url: string, init: RequestInit, label: string): Promise<Response> => {
+// this and answers the parsed body. `label` names the call in errors, so it never carries a webhook's token.
+const discordFetch = async (url: string, call: DiscordCall, label: string): Promise<JsonValue | undefined> => {
     for (let attempt = 0; ; attempt++) {
-        // Bound a stalled connection (undici's default headers timeout is ~5 minutes).
-        const response = await fetch(url, { ...init, signal: AbortSignal.timeout(30_000) });
-        if (response.status === 429 && attempt < MAX_RETRIES) {
-            const body = (await response.json()) as { retry_after?: number };
-            const ms = ((body.retry_after ?? 1) + 0.1) * 1000;
-            await sleep(ms);
-            continue;
+        const response = await vendorRequest(url, {
+            method: call.method ?? "GET",
+            headers: call.botToken === undefined ? {} : { Authorization: `Bot ${call.botToken}` },
+            json: call.body,
+            accept: attempt < MAX_RETRIES ? [429] : [],
+            label: `Discord ${label}`,
+        });
+        if (response.status !== 429) {
+            return response.json;
         }
-        if (!response.ok) {
-            throw new Error(`Discord ${label} failed (HTTP ${response.status}): ${await response.text()}`);
-        }
-        return response;
+        const limit = rateLimitSchema.safeParse(response.json);
+        await sleep(((limit.data?.retry_after ?? 1) + 0.1) * 1000);
     }
 };
 
@@ -89,75 +96,39 @@ export { CHANNEL_TYPE_CATEGORY, CHANNEL_TYPE_TEXT };
 
 export const discordApi: DiscordApi = {
     listGuilds: async (botToken) => {
-        const response = await discordFetch(`${API_BASE}/users/@me/guilds`, { headers: headers(botToken) }, "GET /users/@me/guilds");
-        const items = z.array(guildSchema).parse(await response.json());
+        const items = z.array(guildSchema).parse(await discordFetch(`${API_BASE}/users/@me/guilds`, { botToken }, "GET /users/@me/guilds"));
         return items.map((item): DiscordGuild => ({ id: item.id, name: item.name, owner: item.owner }));
     },
     createGuild: async (botToken, name) => {
-        const response = await discordFetch(
-            `${API_BASE}/guilds`,
-            {
-                method: "POST",
-                headers: headers(botToken),
-                body: JSON.stringify({ name }),
-            },
-            "POST /guilds",
-        );
-        return parseResponse(guildSchema, await response.json(), "POST /guilds");
+        const answer = await discordFetch(`${API_BASE}/guilds`, { method: "POST", botToken, body: { name } }, "POST /guilds");
+        return parseResponse(guildSchema, answer, "POST /guilds");
     },
     getGuildChannels: async (botToken, guildId) => {
-        const response = await discordFetch(
-            `${API_BASE}/guilds/${guildId}/channels`,
-            { headers: headers(botToken) },
-            `GET /guilds/${guildId}/channels`,
-        );
-        const items = z.array(channelSchema).parse(await response.json());
+        const items = z.array(channelSchema).parse(await discordFetch(`${API_BASE}/guilds/${guildId}/channels`, { botToken }, `GET /guilds/${guildId}/channels`));
         return items.map((item): DiscordChannel => ({ id: item.id, name: item.name, type: item.type, parent_id: item.parent_id ?? undefined }));
     },
     createChannel: async (botToken, guildId, name, type, parentId) => {
-        const response = await discordFetch(
+        const answer = await discordFetch(
             `${API_BASE}/guilds/${guildId}/channels`,
-            {
-                method: "POST",
-                headers: headers(botToken),
-                body: JSON.stringify({ name, type, ...(parentId !== undefined ? { parent_id: parentId } : {}) }),
-            },
+            { method: "POST", botToken, body: { name, type, ...(parentId !== undefined ? { parent_id: parentId } : {}) } },
             `POST /guilds/${guildId}/channels`,
         );
-        const item = parseResponse(channelSchema, await response.json(), `POST /guilds/${guildId}/channels`);
+        const item = parseResponse(channelSchema, answer, `POST /guilds/${guildId}/channels`);
         return { id: item.id, name: item.name, type: item.type, parent_id: item.parent_id ?? undefined };
     },
     getChannelWebhooks: async (botToken, channelId) => {
-        const response = await discordFetch(
-            `${API_BASE}/channels/${channelId}/webhooks`,
-            { headers: headers(botToken) },
-            `GET /channels/${channelId}/webhooks`,
-        );
-        const items = z.array(webhookSchema).parse(await response.json());
+        const items = z
+            .array(webhookSchema)
+            .parse(await discordFetch(`${API_BASE}/channels/${channelId}/webhooks`, { botToken }, `GET /channels/${channelId}/webhooks`));
         return items.map((item): DiscordWebhook => ({ id: item.id, name: item.name ?? "", channel_id: item.channel_id, token: item.token ?? "" }));
     },
     createWebhook: async (botToken, channelId, name) => {
-        const response = await discordFetch(
-            `${API_BASE}/channels/${channelId}/webhooks`,
-            {
-                method: "POST",
-                headers: headers(botToken),
-                body: JSON.stringify({ name }),
-            },
-            `POST /channels/${channelId}/webhooks`,
-        );
-        const item = parseResponse(webhookSchema, await response.json(), `POST /channels/${channelId}/webhooks`);
+        const answer = await discordFetch(`${API_BASE}/channels/${channelId}/webhooks`, { method: "POST", botToken, body: { name } }, `POST /channels/${channelId}/webhooks`);
+        const item = parseResponse(webhookSchema, answer, `POST /channels/${channelId}/webhooks`);
         return { id: item.id, name: item.name ?? "", channel_id: item.channel_id, token: item.token ?? "" };
     },
     executeWebhook: async (webhookId, webhookToken, content) => {
-        await discordFetch(
-            `${API_BASE}/webhooks/${webhookId}/${webhookToken}`,
-            {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ content }),
-            },
-            `POST /webhooks/${webhookId}/${webhookToken}`,
-        );
+        // The token is the webhook's credential, so the label (and any error it ends up in) leaves it out.
+        await discordFetch(`${API_BASE}/webhooks/${webhookId}/${webhookToken}`, { method: "POST", body: { content } }, `POST /webhooks/${webhookId}/…`);
     },
 };

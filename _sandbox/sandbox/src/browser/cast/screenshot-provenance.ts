@@ -1,10 +1,12 @@
 import { writeFile } from "node:fs/promises";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
+import { within } from "@intentic/base/async";
 import { z } from "zod";
 import type { Page } from "playwright";
 import type { RpcMessage } from "../../agent/tools/turn-mounts.js";
 import { sanitizeUrl } from "../tools/network-redaction.js";
 import { BROWSER_OUTPUT_REL } from "./browser-artifacts.js";
+import { insideRel } from "@intentic/base/contained";
 
 // A screenshot's provenance, written beside it as `<file>.json`: which conversation took it, by which tool call, of
 // which page, and how far that page had loaded. The output directory holds thousands of shots from every conversation
@@ -48,8 +50,8 @@ export const screenshotFileOf = (answer: RpcMessage, outputDir: string): string 
             }
             const at = link.indexOf(BROWSER_OUTPUT_REL);
             const file = isAbsolute(link) ? link : at === -1 ? undefined : join(outputDir, link.slice(at + BROWSER_OUTPUT_REL.length));
-            const inside = file === undefined ? "" : relative(outputDir, resolve(file));
-            if (file !== undefined && inside !== "" && !inside.startsWith("..") && !isAbsolute(inside)) {
+            const inside = file === undefined ? undefined : insideRel(outputDir, resolve(file));
+            if (file !== undefined && inside !== undefined && inside !== "") {
                 return resolve(file);
             }
         }
@@ -73,11 +75,8 @@ const readPage = async (page: Page): Promise<Pick<ScreenshotProvenance, "url" | 
         height: innerHeight,
         deviceScaleFactor: devicePixelRatio,
     }));
-    const timeout = new Promise<undefined>((resolveTimeout) => {
-        setTimeout(() => resolveTimeout(undefined), READ_TIMEOUT_MS).unref();
-    });
     // allow(silent-catch): a page closed or navigating away under the read is described by its address alone.
-    const state = PageState.safeParse(await Promise.race([read, timeout]).catch(() => undefined)).data;
+    const state = PageState.safeParse(await within(read, READ_TIMEOUT_MS, undefined, { unref: true }).catch(() => undefined)).data;
     if (state === undefined) {
         return page.isClosed() ? {} : { url: sanitizeUrl(page.url()) };
     }

@@ -1,5 +1,6 @@
 import type { IconName, Tip } from "@intentic/ui";
 import type { SandboxSummary } from "@intentic/api-contract";
+import { slugOfDaemonUrl } from "@intentic/sandbox-run/slug";
 import { t } from "@intentic/ui/i18n";
 
 // WHERE THE CONTAINER ACTUALLY STANDS. Nothing else on a sandbox says it: the name, the logo and the status dot read
@@ -148,8 +149,4 @@ export const placementOfKind = (word: string): SandboxPlacement => {
 // The container's slug on its host machine, as the daemon's own address spells it. Best-effort by design: behind the
 // owner's own Cloudflare zone the subdomain need not be the slug, and a slug that matches no device simply leaves the
 // placement at `own` rather than naming the wrong machine.
-export const slugFromDaemonUrl = (daemonUrl: string | null | undefined): string | undefined => {
-    const host = hostOf(daemonUrl);
-    const slug = host?.split(`.`)[0];
-    return slug === undefined || slug === `` ? undefined : slug;
-};
+export const slugFromDaemonUrl = slugOfDaemonUrl;

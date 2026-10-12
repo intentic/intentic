@@ -1,3 +1,4 @@
+import { cachedAsync } from "@intentic/base/held";
 import type { JsonFile } from "../../store/json-file.js";
 
 // Shared 3-rung catalog ladder for every provider's model picker: the live source, the persisted last-known-good list,
@@ -44,7 +45,12 @@ export const ABSENT_FOR_MS = 30 * 60_000;
 export const discoveredCatalog = <Item, Stored, Value, Args extends unknown[] = []>(
     options: DiscoveredCatalogOptions<Item, Stored, Value, Args>,
 ): DiscoveredCatalog<Item, Value, Args> => {
-    let cache: { readonly items: readonly Item[]; readonly value: Value; readonly expiresAt: number } | undefined;
+    type Answer = { readonly items: readonly Item[]; readonly value: Value };
+    // A discovery that came back empty is not held, so the next read asks again. Args are not part of the key: the
+    // answer stands for the provider whoever asked, so concurrent readers share one discovery.
+    const fresh = cachedAsync<undefined, Answer | undefined>({ ttlMs: options.ttlMs, keep: (answer) => answer !== undefined });
+    // The last live answer, kept past its window for `live`, which serves it while a re-discovery comes back empty.
+    let last: Answer | undefined;
 
     // Every id this source has published, as it last published it; the grace window is measured off `at`.
     const published = new Map<string, { readonly item: Item; readonly at: number }>();
@@ -69,28 +75,26 @@ export const discoveredCatalog = <Item, Stored, Value, Args extends unknown[] = 
         return kept.length === 0 ? items : [...items, ...kept];
     };
 
-    const adopt = (items: readonly Item[]): NonNullable<typeof cache> => {
-        cache = { items, value: options.fromLive(items), expiresAt: Date.now() + options.ttlMs };
-        return cache;
+    const adopt = (items: readonly Item[]): Answer => {
+        last = { items, value: options.fromLive(items) };
+        return last;
     };
     const persist = async (items: readonly Item[]): Promise<void> => {
         await options.store?.update(() => options.toStored(items));
     };
     // The cached answer while it is fresh, else a discovery, adopted and persisted when it says anything.
-    const current = async (...args: Args): Promise<NonNullable<typeof cache> | undefined> => {
-        if (cache !== undefined && Date.now() < cache.expiresAt) {
-            return cache;
-        }
-        const items = await options.discover(...args);
-        if (items.length === 0) {
-            return undefined;
-        }
-        // Persisted as served, graced rows included: the file is what a restart opens on, and dropping them there would
-        // undo the window on the next boot.
-        const served = graced(items, Date.now());
-        await persist(served);
-        return adopt(served);
-    };
+    const current = async (...args: Args): Promise<Answer | undefined> =>
+        fresh.get(undefined, async () => {
+            const items = await options.discover(...args);
+            if (items.length === 0) {
+                return undefined;
+            }
+            // Persisted as served, graced rows included: the file is what a restart opens on, and dropping them there
+            // would undo the window on the next boot.
+            const served = graced(items, Date.now());
+            await persist(served);
+            return adopt(served);
+        });
 
     return {
         models: async (...args) => {
@@ -101,7 +105,7 @@ export const discoveredCatalog = <Item, Stored, Value, Args extends unknown[] = 
             const stored = options.store === undefined ? [] : await options.store.read();
             return options.fromStored(stored.length > 0 ? stored : options.seed);
         },
-        live: async (...args) => (await current(...args))?.items ?? cache?.items,
+        live: async (...args) => (await current(...args))?.items ?? last?.items,
         // Replaces the list rather than adding to it, so a proved set is the whole answer; the ids are stamped as
         // published all the same, so a discovery that omits one next is graced like any other drop.
         record: async (items) => {
@@ -110,10 +114,11 @@ export const discoveredCatalog = <Item, Stored, Value, Args extends unknown[] = 
                 published.set(options.idOf(item), { item, at: now });
             }
             await persist(items);
-            adopt(items);
+            fresh.set(undefined, adopt(items));
         },
         forget: () => {
-            cache = undefined;
+            fresh.clear();
+            last = undefined;
             published.clear();
         },
     };

@@ -115,7 +115,8 @@ const harness = async (warned: boolean, narrow: { branch?: string } = {}) => {
         prompts,
         refusing,
         clock,
-        poller: createCiPoller(drivenBy(services, wake), fetchFn, 60_000, () => clock.at),
+        // Jitter pinned to the top of its range, so a refused token's pause is each rung's whole ceiling.
+        poller: createCiPoller(drivenBy(services, wake), fetchFn, 60_000, () => clock.at, () => 1),
         publish: (runs: typeof listed) => (listed = runs),
     };
 };
@@ -206,15 +207,15 @@ test("a refused token is asked again only after a pause that grows, and a new to
     refusing.now = true;
     await poller.poll();
     expect(refusing.asked).toBe(1);
-    // Within the first pause (two intervals) the repo is skipped.
-    clock.at += 60_000;
+    // Within the first pause (four intervals at the top of its jitter) the repo is skipped.
+    clock.at += 120_000;
     await poller.poll();
     expect(refusing.asked).toBe(1);
-    clock.at += 60_000;
+    clock.at += 120_000;
     await poller.poll();
     expect(refusing.asked).toBe(2);
     // The second refusal doubles the pause.
-    clock.at += 120_000;
+    clock.at += 240_000;
     await poller.poll();
     expect(refusing.asked).toBe(2);
     // The owner reconnects the account: the new token is asked on the very next pass.

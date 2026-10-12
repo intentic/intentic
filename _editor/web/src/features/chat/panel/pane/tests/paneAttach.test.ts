@@ -391,7 +391,9 @@ describe(`a page coming back into view`, () => {
         }
     });
 
-    it(`counts a page the back-forward cache restored as coming back, and a fresh page load as nothing`, async () => {
+    // The window's one wake rule (client/sandbox/pageWake.ts): a frozen page's streams are gone however long it was away,
+    // so the whole chat is asked again rather than only a turn the card says is running.
+    it(`counts a page the back-forward cache restored as waking, and a fresh page load as nothing`, async () => {
         const chat = new Conversation(`a`);
         roster.value = { a: { status: `running`, run: `r1` } };
         attach(chat);
@@ -399,8 +401,8 @@ describe(`a page coming back into view`, () => {
         const pageshow = (persisted: boolean): Event => Object.defineProperty(new Event(`pageshow`), `persisted`, { value: persisted });
 
         window.dispatchEvent(pageshow(false));
-        expect(hydrateOnce).not.toHaveBeenCalled();
+        expect([hydrateOnce.mock.calls.length, refreshAfterSleep.mock.calls.length]).toEqual([0, 0]);
         window.dispatchEvent(pageshow(true));
-        expect(called(hydrateOnce, chat)).toEqual([true]);
+        expect(called(refreshAfterSleep, chat)).toEqual([true]);
     });
 });

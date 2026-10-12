@@ -1,4 +1,4 @@
-import { setTimeout as delay } from "node:timers/promises";
+import { sleep, within } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import {
     type Device,
@@ -275,7 +275,7 @@ const pullCached = async (services: Services, id: string): Promise<PullResult> =
         // Stale but serving: the refresh is not awaited here, it lands in the map for the next reader to pick up.
         return held;
     }
-    return (await Promise.race([inflight, delay(PULL_SETTLE_MS, undefined, { ref: false })])) ?? held;
+    return (await within(inflight, PULL_SETTLE_MS, undefined, { unref: true })) ?? held;
 };
 
 // Maps os.platform()'s spelling (win32, darwin) to capability-card slugs; unknown tokens pass through as-is.
@@ -602,7 +602,7 @@ export async function* runDeviceAgentFlow(services: Services, id: string, input:
         // A drop leaves the agent running on the same socket, so no hello re-describes it. The read the view makes
         // right after this lands before the machine's stamp catches up; this one lands after it.
         if (input.op === "forget-unreachable") {
-            void delay(LINKS_SETTLE_MS, undefined, { ref: false })
+            void sleep(LINKS_SETTLE_MS, { unref: true })
                 .then(async () => await refreshFacts(services, id))
                 // allow(silent-catch): detached once the flow has ended; refreshFacts already keeps the last facts on a failed ask
                 .catch(() => undefined);

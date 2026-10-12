@@ -1,6 +1,8 @@
 import { sandboxRef, sandboxValue } from "@intentic/extension-api";
 import { computed, type ComputedRef, ref, type Ref, watch } from "vue";
+import { z } from "zod";
 import { activeSandboxId } from "../../lib/activeSandbox";
+import { storedJson, storedValue, storeJson, storeValue } from "../../lib/browserStorage";
 import { addPendingTerminal, dropPendingTerminal, refreshTerminals } from "./terminalsQuery";
 import { isWork, KINDS, pruneTerminalMeta } from "./terminalMeta";
 import {
@@ -12,9 +14,11 @@ import {
     retypeTerminalSession,
     type TerminalSession,
 } from "./terminalSession";
+import { usePoll } from "@intentic/ui/async";
 import { useTextSize } from "@intentic/ui/text-size";
 import { useTheme } from "@intentic/ui/theme";
 import { useSkin } from "../../skins/useSkin";
+import { onScreen } from "../../workbench/window/onScreen";
 
 // Multi-tab terminal state for the terminal panel: an instance per surface over one shared session cache. `kind` gates
 // restart and the background-process split: process sessions tab only as log views, agent/job only once revealed.
@@ -117,6 +121,11 @@ export interface TerminalTabs {
     readonly restart?: () => void;
 }
 
+// A split layout as stored: lists of session names, anything else in it dropped.
+const StoredGroupsSchema = z
+    .array(z.unknown())
+    .transform((groups) => groups.filter((group): group is string[] => Array.isArray(group) && group.every((name) => typeof name === `string`)));
+
 // One surface's tab state. `storageKey` namespaces the remembered active tab and grouping; `onEmpty` fires when the
 // last tab ends.
 export const createTerminalTabs = (source: TerminalTabsSource, storageKey: string, onEmpty: () => void): TerminalTabs => {
@@ -135,25 +144,13 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     // Session names whose hosts are currently in the container, the active group's members.
     let mountedNames: string[] = [];
 
-    const readGroups = (): string[][] => {
-        try {
-            const parsed: unknown = JSON.parse(window.localStorage.getItem(groupsKey()) ?? `[]`);
-            if (Array.isArray(parsed)) {
-                return parsed.filter((group): group is string[] => Array.isArray(group) && group.every((name) => typeof name === `string`));
-            }
-        } catch {
-            // Falls through to the empty return below.
-        }
-        return [];
-    };
+    // A group that is not a list of names is skipped; storage that is off or unreadable reads as no splits.
+    const readGroups = (): string[][] => storedJson(groupsKey(), StoredGroupsSchema) ?? [];
     // User's split layout per sandbox: which sessions sit together, kept even while a member is temporarily absent.
     const arrangement = ref<string[][]>(readGroups());
+    // Storage may be unavailable (private mode); the in-memory ref still holds.
     const persistGroups = (): void => {
-        try {
-            window.localStorage.setItem(groupsKey(), JSON.stringify(arrangement.value));
-        } catch {
-            // Storage may be unavailable (private mode); the in-memory ref still holds.
-        }
+        storeJson(groupsKey(), arrangement.value);
     };
 
     // Arrangement intersected with what's actually listed, so a pill never points at an unmountable session.
@@ -230,14 +227,14 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
             cell.dataset[`session`] = member;
             cell.addEventListener(`focusin`, () => {
                 activeName.value = member;
-                window.localStorage.setItem(activeKey(), member);
+                storeValue(activeKey(), member);
             });
             container.append(cell);
             mountTerminalSession(sessionOf(tab), cell, member === name);
         }
         mountedNames = group;
         activeName.value = name;
-        window.localStorage.setItem(activeKey(), name);
+        storeValue(activeKey(), name);
     };
 
     // Folds a landed list into the arrangement: dead names drop, empty groups collapse, new sessions get their own
@@ -297,7 +294,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         }
         if (activeName.value === undefined || !tabbed.has(activeName.value)) {
             // What to open onto: prefer a still-running remembered tab, else the first live one, else any tab.
-            const rememberedActive = window.localStorage.getItem(activeKey()) ?? undefined;
+            const rememberedActive = storedValue(activeKey());
             const live = tabs.find((tab) => tab.running);
             const restorable = tabs.find((tab) => tab.name === rememberedActive && tab.running);
             mount((restorable ?? live ?? tabs[0])?.name);
@@ -351,27 +348,27 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     };
 
     // Standing wait's own clock: while a name is awaited, relist every few seconds for a couple of minutes in case the
-    // daemon's push frame is missed, stopping once listed or torn down.
+    // daemon's push frame is missed, stopping once listed or torn down. Out of sight it waits, and the window coming
+    // back relists at once; the deadline runs either way.
     const PENDING_RELIST_MS = 5_000;
     const PENDING_RELIST_MAX_MS = 120_000;
-    let pendingRelist: ReturnType<typeof setInterval> | undefined;
-    const stopPendingRelist = (): void => {
-        clearInterval(pendingRelist);
-        pendingRelist = undefined;
-    };
-    watch(pending, (name) => {
-        stopPendingRelist();
-        if (name === undefined) {
-            return;
-        }
-        const since = Date.now();
-        pendingRelist = setInterval(() => {
-            if (container === undefined || Date.now() - since > PENDING_RELIST_MAX_MS) {
-                stopPendingRelist();
-                return;
+    const pendingRelist = usePoll({
+        everyMs: PENDING_RELIST_MS,
+        immediate: false,
+        visible: onScreen,
+        check: async () => {
+            if (container === undefined) {
+                return true;
             }
-            void refresh().catch(() => undefined);
-        }, PENDING_RELIST_MS);
+            await refresh().catch(() => undefined);
+            return false;
+        },
+    });
+    watch(pending, (name) => {
+        pendingRelist.stop();
+        if (name !== undefined) {
+            pendingRelist.start(PENDING_RELIST_MAX_MS);
+        }
     });
 
     // Sandbox switch while mounted: sessions are already disposed with the scope; drop stale tab state and relist anew.

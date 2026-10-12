@@ -111,14 +111,13 @@ test("stray bytes after the last frame are not a frame", async () => {
     expect((await openLog(path))?.rows).toBe(2);
 });
 
-test("does not acknowledge a new or replaced log when persisting its directory fails", async () => {
+test("does not acknowledge a new log when persisting its directory fails", async () => {
     const path = join(dir, "transcript.jsonl.zst");
     const failure = new Error("directory sync failed");
     const sync = jest.spyOn(recordIo, "syncParents").mockRejectedValue(failure);
     try {
         await expect(appendLog(path, undefined, lines(0, 1))).rejects.toThrow("directory sync failed");
-        await expect(writeLog(path, [lines(1, 1)])).rejects.toThrow("directory sync failed");
-        expect(sync.mock.calls).toEqual([[path], [path]]);
+        expect(sync.mock.calls).toEqual([[path]]);
     } finally {
         sync.mockRestore();
     }

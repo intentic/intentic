@@ -1,12 +1,14 @@
 import { sandboxRef } from "@intentic/extension-api";
 import { computed, watch, type Ref } from "vue";
+import { z } from "zod";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
+import { commitMessageKey, removeStoredValue, storedJson, storeJson } from "../../../../lib/browserStorage";
 
 // The commit box's draft: one value, empty until a From-chip click fills it as a subject line; typing is
 // always untouchable, a fill may only replace its own output. Lives as a per-sandbox, localStorage-backed
-// module singleton so it outlives the Changes panel being unmounted.
+// module singleton so it outlives the Changes panel being unmounted; the account's, so sign-out takes it.
 
-const storageKey = (sandboxId: string): string => `intentic.commitMessage.${sandboxId}`;
+const storageKey = commitMessageKey;
 
 // The box's text and, when it still matches what a From-chip fill wrote, that same text as the fill's claim.
 // Stored together in one record so they can't disagree across a reload.
@@ -15,18 +17,12 @@ interface StoredDraft {
     readonly filled?: string;
 }
 
-const read = (sandboxId: string | undefined): StoredDraft => {
-    if (sandboxId === undefined) {
-        return { message: `` };
-    }
-    try {
-        const held = localStorage.getItem(storageKey(sandboxId));
-        return held === null ? { message: `` } : (JSON.parse(held) as StoredDraft);
-    } catch {
-        // Storage unavailable or unreadable; degrade to an in-memory draft for this page's lifetime.
-        return { message: `` };
-    }
-};
+// A record of another shape (an older build's, a hand edit) is no draft, rather than a box holding `undefined`.
+const StoredDraftSchema: z.ZodType<StoredDraft> = z.object({ message: z.string(), filled: z.string().optional() });
+
+// Storage unavailable or unreadable; degrade to an in-memory draft for this page's lifetime.
+const read = (sandboxId: string | undefined): StoredDraft =>
+    (sandboxId === undefined ? undefined : storedJson(storageKey(sandboxId), StoredDraftSchema)) ?? { message: `` };
 
 const { activeSandboxId } = useSandbox();
 
@@ -97,15 +93,11 @@ watch([draft, filled], ([message, claim]) => {
     if (sandboxId === undefined) {
         return;
     }
-    try {
-        // A blank box persists as no record at all, so nothing carries across a reload.
-        if (isBlank(message)) {
-            localStorage.removeItem(storageKey(sandboxId));
-            return;
-        }
-        const record: StoredDraft = { message, ...(claim === undefined ? {} : { filled: claim }) };
-        localStorage.setItem(storageKey(sandboxId), JSON.stringify(record));
-    } catch {
-        // Storage unavailable (private mode); the in-memory draft still holds for this page.
+    // A blank box persists as no record at all, so nothing carries across a reload. Storage unavailable (private
+    // mode): the in-memory draft still holds for this page.
+    if (isBlank(message)) {
+        removeStoredValue(storageKey(sandboxId));
+        return;
     }
+    storeJson(storageKey(sandboxId), { message, ...(claim === undefined ? {} : { filled: claim }) } satisfies StoredDraft);
 });

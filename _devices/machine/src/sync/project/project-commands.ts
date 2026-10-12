@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { errorMessage } from "@intentic/base/errors";
 import { plural } from "@intentic/base/format";
 import { explain, type Item, type Ui } from "@intentic/local-agent";
+import type { DirectionResult } from "@intentic/sandbox-contract";
 import type { CommandContext } from "@stricli/core";
 import { answeringUi, buildCommand, markFailed } from "../../cli-ui.js";
 import { z } from "zod";
@@ -349,10 +350,6 @@ const restoreCommand = buildCommand<RestoreFlags>({
     },
 });
 
-interface DirectionResult {
-    readonly ok: true;
-    readonly direction: ProjectDirection;
-}
 
 const DIRECTIONS: readonly ProjectDirection[] = ["to-sandbox", "both"];
 

@@ -168,6 +168,26 @@ describe("whether a provider is connected", () => {
         expect(await openCodeCredentials(dir).stored("xai")).toEqual(legacy);
     });
 
+    // A database OpenCode holds locked past the read's wait says nothing about the sign-in: reading it as empty would
+    // report the account signed out, so the read fails instead and the health check answers "unknown".
+    test("a database still locked after the wait is an error, not a signed-out account", async () => {
+        const { dir } = await scratch();
+        const db = new DatabaseSync(join(dir, "opencode.db"));
+        databases.push(db);
+        db.exec(CREDENTIAL_TABLE);
+        db.prepare(
+            "INSERT INTO credential (id, integration_id, label, value, active, time_created, time_updated) VALUES ('cred', 'xai', 'OAuth', ?, 1, 1, 1)",
+        ).run(JSON.stringify(oauth("tok", Date.now() + HOUR)));
+        // A rollback-journal database under an exclusive transaction: no reader gets in until it ends.
+        db.exec("BEGIN EXCLUSIVE");
+        try {
+            await expect(openCodeCredentials(dir).connected("xai")).rejects.toMatchObject({ errcode: 5 });
+        } finally {
+            db.exec("ROLLBACK");
+        }
+        expect(await openCodeCredentials(dir).connected("xai")).toBe(true);
+    }, 20_000);
+
     // The first OpenCode 2 boot moves auth.json's entries into the table and leaves the file: a sign-out after that
     // empties the table, and the stale file must not sign the account back in.
     test("once the table exists, auth.json is ignored, even with the table empty", async () => {

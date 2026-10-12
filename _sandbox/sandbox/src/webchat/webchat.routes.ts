@@ -17,6 +17,7 @@ import { createSseStream } from "./sse-stream.js";
 import { publicConfig, usableAntiBot } from "./webchat-config.js";
 import { resolveVisitor, SignInRequired, type VisitorIdentity } from "./webchat-identity.js";
 import { webchatInstallsDocument } from "../store/installs.js";
+import { readBoundedJson } from "../http/bounded-body.js";
 
 // The Visitor chat's ingest: a public door (automations/public-door.ts) whose verb is `message`, where every arrival is
 // an agent turn. Somebody is waiting for an answer, so the reply streams back as SSE.
@@ -41,18 +42,16 @@ const enqueue = keyedLock<string>();
 // What a refused message answers with: one shape for every gate, so the handler has exactly one way to say no.
 type Refusal = { status: 400 | 401 | 403 | 404 | 409 | 413 | 429; error: string };
 
-// The body, or the refusal; size is checked before JSON parse, since reading an oversized body first is the DoS this
-// limit prevents.
+// The body, or the refusal; the size is capped while the body is read, since holding an oversized body whole is the
+// DoS this limit prevents.
 const parsed = async (c: Context<AppEnv, "/webchat/:id/message">): Promise<Refusal | { body: z.infer<typeof WebchatMessageSchema> }> => {
-    const declared = Number(c.req.header("content-length"));
-    if (Number.isFinite(declared) && declared > PAYLOAD_MAX) {
+    // Counted as it streams, not by the declared length alone: a chunked body declares none.
+    const read = await readBoundedJson(c.req.raw, PAYLOAD_MAX);
+    if (read.kind === "tooLarge") {
         return { status: 413, error: "payload too large" };
     }
-    try {
-        return { body: WebchatMessageSchema.parse(await c.req.json()) };
-    } catch {
-        return { status: 400, error: "invalid message body" };
-    }
+    const body = read.kind === "ok" ? WebchatMessageSchema.safeParse(read.value) : undefined;
+    return body?.success === true ? { body: body.data } : { status: 400, error: "invalid message body" };
 };
 
 interface Admitted {
@@ -221,7 +220,6 @@ export const createWebchatRoutes = (services: Services, installs?: InstallsStore
                         stream: stream.turn,
                         origin: { automationId: automation.id, provider: "webchat", channelId: body.conversationId, author: visitor.author },
                         title: `${visitor.author}: ${body.content}`.slice(0, TITLE_MAX),
-                        ...(automation.allowedTools !== undefined ? { allowedTools: automation.allowedTools } : {}),
                     });
                 }).catch((error: unknown) => services.logger.error({ err: error, automation: automation.id }, "web-chat wake failed"));
                 await stream.flushed();

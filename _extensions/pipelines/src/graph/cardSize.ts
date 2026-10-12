@@ -1,7 +1,7 @@
 import type { DagNode } from "@intentic/extension-ui";
 import type { PipelineJob } from "@intentic/sandbox-contract";
 import { jobName, type PipelineJobCluster, stageOfNode } from "./pipelineDag";
-import { formatDuration, STATUS_TONE } from "../statusVisual";
+import { runDuration, STATUS_TONE } from "../statusVisual";
 
 // A long run is width-bound and has height to spare, so a job row stacks what it says instead of lining it up:
 //   release              the calls it came through, small, when it is a called workflow's job
@@ -46,7 +46,7 @@ export interface JobStatusLine {
 
 export const jobStatusLine = (job: PipelineJob, recurring: ReadonlyMap<string, number>): JobStatusLine => ({
     streak: recurring.get(job.name) || undefined,
-    text: formatDuration(job.durationSeconds) ?? STATUS_TONE[job.status].label,
+    text: runDuration(job.durationSeconds) ?? STATUS_TONE[job.status].label,
 });
 
 const statusWidth = (line: JobStatusLine, measure: MeasureText): number =>

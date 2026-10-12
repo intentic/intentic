@@ -1,6 +1,7 @@
 import type { AgentEvent, DeviceFlowLine, DeviceSandboxFlow } from "@intentic/sandbox-contract";
 import { type CreateAsk, createSandboxThroughFleet, type FleetGateDeps, slugOf } from "./fleet-gate.js";
 import { parkedCards } from "../conversations/actor/parked-cards.js";
+import { createHeldCards } from "../guard/held-cards.js";
 import { memoryFleet } from "../testing.js";
 
 // Where a turn here parks its cards: one fleet's actors.
@@ -24,6 +25,8 @@ interface Fake {
     readonly frames: AgentEvent[];
     readonly provision: ReturnType<typeof jest.fn>;
     readonly flows: DeviceSandboxFlow[];
+    // Ends the turn the card went up in, which settles a card nobody answered.
+    readonly endTurn: () => void;
 }
 
 const fake = (
@@ -33,6 +36,8 @@ const fake = (
     const frames: AgentEvent[] = [];
     const flows: DeviceSandboxFlow[] = [];
     const provision = jest.fn(async () => ok(PROVISIONED));
+    const turn = Promise.withResolvers<void>();
+    const held = createHeldCards(async () => undefined);
     const deps: FleetGateDeps = {
         cards,
         token: async () => "itk_test",
@@ -47,10 +52,10 @@ const fake = (
         liveRun: (conversationId) => ({ conversationId: conversationId ?? "sole-conv", push: (event) => frames.push(event) }),
         observe: () => {},
         awaiting: () => {},
-        deadlineMs: 200,
+        hold: { held, finished: () => turn.promise },
         ...over,
     };
-    return { deps, frames, provision, flows };
+    return { deps, frames, provision, flows, endTurn: () => turn.resolve() };
 };
 
 const ask = (over: Partial<CreateAsk> = {}): CreateAsk => ({
@@ -167,9 +172,14 @@ it("a dismissed card is not a yes, and says so as its own refusal", async () => 
     expect(provision).not.toHaveBeenCalled();
 });
 
-it("an unanswered card expires without creating anything", async () => {
-    const { deps, provision } = fake({ deadlineMs: 20 });
-    const answer = await createSandboxThroughFleet(deps, ask());
+it("a card nobody answered before the turn ended creates nothing", async () => {
+    const { deps, provision, frames, endTurn } = fake();
+    const pending = createSandboxThroughFleet(deps, ask());
+    while (frames.length === 0) {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+    endTurn();
+    const answer = await pending;
     expect(answer.status).toBe(408);
     expect(JSON.parse(answer.body)).toMatchObject({ error: { type: "unanswered" } });
     expect(provision).not.toHaveBeenCalled();

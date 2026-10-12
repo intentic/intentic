@@ -4,6 +4,7 @@ import { readdir, readFile, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { cachedAsync } from "@intentic/base/held";
 import type { EnvironmentDrift, RuntimeInstall } from "@intentic/sandbox-contract";
 
 const execFileAsync = promisify(execFile);
@@ -138,27 +139,24 @@ const pathDrift = async (bornAtMs: number): Promise<string[]> => {
 
 // Cached briefly so the click-triggered refresh and the timed sweep don't repeat the same find walk.
 const CACHE_TTL_MS = 5 * 60_000;
-let cached: { drift: EnvironmentDrift; at: number } | undefined;
+const cached = cachedAsync<undefined, EnvironmentDrift>({ ttlMs: CACHE_TTL_MS });
 
 export const clearDriftCache = (): void => {
-    cached = undefined;
+    cached.clear();
 };
 
-export const computeDrift = async (): Promise<EnvironmentDrift> => {
-    if (cached !== undefined && Date.now() - cached.at < CACHE_TTL_MS) {
-        return cached.drift;
-    }
+const readDrift = async (): Promise<EnvironmentDrift> => {
     const bornAt = await containerBornAtMs();
     const log = await readFile("/var/log/dpkg.log", "utf8").catch(() => "");
-    const drift: EnvironmentDrift = {
+    return {
         bornAt,
         at: Date.now(),
         apt: dpkgInstallsSince(log, bornAt),
         paths: await pathDrift(bornAt),
     };
-    cached = { drift, at: Date.now() };
-    return drift;
 };
+
+export const computeDrift = async (): Promise<EnvironmentDrift> => cached.get(undefined, readDrift);
 
 // Whether a ledger entry is actually present in the container, the gate against a one-off experiment, a failed install,
 // or a stale line. Checked kind by kind: a targeted stat is cheaper and sharper than searching the collapsed display

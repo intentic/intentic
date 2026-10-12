@@ -3,6 +3,7 @@ import { chmod, mkdir, mkdtemp, readdir, rename, rm, writeFile } from "node:fs/p
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { SingleFlight } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import type { EngineId } from "@intentic/sandbox-contract";
 import { engineDescriptor, type EngineDescriptor } from "./engine-descriptors.js";
@@ -92,24 +93,21 @@ const findFile = async (dir: string, name: string): Promise<string | undefined> 
 };
 
 // One install per engine at a time; concurrent callers share the answer, and failures clear so Retry retries.
-const installing = new Map<EngineId, Promise<EngineInstallOutcome>>();
+const installing = new SingleFlight<EngineId, EngineInstallOutcome>();
 
-export const isEngineInstalling = (id: EngineId): boolean => installing.has(id);
+export const isEngineInstalling = (id: EngineId): boolean => installing.joined(id) !== undefined;
 
 // Puts a version on the volume and makes it the one turns use, or says why not. Order is download, verify, move the
 // pointer; every failure path leaves the previous version (usually the image's copy) serving turns.
 export const installEngine = (id: EngineId, version: string): Promise<EngineInstallOutcome> => {
-    const inFlight = installing.get(id);
+    const inFlight = installing.joined(id);
     if (inFlight !== undefined) {
         return inFlight;
     }
-    const run = installOnce(id, version).finally(() => {
-        installing.delete(id);
-        publishRuntimeChange("engines");
-    });
-    installing.set(id, run);
+    const run = installing.run(id, () => installOnce(id, version));
     publishRuntimeChange("engines");
-    return run;
+    // Published once the run has left `installing`, so a reader of the change sees the install over.
+    return run.finally(() => publishRuntimeChange("engines"));
 };
 
 const installOnce = async (id: EngineId, version: string): Promise<EngineInstallOutcome> => {

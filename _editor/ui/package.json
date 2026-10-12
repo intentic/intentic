@@ -50,6 +50,10 @@
             "types": "./src/lib/format.ts",
             "default": "./src/lib/format.ts"
         },
+        "./storage": {
+            "types": "./src/lib/browserStorage.ts",
+            "default": "./src/lib/browserStorage.ts"
+        },
         "./diff": {
             "types": "./src/lib/textDiff.ts",
             "default": "./src/lib/textDiff.ts"

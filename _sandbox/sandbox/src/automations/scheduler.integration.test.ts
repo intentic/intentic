@@ -6,13 +6,16 @@ import { WORKSPACE_ROOT_EXCLUDE_ENV } from "@intentic/sandbox-contract/chores";
 import { unstubbed } from "@intentic/testing";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import type { z } from "zod";
-import { sqliteTurnJournal } from "../agent/run/turn/turn-journal.js";
+import { type JournalEntry, sqliteTurnJournal } from "../agent/run/turn/turn-journal.js";
 import { conversationsDbPath, openConversationsDb } from "../store/conversations-db.js";
 import type { PersistedAgent } from "../conversations/registry/agents-store.js";
 import type { Services } from "../composition.js";
 import { automationConfig } from "../harness/route-stores.testing.js";
 import { outboxStreamFor } from "../webchat/webchat-outbox.js";
 import { fileHeldWakesStore } from "./held-wakes-store.js";
+import { resumeInterruptedFires } from "./fire-resume.js";
+import { restartResume } from "../agent/run/turn/restart-resume-policy.js";
+import { fileThreadSessionsStore } from "../sessions/thread-sessions.js";
 import { fileScheduleCoverageStore } from "./schedule-coverage.js";
 import { type AutomationRecord, fileAutomationsStore } from "./automations-store.js";
 import {
@@ -992,4 +995,73 @@ test("a held repair waits out lands rather than live turns, and a land stream ca
     expect(heldWakeQuiet("workspace", due + LAND_QUIET_CAP_MS, { ...busyFleet, lastLand: due + LAND_QUIET_CAP_MS - 1 })).toBe(true);
     expect(heldWakeQuiet("schedule", due, busyFleet)).toBe(false);
     expect(heldWakeQuiet("schedule", due, { ...busyFleet, liveTurns: 0 })).toBe(true);
+});
+
+// The automation as stored, failing the test outright when the upsert before it did not land.
+const saved = async (services: Services, id: string): Promise<AutomationRecord> => {
+    const record = await services.automations.get(id);
+    if (record === undefined) {
+        throw new Error(`${id} was not saved`);
+    }
+    return record;
+};
+
+// Schedules never carried the automation's allowlist; runFire now reads it off the record for every door.
+test("a schedule fire carries the automation's allowedTools into the turn, read off the record as it is now", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
+    await services.automations.upsert(automationConfig("narrowed", { allowedTools: ["Read"] }));
+    const turns: AgentTurn[] = [];
+    const scheduler = createAutomationsScheduler(drivenBy(services, fakeWake([], [{ kind: "done" }], turns)));
+    await scheduler.tick(pastDue());
+    await waitFor(() => expect(turns).toHaveLength(1), SETTLES);
+    expect(turns[0]?.allowedTools).toEqual(["Read"]);
+
+    // A record captured before the owner narrowed it further still fires on the narrower list.
+    const stale = await saved(services, "narrowed");
+    await services.automations.upsert(automationConfig("narrowed", { allowedTools: ["Grep"] }));
+    await fireAutomation(drivenBy(services, fakeWake([], [{ kind: "done" }], turns)), stale);
+    expect(turns[1]?.allowedTools).toEqual(["Grep"]);
+});
+
+// A restart's re-fire used to come back without the sender's lane, thread and session: a stranger a sender rule put on
+// a narrow persona came back wearing the automation's own, on a conversation its thread no longer knew.
+test("a journalled fire keeps its lane, thread and session, and the re-fire restores them and settles the thread", async () => {
+    const root = mkdtempSync(join(tmpdir(), "sched-"));
+    const services = fakeServices(root, { autoResumeOnRestart: true });
+    const threads = fileThreadSessionsStore(join(root, "thread-sessions.json"), () => false);
+    const withThreads: Services = { ...services, threadSessions: threads, logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {}, info: () => {} }) };
+    await services.automations.upsert(automationConfig("front-door", { trigger: { kind: "event" } }));
+    const record = await saved(services, "front-door");
+    const thread = "discord:front-door:c1:guest";
+    // Opened as a listener opens it, so the thread exists for the fire to settle.
+    await threads.open(thread, () => "a-front-door-1", 60_000, Date.now());
+    let entry: JournalEntry | undefined;
+    const dies: TurnStarter["stream"] = async function* () {
+        entry = (await services.turnJournal.list())[0];
+        yield { kind: "done" };
+    };
+    await fireAutomation(drivenBy(withThreads, dies), record, {
+        payload: "hi",
+        conversationId: "a-front-door-1",
+        sessionId: "sess-1",
+        thread,
+        lane: { actsAs: "guest", requireApproval: false },
+    });
+    expect(entry).toMatchObject({ lane: { actsAs: "guest", requireApproval: false }, thread, sessionId: "sess-1" });
+
+    // The daemon died mid-fire: the row is back in the journal as the dead process left it.
+    if (entry?.kind !== "automation") {
+        throw new Error("the fire journalled nothing");
+    }
+    await services.turnJournal.recordFire(entry);
+    const turns: AgentTurn[] = [];
+    const resumedWake: TurnStarter["stream"] = async function* (input) {
+        turns.push(input);
+        yield { kind: "session", sessionId: "sess-2" };
+        yield { kind: "done" };
+    };
+    await resumeInterruptedFires(drivenBy(withThreads, resumedWake), Date.now(), restartResume({ ownerAsked: false, storm: false, autoResumeOnRestart: true }));
+    await waitFor(() => expect(turns).toHaveLength(1), SETTLES);
+    expect(turns[0]).toMatchObject({ conversationId: "a-front-door-1", sessionId: "sess-1", actsAs: "guest" });
+    await waitFor(async () => expect((await threads.get(thread, 60_000, Date.now()))?.sessionId).toBe("sess-2"), SETTLES);
 });

@@ -115,6 +115,7 @@
             "inHistory": "Dans l'historique {count}",
             "markReviewed": "Marquer relu",
             "markReviewed2": "Marquer {label} comme relu",
+            "markGroupReviewed": "Marquer tout le groupe comme relu",
             "nextFile": "Fichier suivant",
             "notLanded": "non intégré",
             "notLanded2": "Non intégrés {count}",

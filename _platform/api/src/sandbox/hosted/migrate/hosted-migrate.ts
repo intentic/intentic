@@ -1,4 +1,4 @@
-import { sleep as pause } from "@intentic/base/async";
+import { pollFor, sleep as pause } from "@intentic/base/async";
 import { type HostedShape, type HostedTierId, hostedShapeLine, hostedTier } from "@intentic/constants";
 import type { HostedMigration, PrismaClient } from "@intentic/prisma";
 import type { Logger } from "pino";
@@ -155,39 +155,48 @@ const provisionArgsOf = async (config: Config, machine: MigratableMachine, tier:
 /** How a wait passes the time; the suites hand in one that does not, so a poll loop cannot outlive a test. */
 export type Sleep = (ms: number) => Promise<void>;
 
+// How many looks a wait of `deadlineMs` gets: one now and one after each poll, so the waits add up to the deadline and
+// the last look lands on it. A count rather than the clock, so a stubbed sleep cannot spin forever.
+const looksWithin = (deadlineMs: number, pollMs: number): number => Math.ceil(deadlineMs / pollMs) + 1;
+
 /* ASKS FOR THE PRE-FLIGHT SNAPSHOT, after any snapshot of this disk Fly is still taking: Fly takes one at a time and
  * refuses the next until it finishes (fly.ts isFlySnapshotPending), whether it is the daily one, an operator's, or the
  * one an earlier run asked for before it failed. Waiting and then taking a new one, rather than adopting that one,
  * keeps the snapshot what this run says it is: the disk as it was when the run began. Bounded like the waits below. */
 const takeSnapshot = async (config: Config, appName: string, volumeId: string, sleep: Sleep): Promise<string> => {
-    for (let attempt = 0; attempt < Math.ceil(SNAPSHOT_DEADLINE_MS / SNAPSHOT_POLL_MS); attempt += 1) {
-        try {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- a retry loop is the shape of this wait
-            return (await createVolumeSnapshot(config.hosted.flyApiToken, appName, volumeId)).id;
-        } catch (error) {
-            if (!(error instanceof FlyError && isFlySnapshotPending(error))) {
+    const taken = await pollFor(
+        async () => {
+            try {
+                return (await createVolumeSnapshot(config.hosted.flyApiToken, appName, volumeId)).id;
+            } catch (error) {
+                // Only Fly's "one at a time" is waited out; any other refusal is the run's failure.
+                if (error instanceof FlyError && isFlySnapshotPending(error)) {
+                    return undefined;
+                }
                 throw error;
             }
-        }
-        // oxlint-disable-next-line eslint/no-await-in-loop
-        await sleep(SNAPSHOT_POLL_MS);
+        },
+        { intervalMs: SNAPSHOT_POLL_MS, until: Infinity, maxProbes: looksWithin(SNAPSHOT_DEADLINE_MS, SNAPSHOT_POLL_MS), wait: sleep },
+    );
+    if (taken.kind === `found`) {
+        return taken.value;
     }
     throw new Error(`Fly was still taking an earlier snapshot of this disk after ${SNAPSHOT_DEADLINE_MS / MINUTE_MS} minutes, and takes one at a time`);
 };
 
 /* WAITS FOR THE SNAPSHOT TO EXIST, not merely to be scheduled: a restore from one still running restores nothing.
- * Bounded by a count of attempts rather than the clock, so a stubbed sleep cannot spin forever. */
+ * Bounded by a count of looks rather than the clock, so a stubbed sleep cannot spin forever. */
 const awaitSnapshot = async (config: Config, appName: string, volumeId: string, snapshotId: string, sleep: Sleep): Promise<void> => {
-    for (let attempt = 0; attempt < Math.ceil(SNAPSHOT_DEADLINE_MS / SNAPSHOT_POLL_MS); attempt += 1) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- a poll loop is the shape of this wait
-        const snapshots = await listVolumeSnapshots(config.hosted.flyApiToken, appName, volumeId);
-        if (snapshots.find((snapshot) => snapshot.id === snapshotId)?.status === `created`) {
-            return;
-        }
-        // oxlint-disable-next-line eslint/no-await-in-loop
-        await sleep(SNAPSHOT_POLL_MS);
+    const finished = await pollFor(
+        async () => {
+            const snapshots = await listVolumeSnapshots(config.hosted.flyApiToken, appName, volumeId);
+            return snapshots.find((snapshot) => snapshot.id === snapshotId)?.status === `created` ? true : undefined;
+        },
+        { intervalMs: SNAPSHOT_POLL_MS, until: Infinity, maxProbes: looksWithin(SNAPSHOT_DEADLINE_MS, SNAPSHOT_POLL_MS), wait: sleep },
+    );
+    if (finished.kind !== `found`) {
+        throw new Error(`the pre-flight snapshot ${snapshotId} was still not finished after ${SNAPSHOT_DEADLINE_MS / MINUTE_MS} minutes`);
     }
-    throw new Error(`the pre-flight snapshot ${snapshotId} was still not finished after ${SNAPSHOT_DEADLINE_MS / MINUTE_MS} minutes`);
 };
 
 /**
@@ -196,17 +205,17 @@ const awaitSnapshot = async (config: Config, appName: string, volumeId: string, 
  * stale announce from before cannot be mistaken for this one.
  */
 const awaitAnnounce = async (prisma: PrismaClient, sandboxId: string, mark: Date | null, sleep: Sleep): Promise<void> => {
-    for (let attempt = 0; attempt < Math.ceil(ANNOUNCE_DEADLINE_MS / ANNOUNCE_POLL_MS); attempt += 1) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- a poll loop is the shape of this wait
-        const row = await prisma.sandbox.findUnique({ where: { id: sandboxId }, select: { lastSeenAt: true } });
-        const seen = row?.lastSeenAt ?? null;
-        if (seen !== null && seen.getTime() !== (mark?.getTime() ?? 0)) {
-            return;
-        }
-        // oxlint-disable-next-line eslint/no-await-in-loop
-        await sleep(ANNOUNCE_POLL_MS);
+    const announced = await pollFor(
+        async () => {
+            const row = await prisma.sandbox.findUnique({ where: { id: sandboxId }, select: { lastSeenAt: true } });
+            const seen = row?.lastSeenAt ?? null;
+            return seen !== null && seen.getTime() !== (mark?.getTime() ?? 0) ? true : undefined;
+        },
+        { intervalMs: ANNOUNCE_POLL_MS, until: Infinity, maxProbes: looksWithin(ANNOUNCE_DEADLINE_MS, ANNOUNCE_POLL_MS), wait: sleep },
+    );
+    if (announced.kind !== `found`) {
+        throw new Error(`the sandbox did not announce itself within ${ANNOUNCE_DEADLINE_MS / MINUTE_MS} minutes of the machine being changed`);
     }
-    throw new Error(`the sandbox did not announce itself within ${ANNOUNCE_DEADLINE_MS / MINUTE_MS} minutes of the machine being changed`);
 };
 
 const setState = async (prisma: PrismaClient, id: string, state: MigrationState, data: Record<string, unknown> = {}): Promise<void> => {

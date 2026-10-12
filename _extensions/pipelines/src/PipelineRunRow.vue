@@ -34,7 +34,7 @@ import { host } from "./host";
 import PipelineDagGraph from "./graph/PipelineDagGraph.vue";
 import PipelineGraph from "./graph/PipelineGraph.vue";
 import { pipelineStages } from "./graph/pipelineDag";
-import { formatDuration, STATUS_TONE, triggerLabel } from "./statusVisual";
+import { runDuration, STATUS_TONE, triggerLabel } from "./statusVisual";
 import { useRunJobs } from "./useRunJobs";
 import { t } from "./i18n.js";
 
@@ -91,7 +91,7 @@ const actionKey = `${props.run.host}:${props.run.project}:${props.run.runId}`;
 const tone = computed(() => STATUS_TONE[props.run.status]);
 // Queued or going: the two states with something left to stop, so Cancel shows instead of Re-run.
 const inFlight = computed(() => isPipelineInFlight(props.run.status));
-const duration = computed(() => formatDuration(props.run.durationSeconds));
+const duration = computed(() => runDuration(props.run.durationSeconds));
 // Commit subject, or else the run's own id: repeating the branch/sha below would be redundant.
 const headline = computed(() => props.run.title ?? `#${props.run.runId}`);
 const trigger = computed(() => triggerLabel(props.run.trigger));

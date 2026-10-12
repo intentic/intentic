@@ -1,3 +1,4 @@
+import { escapeHtml } from "@intentic/base/escape";
 import type { DocumentType } from "../formats.js";
 import { signJwt } from "./jwt.js";
 import type { Session } from "./sessions.js";
@@ -52,9 +53,6 @@ export const editorConfig = (input: EditorConfigInput): Record<string, unknown> 
     };
     return { ...config, token: signJwt(config, input.secret) };
 };
-
-export const escapeHtml = (text: string): string =>
-    text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 
 // JSON inside a <script>: `<` escaped so no document title can close the tag.
 export const scriptJson = (value: unknown): string => JSON.stringify(value).replaceAll("<", "\\u003c");

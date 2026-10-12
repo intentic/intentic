@@ -8,7 +8,9 @@
         "e2e:onboarding": "INTENTIC_E2E_ONBOARDING=1 playwright test"
     },
     "dependencies": {
-        "@intentic/base": "workspace:*"
+        "@intentic/base": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*",
+        "@intentic/sandbox-run": "workspace:*"
     },
     "devDependencies": {
         "@intentic/prisma": "workspace:*",

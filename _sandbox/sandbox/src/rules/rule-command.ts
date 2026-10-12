@@ -1,8 +1,8 @@
-import { isAbsolute, relative, sep } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import type { Services } from "../composition.js";
 import { plainText } from "@intentic/base/plain-text";
 import { markCheckRunning } from "../workspace/deps/checks-in-flight.js";
+import { insideRel } from "@intentic/base/contained";
 
 // Engine under the push run (git/ops/push-run.ts), the one command the daemon runs in a watched terminal: an edit check
 // (file-edited.ts) and a turn check (agent/run/turn-checks.ts) run as plain children, and nothing runs after work lands.
@@ -25,8 +25,8 @@ export type RuleCommandDeps = Pick<Services, "logger" | "terminalRun" | "workspa
 // isolated turn's own worktree lies outside the workspace and is reviewed against its branch rather than scanned, so
 // it opens no window and closes nothing.
 const openCheckWindow = (root: string, cwd: string): (() => void) => {
-    const project = relative(root, cwd);
-    return project.startsWith("..") || isAbsolute(project) ? () => undefined : markCheckRunning(project.split(sep).join("/"));
+    const project = insideRel(root, cwd);
+    return project === undefined ? () => undefined : markCheckRunning(project);
 };
 
 export interface RuleCommandRequest {

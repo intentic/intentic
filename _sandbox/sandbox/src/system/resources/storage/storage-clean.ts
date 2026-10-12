@@ -1,5 +1,6 @@
 import { lstat, readdir, realpath, rm, rmdir } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import { errnoCode } from "@intentic/base/errors";
 import type { StorageCategoryId, StorageCleanResult } from "@intentic/sandbox-contract";
 import { BROWSER_LOCK, type CleanCandidate, inFlight, planClean } from "./clean-plan.js";
 import { namedByProgram, pnpmRunning, type RunningProgram } from "./running-programs.js";
@@ -19,9 +20,6 @@ export interface CleanDeps {
 }
 
 type Measured = Omit<CleanCandidate, "path">;
-
-const codeOf = (error: unknown): string | undefined =>
-    typeof error === "object" && error !== null && "code" in error && typeof error.code === "string" ? error.code : undefined;
 
 // A category folder's absolute path, without the trailing slash its rule keeps.
 const folderPath = (roots: StorageRoots, root: keyof StorageRoots, prefix: string): string | undefined => {
@@ -182,7 +180,7 @@ const removeTargets = async (
         }
         const outcome = await rm(target.path, { recursive: target.folder, force: false }).then(
             () => "removed" as const,
-            (error: unknown) => (codeOf(error) === "ENOENT" ? ("vanished" as const) : ("failed" as const)),
+            (error: unknown) => (errnoCode(error) === "ENOENT" ? ("vanished" as const) : ("failed" as const)),
         );
         freedBytes += outcome === "removed" ? target.freeable : 0;
         removed += outcome === "removed" ? 1 : 0;

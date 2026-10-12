@@ -51,11 +51,13 @@ export const gitClone = async (
     );
 };
 
+// Each line kept whole: its first column is the index's state, so a leading space (" M", modified only in the work
+// tree) is meaning, not padding. Only a CR a Windows git may add is dropped.
 const porcelainFiles = (stdout: string): string[] =>
     stdout
         .split("\n")
-        .map((line) => line.trim())
-        .filter((line) => line !== "");
+        .map((line) => line.replace(/\r$/, ""))
+        .filter((line) => line.trim() !== "");
 
 export interface GitStatus {
     readonly branch: string;

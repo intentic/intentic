@@ -1,3 +1,4 @@
+import { type Periodic, startPeriodic } from "@intentic/base/async";
 import type { EnvironmentDrift } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../workspace/files/workspace-files.js";
@@ -68,29 +69,21 @@ export const createDriftSweep = (deps: DriftSweepDeps): DriftSweep => {
         return running;
     };
 
-    const tick = (): void => {
+    const tick = async (): Promise<void> => {
         if (deps.conversations.liveSessionIds().length > 0) {
             return;
         }
-        void run();
+        await run();
     };
 
-    let timer: NodeJS.Timeout | undefined;
+    let loop: Periodic | undefined;
     return {
         start: () => {
-            timer ??= setTimeout(() => {
-                tick();
-                timer = setInterval(tick, TICK_MS);
-                timer.unref();
-            }, WARMUP_MS);
-            timer.unref();
+            loop ??= startPeriodic({ warmupMs: WARMUP_MS, everyMs: TICK_MS, run: tick });
         },
         stop: () => {
-            if (timer !== undefined) {
-                clearTimeout(timer);
-                clearInterval(timer);
-                timer = undefined;
-            }
+            loop?.dispose();
+            loop = undefined;
         },
         refresh: () => {
             clearDriftCache();

@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { escapeRegExp } from "@intentic/base/escape";
 import type { FileEntry } from "../types.js";
 
 // Translation catalogs: the JSON files a UI's text actually lives in. A screenshot shows that text, so an agent searches
@@ -238,8 +239,6 @@ const wordCount = (text: string): number => (text === "" ? 0 : text.split(" ").l
 // Interpolation slots across the common syntaxes: `{name}` (vue-i18n, ICU's simple form), `{{name}}` (i18next),
 // `%{name}` (Rails), `%s`/`%d` (printf). A slot matches whatever the screenshot filled it with.
 const PLACEHOLDER = /\{\{[^{}]*\}\}|%\{[^{}]*\}|\{[^{}]*\}|%[sd]/g;
-
-const escapeRegExp = (text: string): string => text.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 interface Template {
     // The whole value with every slot as a wildcard, anchored: a filled-in copy matches it.

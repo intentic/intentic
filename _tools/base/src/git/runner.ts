@@ -3,10 +3,12 @@ import { type ChildProcess, execFile, fork } from "node:child_process";
 import { existsSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { promisify } from "node:util";
+import { sleep } from "../async.js";
 import type { ForkRequest, ForkResponse } from "./forker.js";
 import { clearStaleLock } from "./locks.js";
 
 // Import this rather than re-wrapping execFile elsewhere.
+// allow(primitive-tiers): this is the git door itself, the one promisified execFile every short git call goes through.
 export const exec = promisify(execFile);
 
 // core.fileMode=false ignores upload-flattened permissions.
@@ -420,7 +422,7 @@ const runGit = async (
                 throw error;
             }
             // Outside the bulk slot (already released); a caller backing off index.lock isn't using the machine.
-            await new Promise((resolve) => setTimeout(resolve, attempt * attempt * 50));
+            await sleep(attempt * attempt * 50);
         }
     }
 };
@@ -449,7 +451,7 @@ const SETTLE_MARGIN_MS = 50;
  * answers false, running nothing, when the daemon's own git is busy in that checkout.
  */
 export const settleIndex = async (dir: string): Promise<boolean> => {
-    await new Promise((resolve) => setTimeout(resolve, 1000 - (Date.now() % 1000) + SETTLE_MARGIN_MS));
+    await sleep(1000 - (Date.now() % 1000) + SETTLE_MARGIN_MS);
     if (runningIn.has(dir) || settling.has(dir)) {
         return false;
     }

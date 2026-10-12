@@ -2,6 +2,7 @@ import { type AgentEvent, DEFAULT_SAFETY_POLICY, type SecretHostGuard } from "@i
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { consultWith, createCommandGuard, vendorSubject } from "../../guard/command-guard.js";
 import { NO_TAINT } from "../../guard/turn-taint.js";
+import { createHeldCards } from "../../guard/held-cards.js";
 import { opt } from "../../opt.js";
 import { memoryFleet } from "../../testing.js";
 import { createHostGuardGate, type HostGuardCheck, type HostGuardGateDeps, type WidenRequest } from "./host-guard-gate.js";
@@ -22,12 +23,21 @@ const GITHUB: SecretHostGuard = { subject: "GITHUB_TOKEN", kind: "secret", guard
 interface Fake {
     readonly deps: HostGuardGateDeps;
     readonly frames: AgentEvent[];
+    // Ends the turn the cards went up in, which settles a card nobody answered.
+    readonly endTurn: () => void;
+    readonly held: ReturnType<typeof createHeldCards>;
+    // What the conversation was woken with by a turn's close that held for a card.
+    readonly woken: string[];
 }
 
 const fake = (guards: readonly SecretHostGuard[], over: Partial<HostGuardGateDeps> = {}): Fake => {
     const frames: AgentEvent[] = [];
+    const turn = Promise.withResolvers<void>();
+    const woken: string[] = [];
+    const held = createHeldCards(async (_conversationId, prompt) => void woken.push(prompt));
     const deps: HostGuardGateDeps = {
         cards,
+        hold: { held, finished: () => turn.promise },
         guards: async () => guards,
         ownerEmail: async () => OWNER.email,
         liveRun: (conversationId) => ({ conversationId: conversationId ?? "sole-conv", push: (event) => frames.push(event) }),
@@ -35,7 +45,7 @@ const fake = (guards: readonly SecretHostGuard[], over: Partial<HostGuardGateDep
         awaiting: () => {},
         ...over,
     };
-    return { deps, frames };
+    return { deps, frames, endTurn: () => turn.resolve(), held, woken };
 };
 
 const command = (text: string): SecretTarget => ({ kind: "program", text, language: "bash", tool: "Bash" });
@@ -265,10 +275,37 @@ describe("nobody to ask", () => {
         expect(frames).toEqual([]);
     });
 
-    it("refuses a card nobody answers before its deadline", async () => {
-        const { deps } = fake([GITHUB], { deadlineMs: 1 });
-        const verdict = await createHostGuardGate(deps).check(asked(command(OFF_LIST)));
-        expect(verdict).toEqual({ allow: false, reason: expect.stringContaining("Nobody answered, so it was not used.") });
+    it("refuses a card nobody answered when its turn ended, and never because time passed", async () => {
+        const { deps, frames, endTurn } = fake([GITHUB]);
+        const pending = createHostGuardGate(deps).check(asked(command(OFF_LIST)));
+        while (frames.length === 0) {
+            await new Promise((resolve) => setTimeout(resolve, 1));
+        }
+        endTurn();
+        expect(await pending).toEqual({ allow: false, reason: expect.stringContaining("The turn ended before anyone answered, so it was not used.") });
+    });
+
+    it("keeps the card up when its caller stops waiting; a yes given after the turn ended wakes the conversation, and the same use goes once", async () => {
+        const { deps, frames, held, woken } = fake([GITHUB]);
+        const gate = createHostGuardGate(deps);
+        const gone = new AbortController();
+        const first = gate.check(asked(command(OFF_LIST), { signal: gone.signal }));
+        while (frames.length === 0) {
+            await new Promise((resolve) => setTimeout(resolve, 1));
+        }
+        gone.abort();
+        expect(await first).toEqual({ allow: false, reason: expect.stringContaining("Still waiting for a person to answer the card") });
+
+        const closing = held.hold("conv-1", undefined);
+        await answer(frames, "once", OWNER);
+        await closing;
+        expect(woken).toHaveLength(1);
+        expect(woken[0]).toContain("A person allowed sending GITHUB_TOKEN past its host guard after your turn ended.");
+        expect(woken[0]).toContain(OFF_LIST);
+
+        const raisedBefore = frames.filter((frame) => frame.kind === "permission").length;
+        expect(await gate.check(asked(command(OFF_LIST)))).toEqual({ allow: true, approvedBy: OWNER.email });
+        expect(frames.filter((frame) => frame.kind === "permission")).toHaveLength(raisedBefore);
     });
 });
 

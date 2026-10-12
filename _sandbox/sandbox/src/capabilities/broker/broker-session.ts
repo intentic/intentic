@@ -1,8 +1,7 @@
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
-import { undefinedIfMissing } from "@intentic/base/errors";
+import { createHmac } from "node:crypto";
 import { z } from "zod";
+import { signedPayloads } from "../../auth/signed-payload.js";
+import { loadOrMintKey } from "../../store/plain-files/minted-key.js";
 
 // What a gateway address carries: which card's credential, which of its upstreams, and whose conversation. Signed rather
 // than looked up, so a pane or background job started before a daemon restart keeps working after it, and so nobody
@@ -24,9 +23,6 @@ export interface BrokerSession {
 
 const PayloadSchema = z.object({ i: z.string().min(1), r: z.number().int().nonnegative(), u: z.string().url(), c: z.string().min(1).optional() });
 
-const SIGNATURE_CHARS = 32;
-const KEY_BYTES = 32;
-
 export interface BrokerSessions {
     readonly sign: (session: BrokerSession) => Promise<string>;
     readonly verify: (token: string) => Promise<BrokerSession | undefined>;
@@ -39,65 +35,23 @@ const TAG_CHARS = 12;
 
 // Created once and kept beside the vault, root-only: a key that changed on every boot would strand every process still
 // holding an address, and one an agent could read would let it mint addresses for conversations not its own.
-const keyAt = async (path: string): Promise<Buffer> => {
-    const existing = await readFile(path).catch(undefinedIfMissing);
-    if (existing !== undefined && existing.length >= KEY_BYTES) {
-        return existing;
-    }
-    const key = randomBytes(KEY_BYTES);
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, key, { mode: 0o600 });
-    return key;
-};
+export const brokerSessions = (keyPath: string): BrokerSessions => brokerSessionsFrom(() => loadOrMintKey(keyPath));
 
-export const brokerSessions = (keyPath: string): BrokerSessions => brokerSessionsFrom(() => keyAt(keyPath));
-
-// Over any source of the key, read once and kept; a source that fails is asked again next time.
+// Over any source of the key, read once and kept; a source that fails is asked again next time. Signed as `broker:`, so
+// no other token under the same key passes as an address, and a tag (`tag:`) is never a signature.
 export const brokerSessionsFrom = (readKey: () => Promise<Buffer>): BrokerSessions => {
-    let key: Promise<Buffer> | undefined;
-    const keyOnce = (): Promise<Buffer> => {
-        key ??= readKey().catch((error: unknown) => {
-            key = undefined;
-            throw error;
-        });
-        return key;
-    };
-    const signatureOf = async (payload: string): Promise<string> =>
-        createHmac("sha256", await keyOnce())
-            .update(`broker:${payload}`)
-            .digest("base64url")
-            .slice(0, SIGNATURE_CHARS);
+    const payloads = signedPayloads(readKey, PayloadSchema, { domain: "broker:" });
     return {
         tag: async (purpose) =>
-            createHmac("sha256", await keyOnce())
+            createHmac("sha256", await payloads.key())
                 .update(`tag:${purpose}`)
                 .digest("base64url")
                 .slice(0, TAG_CHARS),
-        sign: async ({ capability, route, upstream, conversationId }) => {
-            const payload = Buffer.from(
-                JSON.stringify({ i: capability, r: route, u: upstream, ...(conversationId !== undefined ? { c: conversationId } : {}) }),
-            ).toString("base64url");
-            return `${payload}.${await signatureOf(payload)}`;
-        },
+        sign: ({ capability, route, upstream, conversationId }) =>
+            payloads.sign({ i: capability, r: route, u: upstream, ...(conversationId !== undefined ? { c: conversationId } : {}) }),
         verify: async (token) => {
-            const [payload, signature, ...rest] = token.split(".");
-            if (payload === undefined || signature === undefined || rest.length > 0 || payload === "") {
-                return undefined;
-            }
-            const expected = Buffer.from(await signatureOf(payload));
-            const given = Buffer.from(signature);
-            if (expected.length !== given.length || !timingSafeEqual(expected, given)) {
-                return undefined;
-            }
-            try {
-                const parsed = PayloadSchema.safeParse(JSON.parse(Buffer.from(payload, "base64url").toString("utf8")));
-                return parsed.success
-                    ? { capability: parsed.data.i, route: parsed.data.r, upstream: parsed.data.u, conversationId: parsed.data.c }
-                    : undefined;
-            } catch {
-                // allow(silent-catch): signed by this key yet unreadable can only be a payload a different build spelled differently.
-                return undefined;
-            }
+            const wire = await payloads.verify(token);
+            return wire === undefined ? undefined : { capability: wire.i, route: wire.r, upstream: wire.u, conversationId: wire.c };
         },
     };
 };

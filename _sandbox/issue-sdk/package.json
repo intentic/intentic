@@ -28,6 +28,7 @@
         "test:watch": "suites --watch"
     },
     "devDependencies": {
+        "@intentic/base": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
         "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",

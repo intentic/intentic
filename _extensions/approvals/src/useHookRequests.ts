@@ -5,11 +5,12 @@ import { computed } from "vue";
 import { host } from "./host";
 
 // Hook sets a turn found in Claude Code's settings files that nobody approved. The daemon keeps them outside the
-// workspace, so no file write announces one: filed under `approvals` so the daemon's own push for that key refreshes it.
+// workspace, so no file write announces one: the daemon's `approvals` push names this read too, in the host's table of
+// pushed reads, so it refreshes with the queue.
 export const hookRequestsQuery = (): HostQuery<HookRequests> => {
     const api = host();
     return {
-        queryKey: api.sandbox.key(`approvals`, `hooks`),
+        queryKey: api.sandbox.readKey(`approvals.hookRequests`),
         queryFn: (): Promise<HookRequests> => api.sandbox.rpc.approvals.hookRequests(),
     };
 };

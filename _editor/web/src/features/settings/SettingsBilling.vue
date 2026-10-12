@@ -16,6 +16,7 @@ import { HOSTED_PLAN } from "../../lib/queryKeys";
 import { apiClient } from "../../lib/useApi";
 import { desktopVersion } from "../../app/environments/desktop";
 import { dismissOperation, useOperation, useOperations } from "../../workbench/operations/operations";
+import { onScreen } from "../../workbench/window/onScreen";
 import type { HostedMigration, HostedPlanState } from "@intentic/api-contract";
 import { useT } from "@intentic/ui/i18n";
 
@@ -45,6 +46,7 @@ const route = useRoute();
 const justJoined = computed(() => route.query[`plan`] === `welcome`);
 const { polling: waiting, start: waitForPlan } = usePoll({
     everyMs: POLL_EVERY_MS,
+    visible: onScreen,
     check: async () => {
         await refetch();
         return plan.value?.onPlan === true;

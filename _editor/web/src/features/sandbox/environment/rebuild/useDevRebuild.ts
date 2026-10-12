@@ -1,5 +1,5 @@
 import { type DeviceCommandResult, readDevRebuildLog } from "@intentic/sandbox-contract";
-import { computed, type ComputedRef, onScopeDispose, reactive, ref } from "vue";
+import { computed, type ComputedRef, reactive } from "vue";
 import { z } from "zod";
 import { type DevRebuildLayers, type DevRebuildStage, rebuildFraction, readRebuildProgress, stageStart } from "./devRebuildStages";
 import { runDeviceCommand } from "../../devices/useDevices";
@@ -9,6 +9,7 @@ import { expectRestart, RESTART_PATIENCE_MS, type RestartQuiet } from "../../liv
 import { removeStoredValue, storedValue, storeValue } from "../../../../lib/browserStorage";
 import { beginHubWork, hubWorkKey } from "../../../../workbench/hub/hubWork";
 import { t } from "@intentic/ui/i18n";
+import { useNow } from "@intentic/ui/async";
 
 // FOLLOWING A REBUILD THAT NOTHING ON THIS PAGE OWNS. `dev-rebuild` starts a detached build on the machine holding the
 // checkout and returns at once; the build then outlives the button, the card, the daemon and the container, because the
@@ -421,13 +422,7 @@ export function useDevRebuild(slug: string): DevRebuildFollower {
 
     // The RUN is module state because the build outlives this component; the CLOCK that draws it is not, because a
     // second only needs counting while somebody is reading it. Idle cards write nothing and re-render nothing.
-    const now = ref(Date.now());
-    const ticking = setInterval(() => {
-        if (rebuildRunning(run.phase)) {
-            now.value = Date.now();
-        }
-    }, TICK_MS);
-    onScopeDispose(() => clearInterval(ticking), true);
+    const now = useNow(() => rebuildRunning(run.phase), TICK_MS);
 
     const start = async (hostId: string): Promise<void> => {
         stop(slug);
@@ -436,7 +431,6 @@ export function useDevRebuild(slug: string): DevRebuildFollower {
         mark(slug);
         storeValue(markerKey(slug), String(run.startedAt));
         removeStoredValue(restartKey(slug));
-        now.value = Date.now();
         try {
             const result = await runDeviceCommand(hostId, `dev-rebuild`);
             if (!result.ok) {

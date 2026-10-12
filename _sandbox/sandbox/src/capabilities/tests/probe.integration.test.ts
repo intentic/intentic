@@ -136,3 +136,25 @@ test(`checks an MCP server by the handshake, and names the server that answered`
     expect(seen[0]?.method).toBe(`POST`);
     expect(seen[0]?.auth).toBe(`Bearer mcp_tok`);
 });
+
+// Streamable HTTP lets a server answer any POST as an event stream, and the probe's accept header says it may.
+test(`names an MCP server that answers the handshake as an event stream, a notification ahead of the reply`, async () => {
+    const started = createServer((_request, response) => {
+        response.writeHead(200, { "content-type": "text/event-stream" });
+        response.end(
+            [
+                `: ok\n\n`,
+                `event: message\ndata: {"jsonrpc":"2.0","method":"notifications/message","params":{"level":"info"}}\n\n`,
+                `event: message\r\ndata: {"jsonrpc":"2.0","id":1,\r\ndata: "result":{"serverInfo":{"name":"notion"}}}\r\n\r\n`,
+            ].join(""),
+        );
+    });
+    server = started;
+    await new Promise<void>((resolve) => started.listen(0, "127.0.0.1", resolve));
+    // SAFETY: a server listening on a TCP port reports its address as AddressInfo, never a pipe name.
+    const url = `http://127.0.0.1:${(started.address() as AddressInfo).port}`;
+
+    const answer = await probeCapability(new Map(), { id: "notion", kind: "mcp", config: { url: `${url}/mcp` } });
+
+    expect(answer).toMatchObject({ checked: true, ok: true, who: `notion` });
+});

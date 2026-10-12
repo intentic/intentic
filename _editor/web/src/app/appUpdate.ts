@@ -1,4 +1,5 @@
-import { computed, ref, type ComputedRef } from "vue";
+import { usePoll } from "@intentic/ui/async";
+import { computed, effectScope, type EffectScope, getCurrentScope, onScopeDispose, ref, type ComputedRef, type Ref } from "vue";
 import { DESKTOP_UPDATE_EVENT, DESKTOP_UPDATE_LINK, desktopApp, openDesktopLink, type DesktopUpdateEvent } from "./environments/desktop";
 import { localFace } from "./environments/local";
 import { buildId } from "./buildEpoch";
@@ -36,6 +37,9 @@ const offerKey = (update: AppUpdate): string => (update.kind === `app` ? `app:${
 // One poller per document, however many components ask; module-level so two callers can't disagree about whether
 // there's an update.
 let started = false;
+// Whether this document asks at all (a local window does not), and whose word on being on screen it asks by.
+let watches = false;
+let shownSource: Readonly<Ref<boolean>> | undefined;
 let lastPoll = 0;
 
 // What's deployed, per `build.json` (emitted beside the bundle by vite.config.ts, served `no-store`). Every
@@ -88,7 +92,7 @@ export const reportIncompleteBundle = (): void => {
  * inside the app, the app refuses a restart asked from it, and the tray and the app's Home already say when there is
  * one. A missing chunk is still its own to repair (reportIncompleteBundle).
  */
-const watchForUpdates = (): void => {
+const watchForUpdates = (shown: Readonly<Ref<boolean>> | undefined): void => {
     if (started) {
         return;
     }
@@ -110,13 +114,59 @@ const watchForUpdates = (): void => {
         }
     });
 
-    void poll();
-    setInterval(() => void poll(), POLL_EVERY_MS);
-    document.addEventListener(`visibilitychange`, () => {
-        if (document.visibilityState === `visible` && Date.now() - lastPoll > RECHECK_ON_FOCUS_AFTER_MS) {
-            void poll();
-        }
-    });
+    watches = true;
+    shownSource = shown;
+};
+
+// An offer the next answer cannot change: the app's own download, or a deploy that moved (any later one is the same
+// reload). An incomplete bundle is not one, since a deploy can still move under it.
+const offerSettled = (): boolean => available.value?.kind === `app` || available.value?.kind === `web`;
+
+// The clock that asks what is deployed, held by the scopes that read the offer and stopped with the last of them (a
+// caller outside any scope holds it for the document's life), and stopped once the offer is settled. Out of sight it
+// waits; the window coming back asks at once unless it asked within the last couple of minutes.
+let holders = 0;
+let clock: EffectScope | undefined;
+
+const startClock = (): void => {
+    if (clock !== undefined || offerSettled()) {
+        return;
+    }
+    // Detached: the scope that started it is only one of its holders.
+    clock = effectScope(true);
+    clock.run(() =>
+        usePoll({
+            everyMs: POLL_EVERY_MS,
+            visible: shownSource,
+            check: async () => {
+                if (Date.now() - lastPoll > RECHECK_ON_FOCUS_AFTER_MS) {
+                    await poll();
+                }
+                return offerSettled();
+            },
+        }).start(),
+    );
+};
+
+const stopClock = (): void => {
+    clock?.stop();
+    clock = undefined;
+};
+
+const holdClock = (): void => {
+    if (!watches) {
+        return;
+    }
+    holders += 1;
+    startClock();
+    if (getCurrentScope() !== undefined) {
+        onScopeDispose(() => {
+            holders -= 1;
+            if (holders === 0) {
+                stopClock();
+            }
+        });
+    }
 };
 
 export interface AppUpdateOffer {
@@ -134,8 +184,12 @@ const offer = computed<AppUpdate | undefined>(() => {
     return current !== undefined && offerKey(current) !== dismissed.value ? current : undefined;
 });
 
-export const useAppUpdate = (): AppUpdateOffer => {
-    watchForUpdates();
+// `shown` is whether the window is on screen (workbench/window/onScreen.ts, which this layer cannot import): a Windows
+// webview back from the tray never says it went hidden, so the document's own word would miss the return. Without it,
+// the document's visibility. The first call starts the watch, so its source is the one that counts.
+export const useAppUpdate = (shown?: Readonly<Ref<boolean>>): AppUpdateOffer => {
+    watchForUpdates(shown);
+    holdClock();
     return {
         offer,
         take: (): void => {

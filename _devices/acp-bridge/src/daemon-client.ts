@@ -1,4 +1,5 @@
 import { RequestError } from "@agentclientprotocol/sdk";
+import { FetchJsonError, type FetchJsonInit, fetchJsonResponse, type JsonValue } from "@intentic/base/fetch-json";
 import {
     agentContract,
     type AgentReply,
@@ -20,7 +21,8 @@ import { z } from "zod";
 // parsed with its schemas; the attach stream is read here rather than through oRPC's client, which the bridge, a
 // published install, does not carry.
 // Every call carries an editor-scoped control token (x-intentic-control); a 401 surfaces as ACP auth_required, a 403
-// means this client's scope has drifted from the daemon's.
+// means this client's scope has drifted from the daemon's. The JSON calls go over base's transport, so a sandbox that
+// stops answering fails the call in 30 s (and says it timed out) instead of holding the editor's prompt open.
 // Unknown frame shapes are skipped, so a newer daemon cannot break an older bridge.
 
 // Only the fields the bridge acts on, so an answer an older or newer daemon shapes differently still reads.
@@ -46,25 +48,34 @@ const raise = (status: number, body: string): never => {
 
 export const createDaemonClient = (url: string, token: string): DaemonClient => {
     const headers = { "x-intentic-control": token };
-    const request = async (path: string, init?: RequestInit): Promise<Response> => {
-        const response = await fetch(`${url}${path}`, { ...init, headers: { ...headers, ...init?.headers } });
-        if (!response.ok) {
-            raise(response.status, await response.text().catch(() => ""));
+    // One JSON call; a refusal (bar the accepted statuses) raised as the ACP error it means.
+    const call = async (path: string, init: Pick<FetchJsonInit, "method" | "json" | "accept" | "signal"> = {}): Promise<JsonValue | undefined> => {
+        try {
+            const answer = await fetchJsonResponse(`${url}${path}`, { ...init, headers, label: `sandbox ${path}` });
+            // An accepted refusal (a 404 the caller reads as "none") answers nothing.
+            return answer.status >= 300 ? undefined : answer.json;
+        } catch (error) {
+            if (error instanceof FetchJsonError && error.kind === "status" && error.status !== undefined) {
+                raise(error.status, error.body ?? "");
+            }
+            throw error;
         }
-        return response;
     };
-    const post = (path: string, body: unknown, signal?: AbortSignal): Promise<Response> =>
-        request(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), ...(signal === undefined ? {} : { signal }) });
 
     return {
         async *streamTurn(turn, signal) {
             // Two requests: the ack names the run the turn started as; attach is the separate, detached watch on it.
-            const started = StartedSchema.safeParse(await (await post(procedurePath(agentContract.run), turn, signal)).json()).data ?? {};
-            const response = await post(
-                procedurePath(agentContract.attach),
-                { conversationId: turn.conversationId, ...(started.run === undefined ? {} : { run: started.run }) },
+            const started = StartedSchema.safeParse(await call(procedurePath(agentContract.run), { method: "POST", json: turn, signal })).data ?? {};
+            // The attach stream runs as long as the turn does, so it is the one call outside the JSON transport's deadline.
+            const response = await fetch(`${url}${procedurePath(agentContract.attach)}`, {
+                method: "POST",
+                headers: { ...headers, "content-type": "application/json" },
+                body: JSON.stringify({ conversationId: turn.conversationId, ...(started.run === undefined ? {} : { run: started.run }) }),
                 signal,
-            );
+            });
+            if (!response.ok) {
+                raise(response.status, await response.text().catch(() => ""));
+            }
             if (response.body === null) {
                 throw RequestError.internalError({ details: "sandbox returned no stream" });
             }
@@ -76,24 +87,18 @@ export const createDaemonClient = (url: string, token: string): DaemonClient => 
             }
         },
         postReply: async (reply) => {
-            await post(procedurePath(agentContract.reply), reply);
+            await call(procedurePath(agentContract.reply), { method: "POST", json: reply });
         },
         getSession: async (id) => {
-            const response = await fetch(`${url}${procedurePath(sessionsContract.get, { id })}`, { headers });
-            // No transcript under that id is nothing to replay; a refused token or a failing sandbox is not that.
-            if (response.status === 404) {
-                await response.body?.cancel();
-                return [];
-            }
-            if (!response.ok) {
-                raise(response.status, await response.text());
-            }
+            // No transcript under that id (a 404, answered as undefined) is nothing to replay; a refused token or a
+            // failing sandbox is not that.
+            const answer = await call(procedurePath(sessionsContract.get, { id }), { accept: [404] });
             // A row this bridge cannot read is skipped, as an unknown attach frame is, rather than failing the replay.
-            const rows = TranscriptSchema.safeParse(await response.json()).data?.messages ?? [];
+            const rows = TranscriptSchema.safeParse(answer).data?.messages ?? [];
             return rows.flatMap((row) => TranscriptRowSchema.safeParse(row).data ?? []);
         },
         listSessions: async () => {
-            await request(procedurePath(sessionsContract.list));
+            await call(procedurePath(sessionsContract.list));
         },
     };
 };

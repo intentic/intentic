@@ -1,3 +1,4 @@
+import { escapeRegExp, isRecord } from "@intentic/base/escape";
 import type { PipelineStatus } from "@intentic/sandbox-contract";
 import { parse } from "yaml";
 
@@ -88,10 +89,6 @@ const callKey = (uses: unknown, from: string | undefined): string | undefined =>
     return remoteWorkflow(uses) === undefined ? undefined : uses;
 };
 
-const isMapping = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
-
-const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
 // Each `${{ … }}` stands for whatever it evaluates to; the text between stays literal.
 const templatePattern = (name: string): { readonly source: string; readonly literal: boolean } => {
     const literal = name.split(/\$\{\{[\s\S]*?\}\}/);
@@ -102,22 +99,22 @@ const templatePattern = (name: string): { readonly source: string; readonly lite
 // the key the file itself was fetched by, undefined for the run's own workflow.
 const declaredJobs = (workflowYaml: string, from: string | undefined): DeclaredJob[] => {
     const parsed: unknown = parse(workflowYaml);
-    if (!isMapping(parsed)) {
+    if (!isRecord(parsed)) {
         return [];
     }
     const jobs = parsed["jobs"];
-    if (!isMapping(jobs)) {
+    if (!isRecord(jobs)) {
         return [];
     }
     return Object.entries(jobs).flatMap(([id, body]) => {
-        if (!isMapping(body)) {
+        if (!isRecord(body)) {
             return [];
         }
         const name = body["name"];
         const dynamicName = typeof name === "string" && name.includes("${{");
         const template = dynamicName ? templatePattern(name) : undefined;
         const strategy = body["strategy"];
-        const matrix = isMapping(strategy) && strategy["matrix"] !== undefined;
+        const matrix = isRecord(strategy) && strategy["matrix"] !== undefined;
         return [
             {
                 id,

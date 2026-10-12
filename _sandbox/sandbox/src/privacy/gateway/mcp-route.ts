@@ -1,6 +1,7 @@
 import type { PersonalDataClass, PrivacyShieldPolicy } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
 import type { AppEnv } from "../../app-env.js";
+import { REQUEST_REFRAMED, RESPONSE_REFRAMED, forwardHeaders } from "../../http/forward-headers.js";
 import type { PrivacyShield } from "../privacy-shield.js";
 import { type Json, isList, isRecord, isText, restoreStrings, toJson } from "./protocols/walk.js";
 import { type SseEvent, sseAsyncTransform } from "./protocols/sse.js";
@@ -20,19 +21,6 @@ export interface McpRouteDeps {
     readonly warn: (message: string, error?: unknown) => void;
     readonly fetch?: typeof fetch;
 }
-
-const REQUEST_DROPPED = new Set(["host", "connection", "content-length", "transfer-encoding", "accept-encoding", "keep-alive", "upgrade"]);
-const RESPONSE_DROPPED = new Set(["content-length", "content-encoding", "transfer-encoding", "connection", "keep-alive"]);
-
-const forwardHeaders = (from: Headers, dropped: ReadonlySet<string>): Headers => {
-    const headers = new Headers();
-    for (const [name, value] of from) {
-        if (!dropped.has(name.toLowerCase())) {
-            headers.set(name, value);
-        }
-    }
-    return headers;
-};
 
 const isJson = (type: string | null): boolean => type !== null && /^application\/([\w.+-]*\+)?json\b/iu.test(type);
 const isEventStream = (type: string | null): boolean => type !== null && /^text\/event-stream\b/iu.test(type);
@@ -199,7 +187,7 @@ export const createMcpRoute = ({ shield, warn, fetch: send = fetch }: McpRouteDe
 
         const query = new URL(c.req.url).search;
         const upstreamUrl = `${session.upstream}${query}`;
-        const headers = forwardHeaders(c.req.raw.headers, REQUEST_DROPPED);
+        const headers = forwardHeaders(c.req.raw.headers, REQUEST_REFRAMED);
         headers.set("accept-encoding", "identity");
         let upstream: Response;
         try {
@@ -211,7 +199,7 @@ export const createMcpRoute = ({ shield, warn, fetch: send = fetch }: McpRouteDe
             warn(`privacy shield: the MCP server ${new URL(session.upstream).host} could not be reached`, error);
             return rpcError(502, `The MCP server could not be reached (${error instanceof Error ? error.message : "network error"}).`);
         }
-        const responseHeaders = forwardHeaders(upstream.headers, RESPONSE_DROPPED);
+        const responseHeaders = forwardHeaders(upstream.headers, RESPONSE_REFRAMED);
         const type = upstream.headers.get("content-type");
         const status = { status: upstream.status, statusText: upstream.statusText, headers: responseHeaders };
         if (!reading || masker === undefined || upstream.body === null) {

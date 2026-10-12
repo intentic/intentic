@@ -1,10 +1,10 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { undefinedIfMissing } from "@intentic/base/errors";
 import { BROKER_PORT } from "@intentic/constants";
 import { GATEWAY_PLACEHOLDER } from "../broker/broker-routes.js";
 import type { ConnectorHook } from "./connector-hooks.js";
 import { homeDir } from "../../system/home-dir.js";
+import { textFile, type TextFile } from "../../store/plain-files/text-file.js";
 
 // npm as a ConnectorHook: npm reads the registry token from ~/.npmrc, not a per-request header, so apply/restore upsert
 // the registry's _authToken line there (mode 0600) and remove strips it. One line per registry: the last-applied token
@@ -35,13 +35,12 @@ export const stripNpmAuth = (content: string): string => {
     return kept.length > 0 ? `${kept.join("\n")}\n` : "";
 };
 
-// Only absence reads as empty: a ~/.npmrc that cannot be read is never rewritten as just the token line, nor left
-// holding a token its remove believed gone.
-const readNpmrc = async (): Promise<string> => (await readFile(npmrcPath(), "utf8").catch(undefinedIfMissing)) ?? "";
+// 0600 on every write, an existing file's mode included: it holds the token. textFile reads only absence as empty, so a
+// ~/.npmrc that cannot be read is never rewritten as just the token line, nor left holding a token its remove believed gone.
+const npmrc = (): TextFile => textFile(npmrcPath(), 0o600);
 
 const writeNpmAuth = async (token: string): Promise<void> => {
-    const current = await readNpmrc();
-    await writeFile(npmrcPath(), upsertNpmAuth(current, token), { mode: 0o600 });
+    await npmrc().update((current) => upsertNpmAuth(current, token));
 };
 
 // True only if the token line is actually on disk; a wiped HOME reports unwired rather than a stale active entry.
@@ -54,11 +53,8 @@ export const npmAccessHook: ConnectorHook = {
         return undefined;
     },
     remove: async () => {
-        const current = await readNpmrc();
-        if (current === "") {
-            return;
-        }
-        await writeFile(npmrcPath(), stripNpmAuth(current), { mode: 0o600 });
+        // Nothing to strip from an empty or missing file, and no reason to create one.
+        await npmrc().update((current) => (current === "" ? undefined : stripNpmAuth(current)));
     },
     restore: async (config) => {
         await writeNpmAuth(config["token"] ?? "");

@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import { isAbsolute, relative, resolve } from "node:path";
 import { createBackoff, sleep } from "@intentic/base/async";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
+import { FetchJsonError, fetchJson } from "@intentic/base/fetch-json";
 import { queueOnFile, writeFileAtomic } from "@intentic/base/fs";
 import { sandboxRouteAllowed } from "@intentic/extension-manifest/permissions";
 import type * as SandboxContract from "@intentic/sandbox-contract";
@@ -149,17 +150,35 @@ export const createDaemonApi = (options: DaemonApiOptions): DaemonApi => {
             return client;
         },
         request: (path, init) => send(`${options.url}${path}`, { ...init, headers: granted(init) }),
+        // Over base's transport, through the same `send`: a 30 s deadline (with the caller's signal), and a refusal's
+        // body cut to one line in the message instead of quoted whole.
         json: async <T>(path: string, init?: RequestInit): Promise<T> => {
+            const method = init?.method ?? "GET";
             const headers = granted(init);
-            if (init?.body !== undefined && !headers.has("content-type")) {
+            // The caller serialized the body itself; it is JSON unless it said otherwise.
+            const body = init?.body ?? undefined;
+            if (body !== undefined && !headers.has("content-type")) {
                 headers.set("content-type", "application/json");
             }
-            const response = await send(`${options.url}${path}`, { ...init, headers });
-            if (!response.ok) {
-                throw new Error(`daemon answered ${response.status} for ${init?.method ?? "GET"} ${path}: ${await response.text()}`);
+            const request = {
+                method,
+                headers,
+                signal: init?.signal ?? undefined,
+                label: `daemon ${method} ${path}`,
+                // SAFETY: `send` is a fetch in all but bun-types' `preconnect`, which the transport never calls.
+                fetch: send as typeof fetch,
+            };
+            try {
+                const answer = await fetchJson(`${options.url}${path}`, body === undefined ? request : { ...request, body });
+                // SAFETY: the caller names the shape the route answers; `api.daemon.rpc` is the door that checks it.
+                return answer as T;
+            } catch (error) {
+                // A refusal keeps the sentence extensions already match on: the status, the call, the daemon's words.
+                if (error instanceof FetchJsonError && error.kind === "status") {
+                    throw new Error(`daemon answered ${error.status} for ${method} ${path}: ${error.body ?? ""}`, { cause: error });
+                }
+                throw error;
             }
-            // SAFETY: the caller names the shape the route answers; `api.daemon.rpc` is the door that checks it.
-            return (await response.json()) as T;
         },
     };
 };

@@ -1,41 +1,9 @@
 import type { WebchatMessage, WebchatPending, WebchatPublicConfig } from "@intentic/sandbox-contract";
 import { embedFailure, type EmbedEndpoint, embedUrl, fetchEmbedChallenge, fetchEmbedJson, type PowChallenge, WEBCHAT_EVENT } from "@intentic/sandbox-contract/embed";
+import { createSseParser, type SseEvent } from "@intentic/sandbox-contract/sse";
 
 // Widget's half of the wire: three calls against the daemon's public /webchat door, all subject to its origin
 // allowlist. Failures carry the server's own sentence (EmbedError), not a status code.
-
-// SSE over POST; EventSource only GETs, so the reply is read directly off the fetch body instead.
-export interface SseFrame {
-    readonly event: string;
-    readonly data: string;
-}
-
-// One SSE event block to a frame; multi-line data (one `data:` line per source line, per spec) rejoins with "\n". A
-// block with no `data:` line (a keepalive) is dropped.
-export const parseSseBlock = (block: string): SseFrame | undefined => {
-    let event = "message";
-    const data: string[] = [];
-    for (const line of block.split("\n")) {
-        if (line.startsWith("event:")) {
-            event = line.slice("event:".length).trimStart();
-            continue;
-        }
-        if (line.startsWith("data:")) {
-            // One optional leading space is spec framing; anything beyond it is the agent's own indentation.
-            const value = line.slice("data:".length);
-            data.push(value.startsWith(" ") ? value.slice(1) : value);
-        }
-    }
-    return data.length === 0 ? undefined : { event, data: data.join("\n") };
-};
-
-// Splits into complete event blocks plus the unterminated remainder to carry forward. Both \n\n and \r\n\r\n terminate
-// a block; a chunk boundary can fall inside one.
-export const splitSseBlocks = (buffer: string): { blocks: string[]; rest: string } => {
-    const normalized = buffer.replaceAll("\r\n", "\n");
-    const parts = normalized.split("\n\n");
-    return { blocks: parts.slice(0, -1).filter((block) => block.trim() !== ""), rest: parts.at(-1) ?? "" };
-};
 
 // Slug for the three calls every embed makes; only the reply (SSE over POST) is this widget's own.
 const SLUG = "webchat";
@@ -77,25 +45,28 @@ export const sendMessage = async (endpoint: EmbedEndpoint, message: WebchatMessa
     }
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
-    let buffer = "";
+    // SSE over POST: EventSource only GETs, so the reply is read off the fetch body with the contract's parser, which
+    // rejoins a multi-line delta (one `data:` line per source line) with "\n" and takes any line ending a proxy left.
+    let ready: SseEvent[] = [];
+    const parser = createSseParser((event) => ready.push(event));
     const drain = (): boolean => {
-        const { blocks, rest } = splitSseBlocks(buffer);
-        buffer = rest;
-        for (const block of blocks) {
-            const frame = parseSseBlock(block);
-            if (frame === undefined) {
+        const events = ready;
+        ready = [];
+        for (const event of events) {
+            // A block with no data line (a keepalive comment) carries nothing for the visitor.
+            if (event.data === undefined) {
                 continue;
             }
-            if (frame.event === WEBCHAT_EVENT.delta) {
-                sink.delta(frame.data);
+            if (event.event === WEBCHAT_EVENT.delta) {
+                sink.delta(event.data);
             }
-            if (frame.event === WEBCHAT_EVENT.pending) {
-                sink.pending(frame.data);
+            if (event.event === WEBCHAT_EVENT.pending) {
+                sink.pending(event.data);
             }
-            if (frame.event === WEBCHAT_EVENT.error) {
-                sink.failed(frame.data);
+            if (event.event === WEBCHAT_EVENT.error) {
+                sink.failed(event.data);
             }
-            if (frame.event === WEBCHAT_EVENT.done) {
+            if (event.event === WEBCHAT_EVENT.done) {
                 return true;
             }
         }
@@ -106,14 +77,15 @@ export const sendMessage = async (endpoint: EmbedEndpoint, message: WebchatMessa
         if (done) {
             break;
         }
-        buffer += decoder.decode(value, { stream: true });
+        parser.feed(decoder.decode(value, { stream: true }));
         if (drain()) {
             // Turn ended; cancel rather than read to EOF, since the daemon closes the body right after.
             await reader.cancel().catch(() => undefined);
             return;
         }
     }
-    buffer += decoder.decode();
+    parser.feed(decoder.decode());
+    parser.end();
     if (!drain()) {
         sink.failed(CUT_SHORT);
     }

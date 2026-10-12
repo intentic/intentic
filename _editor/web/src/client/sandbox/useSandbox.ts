@@ -98,12 +98,25 @@ const select = (id: string): void => {
     persistActive(id);
 };
 
+// A write's answer, put on the cached list: the row it returned replaces its old self, or joins the list when the write
+// `added` it. A list read already in flight is cancelled first, or its older answer would land after this one and put
+// the row back as it was. `current` lets a write that may have been overtaken (a provision a release came after) leave
+// the list to the later one.
+const landOnList = async (row: SandboxSummary, { added = false, current = (): boolean => true } = {}): Promise<void> => {
+    await queryClient.cancelQueries({ queryKey: SANDBOX_LIST_KEY });
+    if (!current()) {
+        return;
+    }
+    queryClient.setQueryData<SandboxSummary[]>(SANDBOX_LIST_KEY, (live = []) =>
+        added ? [...live, row] : live.map((sandbox) => (sandbox.id === row.id ? row : sandbox)),
+    );
+};
+
 // Mints a new sandbox; does not make it active. /setup creates the row before the reader has agreed to
 // anything, so selection moves only on announce or a successful attach.
 const create = async (name: string): Promise<SandboxSummary> => {
     const sandbox = await apiClient.sandbox.create({ name });
-    await queryClient.cancelQueries({ queryKey: SANDBOX_LIST_KEY });
-    queryClient.setQueryData<SandboxSummary[]>(SANDBOX_LIST_KEY, (live = []) => [...live, sandbox]);
+    await landOnList(sandbox, { added: true });
     return sandbox;
 };
 
@@ -114,12 +127,7 @@ const hostedProvision = async (sandboxId: string, token: string): Promise<Sandbo
     const version = hostedChanges.get(sandboxId);
     // The machine composes its environment from this: the profile's own sandbox.toml is applied at its first boot.
     const updated = await apiClient.sandbox.hostedProvision({ sandboxId, token, profile: arrivingProfile() });
-    await queryClient.cancelQueries({ queryKey: SANDBOX_LIST_KEY });
-    if (hostedChanges.get(sandboxId) === version) {
-        queryClient.setQueryData<SandboxSummary[]>(SANDBOX_LIST_KEY, (live = []) =>
-            live.map((sandbox) => (sandbox.id === updated.id ? updated : sandbox)),
-        );
-    }
+    await landOnList(updated, { current: () => hostedChanges.get(sandboxId) === version });
     return updated;
 };
 
@@ -127,10 +135,7 @@ const hostedRelease = withConcurrency(
     async (sandboxId: string): Promise<SandboxSummary> => {
         hostedChanges.set(sandboxId, (hostedChanges.get(sandboxId) ?? 0) + 1);
         const updated = await apiClient.sandbox.hostedRelease({ sandboxId });
-        await queryClient.cancelQueries({ queryKey: SANDBOX_LIST_KEY });
-        queryClient.setQueryData<SandboxSummary[]>(SANDBOX_LIST_KEY, (live = []) =>
-            live.map((sandbox) => (sandbox.id === updated.id ? updated : sandbox)),
-        );
+        await landOnList(updated);
         return updated;
     },
     { mode: `singleFlight`, key: (sandboxId) => sandboxId },
@@ -195,20 +200,14 @@ const activeWakeRefused = computed(() =>
 // from the active selection, since the two can differ mid-reconcile.
 const update = async (sandboxId: string, input: { name?: string; image?: string | null }): Promise<SandboxSummary> => {
     const updated = await apiClient.sandbox.update({ sandboxId, ...input });
-    await queryClient.cancelQueries({ queryKey: SANDBOX_LIST_KEY });
-    queryClient.setQueryData<SandboxSummary[]>(SANDBOX_LIST_KEY, (live = []) =>
-        live.map((sandbox) => (sandbox.id === updated.id ? updated : sandbox)),
-    );
+    await landOnList(updated);
     return updated;
 };
 
 // Points a sandbox at a URL it runs behind and makes it active; the platform stamps lastSeenAt like an announce.
 const attach = async (id: string, url: string): Promise<void> => {
     const updated = await apiClient.sandbox.attach({ sandboxId: id, daemonUrl: url });
-    await queryClient.cancelQueries({ queryKey: SANDBOX_LIST_KEY });
-    queryClient.setQueryData<SandboxSummary[]>(SANDBOX_LIST_KEY, (live = []) =>
-        live.map((sandbox) => (sandbox.id === updated.id ? updated : sandbox)),
-    );
+    await landOnList(updated);
     persistActive(updated.id);
 };
 

@@ -1,7 +1,9 @@
 import { errorMessage } from "@intentic/base/errors";
-import type { PaymentOffer, WalletConfig } from "@intentic/sandbox-contract";
+import { hostCovers, normalizeHost, normalizeHostPattern, type PaymentOffer, type WalletConfig } from "@intentic/sandbox-contract";
 import { atomicToUsd, usdcNetworkOf, usdToAtomic } from "@intentic/sandbox-contract/x402";
-import { type CardDeps, cardRun, OFFER_DEADLINE_MS, raiseRequest, type SettledCard, whyOf } from "../guard/card-offers.js";
+import { type CardDeps, cardRun, type LiveCard, raiseRequest, type SettledCard, whyOf } from "../guard/card-offers.js";
+import { type HeldAnswer, type HoldDeps, createHeldAsks } from "../guard/held-asks.js";
+import { wakeWords } from "../guard/held-cards.js";
 import { type CliAnswer, refusalAnswer } from "../http/cli-answer.js";
 import type { SignRequest } from "./wallet-signer.js";
 import { type OpenedPayment, type PaymentRow, spentTodayAtomic, type WalletLedgerStore } from "./wallet-ledger.js";
@@ -10,7 +12,9 @@ import { mintAuthorization, parseChallenge, parseSettlement, paymentHeader, type
 // Unpaid probe, parse the 402 challenge, check policy, raise an offer card whose numbers are the challenge's and the
 // ledger's, never the model's (except `why`); only a click or the auto-approve band releases a signature.
 // Raised outside the turn generator (the CLI call is HTTP while the turn sits in Bash): frames go to the live run's
-// log, and the card is never journalled, its waiter is the CLI's held connection.
+// log, and the card is never journalled. It waits for the owner however long that takes (guard/held-asks.ts): a CLI
+// whose connection goes leaves it up, held for the turn's close, and a yes given after that wakes the conversation to
+// make the same request again, which pays once at the price the owner saw.
 // An approval releases one EIP-3009 authorization, signed by the platform and settled by the merchant; a failure after
 // signing spends nothing, since the authorization just expires unused.
 
@@ -34,7 +38,7 @@ export interface PaymentGateDeps extends CardDeps {
     readonly fetchFn?: typeof fetch;
     // Whether the turn has read outside content (guard/turn-taint.ts); the one non-policy input to auto-approve.
     readonly tainted: (conversationId: string) => boolean;
-    readonly deadlineMs?: number;
+    readonly hold: HoldDeps;
     readonly now?: () => number;
     // The bound owner, the one person whose click releases a payment: the wallet that pays is theirs. Undefined on a
     // daemon nobody signs in to, where the one person at it answers.
@@ -53,16 +57,135 @@ export interface PaidFetchRequest {
     readonly signal: AbortSignal;
 }
 
-const hostsOf = (list: string | undefined): readonly string[] =>
-    (list ?? "")
+// An allow or deny list as the owner typed it, one entry per line or comma, each read the way a secret's host list
+// reads a pasted entry (normalizeHostPattern): `https://evil.com/x`, `Evil.com.` and `*.evil.com` all mean what they
+// say. `entries` counts what was typed, so a list of nothing but unreadable entries still reads as a list.
+const hostListOf = (list: string | undefined) => {
+    const entries = (list ?? "")
         .split(/[\n,]/)
-        .map((entry) => entry.trim().toLowerCase())
+        .map((entry) => entry.trim())
         .filter((entry) => entry !== "");
+    return { entries: entries.length, patterns: entries.flatMap((entry) => normalizeHostPattern(entry) ?? []) };
+};
 
-// Suffix match on dot boundaries: "example.com" covers "api.example.com", never "notexample.com".
-const hostMatches = (host: string, entry: string): boolean => host === entry || host.endsWith(`.${entry}`);
+// Whether a list covers the host on dot boundaries (hostCovers): "example.com" covers "api.example.com", never
+// "notexample.com". A host that cannot be read is covered by no list.
+const covers = (patterns: readonly string[], host: string | undefined): boolean =>
+    host !== undefined && patterns.some((entry) => hostCovers(entry, host));
+
+// The open payment cards, by the exact request at the exact price, so a yes given after the CLI stopped waiting pays
+// the same request once, and never one whose price moved since.
+const offers = createHeldAsks<SettledCard<"payment_offer"> | "waiting">();
 
 const USD_RE = /^\d+(\.\d{1,6})?$/;
+
+// Raises the offer card and settles with the owner's answer, recording a skip or a card nobody answered as it settles,
+// whether or not the call that raised it is still waiting; `ended` settles it unanswered.
+const offerPayment = async (
+    deps: PaymentGateDeps,
+    run: LiveCard,
+    offer: PaymentOffer,
+    opened: OpenedPayment,
+    ended: AbortSignal,
+): Promise<HeldAnswer<SettledCard<"payment_offer">>> => {
+    const owner = await deps.ownerEmail?.();
+    const card = await raiseRequest(deps, run, {
+        kind: "payment_offer",
+        onAbort: { kind: "payment_offer", requestId: "", approve: false },
+        raised: (requestId) => ({ kind: "payment_offer", requestId, offer }),
+        // Checked against the identity verified on the reply, so another member's click (or a program's) leaves the
+        // card waiting for the owner instead of spending their money.
+        mayAnswer: (caller) =>
+            owner === undefined || caller?.email.toLowerCase() === owner.toLowerCase()
+                ? undefined
+                : `Only the owner (${owner}) can approve a payment from this sandbox's wallet.`,
+        approves: (reply) => reply.approve,
+        signal: ended,
+    });
+    if (card.decision !== "approved") {
+        await deps.ledger.record(opened, card.decision);
+    }
+    return { answer: card, outcome: { decision: card.decision } };
+};
+
+// What a priced request carries to its card: the challenge's quote, the policy it was checked against, the ledger's row.
+interface Priced {
+    readonly quote: PaymentQuote;
+    readonly config: WalletConfig;
+    readonly opened: OpenedPayment;
+    readonly spentToday: bigint;
+    readonly host: string;
+}
+
+// The owner's click on an offer card: the approved card, or what the call answers instead (still waiting, skipped, the
+// turn over, nowhere to ask).
+const ownersApproval = async (
+    deps: PaymentGateDeps,
+    request: PaidFetchRequest,
+    priced: Priced,
+): Promise<SettledCard<"payment_offer"> | PaidAnswer> => {
+    const { quote } = priced;
+    const run = cardRun(deps, request.conversationId);
+    if (run === undefined) {
+        return refusalAnswer(
+            409,
+            "no_conversation",
+            "A payment needs a live conversation to raise its approval card in, and none could be found. Nothing was spent.",
+        );
+    }
+    const offer: PaymentOffer = {
+        url: request.url,
+        ...(quote.description !== undefined ? { description: quote.description } : {}),
+        payTo: quote.payTo,
+        network: priced.config.network,
+        asset: quote.asset,
+        assetName: "USDC",
+        amountUsd: priced.opened.amountUsd,
+        spentTodayUsd: atomicToUsd(priced.spentToday),
+        dailyCapUsd: priced.config.dailyCapUsd,
+        ...whyOf(request.why),
+    };
+    const asked = {
+        conversationId: run.conversationId,
+        key: [request.method, request.url, request.body ?? "", quote.payTo, quote.network, quote.asset, quote.amountAtomic.toString()].join("\u0000"),
+        waiting: () => "waiting" as const,
+        signal: request.signal,
+    };
+    // The same request at the same price, while its card is up or its answer uncollected: no second card.
+    const answered = await (offers.reattach(asked) ??
+        offers.ask(asked, {
+            raise: (ended) => offerPayment(deps, run, offer, priced.opened, ended),
+            told: wakeWords({
+                doing: `paying $${offer.amountUsd} to ${priced.host}`,
+                call: `wallet fetch ${request.method} ${request.url}`,
+                notYet: "Nothing has been paid yet",
+                again: "Make exactly the same request again now: the same method, URL and body. It pays once, at the price the owner saw.",
+                declinedSo: "nothing was spent",
+                refrain: "Continue without it.",
+            }),
+            held: deps.hold.held,
+            finished: deps.hold.finished(run.conversationId),
+        }));
+    if (answered === "waiting") {
+        return refusalAnswer(
+            409,
+            "awaiting_owner",
+            "Still waiting for the owner: a card asks them to approve this payment, and nothing has been paid yet. The card stays up until they answer. " +
+                "Make exactly the same request again to collect their answer, or carry on with other work and end your turn: if they approve it after, you are woken to make the request again.",
+        );
+    }
+    if (answered.decision === "unanswered") {
+        return refusalAnswer(
+            408,
+            "unanswered",
+            "The turn ended before the owner answered the payment offer: nothing was spent. Continue without it; offer again only if the owner shows up.",
+        );
+    }
+    if (answered.decision === "declined") {
+        return refusalAnswer(403, "declined", "The owner skipped this payment: nothing was spent. Continue without it.");
+    }
+    return answered;
+};
 
 export const gatedPaidFetch = async (deps: PaymentGateDeps, request: PaidFetchRequest): Promise<PaidAnswer> => {
     const fetchFn = deps.fetchFn ?? fetch;
@@ -76,7 +199,11 @@ export const gatedPaidFetch = async (deps: PaymentGateDeps, request: PaidFetchRe
         );
     }
     if (config.address === undefined || config.address === "") {
-        return refusalAnswer(409, "wallet_pending", "The wallet is added but not finished setting up: its address has not arrived from the platform yet.");
+        return refusalAnswer(
+            409,
+            "wallet_pending",
+            "The wallet is added but not finished setting up: its address has not arrived from the platform yet.",
+        );
     }
     const network = usdcNetworkOf(config.network);
     if (network === undefined) {
@@ -94,7 +221,10 @@ export const gatedPaidFetch = async (deps: PaymentGateDeps, request: PaidFetchRe
     if (request.maxUsd !== undefined && !USD_RE.test(request.maxUsd)) {
         return refusalAnswer(400, "invalid_request", `--max wants a USD amount like 0.50, got: ${request.maxUsd.slice(0, 40)}`);
     }
-    const host = url.hostname.toLowerCase();
+    // Read the way list entries are, so `evil.com.` is `evil.com`. Undefined for a host no list can name (an IPv6
+    // literal): never paid unasked, and refused outright while a deny list stands, since it cannot be checked against it.
+    const listedHost = normalizeHost(url.hostname);
+    const host = listedHost ?? url.hostname.toLowerCase();
 
     // The unpaid probe: the agent's request sent without payment. A non-402 answer passes through whole; a free
     // endpoint or the endpoint's own 4xx/5xx ends here.
@@ -112,7 +242,11 @@ export const gatedPaidFetch = async (deps: PaymentGateDeps, request: PaidFetchRe
         probe = await fetchFn(url, { ...requestInit(), signal: AbortSignal.any([request.signal, AbortSignal.timeout(PROBE_TIMEOUT_MS)]) });
         probeBody = await probe.text();
     } catch (error) {
-        return refusalAnswer(502, "unreachable", `The endpoint could not be reached (${error instanceof Error ? error.message : "network error"}), nothing was spent.`);
+        return refusalAnswer(
+            502,
+            "unreachable",
+            `The endpoint could not be reached (${error instanceof Error ? error.message : "network error"}), nothing was spent.`,
+        );
     }
     if (probe.status !== 402) {
         return { status: probe.status, body: probeBody, contentType: probe.headers.get("content-type") ?? "application/json" };
@@ -161,9 +295,14 @@ export const gatedPaidFetch = async (deps: PaymentGateDeps, request: PaidFetchRe
             `This payment cannot be checked against the daily cap, so nothing was spent: ${errorMessage(error)}. Tell the owner.`,
         );
     }
-    if (hostsOf(config.deny).some((entry) => hostMatches(host, entry))) {
+    const deny = hostListOf(config.deny);
+    if (covers(deny.patterns, listedHost)) {
         await deps.ledger.record(opened, "refused");
         return refusalAnswer(403, "denied_host", `${host} is on the wallet's deny list: nothing was spent.`);
+    }
+    if (listedHost === undefined && deny.entries > 0) {
+        await deps.ledger.record(opened, "refused");
+        return refusalAnswer(403, "denied_host", `${host} cannot be checked against the wallet's deny list, so it was refused: nothing was spent.`);
     }
     if (quote.amountAtomic > usdToAtomic(config.perPaymentMaxUsd)) {
         await deps.ledger.record(opened, "refused");
@@ -174,7 +313,11 @@ export const gatedPaidFetch = async (deps: PaymentGateDeps, request: PaidFetchRe
         );
     }
     if (request.maxUsd !== undefined && quote.amountAtomic > usdToAtomic(request.maxUsd)) {
-        return refusalAnswer(403, "over_own_max", `This costs $${amountUsd}, over the $${request.maxUsd} ceiling you passed with --max. Nothing was spent.`);
+        return refusalAnswer(
+            403,
+            "over_own_max",
+            `This costs $${amountUsd}, over the $${request.maxUsd} ceiling you passed with --max. Nothing was spent.`,
+        );
     }
     const spentToday = spentTodayAtomic(rows, now(), usdToAtomic);
     const dailyCap = usdToAtomic(config.dailyCapUsd);
@@ -191,57 +334,20 @@ export const gatedPaidFetch = async (deps: PaymentGateDeps, request: PaidFetchRe
     // no card goes up; otherwise it parks on a card, and no live conversation means no card can go up at all.
     // The band is suspended on a tainted turn (outside content replaces the agent's own judgment): the payment still
     // happens, it just asks first.
-    const allow = hostsOf(config.allow);
+    const allow = hostListOf(config.allow);
     const tainted = request.conversationId !== undefined && deps.tainted(request.conversationId);
     const auto =
         !tainted &&
+        listedHost !== undefined &&
         quote.amountAtomic <= usdToAtomic(config.autoApproveUnderUsd) &&
-        (allow.length === 0 || allow.some((entry) => hostMatches(host, entry)));
+        (allow.entries === 0 || covers(allow.patterns, listedHost));
     let card: SettledCard<"payment_offer"> | undefined;
     if (!auto) {
-        const run = cardRun(deps, request.conversationId);
-        if (run === undefined) {
-            return refusalAnswer(
-                409,
-                "no_conversation",
-                "A payment needs a live conversation to raise its approval card in, and none could be found. Nothing was spent.",
-            );
+        const approval = await ownersApproval(deps, request, { quote, config, opened, spentToday, host });
+        if (!("requestId" in approval)) {
+            return approval;
         }
-        const offer: PaymentOffer = {
-            url: request.url,
-            ...(quote.description !== undefined ? { description: quote.description } : {}),
-            payTo: quote.payTo,
-            network: config.network,
-            asset: quote.asset,
-            assetName: "USDC",
-            amountUsd,
-            spentTodayUsd: atomicToUsd(spentToday),
-            dailyCapUsd: config.dailyCapUsd,
-            ...whyOf(request.why),
-        };
-        const owner = await deps.ownerEmail?.();
-        card = await raiseRequest(deps, run, {
-            kind: "payment_offer",
-            onAbort: { kind: "payment_offer", requestId: "", approve: false },
-            raised: (requestId) => ({ kind: "payment_offer", requestId, offer }),
-            // Checked against the identity verified on the reply, so another member's click (or a program's) leaves the
-            // card waiting for the owner instead of spending their money.
-            mayAnswer: (caller) =>
-                owner === undefined || caller?.email.toLowerCase() === owner.toLowerCase()
-                    ? undefined
-                    : `Only the owner (${owner}) can approve a payment from this sandbox's wallet.`,
-            approves: (reply) => reply.approve,
-            signal: request.signal,
-            deadlineMs: deps.deadlineMs ?? OFFER_DEADLINE_MS,
-        });
-        if (card.decision === "unanswered") {
-            await deps.ledger.record(opened, "unanswered");
-            return refusalAnswer(408, "unanswered", "The payment offer went unanswered and expired: nothing was spent. Continue without it; offer again only if the owner shows up.");
-        }
-        if (card.decision === "declined") {
-            await deps.ledger.record(opened, "declined");
-            return refusalAnswer(403, "declined", "The owner skipped this payment: nothing was spent. Continue without it.");
-        }
+        card = approval;
     }
 
     // Opens a pending row first (an unwritable ledger fails closed; the row holds the amount against the cap while in
@@ -251,7 +357,11 @@ export const gatedPaidFetch = async (deps: PaymentGateDeps, request: PaidFetchRe
     try {
         rowId = await deps.ledger.open({ ...opened, auto });
     } catch {
-        return refusalAnswer(500, "ledger_unwritable", "The wallet ledger could not be written, so the payment was refused: no spend without a record.");
+        return refusalAnswer(
+            500,
+            "ledger_unwritable",
+            "The wallet ledger could not be written, so the payment was refused: no spend without a record.",
+        );
     }
     const receipt = (outcome: "paid" | "failed", transaction?: string): void => {
         if (card === undefined) {
@@ -279,7 +389,13 @@ export const gatedPaidFetch = async (deps: PaymentGateDeps, request: PaidFetchRe
     if (signed.status !== 200) {
         await deps.ledger.settle(rowId, "refused");
         receipt("failed");
-        return { ...refusalAnswer(signed.status === 502 ? 502 : 403, "signer_refused", `The platform declined to sign: ${signed.body.slice(0, 300)}, nothing was spent.`) };
+        return {
+            ...refusalAnswer(
+                signed.status === 502 ? 502 : 403,
+                "signer_refused",
+                `The platform declined to sign: ${signed.body.slice(0, 300)}, nothing was spent.`,
+            ),
+        };
     }
     let signature: string;
     try {
@@ -317,7 +433,11 @@ export const gatedPaidFetch = async (deps: PaymentGateDeps, request: PaidFetchRe
         await deps.ledger.settle(rowId, "failed");
         receipt("failed");
         const reason = settlement?.errorReason ?? `the endpoint answered ${paid.status} to the paid retry`;
-        return refusalAnswer(502, "payment_failed", `Payment failed: ${reason}, the authorization expires unused, nothing was spent. Response: ${paidBody.slice(0, 300)}`);
+        return refusalAnswer(
+            502,
+            "payment_failed",
+            `Payment failed: ${reason}, the authorization expires unused, nothing was spent. Response: ${paidBody.slice(0, 300)}`,
+        );
     }
     await deps.ledger.settle(rowId, "paid", settlement?.transaction);
     receipt("paid", settlement?.transaction);

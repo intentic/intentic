@@ -49,6 +49,15 @@ test("a start folder outside the workspace gets the workspace's own rules, not n
     expect(workspaceMemoryNote({ root, cwd: join(root, "..") })).toContain("Ask before deleting anything.");
 });
 
+// `..drafts` is a folder name, not a climb: a `startsWith("..")` test once read it as outside and dropped its rules.
+test("a start folder whose name starts with two dots is inside the workspace", async () => {
+    const root = await scaffold({ [MEMORY_FILE]: "Ask before deleting anything.", [`..drafts/${MEMORY_FILE}`]: "Drafts are never published." });
+
+    const note = workspaceMemoryNote({ root, cwd: join(root, "..drafts") });
+    expect(note).toContain("Ask before deleting anything.");
+    expect(note).toContain("Drafts are never published.");
+});
+
 test("a workspace with no memory file says nothing at all", async () => {
     const root = await scaffold({ "README.md": "# Shop" });
 

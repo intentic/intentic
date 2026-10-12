@@ -1,5 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { sleep } from "@intentic/base/async";
 import { errnoCode, isMissing } from "@intentic/base/errors";
 
 // The processes of one terminal session, found the way the kernel groups them rather than by parentage. tmux starts
@@ -61,11 +62,6 @@ const signal = (pids: readonly number[], name: NodeJS.Signals): void => {
     }
 };
 
-const pause = (ms: number): Promise<void> =>
-    new Promise((resolve) => {
-        setTimeout(resolve, ms).unref();
-    });
-
 /**
  * Ends what a job pane runs, leaving the runner itself to see its command die and publish the status file as it does
  * for any exit. SIGTERM first; whatever is still there after the grace gets SIGKILL. Answers whether anything was
@@ -80,7 +76,7 @@ export const endSession = async (leader: number, procRoot = "/proc", graceMs = T
     const deadline = Date.now() + graceMs;
     let left = first;
     while (left.length > 0 && Date.now() < deadline) {
-        await pause(POLL_MS);
+        await sleep(POLL_MS, { unref: true });
         left = await sessionMembers(leader, procRoot);
     }
     signal(left, "SIGKILL");

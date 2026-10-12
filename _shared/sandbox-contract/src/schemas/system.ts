@@ -1,5 +1,7 @@
 import { z } from "zod";
-import { StatePlanSchema } from "./state-plan.js";
+import { BootProgressSchema } from "../events/system-events.js";
+import { AnnounceStateSchema } from "./platform-link.js";
+import { StatePlanSchema, StateStatusSchema } from "./state-plan.js";
 import { AutoUpdateSchema, UpdateOutcomeSchema, WithdrawnReleaseSchema } from "./updates.js";
 // version is this build's baked-in version; latest/updateAvailable come from comparing it to the published stable
 // release.
@@ -316,3 +318,63 @@ export interface AuthenticationOptionsJSON {
     // pressing it can succeed.
     readonly available: boolean;
 }
+
+// Whether this sandbox's public address answers, probed by the box itself; the same shape as `announce` beside it, so
+// `ic sandbox doctor` and the setup wizard can name whichever link broke.
+export const ReachStateSchema = z.object({
+    // off: nothing to probe; checking: no verdict yet; reachable: its own public address answered with our id.
+    state: z.enum(["off", "checking", "reachable", "unreachable"]),
+    // Why, for "unreachable", already in the user's terms since the wizard renders it verbatim.
+    detail: z.string().optional(),
+    // False once the give-up window is spent; only a restart retries after that.
+    retrying: z.boolean().optional(),
+    at: z.number().optional(),
+});
+export type ReachState = z.infer<typeof ReachStateSchema>;
+
+// Which build answers, so "is the fix live?" is one read.
+export const BuildStampSchema = z.object({
+    version: z.string(),
+    commit: z.string().optional(),
+    builtAt: z.string().optional(),
+});
+
+// GET /health: the "is a daemon there" probe every flow uses (launch scripts, /setup, the browser's loopback probe,
+// the platform's hosted gate, the onboarding lane), served raw before any authentication. `ic` reads it too, in Rust
+// (_sandbox/ic/src/health.rs), which cannot import this and reads only `boot`, `state` and `announce` loosely.
+export const DaemonHealthSchema = z.object({
+    ok: z.literal(true),
+    // The sandbox id, so a loopback probe can confirm it reached this daemon and not an unrelated process. Absent on a
+    // daemon with no connect token.
+    sandboxId: z.string().optional(),
+    // Which posture answers (the daemon's platform/profile.ts); needed before any authenticated read.
+    profile: z.string(),
+    // Tells "not answering" from "still converging".
+    boot: BootProgressSchema,
+    // Whether an update's state conversions are still uncommitted; the host rolls the update back when they stay open.
+    state: StateStatusSchema,
+    // Whether this daemon reached the platform.
+    announce: AnnounceStateSchema,
+    reach: ReachStateSchema,
+    // How the world reaches here: a dialed tunnel, or loopback only.
+    reachedBy: z.enum(["tunnel", "loopback"]),
+    build: BuildStampSchema,
+});
+export type DaemonHealth = z.infer<typeof DaemonHealthSchema>;
+
+// The same answer as a reader outside the daemon takes it: from a daemon of any age, so every field may be missing,
+// and one of an unexpected shape reads as missing rather than failing the whole answer. A daemon older than the boot
+// report said `ready` at the top level instead.
+export const DaemonHealthReadingSchema = z.object({
+    ok: z.boolean().optional().catch(undefined),
+    ready: z.boolean().optional().catch(undefined),
+    sandboxId: z.string().optional().catch(undefined),
+    profile: z.string().optional().catch(undefined),
+    boot: z.object({ ready: z.boolean().optional().catch(undefined) }).optional().catch(undefined),
+    state: z.object({ journal: z.string().optional().catch(undefined) }).optional().catch(undefined),
+    announce: AnnounceStateSchema.optional().catch(undefined),
+    reach: ReachStateSchema.optional().catch(undefined),
+    reachedBy: z.string().optional().catch(undefined),
+    build: BuildStampSchema.optional().catch(undefined),
+});
+export type DaemonHealthReading = z.infer<typeof DaemonHealthReadingSchema>;

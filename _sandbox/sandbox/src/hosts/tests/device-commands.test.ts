@@ -66,6 +66,14 @@ test("accepts a folder on the device and nothing that could end the argument it 
         "~/work && id",
         "~/work'",
         "~/work\nrm -rf /",
+        // PowerShell's double quotes “ ” „ and single quotes ‘ ’ ‚ ‛, each of which ends a literal there.
+        "C:\\x” + (calc) + ”",
+        "C:\\x“; calc",
+        "C:\\x„; calc",
+        "C:\\x’; calc; ‘",
+        "C:\\x‘",
+        "~/work‚",
+        "~/work‛",
         "work",
         "",
     ]) {
@@ -164,7 +172,7 @@ test("restarts THIS sandbox from the checkout the container records, not the cal
     // Spelled in full, prefix included: both dev commands carry the toolchain with them, because the login shell the
     // agent runs never reads the interactive rc pnpm's installer writes PNPM_HOME into.
     expect(line).toBe(
-        'export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"; export PATH="$PNPM_HOME:$PNPM_HOME/bin:$PATH"; sh "/home/ada/intentic"/_sandbox/sandbox/scripts/dev-restart.sh work-abc',
+        'export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"; export PATH="$PNPM_HOME:$PNPM_HOME/bin:$PATH"; sh /home/ada/intentic/_sandbox/sandbox/scripts/dev-restart.sh work-abc',
     );
 });
 
@@ -184,9 +192,9 @@ test("starts the checkout's rebuild in the background, logging where ic's own lo
     expect(line).toBe(
         'export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"; export PATH="$PNPM_HOME:$PNPM_HOME/bin:$PATH"; ' +
             "detach=$(command -v setsid 2>/dev/null || true); " +
-            'mkdir -p "$HOME/.intentic/logs" && cd "/home/ada/intentic" && ' +
+            'mkdir -p "$HOME/.intentic/logs" && cd /home/ada/intentic && ' +
             `$detach nohup sh -c 'pnpm rebuild:sandbox work-abc; printf "\\n${DEV_REBUILD_EXIT_MARK} %s\\n" "$?"' ` +
-            '> "$HOME/.intentic/logs/dev-rebuild-work-abc.log" 2>&1 & sleep 1',
+            '> "$HOME"/.intentic/logs/dev-rebuild-work-abc.log 2>&1 & sleep 1',
     );
 });
 
@@ -215,7 +223,7 @@ test("has the rebuild write its own exit status where the log outlives everythin
 // The read side, polled while a rebuild runs. Needs only the slug: reading a log takes the log's name, not the checkout.
 test("reads the rebuild log back with its mtime, bounded in bytes and lines", () => {
     const line = DEVICE_COMMANDS["dev-rebuild-log"].line(facts({ sandboxId: "someone-else" })) ?? "";
-    expect(line).toContain('log="$HOME/.intentic/logs/dev-rebuild-work-abc.log"');
+    expect(line).toContain('log="$HOME"/.intentic/logs/dev-rebuild-work-abc.log;');
     // Both dialects of mtime, because the machine holding a checkout is as often macOS as it is Linux.
     expect(line).toContain('stat -c %Y "$log" 2>/dev/null || stat -f %m "$log" 2>/dev/null');
     expect(line).toContain(`echo "${DEV_REBUILD_QUIET_MARK} $(( $(date +%s) - at ))"`);
@@ -234,8 +242,8 @@ test("cannot name a log for a sandbox that does not know its own name", () => {
 // One reader, one writer, one path: a card that named the log itself could point at a file nothing writes.
 test("writes and reads the same log path", () => {
     const written = DEVICE_COMMANDS["dev-rebuild"].line(facts({ devRoot: "/home/ada/intentic" })) ?? "";
-    expect(written).toContain(devRebuildLogPath("work-abc").replace("~", "$HOME"));
-    expect(DEVICE_COMMANDS["dev-rebuild-log"].line(facts()) ?? "").toContain(devRebuildLogPath("work-abc").replace("~", "$HOME"));
+    expect(written).toContain(devRebuildLogPath("work-abc").replace("~", '"$HOME"'));
+    expect(DEVICE_COMMANDS["dev-rebuild-log"].line(facts()) ?? "").toContain(devRebuildLogPath("work-abc").replace("~", '"$HOME"'));
 });
 
 // Same rule as the reload beside it: no checkout recorded, no line — a path on somebody's laptop is never guessed.
@@ -249,7 +257,7 @@ test("refuses to rebuild a sandbox that has no checkout behind it", () => {
 
 // A leading `~` is the owner's home on that machine, expanded by the daemon rather than left for a quoted shell.
 test("writes a tilde checkout as $HOME, the one the shell will expand", () => {
-    expect(DEVICE_COMMANDS["dev-rebuild"].line(facts({ devRoot: "~/intentic" }))).toContain('cd "$HOME/intentic"');
+    expect(DEVICE_COMMANDS["dev-rebuild"].line(facts({ devRoot: "~/intentic" }))).toContain('cd "$HOME"/intentic');
 });
 
 // Parsed from the schema, so a field added to what a caller may ask for cannot leave these asking something stale.
@@ -343,7 +351,7 @@ test("enrolls sync in the environment that holds the folder, in that environment
     expect(distroRoute).toEqual({ environment: "wsl:archlinux", in: "wsl:archlinux" });
     const distroLine = DEVICE_COMMANDS["sync-install"].line(inDistro, distroRoute) ?? "";
     expect(distroLine).toContain("curl -fsSL https://intentic.dev/sync");
-    expect(distroLine).toContain('SYNC_DIR="/home/radarsu/intentic/work"');
+    expect(distroLine).toContain('SYNC_DIR=/home/radarsu/intentic/work ');
     // A Windows folder on the same machine: no crossing, and PowerShell.
     const onWindows = facts({ ...pc, localDir: "C:\\Users\\radar\\intentic" });
     const windowsRoute = doorRoute(DEVICE_COMMANDS["sync-install"], onWindows, asked("sync-install"));
@@ -388,23 +396,36 @@ test("enrolls a connected device with the sync one-liner, in its own shell's dia
 test("enrolls a connected device in its own shell's dialect without a code", () => {
     expect(
         DEVICE_COMMANDS["sync-install"].line(facts({ pairToken: "pair_abc", pairCode: "AB12CD34", publicUrl: "https://localhost:8788", mode: "sync" })),
-    ).toBe("curl -fsSL https://intentic.dev/sync | env SANDBOX_URL='https://localhost:8788' PAIR_TOKEN='pair_abc' sh");
+    ).toBe("curl -fsSL https://intentic.dev/sync | env SANDBOX_URL=https://localhost:8788 PAIR_TOKEN=pair_abc sh");
     const unix = DEVICE_COMMANDS["sync-install"].line(facts({ pairToken: "pair_abc", mode: "sync", localDir: "~/intentic/work" }));
     expect(unix).toBe(
-        "curl -fsSL https://intentic.dev/sync | env SANDBOX_URL='https://work-abc.intentic.dev' PAIR_TOKEN='pair_abc' SYNC_DIR=\"$HOME/intentic/work\" sh",
+        "curl -fsSL https://intentic.dev/sync | env SANDBOX_URL=https://work-abc.intentic.dev PAIR_TOKEN=pair_abc SYNC_DIR=\"$HOME\"/intentic/work sh",
     );
     const windows = DEVICE_COMMANDS["sync-install"].line(
         facts({ platform: "windows", pairToken: "pair_abc", mode: "sync", localDir: "C:\\Users\\Ada\\work" }),
     );
     expect(windows).toBe(
-        `$env:SANDBOX_URL='https://work-abc.intentic.dev'; $env:PAIR_TOKEN='pair_abc'; $env:SYNC_DIR="C:\\Users\\Ada\\work"; irm https://intentic.dev/sync.ps1 | iex${EXIT_TAIL}`,
+        `$env:SANDBOX_URL='https://work-abc.intentic.dev'; $env:PAIR_TOKEN='pair_abc'; $env:SYNC_DIR='C:\\Users\\Ada\\work'; irm https://intentic.dev/sync.ps1 | iex${EXIT_TAIL}`,
     );
+});
+
+// The schema refuses quotes, and the line is quoted anyway: each dialect through its one quoter, so a folder with spaces
+// and quotes that reached here past the schema still arrives as one word, and only the home prefix stays unquoted.
+test("quotes the folder for the shell the line runs in, with the home prefix outside the quotes", () => {
+    const enroll = (platform: string, localDir: string): string =>
+        DEVICE_COMMANDS["sync-install"].line(facts({ platform, pairToken: "pair_abc", mode: "sync", localDir })) ?? "";
+    expect(enroll("linux", "~/my work/it's")).toContain(`SYNC_DIR="$HOME"'/my work/it'\\''s' sh`);
+    expect(enroll("linux", "/srv/a b")).toContain(`SYNC_DIR='/srv/a b' sh`);
+    expect(enroll("linux", "~")).toContain(`SYNC_DIR="$HOME" sh`);
+    expect(enroll("windows", "C:\\My Work\\it's ‘x’ ‚y‛")).toContain(`$env:SYNC_DIR='C:\\My Work\\it''s ‘‘x’’ ‚‚y‛‛';`);
+    expect(enroll("windows", "~\\My Work")).toContain(`$env:SYNC_DIR=($HOME + '\\My Work');`);
+    expect(DEVICE_COMMANDS["dev-restart"].line(facts({ devRoot: "/home/ada/my checkout" }))).toContain(`sh '/home/ada/my checkout'/_sandbox/sandbox/scripts/dev-restart.sh`);
 });
 
 // Mirroring forwards ports and touches no files, so a folder must not ride along even when the card has one.
 test("sends no folder for a ports-only enrollment", () => {
     const line = DEVICE_COMMANDS["sync-install"].line(facts({ pairToken: "pair_abc", mode: "mirror", localDir: "~/intentic/work" }));
-    expect(line).toBe("curl -fsSL https://intentic.dev/sync | env SANDBOX_URL='https://work-abc.intentic.dev' PAIR_TOKEN='pair_abc' sh");
+    expect(line).toBe("curl -fsSL https://intentic.dev/sync | env SANDBOX_URL=https://work-abc.intentic.dev PAIR_TOKEN=pair_abc sh");
 });
 
 // A device dials this sandbox by its public address; without one the install would enroll against nothing.

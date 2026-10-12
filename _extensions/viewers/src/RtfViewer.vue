@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { useLatest } from "@intentic/extension-ui";
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import DocumentPaper from "./DocumentPaper.vue";
 import { t } from "./i18n.js";
+import { useViewerLoad } from "./load/useViewerLoad.js";
 import { renderBlocks } from "./odf/render";
 import { parseRtf } from "./rtf/parse";
 
@@ -11,10 +11,8 @@ import { parseRtf } from "./rtf/parse";
 const { blob } = defineProps<{ blob: Blob }>();
 
 const paper = ref<InstanceType<typeof DocumentPaper>>();
-const loading = ref(true);
-const error = ref<string>();
+const { loading, error, start } = useViewerLoad(() => t(`common.couldNotRenderDocument`));
 const empty = ref(false);
-const latest = useLatest();
 // Pictures decoded out of the file; they leak until revoked.
 let urls: string[] = [];
 
@@ -30,12 +28,9 @@ const render = async (source: Blob): Promise<void> => {
     if (host === undefined) {
         return;
     }
-    const isLatest = latest();
-    loading.value = true;
-    error.value = undefined;
-    empty.value = false;
-    host.replaceChildren();
-    try {
+    await start(async (isLatest) => {
+        empty.value = false;
+        host.replaceChildren();
         const bytes = new Uint8Array(await source.arrayBuffer());
         if (!isLatest()) {
             return;
@@ -55,16 +50,7 @@ const render = async (source: Blob): Promise<void> => {
         }
         renderBlocks(doc.blocks, page, host.ownerDocument);
         host.append(page);
-    } catch (caught) {
-        if (!isLatest()) {
-            return;
-        }
-        error.value = caught instanceof Error ? caught.message : t(`common.couldNotRenderDocument`);
-    } finally {
-        if (isLatest()) {
-            loading.value = false;
-        }
-    }
+    });
 };
 
 // One sheet, not pages: RTF records where the WRITER's layout broke, which is not where this one does.

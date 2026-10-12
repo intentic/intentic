@@ -1,9 +1,10 @@
 import { ref, watch, type Ref } from "vue";
+import { deviceKey, removeStoredValue, storedValue, storeValue } from "../lib/browserStorage";
 
 // A preference is per-account, not per-window: without this, a popped-out panel's own document never
 // learns of a change made elsewhere. Changes travel via BroadcastChannel and the browser's `storage`
 // event (which also catches non-preference writes, e.g. a self-heal clear); a preference is live only
-// in windows that import its module.
+// in windows that import its module. A preference is this device's (`deviceKey`): signing out keeps it.
 
 export interface PreferenceOptions<T> {
 /** The localStorage key; preferences live under `ui-`, namespaced away from a window's own view state (`intentic.*`). */
@@ -16,31 +17,14 @@ export interface PreferenceOptions<T> {
     readonly apply?: (value: T) => void;
 }
 
-const local = (): Storage | undefined => {
-    try {
-        return globalThis.localStorage;
-    } catch {
-        return undefined;
-    }
-};
+const stored = (key: string): string | null => storedValue(key) ?? null;
 
-const stored = (key: string): string | null => {
-    try {
-        return local()?.getItem(key) ?? null;
-    } catch {
-        return null;
-    }
-};
-
+// Unavailable or over quota; the in-memory ref still holds for the life of this window.
 const persist = (key: string, raw: string | null): void => {
-    try {
-        if (raw === null) {
-            local()?.removeItem(key);
-        } else {
-            local()?.setItem(key, raw);
-        }
-    } catch {
-        // Unavailable or over quota; the in-memory ref still holds for the life of this window.
+    if (raw === null) {
+        removeStoredValue(key);
+    } else {
+        storeValue(key, raw);
     }
 };
 
@@ -73,7 +57,8 @@ if (typeof window !== `undefined`) {
 }
 
 /** Declare one preference and hand back the ref the app reads and writes; assigning it applies, persists, and notifies every other window. */
-export const definePreference = <T>({ key, read, write, apply }: PreferenceOptions<T>): Ref<T> => {
+export const definePreference = <T>({ key: name, read, write, apply }: PreferenceOptions<T>): Ref<T> => {
+    const key = deviceKey(name);
     const state = ref(read(stored(key))) as Ref<T>;
     apply?.(state.value);
 

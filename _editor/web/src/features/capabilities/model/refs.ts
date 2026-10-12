@@ -1,6 +1,6 @@
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import type { CapabilityField } from "@intentic/extension-manifest";
-import { type RemoteRef, type RemoteRefs, VAULTED } from "@intentic/sandbox-contract";
+import { compareVersions, parseVersion, type RemoteRef, type RemoteRefs, VAULTED } from "@intentic/sandbox-contract";
 import type { PickerGroup } from "@intentic/ui";
 import { type FormValues, isCommitSha, type StoredSecrets } from "./form";
 import { t } from "@intentic/ui/i18n";
@@ -28,46 +28,19 @@ export const refKey = (ref: RemoteRef): string => `${ref.kind}:${ref.name}`;
 
 export const shortSha = (sha: string): string => sha.slice(0, 7);
 
-interface Version {
-    readonly parts: readonly number[];
-    /** A `-rc.1` suffix; a release sorts ahead of its own prereleases. */
-    readonly pre: string | undefined;
-}
-
-const SEMVER = /^v?(\d+)\.(\d+)(?:\.(\d+))?(?:[-+](.+))?$/;
-
-const versionOf = (name: string): Version | undefined => {
-    const match = SEMVER.exec(name);
-    if (match === null) {
-        return undefined;
-    }
-    return { parts: [Number(match[1]), Number(match[2]), Number(match[3] ?? 0)], pre: match[4] };
-};
-
-// Highest first, and a release ahead of its own prereleases: 1.2.0 leads 1.2.0-rc.2 leads 1.2.0-rc.1.
-const compareVersions = (a: Version, b: Version): number => {
-    for (let index = 0; index < 3; index += 1) {
-        const difference = (b.parts[index] ?? 0) - (a.parts[index] ?? 0);
-        if (difference !== 0) {
-            return difference;
-        }
-    }
-    if (a.pre === undefined || b.pre === undefined) {
-        return a.pre === b.pre ? 0 : a.pre === undefined ? -1 : 1;
-    }
-    return b.pre.localeCompare(a.pre);
-};
+// A tag reads as a version when it has at least a major and a minor; `v1` or a dated `2024-01-01` stays a name. The
+// ordering is the contract's semver comparator: a release ahead of its own prereleases, `rc.10` after `rc.9`.
+const isReleaseTag = (name: string): boolean => (parseVersion(name)?.parts.length ?? 0) >= 2;
 
 // Newest first. Version-shaped tags lead, ordered as versions rather than as text (so v10 beats v9); anything else
 // follows in reverse name order, which puts a dated tag newest-first too.
 const compareTags = (left: RemoteRef, right: RemoteRef): number => {
-    const a = versionOf(left.name);
-    const b = versionOf(right.name);
-    if (a !== undefined && b !== undefined) {
-        return compareVersions(a, b);
+    const [a, b] = [isReleaseTag(left.name), isReleaseTag(right.name)];
+    if (a && b) {
+        return compareVersions(right.name, left.name);
     }
-    if (a !== undefined || b !== undefined) {
-        return a !== undefined ? -1 : 1;
+    if (a || b) {
+        return a ? -1 : 1;
     }
     return right.name.localeCompare(left.name);
 };

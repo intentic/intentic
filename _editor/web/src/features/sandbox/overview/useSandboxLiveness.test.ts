@@ -46,7 +46,7 @@ jest.mock("../../../client/sandbox/sandboxRpc", () => ({
 jest.mock("../../../client/sandbox/sandboxAuthFetch", () => ({ SandboxUnaddressedError: class extends Error {} }));
 jest.mock("../../../client/session/sandboxSession", () => ({ useSandboxSession: () => ({ invalidateSession: () => undefined }) }));
 jest.mock("../../../client/sandbox/edgeVerdict", () => ({ forgetEdgeVerdict: () => undefined, lastEdgeVerdict: () => undefined }));
-jest.mock("../../../client/sandbox/pageWake", () => ({ watchPageWake: () => () => undefined }));
+jest.mock("../../../client/sandbox/pageWake", () => ({ watchPageWake: () => () => undefined, refVisibility: () => undefined }));
 jest.mock("../../../app/hotReload", () => ({ reloadOnHotUpdate: () => undefined }));
 jest.mock("../../../lib/queryPersistence", () => ({ queryClient: { removeQueries: () => undefined } }));
 jest.mock("../../../workbench/presence/usePresence", () => ({ clearPresence: () => undefined, presenceStreamOpened: () => undefined }));

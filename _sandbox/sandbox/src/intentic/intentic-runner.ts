@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import type { IntenticLine } from "@intentic/sandbox-contract";
 import { whenAborted } from "@intentic/base/async";
+import { jsonLines } from "@intentic/base/json-lines";
 import { DAEMON_OWNER, workloadStamp } from "../seams/workload-stamp.js";
 
 // IntenticLine, one parsed line from `intentic ... --output ndjson`, is the wire shape the daemon streams; it lives in
@@ -21,24 +22,6 @@ export const parseIntenticLine = (line: string): IntenticLine | undefined => {
     const kind = (value as { kind?: unknown }).kind;
     return typeof kind === "string" ? (value as IntenticLine) : undefined;
 };
-
-// Splits arbitrary string chunks into newline-delimited lines, carrying a partial line across chunk boundaries and
-// flushing any remainder at the end.
-export async function* chunksToLines(chunks: AsyncIterable<string>): AsyncGenerator<string> {
-    let buffer = "";
-    for await (const chunk of chunks) {
-        buffer += chunk;
-        let index = buffer.indexOf("\n");
-        while (index !== -1) {
-            yield buffer.slice(0, index);
-            buffer = buffer.slice(index + 1);
-            index = buffer.indexOf("\n");
-        }
-    }
-    if (buffer !== "") {
-        yield buffer;
-    }
-}
 
 export interface IntenticRun {
     // Subcommand + flags, e.g. ["resolve", "--config", ...]; INTENTIC_OUTPUT=ndjson is forced regardless.
@@ -66,7 +49,6 @@ export async function* runIntentic(run: IntenticRun, signal?: AbortSignal, logge
         env: { ...process.env, INTENTIC_OUTPUT: "ndjson", ...workloadStamp(DAEMON_OWNER) },
     });
     logger?.info({ args: run.args, pid: child.pid }, "intentic run spawned");
-    child.stdout.setEncoding("utf8");
     let stderr = "";
     child.stderr.setEncoding("utf8");
     child.stderr.on("data", (chunk: string) => {
@@ -86,7 +68,7 @@ export async function* runIntentic(run: IntenticRun, signal?: AbortSignal, logge
     const watchdog = setTimeout(() => kill(`the run exceeded ${RUN_WATCHDOG_MS / 60_000}m`), RUN_WATCHDOG_MS);
     watchdog.unref();
     try {
-        for await (const line of chunksToLines(child.stdout as AsyncIterable<string>)) {
+        for await (const line of jsonLines(child.stdout)) {
             const parsed = parseIntenticLine(line);
             if (parsed !== undefined) {
                 yield parsed;

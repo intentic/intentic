@@ -1,7 +1,6 @@
-import { execFile } from "node:child_process";
 import { realpath } from "node:fs/promises";
 import { join } from "node:path";
-import { promisify } from "node:util";
+import { execBounded } from "@intentic/base/process";
 import { icCandidates, icVersionFrom } from "../device/tools/ic-binary.js";
 import type { UpkeepEntry } from "./entry.js";
 
@@ -9,14 +8,12 @@ import type { UpkeepEntry } from "./entry.js";
    (device/tools/ic-binary.ts), but a person typing `ic` gets whichever PATH finds first, and a root install's
    `/usr/local/bin/ic` is never updated: nothing here may write there without sudo. So it is reported, never changed. */
 
-const exec = promisify(execFile);
-
 // Where PATH's `ic` is, the way a shell would find it.
 const icOnPath = async (platform: NodeJS.Platform): Promise<string | undefined> => {
     const lookup =
         platform === "win32"
-            ? exec(join(process.env["SystemRoot"] ?? "C:\\Windows", "System32", "where.exe"), ["ic"], { windowsHide: true, timeout: 30_000 })
-            : exec("sh", ["-c", "command -v ic"], { timeout: 30_000 });
+            ? execBounded(join(process.env["SystemRoot"] ?? "C:\\Windows", "System32", "where.exe"), ["ic"], { timeoutMs: 30_000 })
+            : execBounded("sh", ["-c", "command -v ic"], { timeoutMs: 30_000 });
     // allow(silent-catch): no `ic` on PATH is the answer "none", which shadows nothing
     const first = (await lookup.catch(() => ({ stdout: "" }))).stdout.split(/\r?\n/)[0]?.trim();
     return first === undefined || first === "" ? undefined : first;
@@ -24,7 +21,7 @@ const icOnPath = async (platform: NodeJS.Platform): Promise<string | undefined> 
 
 const versionOf = async (binary: string): Promise<string> =>
     // allow(silent-catch): an ic that will not say its version is reported as such
-    icVersionFrom((await exec(binary, ["--version"], { windowsHide: true, timeout: 30_000 }).catch(() => ({ stdout: "" }))).stdout) ?? "unknown";
+    icVersionFrom((await execBounded(binary, ["--version"], { timeoutMs: 30_000 }).catch(() => ({ stdout: "" }))).stdout) ?? "unknown";
 
 // One path as the platform compares it: through links (a user install links ~/.local/bin/ic to the agent's own), and
 // case-folded on Windows.

@@ -1,6 +1,5 @@
-import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { promisify } from "node:util";
+import { execBounded } from "@intentic/base/process";
 import { WSL_SYSTEM_DISTROS } from "@intentic/sandbox-contract";
 
 // Whether this agent is running inside a WSL distro rather than on the machine itself, and which distro. WSL hands a
@@ -15,8 +14,6 @@ import { WSL_SYSTEM_DISTROS } from "@intentic/sandbox-contract";
 // The line WSL writes into its kernel version string, on both WSL1 ("Microsoft") and WSL2
 // ("microsoft-standard-WSL2"). Matched case-insensitively so one test covers both.
 const WSL_KERNEL = /microsoft/i;
-
-const exec = promisify(execFile);
 
 // `wslpath -w /` answers `\\wsl.localhost\archlinux\` (`\\wsl$\archlinux\` on older builds): the second component is
 // the registration name. Anything else — interop off, no wslpath, a drive path — names nothing.
@@ -55,7 +52,7 @@ const readable = (path: string): Promise<string | undefined> => readFile(path, "
 // be absent, and neither is a reason for a report to fail — the fallbacks below answer instead.
 const WSLPATH_TIMEOUT_MS = 2_000;
 const wslRoot = async (): Promise<string | undefined> =>
-    (await exec("wslpath", ["-w", "/"], { timeout: WSLPATH_TIMEOUT_MS }).catch(() => undefined))?.stdout;
+    (await execBounded("wslpath", ["-w", "/"], { timeoutMs: WSLPATH_TIMEOUT_MS }).catch(() => undefined))?.stdout;
 
 // One reading per report. Two small reads on Linux, nothing anywhere else since neither path exists there, and the
 // one spawn only where the kernel has already said WSL — a native Linux box never pays for it.
@@ -88,9 +85,8 @@ export const listDistros = async ({
     running = false,
     timeoutMs = 5_000,
 }: { readonly running?: boolean; readonly timeoutMs?: number } = {}): Promise<string[] | undefined> => {
-    const answer = await exec("wsl.exe", ["-l", "-q", ...(running ? ["--running"] : [])], {
-        timeout: timeoutMs,
-        windowsHide: true,
+    const answer = await execBounded("wsl.exe", ["-l", "-q", ...(running ? ["--running"] : [])], {
+        timeoutMs,
         env: { ...process.env, WSL_UTF8: "1" },
     }).catch(() => undefined);
     return answer === undefined ? undefined : distrosFrom(answer.stdout);

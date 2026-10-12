@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { syncFolder } from "@intentic/sandbox-contract";
 import { Button, type DeviceSandboxGroup, ui } from "@intentic/ui";
-import { computed, onUnmounted, ref } from "vue";
+import { computed } from "vue";
 import type { DeviceOps } from "../runners/deviceOps";
 import { type DeviceRow, managerOf, type MachineRow } from "../deviceRows";
 import { environmentTitle } from "../machineEnvironments";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { useT } from "@intentic/ui/i18n";
+import { useNow } from "@intentic/ui/async";
+import { formatDuration } from "@intentic/ui/format";
 import { beginSetup, draftFolder, pendingSetup, setDraftFolder } from "./syncSetup";
 
 // TURNING SYNC ON WHERE IT IS READ ABOUT. A machine already connected needs no one-liner to start syncing a folder:
@@ -65,14 +67,10 @@ const setFolder = (environment: DeviceRow, value: string): void => setDraftFolde
 
 // A setup of this row in flight, from this mount or one before it: the folder it was given, said back while it works.
 const pending = computed(() => pendingSetup(machine.key, group.sandboxId));
-// Seconds since it began, so a setup that takes minutes reads as one still going rather than one that stalled.
-const now = ref(Date.now());
-const ticker = setInterval(() => void (now.value = Date.now()), 1000);
-onUnmounted(() => clearInterval(ticker));
-const elapsed = computed(() => {
-    const seconds = Math.max(0, Math.floor((now.value - (pending.value?.startedAt ?? now.value)) / 1000));
-    return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, `0`)}`;
-});
+// Seconds since it began, so a setup that takes minutes reads as one still going rather than one that stalled. The
+// clock runs only while a setup is out.
+const now = useNow(() => pending.value !== undefined);
+const elapsed = computed(() => formatDuration(Math.max(0, (now.value - (pending.value?.startedAt ?? now.value)) / 1000)));
 
 // The field's floor: the path it holds (one monospace `ch` a character, a spare one for the caret, and the field's own
 // padding and border), never under 16rem and never past the line. A fixed floor let a typical path scroll out of its own

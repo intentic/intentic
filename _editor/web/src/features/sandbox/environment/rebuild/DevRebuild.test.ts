@@ -6,7 +6,7 @@ import "@intentic/testing/dom";
 import { DEV_REBUILD_EXIT_MARK, DEV_REBUILD_QUIET_MARK, devRebuildLogPath } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
-import { type App, createApp, h, nextTick, ref } from "vue";
+import { type App, createApp, effectScope, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import { forgetHubWork, hubWorkKey, hubWorkRunning } from "../../../../workbench/hub/hubWork";
 
@@ -33,7 +33,17 @@ jest.mock(`../../overview/useSandboxSettings`, () => ({ useSandboxSettings: () =
 
 const { default: DevRebuild } = await import("./DevRebuild.vue");
 // The same module instance the card uses, so a test can put a run in flight without driving the confirm dialog first.
-const { OUT_OF_CONTACT_MS, useDevRebuild } = await import("./useDevRebuild");
+const { OUT_OF_CONTACT_MS, useDevRebuild: followRebuild } = await import("./useDevRebuild");
+// Each test's own followers inside its own scope, stopped with the test, as a mounted card's are: the clock a follower
+// counts by is the window's one shared clock, and one left running would tick on the timers of a test long over.
+let scope = effectScope();
+const useDevRebuild = (slug: string): ReturnType<typeof followRebuild> => {
+    const made = scope.run(() => followRebuild(slug));
+    if (made === undefined) {
+        throw new Error(`the test's scope has already been stopped`);
+    }
+    return made;
+};
 
 let app: App | undefined;
 
@@ -71,6 +81,7 @@ const settleUi = async (ms = 0): Promise<void> => {
 };
 
 beforeEach(() => {
+    scope = effectScope();
     jest.useFakeTimers();
     askedAbout.length = 0;
     runDeviceCommand.mockReset();
@@ -91,6 +102,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    scope.stop();
     fleet.value = [];
     settings.value = undefined;
     jest.runOnlyPendingTimers();

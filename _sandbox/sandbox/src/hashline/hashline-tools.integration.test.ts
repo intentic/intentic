@@ -134,3 +134,19 @@ test("write creates a file and its folders, and an overwrite keeps the file's mo
     expect(await readFile(join(root, "sub/dir/fresh.txt"), "utf8")).toBe("hi");
     expect((await readdir(root)).toSorted()).toEqual(["run.sh", "sub"]);
 });
+
+// The path checks once lexically and once on disk: a link inside the root that points out of it is still a path out.
+test("a read, edit or write through a symlink that leaves the workspace is refused and touches nothing outside", async () => {
+    const { root, call } = await workspace({});
+    const outside = await mkdtemp(join(tmpdir(), "hashline-outside-"));
+    roots.push(outside);
+    await writeFile(join(outside, "secret.txt"), "untouched\n");
+    await symlink(join(outside, "secret.txt"), join(root, "leak.txt"));
+    await symlink(outside, join(root, "away"));
+    expect(await call("read", { path: "leak.txt" })).toEqual({ text: "path is outside the workspace: leak.txt", isError: true });
+    expect((await call("write", { path: "leak.txt", content: "overwritten" })).isError).toBe(true);
+    expect((await call("write", { path: "away/fresh.txt", content: "planted" })).isError).toBe(true);
+    expect((await call("edit", { path: "leak.txt", anchor: "x", ops: [{ op: "delete", from: "abcd" }] })).isError).toBe(true);
+    expect(await readFile(join(outside, "secret.txt"), "utf8")).toBe("untouched\n");
+    expect((await readdir(outside)).toSorted()).toEqual(["secret.txt"]);
+});

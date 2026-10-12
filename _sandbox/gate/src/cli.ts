@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { randomUUID } from "node:crypto";
+import { sleep } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import { exitOf, GateExchangeError, gateExchange, type GateVerdict, parseArgs, USAGE } from "./gate.js";
 import { exitOfRun, parseRunArgs, RUN_USAGE, RunExchangeError, type RunOutcome, runExchange } from "./run.js";
@@ -35,7 +36,7 @@ if (process.argv[2] === "run") {
     }
     let outcome: RunOutcome;
     try {
-        outcome = await runExchange({ ...call, prompt }, { fetch, sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)), now: Date.now });
+        outcome = await runExchange({ ...call, prompt }, { fetch, sleep, now: Date.now });
     } catch (error) {
         console.error(error instanceof RunExchangeError ? error.message : errorMessage(error));
         process.exit(2);

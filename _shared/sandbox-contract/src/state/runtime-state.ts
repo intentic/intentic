@@ -66,6 +66,10 @@ const RUNTIME_DOMAINS = [
     // An automatic update started waiting, changed what it waits on, began counting down or handed itself to the
     // machine: what every page needs to hear before the sandbox goes quiet under it, wherever the reader is.
     { domain: "update", invalidates: [["update"]] },
+
+    // A standing yes written or taken back outside a need's answer: a permission card's pass, a release, a purge. They
+    // live under the auth root, which no file push watches, and the Allowed list must move with the card that wrote one.
+    { domain: "grants", invalidates: [["grants"]] },
 ] as const satisfies readonly RuntimeDomainBinding[];
 
 export const RUNTIME_DOMAIN_BINDINGS: readonly RuntimeDomainBinding[] = RUNTIME_DOMAINS;

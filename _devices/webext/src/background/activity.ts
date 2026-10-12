@@ -1,3 +1,4 @@
+import { oneLine } from "@intentic/base/one-line";
 import { siteOf } from "./policy.js";
 
 // Tool calls as sentences a person reads in the popup's activity list. Its own module, apart from audit.ts, because
@@ -6,15 +7,13 @@ import { siteOf } from "./policy.js";
 
 const text = (value: unknown): string => (typeof value === "string" ? value : "");
 
-const clip = (value: string, max: number): string => (value.length > max ? `${value.slice(0, max - 1)}…` : value);
-
 // A URL the agent passed, as a person would say it: host and path, no scheme, no query string.
 const place = (url: string): string => {
     try {
         const parsed = new URL(url.includes("://") ? url : `https://${url}`);
-        return clip(`${parsed.host}${parsed.pathname === "/" ? "" : parsed.pathname}`, 60);
+        return oneLine(`${parsed.host}${parsed.pathname === "/" ? "" : parsed.pathname}`, 60);
     } catch {
-        return clip(url, 60);
+        return oneLine(url, 60);
     }
 };
 
@@ -37,15 +36,15 @@ export const describeCall = (tool: string, args: Record<string, unknown>): strin
         case "fill":
             return `Typed ${text(args["text"]).length} characters into ${text(args["ref"])}${args["submit"] === true ? " and submitted" : ""}`;
         case "select_option":
-            return `Chose ${clip(Array.isArray(args["values"]) ? args["values"].map(String).join(", ") : "", 40)} in ${text(args["ref"])}`;
+            return `Chose ${oneLine(Array.isArray(args["values"]) ? args["values"].map(String).join(", ") : "", 40)} in ${text(args["ref"])}`;
         case "key":
             return `Pressed ${text(args["key"])}`;
         case "scroll":
             return `Scrolled ${text(args["direction"]) || "down"}`;
         case "wait_for":
             return args["text"] === undefined
-                ? `Waited for “${clip(text(args["textGone"]), 40)}” to go`
-                : `Waited for “${clip(text(args["text"]), 40)}”`;
+                ? `Waited for “${oneLine(text(args["textGone"]), 40)}” to go`
+                : `Waited for “${oneLine(text(args["text"]), 40)}”`;
         case "screenshot":
             return "Took a screenshot";
         case "ask_access":
@@ -55,6 +54,6 @@ export const describeCall = (tool: string, args: Record<string, unknown>): strin
         case "lend_site":
             return `Borrowed ${text(args["account"])}'s sign-in`;
         default:
-            return clip(`${tool} ${JSON.stringify(args)}`, 120);
+            return oneLine(`${tool} ${JSON.stringify(args)}`, 120);
     }
 };

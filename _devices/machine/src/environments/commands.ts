@@ -1,5 +1,4 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { execBounded } from "@intentic/base/process";
 import { explain, type Footnote, type Item, type Log } from "@intentic/local-agent";
 import { buildRouteMap, type CommandContext } from "@stricli/core";
 import { buildCommand, machineUi } from "../cli-ui.js";
@@ -8,8 +7,6 @@ import { listDistros, WINDOWS_SIDE } from "./wsl.js";
 import { heldDistros, type MachineConfig, readMachineConfig, runOnWindows, updateMachineConfig, windowsRoot, withChild } from "./machine.js";
 
 // The commands that act on the PC as a whole rather than on this one environment of it.
-
-const exec = promisify(execFile);
 
 const attach = buildCommand<Record<never, never>, [string]>({
     docs: { brief: "Keep a WSL distro's agent running from this PC's Windows side (the distro's own agent asks for this)" },
@@ -54,7 +51,7 @@ export const adoptRunningDistros = async (log: Log): Promise<void> => {
     const running = ((await listDistros({ running: true })) ?? []).filter((distro) => !held.includes(distro));
     for (const distro of running) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- one distro at a time; each is a wsl.exe round trip
-        const has = await exec("wsl.exe", ["-d", distro, "--exec", "sh", "-c", HAS_RESIDENT_SH], { timeout: 30_000, windowsHide: true })
+        const has = await execBounded("wsl.exe", ["-d", distro, "--exec", "sh", "-c", HAS_RESIDENT_SH], { timeoutMs: 30_000 })
             .then(() => true)
             .catch(() => false);
         if (has) {

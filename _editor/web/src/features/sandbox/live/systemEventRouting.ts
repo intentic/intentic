@@ -1,3 +1,5 @@
+import { removeStoredValue, type StorageArea, storedKeys, storedValue, storeValue } from "../../../lib/browserStorage";
+
 // What a daemon `/events` frame makes stale: the routing policy, dependency-free (no store, query client, or Vue), so
 // it's testable on its own. The dispatcher that acts on these rules is systemEvents.ts.
 
@@ -11,9 +13,10 @@ const changedSince = (kind: string, sandboxId: string, current: string | undefin
     if (current === undefined) {
         return false;
     }
-    const known = localStorage.getItem(identityKey(kind, sandboxId));
-    localStorage.setItem(identityKey(kind, sandboxId), current);
-    return known !== null && known !== current;
+    // Storage that is off or full remembers nothing, so every hello reads as a first one rather than throwing.
+    const known = storedValue(identityKey(kind, sandboxId));
+    storeValue(identityKey(kind, sandboxId), current);
+    return known !== undefined && known !== current;
 };
 
 // Whether this hello describes a different workspace; a wipe-and-recreate keeps the same sandbox id.
@@ -27,15 +30,10 @@ export const daemonRebuilt = (sandboxId: string, build: string | undefined): boo
 const IDENTITY_PREFIXES = [`intentic.workspaceId.`, `intentic.daemonBuild.`];
 
 export const dropSandboxLocalState = (sandboxId: string): void => {
-    for (const storage of [(): Storage => localStorage, (): Storage => sessionStorage]) {
-        try {
-            const store = storage();
-            const doomed = Object.keys(store).filter((key) => key.includes(sandboxId) && !IDENTITY_PREFIXES.some((prefix) => key.startsWith(prefix)));
-            for (const key of doomed) {
-                store.removeItem(key);
-            }
-        } catch {
-            // Unavailable (private mode, site data off), then nothing was remembered to drop.
+    for (const area of [`local`, `session`] satisfies StorageArea[]) {
+        const doomed = storedKeys(``, area).filter((key) => key.includes(sandboxId) && !IDENTITY_PREFIXES.some((prefix) => key.startsWith(prefix)));
+        for (const key of doomed) {
+            removeStoredValue(key, area);
         }
     }
 };

@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { writeFileAtomicSync } from "@intentic/base/fs";
 import { agentHome } from "@intentic/local-agent";
 import { z } from "zod";
 
@@ -83,11 +84,9 @@ export const readSessions = (dir: string = CONFIG_DIR): SessionMap => {
     return {};
 };
 
-// Temp-then-rename: a second bridge reading mid-write sees the whole previous map or the whole next one.
+// Staged then renamed: a second bridge reading mid-write sees the whole previous map or the whole next one.
 export const writeSessions = (sessions: SessionMap, dir: string = CONFIG_DIR): void => {
     const path = join(dir, "sessions.json");
     mkdirSync(dirname(path), { recursive: true });
-    const staged = `${path}.${process.pid}.tmp`;
-    writeFileSync(staged, `${JSON.stringify(sessions, undefined, 2)}\n`);
-    renameSync(staged, path);
+    writeFileAtomicSync(path, `${JSON.stringify(sessions, undefined, 2)}\n`);
 };

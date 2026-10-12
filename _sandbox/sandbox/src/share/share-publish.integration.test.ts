@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
@@ -45,9 +45,7 @@ const exists = async (path: string): Promise<boolean> =>
 
 it("publishes a page, its pictures, and one copy of the viewer every share loads", async () => {
     const [root, dist] = await Promise.all([workspace(), viewer()]);
-    await publishShare(root, dist, "login-redirect-fix-3f9c", payload(), [
-        { source: `${SHOTS}/after.png`, published: "files/1-after.png" },
-    ]);
+    await publishShare(root, dist, "login-redirect-fix-3f9c", payload(), [{ source: `${SHOTS}/after.png`, published: "files/1-after.png" }]);
 
     const share = join(shareRoot(root), "login-redirect-fix-3f9c");
     // The page carries its own conversation; nothing needs to be running to read it.
@@ -102,11 +100,58 @@ it("never copies a picture from outside the workspace", async () => {
     expect(await exists(join(shareRoot(root), "chat-2b3c", "files/1-hosts.png"))).toBe(false);
 });
 
+// The source is the agent's choice, named in a transcript: a picture beside the vault, or one reached through a folder
+// that links into it or out of /work, must stay where it is. Only the records a conversation's pictures and pages live in
+// are readable inside the control plane.
+it("never copies from the control plane outside the records, nor through a symlinked folder", async () => {
+    const [root, dist] = await Promise.all([workspace(), viewer()]);
+    const vault = join(root, STATE_DIR, "secrets/auth");
+    await mkdir(vault, { recursive: true });
+    await writeFile(join(vault, "token.png"), "VAULT-BYTES");
+    const outside = await mkdtemp(join(tmpdir(), "share-outside-"));
+    await writeFile(join(outside, "host.png"), "HOST-BYTES");
+    await mkdir(join(root, "notes"));
+    await symlink(vault, join(root, "notes/k"));
+    await symlink(outside, join(root, "notes/out"));
+    // A link inside the records themselves, leading into the vault.
+    await symlink(vault, join(root, SHOTS, "k"));
+    await writeFile(join(vault, "page.html"), "<p>vault</p>");
+    await publishShare(
+        root,
+        dist,
+        "chat-7a8b",
+        payload(),
+        [
+            { source: `${STATE_DIR}/secrets/auth/token.png`, published: "files/1-token.png" },
+            { source: "notes/k/token.png", published: "files/2-token.png" },
+            { source: "notes/out/host.png", published: "files/3-host.png" },
+            { source: `${SHOTS}/k/token.png`, published: "files/4-token.png" },
+        ],
+        undefined,
+        [
+            { source: "notes/k/page.html", published: "files/page-1.html" },
+            { source: `${STATE_DIR}/secrets/auth/page.html`, published: "files/page-2.html" },
+        ],
+    );
+    const files = join(shareRoot(root), "chat-7a8b", "files");
+    expect(await readdir(files).catch(() => [])).toEqual([]);
+});
+
+it("still copies a picture from the records and from an ordinary workspace folder", async () => {
+    const [root, dist] = await Promise.all([workspace(), viewer()]);
+    await mkdir(join(root, "docs"));
+    await writeFile(join(root, "docs/chart.png"), "CHART-BYTES");
+    await publishShare(root, dist, "chat-8b9c", payload(), [
+        { source: `${SHOTS}/after.png`, published: "files/1-after.png" },
+        { source: "docs/chart.png", published: "files/2-chart.png" },
+    ]);
+    const files = join(shareRoot(root), "chat-8b9c", "files");
+    expect((await readdir(files)).sort()).toEqual(["1-after.png", "2-chart.png"]);
+});
+
 it("stop sharing takes the page and its pictures, and switches publishing off behind the last one", async () => {
     const [root, dist] = await Promise.all([workspace(), viewer()]);
-    await publishShare(root, dist, "chat-3c4d", payload(), [
-        { source: `${SHOTS}/after.png`, published: "files/1-after.png" },
-    ]);
+    await publishShare(root, dist, "chat-3c4d", payload(), [{ source: `${SHOTS}/after.png`, published: "files/1-after.png" }]);
     await unpublishShare(root, "chat-3c4d");
 
     // The outbox directory itself is what "publishing is on" means; with no share left, it goes too.

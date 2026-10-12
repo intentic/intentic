@@ -8,6 +8,6 @@
     },
     "include": ["./src/**/*"],
     "exclude": ["./src/**/*.test.ts"],
-    "references": [{ "path": "../../_shared/sandbox-contract" }, { "path": "../local-agent" }],
+    "references": [{ "path": "../../_tools/base" }, { "path": "../../_shared/sandbox-contract" }, { "path": "../local-agent" }],
     "extends": "@intentic/tsconfig/tsconfig.base.json"
 }

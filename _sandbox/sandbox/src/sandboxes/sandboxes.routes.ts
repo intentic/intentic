@@ -8,6 +8,8 @@ import { manageDeviceSandbox } from "../hosts/device-reports.js";
 import { hostRunningSelf } from "../hosts/self-host.js";
 import { fleetList, fleetProvision } from "./fleet-client.js";
 import { createSandboxThroughFleet, listFleet } from "./fleet-gate.js";
+import { turnRunOf } from "../conversations/actor/conversation-holdings.js";
+import { holdDepsOf } from "../guard/held-asks.js";
 
 /* The `sandboxes` CLI's two routes, scoped to the agent token like the wallet's and the capability ask's. */
 
@@ -37,6 +39,7 @@ export const createSandboxesRoutes = (services: Services) => {
         devices: () => reachableDevices(services),
         runFlow: (id: string, flow: Parameters<typeof manageDeviceSandbox>[2]) => manageDeviceSandbox(services, id, flow),
         ...cardDeps(services),
+        hold: holdDepsOf(services.heldCards, (conversationId) => turnRunOf(services.conversations, conversationId)),
     };
     return {
         list: async (c: Context<AppEnv>): Promise<Response> => {

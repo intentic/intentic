@@ -1,6 +1,7 @@
 import { fileRestartResume } from "../system/restart-resume.js";
 import { settleRestartPauses } from "../agent/subagents/paused-children.js";
 import { createTurnResumeScheduler, resumeInterruptedTurns } from "../agent/run/turn/turn-resume.js";
+import { type RestartResume, restartResume } from "../agent/run/turn/restart-resume-policy.js";
 import { restoreLimitHolds } from "../conversations/actor/limit-hold.js";
 import { adoptBackgroundJobs } from "../agent/tools/jobs/background-adoption.js";
 import { restoreBackgroundJobs, settleLostRuns } from "../agent/tools/jobs/background-jobs.js";
@@ -26,29 +27,14 @@ export const startBootResumes = ({ logger, role, services, shutdown }: BootPhase
         turnResume.start();
     }
 
-    // Detached: an interrupted turn is a whole turn, and an interrupted automation fire a whole fire. What waited in a
-    // queue goes after them: behind a resumed turn when its conversation has one, at once when it has none. Whether
-    // the owner started this restart and asked for its cut turns back is read once, here, for both passes, and so is
-    // whether this boot is one of a restart storm, which resumes nothing (system/boot/boot-history.ts, 2026-10-05).
-    const ownerAsked = fileRestartResume(services.config.historyRoot)
-        .take(Date.now())
-        .catch((error: unknown) => {
-            logger.warn({ err: error }, "whether the owner asked this restart to resume could not be read, so only the settings decide");
-            return false;
-        });
-    const held = bootFacts().then((facts) => {
-        if (facts?.storm !== true) {
-            return false;
-        }
-        logger.warn(
-            { boots: facts.bootsInWindow, windowMinutes: RESTART_STORM.windowMs / 60_000, previousBootAt: facts.previousBootAt },
-            "boot: a restart storm, so neither a resume ask nor autoResumeOnRestart is honoured this boot; the cut turns stay interrupted",
-        );
-        reportRestartStorm(services.config.historyRoot, facts);
-        return true;
-    });
-    void Promise.all([ownerAsked, held])
-        .then(([asked, storm]) => resumeInterruptedTurns(services, Date.now(), asked, storm))
+    // Detached: an interrupted turn is a whole turn, an interrupted automation fire a whole fire, and a stranded loop or
+    // workflow run a whole run. What waited in a queue goes after the turns: behind a resumed turn when its conversation
+    // has one, at once when it has none. Whether any of it comes back is decided once, here, for all three passes
+    // (agent/run/turn/restart-resume-policy.ts): the owner's ask for this restart, autoResumeOnRestart, and whether this
+    // boot is one of a restart storm, which resumes nothing (system/boot/boot-history.ts, 2026-10-05).
+    const policy = bootResumePolicy({ logger, services });
+    void policy
+        .then((resume) => resumeInterruptedTurns(services, Date.now(), resume))
         .catch((error: unknown) => logger.error({ err: error }, "interrupted turns could not be resumed, they stand on the record as interrupted"))
         .then(() => {
             for (const conversationId of services.agents.ids()) {
@@ -60,8 +46,8 @@ export const startBootResumes = ({ logger, role, services, shutdown }: BootPhase
         // A child paused on a re-run the restart dropped stays stopped: its parent is told, once the turns the restart
         // cut are running again, since only a parent with a live turn can be (agent/subagents/paused-children.ts).
         .then(() => (role.roots ? settleRestartPauses(services) : undefined));
-    void Promise.all([ownerAsked, held])
-        .then(([asked, storm]) => resumeInterruptedFires(services, Date.now(), asked, storm))
+    void policy
+        .then((resume) => resumeInterruptedFires(services, Date.now(), resume))
         .catch((error: unknown) =>
             logger.error({ err: error }, "interrupted automation fires could not be re-fired, they stand on the record as interrupted"),
         );
@@ -103,5 +89,41 @@ export const startBootResumes = ({ logger, role, services, shutdown }: BootPhase
     }
 
     // The coordinator reserves workflow-owned conversations before generic loop recovery sees the rest.
-    void resumeWorkflowExecution(services).catch((error: unknown) => logger.error({ err: error }, "loops and workflow runs could not be resumed"));
+    void policy.then(async (resume) => resumeWorkflowExecution(services, resume)).catch((error: unknown) => logger.error({ err: error }, "loops and workflow runs could not be resumed"));
+};
+
+// The one answer this boot gives every resume pass: the owner's ask for this restart, autoResumeOnRestart, and whether
+// this boot is one of a restart storm. An ask or a setting that cannot be read counts as not given, so an unreadable
+// file never restarts work nobody asked back.
+const bootResumePolicy = async ({ logger, services }: Pick<BootPhase, "logger" | "services">): Promise<RestartResume> => {
+    const [ownerAsked, storm, autoResumeOnRestart] = await Promise.all([
+        readOrFalse(logger, () => fileRestartResume(services.config.historyRoot).take(Date.now()), "whether the owner asked this restart to resume could not be read, so only the settings decide"),
+        bootFacts().then((facts) => {
+            if (facts?.storm !== true) {
+                return false;
+            }
+            logger.warn(
+                { boots: facts.bootsInWindow, windowMinutes: RESTART_STORM.windowMs / 60_000, previousBootAt: facts.previousBootAt },
+                "boot: a restart storm, so neither a resume ask nor autoResumeOnRestart is honoured this boot; the cut turns, fires, loops and workflow runs stay interrupted",
+            );
+            reportRestartStorm(services.config.historyRoot, facts);
+            return true;
+        }),
+        readOrFalse(
+            logger,
+            async () => (await services.sandboxSettings.get()).autoResumeOnRestart,
+            "settings unreadable at boot, so nothing the restart cut is resumed unless the owner asked",
+        ),
+    ]);
+    return restartResume({ ownerAsked, storm, autoResumeOnRestart });
+};
+
+// A yes that could not be read is a no, said in the log.
+const readOrFalse = async (logger: BootPhase["logger"], read: () => Promise<boolean>, saying: string): Promise<boolean> => {
+    try {
+        return await read();
+    } catch (error) {
+        logger.warn({ err: error }, saying);
+        return false;
+    }
 };

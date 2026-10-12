@@ -1,4 +1,3 @@
-import { request } from "node:https";
 import {
     CONNECT_TOKEN_HEADER,
     type IngressInput,
@@ -11,8 +10,10 @@ import {
 import { errorMessage } from "@intentic/base/errors";
 import type { Config } from "../env.config.js";
 import { isLocalHost } from "./tls/local-tls.js";
+import { nodeRequest } from "./tls/node-request.js";
 
-// Every platform call is one exchange over node:https: undici can skip a dev platform's self-signed cert only process-wide.
+// Every platform call is one exchange over node:https (nodeRequest): undici can skip a dev platform's self-signed cert
+// only process-wide.
 
 // How long a platform socket may stay quiet before the exchange is cut, unless a caller asks for less: every call gets
 // one, since a platform that accepts the connection and never answers would otherwise hold its caller (a report loop
@@ -38,32 +39,21 @@ export interface PlatformAnswer {
 }
 
 // Resolves with whatever the platform answered, a refusal included; rejects only when it could not be reached.
-export const exchangeWithPlatform = (config: Config, call: PlatformExchange): Promise<PlatformAnswer> =>
-    new Promise((resolve, reject) => {
-        const url = new URL(call.path, config.platform.url);
-        const req = request(
-            url,
-            {
-                method: call.method,
-                headers: { ...call.headers, ...(call.payload === undefined ? {} : { "content-type": "application/json" }) },
-                rejectUnauthorized: !isLocalHost(url.hostname),
-                ...(call.signal === undefined ? {} : { signal: call.signal }),
-            },
-            (response) => {
-                let raw = "";
-                response.on("data", (chunk: Buffer) => {
-                    raw += chunk.toString();
-                });
-                // A body cut off mid-read errors the response, not the request; unheard, it would be an uncaught error.
-                response.on("error", reject);
-                response.on("end", () => resolve({ status: response.statusCode ?? 0, body: raw, contentType: response.headers["content-type"] }));
-            },
-        );
-        req.on("error", reject);
-        const idleError = call.idleError ?? "the platform did not respond in time";
-        req.setTimeout(call.idleMs ?? PLATFORM_IDLE_MS, () => req.destroy(new Error(idleError)));
-        req.end(call.payload);
+export const exchangeWithPlatform = async (config: Config, call: PlatformExchange): Promise<PlatformAnswer> => {
+    const url = new URL(call.path, config.platform.url);
+    const idleError = call.idleError ?? "the platform did not respond in time";
+    const answer = await nodeRequest(url, {
+        method: call.method,
+        headers: { ...call.headers, ...(call.payload === undefined ? {} : { "content-type": "application/json" }) },
+        body: call.payload,
+        insecure: isLocalHost(url.hostname),
+        idleMs: call.idleMs ?? PLATFORM_IDLE_MS,
+        idleError: () => new Error(idleError),
+        signal: call.signal,
     });
+    const contentType = answer.headers["content-type"];
+    return { status: answer.status, body: answer.body.toString("utf8"), contentType };
+};
 
 /* THE PLATFORM'S ROUTES, CALLED BY NAME. Each is declared once in api-contract's PLATFORM_INGRESS, which the platform
  * registers its handlers under: the method, the path, the body's shape and the answer's come from there, and so does

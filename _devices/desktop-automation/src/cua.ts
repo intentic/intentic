@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import type { Readable } from "node:stream";
+import { jsonLines } from "@intentic/base/json-lines";
 import { z } from "zod";
 import { parseChord } from "./keys.js";
 import { looksLikeUrl } from "./parse.js";
@@ -86,7 +88,6 @@ export class CuaClient {
     readonly #session = `intentic-${randomUUID()}`;
     #child: ChildProcess | undefined;
     #ready: Promise<void> | undefined;
-    #buffer = "";
     #next = 0;
     readonly #pending = new Map<number, Pending>();
 
@@ -106,22 +107,20 @@ export class CuaClient {
         this.#ready = undefined;
     }
 
-    #read(chunk: Buffer): void {
-        this.#buffer += chunk.toString("utf8");
-        for (let end = this.#buffer.indexOf("\n"); end >= 0; end = this.#buffer.indexOf("\n")) {
-            const line = this.#buffer.slice(0, end).trim();
-            this.#buffer = this.#buffer.slice(end + 1);
-            if (line === "") {
-                continue;
+    // One reader per driver process, so a line a dead driver left half-written never prefixes the next one's first.
+    #read(stdout: Readable): void {
+        void (async () => {
+            for await (const line of jsonLines(stdout)) {
+                const message = answerIn(line);
+                const pending = message === undefined ? undefined : this.#pending.get(message.id);
+                if (message !== undefined && pending !== undefined) {
+                    clearTimeout(pending.timer);
+                    this.#pending.delete(message.id);
+                    pending.resolve(message);
+                }
             }
-            const message = answerIn(line);
-            const pending = message === undefined ? undefined : this.#pending.get(message.id);
-            if (message !== undefined && pending !== undefined) {
-                clearTimeout(pending.timer);
-                this.#pending.delete(message.id);
-                pending.resolve(message);
-            }
-        }
+            // allow(silent-catch): a stdout torn down with the driver ends the reading; its exit fails what was pending.
+        })().catch(() => undefined);
     }
 
     #request(method: string, params: RequestParams, timeoutMs: number): Promise<Answer> {
@@ -144,7 +143,9 @@ export class CuaClient {
     #start(): Promise<void> {
         const child = spawn(this.#binary, ["mcp"], { env: this.#env, stdio: ["pipe", "pipe", "ignore"], windowsHide: true });
         this.#child = child;
-        child.stdout?.on("data", (chunk: Buffer) => this.#read(chunk));
+        if (child.stdout !== null) {
+            this.#read(child.stdout);
+        }
         child.on("error", (error: NodeJS.ErrnoException) =>
             this.#fail(new DesktopError(error.code === "ENOENT" ? `There is no cua-driver at ${this.#binary}.` : `cua-driver failed: ${error.message}`, INSTALL)),
         );

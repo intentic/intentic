@@ -7,7 +7,7 @@ import type { Services } from "../composition.js";
 import { type PersistedAgent, reposOf } from "../conversations/registry/agents-store.js";
 import { sessionStart, wakeSourceOf } from "../guard/actions.js";
 import { guard } from "../guard/guard.js";
-import { SingleFlight } from "@intentic/base/async";
+import { type Periodic, SingleFlight, startPeriodic } from "@intentic/base/async";
 import { wrapOutsideContent } from "@intentic/base/outside-text";
 import { automationPending, turnFinished } from "../push/notifications.js";
 import { pinnedRunModel } from "../agent/models/run-role-model.js";
@@ -16,9 +16,12 @@ import { type AutomationRecord, consecutiveFailures } from "./automations-store.
 import type { ScheduleMark } from "./schedule-coverage.js";
 import { sandboxZone, zoneOf } from "./schedule-zone.js";
 import type { SenderLane } from "./senders.js";
+import type { JournalledFire } from "../agent/run/turn/turn-journal.js";
+import { opt } from "../opt.js";
 import { TITLE_MAX } from "../seams/conversation-title.js";
 import { continueConversation, expireAutomation, notifyOwner, type TargetOutcome } from "./watch/fire-targets.js";
 import { checkCondition, conditionOutside } from "./watch/watch-condition.js";
+import { withdrawApprovalPush } from "./held-wake-answers.js";
 
 // How much of an event's webhook body reaches the guard's env and the wake prompt.
 export const PAYLOAD_MAX = 64_000;
@@ -175,7 +178,8 @@ export interface FireOptions {
     // What the sender's rule decided (senders.ts): present, its persona replaces the automation's and its hold adds to
     // it. Absent for a fire nobody sent, a schedule or a webhook, which wears the automation's own.
     readonly lane?: SenderLane;
-    // Narrows the wake's toolbox to the automation's allowlist, so a stranger's message drives a smaller turn.
+    // Replaces the automation's own `allowedTools` for this one fire. Every fire already carries the automation's list
+    // (runFire reads it off the record), whichever door it came through, so this is only for a caller that must differ.
     readonly allowedTools?: readonly string[];
     // When set, text deltas stream here live and the agent is told (STREAM_NOTE) not to send the reply itself.
     readonly stream?: TurnStream;
@@ -368,7 +372,7 @@ const runFire = async (
         sessionId: resumedSessionId,
         thread,
         lane,
-        allowedTools,
+        allowedTools: narrowedTools,
         stream,
         origin,
         title,
@@ -511,21 +515,18 @@ const runFire = async (
         if (pin === undefined) {
             return {};
         }
-        // Journals the fire's trigger inputs, not the resolved turn, so a re-fire re-reads a prompt since fixed.
+        // Journals the fire's trigger inputs, not the resolved turn, so a re-fire re-reads a prompt since fixed. The
+        // sender's lane, thread and session ride along: without them a stranger a sender rule put on a narrow persona
+        // would come back after a restart wearing the automation's own, on a conversation its thread no longer knows.
         const conversationId = resumedConversationId ?? mintConversationId(automation.id, Date.now());
         await services.turnJournal
-            .recordFire({
-                kind: "automation",
-                automationId: automation.id,
-                conversationId,
-                ...(capped !== undefined ? { payload: capped } : {}),
-                ...(origin !== undefined ? { origin } : {}),
-                ...(title !== undefined ? { title } : {}),
-                startedAt: Date.now(),
-                attempts,
-            })
+            .recordFire(journalledFire(automation.id, conversationId, attempts, { payload: capped, origin, title, lane, thread, sessionId: resumedSessionId }))
             .catch((error: unknown) => services.logger.warn({ err: error, automation: automation.id }, "turn journal: fire not recorded"));
         const body = wakeBody(automation, capped, late, observed);
+        // The automation's own allowlist is the boundary for every door, read off the record as it is now rather than as
+        // it was when a queued or held fire was set up, so narrowing it takes effect on the very next turn. A caller's
+        // own list replaces it only where it was given.
+        const allowedTools = narrowedTools ?? (await currentAllowedTools(services, automation));
         let failure: string | undefined;
         let runtimeSessionId: string | undefined;
         // Every fire lands in a conversation; a channel or visitor keeps one active, a schedule wake mints a fresh one.
@@ -632,11 +633,83 @@ export interface AutomationsScheduler {
     readonly tick: (now?: number) => Promise<void>;
 }
 
+// Where a fire's conversation comes from when it may belong to a thread (sessions/thread-sessions.ts), the key of which
+// also keys the lane (seams/thread-key.ts):
+// - an opening: a message arriving now. It continues the thread's live conversation and provider session, or past the
+//   TTL starts one named by `mint`; each door names its own (a listener per fire, a public door per caller).
+// - a seat: one already opened and snapshotted, by a held wake or the turn journal, continued exactly as it was. A seat
+//   with no key is a fire no thread owns, a schedule's or a webhook's.
+export type ThreadPlace =
+    | { readonly key: string; readonly ttlMs: number; readonly mint: () => string }
+    | { readonly key: string | undefined; readonly conversationId: string | undefined; readonly sessionId: string | undefined };
+
+// Fire options a thread decides for itself, so a caller cannot hand one that disagrees with the thread.
+export type ThreadFireOptions = Omit<FireOptions, "conversationId" | "sessionId" | "thread">;
+
+// Open the thread, fire on it, settle it: the one road every threaded fire takes (listeners, the public doors, a held
+// wake's release, a restart's re-fire), so the thread learns the provider session the turn ran on and the next message
+// resumes it instead of restating everything. `onOpened` hears the conversation before the turn starts.
+export const fireOnThread = async (
+    services: Services,
+    automation: AutomationRecord,
+    place: ThreadPlace,
+    options: ThreadFireOptions,
+    onOpened?: (conversationId: string) => Promise<void>,
+): Promise<FireOutcome> => {
+    const seat =
+        "ttlMs" in place ? { key: place.key, ...(await services.threadSessions.open(place.key, place.mint, place.ttlMs, Date.now())) } : place;
+    if (seat.conversationId !== undefined) {
+        await onOpened?.(seat.conversationId);
+    }
+    const settled = await fireAutomation(services, automation, {
+        ...options,
+        ...(seat.conversationId !== undefined ? { conversationId: seat.conversationId } : {}),
+        ...(seat.sessionId !== undefined ? { sessionId: seat.sessionId } : {}),
+        // Snapshotted with a hold and journalled with the fire, so a later release or re-fire settles this same thread.
+        ...(seat.key !== undefined ? { thread: seat.key } : {}),
+    });
+    if (seat.key !== undefined) {
+        await services.threadSessions.settle(seat.key, settled.sessionId, Date.now());
+    }
+    return settled;
+};
+
+// A fire's journal row: what it was set off with, and whose thread and lane it ran on. Each field is set only when the
+// fire carried it, so a row read back holds exactly what the fire had.
+const journalledFire = (
+    automationId: string,
+    conversationId: string,
+    attempts: number,
+    carried: {
+        readonly payload: string | undefined;
+        readonly origin: AgentOrigin | undefined;
+        readonly title: string | undefined;
+        readonly lane: SenderLane | undefined;
+        readonly thread: string | undefined;
+        readonly sessionId: string | undefined;
+    },
+): JournalledFire => {
+    const row: JournalledFire = { kind: "automation", automationId, conversationId, startedAt: Date.now(), attempts };
+    return {
+        ...row,
+        ...opt("payload", carried.payload),
+        ...opt("origin", carried.origin),
+        ...opt("title", carried.title),
+        ...opt("lane", carried.lane === undefined ? undefined : { ...opt("actsAs", carried.lane.actsAs), requireApproval: carried.lane.requireApproval }),
+        ...opt("thread", carried.thread),
+        ...opt("sessionId", carried.sessionId),
+    };
+};
+
+// The automation's allowlist as it stands now, falling back to the record the fire was handed when it is gone.
+const currentAllowedTools = async (services: Services, automation: AutomationRecord): Promise<readonly string[] | undefined> =>
+    (await services.automations.get(automation.id))?.allowedTools ?? automation.allowedTools;
+
 // The snapshot as fire options: each field absent rather than undefined, so replaying a hold cannot set one the
 // original fire did not carry.
 // The persona rides back as a lane so the approved run wears what was decided when it was held, not what the
 // automation says now; the hold itself was answered, so the lane asks for none.
-const heldWakeOptions = (held: AutomationApproval, sink: OutboxSink | undefined): FireOptions => ({
+const heldWakeOptions = (held: AutomationApproval, sink: OutboxSink | undefined): ThreadFireOptions => ({
     cleared: "both",
     held: held.id,
     lane: { actsAs: held.actsAs, requireApproval: false },
@@ -644,9 +717,6 @@ const heldWakeOptions = (held: AutomationApproval, sink: OutboxSink | undefined)
     ...(held.observed !== undefined ? { observed: held.observed } : {}),
     ...(held.origin !== undefined ? { origin: held.origin } : {}),
     ...(held.title !== undefined ? { title: held.title } : {}),
-    ...(held.conversationId !== undefined ? { conversationId: held.conversationId } : {}),
-    ...(held.sessionId !== undefined ? { sessionId: held.sessionId } : {}),
-    ...(held.thread !== undefined ? { thread: held.thread } : {}),
     ...(sink !== undefined ? { stream: sink.stream } : {}),
 });
 
@@ -656,15 +726,11 @@ export const runHeldWake = async (services: Services, automation: AutomationReco
     // The visitor's own stream closed when the wake was held, so a Visitor chat answer has nowhere live to go; queue it
     // where their next page load will collect it. Undefined for every other origin, which answers through its gateway.
     const sink = services.outboxStreamFor(held.origin);
-    const settled = await fireAutomation(services, automation, heldWakeOptions(held, sink));
+    // The snapshot carries the thread's own key: an origin cannot name it, since a thread is keyed by lane too.
+    await fireOnThread(services, automation, { key: held.thread, conversationId: held.conversationId, sessionId: held.sessionId }, heldWakeOptions(held, sink));
     // Before the release is over: the approve route answers its caller here, and the visitor polling a moment later
     // must find the answer rather than an empty thread.
     await sink?.settled();
-    // The snapshot carries the thread's own key: an origin cannot name it, since a thread is keyed by lane too.
-    if (held.thread === undefined || settled.sessionId === undefined) {
-        return;
-    }
-    await services.threadSessions.settle(held.thread, settled.sessionId, Date.now());
 };
 
 // When this automation is next due, or undefined for one no clock drives (a webhook, a listener, a workspace event)
@@ -884,6 +950,7 @@ const releaseCountdownHolds = async (services: Services, now: number): Promise<v
         if (!(await services.heldWakes.remove(held.id)) || automation === undefined || !resumable(automation)) {
             continue;
         }
+        void withdrawApprovalPush(services, held.automationId);
         void runHeldWake(services, automation, held).catch(loggedAs(services, "countdown-released automation run failed", automation.id));
     }
 };
@@ -898,7 +965,7 @@ const releaseCountdownHolds = async (services: Services, now: number): Promise<v
 export const createAutomationsScheduler = (services: Services, intervalMs = 30_000): AutomationsScheduler => {
     // Where the first poll's window opens, and so where the catch-up's ends: a moment is one pass's or the other's.
     let since = Date.now();
-    let timer: NodeJS.Timeout | undefined;
+    let loop: Periodic | undefined;
     // One pass at a time: an interval that comes round while the last pass still runs joins it. A second pass would
     // read the manifest before the first had switched a fired one-time wake off, and fire it again; skipping loses
     // nothing, since the next pass's window opens where the last one's closed.
@@ -960,9 +1027,16 @@ export const createAutomationsScheduler = (services: Services, intervalMs = 30_0
     return {
         tick,
         start: () => {
+            // A second start would settle the same catch-up twice and leave the first loop running unstoppable.
+            if (loop !== undefined) {
+                return;
+            }
             void catchUp().catch(loggedAs(services, "automations catch-up failed"));
-            timer = setInterval(() => void tick(), intervalMs);
+            loop = startPeriodic({ everyMs: intervalMs, run: () => tick() });
         },
-        stop: () => clearInterval(timer),
+        stop: () => {
+            loop?.dispose();
+            loop = undefined;
+        },
     };
 };

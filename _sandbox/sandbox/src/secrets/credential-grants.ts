@@ -91,11 +91,11 @@ export const fileCredentialGrants = (path: string, warn: (error: unknown) => voi
         },
         (error: unknown) => warn(error),
     );
-    // Written after the load and one after another, in the order they were made, so a change made before the load can't
-    // be applied to a file not yet read, and a take-back never lands before the release it takes back.
-    let written: Promise<unknown> = ready;
+    // Written after the load, so a change made before it can't be applied to a file not yet read. They reach the file's
+    // own write queue in the order they were made (a settled promise runs its callbacks in that order), so a take-back
+    // never lands before the release it takes back.
     const persist = (change: (current: Stored) => Stored): void => {
-        written = written.then(() => file.update(change)).catch((error: unknown) => warn(error));
+        void ready.then(async () => await file.update(change)).catch((error: unknown) => warn(error));
     };
     return {
         ...memory,

@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
-import { isAbsolute, join, relative, sep } from "node:path";
+import { join, relative, sep } from "node:path";
+import { insideRel } from "@intentic/base/contained";
 import { MEMORY_FILE } from "@intentic/constants";
 
 // The owner's standing instructions, composed by the daemon instead of left to each runtime's own discovery: the loops
@@ -24,12 +25,12 @@ interface MemoryFile {
 // Every folder from `root` down to `cwd`, root first. A `cwd` outside `root` is the root alone, matching the start
 // folder the escape guard would have opened at.
 const foldersFrom = (root: string, cwd: string): string[] => {
-    const rel = relative(root, cwd);
-    if (rel === "" || rel.startsWith("..") || isAbsolute(rel)) {
+    const rel = insideRel(root, cwd) ?? "";
+    if (rel === "") {
         return [root];
     }
     const folders = [root];
-    for (const segment of rel.split(sep)) {
+    for (const segment of rel.split("/")) {
         folders.push(join(folders.at(-1) ?? root, segment));
     }
     return folders;

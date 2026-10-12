@@ -368,6 +368,7 @@ export { useRailMemory } from "./composables/useRailMemory.js";
 export { useNow } from "./composables/useNow.js";
 export { type Poll, type PollOptions, usePoll, usePollWhile } from "./composables/usePoll.js";
 export { useLatest } from "./composables/useLatest.js";
+export { type SettledOptions, useSettled } from "./composables/useSettled.js";
 // Gates when a loading placeholder may appear; a fast response resolves within the reveal delay so nothing
 // flashes for a normal round trip.
 export { useLoadingReveal } from "./composables/loadingReveal.js";

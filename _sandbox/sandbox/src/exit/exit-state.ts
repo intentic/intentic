@@ -1,6 +1,8 @@
-import { mkdir, readFile, rm } from "node:fs/promises";
-import type { ExitObservation } from "@intentic/sandbox-contract";
+import { mkdir, rm } from "node:fs/promises";
+import { type ExitObservation, ExitObservationSchema } from "@intentic/sandbox-contract";
+import { z } from "zod";
 import { writeJsonFile } from "../store/json-file.js";
+import { readJsonMarker } from "../store/plain-files/json-marker.js";
 import type { ExitSelection } from "./exit-driver.js";
 import { exitStateDir, observationPath, selectionPath, upMarkerPath } from "./exit-paths.js";
 
@@ -15,17 +17,16 @@ const writeJson = async (path: string, value: unknown, id: string): Promise<void
     await writeJsonFile(path, value, 0o600);
 };
 
-const readJson = async <T>(path: string): Promise<T | undefined> =>
-    await readFile(path, "utf8")
-        .then((raw) => JSON.parse(raw) as T)
-        // Absent (never started) and unreadable (damage) both read as nothing remembered; every caller handles that.
-        .catch(() => undefined);
+// What this module writes, checked on the way back in. Absent (never started), unreadable or not this shape (damage)
+// all read as nothing remembered; every caller handles that.
+const SelectionSchema = z.object({ country: z.string().optional(), server: z.string().optional() });
+const ObservedSchema = z.object({ at: z.number(), seen: ExitObservationSchema });
 
-export const readSelection = async (id: string): Promise<ExitSelection | undefined> => await readJson<ExitSelection>(selectionPath(id));
+export const readSelection = async (id: string): Promise<ExitSelection | undefined> => await readJsonMarker(selectionPath(id), SelectionSchema);
 export const writeSelection = async (id: string, selection: ExitSelection): Promise<void> => await writeJson(selectionPath(id), selection, id);
 
 export const readObservation = async (id: string): Promise<{ at: number; seen: ExitObservation } | undefined> =>
-    await readJson<{ at: number; seen: ExitObservation }>(observationPath(id));
+    await readJsonMarker(observationPath(id), ObservedSchema);
 export const writeObservation = async (id: string, seen: ExitObservation, at: number): Promise<void> =>
     await writeJson(observationPath(id), { at, seen }, id);
 

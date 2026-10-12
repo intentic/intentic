@@ -4,6 +4,7 @@
 
 import { LOCAL_PORT, PLATFORM_WEB_ORIGIN } from "@intentic/constants";
 import { ORIGIN_HOST, SANDBOX_CAPABILITIES, sandboxNames } from "@intentic/sandbox-run";
+import { slugOfHostname } from "@intentic/sandbox-run/slug";
 
 export interface ComposeArgs {
     // The short-lived setup code the platform minted, the only secret-adjacent value in the instructions.
@@ -23,7 +24,8 @@ export interface ComposeArgs {
 const PLATFORM_DEFAULT = `https://api.intentic.dev`;
 // Mirrors connect.sh's CLOUDFLARED_IMAGE; the alias and per-sandbox names come from the run contract.
 
-const slugOf = (hostname: string): string => hostname.split(`.`)[0] ?? hostname;
+// The hostname's first label, lowercased as `ic sandbox connect` names the container; an empty hostname stays empty.
+const slugOf = (hostname: string): string => slugOfHostname(hostname) ?? hostname;
 const isLocal = (url: string): boolean => url.includes(`//localhost`) || url.includes(`//127.0.0.1`);
 
 // True when the image reference has an explicit registry host. Mirrors connect.sh's image_has_registry; drives

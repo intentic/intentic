@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, extname } from "node:path";
 import { pathToFileURL } from "node:url";
+import { escapeRegExp } from "@intentic/base/escape";
 import { findTsconfig } from "./checker.js";
 import { LspSession } from "./lsp-rpc.js";
 import { tsgoExePath } from "./tsgo.js";
@@ -93,7 +94,7 @@ const symbolPosition = (symbols: readonly DocumentSymbol[], name: string): Posit
 // Word-boundary occurrences of `name`: candidates offered to the server when the outline has no anchor.
 const lexicalCandidates = (text: string, name: string): Position[] => {
     const positions: Position[] = [];
-    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const escaped = escapeRegExp(name);
     const pattern = new RegExp(`(?<![\\p{ID_Continue}$])${escaped}(?![\\p{ID_Continue}$])`, "gu");
     for (let match = pattern.exec(text); match !== null && positions.length < MAX_CANDIDATES; match = pattern.exec(text)) {
         positions.push(positionOf(text, match.index));

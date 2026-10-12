@@ -1,3 +1,4 @@
+import { createSseParser, type SseParser } from "@intentic/sandbox-contract";
 import type { Json } from "./walk.js";
 
 // Server-Sent Events as both providers stream them, read off a byte stream that may be cut anywhere: inside a UTF-8
@@ -32,75 +33,10 @@ export const serializeEvent = (event: SseEvent): string => {
     return `${name}${data}\n`;
 };
 
-interface SseParser {
-    readonly feed: (text: string) => void;
-    readonly end: () => void;
-}
-
-// Fields per the WHATWG event-stream grammar: `field: value` (one leading space dropped), `:` starts a comment, a
-// blank line ends the event. Only `event` and `data` matter to a restorer; the rest rides along in `raw`.
-const createParser = (dispatch: (event: SseEvent) => void): SseParser => {
-    let buffer = "";
-    // How far into `buffer` is known to hold no terminator, so a long line arriving in small chunks is scanned once.
-    let scanned = 0;
-    let raw = "";
-    let name: string | undefined;
-    let data: string[] | undefined;
-
-    const line = (text: string, terminator: string): void => {
-        raw += text + terminator;
-        if (text === "") {
-            dispatch({ event: name, data: data?.join("\n"), raw });
-            raw = "";
-            name = undefined;
-            data = undefined;
-            return;
-        }
-        const colon = text.indexOf(":");
-        const field = colon < 0 ? text : text.slice(0, colon);
-        const value = colon < 0 ? "" : text.slice(colon + (text.charAt(colon + 1) === " " ? 2 : 1));
-        if (field === "event") {
-            name = value;
-        } else if (field === "data") {
-            data = [...(data ?? []), value];
-        }
-    };
-
-    const lines = (final: boolean): void => {
-        const terminators = /\r\n|\r|\n/gu;
-        terminators.lastIndex = scanned;
-        let start = 0;
-        for (let found = terminators.exec(buffer); found !== null; found = terminators.exec(buffer)) {
-            // A `\r` that ends the buffer may be the first half of a `\r\n` still in flight.
-            if (found[0] === "\r" && found.index === buffer.length - 1 && !final) {
-                break;
-            }
-            line(buffer.slice(start, found.index), found[0]);
-            start = found.index + found[0].length;
-        }
-        buffer = buffer.slice(start);
-        scanned = Math.max(0, buffer.length - 1);
-    };
-
-    return {
-        feed: (text) => {
-            buffer += text;
-            lines(false);
-        },
-        end: () => {
-            lines(true);
-            // An event the stream ended inside: dispatched as it stands, its raw text without the blank line it lacked.
-            if (buffer !== "") {
-                line(buffer, "");
-                buffer = "";
-            }
-            if (raw !== "") {
-                dispatch({ event: name, data: data?.join("\n"), raw });
-                raw = "";
-            }
-        },
-    };
-};
+// The contract's WHATWG parser, narrowed to what a restorer reads: `event` and `data`, with `id` and `retry` riding
+// along in `raw`. Every event leaves it raw, so one no restorer touches goes out byte for byte, an event the stream
+// ended inside included (without the blank line it lacked).
+const createParser = (dispatch: (event: SseEvent) => void): SseParser => createSseParser(({ event, data, raw }) => dispatch({ event, data, raw }));
 
 export const sseTransform = (handler: SseHandler): TransformStream<Uint8Array, Uint8Array> => {
     const decoder = new TextDecoder();

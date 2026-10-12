@@ -1,4 +1,4 @@
-import { sleep } from "@intentic/base/async";
+import { redeemWhileWarming } from "@intentic/sandbox-contract/pairing-redeem";
 import { PeerEnrollmentAnswerSchema, webextEnrollUrl } from "@intentic/sandbox-contract/webext";
 
 // Redeems a pairing code's one-time token for the durable one, with the machine agent's semantics
@@ -22,29 +22,28 @@ export interface EnrollOptions {
     readonly attempts?: number;
     readonly delayMs?: number;
     readonly fetch?: typeof fetch;
-    readonly sleep?: (ms: number) => Promise<void>;
 }
 
 // Five tries two seconds apart: the popup is waiting on this answer, so it gives up long before the machine agent does.
 const ATTEMPTS = 5;
 const DELAY_MS = 2_000;
+const ATTEMPT_TIMEOUT_MS = 15_000;
 
-export const redeemPairing = async (pairing: { readonly url: string; readonly token: string }, options: EnrollOptions = {}): Promise<EnrollOutcome> => {
-    const { attempts = ATTEMPTS, delayMs = DELAY_MS, fetch: send = fetch, sleep: pause = sleep } = options;
-    let last: Response | undefined;
-    for (let attempt = 1; attempt <= attempts; attempt += 1) {
-        if (attempt > 1) {
-            await pause(delayMs);
-        }
-        // allow(silent-catch): a network failure is retried, then answered as unreachable below
-        last = await send(webextEnrollUrl(pairing.url), { method: "POST", headers: { "x-intentic-pair": pairing.token } }).catch(() => undefined);
-        if (last !== undefined && last.status < 500) {
-            break;
-        }
-    }
-    if (last === undefined) {
+export const redeemPairing = async (
+    pairing: { readonly url: string; readonly token: string },
+    options: EnrollOptions = {},
+): Promise<EnrollOutcome> => {
+    const { attempts = ATTEMPTS, delayMs = DELAY_MS, fetch: send = fetch } = options;
+    const outcome = await redeemWhileWarming(
+        (_attempt, signal) =>
+            send(webextEnrollUrl(pairing.url), { method: "POST", headers: { "x-intentic-pair": pairing.token }, signal: signal ?? null }),
+        // A try that hangs counts as unreachable and is asked again, rather than leaving the popup waiting for good.
+        { attempts, delayMs, timeoutMs: ATTEMPT_TIMEOUT_MS },
+    );
+    if (outcome.kind === "unreachable") {
         return { kind: "unreachable" };
     }
+    const last = outcome.response;
     if (last.status >= 500) {
         return { kind: "starting", status: last.status };
     }

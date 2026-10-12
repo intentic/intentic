@@ -1,5 +1,4 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { execBounded } from "@intentic/base/process";
 import { unzipSync } from "fflate";
 import { onPath } from "./tools.js";
 
@@ -8,8 +7,6 @@ import { onPath } from "./tools.js";
 // are the ones whose index is readable without a decompressor this package carries.
 // Everything else (xz, bzip2, zstd) is listed by GNU tar when the image carries it, since the codecs are on the image
 // but not in node_modules; a container nothing here can open is named as unlistable rather than guessed at.
-
-const run = promisify(execFile);
 
 export interface ArchiveEntry {
     readonly path: string;
@@ -200,10 +197,11 @@ export const parseTarListing = (stdout: string): ArchiveEntry[] => {
 
 // Long enough for a large archive's index, short enough that a hung tar cannot hold a read hostage.
 const TAR_TIMEOUT_MS = 60_000;
-const TAR_MAX_BUFFER = 16 * 1024 * 1024;
+// The listing is parsed whole, so the cap is set past any index meant to be read: beyond it the middle is cut.
+const TAR_MAX_OUTPUT = 16 * 1024 * 1024;
 
 /** Lists an archive through GNU tar, which auto-detects gzip, bzip2, xz and zstd on read. */
 export const listWithTar = async (absPath: string): Promise<ArchiveEntry[]> => {
-    const { stdout } = await run("tar", ["-tvf", absPath], { timeout: TAR_TIMEOUT_MS, maxBuffer: TAR_MAX_BUFFER });
+    const { stdout } = await execBounded("tar", ["-tvf", absPath], { timeoutMs: TAR_TIMEOUT_MS, maxOutput: TAR_MAX_OUTPUT });
     return parseTarListing(stdout);
 };

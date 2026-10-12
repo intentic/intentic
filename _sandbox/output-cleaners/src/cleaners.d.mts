@@ -24,6 +24,37 @@ export interface SecretValue {
     readonly replacement: string;
 }
 
+// An issuer's literal prefix and the regex source of the body it mints after it.
+export interface CredentialIssuer {
+    readonly prefix: string;
+    readonly body: string;
+}
+
+// The terminal's copy of the contract's issuer table, and its prefixes alone; a parity test keeps the two equal.
+export const CREDENTIAL_ISSUERS: readonly CredentialIssuer[];
+export const CREDENTIAL_ISSUER_PREFIXES: readonly string[];
+
+// A `{{secret:name}}` reference, capturing the name; not global. The contract's SECRET_REFERENCE is the same pattern.
+export const SECRET_REFERENCE: RegExp;
+
+// The reference a stored value masks to.
+export const secretReference: (name: string) => string;
+
+// The shortest stored value masked by value; shorter ones are not distinctive enough to blank.
+export const SECRET_VALUE_MIN: number;
+
+// One store a secret value lives in: which root it sits under, its path there, how it lays out its values, and what the
+// daemon's registry records a value from it as.
+export interface SecretStore {
+    readonly root: "auth" | "desiredState";
+    readonly path: string;
+    readonly layout: "env" | "flat" | "vault";
+    readonly source: "env" | "sandbox" | "generated" | "capability";
+}
+
+// Every store, in the order a name two of them hold resolves.
+export const SECRET_STORES: readonly SecretStore[];
+
 // Every encoding a value can surface in (raw, JSON-escaped, percent-encoded).
 export const surfaceForms: (value: string) => string[];
 

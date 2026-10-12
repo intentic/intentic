@@ -1,14 +1,12 @@
-import { execFile } from "node:child_process";
 import { createHash, type Hash } from "node:crypto";
 import { mkdir, open, readdir, rename, rm, stat, writeFile, type FileHandle } from "node:fs/promises";
-import { join, resolve, sep } from "node:path";
-import { promisify } from "node:util";
+import { join } from "node:path";
+import { isInside } from "@intentic/base/contained";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
+import { execBounded } from "@intentic/base/process";
 import type { DeviceScopes, StageArtifact, StageArtifactResult } from "@intentic/sandbox-contract";
 import { baseDir } from "../../../config.js";
 import { assertScope } from "../../policy.js";
-
-const exec = promisify(execFile);
 
 // PROGRAMS A SANDBOX SENT, FILED ON THIS MACHINE (schemas/device-artifacts.ts). Each sandbox has its own folder under
 // ~/.intentic/machine/runs, and each push lands in `<sandbox>/<name>/<first 12 of its sha256>/`, written once and never
@@ -38,11 +36,7 @@ export const sandboxRunsDir = (sandboxUrl: string): string => {
 
 // Whether `path` is inside this sandbox's runs folder: what decides that starting it needs "Run programs" rather than
 // "Run commands".
-export const inRuns = (path: string, sandboxUrl: string): boolean => {
-    const root = resolve(sandboxRunsDir(sandboxUrl));
-    const target = resolve(path);
-    return target === root || target.startsWith(`${root}${sep}`);
-};
+export const inRuns = (path: string, sandboxUrl: string): boolean => isInside(sandboxRunsDir(sandboxUrl), path);
 
 interface Upload {
     readonly handle: FileHandle;
@@ -105,7 +99,7 @@ const uploadFor = async (sandboxUrl: string, id: string, offset: number): Promis
 const unpack = async (archive: string, into: string): Promise<void> => {
     await mkdir(into, { recursive: true });
     try {
-        await exec("tar", ["-xf", archive, "-C", into], { windowsHide: true, maxBuffer: 4 * 1024 * 1024 });
+        await execBounded("tar", ["-xf", archive, "-C", into], { timeoutMs: 10 * 60_000, maxOutput: 4 * 1024 * 1024 });
     } catch (error) {
         throw new Error(`could not unpack the pushed folder: ${errorMessage(error)}`, { cause: error });
     }

@@ -1,4 +1,4 @@
-import { setTimeout as sleep } from "node:timers/promises";
+import { sleep } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import { GATE_DAILY_MAX_DEFAULT, type GateVerdict, workflowFaults, workflowRunFaults } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
@@ -9,6 +9,7 @@ import { guard } from "../guard/guard.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
 import { dailyBudget } from "../store/daily-budget.js";
+import { readBoundedText } from "../http/bounded-body.js";
 import { gateVerdictOf } from "./workflow-gate.js";
 import { openRun, runWorkflow, stopWorkflowRun } from "./workflow-runner.js";
 
@@ -81,9 +82,14 @@ export const createGateRoute =
         if (faults.length > 0) {
             return c.json({ error: faults.join(" ") }, 400);
         }
-        const declared = Number(c.req.header("content-length"));
-        if (Number.isFinite(declared) && declared > PAYLOAD_MAX) {
+        // Read with the cap counted as it streams, before anything is spent: a chunked body declares no length, and
+        // reading one whole and slicing it after is the memory the limit exists to protect.
+        const body = await readBoundedText(c.req.raw, PAYLOAD_MAX);
+        if (body.kind === "tooLarge") {
             return c.json({ error: "payload too large" }, 413);
+        }
+        if (body.kind === "invalid") {
+            return c.json({ error: "the body is not UTF-8 text" }, 400);
         }
         // Same admission guard as every automation wake; a refusal must happen before the day's budget is spent.
         const { admission } = await services.sandboxSettings.get();
@@ -96,7 +102,7 @@ export const createGateRoute =
         }
 
         // Request body becomes the run's request, appended to every step's prompt; the daemon never parses it.
-        const request = (await c.req.text()).slice(0, PAYLOAD_MAX);
+        const request = body.value;
         // Refused before the first step spends a session; 400, since the body is the caller's.
         const runFaults = workflowRunFaults(workflow, request);
         if (runFaults.length > 0) {
@@ -116,7 +122,7 @@ export const createGateRoute =
         );
         const waitMs = waitMsOf(c.req.query("wait"));
         const verdict = (async (): Promise<GateVerdict> => {
-            const settled = await Promise.race([finished, sleep(waitMs).then(() => false)]);
+            const settled = await settledWithin(finished, waitMs);
             // A given-up caller must not leave the fan-out running: stop it rather than abandon it.
             if (!settled) {
                 stopWorkflowRun(run.runId);
@@ -131,3 +137,15 @@ export const createGateRoute =
         // Always 200, even for `fail`: the pipeline reads `outcome` itself, distinct from a wrong-token failure.
         return verdictStream(verdict, () => stopWorkflowRun(run.runId), heartbeatMs);
     };
+
+// Whether `work` settled within `ms`. The deadline runs up to three hours, so its timer is cleared the moment the race
+// ends either way, never left armed for hours behind a run that finished in seconds, and unref'd so it never keeps a
+// stopping daemon up.
+export const settledWithin = async (work: Promise<unknown>, ms: number): Promise<boolean> => {
+    const deadline = new AbortController();
+    try {
+        return await Promise.race([work.then(() => true), sleep(ms, { signal: deadline.signal, unref: true }).then(() => false)]);
+    } finally {
+        deadline.abort();
+    }
+};

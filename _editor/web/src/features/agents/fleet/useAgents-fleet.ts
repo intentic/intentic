@@ -1,6 +1,7 @@
 import { sandboxValue } from "@intentic/extension-api";
 import type { AgentSummary } from "@intentic/sandbox-contract";
-import { computed, ref, watch } from "vue";
+import { useNow } from "@intentic/ui/async";
+import { computed, effectScope, watch } from "vue";
 import {
     attentionCards,
     awaitingUser,
@@ -354,12 +355,11 @@ watch(
 // A finished, read chat stays in the rail until it has sat untouched this long (ms); a pinned one stays regardless.
 export const TIDY_AFTER_MS = 12 * 60 * 60 * 1000;
 
-// Minutes are the tidy's resolution: a twelve-hour rule gains nothing from a finer clock.
+// Minutes are the tidy's resolution: a twelve-hour rule gains nothing from a finer clock. It runs only while some chat is
+// done with, the only kind the tidy can let go. Detached: the rail's tidy is the window's, not any one component's.
+// `run()` returns undefined only for a stopped scope; this one is never stopped.
 // allow(module-state): the wall clock the rail's tidy reads, the same in every sandbox
-const tidyClock = ref(Date.now());
-setInterval(() => {
-    tidyClock.value = Date.now();
-}, 60_000);
+const tidyClock = effectScope(true).run(() => useNow(() => fleet.value.some(doneWith), 60_000))!;
 
 // The reader's last contact with a chat: its finish, their last read of it, or focus leaving it.
 const touchedAt = (agent: FleetAgent, leftAt: number | undefined): number => Math.max(agent.updatedAt, agent.seenAt ?? 0, leftAt ?? 0);

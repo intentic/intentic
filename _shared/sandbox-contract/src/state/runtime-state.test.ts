@@ -36,6 +36,10 @@ describe(`staleRuntimeQueryKeys`, () => {
         // The feed is ["activity", <sandbox>] and the status ["activity-status", <sandbox>]: two keys, not one prefix.
         expect(staleRuntimeQueryKeys([`activity`])).toEqual([[`activity`], [`activity-status`]]);
     });
+
+    it(`re-reads the Allowed list when a card's yes is written or taken back, which no file push carries`, () => {
+        expect(staleRuntimeQueryKeys([`grants`])).toEqual([[`grants`]]);
+    });
 });
 
 describe(`RUNTIME_DOMAIN_BINDINGS`, () => {

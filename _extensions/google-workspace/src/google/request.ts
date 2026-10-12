@@ -1,9 +1,12 @@
 import { setTimeout as sleep } from "node:timers/promises";
+import { retryAfterMs } from "@intentic/base/async";
+import { fetchJsonResponse, type JsonValue } from "@intentic/base/fetch-json";
 import type { Session } from "./session.js";
 
 // Every request to Google goes through here: authorization, retries, paging, and errors that name the fix. Google's
 // `{error:{message,...}}` rarely says enough alone (a 403 could mean an unenabled API or a missing scope), so this
-// rewrites it. A 401 is retried once with a fresh token rather than reported.
+// rewrites it. A 401 is retried once with a fresh token rather than reported. Each attempt has a deadline and takes
+// the caller's abort; until 2026-10 none did, so a stalled connection hung the command for undici's ~5 minutes.
 
 const RETRY_STATUS = new Set([429, 500, 502, 503, 504]);
 const MAX_ATTEMPTS = 4;
@@ -15,6 +18,8 @@ export interface CallSpec {
     readonly body?: unknown;
     // A pre-encoded payload (MIME, multipart, raw bytes) instead of JSON; `ArrayBuffer` is what `fetch` takes.
     readonly raw?: { readonly contentType: string; readonly data: Uint8Array<ArrayBuffer> | string };
+    // Ends the call, a retry's wait included.
+    readonly signal?: AbortSignal;
 }
 
 export class GoogleApiError extends Error {
@@ -28,14 +33,9 @@ export class GoogleApiError extends Error {
 }
 
 // Rate limits and the transient 5xx family back off; everything else is the answer. Google's Retry-After header is
-// authoritative when present.
-export const retryDelay = (attempt: number, retryAfter: string | null): number => {
-    const declared = retryAfter === null ? Number.NaN : Number.parseInt(retryAfter, 10);
-    if (Number.isFinite(declared) && declared >= 0) {
-        return Math.min(declared, 30) * 1000;
-    }
-    return 500 * 2 ** (attempt - 1);
-};
+// authoritative when present, up to half a minute.
+export const retryDelay = (attempt: number, retryAfter: string | null, now = Date.now()): number =>
+    retryAfterMs(retryAfter, { now, capMs: 30_000 }) ?? 500 * 2 ** (attempt - 1);
 
 const API_ENABLE_HINT: Record<string, string> = {
     gmail: "Gmail API",
@@ -92,49 +92,102 @@ const withQuery = (url: string, query: CallSpec["query"]): string => {
     return encoded === "" ? url : `${url}${url.includes("?") ? "&" : "?"}${encoded}`;
 };
 
-const send = async (session: Session, spec: CallSpec): Promise<Response> => {
+// Every refusal status: Google's refusals are read here, whole, since its `error.message` is what googleError rewrites
+// and the shared transport's excerpt of a body cuts most of them short.
+const ANY_REFUSAL = Array.from({ length: 200 }, (_, index) => 400 + index);
+
+// A download (a Drive file's bytes, an export) may take far longer than a JSON call; this only bounds one that stalls.
+const DOWNLOAD_TIMEOUT_MS = 10 * 60_000;
+
+interface Sent {
+    readonly method: string;
+    readonly headers: Record<string, string>;
+    readonly spec: CallSpec;
+    // How the call is named in a transport error: without its query, which can carry what the user searched for.
+    readonly label: string;
+}
+
+// One attempt, read whole: the status, the headers (Retry-After), and either the body of a success or the parsed body
+// of a refusal, for googleError.
+interface Answer<T> {
+    readonly status: number;
+    readonly headers: Headers;
+    readonly body: T | undefined;
+    readonly problem: JsonValue | undefined;
+}
+
+const isSuccess = (status: number): boolean => status >= 200 && status < 300;
+
+// A JSON call over base's transport, which holds the deadline and the abort.
+const jsonAttempt = async (url: string, sent: Sent): Promise<Answer<JsonValue>> => {
+    const { spec } = sent;
+    const payload = spec.raw === undefined ? { json: spec.body } : { body: spec.raw.data };
+    const answer = await fetchJsonResponse(url, { method: sent.method, headers: sent.headers, ...payload, signal: spec.signal, accept: ANY_REFUSAL, label: sent.label });
+    const success = isSuccess(answer.status);
+    return { status: answer.status, headers: answer.headers, body: success ? answer.json : undefined, problem: success ? undefined : answer.json };
+};
+
+const parsedOrUndefined = (text: string): JsonValue | undefined => {
+    try {
+        // SAFETY: JSON.parse returns only JSON values; googleError reads the one field it knows by hand.
+        return JSON.parse(text) as JsonValue;
+    } catch {
+        return undefined;
+    }
+};
+
+// A download's bytes, which are not JSON, so it keeps its own fetch with the same deadline-and-abort pairing.
+const bytesAttempt = async (url: string, sent: Sent): Promise<Answer<Buffer>> => {
+    const deadline = AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS);
+    const signal = sent.spec.signal === undefined ? deadline : AbortSignal.any([sent.spec.signal, deadline]);
+    try {
+        const response = await fetch(url, { method: sent.method, headers: sent.headers, signal });
+        if (isSuccess(response.status)) {
+            return { status: response.status, headers: response.headers, body: Buffer.from(await response.arrayBuffer()), problem: undefined };
+        }
+        return { status: response.status, headers: response.headers, body: undefined, problem: parsedOrUndefined(await response.text()) };
+    } catch (error) {
+        if (deadline.aborted) {
+            throw new Error(`${sent.label} timed out after ${DOWNLOAD_TIMEOUT_MS}ms`, { cause: error });
+        }
+        throw error;
+    }
+};
+
+const send = async <T>(session: Session, spec: CallSpec, attempt: (url: string, sent: Sent) => Promise<Answer<T>>): Promise<T | undefined> => {
     const url = withQuery(spec.url, spec.query);
+    const method = spec.method ?? "GET";
+    const label = `Google ${method} ${spec.url.split("?")[0] ?? spec.url}`;
     let token = await session.token();
     let refreshed = false;
-    for (let attempt = 1; ; attempt += 1) {
+    for (let tries = 1; ; tries += 1) {
         const headers: Record<string, string> = { authorization: `Bearer ${token}` };
         if (spec.raw !== undefined) {
             headers["content-type"] = spec.raw.contentType;
-        } else if (spec.body !== undefined) {
-            headers["content-type"] = "application/json";
         }
-        const response = await fetch(url, {
-            method: spec.method ?? "GET",
-            headers,
-            body: spec.raw?.data ?? (spec.body === undefined ? null : JSON.stringify(spec.body)),
-        });
-        if (response.ok) {
-            return response;
+        const answer = await attempt(url, { method, headers, spec, label });
+        if (isSuccess(answer.status)) {
+            return answer.body;
         }
-        if (response.status === 401 && !refreshed) {
+        if (answer.status === 401 && !refreshed) {
             refreshed = true;
             token = await session.refresh();
             continue;
         }
-        if (RETRY_STATUS.has(response.status) && attempt < MAX_ATTEMPTS) {
-            await response.body?.cancel().catch(() => undefined);
-            await sleep(retryDelay(attempt, response.headers.get("retry-after")));
+        if (RETRY_STATUS.has(answer.status) && tries < MAX_ATTEMPTS) {
+            await sleep(retryDelay(tries, answer.headers.get("retry-after")), undefined, spec.signal === undefined ? {} : { signal: spec.signal });
             continue;
         }
-        throw googleError(response.status, url, await response.json().catch(() => undefined));
+        throw googleError(answer.status, url, answer.problem);
     }
 };
 
-export const call = async <T>(session: Session, spec: CallSpec): Promise<T> => {
-    const response = await send(session, spec);
-    // 204 on a delete; some Gmail modify endpoints also answer 204.
-    if (response.status === 204) {
-        return undefined as T;
-    }
-    return (await response.json()) as T;
-};
+// 204 on a delete (and on some Gmail modify endpoints) answers undefined.
+export const call = async <T>(session: Session, spec: CallSpec): Promise<T> =>
+    // SAFETY: the caller names the shape Google documents for this endpoint; nothing here checks it, as before.
+    (await send(session, spec, jsonAttempt)) as T;
 
-export const callBytes = async (session: Session, spec: CallSpec): Promise<Buffer> => Buffer.from(await (await send(session, spec)).arrayBuffer());
+export const callBytes = async (session: Session, spec: CallSpec): Promise<Buffer> => (await send(session, spec, bytesAttempt)) ?? Buffer.alloc(0);
 
 // Every Google list endpoint pages the same way and walks forever if nothing stops it; `limit` is required. The
 // page-size key differs per API (`maxResults` vs `pageSize`), so it's named per call.

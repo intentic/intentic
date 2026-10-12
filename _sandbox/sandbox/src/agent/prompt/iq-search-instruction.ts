@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { cachedAsync } from "@intentic/base/held";
 import { SEARCH_GUIDANCE } from "./guidance.js";
 
 export const IQ_SEARCH_INSTRUCTION_HEADER = "## iq workspace search";
@@ -16,7 +17,8 @@ export interface IqSearchTeaching {
     readonly cohort: string;
 }
 
-const teachingByPlugin = new Map<string, Promise<IqSearchTeaching>>();
+// Held for good once read; a failed read is not held, so a plugin unreadable at one turn is read again at the next.
+const teachingByPlugin = cachedAsync<string, IqSearchTeaching>({ ttlMs: Infinity });
 
 const loadIqSearchInstruction = async (pluginDir: string): Promise<IqSearchTeaching> => {
     const nudgeSource = await readFile(join(pluginDir, "hooks/nudge.txt"), "utf8");
@@ -32,12 +34,5 @@ const loadIqSearchInstruction = async (pluginDir: string): Promise<IqSearchTeach
 
 // The plugin is image-baked and immutable for a daemon's lifetime. Cache both reads so a measured conversation
 // can stamp its cohort on every turn without turning that stamp into two filesystem reads per request.
-export const iqSearchInstruction = (pluginDir: string): Promise<IqSearchTeaching> => {
-    const existing = teachingByPlugin.get(pluginDir);
-    if (existing !== undefined) {
-        return existing;
-    }
-    const loaded = loadIqSearchInstruction(pluginDir);
-    teachingByPlugin.set(pluginDir, loaded);
-    return loaded;
-};
+export const iqSearchInstruction = (pluginDir: string): Promise<IqSearchTeaching> =>
+    teachingByPlugin.get(pluginDir, () => loadIqSearchInstruction(pluginDir));

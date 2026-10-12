@@ -6,6 +6,7 @@
 
 import { appendFileSync, readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
+import { sleep } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import {
     conversationIdFor,
@@ -81,7 +82,7 @@ if (inputs.door === "run") {
     };
     let outcome: RunOutcome;
     try {
-        outcome = await runExchange(call, { fetch, sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)), now: Date.now });
+        outcome = await runExchange(call, { fetch, sleep, now: Date.now });
     } catch (error) {
         wiring(error instanceof RunExchangeError ? error.message : `the agent could not be run: ${errorMessage(error)}`);
     }

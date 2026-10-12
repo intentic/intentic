@@ -131,6 +131,15 @@ describe("settingsHookSet", () => {
         expect((await settingsHookSet(place))?.scripts.map((script) => script.path)).toEqual(["$CLAUDE_PROJECT_DIR/gate"]);
     });
 
+    // `..hooks` is a folder name like any other, which a `startsWith("..")` test read as a climb out of the project.
+    test("a script in a folder whose name starts with two dots is still the project's", async () => {
+        const place = fresh();
+        await writeText(join(place.cwd, "..hooks", "check.sh"), "exit 0\n");
+        await projectSettings(place, { hooks: { Stop: [hook("bash ..hooks/check.sh")] } });
+
+        expect((await settingsHookSet(place))?.scripts.map((script) => script.path)).toEqual(["$CLAUDE_PROJECT_DIR/..hooks/check.sh"]);
+    });
+
     test("an isolated turn's project file is read through the namespace's map, and hashes the same as the main tree's", async () => {
         const base = mkdtempSync(join(tmpdir(), "settings-hooks-"));
         const main = placeIn(base);

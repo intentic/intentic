@@ -1,6 +1,7 @@
 import { statfs } from "node:fs/promises";
 import { availableParallelism, freemem, loadavg, totalmem } from "node:os";
 import { performance } from "node:perf_hooks";
+import { cachedAsync } from "@intentic/base/held";
 import { countedBytesOf, swapFullOf } from "@intentic/constants/memory-room";
 import type { DaemonUsage, ProcessGroupMetrics, ProcessRole, SandboxMetrics, SandboxUsage, SessionMetrics } from "@intentic/sandbox-contract";
 import { DAEMON_OWNER, ONE_SHOT_OWNER } from "../../seams/workload-stamp.js";
@@ -249,8 +250,7 @@ export const createLiveMetrics = ({
     const scan = source === undefined ? scanProcesses : createProcessScanner(source);
     const sourceOf = source ?? procSource();
     let baseline: Baseline | undefined;
-    let last: SandboxMetrics | undefined;
-    let inFlight: Promise<SandboxMetrics> | undefined;
+    const readings = cachedAsync<undefined, SandboxMetrics>({ ttlMs: REUSE_MS, now: () => sourceOf.now() });
 
     const sample = async (): Promise<SandboxMetrics> => {
         const units = await sourceOf.units();
@@ -298,22 +298,6 @@ export const createLiveMetrics = ({
     };
 
     return {
-        read: () => {
-            if (inFlight !== undefined) {
-                return inFlight;
-            }
-            if (last !== undefined && sourceOf.now() - last.at < REUSE_MS) {
-                return Promise.resolve(last);
-            }
-            inFlight = sample()
-                .then((metrics) => {
-                    last = metrics;
-                    return metrics;
-                })
-                .finally(() => {
-                    inFlight = undefined;
-                });
-            return inFlight;
-        },
+        read: () => readings.get(undefined, sample),
     };
 };

@@ -1,61 +1,10 @@
-// Minimal glob → RegExp for scope filters, supporting **, *, ?, [...] and {a,b} over forward-slash relative paths. A
-// glob without a slash matches basename-or-anywhere, like ripgrep's -g.
+import { globRegExp } from "@intentic/sandbox-contract";
+
+// A scope filter's glob as a RegExp over forward-slash relative paths. The matching itself is the contract's, Bun.Glob's
+// reading of every construct, so `iq` and the search box admit the same files; what stays here is how `iq` reads a
+// pattern before matching, as ripgrep's -g does: a glob without a slash matches a name at any depth, a leading `./` is
+// the root, and a trailing `/` means the directory and everything under it.
 export const globToRegExp = (glob: string): RegExp => {
-    const pattern = glob.includes("/") ? glob.replace(/^\.\//, "") : `**/${glob}`;
-    let re = "";
-    for (let i = 0; i < pattern.length; i++) {
-        const ch = pattern[i]!;
-        if (ch === "*") {
-            if (pattern[i + 1] === "*") {
-                // A globstar consumes whole directory segments, not any characters: `**api` won't also match
-                // `_apps/napi`.
-                i++;
-                if (pattern[i + 1] === "/") {
-                    re += "(?:[^/]+/)*";
-                    i++;
-                    continue;
-                }
-                re += ".*";
-                continue;
-            }
-            re += "[^/]*";
-            continue;
-        }
-        if (ch === "?") {
-            re += "[^/]";
-            continue;
-        }
-        if (ch === "[") {
-            const end = pattern.indexOf("]", i + 1);
-            if (end === -1) {
-                re += "\\[";
-                continue;
-            }
-            re += pattern.slice(i, end + 1);
-            i = end;
-            continue;
-        }
-        if (ch === "{") {
-            const end = pattern.indexOf("}", i + 1);
-            if (end === -1) {
-                re += "\\{";
-                continue;
-            }
-            const alts = pattern
-                .slice(i + 1, end)
-                .split(",")
-                .map((alt) =>
-                    alt
-                        .replace(/[.+^${}()|[\]\\]/g, "\\$&")
-                        .replace(/\*/g, "[^/]*")
-                        .replace(/\?/g, "[^/]"),
-                );
-            re += `(?:${alts.join("|")})`;
-            i = end;
-            continue;
-        }
-        re += /[.+^${}()|[\]\\]/.test(ch) ? `\\${ch}` : ch;
-    }
-    // A trailing `/` means the directory and everything under it.
-    return new RegExp(pattern.endsWith("/") ? `^${re}.*$` : `^${re}$`);
+    const rooted = glob.includes("/") ? glob.replace(/^\.\//, "") : `**/${glob}`;
+    return globRegExp(rooted.endsWith("/") ? `${rooted}**` : rooted);
 };

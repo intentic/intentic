@@ -1,3 +1,4 @@
+import { cachedAsync } from "@intentic/base/held";
 import { type EngineChannel, type EngineId, isNewer } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { ENGINE_DESCRIPTORS, engineDescriptor } from "./engine-descriptors.js";
@@ -28,10 +29,12 @@ interface ListCache {
     readonly entries: Partial<Record<EngineId, BlessedEntry>>;
     readonly readAt: string;
     readonly etag?: string;
-    readonly at: number;
 }
 
+// The last list read, kept past its hour: the etag for the next conditional read, the card's read time, and the answer
+// while a refresh fails. Only a read that landed makes it fresh, so a failed refresh is tried again on the next read.
 let list: ListCache | undefined;
+const freshList = cachedAsync<undefined, ListCache | undefined>({ ttlMs: LIST_TTL_MS, keep: (read) => read !== undefined });
 
 const fetchList = async (): Promise<ListCache | undefined> => {
     try {
@@ -41,7 +44,7 @@ const fetchList = async (): Promise<ListCache | undefined> => {
         });
         // 304 means the list is unchanged since last read; only the freshness stamp moves forward.
         if (response.status === 304 && list !== undefined) {
-            return { ...list, at: Date.now(), readAt: new Date().toISOString() };
+            return { ...list, readAt: new Date().toISOString() };
         }
         if (!response.ok) {
             return undefined;
@@ -58,19 +61,26 @@ const fetchList = async (): Promise<ListCache | undefined> => {
             }),
         );
         const etag = response.headers.get("etag");
-        return { entries, readAt: new Date().toISOString(), ...(etag === null ? {} : { etag }), at: Date.now() };
+        return { entries, readAt: new Date().toISOString(), ...(etag === null ? {} : { etag }) };
     } catch {
         return undefined;
     }
 };
 
-// Keep the cached engine list when refresh fails.
+// Keeps serving the last list read when a refresh fails.
 export const blessedList = async (force = false): Promise<ListCache | undefined> => {
-    if (!force && list !== undefined && Date.now() - list.at < LIST_TTL_MS) {
-        return list;
-    }
-    list = (await fetchList()) ?? (list === undefined ? undefined : { ...list, at: Date.now() });
-    return list;
+    const read = await freshList.get(
+        undefined,
+        async () => {
+            const fetched = await fetchList();
+            if (fetched !== undefined) {
+                list = fetched;
+            }
+            return fetched;
+        },
+        { fresh: force },
+    );
+    return read ?? list;
 };
 
 export const blessedEntry = async (id: EngineId): Promise<BlessedEntry | undefined> => (await blessedList())?.entries[id];
@@ -82,6 +92,7 @@ export const blessedListSource = (): string => LIST_URL();
 // Test seam: clears both upstream caches so a suite can change what fetch answers between cases.
 export const forgetUpstream = (): void => {
     list = undefined;
+    freshList.clear();
     publishedCache.clear();
 };
 
@@ -126,27 +137,20 @@ const githubReleases = async (repo: string): Promise<{ latest?: string; versions
 
 type Published = { latest?: string; versions: string[] } | undefined;
 
-// Concurrent readers share one request; an unreachable answer is dropped at once so the next read asks again.
-const publishedCache = new Map<EngineId, { readonly at: number; readonly answer: Promise<Published> }>();
+// Concurrent readers share one request; an unreachable answer is not held, so the next read asks again.
+const publishedCache = cachedAsync<EngineId, Published>({ ttlMs: PUBLISHED_TTL_MS, keep: (answer) => answer !== undefined });
 
 // What upstream publishes for this engine, or undefined when upstream could not be reached; "no newer version" and "we
 // could not ask" must not read the same.
-const publishedVersions = (id: EngineId, fresh = false): Promise<Published> => {
-    const held = publishedCache.get(id);
-    if (!fresh && held !== undefined && Date.now() - held.at < PUBLISHED_TTL_MS) {
-        return held.answer;
-    }
-    const { source } = engineDescriptor(id);
-    const answer = source.kind === "npm" ? npmMetadata(source.package) : githubReleases(source.repo);
-    const entry = { at: Date.now(), answer };
-    publishedCache.set(id, entry);
-    void answer.then((result) => {
-        if (result === undefined && publishedCache.get(id) === entry) {
-            publishedCache.delete(id);
-        }
-    });
-    return answer;
-};
+const publishedVersions = (id: EngineId, fresh = false): Promise<Published> =>
+    publishedCache.get(
+        id,
+        async () => {
+            const { source } = engineDescriptor(id);
+            return source.kind === "npm" ? npmMetadata(source.package) : githubReleases(source.repo);
+        },
+        { fresh },
+    );
 
 // Lowest published version at or above the floor, the smallest step that clears it. Used by the card's Update-anyway
 // action, which wants the least-unblessed version available.

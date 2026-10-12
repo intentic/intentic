@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { AnchoredOverlay, Button, ContextMenu, FACE_SIZES, isOverlayTarget, PersonaFace, SearchBar, type Tip, toneWash } from "@intentic/ui";
+import { useSettled } from "@intentic/ui/async";
 import { createInlineRename } from "@intentic/ui/inline-rename";
 import type { Disposable } from "@intentic/extension-api";
 import type { MenuItem } from "primevue/menuitem";
@@ -15,6 +16,7 @@ import { statusIcon, statusLabel, statusTabClass } from "../models/catalog";
 import { chatOnRail, chatWide, toggleChatFloating, toggleChatHome } from "../panel/chatPanelLayout";
 import { allTabs, isArchived, laneOfTab, originOf, othersOf, tabLabel, tabsInLane, toRightOf } from "./tabs";
 import { useChat } from "../run/useChat";
+import { SEARCH_SETTLE_MS } from "../run/useChat-sessions";
 import { useChatFloating } from "../panel/chatFloating";
 import { CHAT } from "../../../workbench/commands/categories";
 import { commandShortcut, type CommandRegistration, registerCommand, withShortcut } from "../../../workbench/commands/useCommands";
@@ -174,14 +176,9 @@ const historyOpen = ref(false);
 const historyAnchor = ref<HTMLElement>();
 const searchInput = ref<InstanceType<typeof SearchBar> | null>(null);
 
-// Filters sessions by title or content (server-side); debounced so a keystroke burst becomes one request.
+// Filters sessions by title or content (server-side); settled so a keystroke burst becomes one request.
 const query = ref(``);
-let searchTimer: ReturnType<typeof setTimeout> | undefined;
-watch(query, (value) => {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => void loadSessions(value.trim() || undefined), 200);
-});
-onBeforeUnmount(() => clearTimeout(searchTimer));
+watch(useSettled(query, SEARCH_SETTLE_MS, { trim: true }), (settled) => void loadSessions(settled || undefined));
 
 // Right-click on the bar's chrome opens window-wide sweeps (Close Finished/All, pop-out), not a pop-out on the
 // spot. A card's own menu acts on that card; this one and the keyboard commands act on the active chat.

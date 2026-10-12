@@ -28,6 +28,7 @@
     },
     "dependencies": {
         "@agentclientprotocol/sdk": "catalog:",
+        "@intentic/base": "workspace:*",
         "@intentic/constants": "workspace:*",
         "@intentic/local-agent": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",

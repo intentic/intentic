@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { errorMessage } from "@intentic/base/errors";
+import { FetchJsonError, fetchJsonResponse, type JsonResponse } from "@intentic/base/fetch-json";
 import type { FlyMachineConfig } from "@intentic/sandbox-run/fly";
 
 // Plain-fetch client for Fly's Machines API, no provider SDK; the platform's own token (config.hosted) keeps permanent
@@ -28,8 +30,8 @@ export const flyBuildRole = (sandboxId: string, instance: string): Record<string
     [FLY_META_PLATFORM]: instance,
 });
 
-// A Fly API failure. `status` carries Fly's HTTP code; undefined when the failure never reached a response (timeout,
-// dead socket) — the difference isFlyGone and isFlyCapacity key off.
+// A Fly API failure. `status` carries Fly's HTTP code; undefined when Fly gave no answer to read (timeout, dead socket,
+// a body that is not JSON) — the difference isFlyGone and isFlyCapacity key off.
 export class FlyError extends Error {
     readonly status: number | undefined;
 
@@ -59,20 +61,79 @@ const errorSchema = z.object({ error: z.string() });
 // 30s deadline, same as reachability.ts/cloudflare.ts; a timeout surfaces as a status-less FlyError.
 const FLY_TIMEOUT_MS = 30_000;
 
-// Attaches the deadline and turns a transport failure into a named FlyError. Any abort spelling (`TimeoutError`,
-// `AbortError`) is read as this deadline, the only signal on the request.
-const flyFetch = async (method: string, path: string, init: RequestInit, deadlineMs: number = FLY_TIMEOUT_MS): Promise<Response> => {
+// Every refusal is answered rather than thrown, so the callers below read Fly's whole `{ error }` sentence (what
+// isFlyCapacity matches on) instead of the shared transport's excerpt of it, and keep their own wording per status.
+const FLY_REFUSALS = Array.from({ length: 200 }, (_, index) => 400 + index);
+
+// How a call that got no answer is told: Fly's deadline passing, or Fly not reached at all.
+export interface FlyUnanswered {
+    readonly timedOut: (seconds: number) => string;
+    readonly unreachable: (detail: string) => string;
+}
+
+export interface FlyRequest {
+    readonly method: string;
+    readonly token: string;
+    // Sent as JSON.
+    readonly json?: unknown;
+    readonly deadlineMs?: number;
+    readonly unanswered: FlyUnanswered;
+}
+
+// One call to any of Fly's APIs (Machines, GraphQL, metrics) over the shared JSON transport: the deadline, the bearer
+// token, and every refusal answered with its status and parsed body. A failure that never got an answer is a
+// status-less FlyError, with a deadline told apart from a dead socket (the GraphQL and metrics clients used to report
+// their own timeout as "could not be reached").
+export const flyRequest = async (url: string, request: FlyRequest): Promise<JsonResponse> => {
+    const deadlineMs = request.deadlineMs ?? FLY_TIMEOUT_MS;
     try {
-        return await fetch(`${BASE}${path}`, { ...init, method, signal: AbortSignal.timeout(deadlineMs) });
+        return await fetchJsonResponse(url, {
+            method: request.method,
+            headers: { authorization: `Bearer ${request.token}` },
+            json: request.json,
+            timeoutMs: deadlineMs,
+            accept: FLY_REFUSALS,
+            label: `Fly ${request.method} ${new URL(url).pathname}`,
+        });
     } catch (error) {
-        const aborted = error instanceof Error && (error.name === `TimeoutError` || error.name === `AbortError`);
-        throw new FlyError(
-            aborted
-                ? `Fly did not answer ${method} ${path} within ${deadlineMs / 1000}s`
-                : `Fly could not be reached for ${method} ${path}: ${error instanceof Error ? error.message : `transport failure`}`,
-        );
+        if (!(error instanceof FetchJsonError)) {
+            throw error;
+        }
+        if (error.kind === `timeout`) {
+            throw new FlyError(request.unanswered.timedOut(deadlineMs / 1000));
+        }
+        // A body that is not JSON already says so in the transport's words, with its excerpt.
+        throw new FlyError(error.kind === `parse` ? error.message : request.unanswered.unreachable(errorMessage(error.cause ?? error)));
     }
 };
+
+// 401 or 403 from any Fly API: the platform's own token is wrong, which is the operator's to fix.
+export const flyTokenRejected = (status: number): FlyError | undefined =>
+    status === 401 || status === 403
+        ? new FlyError(`Fly rejected the platform's API token (HTTP ${status}): check HOSTED_FLY_API_TOKEN / HOSTED_FLY_ORG.`, status)
+        : undefined;
+
+// A Machines API refusal: the token's fault on 401/403, else Fly's own `{ error }` sentence, else the bare status.
+// What Response.ok says, for an answer the shared transport already read.
+export const isFlyOk = (response: JsonResponse): boolean => response.status >= 200 && response.status < 300;
+
+const machinesRefusal = (response: JsonResponse, refused: string, failed: string = refused): FlyError => {
+    const rejected = flyTokenRejected(response.status);
+    if (rejected !== undefined) {
+        return rejected;
+    }
+    const failure = errorSchema.safeParse(response.json);
+    return new FlyError(failure.success ? `Fly refused ${refused}: ${failure.data.error}` : `Fly ${failed} failed with HTTP ${response.status}`, response.status);
+};
+
+const machinesFetch = (path: string, request: Omit<FlyRequest, `unanswered`>): Promise<JsonResponse> =>
+    flyRequest(`${BASE}${path}`, {
+        ...request,
+        unanswered: {
+            timedOut: (seconds) => `Fly did not answer ${request.method} ${path} within ${seconds}s`,
+            unreachable: (detail) => `Fly could not be reached for ${request.method} ${path}: ${detail}`,
+        },
+    });
 
 // Fly states billed as running (meter, idle sweep, wake); replacing counts, stopped/suspended/destroyed don't.
 export const LIVE_STATES = new Set([`created`, `starting`, `started`, `replacing`]);
@@ -83,31 +144,12 @@ const idSchema = z.object({ id: z.string() });
 const machineSchema = z.object({ id: z.string(), state: z.string(), updated_at: z.string().optional() });
 
 const call = async (token: string, method: string, path: string, body?: unknown, deadlineMs?: number): Promise<unknown> => {
-    const response = await flyFetch(
-        method,
-        path,
-        {
-            headers: { authorization: `Bearer ${token}`, ...(body === undefined ? {} : { "content-type": `application/json` }) },
-            ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-        },
-        deadlineMs,
-    );
-    if (response.ok) {
-        // DELETE answers an empty body; parse only when there is something to parse.
-        const text = await response.text();
-        return text === `` ? undefined : (JSON.parse(text) as unknown);
+    const response = await machinesFetch(path, { method, token, json: body, deadlineMs });
+    if (isFlyOk(response)) {
+        // DELETE answers an empty body, which reads as undefined.
+        return response.json;
     }
-    if (response.status === 401 || response.status === 403) {
-        throw new FlyError(
-            `Fly rejected the platform's API token (HTTP ${response.status}): check HOSTED_FLY_API_TOKEN / HOSTED_FLY_ORG.`,
-            response.status,
-        );
-    }
-    const failure = errorSchema.safeParse(await response.json().catch(() => undefined));
-    if (failure.success) {
-        throw new FlyError(`Fly refused ${method} ${path}: ${failure.data.error}`, response.status);
-    }
-    throw new FlyError(`Fly API ${method} ${path} failed with HTTP ${response.status}`, response.status);
+    throw machinesRefusal(response, `${method} ${path}`, `API ${method} ${path}`);
 };
 
 // `network: name` gives the app its own private network, so sandboxes never share Fly's org-wide 6PN. Nothing needs to
@@ -119,21 +161,11 @@ export const createApp = async (token: string, org: string, name: string): Promi
 // Deleting the app tears down its machines and volumes with it. An already-gone app (404) counts as success: delete's
 // contract is not there anymore.
 export const deleteApp = async (token: string, name: string): Promise<void> => {
-    const response = await flyFetch(`DELETE`, `/apps/${encodeURIComponent(name)}?force=true`, { headers: { authorization: `Bearer ${token}` } });
-    if (response.ok || response.status === 404) {
+    const response = await machinesFetch(`/apps/${encodeURIComponent(name)}?force=true`, { method: `DELETE`, token });
+    if (isFlyOk(response) || response.status === 404) {
         return;
     }
-    if (response.status === 401 || response.status === 403) {
-        throw new FlyError(
-            `Fly rejected the platform's API token (HTTP ${response.status}): check HOSTED_FLY_API_TOKEN / HOSTED_FLY_ORG.`,
-            response.status,
-        );
-    }
-    const failure = errorSchema.safeParse(await response.json().catch(() => undefined));
-    throw new FlyError(
-        failure.success ? `Fly refused DELETE /apps/${name}: ${failure.data.error}` : `Fly DELETE /apps/${name} failed with HTTP ${response.status}`,
-        response.status,
-    );
+    throw machinesRefusal(response, `DELETE /apps/${name}`);
 };
 
 export const appExists = async (token: string, name: string): Promise<boolean> => {
@@ -360,19 +392,11 @@ export const getMachineDetail = async (token: string, app: string, machineId: st
 // counts as success.
 export const destroyMachine = async (token: string, app: string, machineId: string, options: { force?: boolean } = {}): Promise<void> => {
     const query = options.force === true ? `?force=true` : ``;
-    const response = await flyFetch(`DELETE`, `/apps/${encodeURIComponent(app)}/machines/${encodeURIComponent(machineId)}${query}`, {
-        headers: { authorization: `Bearer ${token}` },
-    });
-    if (response.ok || response.status === 404) {
+    const response = await machinesFetch(`/apps/${encodeURIComponent(app)}/machines/${encodeURIComponent(machineId)}${query}`, { method: `DELETE`, token });
+    if (isFlyOk(response) || response.status === 404) {
         return;
     }
-    const failure = errorSchema.safeParse(await response.json().catch(() => undefined));
-    throw new FlyError(
-        failure.success
-            ? `Fly refused DELETE machine ${machineId} in ${app}: ${failure.data.error}`
-            : `Fly DELETE machine ${machineId} in ${app} failed with HTTP ${response.status}`,
-        response.status,
-    );
+    throw machinesRefusal(response, `DELETE machine ${machineId} in ${app}`);
 };
 
 export const getMachine = async (token: string, app: string, machineId: string): Promise<{ state: string; updatedAt?: Date }> => {

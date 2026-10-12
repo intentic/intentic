@@ -76,6 +76,34 @@ it(`decodes the daemon's event stream into typed contract frames`, async () => {
     expect(hello?.kind === `hello` && hello.workspaceId).toBe(`ws-1`);
 });
 
+it(`tells a caller who asks of every chunk a stream brings, the keep-alives its frames never show`, async () => {
+    // oRPC's keep-alive is an SSE comment: bytes on the wire, swallowed by the event iterator.
+    const body = `: \n\nevent: message\ndata: ${JSON.stringify({ kind: `heartbeat` })}\n\n: \n\n`;
+    stubGlobal(
+        `fetch`,
+        jest.fn(async () => {
+            const encoder = new TextEncoder();
+            const chunks = body.split(/(?<=\n\n)/u).map((part) => encoder.encode(part));
+            const stream = new ReadableStream<Uint8Array>({
+                start: (controller) => {
+                    for (const chunk of chunks) {
+                        controller.enqueue(chunk);
+                    }
+                    controller.close();
+                },
+            });
+            return new Response(stream, { status: 200, headers: { "content-type": `text/event-stream` } });
+        }),
+    );
+    let heard = 0;
+    const frames: string[] = [];
+    for await (const frame of await sandboxRpc.system.events({ clientId: `c1` }, { context: { heard: () => (heard += 1) } })) {
+        frames.push(frame.kind);
+    }
+    expect(frames).toEqual([`heartbeat`]);
+    expect(heard).toBe(3);
+});
+
 it(`sends the session bearer and the TOFU connect token on the stream request`, async () => {
     authState.token = `session-token`;
     authState.rejected = [];

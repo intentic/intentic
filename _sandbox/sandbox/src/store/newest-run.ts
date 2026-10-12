@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { writeFileAtomic } from "@intentic/base/fs";
 import { DEV_VERSION, isNewer } from "@intentic/sandbox-contract";
@@ -6,6 +5,7 @@ import { z } from "zod";
 import { version } from "../version.js";
 import { stateRelPath } from "../state-paths.js";
 import { defineDocument } from "./evolution/documents.js";
+import { readJsonMarker } from "./plain-files/json-marker.js";
 
 // Stamp of the newest intentic that ran this workspace, moved only forward: its release version, the digest of the
 // conversions it ran (store/evolution/documents.ts), and the conversion count builds before the digest compared. The
@@ -25,6 +25,14 @@ const NewestRunSchema = z.object({
     digest: z.string().optional(),
 });
 export const newestRunDocument = defineDocument({ path: stateRelPath(".intentic/local/newest-run.json"), schema: NewestRunSchema });
+
+// The reader takes each field it can use and drops the rest one by one, so a stamp with one field of a shape it does
+// not know still names the version it carries.
+const NewestRunOnDisk = z.object({
+    version: z.string().optional().catch(undefined),
+    engine: z.number().optional().catch(undefined),
+    digest: z.string().optional().catch(undefined),
+});
 
 // Undefined until recordNewestRun runs; after that, the newest version seen.
 let newest: string | undefined;
@@ -52,17 +60,8 @@ export interface NewestRunOptions {
 
 export const recordNewestRun = async (workspaceRoot: string, running: string = version, options: NewestRunOptions = {}): Promise<void> => {
     const path = join(workspaceRoot, newestRunDocument.path);
-    let recorded: z.infer<typeof NewestRunSchema> = {};
-    try {
-        const raw = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown> | undefined;
-        recorded = {
-            ...(typeof raw?.["version"] === "string" ? { version: raw["version"] } : {}),
-            ...(typeof raw?.["engine"] === "number" ? { engine: raw["engine"] } : {}),
-            ...(typeof raw?.["digest"] === "string" ? { digest: raw["digest"] } : {}),
-        };
-    } catch {
-        // Absent or unreadable both read as no run recorded; re-established below.
-    }
+    // Absent or unreadable both read as no run recorded; re-established below.
+    const recorded = (await readJsonMarker(path, NewestRunOnDisk)) ?? {};
     newest = recorded.version;
     if (options.write === false || running === DEV_VERSION || (recorded.version !== undefined && !isNewer(running, recorded.version))) {
         return;

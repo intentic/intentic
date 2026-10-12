@@ -1,31 +1,23 @@
+import { z } from "zod";
+import { inputHistoryKey, storedJson, storeJson } from "../../../lib/browserStorage";
+
 // Composer message recall (up/down cycle sent messages, like shell history), distinct from the transcript:
 // workspace-wide, reaching prompts from chats no longer open. Scoped per sandbox in localStorage, since it must
-// work before the sandbox is reachable.
+// work before the sandbox is reachable; the account's, so sign-out takes it (lib/browserStorage.ts).
 
-const historyKey = (sandboxId: string): string => `intentic.inputHistory.${sandboxId}`;
+const historyKey = inputHistoryKey;
+
+// A list of prompts; an entry that is not text is skipped rather than costing the rest.
+const StoredHistorySchema = z.array(z.unknown()).transform((entries) => entries.filter((entry): entry is string => typeof entry === `string`));
 
 // Ring depth: deep enough for yesterday's prompts, shallow enough to fit the localStorage budget.
 const LIMIT = 100;
 
-const read = (key: string): string[] => {
-    try {
-        const raw = localStorage.getItem(key);
-        if (raw === null) {
-            return [];
-        }
-        const parsed = JSON.parse(raw) as unknown;
-        return Array.isArray(parsed) ? parsed.filter((entry): entry is string => typeof entry === `string`) : [];
-    } catch {
-        return [];
-    }
-};
+const read = (key: string): string[] => storedJson(key, StoredHistorySchema) ?? [];
 
+// Storage full or blocked: recall degrades to this page's lifetime rather than failing the send.
 const write = (key: string, entries: readonly string[]): void => {
-    try {
-        localStorage.setItem(key, JSON.stringify(entries));
-    } catch {
-        // Storage full or blocked: recall degrades to this page's lifetime rather than failing the send.
-    }
+    storeJson(key, entries);
 };
 
 // Whether the caret sits on the first/last line of the draft, the only lines where the arrows reach recall.

@@ -15,7 +15,7 @@ const scripted = (answers: readonly (Response | "offline")[]) => {
         }
         return answer;
     }) as typeof fetch;
-    return { calls, options: { fetch: send, sleep: async () => {}, attempts: 3 } };
+    return { calls, options: { fetch: send, delayMs: 0, attempts: 3 } };
 };
 
 const json = (status: number, body: unknown): Response => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -24,7 +24,9 @@ test("a redeemed code answers the durable token, posting the pairing token to th
     const { calls, options } = scripted([json(200, { id: "brave", token: "durable" })]);
     expect(await redeemPairing(PAIRING, options)).toEqual({ kind: "enrolled", token: "durable" });
     expect(calls.map(({ url }) => url)).toEqual(["https://sandbox-abc.example.dev/system/webext/enroll"]);
-    expect(calls[0]?.init).toEqual({ method: "POST", headers: { "x-intentic-pair": "pair-1" } });
+    expect(calls[0]?.init).toMatchObject({ method: "POST", headers: { "x-intentic-pair": "pair-1" } });
+    // Bounded per try, so a tunnel that never answers is asked again rather than waited on for good.
+    expect(calls[0]?.init?.signal).toBeInstanceOf(AbortSignal);
 });
 
 test("a 502 from a sandbox warming up is retried, and redeems once it is up", async () => {

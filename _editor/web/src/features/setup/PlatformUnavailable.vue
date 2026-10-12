@@ -3,9 +3,11 @@ import { Button, toneWash } from "@intentic/ui";
 import { onUnmounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useT } from "@intentic/ui/i18n";
+import { usePoll } from "@intentic/ui/async";
 import { platformRetry } from "../../client/auth/platformRetry";
 import DirectSandboxes from "../sandbox/recovery/DirectSandboxes.vue";
 import { normalizeDaemonUrl } from "../../lib/daemonUrl";
+import { onScreen } from "../../workbench/window/onScreen";
 
 const t = useT();
 
@@ -27,21 +29,16 @@ const opened = returnTo === null || returnTo === undefined || !returnTo.startsWi
 const focusUrl = opened === null ? undefined : normalizeDaemonUrl(opened);
 
 // Asks again on its own while the screen is up, so a reader who leaves the tab open lands in the app the moment the
-// platform answers, without pressing anything. Only while the tab is visible: a backgrounded outage screen is free.
+// platform answers, without pressing anything. Only while the window is on screen (onScreen, which also counts a window
+// hidden in the tray): a backgrounded outage screen is free.
 const RETRY_MS = 5000;
 const quietly = (): void => void retry().catch(() => undefined);
-const tick = (): void => {
-    if (document.visibilityState === `visible`) {
-        quietly();
-    }
-};
-const ticker = setInterval(tick, RETRY_MS);
+// One ask at a time: a slow platform answering late is not asked again on top of itself. Leaving the screen unmounts
+// it, which ends the wait.
+usePoll({ everyMs: RETRY_MS, immediate: false, visible: onScreen, check: retry }).start();
 globalThis.addEventListener(`online`, quietly);
-document.addEventListener(`visibilitychange`, tick);
 onUnmounted(() => {
-    clearInterval(ticker);
     globalThis.removeEventListener(`online`, quietly);
-    document.removeEventListener(`visibilitychange`, tick);
 });
 </script>
 

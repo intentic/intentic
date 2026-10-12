@@ -29,13 +29,13 @@ export function useUndo(repo: Ref<string>) {
     const api = host();
     const queryClient = useQueryClient();
 
-    const key = computed(() => api.sandbox.key(`git-history`, `undo`, repo.value));
+    const key = computed(() => api.sandbox.readKey(`git.undoable`, { repo: repo.value }));
     const query = useQuery({
         queryKey: key,
         queryFn: () => api.sandbox.rpc.git.undoable({ repo: repo.value }),
         enabled: computed(() => api.sandbox.reachable()),
     });
-    useRefRefresh(repo, [`undo`]);
+    useRefRefresh(repo, [key]);
 
     const action = computed<UndoableAction | undefined>(() => query.data.value?.action);
     const { busy, error: actionError, run } = useAsyncAction();
@@ -52,7 +52,7 @@ export function useUndo(repo: Ref<string>) {
             await Promise.all([
                 queryClient.invalidateQueries({ queryKey: key.value }),
                 queryClient.invalidateQueries({ queryKey: api.sandbox.key(`git-history`, `log`, repo.value) }),
-                queryClient.invalidateQueries({ queryKey: api.sandbox.key(`git-history`, `branches`, repo.value) }),
+                queryClient.invalidateQueries({ queryKey: api.sandbox.readKey(`git.branches`, { repo: repo.value }) }),
             ]);
             if (!result.ok) {
                 // A refusal is worth showing, usually meaning the repository moved since this undo was prepared.

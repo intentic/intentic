@@ -1,6 +1,7 @@
 import { type FileHandle, open, readdir, rm, stat, writeFile } from "node:fs/promises";
-import { join, relative, sep } from "node:path";
+import { basename, join, relative, sep } from "node:path";
 import type { LogFileEntry } from "@intentic/sandbox-contract";
+import { writeFileAtomic } from "@intentic/base/fs";
 import { forkedExec } from "@intentic/base/git";
 import { MARKER_FILE } from "../system/boot/restarts/boot-marker.js";
 import { RESTART_INTENT_FILE, RESTARTS_FILE } from "../system/boot/restarts/restart-record.js";
@@ -15,7 +16,8 @@ import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
 //   tools read keep what the cut dropped as one older segment beside them (`daemon.log.1`)
 // - never cut a file that is one JSON document (a CPU profile, a fatal-error report): cutting corrupts it, so it is kept
 //   whole, and only past WHOLE_MAX_BYTES removed
-// - leave the restart record's files alone (KEPT)
+// - leave the restart record's files alone (KEPT), and never cut a log that cuts itself (SELF_CAPPED)
+// - remove a staging file a killed writer left behind (isStaging)
 // - drop files idle past MAX_AGE_MS
 // - keep only the newest files of each group: a directory that churns (terminals/ gains hundreds of pane captures an
 //   hour) is counted on its own, so it never pushes out a CPU profile or a service log the boot just named
@@ -45,26 +47,29 @@ const KEPT = new Set([MARKER_FILE, RESTART_INTENT_FILE, RESTARTS_FILE]);
 // Extensions of files that are one JSON document rather than lines.
 const WHOLE_FILE = /\.(?:cpuprofile|heapprofile|heapsnapshot|json)$/;
 
-// resource-metrics.jsonl only (exact name, not extension): default caps would hold under a day of samples.
-const FILE_CAPS: Readonly<Record<string, { readonly maxBytes: number; readonly tailBytes: number }>> = {
-    "resource-metrics.jsonl": { maxBytes: 40_000_000, tailBytes: 30_000_000 },
-};
+// Logs whose writer cuts them to a cap of its own, under the queue its appends go through (system/resources/
+// resource-metrics.ts): a cut here could only race those appends. Still evicted by age and count like any other.
+const SELF_CAPPED = new Set(["resource-metrics.jsonl"]);
+
+// A file mid-write: the staging name an atomic write renames into place (`.<name>.<random>.tmp`, stagingOf in
+// @intentic/base/fs; pane-log-clean and the capped logs write through it), or `<name>.tmp`, the fixed one pane-log-clean
+// used before 2026-10-12. Never a log of its own, so never listed or cut; one a killed writer left behind is removed
+// once it has sat idle for longer than any write takes.
+const isStaging = (path: string): boolean => basename(path).endsWith(".tmp");
+const STAGING_IDLE_MS = 3_600_000;
 
 const relativeName = (root: string, path: string): string => relative(root, path).split(sep).join("/");
-
-const capFor = (root: string, path: string): { readonly maxBytes: number; readonly tailBytes: number } =>
-    FILE_CAPS[relativeName(root, path)] ?? { maxBytes: MAX_FILE_BYTES, tailBytes: TAIL_BYTES };
 
 /** The older segment a rotated log keeps beside itself; readers go on into it once the live file is exhausted. */
 export const rotatedSegment = (path: string): string => `${path}.1`;
 
 export { logsRoot };
 
+// Every file under root, staging files included.
 const walkFiles = async (root: string): Promise<string[]> => {
     try {
         const entries = await readdir(root, { recursive: true, withFileTypes: true });
-        // Skip pane-log-clean's atomic-rename scratch files (terminals/*.log.tmp), not real log files.
-        return entries.filter((entry) => entry.isFile() && !entry.name.endsWith(".tmp")).map((entry) => join(entry.parentPath, entry.name));
+        return entries.filter((entry) => entry.isFile()).map((entry) => join(entry.parentPath, entry.name));
     } catch {
         return [];
     }
@@ -73,7 +78,7 @@ const walkFiles = async (root: string): Promise<string[]> => {
 // Every log file under root, newest first, named as root-relative posix paths for the /logs route.
 export const listLogFiles = async (root: string): Promise<LogFileEntry[]> => {
     const files = await Promise.all(
-        (await walkFiles(root)).map(async (path) => {
+        (await walkFiles(root)).filter((path) => !isStaging(path)).map(async (path) => {
             try {
                 const info = await stat(path);
                 return { name: relative(root, path).split(sep).join("/"), sizeBytes: info.size, modifiedAt: Math.round(info.mtimeMs) };
@@ -154,38 +159,41 @@ const pastCount = (root: string, newestFirst: readonly PrunedFile[]): PrunedFile
 // far past its cap, and reading it whole would put all of it in the daemon's heap. A rotated log's dropped head (its
 // newest part, up to a cap's worth) goes to its older segment first, so a crash between the two writes duplicates lines
 // rather than losing them. Read-then-rewrite can drop an append racing the rewrite; acceptable for debug logs at these
-// caps.
+// caps. The live file is rewritten in place, never renamed over: pino's destination keeps writing to the file it
+// opened, and after a rename that would be a file no name reaches. The older segment nobody holds open, so it is
+// replaced whole, and a reader never meets half of it.
 const cutToTail = async (root: string, path: string): Promise<void> => {
-    const cap = capFor(root, path);
     const handle = await open(path, "r");
     let tail: Buffer;
     let segment: Buffer | undefined;
     try {
         const size = (await handle.stat()).size;
-        tail = await alignedTail(handle, size, cap.tailBytes);
+        tail = await alignedTail(handle, size, TAIL_BYTES);
         if (ROTATED.has(relativeName(root, path))) {
-            segment = await alignedTail(handle, size - tail.length, cap.maxBytes - cap.tailBytes);
+            segment = await alignedTail(handle, size - tail.length, MAX_FILE_BYTES - TAIL_BYTES);
         }
     } finally {
         await handle.close();
     }
     if (segment !== undefined) {
-        await writeFile(rotatedSegment(path), segment);
+        await writeFileAtomic(rotatedSegment(path), segment);
     }
     await writeFile(path, tail);
 };
 
 export const pruneLogFiles = async (root: string): Promise<void> => {
     const files: PrunedFile[] = [];
+    const staged: PrunedFile[] = [];
     for (const path of (await walkFiles(root)).filter((candidate) => !KEPT.has(relativeName(root, candidate)))) {
         try {
             const info = await stat(path);
-            files.push({ path, size: info.size, mtimeMs: info.mtimeMs });
+            (isStaging(path) ? staged : files).push({ path, size: info.size, mtimeMs: info.mtimeMs });
         } catch {
             // Already gone.
         }
     }
     const now = Date.now();
+    await Promise.all(staged.filter((file) => now - file.mtimeMs > STAGING_IDLE_MS).map((file) => rm(file.path, { force: true })));
     const live = files.filter((file) => now - file.mtimeMs <= MAX_AGE_MS).toSorted((a, b) => b.mtimeMs - a.mtimeMs);
     const counted = new Set(pastCount(root, live));
     const whole = live.filter((file) => WHOLE_FILE.test(file.path));
@@ -197,7 +205,10 @@ export const pruneLogFiles = async (root: string): Promise<void> => {
     await Promise.all(evicted.map((file) => rm(file.path, { force: true })));
     await Promise.all(
         live
-            .filter((file) => !counted.has(file) && !WHOLE_FILE.test(file.path) && file.size > capFor(root, file.path).maxBytes)
+            .filter(
+                (file) =>
+                    !counted.has(file) && !WHOLE_FILE.test(file.path) && !SELF_CAPPED.has(relativeName(root, file.path)) && file.size > MAX_FILE_BYTES,
+            )
             .map((file) => cutToTail(root, file.path)),
     );
 };

@@ -4,6 +4,7 @@ import {
     type DeviceCommand,
     type DeviceCommandResult,
     type DeviceFlowLine,
+    type IntenticLine,
     type DeviceSandboxFlowInput,
     type DeviceSandboxOp,
     type SandboxResourcesAsk,
@@ -20,7 +21,7 @@ import { sandboxError, sandboxJson, sandboxRequest } from "../../../client/sandb
 import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
-import { readIntenticLines } from "../../../lib/intenticStream";
+import { StreamEndedError, StreamFailedError, untilResult } from "../../../lib/intenticStream";
 import { SYNC_HEALTH } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 
@@ -132,30 +133,15 @@ const OP_WORDS: Readonly<Record<DeviceSandboxOp, () => string>> = {
     "runner-remove": () => t(`sandbox.useDevices.ops.runnerRemove`),
 };
 
-// Everything the flow said: its result sentence, and its refusal if it sent one. A refusal is returned rather than
-// thrown so the caller can tell one the device SENT from the connection dying under it.
-const flowSaid = async (
-    frames: AsyncIterable<DeviceFlowLine>,
-    onLine: ((line: string) => void) | undefined,
-): Promise<{ outcome: string | undefined; refusal: string | undefined }> => {
-    let outcome: string | undefined;
-    for await (const line of readIntenticLines(frames)) {
-        if (line[`kind`] === `line`) {
-            const text = frameText(line, `text`);
-            if (text !== undefined) {
-                onLine?.(text);
-            }
-            continue;
+// A flow's printed lines, as the caller's onLine takes them; the terminal frames speak through the result or the throw.
+const printedLines =
+    (onLine: ((line: string) => void) | undefined) =>
+    (line: IntenticLine): void => {
+        const text = line.kind === `line` ? frameText(line, `text`) : undefined;
+        if (text !== undefined) {
+            onLine?.(text);
         }
-        if (line[`kind`] === `error`) {
-            return { outcome, refusal: frameText(line, `message`) ?? t(`sandbox.useDevices.opFailed`) };
-        }
-        if (line[`kind`] === `result`) {
-            outcome = frameText(line, `message`) ?? outcome;
-        }
-    }
-    return { outcome, refusal: undefined };
-};
+    };
 
 /**
  * A flow's stream that broke, or ended, before the device's last word: the machine carries on with nobody listening,
@@ -173,25 +159,28 @@ export class DeviceFlowLostError extends Error {
 
 // A stream ending without a terminal frame means the connection dropped, not that the operation stopped;
 // the next fleet read reflects the real outcome. For an op that `severs` that drop IS its ending, answered as
-// undefined; any other op's drop is lost contact.
+// undefined; any other op's drop is lost contact. A refusal the device sent throws as itself, severing or not.
 const outcomeOf = async (
     frames: AsyncIterable<DeviceFlowLine>,
     onLine: ((line: string) => void) | undefined,
     severs: boolean,
 ): Promise<string | undefined> => {
-    const said = await flowSaid(frames, onLine).catch((error: unknown) => {
-        if (!severs) {
-            // Read by shape: the browser's own abort is a DOMException, which not every DOM makes an Error.
-            const browser = messageOr(error, ``);
-            throw new DeviceFlowLostError(browser === `` ? undefined : browser);
+    let outcome: string | undefined;
+    try {
+        outcome = frameText(await untilResult(frames, { failed: () => t(`sandbox.useDevices.opFailed`), onLine: printedLines(onLine) }), `message`);
+    } catch (error) {
+        if (error instanceof StreamFailedError) {
+            throw error;
         }
-        return { outcome: undefined, refusal: undefined };
-    });
-    if (said.refusal !== undefined) {
-        throw new Error(said.refusal);
+        if (severs) {
+            return undefined;
+        }
+        // Read by shape: the browser's own abort is a DOMException, which not every DOM makes an Error.
+        const browser = error instanceof StreamEndedError ? `` : messageOr(error, ``);
+        throw new DeviceFlowLostError(browser === `` ? undefined : browser);
     }
-    if (said.outcome !== undefined || severs) {
-        return said.outcome;
+    if (outcome !== undefined || severs) {
+        return outcome;
     }
     throw new DeviceFlowLostError(undefined);
 };
@@ -221,23 +210,16 @@ export async function runDeviceAgentFlow(
     { onLine }: { onLine?: (line: string) => void } = {},
 ): Promise<{ message: string | undefined; settled: boolean }> {
     const frames = await sandboxRpc.system.runDeviceAgentFlow({ id: hostId, op });
-    let message: string | undefined;
-    for await (const line of readIntenticLines(frames)) {
-        if (line[`kind`] === `line`) {
-            const text = frameText(line, `text`);
-            if (text !== undefined) {
-                onLine?.(text);
+    // An `error` frame means the device refused (its switch off, or its agent too old), not a dropped connection.
+    const result = await untilResult(frames, { failed: () => t(`sandbox.useDevices.agentUpdateRefused`), onLine: printedLines(onLine) }).catch(
+        (error: unknown) => {
+            if (error instanceof StreamEndedError) {
+                return undefined;
             }
-            continue;
-        }
-        // An `error` frame means the device refused (its switch off, or its agent too old), not a dropped connection.
-        if (line[`kind`] === `error`) {
-            throw new Error(frameText(line, `message`) ?? t(`sandbox.useDevices.agentUpdateRefused`));
-        }
-        if (line[`kind`] === `result`) {
-            message = frameText(line, `message`) ?? message;
-        }
-    }
+            throw error;
+        },
+    );
+    const message = result === undefined ? undefined : frameText(result, `message`);
     return { message, settled: message !== undefined };
 }
 

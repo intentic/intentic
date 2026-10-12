@@ -1,5 +1,6 @@
-import { appendFile, mkdir, open, readFile } from "node:fs/promises";
+import { appendFile, type FileHandle, mkdir, open, readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { queueOnFile, writeFileAtomic } from "@intentic/base/fs";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import type { z } from "zod";
 import { type Conversion, convertDocument, type Granularity, isJsonObject } from "./evolution/conversions.js";
@@ -193,13 +194,39 @@ export const openDirectory = <D extends AnyDocument<Granularity, true>>(spec: D,
     return jsonDir<DocumentUnit<D>>(dir, parse, spec);
 };
 
+// When a ledger gives up its oldest lines. Every ledger names one, so whether it may lose history is said where it is
+// opened: an audit trail may, a money log never may.
+export type LedgerCap =
+    | "never"
+    | {
+          // Past this many bytes after an append, the ledger is rewritten to its newest whole lines, renamed over the old
+          // file so a crash mid-rewrite leaves the whole ledger rather than a truncated one.
+          readonly overBytes: number;
+          // At most this many lines kept, the newest.
+          readonly keepLines?: number;
+          // At most this many bytes kept, in whole lines: only these are read, so a ledger far past its cap never
+          // enters memory whole.
+          readonly keepBytes?: number;
+      };
+
+export interface LedgerOptions {
+    readonly cap: LedgerCap;
+}
+
+export interface Appended {
+    // Whether this append took the ledger past its cap and its oldest lines were dropped, for a store that holds the
+    // ledger in memory and must drop them too.
+    readonly pruned: boolean;
+}
+
 // An append-only ledger: written a line at a time, read whole.
 export interface Ledger<E> {
     // Every entry this build can read, oldest first; [] for an absent ledger, and a throw for one that exists and cannot
     // be read, never an empty answer.
     readonly read: () => Promise<E[]>;
-    // One line at the end; the store serializes its own appends.
-    readonly append: (entry: E) => Promise<void>;
+    // One line at the end. Appends to one path queue behind each other whichever handle makes them, so a store needs no
+    // queue of its own; a failed one surfaces to its caller and the next still runs.
+    readonly append: (entry: E) => Promise<Appended>;
 }
 
 // One line of a ledger as today's entry: through the document's conversions, then its schema. Undefined for a torn line
@@ -219,9 +246,9 @@ const ledgerEntry = <D extends AnyDocument<"entries", false>>(spec: D, line: str
 
 // A ledger whose last line a crash cut short has no newline after it, and the next line appended would be glued onto the
 // fragment and lost with it. So the first append a process makes to a ledger ends that line first; checked once per
-// path, since every line appended after it ends itself. Shared by every handle on the path, so two first appends wait
-// on one check rather than each adding a newline.
-const tailsMended = new Map<string, Promise<void>>();
+// path, since every line appended after it ends itself. Read and written only inside the path's queue, so two first
+// appends cannot both add a newline.
+const tailsMended = new Set<string>();
 
 const mendTail = async (path: string): Promise<void> => {
     const handle = await open(path, "r").catch(undefinedIfMissing);
@@ -242,37 +269,75 @@ const mendTail = async (path: string): Promise<void> => {
     }
 };
 
-const tailMended = (path: string): Promise<void> => {
-    const key = resolve(path);
-    let mended = tailsMended.get(key);
-    if (mended === undefined) {
-        // A check that failed is asked again by the next append rather than failing every append after it.
-        mended = mendTail(path).catch((error: unknown) => {
-            tailsMended.delete(key);
-            throw error;
-        });
-        tailsMended.set(key, mended);
-    }
-    return mended;
+// The newest whole lines of an open file `size` bytes long, at most `keepBytes` of them when given. One byte before the
+// cut rides along, to tell a cut that fell on a line boundary from one inside a line, whose remains are dropped.
+const newestLines = async (handle: FileHandle, size: number, keepBytes: number | undefined): Promise<string[]> => {
+    const length = Math.min(keepBytes ?? size, size);
+    const lead = length < size ? 1 : 0;
+    const { buffer, bytesRead } = await handle.read(Buffer.alloc(length + lead), 0, length + lead, size - length - lead);
+    const chunk = buffer.subarray(0, bytesRead);
+    const newline = lead === 0 ? -1 : chunk.indexOf(0x0a);
+    const aligned = lead === 0 ? chunk : chunk.subarray(newline === -1 ? chunk.length : newline + 1);
+    return aligned
+        .toString("utf8")
+        .split("\n")
+        .filter((line) => line !== "");
 };
 
-// A document stored as JSON Lines, one entry per line, appended and never rewritten whole by this layer (usage.jsonl,
-// activity.jsonl): its document is `boot: false`, since the boot step reads whole JSON files, and every read converts
-// each line instead. Lines this build cannot read stay in the file for the build that wrote them.
-export const openLedger = <D extends AnyDocument<"entries", false>>(spec: D, path: string): Ledger<DocumentUnit<D>> => {
+// Cuts the ledger to its cap's newest lines once it has passed the cap; answers whether it did.
+const pruneOver = async (path: string, cap: Exclude<LedgerCap, "never">): Promise<boolean> => {
+    const handle = await open(path, "r");
+    let kept: string[];
+    try {
+        const { size } = await handle.stat();
+        if (size <= cap.overBytes) {
+            return false;
+        }
+        const lines = await newestLines(handle, size, cap.keepBytes);
+        kept = cap.keepLines === undefined ? lines : lines.slice(Math.max(0, lines.length - cap.keepLines));
+    } finally {
+        await handle.close();
+    }
+    await writeFileAtomic(path, kept.length === 0 ? "" : `${kept.join("\n")}\n`);
+    return true;
+};
+
+// The writing half of a ledger, for a file of lines no document describes and nothing reads back as state: a debug
+// series the diagnostics tools tail (resource-metrics.jsonl). Each line is one record with no newline in it.
+export interface LineLog {
+    readonly append: (line: string) => Promise<Appended>;
+}
+
+export const lineLog = (path: string, { cap }: LedgerOptions): LineLog => ({
+    append: (line) =>
+        queueOnFile(path, async () => {
+            await mkdir(dirname(path), { recursive: true });
+            const key = resolve(path);
+            if (!tailsMended.has(key)) {
+                // Marked only once it held: a check that failed is made again by the next append.
+                await mendTail(path);
+                tailsMended.add(key);
+            }
+            await appendFile(path, `${line}\n`);
+            return { pruned: cap !== "never" && (await pruneOver(path, cap)) };
+        }),
+});
+
+// A document stored as JSON Lines, one entry per line, appended and never rewritten whole by this layer except to cut it
+// to its cap (usage.jsonl, activity.jsonl): its document is `boot: false`, since the boot step reads whole JSON files,
+// and every read converts each line instead. Lines this build cannot read stay in the file for the build that wrote
+// them, until a cap cuts them with the rest of the oldest lines.
+export const openLedger = <D extends AnyDocument<"entries", false>>(spec: D, path: string, options: LedgerOptions): Ledger<DocumentUnit<D>> => {
     if (spec.directory || spec.granularity !== "entries") {
         throw layoutError(spec, "a ledger of lines");
     }
+    const lines = lineLog(path, options);
     return {
         read: async () => {
             const text = await readFile(path, "utf8").catch(undefinedIfMissing);
             return text === undefined ? [] : text.split("\n").flatMap((line) => (line === "" ? [] : (ledgerEntry(spec, line) ?? [])));
         },
-        append: async (entry) => {
-            await mkdir(dirname(path), { recursive: true });
-            await tailMended(path);
-            await appendFile(path, `${JSON.stringify(entry)}\n`);
-        },
+        append: (entry) => lines.append(JSON.stringify(entry)),
     };
 };
 

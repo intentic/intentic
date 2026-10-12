@@ -10,7 +10,7 @@ import { host } from "./host";
 export function useShares() {
     const api = host();
     const queryClient = useQueryClient();
-    const queryKey = api.sandbox.key(`shares`);
+    const queryKey = api.sandbox.readKey(`share.list`);
 
     const query = useQuery({
         queryKey,

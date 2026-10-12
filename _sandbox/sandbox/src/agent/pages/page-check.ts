@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import type { Browser, Page } from "playwright";
+import { oneLine } from "@intentic/base/one-line";
 import {
     PAGE_BRIDGE,
     PAGE_COLUMN_WIDTH,
@@ -117,7 +118,7 @@ const slot = async (): Promise<() => void> => {
     };
 };
 
-const clip = (text: string): string => (text.length > MAX_MESSAGE_CHARS ? `${text.slice(0, MAX_MESSAGE_CHARS)}…` : text);
+const clip = (text: string): string => oneLine(text, MAX_MESSAGE_CHARS);
 
 const levelOf = (type: string): PageMessage["level"] | undefined => {
     switch (type) {

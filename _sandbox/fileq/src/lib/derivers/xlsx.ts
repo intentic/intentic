@@ -1,3 +1,4 @@
+import { oneLine } from "@intentic/base/one-line";
 import { markdownTable } from "@intentic/webq/markdown";
 import type ExcelJS from "exceljs";
 import type { DerivedDoc, Deriver } from "./deriver.js";
@@ -38,9 +39,6 @@ const cellText = (value: ExcelJS.CellValue): string => {
     return String(value);
 };
 
-// What a cell shows as one line: a sheet's cell can hold line breaks and runs of spaces nobody reads as meaningful.
-const oneLine = (text: string): string => text.replaceAll(/\s+/g, " ").trim();
-
 export const xlsxDeriver: Deriver = {
     name: "xlsx",
     version: 1,
@@ -73,7 +71,8 @@ export const xlsxDeriver: Deriver = {
                 sections.push(`## ${sheet.name}\n\n(empty sheet)`);
                 continue;
             }
-            sections.push(`## ${sheet.name}\n\n${markdownTable(kept.map((row) => row.map(oneLine)))}`);
+            // Each cell as one line: a sheet's cell can hold line breaks and runs of spaces nobody reads as meaningful.
+            sections.push(`## ${sheet.name}\n\n${markdownTable(kept.map((row) => row.map((cell) => oneLine(cell))))}`);
         }
         return { markdown: sections.join("\n\n"), notes };
     },

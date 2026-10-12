@@ -53,7 +53,7 @@ it(`refreshes the terminal surfaces when the daemon says a session moved`, () =>
 it(`refreshes the panels AND the per-repo apps from one dev-server frame`, () => {
     // Both lists are drawn from the same managed process, so one domain name invalidates both keys.
     applySystemEvent({ kind: `runtimeChanged`, domains: [`panels`] }, SANDBOX);
-    expect(invalidated).toEqual([[`panels`], [`panels.list`], [`apps`]]);
+    expect(invalidated).toEqual([[`panels`], [`panels.list`], [`apps`], [`workspace.appsList`]]);
 });
 
 // The Projects dashboard lists every repo, not the open project's, so the narrowed panels list cannot tell it.
@@ -95,6 +95,7 @@ it(`re-asks every runtime-bound view on a new connection, once each`, async () =
         `capabilities`,
         `system.terminals`,
         `panels.list`,
+        `workspace.appsList`,
         `ports.list`,
         `system.browsers`,
         `system.subagents`,

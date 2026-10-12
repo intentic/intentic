@@ -1,4 +1,8 @@
-import { createBody, newPullProgress, parseInspect, pullProgressLine } from "../docker.js";
+import { createServer, type Server } from "node:http";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createBody, createDockerEngine, newPullProgress, parseInspect, pullProgressLine } from "../docker.js";
 
 // Lines as the engine streams them for `POST /images/create`.
 const line = (event: Record<string, unknown>): string => JSON.stringify(event);
@@ -26,6 +30,62 @@ describe(`pull progress`, () => {
         const progress = newPullProgress();
         expect(pullProgressLine(progress, ``)).toBeUndefined();
         expect(() => pullProgressLine(progress, line({ error: `manifest unknown` }))).toThrow(`manifest unknown`);
+    });
+});
+
+// A fake engine on a unix socket that answers every request with one status and body, written in the given pieces.
+const fakeEngine = async (status: number, pieces: readonly Uint8Array[]): Promise<{ socketPath: string; close: () => Promise<void> }> => {
+    const dir = await mkdtemp(join(tmpdir(), `docker-`));
+    const socketPath = join(dir, `engine.sock`);
+    const server: Server = createServer((_req, res) => {
+        res.writeHead(status, { "content-type": `application/json` });
+        for (const piece of pieces) {
+            res.write(piece);
+        }
+        res.end();
+    });
+    await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+    return {
+        socketPath,
+        close: async () => {
+            await new Promise<void>((resolve) => server.close(() => resolve()));
+            await rm(dir, { recursive: true, force: true });
+        },
+    };
+};
+
+describe(`pull`, () => {
+    it(`reads progress lines split mid-character and CRLF-terminated, and the error line at the end rejects`, async () => {
+        const bytes = new TextEncoder().encode(
+            [
+                line({ status: `Pulling from é`, id: `x` }),
+                line({ status: `Downloading`, id: `a`, progressDetail: { current: 50, total: 100 } }),
+                line({ error: `manifest unknown` }),
+            ].join(`\r\n`),
+        );
+        const cut = bytes.indexOf(0xc3) + 1;
+        const engine = await fakeEngine(200, [bytes.subarray(0, cut), bytes.subarray(cut)]);
+        const seen: (number | undefined)[] = [];
+        try {
+            await expect(createDockerEngine(engine.socketPath).pull(`onlyoffice/documentserver:9`, (percent) => seen.push(percent))).rejects.toThrow(
+                `manifest unknown`,
+            );
+            expect(seen).toEqual([43]);
+        } finally {
+            await engine.close();
+        }
+    });
+
+    // The engine's reason used to be cut to whatever followed its last newline, which for a one-line JSON error is nothing.
+    it(`names the engine's whole reason when it refuses the pull`, async () => {
+        const engine = await fakeEngine(404, [new TextEncoder().encode(`{"message":"pull access denied"}\n`)]);
+        try {
+            await expect(createDockerEngine(engine.socketPath).pull(`private/image:1`, () => undefined)).rejects.toThrow(
+                `pulling private/image:1: the Docker engine answered 404, pull access denied`,
+            );
+        } finally {
+            await engine.close();
+        }
     });
 });
 

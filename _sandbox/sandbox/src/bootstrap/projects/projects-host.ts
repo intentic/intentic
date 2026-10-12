@@ -1,4 +1,5 @@
 import type { DeviceReport } from "@intentic/sandbox-contract";
+import { serialLock } from "@intentic/base/async";
 import type { GitRunner } from "@intentic/base/git";
 import { ensureProjectRepo } from "../../git/remote/project-repo.js";
 import { attachedProjects, registerProject, reportedProjects } from "../../system/projects-registry.js";
@@ -97,15 +98,12 @@ export const attachReportedProjects = async (deps: ProjectsHostDeps, report: Dev
 // a new folder before the first has attached it, and two inits of one repo would race. Each report waits for the one
 // before it, whatever became of that one.
 export const projectsHostAttacher = (deps: ProjectsHostDeps): ((report: DeviceReport) => Promise<void>) => {
-    let queue: Promise<unknown> = Promise.resolve();
-    return (report) => {
-        const next = queue
-            .then(() => attachReportedProjects(deps, report))
-            .then(
-                () => undefined,
-                (error) => deps.logger.warn({ err: error }, "a sync report's project folders were not taken in, the next report tries again"),
-            );
-        queue = next;
-        return next;
+    const inOrder = serialLock();
+    return async (report) => {
+        try {
+            await inOrder(async () => await attachReportedProjects(deps, report));
+        } catch (error) {
+            deps.logger.warn({ err: error }, "a sync report's project folders were not taken in, the next report tries again");
+        }
     };
 };

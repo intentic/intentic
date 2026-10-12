@@ -1,18 +1,17 @@
-import { type ChildProcess, execFile, spawn } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { mkdir, open, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
-import { promisify } from "node:util";
+import { pollFor, within } from "@intentic/base/async";
 import { writeFileAtomic } from "@intentic/base/fs";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
+import { execBounded } from "@intentic/base/process";
 import type { Desktop, WindowInfo } from "@intentic/desktop-automation";
 import type { DeviceScopes } from "@intentic/sandbox-contract";
 import { assertPath, assertScope, ScopeError } from "../../policy.js";
 import { destructiveClasses, destructiveRefusal } from "../shell.js";
 import { inRuns, listArtifacts, sandboxRunsDir } from "./artifacts.js";
 import { isolatedExit, startScript, stopWindowsSandbox, windowsSandboxExe, windowsSandboxMissing, windowsSandboxRunning, wsbConfig } from "./isolated.js";
-
-const exec = promisify(execFile);
 
 // PROGRAMS THE AGENT STARTED ON THIS MACHINE, AND KEPT AN EYE ON. run_command waits for its command and stops it at the
 // deadline, which is right for a command and wrong for an app: an app is meant to stay up while the agent looks at it,
@@ -126,16 +125,16 @@ const SAME_PROCESS_MS = 10_000;
 const processStartedAt = async (pid: number): Promise<number | undefined> => {
     try {
         if (process.platform === "win32") {
-            const { stdout } = await exec(
+            const { stdout } = await execBounded(
                 "powershell.exe",
                 ["-NoProfile", "-NonInteractive", "-Command", `(Get-Process -Id ${pid} -ErrorAction Stop).StartTime.ToUniversalTime().ToString('o')`],
-                { windowsHide: true },
+                { timeoutMs: 30_000 },
             );
             const at = Date.parse(stdout.trim());
             return Number.isNaN(at) ? undefined : at;
         }
         // `lstart` is the start in local time, to the second, on Linux and macOS alike.
-        const { stdout } = await exec("ps", ["-o", "lstart=", "-p", String(pid)], { env: { ...process.env, LC_ALL: "C", LANG: "C" } });
+        const { stdout } = await execBounded("ps", ["-o", "lstart=", "-p", String(pid)], { timeoutMs: 30_000, env: { ...process.env, LC_ALL: "C", LANG: "C" } });
         const at = Date.parse(stdout.trim().replace(/\s+/g, " "));
         return Number.isNaN(at) ? undefined : at;
     } catch {
@@ -345,7 +344,7 @@ export const startApp = async (request: StartRequest, scopes: DeviceScopes, sand
     });
     child.unref();
     // A program that falls over at once is answered as such, with what it said, rather than as started.
-    const early = await Promise.race([exited.then(() => true), new Promise<boolean>((done) => setTimeout(() => done(false), EARLY_EXIT_MS))]);
+    const early = await within(exited.then(() => true), EARLY_EXIT_MS, false);
     if (early) {
         const final = (await readRuns(sandboxUrl)).find((entry) => entry.id === id) ?? run;
         const { text } = await tailLines(log, 40);
@@ -440,14 +439,14 @@ export const descendantsOf = (rows: readonly (readonly [number, number])[], root
 
 const processRows = async (): Promise<[number, number][]> => {
     if (process.platform === "win32") {
-        const { stdout } = await exec(
+        const { stdout } = await execBounded(
             "powershell.exe",
             ["-NoProfile", "-NonInteractive", "-Command", "Get-CimInstance Win32_Process | ForEach-Object { \"$($_.ProcessId) $($_.ParentProcessId)\" }"],
-            { windowsHide: true, maxBuffer: 8 * 1024 * 1024 },
+            { timeoutMs: 30_000, maxOutput: 8 * 1024 * 1024 },
         );
         return parseRows(stdout);
     }
-    const { stdout } = await exec("ps", ["-A", "-o", "pid=,ppid="], { maxBuffer: 8 * 1024 * 1024 });
+    const { stdout } = await execBounded("ps", ["-A", "-o", "pid=,ppid="], { timeoutMs: 30_000, maxOutput: 8 * 1024 * 1024 });
     return parseRows(stdout);
 };
 
@@ -568,21 +567,15 @@ export const appLogs = async (id: string, lines: number, grep: string | undefine
 };
 
 const waitGone = async (run: AppRun, ms: number): Promise<boolean> => {
-    const deadline = Date.now() + ms;
-    while (Date.now() < deadline) {
-        if ((await runState(run)) === "ended") {
-            return true;
-        }
-        await new Promise((done) => setTimeout(done, 200));
-    }
-    return (await runState(run)) === "ended";
+    const gone = await pollFor(async () => ((await runState(run)) === "ended" ? true : undefined), { intervalMs: 200, until: Date.now() + ms });
+    return gone.kind === "found" || (await runState(run)) === "ended";
 };
 
 const signalTree = async (pid: number, force: boolean): Promise<void> => {
     if (process.platform === "win32") {
         // /T takes everything it started; without /F a window is asked to close, as its close button would.
         // allow(silent-catch): taskkill fails when the tree already ended, which is the outcome a stop wants
-        await exec("taskkill", ["/PID", String(pid), "/T", ...(force ? ["/F"] : [])], { windowsHide: true }).catch(() => undefined);
+        await execBounded("taskkill", ["/PID", String(pid), "/T", ...(force ? ["/F"] : [])], { timeoutMs: 30_000 }).catch(() => undefined);
         return;
     }
     try {

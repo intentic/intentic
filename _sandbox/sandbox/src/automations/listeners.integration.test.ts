@@ -12,7 +12,7 @@ import { threadKey } from "../seams/thread-key.js";
 import { unstubbed } from "@intentic/testing";
 import { fileAutomationsStore } from "./automations-store.js";
 import { fileHeldWakesStore } from "./held-wakes-store.js";
-import { createMessageBatcher, dispatchListenerMessage, type MessageContext, reportListenerFailure } from "./listeners.js";
+import { createMessageBatcher, dispatchListenerMessage, LISTENER_RATE_MAX, type MessageContext, reportListenerFailure } from "./listeners.js";
 import { PAYLOAD_MAX, type TurnStream } from "./scheduler.js";
 import { fileSendersStore } from "./senders-store.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
@@ -391,4 +391,32 @@ test("`others: hold` parks a stranger wearing the automation's own persona", asy
     await eventually(async () => expect(await services.heldWakes.list()).toHaveLength(1));
     expect((await services.heldWakes.list())[0]).toMatchObject({ automationId: "senders-others-hold", actsAs: "guest" });
     expect(prompts).toEqual([]);
+});
+
+// The contract calls an automation's allowlist the real boundary for anything a stranger's message drives; only
+// webchat and intake used to carry it, so a channel message ran on the full toolbox.
+test("a channel message wakes a turn narrowed to the automation's allowedTools", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-")));
+    await services.automations.upsert(listenerAutomation("narrow-tools", { allowedTools: ["Read", "Grep"] }));
+    const turns: AgentTurn[] = [];
+    await dispatchListenerMessage(drivenBy(services, captureWithSession(turns, "sess-narrow")), message(), 5);
+    await eventually(() => expect(turns).toHaveLength(1));
+    expect(turns[0]?.allowedTools).toEqual(["Read", "Grep"]);
+});
+
+// A channel is a door strangers knock on too: one sender flooding it is turned away past the minute's limit rather
+// than driving a wake per line.
+test("a sender over the minute's limit is dropped, and another sender in the channel still gets through", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-")));
+    await services.automations.upsert(listenerAutomation("flooded"));
+    const prompts: string[] = [];
+    const flood = { id: "u-flood", name: "flood" };
+    for (let index = 0; index <= LISTENER_RATE_MAX; index += 1) {
+        await dispatchListenerMessage(drivenBy(services, fakeWake(prompts)), message({ id: `f${index}`, author: flood, content: `<${index}>` }), 5);
+    }
+    // However the batcher folded them into wakes, every line inside the limit arrived and the one past it did not.
+    await eventually(() => expect(prompts.join("")).toContain(`<${LISTENER_RATE_MAX - 1}>`));
+    expect(prompts.join("")).not.toContain(`<${LISTENER_RATE_MAX}>`);
+    await dispatchListenerMessage(drivenBy(services, fakeWake(prompts)), message({ id: "other", author: { id: "u-other", name: "other" }, content: "<other>" }), 5);
+    await eventually(() => expect(prompts.join("")).toContain("<other>"));
 });

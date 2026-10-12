@@ -3,6 +3,7 @@ import { createServer, type Server } from "node:http";
 import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
+import { isRecord } from "@intentic/base/escape";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { type CommandGuard, consultWith, vendorSubject } from "../../guard/command-guard.js";
@@ -139,7 +140,6 @@ const HELD_COMMAND_MS = 24 * 60 * 60 * 1000;
 // stays out of its arguments too; the script then runs the command in the real one.
 const NEUTRAL_CWD = "/";
 
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 const editsOf = (value: unknown): { old_string: string; new_string: string }[] =>
     Array.isArray(value)
         ? value.flatMap((edit) =>

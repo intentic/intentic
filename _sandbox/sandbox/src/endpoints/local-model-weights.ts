@@ -4,6 +4,7 @@ import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { once } from "node:events";
 import { basename, dirname, join } from "node:path";
 import { downloadFile } from "@huggingface/hub";
+import { SingleFlight } from "@intentic/base/async";
 import { undefinedIfMissing, errorMessage } from "@intentic/base/errors";
 import { type Capability, LOCAL_MODEL_INSTANT, LOCAL_MODEL_WINDOW_DEFAULT, type LocalModelPrefetch } from "@intentic/sandbox-contract";
 import { opt } from "../opt.js";
@@ -75,18 +76,14 @@ const mismatch = async (path: string, source: LocalModelSource): Promise<Error> 
 };
 
 // Keyed by destination like the fetches: two cards starting on one file read it once.
-const verifications = new Map<string, Promise<void>>();
+const verifications = new SingleFlight<string, void>();
 
 /**
  * Holds weights already on disk to the pinned digest before a start: free for a file this cache verified, one full read
  * for a file fetched before pinning. A mismatch deletes the file and throws.
  */
-export const verifyWeights = (source: LocalModelSource, destination: string): Promise<void> => {
-    const running = verifications.get(destination);
-    if (running !== undefined) {
-        return running;
-    }
-    const promise = (async () => {
+export const verifyWeights = (source: LocalModelSource, destination: string): Promise<void> =>
+    verifications.run(destination, async () => {
         const expected = source.sha256;
         if (expected === undefined || (await weightsTrusted(source, destination))) {
             return;
@@ -95,12 +92,7 @@ export const verifyWeights = (source: LocalModelSource, destination: string): Pr
             throw await mismatch(destination, source);
         }
         await recordVerified(destination, expected);
-    })().finally(() => {
-        verifications.delete(destination);
     });
-    verifications.set(destination, promise);
-    return promise;
-};
 
 // The one door into the cache: a pinned file is renamed into place only once what arrived hashes to its digest.
 const settle = async (staged: string, destination: string, source: LocalModelSource, hash: Hash | undefined): Promise<void> => {

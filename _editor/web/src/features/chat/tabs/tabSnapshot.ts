@@ -6,6 +6,7 @@ import type { TurnPick } from "../run/turnDefaults";
 import type { ForkLink, SessionRef } from "../run/turnRequest";
 import type { ChatRunView } from "../run/chatRun";
 import { forgetWindowState, readWindowState, writeWindowState } from "../../../workbench/window/windowStore";
+import { chatTabsKey } from "../../../lib/browserStorage";
 
 // Where a sandbox's open chat tabs persist between page loads: identity, title, and composer draft, one JSON
 // blob per sandbox, seeded from the last window's (windowStore has the store mechanics). Transcript content
@@ -109,7 +110,8 @@ export interface TabSnapshot {
     readonly tabs: readonly StoredTab[];
 }
 
-const snapshotKey = (sandboxId: string): string => `intentic.chatTabs.${sandboxId}`;
+// The account's, so sign-out takes every sandbox's strip with it (lib/browserStorage.ts).
+const snapshotKey = chatTabsKey;
 
 // A field that reads back unusable is absent, so the restore falls to that field's own default rather than failing the tab.
 const maybe = <T extends z.ZodType>(schema: T) => schema.optional().catch(undefined);

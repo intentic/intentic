@@ -1,8 +1,7 @@
-import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { undefinedIfMissing } from "@intentic/base/errors";
 import { MEMORY_FILE } from "@intentic/constants";
 import { mergeFenced } from "../../migrations/merge.js";
+import { textFile } from "../../store/plain-files/text-file.js";
 
 // A project sandbox's agents learn which folder is the owner's from the workspace's own AGENTS.md, which the daemon
 // composes into every turn whichever runtime serves it (agent/prompt/workspace-memory.ts), and a projects host's learn
@@ -49,19 +48,19 @@ export const projectNote = (folders: readonly [string, ...string[]]): string => 
 };
 
 // True when it wrote. A boot that finds the note current leaves the file alone, so it never reads as a change in the
-// review, and so does an empty list: a projects host nothing has attached to yet has no folder to name. Only a missing
-// file reads as empty: the write replaces the whole file, and those are the owner's own rules.
+// review, and so does an empty list: a projects host nothing has attached to yet has no folder to name. Through textFile,
+// whose read takes only a missing file as empty and whose write is atomic and queued: the write replaces the whole file,
+// and those are the owner's own rules, which a boot's converge and an attach's must not race to drop.
 export const convergeProjectNote = async (workspaceRoot: string, names: readonly string[]): Promise<boolean> => {
     const [first, ...rest] = names.map((name) => join(workspaceRoot, name));
     if (first === undefined) {
         return false;
     }
-    const path = join(workspaceRoot, MEMORY_FILE);
-    const existing = (await readFile(path, "utf8").catch(undefinedIfMissing)) ?? "";
-    const next = mergeFenced(existing, PROJECT_NOTE_FENCE, projectNote([first, ...rest]));
-    if (next === existing) {
-        return false;
-    }
-    await writeFile(path, next);
-    return true;
+    let wrote = false;
+    await textFile(join(workspaceRoot, MEMORY_FILE)).update((existing) => {
+        const next = mergeFenced(existing, PROJECT_NOTE_FENCE, projectNote([first, ...rest]));
+        wrote = next !== existing;
+        return wrote ? next : undefined;
+    });
+    return wrote;
 };

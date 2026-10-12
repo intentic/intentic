@@ -1,4 +1,5 @@
 import { createHash, randomBytes, randomInt } from "node:crypto";
+import { BoundedMap } from "@intentic/base/held";
 import type {
     AuthenticationOptionsJSON,
     AuthenticationResponse,
@@ -238,7 +239,7 @@ const verified = <T>(run: () => T): T => {
 
 export const createPasskeyCeremonies = (deps: PasskeyCeremonyDeps): PasskeyCeremonies => {
     const now = deps.now ?? Date.now;
-    const pending = new Map<string, PendingChallenge>();
+    const pending = new BoundedMap<string, PendingChallenge>(MAX_PENDING_CHALLENGES);
     let recoveryFailures = 0;
     let recoveryLockedUntil = 0;
 
@@ -248,13 +249,6 @@ export const createPasskeyCeremonies = (deps: PasskeyCeremonyDeps): PasskeyCerem
             if (entry.expiresAt <= at) {
                 pending.delete(key);
             }
-        }
-        while (pending.size >= MAX_PENDING_CHALLENGES) {
-            const oldest = pending.keys().next().value;
-            if (oldest === undefined) {
-                break;
-            }
-            pending.delete(oldest);
         }
         const id = base64url.encode(randomBytes(32));
         pending.set(id, { ...challenge, expiresAt: at + CHALLENGE_TTL_MS });

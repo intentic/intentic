@@ -1,4 +1,5 @@
 import type { sandboxContract } from "@intentic/sandbox-contract";
+import type { InferClientInputs } from "@orpc/client";
 import type { ContractRouterClient } from "@orpc/contract";
 import type { Component } from "vue";
 import type { DiffPayload } from "./diff.js";
@@ -89,10 +90,22 @@ export interface ViewAsk {
     readonly actions?: readonly ViewAskAction[] | undefined;
 }
 
+// The daemon's contract as `api.sandbox.rpc` types it, and one of its procedures by route name (`personas.list`), the
+// name the host files that read's cache entry under and the daemon's pushes refresh it by.
+type SandboxRpc = ContractRouterClient<typeof sandboxContract>;
+export type SandboxProcedure = { [G in keyof SandboxRpc & string]: `${G}.${keyof SandboxRpc[G] & string}` }[keyof SandboxRpc & string];
+type ProcedureNamed<P extends SandboxProcedure> = P extends `${infer G extends keyof SandboxRpc}.${infer N}`
+    ? N extends keyof SandboxRpc[G]
+        ? SandboxRpc[G][N]
+        : never
+    : never;
+export type SandboxProcedureInput<P extends SandboxProcedure> = InferClientInputs<ProcedureNamed<P>>;
+
 // One cached read, shared by `ViewRegistration.warm` and `api.sandbox.fetch`. `staleTime`/`gcTime` are
 // optional; both default to the host's.
 export interface HostQuery<T = unknown> {
-    // Must be scoped by api.sandbox.key(...), so nothing bleeds across a sandbox switch.
+    // Must be scoped by api.sandbox.readKey(...) for a contract read, else api.sandbox.key(...), so nothing bleeds across
+    // a sandbox switch.
     readonly queryKey: readonly unknown[];
     readonly queryFn: () => Promise<T>;
     readonly staleTime?: number | undefined;
@@ -290,8 +303,14 @@ export interface IntenticApi {
         fetch<T>(query: HostQuery<T>): Promise<T>;
         // Whether the active sandbox is reachable; reactive when read inside a computed.
         reachable(): boolean;
-        // A cache key scoped to the active sandbox; required prefix for every host-provided vue-query key.
+        // A cache key scoped to the active sandbox, for what is not one contract read (a `json` route, a composite);
+        // required prefix for every host-provided vue-query key.
         key(...parts: readonly string[]): readonly unknown[];
+        // The cache key of one contract read, exactly the host's own for it, so a view and the shell reading
+        // `personas.list` share one entry and every push the daemon makes for that read refreshes it. The entry holds
+        // the procedure's whole answer: return `rpc.<group>.<name>(input)` unchanged from `queryFn` and reshape with
+        // `select`, or two readers of one key would store two shapes under it.
+        readKey<P extends SandboxProcedure>(procedure: P, input?: SandboxProcedureInput<P>): readonly unknown[];
         // The daemon's public tunnel origin, for externally-shareable URLs; undefined until the sandbox is registered.
         origin(): string | undefined;
         // The signed-in user's trust tier, reactive like `reachable`. For affordances only: every route is

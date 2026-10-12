@@ -1,5 +1,6 @@
 import http from "node:http";
 import type { Readable } from "node:stream";
+import { errnoCode, errorMessage } from "@intentic/base/errors";
 import type { BrowserRoutes } from "./browser-routes.js";
 import { relayUpgrade } from "./upgrade-relay.js";
 import { endedPage } from "./host-page.js";
@@ -206,7 +207,7 @@ export const createListener = (deps: ListenerDeps): Listener => {
             }
             return true;
         } catch (error) {
-            deps.log(`saving ${file.path} failed: ${error instanceof Error ? error.message : String(error)}`);
+            deps.log(`saving ${file.path} failed: ${errorMessage(error)}`);
             return false;
         }
     };
@@ -283,7 +284,7 @@ export const createListener = (deps: ListenerDeps): Listener => {
                     proxy(req, res);
             }
         })().catch((error: unknown) => {
-            deps.log(`request failed: ${error instanceof Error ? error.message : String(error)}`);
+            deps.log(`request failed: ${errorMessage(error)}`);
             if (!res.headersSent) {
                 json(res, 500, { error: "internal" });
             }
@@ -337,7 +338,7 @@ export const createListener = (deps: ListenerDeps): Listener => {
             try {
                 return await bind(port);
             } catch (error) {
-                if ((error as NodeJS.ErrnoException).code !== "EADDRINUSE") {
+                if (errnoCode(error) !== "EADDRINUSE") {
                     throw error;
                 }
                 return bind(0);

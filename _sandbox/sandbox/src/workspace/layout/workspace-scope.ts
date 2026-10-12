@@ -3,7 +3,7 @@ import { type ArchivePath, archivePrefixOf, archiveRootOf, ConversationIdSchema,
 import { ORPCError } from "@orpc/server";
 import type { PersistedAgent } from "../../conversations/registry/agents-store.js";
 import { archiveChildrenOf, archiveMemberPath, isBrowsableArchiveFile } from "../files/archive/workspace-archive-browse.js";
-import { isControlPlanePath, realWithin, resolveWithin } from "../files/workspace-files-paths.js";
+import { isControlPlanePath, resolveWithin, resolveWorkspacePath } from "../files/workspace-files-paths.js";
 
 // Resolves where a read really lands, for every file-serving route; downstream just takes the answer. Two questions in
 // one place: whose copy of the workspace it means, and whether it reads through an archive into that archive's
@@ -28,20 +28,17 @@ const present = async (path: string): Promise<boolean> => {
 };
 
 // Resolves relPath inside root: an escaping path is BAD_REQUEST, the daemon's private state is NOT_FOUND (not
-// FORBIDDEN).
-// The escape guard runs twice: lexically (resolveWithin) and on disk (realWithin, for a symlink); both are BAD_REQUEST.
+// FORBIDDEN). Both are asked lexically and on disk (resolveWorkspacePath), so a symlinked folder leads neither out of
+// root nor into its control plane.
 export const containedIn = async (root: string, relPath: string): Promise<string> => {
-    const target = resolveWithin(root, relPath);
-    if (target === undefined) {
+    const resolved = await resolveWorkspacePath(root, relPath);
+    if (resolved.kind === "outside") {
         throw new ORPCError("BAD_REQUEST", { message: "invalid path" });
     }
-    if (isControlPlanePath(root, target)) {
+    if (resolved.kind === "controlPlane") {
         throw new ORPCError("NOT_FOUND", { message: "not found" });
     }
-    if ((await realWithin(root, target)) === undefined) {
-        throw new ORPCError("BAD_REQUEST", { message: "invalid path" });
-    }
-    return target;
+    return resolved.path;
 };
 
 // A non-isolated conversation resolves to the shared tree rather than failing; /work genuinely is its tree.

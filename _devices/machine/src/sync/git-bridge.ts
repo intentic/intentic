@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { HISTORY_ROOT, STATE_DIR } from "@intentic/constants";
+import { GIT_GLOBAL_ARGS } from "@intentic/base/git";
 import type { Log } from "@intentic/local-agent";
 import { isProjectPairing, type Pairing } from "./config.js";
 import { runProcess } from "./exec.js";
@@ -21,9 +22,14 @@ export interface BridgeExec {
 // A hung tunnel must not wedge one pass for good, generous enough for a first fetch of a real repo.
 const EXEC_TIMEOUT_MS = 120_000;
 
+// Every git here runs in the user's own repo, perhaps while their editor or terminal runs git in it too: the shared
+// GIT_GLOBAL_ARGS keep a read off index.lock (`--no-optional-locks`, which leaves the locks a write takes alone) and read
+// modes the sandbox's way. Through runProcess rather than the base git runner, which has no deadline: a fetch or
+// ls-remote over a hung tunnel must end with this pass.
 export const realBridgeExec: BridgeExec = {
     run: async (command, args, cwd) => {
-        const result = await runProcess(command, args, { cwd, timeoutMs: EXEC_TIMEOUT_MS });
+        const argv = command === "git" ? [...GIT_GLOBAL_ARGS, ...args] : args;
+        const result = await runProcess(command, argv, { cwd, timeoutMs: EXEC_TIMEOUT_MS });
         return result.status === 0 ? result.stdout : undefined;
     },
     exists: existsSync,
@@ -66,8 +72,9 @@ export const bridgeRepo = async (exec: BridgeExec, alias: string, localDir: stri
         log(`  ${repo}: initialized, this repo's history now follows the sandbox`);
     }
     // Mirrors the sandbox's core.fileMode=false (daemon's GIT_GLOBAL_ARGS): local git defaults true. Checked every
-    // pass, not just init, since already-paired repos may predate this.
-    if ((await exec.run("git", ["config", "--get", "core.fileMode"], dir))?.trim() !== "false") {
+    // pass, not just init, since already-paired repos may predate this. `--local`, since the `-c core.fileMode=false`
+    // every git here runs with would otherwise answer for the repo's own file, which the user's own git reads.
+    if ((await exec.run("git", ["config", "--local", "--get", "core.fileMode"], dir))?.trim() !== "false") {
         await exec.run("git", ["config", "core.fileMode", "false"], dir);
     }
     const current = (await exec.run("git", ["remote", "get-url", "sandbox"], dir))?.trim();

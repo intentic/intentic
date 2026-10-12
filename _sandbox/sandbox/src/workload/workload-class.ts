@@ -10,6 +10,7 @@ import {
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { getPriority, setPriority } from "node:os";
 import type { Readable, Writable } from "node:stream";
+import { sleep } from "@intentic/base/async";
 import { forkedExec } from "@intentic/base/git";
 
 // What a process is to this sandbox, decided by whoever spawned it and applied as it starts: its CPU niceness, its IO
@@ -212,6 +213,6 @@ export const applyToStampedChild = async (stamp: string, workload: Workload): Pr
         if (Date.now() >= deadline) {
             return undefined;
         }
-        await new Promise((resolve) => setTimeout(resolve, STAMP_POLL_MS));
+        await sleep(STAMP_POLL_MS);
     }
 };

@@ -3,6 +3,7 @@
 // notification tap or a shortcut names its own destination and keeps it; a browser tab at "/" is a typed address.
 import { z } from "zod";
 import { storedValue, storeValue } from "../lib/browserStorage";
+import { inAppPath } from "../lib/routes/inAppPath";
 
 const LAST_ROUTE_KEY = `intentic.lastRoute`;
 const RECENT_VISIT_MS = 30 * 60_000;
@@ -11,9 +12,9 @@ const SavedRoute = z.object({ path: z.string(), at: z.number() });
 export const recentRoute = (stored: string | null, now: number): string | undefined => {
     try {
         const saved = SavedRoute.safeParse(JSON.parse(stored ?? `null`));
-        return saved.success && saved.data.path.startsWith(`/`) && !saved.data.path.startsWith(`//`) && saved.data.path !== `/` &&
-            now >= saved.data.at && now - saved.data.at < RECENT_VISIT_MS
-            ? saved.data.path
+        const path = saved.success ? inAppPath(saved.data.path) : undefined;
+        return saved.success && path !== undefined && path !== `/` && now >= saved.data.at && now - saved.data.at < RECENT_VISIT_MS
+            ? path
             : undefined;
     // allow(silent-catch): Corrupt browser storage should leave the app at its normal root route.
     } catch {

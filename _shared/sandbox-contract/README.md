@@ -41,6 +41,11 @@ flowchart LR
   `blocked` with its `fix` · `unknown`), and `SPENT_UTILIZATION` is the only spent line. The daemon runs it for every
   picker and publishes it as `state` on each account row. The editor reads that field and never judges a row itself: a
   row without it (a daemon from before v1.313) reads as `unknown`, and the editor says the sandbox needs an update.
+- What a credential looks like is decided here too: `CREDENTIAL_ISSUERS` in `src/policy/credential-material.ts` (each
+  issuer's prefix and token body, as data) and `SECRET_REFERENCE` in `src/schemas/needs.ts` (the `{{secret:name}}`
+  pattern, non-global, so each site that scans derives its own `/g` copy). The terminal output filter
+  (`@intentic/output-cleaners`) imports only node builtins and keeps copies of both; the daemon's
+  `src/secrets/terminal-masking-parity.test.ts` fails when a copy parts from these.
 - `./documents` is the vocabulary stored files evolve by, shared by the daemon's stores and an extension's own files
   (`sandboxDocument`): guarded, pure conversions of raw JSON that settle on their own output, the passthrough that
   keeps what a build does not know on its writes, and `readDocument`, the one read every store makes of a file (JSON,
@@ -62,6 +67,16 @@ flowchart LR
   verbatim in the staged-update marker) and `/health`'s `state`. So are `UpdateOutcomeSchema` and
   `PreparingUpdateSchema`, the files `ic` writes beside an update for the daemon to read. `golden/` holds an example of
   each, which the contract's tests keep current and ic's Rust tests parse or produce field for field.
+- `/health` is served raw, and its shape is `DaemonHealthSchema` (`src/schemas/system.ts`); every reader outside the
+  daemon (the platform's hosted gate, the editor's recovery screen, the onboarding lane) parses it with
+  `DaemonHealthReadingSchema`, where any field may be missing or of an old shape. `ic` reads it in Rust and keeps its
+  own loose reading of `boot`, `state` and `announce`. What the machine agent prints for a bring-back, and so what
+  the editor reads off the desktop app's `intentic:project` event, is `src/schemas/project-bring-back.ts`.
+- One reading each of three small grammars every tier parses: `src/protocol/sse.ts` is the WHATWG event-stream parser
+  (CRLF, CR or LF; data lines joined; `event`, `id`, `retry`) with the idle window a daemon stream ends after;
+  `globMatcher` in `src/policy/search-globs.ts` matches a "files to include" glob as Bun.Glob does, so the daemon and
+  the desktop folder server admit the same files; `compareVersions` in `src/state/versions.ts` orders versions as
+  semver does, a release above its own prereleases.
 - The wire no oRPC route carries is defined by the Rust crates that speak it (`_sandbox/netd/crates`): `tunnel` (the
   `/tunnel/v2` door, its headers and lanes, the stream multiplexer, close codes, liveness, ALPN and the transports an
   edge declares; what the daemon announces as its transfers is `protocol/tunnel-bulk.ts`, held to the edge's reading by

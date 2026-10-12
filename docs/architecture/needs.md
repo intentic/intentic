@@ -44,6 +44,7 @@ Before raising a card the daemon checks what the turn can already reach ([`turn-
 - A conversation that came from a channel (Slack, Telegram, Discord…) hears it there too ([`need-channel.ts`](../../_sandbox/sandbox/src/needs/need-channel.ts)), with where to answer it and, for a secret, a warning not to paste it into the channel. A visitor's chat never does: nothing a need asks for is a stranger's to give.
 - A pending plan names the conversation's open needs under itself, so the person answers them in the same sitting as the plan rather than one interruption at a time.
 - Every yes still standing (what a grant widened, which credentials were released, whether its installs run unasked) is listed on Needs you's Allowed tab, by conversation, each with Take back ([`standing-grants.ts`](../../_sandbox/sandbox/src/needs/standing-grants.ts)); it applies from the conversation's next turn, and for installs from its next install. A yes is kept until a person takes it back or the conversation is gone: a restart forgets none of them.
+- That includes a credential gateway card's "Allow requests like this with <name> in this conversation", listed in the card's own words ("Requests like GET api.github.com/… with GitHub") and taken back by capability and rule. A yes a card writes mid-turn closes no need, so the daemon pushes a `grants` runtime change whenever a conversation's grants or releases move, and the tab reads again.
 
 ## Needs you
 
@@ -75,5 +76,5 @@ One inbox answers "what is waiting on me", whichever part of the app holds it ([
 | --- | --- |
 | `.intentic/records/needs.json` | every open need and the recent closed ones, with who answered and how the agent was told |
 | `sandbox-secrets.json` (auth root) | secrets a person pasted into a card or added on the Secrets view without DevOps, and ones `secrets generate` made |
-| `conversation-grants.json` (auth root) | what a person allowed one conversation beyond its persona, "allow installs for this conversation" from an install card, "allow <secret> anywhere in this conversation" from a host guard card, and "allow everything in this conversation" from any permission card's Allow menu |
+| `conversation-grants.json` (auth root) | what a person allowed one conversation beyond its persona, "allow installs for this conversation" from an install card, "allow <secret> anywhere in this conversation" from a host guard card, "allow everything in this conversation" from any permission card's Allow menu, and the credential gateway rules a card's "allow requests like this" stopped asking |
 | `credential-releases.json` (auth root, [`credential-grants.ts`](../../_sandbox/sandbox/src/secrets/credential-grants.ts)) | credentials a named approver released to a conversation, until a take-back; mirrored in memory, loaded at boot |

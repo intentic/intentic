@@ -5,7 +5,7 @@ import { computed, ref } from "vue";
 import PipelineDagGraph from "./graph/PipelineDagGraph.vue";
 import { pipelineStages } from "./graph/pipelineDag";
 import { forgeRunUrl, runOf, runRefOf } from "./runSide";
-import { formatDuration, STATUS_TONE } from "./statusVisual";
+import { runDuration, STATUS_TONE } from "./statusVisual";
 import { useFailureHistory } from "./useFailureHistory";
 import { usePipelines } from "./usePipelines";
 import { useRunJobs } from "./useRunJobs";
@@ -37,7 +37,7 @@ const graphBox = ref<HTMLElement>();
 const narrow = useNarrow(graphBox, 36);
 
 const tone = computed(() => (run.value === undefined ? undefined : STATUS_TONE[run.value.status]));
-const duration = computed(() => formatDuration(run.value?.durationSeconds));
+const duration = computed(() => runDuration(run.value?.durationSeconds));
 const forgeName = computed(() => (repo.value?.host === `gitlab` ? `GitLab` : `GitHub`));
 </script>
 

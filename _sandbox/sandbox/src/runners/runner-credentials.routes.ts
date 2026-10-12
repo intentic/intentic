@@ -11,6 +11,7 @@ import type { Context } from "hono";
 import { replaceRejectedToken } from "../runtimes/claude/claude-credentials.js";
 import type { Services } from "../composition.js";
 import type { HarnessCredentialsResult } from "../agent/providers/harness-credentials.js";
+import { REQUEST_REFRAMED, RESPONSE_REFRAMED, forwardHeaders } from "../http/forward-headers.js";
 import { bearerPeer } from "../peers/peer-store.js";
 
 // A runner's turns spend this sandbox's model providers through three bearer-authenticated routes:
@@ -101,8 +102,9 @@ export const createRunnerCredentialRefreshRoute =
         return c.json(accessToken !== undefined ? { accessToken } : {});
     };
 
-// Hop-by-hop and identity headers: the runner's bearer must never reach the translator as the local one.
-const DROPPED_HEADERS = new Set(["authorization", "host", "connection", "content-length", "transfer-encoding", "accept-encoding"]);
+// The runner's bearer must never reach the translator as the local one, so it goes with the hop-by-hop and reframed
+// headers and the translator's own is set in its place.
+const DROPPED_HEADERS = [...REQUEST_REFRAMED, "authorization"];
 
 export const createRunnerTranslatorProxyRoute =
     (services: Pick<Services, "runners" | "config">) =>
@@ -117,12 +119,7 @@ export const createRunnerTranslatorProxyRoute =
         }
         const rest = c.req.path.slice(runnerTranslatorPath.length);
         const url = new URL(c.req.url);
-        const headers = new Headers();
-        for (const [name, value] of c.req.raw.headers) {
-            if (!DROPPED_HEADERS.has(name.toLowerCase())) {
-                headers.set(name, value);
-            }
-        }
+        const headers = forwardHeaders(c.req.raw.headers, DROPPED_HEADERS);
         headers.set("authorization", `Bearer ${translator.token}`);
         // Streamed both ways so a long SSE turn isn't buffered in memory; `duplex` lets fetch send an unmeasured body.
         const upstream = await fetch(`${translator.url.replace(/\/$/, "")}${rest}${url.search}`, {
@@ -130,5 +127,7 @@ export const createRunnerTranslatorProxyRoute =
             headers,
             ...(c.req.raw.body !== null ? { body: c.req.raw.body, duplex: "half" as const } : {}),
         } as RequestInit);
-        return new Response(upstream.body, { status: upstream.status, headers: upstream.headers });
+        // fetch has decoded the body and the translator's hop-by-hop headers describe its connection to this daemon, so
+        // neither its encoding nor its framing goes on to the runner.
+        return new Response(upstream.body, { status: upstream.status, headers: forwardHeaders(upstream.headers, RESPONSE_REFRAMED) });
     };

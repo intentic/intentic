@@ -10,6 +10,7 @@ import { useTabRoots } from "./mobileTabs";
 import { onTabRoot } from "../lib/routes/tabRoots";
 import SandboxGate from "../features/sandbox/gates/SandboxGate.vue";
 import { useEdgeBack } from "./edgeBack";
+import { useKeybindings } from "../workbench/commands/useKeybindings";
 
 // Mobile chrome: full-screen views over a bottom tab bar. h-dvh tracks the browser's UI chrome; the
 // bar yields to the on-screen keyboard. No rail, chat column, or docked terminal: chat and terminal are
@@ -62,6 +63,10 @@ const wallpapered = useWallpaperedRoute();
 // The getting-started checklist, started with the shell so every mark in every feature has an answer to read
 // (features/tour/tourState.ts), whichever screen a first run opens on.
 useGettingStarted();
+// The same keystroke dispatcher the desktop shell installs. The shell's own commands are desktop-only, but a surface
+// that claims keys of its own (the review pass's j/k/v, reviewKeys.ts) does so through the registry, and a narrow
+// window or a tablet with a keyboard lands here.
+useKeybindings();
 </script>
 
 <template>

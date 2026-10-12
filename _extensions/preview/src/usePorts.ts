@@ -4,13 +4,13 @@ import { computed } from "vue";
 import { host } from "./host";
 
 // Sandbox's listening TCP ports via the daemon's `ports` procedures, the generic complement to panels; `forward`
-// exposes one at its port-<slot> hostname. Unpolled: shares the daemon's push key (`ports`) with the shell's own
-// indicator, so both refresh off one frame.
+// exposes one at its port-<slot> hostname. Unpolled: keyed by its procedure, the shell's own indicator's key, which
+// the daemon's `ports` push reaches through the host's table of pushed reads, so both refresh off one frame.
 
 export function usePorts() {
     const api = host();
     const queryClient = useQueryClient();
-    const queryKey = api.sandbox.key(`ports`);
+    const queryKey = api.sandbox.readKey(`ports.list`);
 
     const query = useQuery({
         queryKey,

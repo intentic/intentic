@@ -13,6 +13,7 @@ import { PAYLOAD_MAX, type TurnStream } from "../../automations/scheduler.js";
 import type { Services } from "../../composition.js";
 import type { AppEnv } from "../../app-env.js";
 import { callingExtension, type ExtensionGrant } from "../../auth/grants.js";
+import { readBoundedJson } from "../../http/bounded-body.js";
 import { listenerOwnership, listenerStateOf } from "./listener-state.js";
 import { setListenerStatus } from "./listener-status.js";
 
@@ -59,16 +60,16 @@ export const createListenerRoutes = (services: Services) => ({
             return caller;
         }
         const provider = c.req.param("provider");
-        const declared = Number(c.req.header("content-length"));
-        if (Number.isFinite(declared) && declared > PAYLOAD_MAX) {
+        // Counted as it arrives: a chunked body declares no length, and would otherwise be read whole first.
+        const body = await readBoundedJson(c.req.raw, PAYLOAD_MAX);
+        if (body.kind === "tooLarge") {
             return c.json({ error: "payload too large" }, 413);
         }
-        let message: ListenerMessage;
-        try {
-            message = ListenerMessageSchema.parse(await c.req.json());
-        } catch {
+        const parsed = body.kind === "ok" ? ListenerMessageSchema.safeParse(body.value) : undefined;
+        if (parsed === undefined || !parsed.success) {
             return c.json({ error: "invalid listener message" }, 400);
         }
+        const message: ListenerMessage = parsed.data;
         if (message.provider !== provider) {
             return c.json({ error: "provider mismatch" }, 400);
         }

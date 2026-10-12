@@ -1,3 +1,6 @@
+import { windowsHolds } from "@intentic/base/contained";
+import { escapeRegExp } from "@intentic/base/escape";
+import type { ProjectChange as PrintedChange, ProjectChangeKind } from "@intentic/sandbox-contract";
 import { isSafeRelativePath } from "../residue.js";
 
 // WHAT A COPY-FIRST PROJECT'S SANDBOX CHANGED, worked out from two listings of the same folder: this device's copy and
@@ -16,16 +19,12 @@ export interface FileStamp {
 export type Listed = FileStamp | "other";
 export type Listing = ReadonlyMap<string, Listed>;
 
-export type ChangeKind = "added" | "modified" | "deleted";
+export type ChangeKind = ProjectChangeKind;
 
-// One entry of `sync changes`: `size` is the sandbox copy's, what bringing it back writes here. `held` is set on a
-// `modified` path bring-back will not write over, saying why (its JSON is `conflict: true`).
-export interface ProjectChange {
-    readonly path: string;
-    readonly kind: ChangeKind;
-    readonly size?: number;
-    readonly held?: string;
-}
+// One entry of `sync changes`, the contract's printed entry as this agent holds it: `size` is the sandbox copy's, what
+// bringing it back writes here. `held` is set on a `modified` path bring-back will not write over, saying why (its JSON
+// is `conflict: true`).
+export type ProjectChange = Readonly<Omit<PrintedChange, "conflict">> & { readonly held?: string };
 
 // The first this many changes are listed; the rest are counted out as `truncated`.
 export const CHANGES_MAX = 5_000;
@@ -43,18 +42,16 @@ const MUTAGEN_TEMPORARY = ".mutagen-temporary-*";
 const PATTERN = /^\/?[^/*?[\]!\\{}]*(?:\*[^/*?[\]!\\{}]*)*$/;
 const DEEP_PATH = /^\*\*\/[^/*?[\]!\\{}]+(?:\/[^/*?[\]!\\{}]+)+$/;
 
-const escaped = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
-
 // The pattern as a regular expression over a whole relative path, which the sandbox's walk runs as it is (project-remote.ts).
 export const ignoreExpression = (pattern: string): string => {
     if (DEEP_PATH.test(pattern) && pattern.split("/").slice(1).every((segment) => segment !== "." && segment !== "..")) {
-        return `(?:^|/)${escaped(pattern.slice("**/".length))}(?:/|$)`;
+        return `(?:^|/)${escapeRegExp(pattern.slice("**/".length))}(?:/|$)`;
     }
     const bare = pattern.replace(/^\//, "");
     if (!PATTERN.test(pattern) || bare === "" || bare.includes("**")) {
         throw new Error(`the ignore pattern ${JSON.stringify(pattern)} is not one this agent can match exactly, so it will not compare the folder with the sandbox's copy`);
     }
-    const name = bare.split("*").map(escaped).join("[^/]*");
+    const name = bare.split("*").map(escapeRegExp).join("[^/]*");
     return `${pattern.startsWith("/") ? "^" : "(?:^|/)"}${name}(?:/|$)`;
 };
 
@@ -68,17 +65,10 @@ export const ignoreMatcher = (patterns: readonly string[]): ((path: string) => b
 
 // A path either side may carry: relative, forward-slashed, no empty, `.` or `..` segment, no backslash (a name that holds
 // one on Linux has no spelling on Windows, nor in this format). Anything else is left out of both listings. On Windows,
-// also no name Windows cannot hold (`windowsHolds`): such a path is refused before anything is made for it.
+// also no name Windows cannot hold: such a path is refused before anything is made for it. (2026-10-06) base's
+// `windowsHolds` keeps the rule and what NTFS was measured doing with such names.
 export const isPortablePath = (path: string, platform: NodeJS.Platform = process.platform): boolean =>
     isSafeRelativePath(path) && !/^[a-z]:/i.test(path) && (platform !== "win32" || path.split("/").every(windowsHolds));
-
-// (2026-10-06) Whether Windows can hold a name: none of `<>:"|?*` or a control character (a colon names an alternate
-// data stream of another file), no trailing dot or space (which Windows drops), and no device name (`CON`, `NUL`,
-// `COM1`…, with or without an extension). Measured on NTFS: `notes:extra` left an empty `.notes` beside it, and `nul`
-// was made through a long path and then refused by PowerShell's own delete. local-files' paths.ts holds the same rule.
-const WINDOWS_FORBIDDEN = /[<>:"|?*\u0000-\u001f]/;
-const WINDOWS_DEVICE = /^(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/i;
-const windowsHolds = (name: string): boolean => !WINDOWS_FORBIDDEN.test(name) && !/[. ]$/.test(name) && !WINDOWS_DEVICE.test(name);
 
 const HASH = /^[0-9a-f]{64}$/;
 

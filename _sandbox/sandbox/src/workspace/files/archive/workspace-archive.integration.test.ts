@@ -1,8 +1,9 @@
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pack } from "tar-stream";
+import { STATE_DIR } from "@intentic/constants";
 import { extractTarToWorkspace, PathEscapeError } from "./workspace-archive.js";
 import { UploadTooLargeError } from "../workspace-files-upload.js";
 
@@ -91,16 +92,20 @@ test("extractTarToWorkspace rejects an escaping entry path", async () => {
 test("extractTarToWorkspace rejects an absolute entry path, and one that climbs through a folder", async () => {
     const root = await mkdtemp(join(tmpdir(), "tar-"));
     await expect(extractTarToWorkspace(root, await tarOf([{ name: "/tmp/evil.txt", content: "no" }]))).rejects.toBeInstanceOf(PathEscapeError);
-    await expect(extractTarToWorkspace(root, await tarOf([{ name: "a/../../evil.txt", content: "no" }]))).rejects.toBeInstanceOf(
-        PathEscapeError,
-    );
+    await expect(extractTarToWorkspace(root, await tarOf([{ name: "a/../../evil.txt", content: "no" }]))).rejects.toBeInstanceOf(PathEscapeError);
     await rm(root, { recursive: true, force: true });
 });
 
 // `tar -cf x.tar .` writes the archive's own root first; it is /work, already there, not an escape.
 test("extractTarToWorkspace takes an archive that names its own root", async () => {
     const root = await mkdtemp(join(tmpdir(), "tar-"));
-    await extractTarToWorkspace(root, await tarOf([{ name: "./", type: "directory" }, { name: "./a.txt", content: "hi" }]));
+    await extractTarToWorkspace(
+        root,
+        await tarOf([
+            { name: "./", type: "directory" },
+            { name: "./a.txt", content: "hi" },
+        ]),
+    );
     expect(await readFile(join(root, "a.txt"), "utf8")).toBe("hi");
     await rm(root, { recursive: true, force: true });
 });
@@ -154,5 +159,34 @@ test("extractTarToWorkspace enforces one byte budget across the whole archive", 
             1500,
         ),
     ).rejects.toBeInstanceOf(UploadTooLargeError);
+    await rm(root, { recursive: true, force: true });
+});
+
+// A folder already in /work that links elsewhere passes the lexical check while the write follows the link. Out of the
+// workspace aborts like any escape; into the control plane is skipped like any control-plane entry. Real symlinks.
+test("extractTarToWorkspace refuses an entry through a symlinked folder that leads out of the workspace", async () => {
+    const root = await mkdtemp(join(tmpdir(), "tar-"));
+    const outside = await mkdtemp(join(tmpdir(), "tar-outside-"));
+    await symlink(outside, join(root, "away"));
+    await expect(extractTarToWorkspace(root, await tarOf([{ name: "away/planted.sh", content: "x" }]))).rejects.toBeInstanceOf(PathEscapeError);
+    expect(existsSync(join(outside, "planted.sh"))).toBe(false);
+    await rm(root, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
+});
+
+test("extractTarToWorkspace skips an entry through a symlinked folder into the control plane and keeps extracting", async () => {
+    const root = await mkdtemp(join(tmpdir(), "tar-"));
+    await mkdir(join(root, STATE_DIR, "secrets/auth"), { recursive: true });
+    await mkdir(join(root, "notes"));
+    await symlink(join(root, STATE_DIR, "secrets/auth"), join(root, "notes/k"));
+    await extractTarToWorkspace(
+        root,
+        await tarOf([
+            { name: "notes/k/acc.json", content: "planted" },
+            { name: "notes/keep.txt", content: "ok" },
+        ]),
+    );
+    expect(existsSync(join(root, STATE_DIR, "secrets/auth/acc.json"))).toBe(false);
+    expect(await readFile(join(root, "notes/keep.txt"), "utf8")).toBe("ok");
     await rm(root, { recursive: true, force: true });
 });

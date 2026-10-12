@@ -1,5 +1,4 @@
-import { setTimeout as sleep } from "node:timers/promises";
-import { createBackoff } from "@intentic/base/async";
+import { createBackoff, sleep } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import type { Log } from "@intentic/local-agent";
 import { HOST_HEARTBEAT_MS, hostConnectUrl, type DeviceScopes } from "@intentic/sandbox-contract";
@@ -149,9 +148,8 @@ export const connect = (
                 await forget(config.sandboxUrl).catch((error: unknown) => linkLog(`could not drop the link (${String(error)})`));
                 return false;
             }
-            // allow(silent-catch): the sleep only rejects with the AbortError of `signal`, which the loop and the return read as signal.aborted.
             // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
-            await sleep(GONE_RECHECK_MS, undefined, { signal }).catch(() => undefined);
+            await sleep(GONE_RECHECK_MS, { signal });
         }
         return !signal.aborted;
     };

@@ -5,27 +5,9 @@ import { StringDecoder } from "node:string_decoder";
 // way down. Both decode across chunk boundaries, since a character split between two chunks decoded one chunk at a time
 // is two replacement characters in the record or the error.
 
-// The stream's records, one per LF. Node's readline also breaks lines at U+2028 and U+2029, which JSON allows raw inside
-// a string and which Codex and Pi do not escape, so a record holding one reached JSON.parse as two halves. A trailing
-// \r is dropped, blank lines are skipped, and a last record the stream ended without its LF is still a record.
-export async function* jsonLines(stream: Readable): AsyncGenerator<string> {
-    const decoder = new StringDecoder("utf8");
-    let buffer = "";
-    for await (const chunk of stream as AsyncIterable<Buffer | string>) {
-        buffer += typeof chunk === "string" ? chunk : decoder.write(chunk);
-        for (let newline = buffer.indexOf("\n"); newline !== -1; newline = buffer.indexOf("\n")) {
-            const line = buffer.slice(0, newline);
-            buffer = buffer.slice(newline + 1);
-            if (line.trim() !== "") {
-                yield line.endsWith("\r") ? line.slice(0, -1) : line;
-            }
-        }
-    }
-    const last = buffer + decoder.end();
-    if (last.trim() !== "") {
-        yield last.endsWith("\r") ? last.slice(0, -1) : last;
-    }
-}
+// The stream's records, one per LF (never at U+2028/U+2029, which Codex and Pi leave raw inside strings): the one reader
+// lives in base, beside the other protocols that read the same framing.
+export { jsonLines } from "@intentic/base/json-lines";
 
 export interface OutputTail {
     // Keeps what the stream says, with a decoder of its own, so two streams kept in one tail do not split each other's

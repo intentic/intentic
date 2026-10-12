@@ -55,8 +55,10 @@ const describe = (repos: readonly CiRepo[], repoFilter: string): CiDelivery => {
 export function useCiDelivery(active: Ref<boolean>, repo: Ref<string>) {
     const api = host();
     const query = useQuery({
-        queryKey: api.sandbox.key(`ci-delivery`),
-        queryFn: async (): Promise<CiRepo[]> => (await api.sandbox.rpc.ci.runs()).repos,
+        // The CI board's own entry, refreshed by the daemon's CI push, rather than a second copy of the same read.
+        queryKey: api.sandbox.readKey(`ci.runs`),
+        queryFn: () => api.sandbox.rpc.ci.runs(),
+        select: (answer): CiRepo[] => answer.repos,
         enabled: computed(() => active.value && api.sandbox.reachable()),
     });
     return {

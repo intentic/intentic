@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { Icon, SegmentedControl, useLatest } from "@intentic/extension-ui";
+import { SegmentedControl } from "@intentic/extension-ui";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { SheetRows } from "./sheetProtocol";
 import { createSheetWorkerClient } from "./sheetWorkerClient";
 import { t } from "./i18n.js";
+import ViewerStatus from "./load/ViewerStatus.vue";
+import { useViewerLoad } from "./load/useViewerLoad.js";
 
 /* XLSX preview: transfers a workbook to a dedicated worker, which parses it once and hands back the selected sheet's VALUES. */
 
@@ -12,10 +14,9 @@ const { blob } = defineProps<{ blob: Blob }>();
 const sheets = ref<readonly string[]>([]);
 const active = ref(``);
 const activeRows = ref<SheetRows>([]);
-const loading = ref(true);
-const error = ref<string>();
-const latestFile = useLatest();
-const latestSheet = useLatest();
+// One sequence for the file and the sheet picked in it: a new file or a new pick each supersedes whatever was still
+// loading, so a sheet answered by a workbook since replaced, or a pick since changed, is dropped.
+const { loading, error, start } = useViewerLoad(() => t(`sheetViewer.couldNotRead`));
 let client: ReturnType<typeof createSheetWorkerClient> | undefined;
 
 const tabOptions = computed(() => sheets.value.map((name) => ({ label: name, value: name })));
@@ -26,30 +27,16 @@ const columnCount = computed(() => activeRows.value.reduce((widest, row) => Math
 const headerRow = computed(() => activeRows.value[0]);
 const bodyRows = computed(() => activeRows.value.slice(1));
 
-// A sheet rendered for a workbook since replaced is dropped too: every load swaps `client` first.
-const renderSheet = async (name: string, target: NonNullable<typeof client>): Promise<void> => {
-    const isLatest = latestSheet();
-    active.value = name;
-    activeRows.value = [];
-    loading.value = true;
-    error.value = undefined;
-    try {
+const renderSheet = (name: string, target: NonNullable<typeof client>): Promise<void> =>
+    start(async (isLatest) => {
+        active.value = name;
+        activeRows.value = [];
         const rows = await target.render(name);
-        if (!isLatest() || target !== client) {
+        if (!isLatest()) {
             return;
         }
         activeRows.value = rows;
-    } catch (caught) {
-        if (!isLatest() || target !== client) {
-            return;
-        }
-        error.value = caught instanceof Error ? caught.message : t(`sheetViewer.couldNotRead`);
-    } finally {
-        if (isLatest() && target === client) {
-            loading.value = false;
-        }
-    }
-};
+    });
 
 const select = (name: string): void => {
     if (client !== undefined) {
@@ -57,16 +44,13 @@ const select = (name: string): void => {
     }
 };
 
-const render = async (source: Blob): Promise<void> => {
-    const isLatest = latestFile();
-    client?.close();
-    client = undefined;
-    loading.value = true;
-    error.value = undefined;
-    sheets.value = [];
-    active.value = ``;
-    activeRows.value = [];
-    try {
+const render = (source: Blob): Promise<void> =>
+    start(async (isLatest) => {
+        client?.close();
+        client = undefined;
+        sheets.value = [];
+        active.value = ``;
+        activeRows.value = [];
         const buffer = await source.arrayBuffer();
         if (!isLatest()) {
             return;
@@ -78,24 +62,15 @@ const render = async (source: Blob): Promise<void> => {
         const next = createSheetWorkerClient(async () => new SheetWorker());
         client = next;
         const names = await next.load(buffer);
-        if (!isLatest() || next !== client) {
+        if (!isLatest()) {
             return;
         }
         sheets.value = names;
         const first = names[0];
-        if (first === undefined) {
-            loading.value = false;
-            return;
+        if (first !== undefined) {
+            await renderSheet(first, next);
         }
-        await renderSheet(first, next);
-    } catch (caught) {
-        if (!isLatest()) {
-            return;
-        }
-        error.value = caught instanceof Error ? caught.message : t(`sheetViewer.couldNotRead`);
-        loading.value = false;
-    }
-};
+    });
 
 onMounted(() => void render(blob));
 watch(
@@ -111,32 +86,29 @@ onBeforeUnmount(() => client?.close());
             <SegmentedControl v-model="active" size="xs" :options="tabOptions" @update:model-value="select" />
         </div>
         <div class="min-h-0 flex-1">
-            <div v-if="loading" class="flex h-full items-center justify-center text-muted"><Icon name="spinner" class="text-xl" spin /></div>
-            <div v-else-if="error" class="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
-                <Icon name="exclamation-triangle" class="text-3xl text-danger" />
-                <p class="text-sm text-danger">{{ error }}</p>
-            </div>
-            <div v-else-if="columnCount === 0" class="flex h-full items-center justify-center text-sm text-muted">
-                {{ t(`sheetViewer.sheetEmpty`) }}
-            </div>
-            <div v-else class="xlsx-sheet h-full overflow-auto p-4">
-                <table>
-                    <thead v-if="headerRow !== undefined">
-                        <tr>
-                            <th v-for="column in columnCount" :key="column" :class="{ numeric: typeof headerRow[column - 1] === `number` }">
-                                {{ headerRow[column - 1] }}
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-for="(row, index) in bodyRows" :key="index">
-                            <td v-for="column in columnCount" :key="column" :class="{ numeric: typeof row[column - 1] === `number` }">
-                                {{ row[column - 1] }}
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
+            <ViewerStatus :loading="loading" :error="error">
+                <div v-if="columnCount === 0" class="flex h-full items-center justify-center text-sm text-muted">
+                    {{ t(`sheetViewer.sheetEmpty`) }}
+                </div>
+                <div v-else class="xlsx-sheet h-full overflow-auto p-4">
+                    <table>
+                        <thead v-if="headerRow !== undefined">
+                            <tr>
+                                <th v-for="column in columnCount" :key="column" :class="{ numeric: typeof headerRow[column - 1] === `number` }">
+                                    {{ headerRow[column - 1] }}
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="(row, index) in bodyRows" :key="index">
+                                <td v-for="column in columnCount" :key="column" :class="{ numeric: typeof row[column - 1] === `number` }">
+                                    {{ row[column - 1] }}
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </ViewerStatus>
         </div>
     </div>
 </template>

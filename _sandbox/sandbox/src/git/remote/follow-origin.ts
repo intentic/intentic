@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import type { Logger } from "pino";
+import { type Periodic, startPeriodic } from "@intentic/base/async";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import type { Services } from "../../composition.js";
 import type { ActionResult } from "../changes/changes-commits.js";
@@ -179,22 +180,20 @@ export const createOriginFollow = (deps: OriginFollowDeps): OriginFollow => {
         return running;
     };
 
-    let timer: NodeJS.Timeout | undefined;
+    let loop: Periodic | undefined;
     return {
         start: () => {
-            timer ??= setTimeout(() => {
-                void round();
-                timer = setInterval(() => void round(), TICK_MS);
-                timer.unref();
-            }, WARMUP_MS);
-            timer.unref();
+            loop ??= startPeriodic({
+                warmupMs: WARMUP_MS,
+                everyMs: TICK_MS,
+                run: async () => {
+                    await round();
+                },
+            });
         },
         stop: () => {
-            if (timer !== undefined) {
-                clearTimeout(timer);
-                clearInterval(timer);
-                timer = undefined;
-            }
+            loop?.dispose();
+            loop = undefined;
         },
         round,
     };

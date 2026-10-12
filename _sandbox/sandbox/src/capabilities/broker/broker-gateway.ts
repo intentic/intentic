@@ -1,7 +1,9 @@
 import type { Broker, BrokerRule } from "@intentic/extension-manifest";
+import { oneLine } from "@intentic/base/one-line";
 import { hostAllowed, type SecretHostGuard } from "@intentic/sandbox-contract";
 import { credentialRequest } from "../../guard/actions.js";
 import { guard } from "../../guard/guard.js";
+import { REQUEST_REFRAMED, RESPONSE_REFRAMED, forwardHeaders } from "../../http/forward-headers.js";
 import type { CredentialGate } from "../../secrets/gates/credential-gate.js";
 import { brokerRoutes, type ExpandedRoute, GATEWAY_PLACEHOLDER } from "./broker-routes.js";
 import { effectiveRules, evaluateRules, ruleIdentity } from "./broker-rules.js";
@@ -67,23 +69,6 @@ export interface GatewayDeps {
     readonly fetch?: typeof fetch;
 }
 
-// What describes this connection or the agent's own client rather than the request: never forwarded. `accept-encoding`
-// too, so the answer arrives as the bytes fetch hands back, with no encoding header left claiming otherwise.
-const REQUEST_DROPPED = new Set([
-    "host",
-    "connection",
-    "keep-alive",
-    "proxy-authorization",
-    "proxy-connection",
-    "te",
-    "trailer",
-    "transfer-encoding",
-    "upgrade",
-    "content-length",
-    "accept-encoding",
-]);
-const RESPONSE_DROPPED = new Set(["connection", "keep-alive", "transfer-encoding", "content-encoding", "content-length", "upgrade"]);
-
 const DETAIL_MAX = 80;
 
 // A form-borne credential rides an OAuth token exchange, which is a few hundred bytes; anything far larger is not one.
@@ -122,8 +107,6 @@ const splitPath = (pathname: string): { readonly token: string; readonly rest: s
 };
 
 const basePath = (route: ExpandedRoute): string => (route.upstream.pathname === "/" ? "" : route.upstream.pathname);
-
-const clipped = (text: string): string => (text.length <= DETAIL_MAX ? text : `${text.slice(0, DETAIL_MAX)}…`);
 
 // A redirect back onto the same service is pointed at the gateway again, so the client's next hop carries the credential
 // the same way; one anywhere else (a signed download URL) goes as the service sent it, without it.
@@ -175,7 +158,7 @@ export const createGateway = (deps: GatewayDeps): ((request: Request) => Promise
         }
         const method = request.method.toUpperCase();
         const where = `${route.upstream.host}${basePath(route)}${rest}`;
-        const detail = clipped(`${method} ${where}`);
+        const detail = oneLine(`${method} ${where}`, DETAIL_MAX);
 
         // Where: the owner's host guard for the card, which may have narrowed what its connector declared.
         let guards: readonly SecretHostGuard[];
@@ -254,13 +237,14 @@ export const createGateway = (deps: GatewayDeps): ((request: Request) => Promise
         const target = new URL(route.upstream.href);
         target.pathname = `${basePath(route)}${route.pathPrefix}${rest}`;
         target.search = url.search;
-        const headers = new Headers();
-        for (const [name, value] of request.headers) {
-            const lower = name.toLowerCase();
-            // The placeholder never leaves: any header carrying it was the agent's own attempt at the credential.
-            if (!REQUEST_DROPPED.has(lower) && !(lower in route.headers) && !value.includes(GATEWAY_PLACEHOLDER)) {
-                headers.append(name, value);
-            }
+        // `accept-encoding` is among the reframed headers, so the answer arrives as the bytes fetch hands back, with no
+        // encoding header left claiming otherwise. What the route sets itself is never the agent's to send.
+        const headers = forwardHeaders(request.headers, [...REQUEST_REFRAMED, ...Object.keys(route.headers)]);
+        // The placeholder never leaves: any header carrying it was the agent's own attempt at the credential.
+        // Named first and deleted after, since deleting from Headers while iterating it skips the entry that follows.
+        const carrying = [...headers].filter(([, value]) => value.includes(GATEWAY_PLACEHOLDER)).map(([name]) => name);
+        for (const name of carrying) {
+            headers.delete(name);
         }
         for (const [name, value] of Object.entries(route.headers)) {
             headers.set(name, value);
@@ -294,12 +278,7 @@ export const createGateway = (deps: GatewayDeps): ((request: Request) => Promise
         }
         deps.used({ capability, fields: route.fields, conversationId, detail, ...(approvedBy !== undefined ? { approvedBy } : {}) });
 
-        const answer = new Headers();
-        for (const [name, value] of upstream.headers) {
-            if (!RESPONSE_DROPPED.has(name.toLowerCase())) {
-                answer.append(name, value);
-            }
-        }
+        const answer = forwardHeaders(upstream.headers, RESPONSE_REFRAMED);
         const location = upstream.headers.get("location");
         if (location !== null) {
             answer.set("location", relocated(location, route, `${url.origin}/${token}`));

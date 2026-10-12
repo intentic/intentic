@@ -2,6 +2,8 @@ import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { promisify } from "node:util";
 
+import { cachedAsync } from "@intentic/base/held";
+
 // Versions are read from the binaries themselves, not recipe pins: a pin describes what the next rebuild installs, not
 // what the container has now. Exempted from the visible-tmux rule in terminal-run.ts, since this is not a user action.
 
@@ -23,9 +25,13 @@ interface Probe {
     readonly at: number;
 }
 
-const cache = new Map<string, Probe>();
-const moduleCache = new Map<string, Probe>();
-const packageCache = new Map<string, Probe>();
+type BinaryProbe = Probe & { readonly timedOut: boolean };
+
+// Timeouts are not cached, or one busy moment holds a present tool at 'unknown' for the rest of the window.
+const cache = cachedAsync<string, BinaryProbe>({ ttlMs: CACHE_TTL_MS, keep: (probe) => !probe.timedOut });
+const moduleCache = cachedAsync<string, Probe>({ ttlMs: CACHE_TTL_MS });
+// Filled by hand rather than through `get`: one dpkg query answers a whole batch of names.
+const packageCache = cachedAsync<string, Probe>({ ttlMs: CACHE_TTL_MS });
 
 export interface ModuleProbeTarget {
     readonly name: string;
@@ -45,7 +51,7 @@ export const parseVersion = (output: string): string | undefined => /(\d+\.\d+(?
 
 // One tool's version, or undefined if it has none; `found` distinguishes that from missing entirely. Any failure but
 // ENOENT/EACCES still proves the binary exists, so it falls through to the next flag.
-const probeOnce = async (bin: string): Promise<Probe & { readonly timedOut: boolean }> => {
+const probeOnce = async (bin: string): Promise<BinaryProbe> => {
     let found = false;
     let timedOut = false;
     for (const flag of VERSION_FLAGS) {
@@ -76,16 +82,8 @@ const probeOnce = async (bin: string): Promise<Probe & { readonly timedOut: bool
 };
 
 const probeVersion = async (bin: string): Promise<Probe> => {
-    const cached = cache.get(bin);
-    if (cached !== undefined && Date.now() - cached.at < CACHE_TTL_MS) {
-        return cached;
-    }
-    const { timedOut, ...probe } = await probeOnce(bin);
-    // Timeouts are not cached, or one busy moment holds a present tool at 'unknown' for the rest of the window.
-    if (!timedOut) {
-        cache.set(bin, probe);
-    }
-    return probe;
+    const { version, found, at } = await cache.get(bin, async () => probeOnce(bin));
+    return { version, found, at };
 };
 
 // Deduplicates candidates (callers' lists overlap) so cost scales with distinct binaries, not the recipe.
@@ -109,15 +107,7 @@ const probeModuleOnce = async (manifest: string): Promise<Probe> => {
     }
 };
 
-const probeModule = async (target: ModuleProbeTarget): Promise<Probe> => {
-    const cached = moduleCache.get(target.manifest);
-    if (cached !== undefined && Date.now() - cached.at < CACHE_TTL_MS) {
-        return cached;
-    }
-    const probe = await probeModuleOnce(target.manifest);
-    moduleCache.set(target.manifest, probe);
-    return probe;
-};
+const probeModule = async (target: ModuleProbeTarget): Promise<Probe> => moduleCache.get(target.manifest, async () => probeModuleOnce(target.manifest));
 
 // `ii` is dpkg's installed-and-configured; anything else (removed, config-only, half-installed) is not on disk.
 const DPKG_FORMAT = "${Package}|${db:Status-Abbrev}|${Version}\\n";
@@ -146,8 +136,8 @@ export const probePackages = async (packages: Iterable<string>, query: typeof qu
     const result = new Map<string, Probe>();
     const stale: string[] = [];
     for (const name of new Set(packages)) {
-        const cached = packageCache.get(name);
-        if (cached !== undefined && now - cached.at < CACHE_TTL_MS) {
+        const cached = packageCache.peek(name);
+        if (cached !== undefined) {
             result.set(name, cached);
         } else {
             stale.push(name);

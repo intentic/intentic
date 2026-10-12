@@ -1,7 +1,5 @@
-import { execFile } from "node:child_process";
 import { chmod, rename, rm, stat } from "node:fs/promises";
 import { homeDir } from "@intentic/local-agent";
-import { promisify } from "node:util";
 import {
     DEV_VERSION,
     DEVICE_FEATURE_RESHAPE_LATER,
@@ -14,13 +12,12 @@ import {
 import { archToken, download, exe, osToken } from "../../release.js";
 import { MACHINE_VERSION } from "../../version.js";
 import { errorMessage } from "@intentic/base/errors";
+import { execBounded } from "@intentic/base/process";
 
 // WHICH `ic` THIS AGENT RUNS, and keeping it at least as new as the agent. Every sandbox verb here is an `ic` verb, so an
 // agent that learned `ic sandbox list --json` or `ic sandbox shape` in the same release as ic did must not be left
 // talking to the ic an install shim put down months ago. The shims download a fresh one on every run; this is the same
 // download, for the machines where nobody has run a shim since.
-
-const exec = promisify(execFile);
 
 // Where `ic` is, in the order the installers put it: a root install writes /usr/local/bin, a user install writes under
 // the home and symlinks ~/.local/bin, Windows only ever has the profile copy. PATH is the last resort, since a
@@ -61,7 +58,7 @@ export const installedIc = async (): Promise<InstalledIc | undefined> => {
     for (const candidate of icCandidates(process.platform, homeDir())) {
         // allow(silent-catch): a candidate that is missing or will not say its version is not the installed ic, and the next is tried
         // oxlint-disable-next-line eslint/no-await-in-loop -- candidates are tried in order; the first that answers wins
-        const answer = await exec(candidate, ["--version"], { timeout: 30_000, windowsHide: true }).catch(() => undefined);
+        const answer = await execBounded(candidate, ["--version"], { timeoutMs: 30_000 }).catch(() => undefined);
         if (answer !== undefined) {
             // allow(silent-catch): a bare name found on PATH is not a file this agent can stat; its time is simply not said
             // oxlint-disable-next-line eslint/no-await-in-loop -- the one candidate that answered
@@ -196,7 +193,7 @@ export const ensureCurrentIc = (): Promise<void> => ensureForFile();
 const helpOf = async (verb: readonly string[]): Promise<string | undefined> => {
     for (const candidate of icCandidates(process.platform, homeDir())) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- candidates are tried in order; the first that answers wins
-        const answer = await exec(candidate, [...verb, "--help"], { timeout: 30_000, windowsHide: true }).then(
+        const answer = await execBounded(candidate, [...verb, "--help"], { timeoutMs: 30_000 }).then(
             ({ stdout }) => stdout,
             (error: NodeJS.ErrnoException) => (error.code === "ENOENT" ? undefined : ""),
         );

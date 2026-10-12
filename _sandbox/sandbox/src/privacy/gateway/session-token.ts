@@ -1,9 +1,7 @@
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
-import { undefinedIfMissing } from "@intentic/base/errors";
 import { z } from "zod";
+import { signedPayloads } from "../../auth/signed-payload.js";
 import { opt } from "../../opt.js";
+import { loadOrMintKey } from "../../store/plain-files/minted-key.js";
 
 // What a gateway URL carries: which provider the requests behind it are for (the trust decision), where they go next,
 // and whose conversation they belong to (the log). Signed rather than looked up, so a runtime spawned before a daemon
@@ -21,8 +19,6 @@ export interface GatewaySession {
 
 const PayloadSchema = z.object({ p: z.string().min(1), u: z.string().url(), c: z.string().optional(), k: z.literal(true).optional() });
 
-const SIGNATURE_CHARS = 32;
-
 export interface SessionTokens {
     readonly sign: (session: GatewaySession) => Promise<string>;
     readonly verify: (token: string) => Promise<GatewaySession | undefined>;
@@ -30,70 +26,23 @@ export interface SessionTokens {
 
 // The signing key, created once and kept beside the vault: a key that changed on every boot would strand every runtime
 // still holding an old URL.
-const keyAt = async (path: string): Promise<Buffer> => {
-    const existing = await readFile(path).catch(undefinedIfMissing);
-    if (existing !== undefined && existing.length >= 32) {
-        return existing;
-    }
-    const key = randomBytes(32);
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, key, { mode: 0o600 });
-    return key;
-};
+export const sessionTokens = (keyPath: string): SessionTokens => sessionTokensFrom(() => loadOrMintKey(keyPath));
 
-export const sessionTokens = (keyPath: string): SessionTokens => sessionTokensFrom(() => keyAt(keyPath));
-
-// Over any source of the key, read once and kept; a source that fails is asked again next time.
+// Over any source of the key, read once and kept; a source that fails is asked again next time. Signed with no domain:
+// the addresses already handed out were signed over the bare payload (signed-payload.ts).
 export const sessionTokensFrom = (readKey: () => Promise<Buffer>): SessionTokens => {
-    let key: Promise<Buffer> | undefined;
-    const keyOnce = (): Promise<Buffer> => {
-        key ??= readKey().catch((error: unknown) => {
-            key = undefined;
-            throw error;
-        });
-        return key;
-    };
-    const signatureOf = async (payload: string): Promise<string> =>
-        createHmac("sha256", await keyOnce())
-            .update(payload)
-            .digest("base64url")
-            .slice(0, SIGNATURE_CHARS);
+    const payloads = signedPayloads(readKey, PayloadSchema);
     return {
-        sign: async ({ provider, upstream, conversationId, clearing }) => {
-            const payload = Buffer.from(
-                JSON.stringify({
-                    p: provider,
-                    u: upstream,
-                    ...(conversationId !== undefined ? { c: conversationId } : {}),
-                    ...opt("k", clearing === true ? true : undefined),
-                }),
-            ).toString("base64url");
-            return `${payload}.${await signatureOf(payload)}`;
-        },
+        sign: ({ provider, upstream, conversationId, clearing }) =>
+            payloads.sign({
+                p: provider,
+                u: upstream,
+                ...(conversationId !== undefined ? { c: conversationId } : {}),
+                ...opt("k", clearing === true ? true : undefined),
+            }),
         verify: async (token) => {
-            const [payload, signature, ...rest] = token.split(".");
-            if (payload === undefined || signature === undefined || rest.length > 0) {
-                return undefined;
-            }
-            const expected = Buffer.from(await signatureOf(payload));
-            const given = Buffer.from(signature);
-            if (expected.length !== given.length || !timingSafeEqual(expected, given)) {
-                return undefined;
-            }
-            try {
-                const parsed = PayloadSchema.safeParse(JSON.parse(Buffer.from(payload, "base64url").toString("utf8")));
-                return parsed.success
-                    ? {
-                          provider: parsed.data.p,
-                          upstream: parsed.data.u,
-                          conversationId: parsed.data.c,
-                          ...opt("clearing", parsed.data.k),
-                      }
-                    : undefined;
-            } catch {
-                // allow(silent-catch): signed by this key yet unreadable can only be a key reused across builds that spelled it differently.
-                return undefined;
-            }
+            const wire = await payloads.verify(token);
+            return wire === undefined ? undefined : { provider: wire.p, upstream: wire.u, conversationId: wire.c, ...opt("clearing", wire.k) };
         },
     };
 };

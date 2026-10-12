@@ -1,7 +1,9 @@
 import { existsSync } from "node:fs";
 import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync } from "node:sqlite";
+import { openSqlite } from "@intentic/base/sqlite";
+import { z } from "zod";
 import { discoveredCatalog } from "../../agent/models/model-catalog.js";
 import { idCatalog } from "../../agent/models/model-discovery.js";
 import { cacheFile } from "../../store/open-document.js";
@@ -27,6 +29,11 @@ export interface StoredCredential {
 const asCredential = (value: unknown): StoredCredential | undefined =>
     typeof value === "object" && value !== null ? (value as StoredCredential) : undefined;
 
+// What node:sqlite's errors carry of SQLite's own: the result code. SQLITE_BUSY (5) and SQLITE_LOCKED (6) are read by
+// their primary code, which an extended one (BUSY_RECOVERY, BUSY_SNAPSHOT) carries in its low byte.
+const SqliteFailureSchema = z.object({ errcode: z.number().int() });
+const BUSY_CODES = new Set([5, 6]);
+
 // The table's rows for one integration, or undefined where there is no table yet (no OpenCode 2 boot has migrated this
 // directory), so the caller knows to read auth.json instead. An integration with several accounts lists the active one
 // first; OpenCode leaves `active` unset on a lone credential.
@@ -36,7 +43,9 @@ const credentialsInDatabase = (database: string, integrationID: string): StoredC
     }
     let db: DatabaseSync | undefined;
     try {
-        db = new DatabaseSync(database, { readOnly: true });
+        // Read-only, so nothing of OpenCode's is changed (no journal mode set), with a busy timeout: a read that meets
+        // OpenCode's own write waits it out instead of failing at once.
+        db = openSqlite(database, { readOnly: true });
         const table = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'credential'").get();
         if (table === undefined) {
             return undefined;
@@ -53,8 +62,13 @@ const credentialsInDatabase = (database: string, integrationID: string): StoredC
                 return [];
             }
         });
-    } catch {
-        // allow(silent-catch): a database mid-write or locked reads as holding nothing this time; the next ask reads again
+    } catch (error) {
+        // Still locked after the wait says nothing about what is stored: answering "no credentials" would tell the caller
+        // the account was signed out. Any other failure (a damaged or foreign file) holds nothing this daemon can use.
+        const failure = SqliteFailureSchema.safeParse(error);
+        if (failure.success && BUSY_CODES.has(failure.data.errcode % 256)) {
+            throw error;
+        }
         return [];
     } finally {
         db?.close();

@@ -22,7 +22,7 @@ import { randomSecret } from "./random-secret.js";
 import { guardForEntry } from "./host-guards.js";
 import { createSecretHostRoutes } from "./secret-hosts.routes.js";
 import { createCredentialPolicyRoutes, credentialPolicies } from "../capabilities/broker/broker-policy.routes.js";
-import { type TextFile, textFile } from "../store/text-file.js";
+import { type TextFile, textFile } from "../store/plain-files/text-file.js";
 
 // The whole `Services`, not a Pick: the inventory hands `services` on to every provider module's secretEntries, and a
 // Pick would go stale with each module edit.

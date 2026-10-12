@@ -60,6 +60,15 @@ test("a path is inside a folder only at a separator, so a link to a neighbour of
     expect(isInside("/home/dev/.intentic/sync-elsewhere/bin", "/home/dev/.intentic/sync")).toBe(false);
 });
 
+// The string prefix this replaced took a path that climbs back out through `..` as inside, and refused everything under `/`.
+test("a path that climbs out is not inside, a `..name` is, and a relative argument is never a place", () => {
+    expect(isInside("/home/dev/.intentic/sync/../elsewhere/bin", "/home/dev/.intentic/sync")).toBe(false);
+    expect(isInside("/home/dev/.intentic/sync/..cache/bin", "/home/dev/.intentic/sync")).toBe(true);
+    expect(isInside("/usr/bin/node", "/")).toBe(true);
+    expect(isInside("-e", process.cwd())).toBe(false);
+    expect(isInside("bin/intentic-sync", process.cwd())).toBe(false);
+});
+
 // The deliberate rule of the start's repair holds here too: an entry launching another install's command is its own.
 test("this agent's login entry is written again when stale or missing, left when current or another install's, and said when unreadable", () => {
     const repair = async (): Promise<void> => await Promise.resolve();

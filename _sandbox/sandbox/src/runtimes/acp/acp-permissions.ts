@@ -1,10 +1,12 @@
 import type { PermissionOption, PermissionOptionKind, RequestPermissionRequest, RequestPermissionResponse } from "@agentclientprotocol/sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import { type CommandGuard, consultWith, vendorSubject } from "../../guard/command-guard.js";
+import type { CommandGuard } from "../../guard/command-guard.js";
+import { answerVendorAsk, askCwdOf, askProgramOf, VendorToolInputSchema } from "../decorators/vendor-ask.js";
 
 // Daemon's answer to ACP session/request_permission: auto-allows by default. Plan phase rejects mutating tool kinds
-// (best-effort); the safety policy runs the same triage/judge/hard rule as the Claude Code hook. A refusal carries no
-// reason; the card shows the user why, the agent only sees rejected.
+// (best-effort); the safety policy runs the same triage/judge/hard rule as the Claude Code hook, through the answer
+// every vendor ask shares (decorators/vendor-ask.ts). A refusal carries no reason; the card shows the user why, the
+// agent only sees rejected.
 
 export type PermissionPhase = "execute" | "plan";
 
@@ -22,22 +24,6 @@ const selected = (option: PermissionOption): RequestPermissionResponse => ({ out
 const CANCELLED: RequestPermissionResponse = { outcome: { outcome: "cancelled" } };
 
 const MUTATING = new Set(["edit", "delete", "move", "execute"]);
-
-// Text the classifier can read from a call, or undefined if none; rawInput's shape is the agent's, so common field
-// names are tried in turn before falling back to title. Never throws on a hostile rawInput shape.
-const programOf = (request: RequestPermissionRequest): string | undefined => {
-    const raw = request.toolCall.rawInput;
-    if (typeof raw === "object" && raw !== null) {
-        for (const key of ["command", "cmd", "script", "code", "input"]) {
-            const value = (raw as Record<string, unknown>)[key];
-            if (typeof value === "string" && value.trim() !== "") {
-                return value;
-            }
-        }
-    }
-    const title = request.toolCall.title;
-    return typeof title === "string" && title.trim() !== "" ? title : undefined;
-};
 
 export const decidePermission = async (
     request: RequestPermissionRequest,
@@ -57,20 +43,26 @@ export const decidePermission = async (
         }
         // No rejection offered, allowing beats cancelling the whole planning turn; the preamble still holds.
     }
-    // The rulebook is consulted only when the owner wrote a rule, the agent offered a way to say no, and the call
-    // carries readable text; missing any of the three, this is the auto-allow it always was.
-    if (gate?.enforcing === true && rejection !== undefined) {
-        const program = programOf(request);
-        if (program !== undefined) {
-            const outcome = await consultWith(gate, program, vendorSubject(request.toolCall.name ?? request.toolCall.kind ?? "tool"), push);
-            if (!outcome.allow) {
-                return selected(rejection);
-            }
-        }
-    }
-    const allowance = pick(request.options, ["allow_always", "allow_once"]);
+    // rawInput's shape is the agent's; the title stands in when it names no command. No cwd to read it against: the
+    // gate already carries the turn's.
+    const input = VendorToolInputSchema.parse(request.toolCall.rawInput);
+    const answer = await answerVendorAsk(gate === undefined ? undefined : { gate, push }, {
+        tool: request.toolCall.name ?? request.toolCall.kind ?? "tool",
+        program: askProgramOf(input, request.toolCall.title),
+        cwd: askCwdOf(input),
+        canRefuse: rejection !== undefined,
+    });
+    // The standing "always" only while no rule is watching: once the rulebook enforces, the agent must keep asking.
+    const lasting = answer.allow && answer.lasting;
+    const allowance = answer.allow ? pick(request.options, lasting ? ["allow_always", "allow_once"] : ["allow_once"]) : undefined;
     if (allowance !== undefined) {
         return selected(allowance);
+    }
+    // A refusal, or no one-time yes on offer while the rulebook enforces: an "always" would let the agent run later
+    // commands without asking, past the rulebook. Without a no on offer the rulebook was never consulted and cannot
+    // hold this agent's calls anyway, and cancelling would end the whole turn.
+    if (!lasting && rejection !== undefined) {
+        return selected(rejection);
     }
     const first = request.options[0];
     return first !== undefined ? selected(first) : CANCELLED;

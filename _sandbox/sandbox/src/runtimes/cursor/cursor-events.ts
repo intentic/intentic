@@ -1,5 +1,6 @@
 import type { InteractionUpdate, NestedTaskUpdate, TodoItem as CursorTodo, ToolCall } from "@cursor/sdk";
 import type { AgentEvent, TodoItem, ToolCallContent } from "@intentic/sandbox-contract";
+import { isRecord } from "@intentic/base/escape";
 import { z } from "zod";
 import { displayNameOf, toolTarget } from "@intentic/agent-context/tool-calls";
 import { diffContent, toolInput, toolLocations, workspacePath } from "../../agent/tools/tool-calls.js";
@@ -76,7 +77,6 @@ const startedContent = (call: ToolCall, cwd: string): ToolCallContent[] | undefi
 };
 
 const text = (value: unknown): string | undefined => (typeof value === "string" && value !== "" ? value : undefined);
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 const lines = (parts: readonly (string | undefined)[]): string | undefined => {
     const kept = parts.filter((part): part is string => part !== undefined && part !== "");
     return kept.length === 0 ? undefined : kept.join("\n");

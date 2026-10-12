@@ -12,9 +12,9 @@ import { resolveTurnJobs } from "../../tools/jobs/job-fates.js";
 //    queue for the next turn instead of going into a steering queue no model reads any more.
 // 2. judge jobs: each job the run left running is stopped, left to the person, or awaited (job-fates.ts); once per run.
 // 3. arm wakes: each awaited job, and each finished one whose exit the model never read, is handed to a watch
-//    (background-adoption.ts). A device card the agent stopped waiting on holds the turn here, still live and parked on
-//    the card, until it settles; a yes or a decline with a note is queued as a wake (guard/held-cards.ts), and a stop
-//    cancels the card. What the conversation holds then says whether it runs again by itself (awaitingWake,
+//    (background-adoption.ts). A card the agent stopped waiting on (a device command, a secret's release, a payment:
+//    guard/held-asks.ts) holds the turn here, still live and parked on the card, until it settles; a yes or a decline
+//    with a note is queued as a wake in the gate's own words (guard/held-cards.ts), and a stop cancels the card. What the conversation holds then says whether it runs again by itself (awaitingWake,
 //    conversation-state.ts), so nothing later predicts it.
 // 4. land, a turn that ended clean only (placement.land): nothing while it awaits a wake, whose turn finishes the work;
 //    else the repository's own fixers run in its worktree (worktree-fixers.ts), the rules decide, and it lands under the
@@ -41,7 +41,7 @@ export interface TurnCloserDeps {
     readonly logger: Logger;
 }
 
-// `signal` is the turn's own: a stop while the close holds for a device card cancels the card.
+// `signal` is the turn's own: a stop while the close holds for a card cancels the card.
 export const turnCloser = (deps: TurnCloserDeps, conversationId: string, steering: SteeringQueue | undefined, signal?: AbortSignal): TurnCloser => ({
     hush: () => steering?.close(),
     armWakes: async () => {

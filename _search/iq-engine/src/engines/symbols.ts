@@ -1,5 +1,6 @@
 import type { WorkspaceSearchTag } from "@intentic/sandbox-contract";
 import { fuzzyScore } from "@intentic/base/fuzzy";
+import { escapeRegExp } from "@intentic/base/escape";
 import type { SqliteDb } from "@intentic/base/sqlite";
 import type { EngineHit, SymbolRow } from "../types.js";
 import { globToRegExp } from "../workspace/glob.js";
@@ -90,7 +91,7 @@ export interface RefsResult {
 
 // `iq refs X`, live word-boundary ripgrep, each hit classified by lexical context; definition lines dropped.
 export const refsOf = async (db: SqliteDb, name: string, kindFilter: RefKind | undefined, rgBase: Omit<RgOptions, "pattern">): Promise<RefsResult> => {
-    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const escaped = escapeRegExp(name);
     const { hits: raw } = await rgSearch({ ...rgBase, pattern: escaped, word: true });
     const defLines = new Set(symbolRows(db, "WHERE s.name = ?", name).map((symbol) => `${symbol.path}:${symbol.line}`));
     const counts = new Map<string, number>();

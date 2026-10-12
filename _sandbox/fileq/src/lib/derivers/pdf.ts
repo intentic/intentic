@@ -1,8 +1,8 @@
-import { execFile, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { promisify } from "node:util";
+import { execBounded, ProcessError, runBounded } from "@intentic/base/process";
 import { extractText, getDocumentProxy, getMeta } from "unpdf";
 import { onPath } from "../tools.js";
 import type { DerivedDoc, Deriver } from "./deriver.js";
@@ -24,8 +24,6 @@ const OCR_DPI = "200";
 // The reader loads its models once per run and then takes a second or few per page.
 const OCR_TIMEOUT_MS = 60_000 + MAX_OCR_PAGES * 15_000;
 
-const run = promisify(execFile);
-
 // Asked once per PATH: the answer is a fact of the image, and a stamp is read on every derive.
 const checked = new Map<string, boolean>();
 
@@ -45,23 +43,21 @@ export const ocrAvailable = (): boolean => {
 };
 
 // What `ocr` printed for its images, one page per image: it writes a form feed line between images, and an image it
-// could not read leaves its page empty (exit 1) rather than shifting the ones after it.
-const readPages = (images: readonly string[]): Promise<string> =>
-    new Promise((resolve, reject) => {
-        execFile("ocr", [...images], { timeout: OCR_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024 }, (error, stdout) => {
-            if (error === null || error.code === 1) {
-                resolve(stdout);
-            } else {
-                reject(error);
-            }
-        });
-    });
+// could not read leaves its page empty (exit 1) rather than shifting the ones after it. The pages are split on those
+// form feeds, so the cap stays well past what twenty pages of text come to: a cut middle would shift every page after it.
+const readPages = async (images: readonly string[]): Promise<string> => {
+    const result = await runBounded("ocr", images, { timeoutMs: OCR_TIMEOUT_MS, maxOutput: 16 * 1024 * 1024 });
+    if (!result.timedOut && (result.exitCode === 0 || result.exitCode === 1)) {
+        return result.stdout.text;
+    }
+    throw new ProcessError("ocr", images, result);
+};
 
 const recognisePages = async (absPath: string, totalPages: number): Promise<string[]> => {
     const dir = await mkdtemp(join(tmpdir(), "fileq-ocr-"));
     try {
-        await run("pdftoppm", ["-r", OCR_DPI, "-png", "-f", "1", "-l", String(Math.min(totalPages, MAX_OCR_PAGES)), absPath, join(dir, "page")], {
-            timeout: 120_000,
+        await execBounded("pdftoppm", ["-r", OCR_DPI, "-png", "-f", "1", "-l", String(Math.min(totalPages, MAX_OCR_PAGES)), absPath, join(dir, "page")], {
+            timeoutMs: 120_000,
         });
         const images = (await readdir(dir)).filter((name) => name.endsWith(".png")).toSorted();
         if (images.length === 0) {

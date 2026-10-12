@@ -1,5 +1,6 @@
 import { appendFileSync } from "node:fs";
 import { join } from "node:path";
+import { errorMessage } from "@intentic/base/errors";
 import { fieldNotes } from "@intentic/agent-context/field-notes";
 import { workspaceMapNote } from "@intentic/agent-context/workspace-map";
 import { readOptions, saveOptions, type Options } from "./features.js";
@@ -98,7 +99,7 @@ const record = (what: string, write: () => void): void => {
     try {
         write();
     } catch (error) {
-        process.stderr.write(`intentic: ${what} not recorded: ${error instanceof Error ? error.message : String(error)}\n`);
+        process.stderr.write(`intentic: ${what} not recorded: ${errorMessage(error)}\n`);
     }
 };
 

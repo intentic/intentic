@@ -10,9 +10,11 @@ import {
     pollFor,
     pollUntil,
     retry,
+    retryAfterMs,
     serialLock,
     sleep,
     SingleFlight,
+    startPeriodic,
     TimeoutError,
     unlessAborted,
     watchQueue,
@@ -207,15 +209,17 @@ describe(`keyedLock`, () => {
     it(`runs one task at a time per key, the next after the last however it ended`, async () => {
         const lock = keyedLock<string>();
         const order: string[] = [];
-        const slow = (name: string, fail = false) => async (): Promise<string> => {
-            order.push(`${name} start`);
-            await new Promise((resolve) => setTimeout(resolve, 10));
-            order.push(`${name} end`);
-            if (fail) {
-                throw new Error(name);
-            }
-            return name;
-        };
+        const slow =
+            (name: string, fail = false) =>
+            async (): Promise<string> => {
+                order.push(`${name} start`);
+                await new Promise((resolve) => setTimeout(resolve, 10));
+                order.push(`${name} end`);
+                if (fail) {
+                    throw new Error(name);
+                }
+                return name;
+            };
 
         const first = lock(`repo`, slow(`first`, true));
         const second = lock(`repo`, slow(`second`));
@@ -235,15 +239,17 @@ describe(`serialLock`, () => {
     it(`runs one task at a time, the next after the last however it ended`, async () => {
         const serially = serialLock();
         const order: string[] = [];
-        const slow = (name: string, fail = false) => async (): Promise<string> => {
-            order.push(`${name} start`);
-            await new Promise((resolve) => setTimeout(resolve, 10));
-            order.push(`${name} end`);
-            if (fail) {
-                throw new Error(name);
-            }
-            return name;
-        };
+        const slow =
+            (name: string, fail = false) =>
+            async (): Promise<string> => {
+                order.push(`${name} start`);
+                await new Promise((resolve) => setTimeout(resolve, 10));
+                order.push(`${name} end`);
+                if (fail) {
+                    throw new Error(name);
+                }
+                return name;
+            };
 
         const first = serially(slow(`first`, true));
         const second = serially(slow(`second`));
@@ -921,5 +927,226 @@ describe(`unlessAborted`, () => {
         }
         expect(added).toHaveBeenCalledTimes(3);
         expect(removed).toHaveBeenCalledTimes(3);
+    });
+});
+
+describe(`within, extended`, () => {
+    it(`takes a function, and a throw before it returns a promise is the race's rejection`, async () => {
+        await expect(within(() => `now`, 100, `late`)).resolves.toBe(`now`);
+        await expect(
+            within(
+                () => {
+                    throw new Error(`broke`);
+                },
+                100,
+                `late`,
+            ),
+        ).rejects.toThrow(`broke`);
+    });
+
+    it(`gives up at the time with an unref'd timer as well`, async () => {
+        const waiting = within(new Promise<never>(() => undefined), 100, `late`, { unref: true });
+        await advanceTimersByTimeAsync(100);
+        await expect(waiting).resolves.toBe(`late`);
+    });
+});
+
+describe(`Delayer with maxWaitMs`, () => {
+    it(`runs at the ceiling however often it is retriggered, then opens a fresh window`, async () => {
+        const delayer = new Delayer<number>(50, { maxWaitMs: 120 });
+        let runs = 0;
+        const task = (): number => ++runs;
+        const first = delayer.trigger(task);
+        for (let step = 0; step < 3; step += 1) {
+            await advanceTimersByTimeAsync(30);
+            void delayer.trigger(task);
+        }
+        await advanceTimersByTimeAsync(29);
+        void delayer.trigger(task);
+        expect(runs).toBe(0);
+        // 120 ms since the window opened, though the last trigger was 1 ms ago.
+        await advanceTimersByTimeAsync(1);
+        expect(runs).toBe(1);
+        await expect(first).resolves.toBe(1);
+        expect(delayer.isPending).toBe(false);
+
+        void delayer.trigger(task);
+        await advanceTimersByTimeAsync(50);
+        expect(runs).toBe(2);
+    });
+
+    it(`runs the same with unref'd timers`, async () => {
+        const delayer = new Delayer<number>(50, { maxWaitMs: 60, unref: true });
+        const ran = delayer.trigger(() => 7);
+        await advanceTimersByTimeAsync(50);
+        await expect(ran).resolves.toBe(7);
+    });
+
+    it(`cancel clears the ceiling as well`, async () => {
+        const delayer = new Delayer<number>(50, { maxWaitMs: 60 });
+        const task = jest.fn(() => 1);
+        void delayer.trigger(task);
+        delayer.cancel();
+        await advanceTimersByTimeAsync(200);
+        expect(task).not.toHaveBeenCalled();
+    });
+});
+
+describe(`startPeriodic`, () => {
+    it(`runs after the warm-up, then every interval`, async () => {
+        const run = jest.fn(async () => {});
+        const loop = startPeriodic({ warmupMs: 1_000, everyMs: 100, run });
+        await advanceTimersByTimeAsync(999);
+        expect(run).not.toHaveBeenCalled();
+        await advanceTimersByTimeAsync(1);
+        expect(run).toHaveBeenCalledTimes(1);
+        await advanceTimersByTimeAsync(200);
+        expect(run).toHaveBeenCalledTimes(3);
+        loop.dispose();
+    });
+
+    it(`starts at once with a zero warm-up, and waits one interval by default`, async () => {
+        const now = jest.fn();
+        startPeriodic({ warmupMs: 0, everyMs: 100, run: now }).dispose();
+        expect(now).toHaveBeenCalledTimes(1);
+
+        const later = jest.fn();
+        const loop = startPeriodic({ everyMs: 100, run: later });
+        await advanceTimersByTimeAsync(99);
+        expect(later).not.toHaveBeenCalled();
+        await advanceTimersByTimeAsync(1);
+        expect(later).toHaveBeenCalledTimes(1);
+        loop.dispose();
+    });
+
+    it(`skips a tick that finds the last run still going, and runNow joins it`, async () => {
+        const gates: (() => void)[] = [];
+        let active = 0;
+        let most = 0;
+        const run = jest.fn(
+            () =>
+                new Promise<void>((resolve) => {
+                    active += 1;
+                    most = Math.max(most, active);
+                    gates.push(() => {
+                        active -= 1;
+                        resolve();
+                    });
+                }),
+        );
+        const loop = startPeriodic({ warmupMs: 0, everyMs: 100, run });
+        await advanceTimersByTimeAsync(350);
+        expect(run).toHaveBeenCalledTimes(1);
+        expect(loop.running).toBe(true);
+        const joined = loop.runNow();
+        expect(run).toHaveBeenCalledTimes(1);
+        gates.shift()?.();
+        await joined;
+        expect(loop.running).toBe(false);
+        await advanceTimersByTimeAsync(100);
+        expect(run).toHaveBeenCalledTimes(2);
+        expect(most).toBe(1);
+        loop.dispose();
+        gates.shift()?.();
+    });
+
+    it(`stops its timers on dispose, warm-up included, and aborts the run's signal`, async () => {
+        const run = jest.fn();
+        startPeriodic({ warmupMs: 1_000, everyMs: 100, run }).dispose();
+        await advanceTimersByTimeAsync(5_000);
+        expect(run).not.toHaveBeenCalled();
+
+        let seen: AbortSignal | undefined;
+        const running = jest.fn(
+            (signal: AbortSignal) =>
+                new Promise<void>((resolve) => {
+                    seen = signal;
+                    signal.addEventListener(`abort`, () => resolve());
+                }),
+        );
+        const loop = startPeriodic({ warmupMs: 0, everyMs: 100, run: running });
+        loop.dispose();
+        expect(seen?.aborted).toBe(true);
+        await advanceTimersByTimeAsync(0);
+        await expect(loop.runNow()).resolves.toBeUndefined();
+        expect(running).toHaveBeenCalledTimes(1);
+    });
+
+    it(`is disposed by its signal, and hands a failed run to onError and carries on`, async () => {
+        const failures: unknown[] = [];
+        const controller = new AbortController();
+        let runs = 0;
+        startPeriodic({
+            warmupMs: 0,
+            everyMs: 100,
+            signal: controller.signal,
+            onError: (error) => failures.push(error),
+            run: async () => {
+                runs += 1;
+                throw new Error(`tick ${runs}`);
+            },
+        });
+        await advanceTimersByTimeAsync(100);
+        expect(failures).toHaveLength(2);
+        controller.abort();
+        await advanceTimersByTimeAsync(1_000);
+        expect(runs).toBe(2);
+    });
+});
+
+describe(`pollFor maxProbes`, () => {
+    it(`expires after the cap even when the clock never moves`, async () => {
+        const probe = jest.fn(async () => undefined);
+        const outcome = pollFor(probe, { intervalMs: 50, until: Infinity, maxProbes: 3, now: () => 0 });
+        await advanceTimersByTimeAsync(1_000);
+        await expect(outcome).resolves.toEqual({ kind: `expired` });
+        expect(probe).toHaveBeenCalledTimes(3);
+    });
+});
+
+describe(`an injected wait`, () => {
+    it(`is what retry and pollFor wait with, so a test can count it`, async () => {
+        const slept: number[] = [];
+        const wait = async (ms: number): Promise<void> => {
+            slept.push(ms);
+        };
+        let tries = 0;
+        await expect(
+            retry(
+                async () => {
+                    tries += 1;
+                    if (tries < 3) {
+                        throw new Error(`blip`);
+                    }
+                    return `ok`;
+                },
+                { attempts: 5, delayMs: (attempt) => attempt * 100, wait },
+            ),
+        ).resolves.toBe(`ok`);
+        expect(slept).toEqual([100, 200]);
+
+        slept.length = 0;
+        const outcome = await pollFor(async () => undefined, { intervalMs: 500, until: Infinity, maxProbes: 4, now: () => 0, wait });
+        expect(outcome).toEqual({ kind: `expired` });
+        expect(slept).toEqual([500, 500, 500]);
+    });
+});
+
+describe(`retryAfterMs`, () => {
+    it(`reads whole seconds and an HTTP date, from headers or the bare value`, () => {
+        const now = Date.parse(`2026-01-01T00:00:00Z`);
+        expect(retryAfterMs(new Headers({ "retry-after": `30` }), { now })).toBe(30_000);
+        expect(retryAfterMs(` 0 `)).toBe(0);
+        expect(retryAfterMs(`Thu, 01 Jan 2026 00:01:00 GMT`, { now })).toBe(60_000);
+        expect(retryAfterMs(`Wed, 31 Dec 2025 23:00:00 GMT`, { now })).toBe(0);
+    });
+
+    it(`is undefined when absent or unreadable, and capped when asked`, () => {
+        expect(retryAfterMs(new Headers())).toBeUndefined();
+        expect(retryAfterMs(null)).toBeUndefined();
+        expect(retryAfterMs(``)).toBeUndefined();
+        expect(retryAfterMs(`soon`)).toBeUndefined();
+        expect(retryAfterMs(`-5`)).toBeUndefined();
+        expect(retryAfterMs(`3600`, { capMs: 30_000 })).toBe(30_000);
     });
 });

@@ -6,7 +6,7 @@ import { extractTarToWorkspace, PathEscapeError } from "./archive/workspace-arch
 import { computeUploadSkip, type UploadManifestEntry } from "./workspace-diff.js";
 import { sha256Text } from "./workspace-files.js";
 import { MAX_RAW_BYTES, contentTypeForPath, openWorkspaceFileRange, parseByteRange } from "./workspace-files-download.js";
-import { isControlPlanePath, resolveWithin } from "./workspace-files-paths.js";
+import { resolveWorkspacePath } from "./workspace-files-paths.js";
 import { planEntries, planOfBinding } from "./download/workspace-download.js";
 import { type ZipEntry, zipChunks, zipLength } from "./download/workspace-zip.js";
 import { Readable } from "node:stream";
@@ -23,7 +23,10 @@ import { callerFence } from "../../areas/area-scope.js";
 // Byte routes that stay off oRPC because their bodies are streamed: raw file read, ranged media read, and file/diff/tar
 // uploads. Registered before the oRPC catch-all, like /health.
 
-export type WorkspaceBytesRoutesDeps = Pick<Services, "workspaceScope" | "files" | "auth" | "mediaTickets" | "workspace" | "history" | "areas" | "agents">;
+export type WorkspaceBytesRoutesDeps = Pick<
+    Services,
+    "workspaceScope" | "files" | "auth" | "mediaTickets" | "workspace" | "history" | "areas" | "agents"
+>;
 
 // Resolves path via scopedTarget and translates its ORPCError into this route's status shape; anything else propagates.
 // The same two questions the oRPC reads ask first — whose copy, and whether this caller may look there — since these
@@ -60,26 +63,31 @@ const scopedFileTarget = async (
     }
 };
 
-// Why an upload can't be written, or undefined when it can: the sandbox's own state is never writable through the
-// generic upload, an archive is browsable rather than writable, and nobody writes outside their own folders.
+// Where an upload is written, or why it can't be: the sandbox's own state is never writable through the generic
+// upload, an archive is browsable rather than writable, and nobody writes outside their own folders. Each is asked of
+// the path as spelled and as it lands on disk, since a symlinked folder would otherwise carry the write out of /work,
+// into .intentic/, or out of the caller's fence.
 // The attachment exemption `fenceOpens` carries is what keeps a fenced member able to put a file in front of the
 // agent they are allowed to talk to, which is the only write their tier has.
-const refusedUpload = (
+const uploadTarget = async (
     root: string,
     fence: Fence,
     relPath: string | undefined,
-    target: string,
-): { error: string; status: 400 | 403 | 404 } | undefined => {
-    if (isControlPlanePath(root, target)) {
+): Promise<{ target: string } | { error: string; status: 400 | 403 | 404 }> => {
+    const resolved = relPath === undefined ? ({ kind: "outside" } as const) : await resolveWorkspacePath(root, relPath);
+    if (resolved.kind === "outside") {
+        return { error: "invalid path", status: 400 };
+    }
+    if (resolved.kind === "controlPlane") {
         return { error: "not found", status: 404 };
     }
     if (insideArchive(root, relPath ?? "")) {
         return { error: "an archive's contents are read-only; extract it to change them", status: 400 };
     }
-    if (!fenceOpens(fence, relPath ?? "")) {
+    if (!fenceOpens(fence, relPath ?? "") || !fenceOpens(fence, resolved.realRel)) {
         return { error: "outside your access to this workspace", status: 403 };
     }
-    return undefined;
+    return { target: resolved.path };
 };
 
 export const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) => ({
@@ -235,20 +243,23 @@ export const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) =
     // POST /workspace/upload: writes one file under /work; drag-drop and the editor's save both post here.
     // Streams straight to disk (parent dirs auto-created); 400 on escape, 413 on oversize.
     upload: async (c: Context<AppEnv>): Promise<Response> => {
-        const path = c.req.query("path");
-        const target = path === undefined ? undefined : resolveWithin(services.workspace.root, path);
-        if (target === undefined) {
-            return c.json({ error: "invalid path" }, 400);
+        const resolved = await uploadTarget(
+            services.workspace.root,
+            callerFence(await services.areas.list(), c.get("identity")),
+            c.req.query("path"),
+        );
+        if ("error" in resolved) {
+            return c.json({ error: resolved.error }, resolved.status);
         }
-        const refused = refusedUpload(services.workspace.root, callerFence(await services.areas.list(), c.get("identity")), path, target);
-        if (refused !== undefined) {
-            return c.json({ error: refused.error }, refused.status);
-        }
+        const target = resolved.target;
         // ?offset positions this part of a chunked upload; the write lands in place instead of truncating.
         const offset = Number(c.req.query("offset") ?? 0);
         if (!Number.isInteger(offset) || offset < 0) {
             return c.json({ error: "invalid offset" }, 400);
         }
+        // The declared length only refuses early. The cap itself is writeStream's, which counts the bytes as they
+        // reach disk, so a chunked body (no Content-Length) is held to it too and never buffered whole.
+        // allow(primitive-tiers): an early refusal only; the streamed write below is the cap.
         const declared = Number(c.req.header("content-length"));
         if (Number.isFinite(declared) && offset + declared > MAX_UPLOAD_BYTES) {
             return c.json({ error: "file too large" }, 413);

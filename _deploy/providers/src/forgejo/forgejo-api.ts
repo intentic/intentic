@@ -1,6 +1,8 @@
 import { z } from "zod";
+import type { JsonResponse } from "@intentic/base/fetch-json";
 import { parseResponse } from "../core/inputs.js";
 import { responseDetail } from "../core/response-detail.js";
+import { vendorRequest } from "../core/rest-client.js";
 
 // Admin connection every call carries: instance location and admin credentials. Auth flows per-call as HTTP
 // Basic rather than baked into the adapter, so one process can drive several instances.
@@ -231,194 +233,167 @@ export interface ForgejoApi {
 
 const authHeader = (user: string, password: string): string => `Basic ${Buffer.from(`${user}:${password}`).toString("base64")}`;
 
-const request = async (args: {
+interface ForgejoCall extends ForgejoAdmin {
     readonly method: string;
-    readonly baseUrl: string;
     readonly path: string;
-    readonly user: string;
-    readonly password: string;
+    // Sent as JSON.
     readonly body?: unknown;
-}): Promise<Response> =>
-    fetch(`${args.baseUrl}/api/v1${args.path}`, {
+    // Refusals answered rather than thrown: a 404 that means "not there".
+    readonly accept?: readonly number[];
+}
+
+// One call to Forgejo's JSON API: Basic auth, and a refusal (anything not accepted) thrown with Forgejo's own words.
+const request = async (args: ForgejoCall): Promise<JsonResponse> =>
+    vendorRequest(`${args.baseUrl}/api/v1${args.path}`, {
         method: args.method,
-        headers: {
-            Authorization: authHeader(args.user, args.password),
-            ...(args.body !== undefined ? { "Content-Type": "application/json" } : {}),
-        },
-        ...(args.body !== undefined ? { body: JSON.stringify(args.body) } : {}),
-        // Bound a stalled connection (undici's default headers timeout is ~5 minutes).
-        signal: AbortSignal.timeout(30_000),
+        headers: { Authorization: authHeader(args.user, args.password) },
+        json: args.body,
+        accept: args.accept ?? [],
+        label: `Forgejo API ${args.method} ${args.path}`,
     });
 
-const ok = async (response: Response, method: string, path: string): Promise<Response> => {
-    if (!response.ok) {
-        throw new Error(`Forgejo API ${method} ${path} failed (HTTP ${response.status}): ${await responseDetail(response)}`);
-    }
-    return response;
+// A delete that is idempotent: a 404 means the resource is already gone, which is the desired end state.
+const removal = async (args: Omit<ForgejoCall, "method" | "accept">): Promise<void> => {
+    await request({ ...args, method: "DELETE", accept: [404] });
 };
 
-// A delete that is idempotent: a 404 means the resource is already gone, which is the desired end state.
-const okOrMissing = async (response: Response, method: string, path: string): Promise<void> => {
-    if (response.status === 404) {
-        return;
-    }
-    await ok(response, method, path);
-};
+// Every refusal status, for the one read that takes any refusal as "nothing there yet".
+const ANY_REFUSAL = Array.from({ length: 200 }, (_, index) => 400 + index);
 
 const toRepo = (raw: z.infer<typeof rawRepoSchema>): ForgejoRepo => ({ cloneUrl: raw.clone_url, sshUrl: raw.ssh_url });
 
 export const forgejoApi: ForgejoApi = {
     findRepo: async ({ baseUrl, user, password, owner, name }) => {
         const path = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`;
-        const response = await request({ method: "GET", baseUrl, path, user, password });
+        const response = await request({ method: "GET", baseUrl, path, user, password, accept: [404] });
         if (response.status === 404) {
             return undefined;
         }
-        return toRepo(parseResponse(rawRepoSchema, await (await ok(response, "GET", path)).json(), `Forgejo API GET ${path}`));
+        return toRepo(parseResponse(rawRepoSchema, response.json, `Forgejo API GET ${path}`));
     },
     createRepo: async ({ baseUrl, user, password, owner, ownerIsOrg, name, private: isPrivate, autoInit }) => {
         const path = ownerIsOrg ? `/orgs/${encodeURIComponent(owner)}/repos` : `/admin/users/${encodeURIComponent(owner)}/repos`;
         const response = await request({ method: "POST", baseUrl, path, user, password, body: { name, private: isPrivate, auto_init: autoInit } });
-        return toRepo(parseResponse(rawRepoSchema, await (await ok(response, "POST", path)).json(), `Forgejo API POST ${path}`));
+        return toRepo(parseResponse(rawRepoSchema, response.json, `Forgejo API POST ${path}`));
     },
     findUser: async ({ baseUrl, user, password, username }) => {
         const path = `/users/${encodeURIComponent(username)}`;
-        const response = await request({ method: "GET", baseUrl, path, user, password });
-        if (response.status === 404) {
-            return false;
-        }
-        await ok(response, "GET", path);
-        return true;
+        return (await request({ method: "GET", baseUrl, path, user, password, accept: [404] })).status !== 404;
     },
     createUser: async ({ baseUrl, user, password, username, email, accountPassword }) => {
-        const path = "/admin/users";
         const body = { username, email, password: accountPassword, must_change_password: false, visibility: "private" };
-        await ok(await request({ method: "POST", baseUrl, path, user, password, body }), "POST", path);
+        await request({ method: "POST", baseUrl, path: "/admin/users", user, password, body });
     },
     findOrg: async ({ baseUrl, user, password, org }) => {
         const path = `/orgs/${encodeURIComponent(org)}`;
-        const response = await request({ method: "GET", baseUrl, path, user, password });
-        if (response.status === 404) {
-            return false;
-        }
-        await ok(response, "GET", path);
-        return true;
+        return (await request({ method: "GET", baseUrl, path, user, password, accept: [404] })).status !== 404;
     },
     createOrg: async ({ baseUrl, user, password, org }) => {
         const path = `/admin/users/${encodeURIComponent(user)}/orgs`;
-        await ok(await request({ method: "POST", baseUrl, path, user, password, body: { username: org, visibility: "private" } }), "POST", path);
+        await request({ method: "POST", baseUrl, path, user, password, body: { username: org, visibility: "private" } });
     },
     findTeam: async ({ baseUrl, user, password, org, name }) => {
         const path = `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(name)}`;
-        const response = await request({ method: "GET", baseUrl, path, user, password });
+        const response = await request({ method: "GET", baseUrl, path, user, password, accept: [404] });
         if (response.status === 404) {
             return undefined;
         }
-        const raw = parseResponse(rawTeamSchema, await (await ok(response, "GET", path)).json(), `Forgejo API GET ${path}`);
+        const raw = parseResponse(rawTeamSchema, response.json, `Forgejo API GET ${path}`);
         return { id: raw.id, permission: raw.permission };
     },
     createTeam: async ({ baseUrl, user, password, org, name, permission }) => {
         const path = `/orgs/${encodeURIComponent(org)}/teams`;
         const body = { name, permission, units: ["repo.code"], includes_all_repositories: false, can_create_org_repo: false };
-        const response = await request({ method: "POST", baseUrl, path, user, password, body });
-        const raw = parseResponse(rawTeamSchema, await (await ok(response, "POST", path)).json(), `Forgejo API POST ${path}`);
+        const raw = parseResponse(rawTeamSchema, (await request({ method: "POST", baseUrl, path, user, password, body })).json, `Forgejo API POST ${path}`);
         return { id: raw.id, permission: raw.permission };
     },
     addTeamMember: async ({ baseUrl, user, password, teamId, username }) => {
-        const path = `/teams/${teamId}/members/${encodeURIComponent(username)}`;
-        await ok(await request({ method: "PUT", baseUrl, path, user, password }), "PUT", path);
+        await request({ method: "PUT", baseUrl, path: `/teams/${teamId}/members/${encodeURIComponent(username)}`, user, password });
     },
     addTeamRepo: async ({ baseUrl, user, password, teamId, org, name }) => {
-        const path = `/teams/${teamId}/repos/${encodeURIComponent(org)}/${encodeURIComponent(name)}`;
-        await ok(await request({ method: "PUT", baseUrl, path, user, password }), "PUT", path);
+        await request({ method: "PUT", baseUrl, path: `/teams/${teamId}/repos/${encodeURIComponent(org)}/${encodeURIComponent(name)}`, user, password });
     },
     listHooks: async ({ baseUrl, user, password, owner, name }) => {
         const path = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/hooks`;
-        const response = await request({ method: "GET", baseUrl, path, user, password });
-        return parseResponse(z.array(forgejoHookSchema), await (await ok(response, "GET", path)).json(), `Forgejo API GET ${path}`);
+        return parseResponse(z.array(forgejoHookSchema), (await request({ method: "GET", baseUrl, path, user, password })).json, `Forgejo API GET ${path}`);
     },
     createHook: async ({ baseUrl, user, password, owner, name, type, config, events }) => {
         const path = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/hooks`;
-        await ok(await request({ method: "POST", baseUrl, path, user, password, body: { type, config, events, active: true } }), "POST", path);
+        await request({ method: "POST", baseUrl, path, user, password, body: { type, config, events, active: true } });
     },
     updateHook: async ({ baseUrl, user, password, owner, name, id, config, events }) => {
         const path = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/hooks/${id}`;
-        await ok(await request({ method: "PATCH", baseUrl, path, user, password, body: { config, events, active: true } }), "PATCH", path);
+        await request({ method: "PATCH", baseUrl, path, user, password, body: { config, events, active: true } });
     },
     latestCommit: async ({ baseUrl, user, password, owner, name, branch }) => {
         const path = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/commits?sha=${encodeURIComponent(branch)}&limit=1`;
-        const response = await request({ method: "GET", baseUrl, path, user, password });
+        const response = await request({ method: "GET", baseUrl, path, user, password, accept: ANY_REFUSAL });
         // An empty repo answers 409 and a missing branch 404; either way nothing has been pushed yet.
-        if (!response.ok) {
+        if (response.status >= 300) {
             return undefined;
         }
-        const commits = parseResponse(z.array(rawCommitSchema), await response.json(), `Forgejo API GET ${path}`);
+        const commits = parseResponse(z.array(rawCommitSchema), response.json, `Forgejo API GET ${path}`);
         return commits[0]?.sha;
     },
     readFile: async ({ baseUrl, user, password, owner, name, branch, path: filePath }) => {
         const path = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/raw/${encodePath(filePath)}?ref=${encodeURIComponent(branch)}`;
-        const response = await request({ method: "GET", baseUrl, path, user, password });
+        // The raw endpoint answers the file's own bytes, not JSON, so this is the one call outside the JSON transport.
+        const response = await fetch(`${baseUrl}/api/v1${path}`, {
+            headers: { Authorization: authHeader(user, password) },
+            // Bound a stalled connection (undici's default headers timeout is ~5 minutes).
+            signal: AbortSignal.timeout(30_000),
+        });
         if (response.status === 404) {
             return undefined;
         }
-        return (await ok(response, "GET", path)).text();
+        if (!response.ok) {
+            throw new Error(`Forgejo API GET ${path} failed (HTTP ${response.status}): ${await responseDetail(response)}`);
+        }
+        return response.text();
     },
     commitFile: async ({ baseUrl, user, password, owner, name, branch, path: filePath, content, message }) => {
         const path = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/contents/${encodePath(filePath)}`;
         const base64 = Buffer.from(content).toString("base64");
         // Creates with POST, replaces with PUT (needs the current blob sha); look up the file first to choose.
-        const existing = await request({ method: "GET", baseUrl, path: `${path}?ref=${encodeURIComponent(branch)}`, user, password });
+        const existing = await request({ method: "GET", baseUrl, path: `${path}?ref=${encodeURIComponent(branch)}`, user, password, accept: [404] });
         if (existing.status === 404) {
-            await ok(await request({ method: "POST", baseUrl, path, user, password, body: { content: base64, message, branch } }), "POST", path);
+            await request({ method: "POST", baseUrl, path, user, password, body: { content: base64, message, branch } });
             return;
         }
-        const current = parseResponse(rawContentSchema, await (await ok(existing, "GET", path)).json(), `Forgejo API GET ${path}`);
-        await ok(
-            await request({ method: "PUT", baseUrl, path, user, password, body: { content: base64, message, branch, sha: current.sha } }),
-            "PUT",
-            path,
-        );
+        const current = parseResponse(rawContentSchema, existing.json, `Forgejo API GET ${path}`);
+        await request({ method: "PUT", baseUrl, path, user, password, body: { content: base64, message, branch, sha: current.sha } });
     },
     setRepoSecret: async ({ baseUrl, user, password, owner, name, secretName, data }) => {
         const path = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/actions/secrets/${encodeURIComponent(secretName)}`;
-        // PUT is create-or-replace; Forgejo accepts the plaintext value as `data`; 201/204 both ok().
-        await ok(await request({ method: "PUT", baseUrl, path, user, password, body: { data } }), "PUT", path);
+        // PUT is create-or-replace; Forgejo accepts the plaintext value as `data`; 201/204 both succeed.
+        await request({ method: "PUT", baseUrl, path, user, password, body: { data } });
     },
     deleteRepo: async ({ baseUrl, user, password, owner, name }) => {
-        const path = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`;
-        await okOrMissing(await request({ method: "DELETE", baseUrl, path, user, password }), "DELETE", path);
+        await removal({ baseUrl, path: `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`, user, password });
     },
     deleteFile: async ({ baseUrl, user, password, owner, name, branch, path: filePath, message }) => {
         const path = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/contents/${encodePath(filePath)}`;
-        const existing = await request({ method: "GET", baseUrl, path: `${path}?ref=${encodeURIComponent(branch)}`, user, password });
+        const existing = await request({ method: "GET", baseUrl, path: `${path}?ref=${encodeURIComponent(branch)}`, user, password, accept: [404] });
         if (existing.status === 404) {
             return;
         }
-        const current = parseResponse(rawContentSchema, await (await ok(existing, "GET", path)).json(), `Forgejo API GET ${path}`);
-        await okOrMissing(
-            await request({ method: "DELETE", baseUrl, path, user, password, body: { message, branch, sha: current.sha } }),
-            "DELETE",
-            path,
-        );
+        const current = parseResponse(rawContentSchema, existing.json, `Forgejo API GET ${path}`);
+        await removal({ baseUrl, path, user, password, body: { message, branch, sha: current.sha } });
     },
     deleteRepoSecret: async ({ baseUrl, user, password, owner, name, secretName }) => {
         const path = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/actions/secrets/${encodeURIComponent(secretName)}`;
-        await okOrMissing(await request({ method: "DELETE", baseUrl, path, user, password }), "DELETE", path);
+        await removal({ baseUrl, path, user, password });
     },
     deleteHook: async ({ baseUrl, user, password, owner, name, id }) => {
-        const path = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/hooks/${id}`;
-        await okOrMissing(await request({ method: "DELETE", baseUrl, path, user, password }), "DELETE", path);
+        await removal({ baseUrl, path: `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/hooks/${id}`, user, password });
     },
     deleteUser: async ({ baseUrl, user, password, username }) => {
-        const path = `/admin/users/${encodeURIComponent(username)}?purge=true`;
-        await okOrMissing(await request({ method: "DELETE", baseUrl, path, user, password }), "DELETE", path);
+        await removal({ baseUrl, path: `/admin/users/${encodeURIComponent(username)}?purge=true`, user, password });
     },
     deleteOrg: async ({ baseUrl, user, password, org }) => {
-        const path = `/orgs/${encodeURIComponent(org)}`;
-        await okOrMissing(await request({ method: "DELETE", baseUrl, path, user, password }), "DELETE", path);
+        await removal({ baseUrl, path: `/orgs/${encodeURIComponent(org)}`, user, password });
     },
     deleteTeam: async ({ baseUrl, user, password, teamId }) => {
-        const path = `/teams/${teamId}`;
-        await okOrMissing(await request({ method: "DELETE", baseUrl, path, user, password }), "DELETE", path);
+        await removal({ baseUrl, path: `/teams/${teamId}`, user, password });
     },
 };

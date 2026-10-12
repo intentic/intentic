@@ -1,3 +1,5 @@
+import { escapeRegExp } from "@intentic/base/escape";
+
 // App routes as a router declares them. The owner names editor screens by their address ("/sandbox/agent?section=tools")
 // in about a third of his asks, and a bare iq query for one matched file names instead (AGENTS.md for `/agents`). This
 // reads route tables from source, joins nested paths, and matches an address against them, without knowing any app's
@@ -414,8 +416,6 @@ export interface CompiledRoute {
     // `/:pathMatch(.*)*` and friends: matches anything, so it answers nothing.
     readonly catchAll: boolean;
 }
-
-const escapeRegExp = (text: string): string => text.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // vue-router's and react-router's path syntax: `:name`, `:name?` / `:name*` / `:name+`, `:name(regex)`, and `*` splats.
 export const compileRoute = (pattern: string): CompiledRoute => {

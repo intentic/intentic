@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { usePanels } from "../extensions/usePanels";
-import { APPS, PORTS } from "../../lib/queryKeys";
+import { APPS, rpcPrefix } from "../../lib/queryKeys";
 import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { stopJob } from "../agents/fleet/useAgents-actions";
 import { usePorts } from "../sandbox/environment/usePorts";
@@ -22,8 +22,9 @@ export function usePreviewTargets(active: Ref<boolean>) {
 
     const monorepos = computed(() => panels.value.filter((panel) => panel.monorepo).map((panel) => panel.repo));
     const { query: appsQuery } = useSandboxQuery({
-        // Keyed on the monorepo list; a repo appearing or vanishing refetches, matching the daemon's `apps` push.
-        queryKey: computed(() => APPS.of(...monorepos.value)),
+        // Keyed on the monorepo list, held as one element so a single repo's read can never share the entry; a repo
+        // appearing or vanishing refetches, matching the daemon's `apps` push.
+        queryKey: computed(() => APPS.of([...monorepos.value])),
         queryFn: async () => {
             const lists = await Promise.all(
                 monorepos.value.map(async (repo) => {
@@ -50,7 +51,7 @@ export function usePreviewTargets(active: Ref<boolean>) {
     const act = async (target: PreviewTarget, verb: `start` | `stop`): Promise<void> => {
         if (target.job !== undefined && verb === `stop`) {
             await stopJob(target.job.conversationId, target.job.jobId);
-            await queryClient.invalidateQueries({ queryKey: PORTS.every });
+            await queryClient.invalidateQueries({ queryKey: rpcPrefix(`ports.list`) });
             return;
         }
         if (target.kind === `repo` && target.repo !== undefined) {
@@ -70,7 +71,7 @@ export function usePreviewTargets(active: Ref<boolean>) {
     // Waits for the refetch since the target doesn't exist until the ports read lands.
     const forward = async (port: number): Promise<string | undefined> => {
         const { previewUrl } = await sandboxRpc.ports.forward({ port });
-        await queryClient.invalidateQueries({ queryKey: PORTS.every });
+        await queryClient.invalidateQueries({ queryKey: rpcPrefix(`ports.list`) });
         return previewUrl === undefined ? undefined : portTargetId(port);
     };
 

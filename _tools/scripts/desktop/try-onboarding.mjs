@@ -113,8 +113,14 @@ const powershell = async (script, options = {}) =>
         options,
     );
 
-/** A JS string as a PowerShell single-quoted literal: doubling is the only escape that language has. */
-const psQuote = (value) => `'${String(value).replaceAll("'", "''")}'`;
+/**
+ * A JS string as a PowerShell expression yielding it. Not a quoted literal: PowerShell reads the typographic quotes
+ * ‘ ’ ‚ ‛ as single quotes too, so doubling ASCII ones leaves a path such as C:\Users\O’Brien a way out of the literal.
+ * Base64 holds no character PowerShell reads as syntax. The same technique as `psText` in
+ * _devices/desktop-automation/src/windows/powershell.ts, copied because this script runs under plain node and cannot
+ * import TypeScript.
+ */
+const psQuote = (value) => `([System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${Buffer.from(String(value), "utf8").toString("base64")}')))`;
 
 /** `ConvertTo-Json` answers nothing / an object / an array for 0 / 1 / N results; all three are a list. */
 const asList = (json) => {

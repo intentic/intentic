@@ -21,7 +21,7 @@ import SecretEntryRow from "../../capabilities/connect/secrets/SecretEntryRow.vu
 import SecretField from "../../capabilities/connect/secrets/SecretField.vue";
 import { useCapabilities } from "../../capabilities/connect/useCapabilities";
 import { useExtensions } from "../../extensions/useExtensions";
-import { readIntenticLines } from "../../../lib/intenticStream";
+import { untilResult } from "../../../lib/intenticStream";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useSecretInventory } from "../../capabilities/connect/secrets/useSecrets";
@@ -178,12 +178,12 @@ const pushToCi = async (): Promise<void> => {
         failed: t(`sandbox.sandboxSecrets.couldntPushToCi`),
         task: async () => {
             const lines = await sandboxRpc.intentic.run({ args: [`deploy`, `secrets`, `push`] });
-            for await (const line of readIntenticLines(lines)) {
-                if (line[`kind`] === `error` && typeof line[`message`] === `string`) {
-                    throw new Error(line[`message`]);
-                }
+            try {
+                await untilResult(lines, { failed: () => t(`sandbox.sandboxSecrets.couldntPushToCi`) });
+            } finally {
+                // Re-read however it ended, so the stale marks show what the sandbox now records rather than what was hoped.
+                refreshInventory();
             }
-            refreshInventory();
         },
     });
 };

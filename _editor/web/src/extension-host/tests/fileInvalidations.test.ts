@@ -9,10 +9,15 @@ import { ExtensionManifestSchema } from "@intentic/extension-manifest";
 // registry can't enumerate third-party ones.
 // Only in-repo builtins can be checked here; third-party extensions have nothing to read until installed.
 
+// The registry's runtime chain reaches useSandbox, which wants a browser at import; only the push table is read here.
+jest.mock("../../lib/activeSandbox", () => ({ sandboxKey: (...parts: unknown[]) => [...parts, `sbx`] }));
+const { pushedKeys } = await import("../../lib/queryKeys");
+
 const EXTENSIONS_ROOT = join(repoRoot(import.meta.url), `_extensions`);
 
-// Every `.key("name")` call an extension's sources register, found by scanning source text; a key built another way is
-// not detected.
+// Every `.key("name")` call an extension's sources register, and every contract read it keys by procedure
+// (`.readKey("personas.list")`), which a pushed name reaches through the registry's PUSHED_READS; found by scanning
+// source text, so a key built another way is not detected.
 const registeredKeys = (dir: string): Set<string> => {
     const walk = (from: string): string[] =>
         readdirSync(from, { withFileTypes: true }).flatMap((entry) => {
@@ -24,7 +29,7 @@ const registeredKeys = (dir: string): Set<string> => {
         });
     const keys = new Set<string>();
     for (const file of walk(dir)) {
-        for (const match of readFileSync(file, `utf8`).matchAll(/\.key\(\s*["'`]([^"'`]+)["'`]/gu)) {
+        for (const match of readFileSync(file, `utf8`).matchAll(/\.(?:read)?[kK]ey\(\s*["'`]([^"'`]+)["'`]/gu)) {
             keys.add(match[1] ?? ``);
         }
     }
@@ -62,10 +67,12 @@ test(`the scan finds extensions that declare file invalidations`, () => {
 
 test(`every name a first-party extension invalidates is one it registers a query under`, () => {
     const unlanded = declaringExtensions().flatMap(({ name, invalidates, keys }) =>
-        invalidates.filter((key) => !keys.has(key)).map((key) => `${name}: contributes.files invalidates "${key}", which no query in it registers`),
+        invalidates
+            .filter((key) => !pushedKeys([key]).some((path) => keys.has(path.join(`.`))))
+            .map((key) => `${name}: contributes.files invalidates "${key}", which no query in it registers`),
     );
     expect(
         unlanded.toSorted(),
-        `register the query under this key with api.sandbox.key(...), or drop the name from the manifest — a push that matches nothing refreshes nothing, silently`,
+        `register the query under this key with api.sandbox.key(...), key its contract read with api.sandbox.readKey(...) and map the name to it in PUSHED_READS (lib/queryKeys.ts), or drop the name from the manifest — a push that matches nothing refreshes nothing, silently`,
     ).toEqual([]);
 });

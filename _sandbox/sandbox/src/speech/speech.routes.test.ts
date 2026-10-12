@@ -77,9 +77,25 @@ test("an oversized utterance is refused whether declared or discovered", async (
         headers: { "content-length": String(MAX_UTTERANCE_WAV_BYTES + 1) },
     });
     expect(declared.status).toBe(413);
-    // Discovered: an undeclared body over the cap is refused after buffering.
+    // Discovered: an undeclared body over the cap is refused once the count passes it.
     const discovered = await app.request("/speech/transcribe", { method: "POST", body: Buffer.alloc(MAX_UTTERANCE_WAV_BYTES + 1) });
     expect(discovered.status).toBe(413);
+});
+
+// The undeclared case read the whole body before measuring it; a stream that never ends shows the read is counted.
+test("an oversized chunked utterance is refused without reading it whole", async () => {
+    const app = createSpeechRoute(speechDeps({}));
+    let pulled = 0;
+    const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+            pulled += 65_536;
+            controller.enqueue(new Uint8Array(65_536));
+        },
+    });
+    // SAFETY: `duplex` is required by the runtime for a stream body but missing from the DOM RequestInit type.
+    const response = await app.request("/speech/transcribe", { method: "POST", body, duplex: "half" } as RequestInit);
+    expect(response.status).toBe(413);
+    expect(pulled).toBeLessThan(MAX_UTTERANCE_WAV_BYTES + 4 * 65_536);
 });
 
 test("an empty body is a 400, not a model run over nothing", async () => {

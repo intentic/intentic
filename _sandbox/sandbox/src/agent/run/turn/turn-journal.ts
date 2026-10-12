@@ -51,6 +51,9 @@ const JournalledTurnSchema = z.object({
 });
 export type JournalledTurn = z.infer<typeof JournalledTurnSchema>;
 
+// A sender lane as journalled: an absent persona is the full toolbox reaching no account, as in the lane itself.
+const JournalledLaneSchema = z.object({ actsAs: z.string().optional(), requireApproval: z.boolean() });
+
 const JournalledFireSchema = z.object({
     ...inFlightSince,
     kind: z.literal("automation"),
@@ -61,6 +64,13 @@ const JournalledFireSchema = z.object({
     payload: z.string().optional(),
     origin: AgentOriginSchema.optional(),
     title: z.string().optional(),
+    // What the sender's rule decided (automations/senders.ts): a re-fire without it would wear the automation's own
+    // persona, wider than the one a stranger was put on. Absent for a fire nobody sent, and on rows written before.
+    lane: JournalledLaneSchema.optional(),
+    // The thread-sessions key the fire belongs to, so the re-fire settles the same thread and its next message resumes it.
+    thread: z.string().optional(),
+    // The provider session the fire resumed, so the re-fire continues the thread's conversation rather than restarting it.
+    sessionId: z.string().optional(),
 });
 export type JournalledFire = z.infer<typeof JournalledFireSchema>;
 
@@ -135,6 +145,10 @@ interface FireRow {
     readonly payload: string | null;
     readonly origin: string | null;
     readonly title: string | null;
+    // Absent from a row read off a database an older build still has open.
+    readonly lane?: string | null;
+    readonly thread?: string | null;
+    readonly session_id?: string | null;
 }
 
 export const turnJournalRows = ({ db }: ConversationsDb): TurnJournalRows => {
@@ -207,6 +221,9 @@ const fireOf = (row: FireRow): JournalledFire[] => {
         ...(row.payload === null ? {} : { payload: row.payload }),
         ...(row.origin === null ? {} : { origin: JSON.parse(row.origin) }),
         ...(row.title === null ? {} : { title: row.title }),
+        ...opt("lane", row.lane === undefined || row.lane === null ? undefined : JSON.parse(row.lane)),
+        ...opt("thread", row.thread ?? undefined),
+        ...opt("sessionId", row.session_id ?? undefined),
     });
     return parsed.success ? [parsed.data] : [];
 };
@@ -217,9 +234,11 @@ export const sqliteTurnJournal = (conversations: ConversationsDb): TurnJournal =
     const selectTurns = db.prepare("SELECT * FROM turn_journal ORDER BY started_at");
     const selectFires = db.prepare("SELECT * FROM fire_journal ORDER BY started_at");
     const upsertFire = db.prepare(`
-        INSERT INTO fire_journal(automation_id, conversation_id, started_at, attempts, payload, origin, title) VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO fire_journal(automation_id, conversation_id, started_at, attempts, payload, origin, title, lane, thread, session_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(automation_id) DO UPDATE SET conversation_id = excluded.conversation_id, started_at = excluded.started_at,
-            attempts = excluded.attempts, payload = excluded.payload, origin = excluded.origin, title = excluded.title
+            attempts = excluded.attempts, payload = excluded.payload, origin = excluded.origin, title = excluded.title,
+            lane = excluded.lane, thread = excluded.thread, session_id = excluded.session_id
     `);
     const deleteFire = db.prepare("DELETE FROM fire_journal WHERE automation_id = ?");
     return {
@@ -237,6 +256,9 @@ export const sqliteTurnJournal = (conversations: ConversationsDb): TurnJournal =
                 fire.payload ?? null,
                 fire.origin === undefined ? null : JSON.stringify(fire.origin),
                 fire.title ?? null,
+                fire.lane === undefined ? null : JSON.stringify(fire.lane),
+                fire.thread ?? null,
+                fire.sessionId ?? null,
             );
         },
         clearTurn: async (conversationId) => rows.deleteTurn(conversationId),

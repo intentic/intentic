@@ -1,14 +1,14 @@
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { execFile } from "node:child_process";
-import { lstat, mkdir, readFile, rm, stat } from "node:fs/promises";
+import { lstat, mkdir, rm, stat } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
-import { writeFileAtomic } from "@intentic/base/fs";
 import type { AgentEvent, ProjectInstallMode } from "@intentic/sandbox-contract";
 import type { ParkedCards } from "../../conversations/actor/parked-cards.js";
 import { inWorktree, type IsolationPlan, ownWorktree, type TurnPlacement } from "../../conversations/worktrees/isolation.js";
 import { gitIgnores } from "../../git-ignores.js";
 import { opt } from "../../opt.js";
+import { ensureLines } from "../../store/plain-files/text-file.js";
 import { agentCommand, classifyImageInstalls, type ProjectInstall, projectInstallsOf } from "./agent-installs.js";
 
 // An agent's own project install is judged by where it writes, not by being an install, and judged in one place for
@@ -174,16 +174,9 @@ export const ensureInstallDirIgnored = async (root: string, ecosystem: ProjectIn
     const common = resolve(standing, await git(standing, ["rev-parse", "--git-common-dir"]));
     const rel = relative(top, root).split(sep).join("/");
     const pattern = rel === "" ? `/**/${name}/` : nested ? `/${rel}/**/${name}/` : `/${rel}/${name}/`;
-    const file = join(common, "info", "exclude");
     // A repo with no exclude file yet gets one; one that cannot be read throws, and the owner's own lines stay as they are.
-    const current = (await present(file)) ? await readFile(file, "utf8") : "";
-    if (current.split("\n").some((line) => line.trim() === pattern)) {
-        return;
-    }
-    const kept = current.replace(/\n+$/, "");
-    const note = current.includes(EXCLUDE_NOTE) ? [] : [EXCLUDE_NOTE];
-    await mkdir(dirname(file), { recursive: true });
-    await writeFileAtomic(file, [...(kept === "" ? [] : [kept]), ...note, pattern, ""].join("\n"));
+    // Queued on the file, which the worktrees' mirror excludes grow too.
+    await ensureLines(join(common, "info", "exclude"), [pattern], { note: EXCLUDE_NOTE });
 };
 
 // Without a namespace an isolated turn's `node_modules` are symlinks into the main tree, so an install would write

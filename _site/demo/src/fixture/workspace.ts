@@ -14,7 +14,7 @@ import type {
     WorkspaceTree,
 } from "@intentic/sandbox-contract";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { includeGlobs, RUN_TARGETS_FILE } from "@intentic/sandbox-contract";
+import { includeMatcher, RUN_TARGETS_FILE } from "@intentic/sandbox-contract";
 import { demoQuiet, deskEdition, freshEdition } from "../mode";
 import { acceptanceFiles } from "./acceptance";
 import { SUPPORT_SWEEP_PATH, SUPPORT_SWEEP_SHOT } from "./browserShots";
@@ -832,37 +832,12 @@ export const sessions = (now: number): SessionSummary[] => {
 // Searches files with a real body, ignored paths excluded — the same two limits the daemon's search has, so a hit here
 // is a hit there too.
 const searchablePaths = (include: string, dir: string): string[] => {
-    const admits = includeFilter(include);
+    // The panel's include field, matched by the contract's own matcher, the same one the daemon and the desktop
+    // folder server use.
+    const admits = includeMatcher(include);
     // The open project narrows the search the way the daemon's `dir` does: a prefix, applied before the include globs.
     const inside = (path: string): boolean => dir === `` || path.startsWith(`${dir}/`);
     return [...FILES].flatMap(([path, entry]) => (typeof entry === `string` && !isIgnored(path) && inside(path) && admits(path) ? [path] : []));
-};
-
-// Panel's include field, parsed by the same `includeGlobs` the daemon uses; only matching those globs is local here,
-// same as the text matcher.
-// Each token maps to one regex fragment, else escaped; `**/` may span zero directories.
-const GLOB_TOKENS: Record<string, string> = {
-    "**/": `(?:[^/]+/)*`,
-    "**": `.*`,
-    "*": `[^/]*`,
-    "?": `[^/]`,
-    "{": `(?:`,
-    "}": `)`,
-    ",": `|`,
-};
-const globRegExp = (glob: string): RegExp => {
-    // Leading `./` marks an anchored pattern; without it matching still starts at the root.
-    const source = [...glob.replace(/^\.\//, ``).matchAll(/\[[^\]]*\]|\*\*\/|\*\*|\*|\?|\{|\}|,|[^*?{}[\],]+/g)]
-        .map(([token]) => GLOB_TOKENS[token] ?? (token.startsWith(`[`) ? token : token.replaceAll(/[.+^$()|\\]/g, String.raw`\$&`)))
-        .join(``);
-    return new RegExp(`^${source}$`);
-};
-
-const includeFilter = (include: string): ((path: string) => boolean) => {
-    const { globs, notGlobs } = includeGlobs(include);
-    const admits = globs.map(globRegExp);
-    const denies = notGlobs.map(globRegExp);
-    return (path) => (admits.length === 0 || admits.some((glob) => glob.test(path))) && !denies.some((glob) => glob.test(path));
 };
 
 // Literal text unless `.*` is on; an invalid regex falls back to literal matching, same as the daemon.

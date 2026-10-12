@@ -5,6 +5,7 @@
 // wherever floating.ts does, node tests included (where to DOWNLOAD the app is desktopDownloads.ts, which does not).
 
 import { isTypingTarget } from "@intentic/ui/event-target";
+import { inAppPath } from "../../lib/routes/inAppPath";
 
 // What the app tells the page about the webview (not about the app): whether this window skips the loopback gate
 // (loopback/loopbackPermission.ts). Optional since the SPA ships continuously and the app doesn't; undefined reads as "ask
@@ -233,10 +234,6 @@ declare global {
     }
 }
 
-// A path of this page, as the app builds them (`/?sandbox=<id>`, `/setup`): rooted, and never `//`, which a
-// navigation would read as another host.
-const PAGE_PATH = /^\/(?!\/)/;
-
 /**
  * Registers how this page goes to a path it is told: `go` routes in place. Inside the app only; a path that is not one
  * of this page's is ignored, and one `go` fails on is loaded the way the app would have loaded it, so the reader still
@@ -247,8 +244,11 @@ export const installDesktopOpener = (go: (path: string) => Promise<void>): void 
         return;
     }
     window.__INTENTIC_OPEN__ = (path: string): void => {
-        if (PAGE_PATH.test(path)) {
-            void goOrLoad(go, path);
+        // A path of this page, as the app builds them (`/?sandbox=<id>`, `/setup`). Anything a navigation would take
+        // to another host (`//x`, `/\x`) is refused here, since the fallback below loads whatever it is given.
+        const page = inAppPath(path);
+        if (page !== undefined) {
+            void goOrLoad(go, page);
         }
     };
 };

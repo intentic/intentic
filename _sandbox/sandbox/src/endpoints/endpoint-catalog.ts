@@ -1,5 +1,6 @@
 import { mkdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { cachedAsync } from "@intentic/base/held";
 import { compareUnrankedModelIds, type EndpointConfig, type HelperOnly, LOCAL_MODELS, type Model, ModelSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { opt } from "../opt.js";
@@ -215,7 +216,11 @@ export const createEndpointCatalog = (
     fetchImpl: typeof fetch = localTolerantFetch,
     options: EndpointCatalogOptions = {},
 ): EndpointCatalog => {
-    const cache = new Map<string, { value: { models: Model[]; default: string }; expiresAt: number }>();
+    // Only a list the server itself answered with is held, so the next read re-probes instead of pinning a stale list.
+    const cache = cachedAsync<string, { readonly value: { models: Model[]; default: string }; readonly discovered: boolean }>({
+        ttlMs: MODELS_TTL_MS,
+        keep: (read) => read.discovered,
+    });
     const persistPath = (id: string): string => join(persistDir, `${id}.json`);
 
     // Parsed through the schema, not trusted: a record from an older daemon or a truncated write reads as nothing
@@ -225,27 +230,24 @@ export const createEndpointCatalog = (
 
     return {
         models: async (id, config) => {
-            const cached = cache.get(id);
-            if (cached !== undefined && Date.now() < cached.expiresAt) {
-                return cached.value;
-            }
-            const discovered = await discover(config, fetchImpl);
-            if (discovered.length > 0) {
-                const value = ordered(discovered);
-                await mkdir(dirname(persistPath(id)), { recursive: true });
-                const before = await persisted(id).read();
-                await persisted(id).update(() => value.models);
-                cache.set(id, { value, expiresAt: Date.now() + MODELS_TTL_MS });
-                if (!sameIds(before, value.models)) {
-                    options.onChanged?.(id);
+            const read = await cache.get(id, async () => {
+                const discovered = await discover(config, fetchImpl);
+                if (discovered.length > 0) {
+                    const value = ordered(discovered);
+                    await mkdir(dirname(persistPath(id)), { recursive: true });
+                    const before = await persisted(id).read();
+                    await persisted(id).update(() => value.models);
+                    if (!sameIds(before, value.models)) {
+                        options.onChanged?.(id);
+                    }
+                    return { value, discovered: true };
                 }
-                return value;
-            }
-            // Uncached, so the next read re-probes instead of pinning a stale list.
-            return ordered(await persisted(id).read());
+                return { value: ordered(await persisted(id).read()), discovered: false };
+            });
+            return read.value;
         },
         forget: async (id) => {
-            cache.delete(id);
+            cache.drop(id);
             await rm(persistPath(id), { force: true });
         },
     };

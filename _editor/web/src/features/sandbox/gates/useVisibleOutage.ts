@@ -1,35 +1,39 @@
 import { useNow } from "@intentic/ui/async";
-import { computed, onScopeDispose, ref, watch, type ComputedRef } from "vue";
+import { computed, ref, watch, type ComputedRef } from "vue";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
+import { onScreen } from "../../../workbench/window/onScreen";
 import { restartExpected } from "../live/sandboxRestart";
 import { useDiagnosis } from "../diagnosis/useDiagnosis";
 import { type DiagnosisNotice, presentDiagnosis } from "../diagnosis/presentation";
 import { recoveryDue } from "./recovery";
 
 // The gate and the recovery card read the same visible outage time. A frozen page may wake minutes later but has
-// spent none of those minutes waiting for a reconnect. Component-scoped so its listener leaves with the view.
+// spent none of those minutes waiting for a reconnect. Component-scoped so its watch leaves with the view.
 export const useVisibleOutage = (): { elapsed: ComputedRef<number>; hidden: ComputedRef<number>; freshFailure: ComputedRef<boolean> } => {
     const { connection, reachable } = useSandbox();
-    const visible = ref(document.visibilityState !== `hidden`);
+    // onScreen, not the document's word: a window hidden in the tray on Windows still reports itself visible.
+    const visible = onScreen;
     const hiddenMs = ref(0);
     const needsVisibleFailure = ref(!visible.value);
     let hiddenAt: number | undefined = visible.value ? undefined : Date.now();
     let failureAtWake = connection.value.failure;
-    const visibilityChanged = (): void => {
-        visible.value = document.visibilityState !== `hidden`;
-        if (!visible.value) {
-            hiddenAt = Date.now();
-        } else {
-            if (hiddenAt !== undefined && connection.value.unavailableSince !== undefined) {
-                hiddenMs.value += Date.now() - Math.max(hiddenAt, connection.value.unavailableSince);
+    // Sync: the moment it changes is the reading, not the next flush.
+    watch(
+        visible,
+        (shown) => {
+            if (!shown) {
+                hiddenAt = Date.now();
+            } else {
+                if (hiddenAt !== undefined && connection.value.unavailableSince !== undefined) {
+                    hiddenMs.value += Date.now() - Math.max(hiddenAt, connection.value.unavailableSince);
+                }
+                hiddenAt = undefined;
+                failureAtWake = connection.value.failure;
+                needsVisibleFailure.value = true;
             }
-            hiddenAt = undefined;
-            failureAtWake = connection.value.failure;
-            needsVisibleFailure.value = true;
-        }
-    };
-    document.addEventListener(`visibilitychange`, visibilityChanged);
-    onScopeDispose(() => document.removeEventListener(`visibilitychange`, visibilityChanged));
+        },
+        { flush: `sync` },
+    );
     // A new outage (or its end) starts the count again.
     watch(
         () => connection.value.unavailableSince,

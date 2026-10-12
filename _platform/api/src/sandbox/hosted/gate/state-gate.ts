@@ -1,5 +1,7 @@
 import { setTimeout as delay } from "node:timers/promises";
+import { pollFor } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
+import { oneLine } from "@intentic/base/one-line";
 import type { Prisma } from "@intentic/prisma";
 import { type PlanFailure, PlanFailureSchema, STATE_PLAN_FORMAT } from "@intentic/sandbox-contract";
 import { FLY_VOLUME_LAYOUT, type FlyMachineConfig } from "@intentic/sandbox-run/fly";
@@ -123,8 +125,6 @@ const lastLine = (text: string): string | undefined =>
         .map((line) => line.trim())
         .findLast((line) => line !== ``);
 
-const clip = (text: string, limit: number): string => (text.length <= limit ? text : `${text.slice(0, limit)}…`);
-
 const failuresOf = (raw: readonly unknown[] | undefined): PlanFailure[] =>
     (raw ?? []).flatMap((item) => {
         const failure = PlanFailureSchema.partial().safeParse(item);
@@ -149,7 +149,7 @@ export const readPlanAnswer = (answer: FlyExecAnswer): HostedPlanVerdict => {
             .split(`\n`)
             .map((line) => line.trim())
             .findLast((line) => line.includes(`Error`));
-        return { kind: `broken`, reason: `the planner exited with status ${answer.exitCode}${error === undefined ? `` : `: ${clip(error, 200)}`}` };
+        return { kind: `broken`, reason: `the planner exited with status ${answer.exitCode}${error === undefined ? `` : `: ${oneLine(error, 200)}`}` };
     }
     const line = lastLine(answer.stdout);
     if (line === undefined) {
@@ -159,7 +159,7 @@ export const readPlanAnswer = (answer: FlyExecAnswer): HostedPlanVerdict => {
     try {
         parsed = PlanLineSchema.parse(JSON.parse(line));
     } catch {
-        return { kind: `broken`, reason: `the planner's answer is not a plan: ${clip(line, 120)}` };
+        return { kind: `broken`, reason: `the planner's answer is not a plan: ${oneLine(line, 120)}` };
     }
     if (parsed.plan === undefined) {
         return { kind: `broken`, reason: `the planner's answer names no plan format` };
@@ -228,18 +228,16 @@ interface HostedGateMachine {
 // when none answered): the caller decides what a machine that would not settle means.
 const settleTo = async (config: Config, machine: HostedGateMachine, wanted: string): Promise<FlyMachineCurrent | undefined> => {
     let last: FlyMachineCurrent | undefined;
-    for (let attempt = 0; attempt < SETTLE_ATTEMPTS; attempt += 1) {
-        // allow(silent-catch): an unanswered read is one more attempt; the bound decides, not the refusal
-        // oxlint-disable-next-line eslint/no-await-in-loop -- settling is sequential by definition
-        const read = await getMachineConfig(config.hosted.flyApiToken, machine.appName, machine.machineId).catch(() => undefined);
-        last = read ?? last;
-        if (read?.state === wanted) {
-            return read;
-        }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- as above
-        await delay(SETTLE_MS);
-    }
-    return last;
+    const settled = await pollFor(
+        async () => {
+            // allow(silent-catch): an unanswered read is one more attempt; the bound decides, not the refusal
+            const read = await getMachineConfig(config.hosted.flyApiToken, machine.appName, machine.machineId).catch(() => undefined);
+            last = read ?? last;
+            return read?.state === wanted ? read : undefined;
+        },
+        { intervalMs: SETTLE_MS, until: Infinity, maxProbes: SETTLE_ATTEMPTS, wait: (ms) => delay(ms) },
+    );
+    return settled.kind === `found` ? settled.value : last;
 };
 
 // Stops a machine and waits until it reads stopped, so the next config replacement leaves it stopped rather than
@@ -327,7 +325,7 @@ const strand = async (change: HostedChange, error: Error, options: HostedSwitchO
     try {
         await record.prisma.hostedMachine.update({
             where: { id: record.hostedMachineId },
-            data: { strandedAt: new Date(), strandedDetail: `moving ${previousImage} to ${targetImage}, putting the previous version back failed: ${clip(error.message, 400)}` },
+            data: { strandedAt: new Date(), strandedDetail: `moving ${previousImage} to ${targetImage}, putting the previous version back failed: ${oneLine(error.message, 400)}` },
         });
     } catch (failure) {
         options.logger?.error({ err: failure, app: machine.appName }, `hosted image gate: recording the stranded machine failed; only the line above says so`);

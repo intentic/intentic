@@ -10,12 +10,13 @@ import { host } from "./host";
 export function useLoopDesigns() {
     const api = host();
     const queryClient = useQueryClient();
-    const queryKey = api.sandbox.key(`loop-designs`);
+    const queryKey = api.sandbox.readKey(`loops.designs`);
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey });
 
     const query = useQuery({
         queryKey,
-        queryFn: async (): Promise<LoopDesign[]> => (await api.sandbox.rpc.loops.designs()).designs,
+        queryFn: () => api.sandbox.rpc.loops.designs(),
+        select: (answer): LoopDesign[] => answer.designs,
         enabled: computed(() => api.sandbox.reachable()),
     });
 

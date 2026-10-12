@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile, realpath } from "node:fs/promises";
-import { join, relative, sep } from "node:path";
+import { join } from "node:path";
+import { insideRel } from "@intentic/base/contained";
 import { errorMessage, isMissing, undefinedIfMissing } from "@intentic/base/errors";
 import { pathExists } from "@intentic/base/fs";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
@@ -89,13 +90,7 @@ export interface DevPlace {
 
 // Inside a tree root and not one of the places that hold no source: the sandbox's own state (the pinned clone itself
 // among it), the read-only reference shelf, the outbox.
-const placeIn = (base: string, real: string): string | undefined => {
-    const rel = relative(base, real);
-    if (rel.startsWith("..") || rel.startsWith(sep)) {
-        return undefined;
-    }
-    return rel.split(sep).join("/");
-};
+const placeIn = (base: string, real: string): string | undefined => insideRel(base, real);
 
 // A root not there yet (no conversation has had a worktree) holds no place.
 const resolvedRoot = (path: string): Promise<string | undefined> => realpath(path).catch(undefinedIfMissing);

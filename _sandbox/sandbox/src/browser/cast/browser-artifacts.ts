@@ -3,6 +3,7 @@ import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-
 import { pathExists } from "@intentic/base/fs";
 import type { ToolCallContent } from "@intentic/sandbox-contract";
 import { stateRelPath } from "../../state-paths.js";
+import { insideRel } from "@intentic/base/contained";
 
 // Directory every artifact belongs in, outside every repo, so it never reaches the Changes panel or a commit.
 export const BROWSER_OUTPUT_REL = stateRelPath(".intentic/records/artifacts/browser/");
@@ -26,8 +27,8 @@ const SCREENSHOT_TOOL = `mcp__.+__${SCREENSHOT_VERB}`;
 // basename, anything already inside (including a subdirectory) is left as asked.
 const inOutputDir = (outputDir: string, filename: string): string => {
     const resolved = resolve(outputDir, filename);
-    const rel = relative(outputDir, resolved);
-    return rel !== "" && !rel.startsWith("..") ? resolved : join(outputDir, basename(filename));
+    const rel = insideRel(outputDir, resolved);
+    return rel !== undefined && rel !== "" ? resolved : join(outputDir, basename(filename));
 };
 
 // Past this many numbered names the shot takes a clock suffix instead, so a `taken` that always answers yes can't hang
@@ -59,8 +60,8 @@ export const screenshotImage = (resultText: string, cwd: string, outputDir: stri
             continue;
         }
         const abs = resolve(cwd, link);
-        const inOutput = relative(outputDir, abs);
-        if (inOutput === "" || inOutput.startsWith("..")) {
+        const inOutput = insideRel(outputDir, abs);
+        if (inOutput === undefined || inOutput === "") {
             continue;
         }
         return { type: "image", path: relative(root, abs).split(sep).join("/") };

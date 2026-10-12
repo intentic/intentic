@@ -1,7 +1,7 @@
 import type { ForticlientConnection, NetdiskLink, VpnLink } from "@intentic/sandbox-contract";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed, type ComputedRef } from "vue";
-import { readIntenticLines } from "../../../lib/intenticStream";
+import { untilResult } from "../../../lib/intenticStream";
 import { rpcKey } from "../../../lib/queryKeys";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";
 import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
@@ -66,15 +66,15 @@ export function useLiveLinks<K extends LinkKind>(
             throw failure instanceof SandboxHttpError ? new Error(failure.said.message ?? linkWords(kind, failure.status).refused) : failure;
         });
         try {
-            for await (const line of readIntenticLines(lines)) {
-                const message = line[`message`];
-                if (typeof message === `string`) {
-                    onLine?.(message);
-                }
-                if (line[`kind`] === `error`) {
-                    throw new Error(typeof message === `string` ? message : linkWords(kind).failed);
-                }
-            }
+            await untilResult(lines, {
+                failed: () => linkWords(kind).failed,
+                onLine: (line) => {
+                    const message = line[`message`];
+                    if (typeof message === `string`) {
+                        onLine?.(message);
+                    }
+                },
+            });
         } finally {
             // A failed open can still move the state (a half-negotiated tunnel), so re-read either way.
             await invalidate();

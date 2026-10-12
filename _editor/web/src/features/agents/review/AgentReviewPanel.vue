@@ -5,7 +5,6 @@ import {
     EmptyState,
     explorerColorClass,
     iconForEntry,
-    isTypingTarget,
     Notice,
     ResizeSeam,
     SegmentedControl,
@@ -18,7 +17,7 @@ import {
 } from "@intentic/ui";
 import { isTestPath, type WorkspaceModule, type FileDiff } from "@intentic/sandbox-contract";
 import type { LineStat } from "@intentic/code-read";
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, type Ref, useTemplateRef, watch } from "vue";
+import { computed, nextTick, ref, type Ref, useTemplateRef, watch } from "vue";
 import { useRouter } from "vue-router";
 import ReviewStat from "../../workspace/changes/ReviewStat.vue";
 import { draftStrayAsk, stopAgent } from "../fleet/agentActions";
@@ -52,7 +51,8 @@ import ReviewGroupCheck from "./ReviewGroupCheck.vue";
 import { groupCountLabel, groupPassOn, rowAfterGroup, viewedIn } from "./reviewGroupPass";
 import { basename } from "@intentic/ui/path";
 import { useT } from "@intentic/ui/i18n";
-import { formatChord, isApplePlatform } from "../../../workbench/commands/keybindings";
+import { commandShortcut } from "../../../workbench/commands/useCommands";
+import { REVIEW_MARK, REVIEW_MARK_GROUP, REVIEW_NEXT, REVIEW_PREVIOUS, useReviewKeys } from "./reviewKeys";
 
 // One agent's work as a review: file list on the left, that file's diff on the right, the shape every code review
 // has. Replaces the old panel's mistakes:
@@ -67,22 +67,24 @@ import { formatChord, isApplePlatform } from "../../../workbench/commands/keybin
 
 const t = useT();
 
-// The review pass's hovers: its one-key peers as key caps (the keydown handler below reads the same keys).
-const mac = isApplePlatform();
+// The review pass's hovers: its one-key peers as key caps, read off the registry (reviewKeys.ts) so a remapped key
+// shows as it is bound.
 const reviewedTip = (keys?: string): Tip => ({
     title: t(`agents.agentReviewPanel.reviewed`),
     tone: `success`,
     keys,
     note: t(`agents.agentReviewPanel.clickToUnmark`),
 });
+// A key the reader unbound leaves its row out rather than showing an empty cap.
+const shortcutRow = (label: string, keys: string | undefined): Tip[`rows`] => (keys === undefined ? undefined : [{ label, value: keys }]);
 const markTip = computed((): Tip => ({
     title: t(`agents.agentReviewPanel.markReviewed`),
-    keys: formatChord(`v`, mac),
-    rows: [{ label: t(`agents.agentReviewPanel.wholeGroup`), value: formatChord(`Shift+v`, mac) }],
+    keys: commandShortcut(REVIEW_MARK),
+    rows: shortcutRow(t(`agents.agentReviewPanel.wholeGroup`), commandShortcut(REVIEW_MARK_GROUP)),
     note: t(`agents.agentReviewPanel.thenNextFile`),
 }));
-const previousTip = computed((): Tip => ({ title: t(`agents.agentReviewPanel.previousFile`), keys: formatChord(`k`, mac) }));
-const nextTip = computed((): Tip => ({ title: t(`agents.agentReviewPanel.nextFile`), keys: formatChord(`j`, mac) }));
+const previousTip = computed((): Tip => ({ title: t(`agents.agentReviewPanel.previousFile`), keys: commandShortcut(REVIEW_PREVIOUS) }));
+const nextTip = computed((): Tip => ({ title: t(`agents.agentReviewPanel.nextFile`), keys: commandShortcut(REVIEW_NEXT) }));
 
 const { agentId, at, changes } = defineProps<{
     agentId: string;
@@ -497,40 +499,7 @@ const viewGroupAndAdvance = (): void => {
 // The panel's own box, for asking whether it is on screen to be keyed at all.
 const panel = useTemplateRef<HTMLElement>(`panel`);
 
-const onKey = (event: KeyboardEvent): void => {
-    if (event.metaKey || event.ctrlKey || event.altKey) {
-        return;
-    }
-    // A review held behind a phone's chat page (SwipePages) is inert: a `v` there would mark files nobody is looking at.
-    if ((panel.value?.closest(`[inert]`) ?? null) !== null) {
-        return;
-    }
-    // Typing beats navigating: this guard leaves arrows and F7 to the chat composer or Monaco when focused.
-    if (isTypingTarget(event.target)) {
-        return;
-    }
-    if (event.key === `ArrowDown` || event.key === `j`) {
-        event.preventDefault();
-        move(1);
-        return;
-    }
-    if (event.key === `ArrowUp` || event.key === `k`) {
-        event.preventDefault();
-        move(-1);
-        return;
-    }
-    if (event.key === `v`) {
-        event.preventDefault();
-        viewAndAdvance();
-        return;
-    }
-    if (event.key === `V`) {
-        event.preventDefault();
-        viewGroupAndAdvance();
-    }
-};
-onMounted(() => window.addEventListener(`keydown`, onKey));
-onBeforeUnmount(() => window.removeEventListener(`keydown`, onKey));
+useReviewKeys({ panel, move, viewAndAdvance, viewGroupAndAdvance });
 
 // The diff.
 // Shares its cache key with the background loader (AGENT_FILE_DIFF_OPTIONS), so a warmed row paints without a

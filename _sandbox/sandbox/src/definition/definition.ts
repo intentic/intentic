@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { FIELD_NOTES_FILE, STATE_DIR } from "@intentic/constants";
 import { errorMessage } from "@intentic/base/errors";
+import { isRecord } from "@intentic/base/escape";
 import {
     type Capability,
     CapabilitySchema,
@@ -440,15 +441,13 @@ export const emitDefinitionToml = (definition: SandboxDefinition, omitted: reado
 
 // Strict TOML, then the contract schema; each failure is named.
 
-const recordLike = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
-
 // Compares only keys the input supplied: schema defaults added during parsing are harmless, but any key TOML held and
 // parsing dropped is named, unlike a JSON API schema that tolerates an unknown newer field.
 const strippedDefinitionKeys = (raw: unknown, parsed: unknown, path = ""): string[] => {
     if (Array.isArray(raw) && Array.isArray(parsed)) {
         return raw.flatMap((entry, index) => strippedDefinitionKeys(entry, parsed[index], `${path}[${index}]`));
     }
-    if (!recordLike(raw) || !recordLike(parsed)) {
+    if (!isRecord(raw) || !isRecord(parsed)) {
         return [];
     }
     return Object.entries(raw).flatMap(([key, value]) => {

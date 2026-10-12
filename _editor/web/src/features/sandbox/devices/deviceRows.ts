@@ -9,6 +9,7 @@ import {
     type Machine,
     machinesOf,
 } from "@intentic/sandbox-contract";
+import { slugOfDaemonUrl } from "@intentic/sandbox-run/slug";
 import type { IconName, StatusVariant, Tip } from "@intentic/ui";
 import {
     type DeviceFolderRow,
@@ -300,14 +301,9 @@ export const machineRow = (environments: readonly DeviceRow[], { key, label }: P
     return { key, label, environments, groups: sandboxGroups(lists.pairings, lists.ports, lists.sandboxes) };
 };
 
-// The slug docker knows a sandbox's container by: the first label of its daemon's hostname, the rule the setup
-// script names the container with and the launcher addresses it by. Undefined for a sandbox that has no address yet.
-export const slugOfDaemonUrl = (daemonUrl: string | null | undefined): string | undefined => {
-    if (daemonUrl === null || daemonUrl === undefined || !URL.canParse(daemonUrl)) {
-        return undefined;
-    }
-    return new URL(daemonUrl).hostname.split(`.`)[0] || undefined;
-};
+// The slug docker knows a sandbox's container by, read the one way every surface reads it; passed on for the pages
+// that already take it from here.
+export { slugOfDaemonUrl };
 
 // Slug to the account's name for it, for every account sandbox that has an address and a name.
 const accountNames = (account: readonly { name: string; daemonUrl: string | null }[]): Map<string, string> => {

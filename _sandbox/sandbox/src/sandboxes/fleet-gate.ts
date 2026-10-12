@@ -1,5 +1,8 @@
+import { slugOfHostname } from "@intentic/sandbox-run/slug";
 import type { DeviceFlowLine, DeviceSandboxFlow } from "@intentic/sandbox-contract";
-import { type CardDeps, cardRun, OFFER_DEADLINE_MS, raiseRequest, whyOf } from "../guard/card-offers.js";
+import { type CardDeps, cardRun, type LiveCard, raiseRequest, whyOf } from "../guard/card-offers.js";
+import { type HeldAnswer, type HoldDeps, createHeldAsks } from "../guard/held-asks.js";
+import { wakeWords } from "../guard/held-cards.js";
 import { type CliAnswer, jsonAnswer, refusalAnswer } from "../http/cli-answer.js";
 import { answerError, type ProvisionedSandbox } from "./fleet-client.js";
 
@@ -9,6 +12,9 @@ import { answerError, type ProvisionedSandbox } from "./fleet-client.js";
 //
 // The order is the point. The card comes BEFORE the claim is minted, so a declined ask costs the account nothing at
 // all: no row, no code, nothing to expire. A claim is minted only against a yes, and it is spent immediately.
+//
+// The card waits for the owner however long that takes (guard/held-asks.ts): a CLI whose connection goes leaves it up,
+// held for the turn's close, and a yes given after that wakes the conversation to make the same create again.
 
 // The words on the card's two buttons. Compared verbatim against what comes back, so they are named once.
 const APPROVE = "Create it";
@@ -22,7 +28,7 @@ export interface FleetGateDeps extends CardDeps {
     /** The machines this sandbox can reach, and which of them runs this sandbox (undefined when unread, not "none"). */
     readonly devices: () => Promise<{ readonly ids: readonly string[]; readonly self: string | undefined }>;
     readonly runFlow: (id: string, flow: DeviceSandboxFlow) => AsyncGenerator<DeviceFlowLine>;
-    readonly deadlineMs?: number;
+    readonly hold: HoldDeps;
 }
 
 export interface CreateAsk {
@@ -40,7 +46,8 @@ const NO_CAPABILITY =
 
 // A sandbox's slug is the first label of the public hostname the platform minted for it, and that is also the name
 // docker will know its container by — which is what the device has to check is free before spending the claim.
-export const slugOf = (hostname: string): string => hostname.split(".")[0] ?? "";
+// Read the run contract's way, lowercased as `ic sandbox connect` names the container.
+export const slugOf = (hostname: string): string => slugOfHostname(hostname) ?? "";
 
 const provisionedFrom = (body: string): ProvisionedSandbox | undefined => {
     try {
@@ -66,7 +73,11 @@ const machineFor = async (deps: FleetGateDeps, on: string | undefined): Promise<
     if (on !== undefined) {
         return ids.includes(on)
             ? { id: on }
-            : refusalAnswer(409, "no_such_device", `"${on}" is not a computer this sandbox can reach. Connected right now: ${ids.join(", ") || "none"}.`);
+            : refusalAnswer(
+                  409,
+                  "no_such_device",
+                  `"${on}" is not a computer this sandbox can reach. Connected right now: ${ids.join(", ") || "none"}.`,
+              );
     }
     const only = ids.length === 1 ? ids[0] : undefined;
     const chosen = self ?? only;
@@ -90,13 +101,57 @@ const approveDescription = (machineId: string, why: string | undefined): string 
     return agentsCase === undefined ? means : `${means} The agent's case: ${agentsCase}`;
 };
 
+// The open create cards, by the exact create, so a yes given after the CLI stopped waiting creates it once.
+const creates = createHeldAsks<CliAnswer | undefined>();
+
 // The owner's decision, as the only thing standing between an agent and a sandbox on their account. Undefined is a
 // yes; anything else is the refusal to answer with, worded for whichever way it was not a yes.
 const askOwner = async (deps: FleetGateDeps, ask: CreateAsk, machineId: string): Promise<CliAnswer | undefined> => {
     const run = cardRun(deps, ask.conversationId);
     if (run === undefined) {
-        return refusalAnswer(409, "no_conversation", "There is no live conversation to raise the card in, and a sandbox is never created without one.");
+        return refusalAnswer(
+            409,
+            "no_conversation",
+            "There is no live conversation to raise the card in, and a sandbox is never created without one.",
+        );
     }
+    const asked = {
+        conversationId: run.conversationId,
+        key: [ask.name, machineId, ask.definition ?? ""].join("\u0000"),
+        waiting: () =>
+            refusalAnswer(
+                409,
+                "awaiting_owner",
+                `Still waiting for the owner: a card asks them to create "${ask.name}", and nothing has been created yet. The card stays up until they answer. ` +
+                    "Make exactly the same call again to collect their answer, or carry on with other work and end your turn: if they say yes after, you are woken to make the call again.",
+            ),
+        signal: ask.signal,
+    };
+    return (
+        creates.reattach(asked) ??
+        creates.ask(asked, {
+            raise: (ended) => cardFor(deps, run, ask, machineId, ended),
+            told: wakeWords({
+                doing: `creating the sandbox "${ask.name}" on ${machineId}`,
+                notYet: "Nothing has been created yet",
+                again: "Make the same call now, with the same name, machine and definition.",
+                declinedSo: "nothing was created",
+                refrain: `Carry on without it, and do not ask again for "${ask.name}".`,
+            }),
+            held: deps.hold.held,
+            finished: deps.hold.finished(run.conversationId),
+        })
+    );
+};
+
+// Raises the card and settles with the owner's answer; `ended` settles it unanswered.
+const cardFor = async (
+    deps: FleetGateDeps,
+    run: LiveCard,
+    ask: CreateAsk,
+    machineId: string,
+    ended: AbortSignal,
+): Promise<HeldAnswer<CliAnswer | undefined>> => {
     const card = await raiseRequest(deps, run, {
         kind: "question",
         onAbort: { kind: "question", requestId: "", cancelled: true },
@@ -117,17 +172,29 @@ const askOwner = async (deps: FleetGateDeps, ask: CreateAsk, machineId: string):
         }),
         // Approval is the exact label coming back, never a truthy answer: an unanswered card and a dismissed one both
         // arrive with no answers at all, and neither is a yes.
-        approves: (reply) => Object.values(reply.answers ?? {}).flat().includes(APPROVE),
-        signal: ask.signal,
-        deadlineMs: deps.deadlineMs ?? OFFER_DEADLINE_MS,
+        approves: (reply) =>
+            Object.values(reply.answers ?? {})
+                .flat()
+                .includes(APPROVE),
+        signal: ended,
     });
     switch (card.decision) {
         case "approved":
-            return undefined;
+            return { answer: undefined, outcome: { decision: "approved" } };
         case "declined":
-            return refusalAnswer(409, "declined", `The owner did not want that sandbox created. Carry on without it, and do not ask again for "${ask.name}".`);
+            return {
+                answer: refusalAnswer(
+                    409,
+                    "declined",
+                    `The owner did not want that sandbox created. Carry on without it, and do not ask again for "${ask.name}".`,
+                ),
+                outcome: { decision: "declined" },
+            };
         case "unanswered":
-            return refusalAnswer(408, "unanswered", "The ask went unanswered and expired: nothing was created. Continue without it.");
+            return {
+                answer: refusalAnswer(408, "unanswered", "The turn ended before the owner answered: nothing was created. Continue without it."),
+                outcome: { decision: "unanswered" },
+            };
     }
 };
 

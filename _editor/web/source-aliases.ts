@@ -103,6 +103,10 @@ export const sourceAliases = (): Record<string, string> => ({
     // Busy-flag and wall-clock composables, plain state over Vue reactivity, reached by node-tested composables that
     // must not boot the component graph (its theme reader touches `document` at module scope).
     "@intentic/ui/async": fromRoot("_editor/ui/src/lib/async.ts"),
+    // The one door to browser storage (safe reads and writes, the device / account / sandbox scopes), read by plain
+    // modules that load before anything is mounted. Without its own line here the bare `@intentic/ui` alias below
+    // takes the import and the build cannot resolve it.
+    "@intentic/ui/storage": fromRoot("_editor/ui/src/lib/browserStorage.ts"),
     // The clipboard write and its "Copied" flag, for composables and their tests that must not boot the component graph.
     "@intentic/ui/clipboard": fromRoot("_editor/ui/src/lib/clipboard.ts"),
     // Gate deciding whether a wait indicator is shown; its test drives fake timers over plain reactivity and must not

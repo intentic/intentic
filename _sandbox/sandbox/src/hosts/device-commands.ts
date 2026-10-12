@@ -9,6 +9,7 @@ import {
     hostConnectionKey,
     pathReach,
 } from "@intentic/sandbox-contract";
+import { powershellQuote, shellQuote } from "@intentic/sandbox-run/quote";
 import { ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import { callTool, forgetPull, heldHostDevices } from "./device-reports.js";
@@ -114,9 +115,26 @@ const forSandbox = (base: string, sandboxId: string | undefined): string => (san
 // before any line is built — so this never has to invent a number for a command that has to name one.
 const forPort = (base: string, port: number | undefined): string => (port === undefined ? base : `${base} --port ${port}`);
 
-// A leading `~` is expanded by the shell only outside quotes, so the daemon writes `$HOME` itself: the contract's own
-// schema refuses a `$` from the caller, which makes this the only one in the line.
-const shellDir = (dir: string): string => `"${dir.replace(/^~(?=[\\/]|$)/, "$HOME")}"`;
+// A folder as one word of the shell the line runs in, quoted by that shell's one quoter. A leading `~` is expanded by a
+// shell only outside quotes, so the daemon writes the home variable itself, outside the quoted rest: the contract's own
+// schema refuses a `$` from the caller, which makes it the only one in the line.
+const HOME_PREFIX = /^~(?=[\\/]|$)/;
+
+const shellDir = (dir: string): string => {
+    const rest = dir.replace(HOME_PREFIX, "");
+    if (rest === dir) {
+        return shellQuote(dir);
+    }
+    return rest === "" ? `"$HOME"` : `"$HOME"${shellQuote(rest)}`;
+};
+
+const powershellDir = (dir: string): string => {
+    const rest = dir.replace(HOME_PREFIX, "");
+    if (rest === dir) {
+        return powershellQuote(dir);
+    }
+    return rest === "" ? "$HOME" : `($HOME + ${powershellQuote(rest)})`;
+};
 
 // BOTH DEV COMMANDS NEED pnpm, AND THE AGENT'S SHELL USUALLY HASN'T GOT IT. Its installer writes PNPM_HOME into the
 // INTERACTIVE rc (.zshrc/.bashrc); the agent runs a login shell, which never reads those, so a line that just says
@@ -171,13 +189,12 @@ const installLine = (facts: DeviceCommandFacts, route: DeviceCommandRoute = {}):
     const dir = facts.mode === "mirror" ? undefined : facts.localDir;
     const windowsTarget = route.environment === undefined ? facts.platform === "windows" : route.environment === HOST_NATIVE_ENVIRONMENT;
     const dialect = windowsTarget ? "powershell" : "sh";
+    const quote = dialect === "powershell" ? powershellQuote : shellQuote;
+    const pairing = { SANDBOX_URL: quote(facts.publicUrl), PAIR_TOKEN: quote(facts.pairToken) };
+    const env = dir === undefined ? pairing : { ...pairing, SYNC_DIR: dialect === "powershell" ? powershellDir(dir) : shellDir(dir) };
     const line =
         codedInstallLine(dialect, "sync", facts.publicUrl, facts.pairCode) ??
-        agentInstallLine(dialect, { powershell: "desktopPs1", sh: "desktopSh" }, {
-            SANDBOX_URL: `'${facts.publicUrl}'`,
-            PAIR_TOKEN: `'${facts.pairToken}'`,
-            ...(dir === undefined ? {} : { SYNC_DIR: shellDir(dir) }),
-        });
+        agentInstallLine(dialect, { powershell: "desktopPs1", sh: "desktopSh" }, env);
     return exitingLine(dialect, line);
 };
 

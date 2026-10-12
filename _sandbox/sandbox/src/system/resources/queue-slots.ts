@@ -1,6 +1,8 @@
 import { access, readdir, readlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { z } from "zod";
+import { readJsonMarker } from "../../store/plain-files/json-marker.js";
 import { readText } from "./cgroup.js";
 import { listPids, procUnits } from "./process-scan.js";
 import { parseProcStat } from "./proc-stat.js";
@@ -13,7 +15,7 @@ const WAIT_FILE = /^wait\.(\d+)$/u;
 
 // How many holders and waiters one pool lists: enough to name who is in the way, not a census of a pile-up.
 const LISTED = 4;
-// What one wait file or state.json may weigh before it is read as garbage rather than parsed.
+// What one wait file or state.json may weigh, in bytes, before it is read as garbage rather than parsed.
 const QUEUE_FILE_BYTES = 64_000;
 
 // A holder's command line is kept to this many characters: enough to name it, not a pasted script.
@@ -187,18 +189,9 @@ const exists = (path: string): Promise<boolean> =>
         () => false,
     );
 
-const readJson = async (path: string): Promise<unknown> => {
-    const raw = await readText(path);
-    if (raw === undefined || raw.length > QUEUE_FILE_BYTES) {
-        return undefined;
-    }
-    try {
-        return JSON.parse(raw) as unknown;
-    } catch {
-        // allow(silent-catch): a half-written or planted queue file says nothing, which is what the caller asks
-        return undefined;
-    }
-};
+// Any JSON at all: parseWaiter and the state reader take each field on its own. A half-written, oversized or planted
+// queue file says nothing, which is what the caller asks.
+const readJson = async (path: string): Promise<unknown> => await readJsonMarker(path, z.unknown(), { maxBytes: QUEUE_FILE_BYTES });
 
 const field = (value: unknown, key: string): unknown =>
     typeof value === "object" && value !== null ? (value as Record<string, unknown>)[key] : undefined;

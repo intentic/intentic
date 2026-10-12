@@ -6,7 +6,7 @@
     "category": "code",
     "icon": "history",
     "engines": {
-        "intentic": "^2.0.0"
+        "intentic": "^2.27.0"
     },
     "permissions": {
         "sandbox": [

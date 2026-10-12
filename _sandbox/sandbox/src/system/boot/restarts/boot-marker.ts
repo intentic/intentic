@@ -3,9 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import { writeFileAtomicSync } from "@intentic/base/fs";
+import { z } from "zod";
 import type { Logger } from "pino";
 import { opt } from "../../../opt.js";
 import { processIdentity, type ProcessIdentity, sameProcess } from "../../resources/proc-stat.js";
+import { readJsonMarkerSync } from "../../../store/plain-files/json-marker.js";
 import { buildInfo, buildText } from "../build-info.js";
 import {
     describePreviousRun,
@@ -107,14 +109,14 @@ const tmpCleared = (previous: ExitMarker | undefined, tmpMarker: string): boolea
     return !existsSync(tmpMarker);
 };
 
-const readMarker = (path: string): ExitMarker | undefined => {
-    try {
-        return JSON.parse(readFileSync(path, "utf8")) as ExitMarker;
-    } catch {
-        // First boot, or an unreadable marker, nothing to report either way.
-        return undefined;
-    }
-};
+// Held only to what every marker this module ever wrote carries, and the rest taken as written: a marker refused for
+// one odd field would hide how the previous run ended, which is all it is there to say.
+const ExitMarkerOnDisk = z.looseObject({ state: z.enum(["running", "exited"]), pid: z.number(), startedAt: z.number() });
+
+// First boot, or an unreadable marker: nothing to report either way. Read synchronously, as the claim is.
+const readMarker = (path: string): ExitMarker | undefined =>
+    // SAFETY: only this module writes the file, always whole as an ExitMarker, and the fields every reader needs are checked.
+    readJsonMarkerSync(path, ExitMarkerOnDisk) as ExitMarker | undefined;
 
 // Says how the previous run ended, in one line beside this run's build, and files it in restarts.jsonl; the intent
 // left for that stop is spent here. Never throws.
@@ -227,7 +229,10 @@ export const writeRestartIntent = (logsDir: string, intent: Omit<RestartIntent, 
     writeFileAtomicSync(join(logsDir, RESTART_INTENT_FILE), `${JSON.stringify({ ...intent, at: intent.at ?? new Date().toISOString() })}\n`);
 };
 
-/** Appends one boot's record, keeping the newest RESTARTS_KEPT. Synchronous, as the boot marker is. */
+/**
+ * Appends one boot's record, keeping the newest RESTARTS_KEPT. Synchronous, as the boot marker is: claimBootMarker files
+ * it from prepareDaemonProcess, which runs before the boot awaits anything.
+ */
 export const appendRestart = (logsDir: string, record: RestartRecord): void => {
     const path = join(logsDir, RESTARTS_FILE);
     let kept: string[] = [];

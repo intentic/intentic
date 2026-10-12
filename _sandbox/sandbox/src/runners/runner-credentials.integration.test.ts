@@ -134,15 +134,25 @@ describe("translator proxy", () => {
     let upstream: ServerType;
     let proxy: ServerType;
     let proxyUrl: string;
-    let upstreamSaw: { path?: string; auth?: string | undefined; body?: unknown };
+    let app: Hono;
+    let upstreamSaw: { path?: string; auth?: string | undefined; body?: unknown; headers?: Headers };
 
     beforeAll(() => {
         upstreamSaw = {};
         const translator = new Hono();
         translator.post("/v1/messages", async (c) => {
-            upstreamSaw = { path: c.req.path, auth: c.req.header("authorization"), body: await c.req.json() };
+            upstreamSaw = { path: c.req.path, auth: c.req.header("authorization"), body: await c.req.json(), headers: c.req.raw.headers };
             return c.json({ answered: true });
         });
+        translator.post("/v1/hops", (c) =>
+            c.body("{}", 200, {
+                "content-type": "application/json",
+                connection: "x-translator-hop",
+                "x-translator-hop": "1",
+                "keep-alive": "timeout=5",
+                "x-kept": "yes",
+            }),
+        );
         upstream = serve({ fetch: translator.fetch, port: 0 });
         const translatorUrl = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}`;
         const services = {
@@ -150,7 +160,7 @@ describe("translator proxy", () => {
             runners: { verify: async (presented: string) => (presented === TOKEN ? { kind: "enrolled", id: "r" } : { kind: "unknown" }) },
             logger: quiet,
         } as unknown as Services;
-        const app = new Hono();
+        app = new Hono();
         app.all("/system/runners/translator/*", createRunnerTranslatorProxyRoute(services));
         proxy = serve({ fetch: app.fetch, port: 0 });
         proxyUrl = `http://127.0.0.1:${(proxy.address() as AddressInfo).port}`;
@@ -171,6 +181,38 @@ describe("translator proxy", () => {
         expect(upstreamSaw.path).toBe("/v1/messages");
         expect(upstreamSaw.auth).toBe("Bearer local-secret");
         expect(upstreamSaw.body).toEqual({ model: "gpt-5" });
+    });
+
+    // In-process, so the runner's side can carry the hop-by-hop headers a real client's fetch would refuse to send.
+    it("passes on no hop-by-hop header, nor any the Connection header names, to the translator", async () => {
+        await app.request("/system/runners/translator/v1/messages", {
+            method: "POST",
+            headers: {
+                authorization: `Bearer ${TOKEN}`,
+                "content-type": "application/json",
+                connection: "x-runner-hop",
+                "x-runner-hop": "1",
+                "proxy-authorization": "Basic cHJveHk6cGFzcw",
+                te: "trailers",
+                "x-kept": "yes",
+            },
+            body: JSON.stringify({ model: "gpt-5" }),
+        });
+        for (const name of ["x-runner-hop", "proxy-authorization", "te"]) {
+            expect(upstreamSaw.headers?.has(name)).toBe(false);
+        }
+        expect(upstreamSaw.headers?.get("x-kept")).toBe("yes");
+        expect(upstreamSaw.auth).toBe("Bearer local-secret");
+    });
+
+    it("hands the runner the translator's answer without its hop-by-hop or framing headers", async () => {
+        const response = await app.request("/system/runners/translator/v1/hops", { method: "POST", headers: { authorization: `Bearer ${TOKEN}` }, body: "{}" });
+        expect(response.status).toBe(200);
+        for (const name of ["connection", "x-translator-hop", "keep-alive", "content-length"]) {
+            expect(response.headers.has(name)).toBe(false);
+        }
+        expect(response.headers.get("x-kept")).toBe("yes");
+        expect(await response.text()).toBe("{}");
     });
 
     it("no valid runner token, no door", async () => {

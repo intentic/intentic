@@ -291,6 +291,23 @@ flowchart LR
   (`system/boot/restarts/boot-history.ts`), and the third within 30 minutes honours neither a resume ask (which `ic` now writes
   before every restart) nor autoResumeOnRestart, says so in the log and on the settings-problems card, and leaves the
   cut turns interrupted. A parked turn whose cards cannot come back is given up after three boots.
+- One restart policy for everything a restart cuts (2026-10-12). The boot works out once whether anything comes back
+  (`agent/run/turn/restart-resume-policy.ts`: the owner's ask, autoResumeOnRestart, a restart storm) and hands the same
+  answer to the turns, the automation fires and the loops and workflow runs. A loop or workflow run used to restart on
+  every boot regardless; when the policy says no, it is now settled `stopped` with a detail saying the sandbox restarted
+  while it ran. An automation fire's journal row also keeps the sender's lane, thread and provider session, so a
+  restart's re-fire runs on the persona the sender was given and settles the same thread.
+- Every automation fire runs inside the automation's own `allowedTools`, whichever door it came through (2026-10-12):
+  `runFire` reads it off the record, so schedules, webhooks, channel listeners, approved holds and restart re-fires
+  are bound the same as the Visitor chat and bug intake. Channel listeners hold the same two ceilings as the other
+  doors (`automations/door-admission.ts`: messages a minute per sender, wakes a day per automation), and every door
+  caps its body while reading it (`http/bounded-body.ts`), so a chunked body with no length is still refused at the
+  limit. Rejecting a held wake withdraws its approval push, records a skipped run and tells the channel or visitor it
+  came from (`automations/held-wake-answers.ts`).
+- A persona's folder fence and its `sandbox` power are judged by path segment, by the contract's `fenceAllows` and
+  `isSandboxPath`, and see every editing tool `rules/edit-tools.ts` lists, the hashline tools included
+  (`personas/persona-scope.ts`, 2026-10-12). The hashline tools check where a path really lands, through symlinks,
+  before they read or write (`hashline/hashline-tools.ts`).
   `/run/intentic/work.json` adds `bootedAt`, `previousBootAt`, `bootsInWindow`, `restartStorm` and `lastRestartAt`
   beside `liveTurns` and `at`, so the host's keeper sees the storm too.
 - Every restart says why (2026-10-11). Whoever is about to stop or restart the sandbox (the owner's Devices card,

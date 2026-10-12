@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
-import { basename, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
+import { insideRel } from "@intentic/base/contained";
+import { isRecord } from "@intentic/base/escape";
 import type { HookMarketplace, HookPlugin, HookScript, SettingsHook } from "@intentic/sandbox-contract";
 import { frontmatterHooks } from "./frontmatter-hooks.js";
 import { enabledPluginsOf, installedPluginDirs, jsonIn, pluginHooks, skillFolderPlugins } from "./plugin-hooks.js";
@@ -75,8 +77,6 @@ interface Declaration {
     readonly plugin?: { readonly name: string; readonly root: string };
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
-
 // Keys sorted at every depth, arrays kept in order: a reformatted or reordered file is the same set, a reordered hook
 // list is not.
 const canonical = (value: unknown): unknown => {
@@ -104,12 +104,12 @@ const settingsIn = async (path: string): Promise<Record<string, unknown>> => {
 
 // The path as the approval shows and pins it, the same whichever worktree the turn ran in.
 const spelled = (path: string, place: HookPlace): string => {
-    const inProject = relative(place.cwd, path);
-    if (inProject !== "" && !inProject.startsWith("..") && !isAbsolute(inProject)) {
+    const inProject = insideRel(place.cwd, path) ?? "";
+    if (inProject !== "") {
         return `$CLAUDE_PROJECT_DIR/${inProject}`;
     }
-    const inHome = relative(place.home, path);
-    return inHome !== "" && !inHome.startsWith("..") && !isAbsolute(inHome) ? `~/${inHome}` : path;
+    const inHome = insideRel(place.home, path) ?? "";
+    return inHome === "" ? path : `~/${inHome}`;
 };
 
 // What one hook runs, as the row a person approves: its command line, else its address, script, prompt or tool.

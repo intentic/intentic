@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { diffMark, Icon, ui, useLatest } from "@intentic/extension-ui";
+import { diffMark, Icon, ui } from "@intentic/extension-ui";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { anchorsOf, compareDocx } from "./docxCompare.js";
 import { fitPages, keepFitted } from "./docxFit.js";
 import { MARK_CLASS, type RedlineEvent } from "./docxRedline.js";
 import { t } from "./i18n.js";
+import ViewerStatus from "./load/ViewerStatus.vue";
+import { useViewerLoad } from "./load/useViewerLoad.js";
 
 /* Two versions of a Word document as one: the new document as docx-preview draws it, with the words that left it
    struck through where they stood and the words that arrived underlined (docxRedline.ts). A bar over it counts what
@@ -17,7 +19,7 @@ const { before, after } = defineProps<{ before: Blob; after: Blob; path: string 
 const emit = defineEmits<{ failed: [message: string] }>();
 
 const host = ref<HTMLElement>();
-const loading = ref(true);
+const { loading, start } = useViewerLoad(() => t(`docxCompare.couldNotCompare`), { failed: (message) => emit(`failed`, message) });
 const events = ref<readonly RedlineEvent[]>([]);
 const whole = ref(false);
 // Marked paragraphs by event, read off the rendered document; and where each event sits, as a share of the scroll.
@@ -25,8 +27,6 @@ let anchors = new Map<number, HTMLElement[]>();
 const ticks = ref<readonly { readonly id: number; readonly kind: RedlineEvent["kind"]; readonly at: number }[]>([]);
 // Which event is lit; -1 before the reader steps.
 const current = ref(-1);
-
-const latest = useLatest();
 
 const CURRENT_CLASS = `${MARK_CLASS}-current`;
 
@@ -51,13 +51,11 @@ const render = async (): Promise<void> => {
     if (surface === undefined) {
         return;
     }
-    const isLatest = latest();
-    loading.value = true;
-    current.value = -1;
-    events.value = [];
-    ticks.value = [];
-    surface.replaceChildren();
-    try {
+    await start(async (isLatest) => {
+        current.value = -1;
+        events.value = [];
+        ticks.value = [];
+        surface.replaceChildren();
         const compared = await compareDocx(before, after, surface, { removedPicture: t(`docxCompare.removedPicture`) });
         if (!isLatest()) {
             return;
@@ -67,15 +65,7 @@ const render = async (): Promise<void> => {
         anchors = anchorsOf(surface);
         fitPages(surface);
         place();
-    } catch (error) {
-        if (isLatest()) {
-            emit(`failed`, error instanceof Error ? error.message : t(`docxCompare.couldNotCompare`));
-        }
-    } finally {
-        if (isLatest()) {
-            loading.value = false;
-        }
-    }
+    });
 };
 
 // The pages are refitted and the ticks re-placed on every resize of the pane, since both are positions in a layout
@@ -185,9 +175,8 @@ const TICK_CLASS: Record<RedlineEvent["kind"], string> = { changed: `bg-warning`
                     @click="go(index)"
                 ></button>
             </div>
-            <div v-if="loading" class="absolute inset-0 flex items-center justify-center bg-canvas text-muted">
-                <Icon name="spinner" class="text-xl" spin />
-            </div>
+            <!-- No error state: a pair that fails is reported to the host, which offers the other readings instead. -->
+            <ViewerStatus overlay :loading="loading" />
         </div>
     </div>
 </template>

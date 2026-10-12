@@ -45,6 +45,13 @@ flowchart LR
   `src/surface.json`, which records the api's members, from 2.20.0 a digest of the whole generated manifest
   schema, since a host's parse drops a field it does not know at any depth, from 2.21.0 `ToolDefinition`'s fields, and
   from 2.22.0 `api.sideViews`' members and `SideViewRegistration`'s fields.
+- A cached read is keyed through the api, never spelled: `api.sandbox.readKey(procedure, input)` for one contract
+  read, which is the host's own key for it, so a view shares the shell's entry and every push the daemon makes for that
+  procedure; `api.sandbox.key(...names)` for anything else (a `json` route, a composite). The entry holds the
+  procedure's whole answer, so a reader that wants part of it reshapes with `select` (2026-10-12: two packs had each
+  keyed `personas`, one storing the answer and one a bare list, and whichever filled the entry broke the other). The
+  editor's `queryKeys.guard.test.ts` reads the in-repo packs for a contract read under a hand-picked name. A paged
+  (infinite) read is the exception: its entry holds pages, not the answer, so it keeps a name of its own.
 - Helpers every extension needs live here too: sandbox-scoped module state (`sandboxRef`, cleared on every sandbox
   switch), background polling for rail badges, `sandboxLedger` (whose writes reject rather than overwrite a file they
   could not read), `sandboxDocument` (a file of the extension's own read through the `conversions` its shape has had,

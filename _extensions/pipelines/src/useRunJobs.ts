@@ -16,7 +16,9 @@ export const jobsPollMs = (run: PipelineRun | undefined): number | false => (run
 
 export function useRunJobs(run: Ref<PipelineRun | undefined>) {
     const api = host();
-    const queryKey = computed(() => api.sandbox.key(`ci-jobs`, run.value?.repo ?? ``, String(run.value?.runId ?? ``)));
+    const queryKey = computed(() =>
+        run.value === undefined ? api.sandbox.readKey(`ci.jobs`) : api.sandbox.readKey(`ci.jobs`, { repo: run.value.repo, runId: run.value.runId }),
+    );
     const enabled = computed(() => run.value !== undefined && api.sandbox.reachable());
     const inFlight = computed(() => run.value !== undefined && isPipelineInFlight(run.value.status));
 

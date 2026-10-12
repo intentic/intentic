@@ -21,6 +21,7 @@ import { sandboxJson, sandboxRequest } from "../client/sandbox/sandboxClient";
 import { gatedSandboxRpc, sandboxRpc } from "../client/sandbox/sandboxRpc";
 import { useTerminalPanel } from "../features/terminal/useTerminalPanel";
 import { sandboxKey } from "../lib/activeSandbox";
+import { rpcKey } from "../lib/queryKeys";
 import { useSandbox } from "../client/sandbox/useSandbox";
 import { useWorkspaceTabs } from "../features/workspace/tabs/useWorkspaceTabs";
 import { diffTabId } from "../features/workspace/tabs/workspaceTabs";
@@ -359,6 +360,9 @@ export const createExtensionApi = (
             fetch: (query) => queryClient.fetchQuery({ ...query, queryKey: [...query.queryKey] }),
             reachable: () => useSandbox().reachable.value === true,
             key: (...parts) => sandboxKey(...parts),
+            // The shell's own key for the read, so a view and the shell share one entry and the daemon's pushes for the
+            // procedure reach it; the SDK's procedure names are the contract's, the same set the shell's are.
+            readKey: (procedure, input) => rpcKey(procedure, input),
             origin: () => {
                 const base = useSandbox().daemonUrl.value;
                 return base === undefined || base === `` ? undefined : base;

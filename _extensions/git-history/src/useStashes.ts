@@ -14,14 +14,14 @@ export function useStashes(repo: Ref<string>) {
     const api = host();
     const queryClient = useQueryClient();
 
-    const key = computed(() => api.sandbox.key(`git-history`, `stashes`, repo.value));
+    const key = computed(() => api.sandbox.readKey(`git.stashes`, { repo: repo.value }));
     const query = useQuery({
         queryKey: key,
         queryFn: () => api.sandbox.rpc.git.stashes({ repo: repo.value }),
         enabled: computed(() => api.sandbox.reachable()),
     });
     // `refs/stash` is an ordinary ref, so stashing in a terminal arrives on the same push as a commit.
-    useRefRefresh(repo, [`stashes`]);
+    useRefRefresh(repo, [key]);
 
     const stashes = computed<readonly StashEntry[]>(() => query.data.value?.stashes ?? []);
     const { busy, error: actionError, run } = useAsyncAction();
@@ -33,7 +33,7 @@ export function useStashes(repo: Ref<string>) {
     const invalidate = (): Promise<unknown> =>
         Promise.all([
             queryClient.invalidateQueries({ queryKey: key.value }),
-            queryClient.invalidateQueries({ queryKey: api.sandbox.key(`git-history`, `working`) }),
+            queryClient.invalidateQueries({ queryKey: api.sandbox.readKey(`git.changes`) }),
         ]);
 
     return {

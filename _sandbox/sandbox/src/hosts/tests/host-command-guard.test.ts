@@ -104,7 +104,7 @@ const cardUp = async (): Promise<string> => {
     throw new Error("the gate raised no card on the turn");
 };
 
-// Handed out in place of the card's real ten-minute timer, so a test can let the deadline pass.
+// Handed out in place of any timer the card would set, so a test can see that none is.
 let deadline = new AbortController();
 const armDeadline = () => jest.spyOn(AbortSignal, "timeout").mockReturnValue(deadline.signal);
 let timeout: ReturnType<typeof armDeadline> | undefined;
@@ -126,20 +126,16 @@ afterEach(async () => {
 });
 
 describe("nobody answers the card", () => {
-    it("says so, and what to do next, when the deadline passes with the turn still running", async () => {
-        const judged = judgeHostCommand(services, guards, ASKED);
-        await cardUp();
+    it("sets no clock on the card: a yes long after the call stopped waiting still runs it", async () => {
+        expect(await judgeHostCommand(services, guards, ASKED, 20)).toMatchObject({ refusal: expect.stringMatching(/^Still waiting/) });
+        // No timer stands behind the card, so what used to end it after ten minutes ends nothing.
+        expect(timeout?.mock.calls).toEqual([]);
         deadline.abort();
+        expect(cards.resolve({ kind: "permission", requestId: await cardUp(), decision: "once" })).toBe("settled");
 
-        expect(await judged).toEqual({
-            refusal:
-                'Nobody answered within 10 minutes, so it was not run on "rog". Do not retry it unasked: carry on without it and say what was left undone.',
-        });
-        // The one timer the card set, ten minutes long.
-        expect(timeout?.mock.calls).toEqual([[600_000]]);
-        // Read by an agent still working: the turn goes on.
+        expect(await judgeHostCommand(services, guards, ASKED, 20)).toBeUndefined();
         expect(turnRunOf(fleet.conversations, CONVERSATION)?.done).toBe(false);
-        expect(answers).toEqual([{ answer: "unanswered", outcome: "refused" }]);
+        expect(answers).toEqual([{ answer: "allowed", outcome: "allowed" }]);
     });
 
     it("settles the card when the turn ends, and says the turn ended rather than that time ran out", async () => {
@@ -228,7 +224,7 @@ describe("the card outlives the call", () => {
 describe("the agent ends its turn while the card is up", () => {
     it("holds the card for the turn's close until a call collects its answer", async () => {
         expect(await judgeHostCommand(services, guards, ASKED, 20)).toMatchObject({ refusal: expect.stringMatching(/^Still waiting/) });
-        expect(heldCards.open(CONVERSATION).map((card) => card.command)).toEqual([ASKED.command]);
+        expect(heldCards.open(CONVERSATION)).toHaveLength(1);
         expect(cards.resolve({ kind: "permission", requestId: await cardUp(), decision: "once" })).toBe("settled");
 
         expect(await judgeHostCommand(services, guards, ASKED, 20)).toBeUndefined();

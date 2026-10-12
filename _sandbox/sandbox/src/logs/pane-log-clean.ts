@@ -1,8 +1,9 @@
 #!/usr/bin/env -S node --max-semi-space-size=1 --optimize-for-size
-import { rename, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { StringDecoder } from "node:string_decoder";
+import { writeFileAtomic } from "@intentic/base/fs";
 import type { Terminal as TerminalType } from "@xterm/headless";
+import { Delayer } from "@intentic/base/async";
 
 // Pane output (piped by log-files.ts's pipe-pane hooks) is a live terminal stream, not text: redraws and cursor moves
 // would concatenate into garbage if escapes were merely stripped. One process per pane replays it through a headless VT
@@ -106,13 +107,11 @@ const main = async (): Promise<void> => {
         scrollback: SCROLLBACK,
     });
 
-    const tmp = `${file}.tmp`;
     let dirty = false;
     let draining: Promise<void> | undefined;
-    const persist = async (): Promise<void> => {
-        await writeFile(tmp, renderNow());
-        await rename(tmp, file); // atomic swap so a concurrent /logs tail never reads a half-written file
-    };
+    // Replaced whole, so a concurrent /logs tail never reads a half-written screen; the staging name is one the logs
+    // prune knows (log-files.ts isStaging).
+    const persist = (): Promise<void> => writeFileAtomic(file, renderNow());
     // Coalescing, non-overlapping flusher: repeated triggers just re-arm `dirty`; the loop drains it.
     const drain = (): Promise<void> => {
         if (draining !== undefined) {
@@ -133,40 +132,19 @@ const main = async (): Promise<void> => {
         return draining;
     };
 
-    let debounce: ReturnType<typeof setTimeout> | undefined;
-    let maxWait: ReturnType<typeof setTimeout> | undefined;
+    // Quiet for FLUSH_DEBOUNCE_MS, or FLUSH_MAX_MS into a burst that never pauses (a TUI redrawing every frame).
+    const flushes = new Delayer<void>(FLUSH_DEBOUNCE_MS, { maxWaitMs: FLUSH_MAX_MS });
     const trigger = (): void => {
         dirty = true;
         void drain();
     };
-    const schedule = (): void => {
-        if (debounce !== undefined) {
-            clearTimeout(debounce);
-        }
-        debounce = setTimeout(() => {
-            if (maxWait !== undefined) {
-                clearTimeout(maxWait);
-                maxWait = undefined;
-            }
-            trigger();
-        }, FLUSH_DEBOUNCE_MS);
-        maxWait ??= setTimeout(() => {
-            maxWait = undefined;
-            trigger();
-        }, FLUSH_MAX_MS);
-    };
 
     for await (const chunk of process.stdin) {
         await write(chunk as Buffer);
-        schedule();
+        void flushes.trigger(trigger);
     }
 
-    if (debounce !== undefined) {
-        clearTimeout(debounce);
-    }
-    if (maxWait !== undefined) {
-        clearTimeout(maxWait);
-    }
+    flushes.dispose();
     if (draining !== undefined) {
         await draining;
     } // let any in-flight flush settle, then write the final state

@@ -1,5 +1,6 @@
 import type { IntenticLine } from "@intentic/sandbox-contract";
-import { chunksToLines, parseIntenticLine } from "./intentic-runner.js";
+import { jsonLinesOf } from "@intentic/base/json-lines";
+import { parseIntenticLine } from "./intentic-runner.js";
 
 const collect = async (lines: AsyncIterable<string>): Promise<string[]> => {
     const out: string[] = [];
@@ -15,15 +16,18 @@ async function* chunks(...values: string[]): AsyncGenerator<string> {
     }
 }
 
-test("chunksToLines reassembles lines split across chunk boundaries", async () => {
-    expect(await collect(chunksToLines(chunks('{"kind":"no', 'de"}\n{"kind":"iter', 'ation"}\n')))).toEqual([
+// The runner reads the CLI's stdout through base's jsonLines; these pin what it relies on from it.
+test("lines split across chunk boundaries are reassembled", async () => {
+    expect(await collect(jsonLinesOf(chunks('{"kind":"no', 'de"}\n{"kind":"iter', 'ation"}\n')))).toEqual([
         '{"kind":"node"}',
         '{"kind":"iteration"}',
     ]);
 });
 
-test("chunksToLines flushes a trailing line with no newline", async () => {
-    expect(await collect(chunksToLines(chunks('{"kind":"result"}')))).toEqual(['{"kind":"result"}']);
+test("a trailing line with no newline is flushed, and a CRLF record parses", async () => {
+    const lines = await collect(jsonLinesOf(chunks('{"kind":"node"}\r\n{"kind":"result"}')));
+    expect(lines).toEqual(['{"kind":"node"}', '{"kind":"result"}']);
+    expect(lines.map(parseIntenticLine)).toEqual([{ kind: "node" }, { kind: "result" }]);
 });
 
 test("parseIntenticLine accepts an event object with a string kind", () => {

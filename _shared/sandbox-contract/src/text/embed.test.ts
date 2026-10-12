@@ -47,6 +47,20 @@ test("a JSON fetch answers the body or throws the refusal", async () => {
         jest.fn(async () => new Response(JSON.stringify({ error: "rate limited" }), { status: 429 })),
     );
     await expect(fetchEmbedJson("https://x/y")).rejects.toMatchObject({ message: "rate limited", status: 429 });
+    stubGlobal(
+        "fetch",
+        jest.fn(async () => new Response("<html>bad gateway</html>", { status: 502 })),
+    );
+    await expect(fetchEmbedJson("https://x/y")).rejects.toMatchObject({ message: "request failed (502)", status: 502 });
+    unstubAllGlobals();
+});
+
+test("a door that cannot be reached says so in words a visitor can read, without the URL", async () => {
+    stubGlobal(
+        "fetch",
+        jest.fn(async () => { throw new TypeError("Failed to fetch"); }),
+    );
+    await expect(fetchEmbedJson("https://x/y")).rejects.toThrow("The server could not be reached: Failed to fetch");
     unstubAllGlobals();
 });
 

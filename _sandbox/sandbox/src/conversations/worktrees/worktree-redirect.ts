@@ -1,13 +1,11 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
+import { escapeRegExp } from "@intentic/base/escape";
 import { heredocBodies } from "@intentic/sandbox-contract";
 import { type IsolationPlan, inWorktree } from "./isolation.js";
 
 // When the worktree bind-mount cannot be built (no CAP_SYS_ADMIN), this rewrites absolute workspace-root paths into the
 // conversation's worktree at the tool-call layer, silently; MAIN_MOUNT still allows a deliberate write to the main
 // checkout. Covers only paths that arrive as tool input, not ones a subprocess computes itself.
-
-// Regex-escapes a path for embedding in the command matcher below.
-const escapeRegExp = (value: string): string => value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 
 // Matches absolute root paths inside a shell command. The lookbehind refuses a root that is part of a longer path
 // (letting MAIN_MOUNT through); the trailing class stops at the characters that end a path in shell.

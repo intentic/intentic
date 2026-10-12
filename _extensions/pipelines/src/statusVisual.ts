@@ -1,4 +1,5 @@
 import type { IconName, StatusVariant } from "@intentic/extension-ui";
+import { formatElapsed } from "@intentic/extension-ui/format";
 import type { PipelineStatus } from "@intentic/sandbox-contract";
 import { t } from "./i18n";
 
@@ -112,11 +113,6 @@ export const triggerLabel = (trigger: string | undefined): string | undefined =>
     return triggerLabels()[trigger] ?? trigger.replaceAll(`_`, ` `);
 };
 
-// CI durations are minutes-and-seconds territory; anything longer still reads fine as `73m 4s`.
-export const formatDuration = (seconds: number | undefined): string | undefined => {
-    if (seconds === undefined) {
-        return undefined;
-    }
-    const minutes = Math.floor(seconds / 60);
-    return minutes > 0 ? t(`statusVisual.minutesSeconds`, { minutes, seconds: seconds % 60 }) : t(`statusVisual.seconds`, { seconds });
-};
+// How long a run or job took, in the kit's span of time so it reads as every other duration in the app does; a run with
+// no clock yet has none. The node-safe `format` door, since runSide.ts reads this module outside a browser.
+export const runDuration = (seconds: number | undefined): string | undefined => (seconds === undefined ? undefined : formatElapsed(seconds));

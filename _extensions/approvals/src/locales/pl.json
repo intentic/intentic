@@ -147,11 +147,9 @@
     },
     "postText": {
         "anyMomentNow": "lada chwila",
-        "minutesSeconds": "{minutes} min {seconds} s",
         "replyIn": "odpowiedź w",
         "replyOn": "odpowiedź na",
-        "replyToCommentIn": "odpowiedź na komentarz w",
-        "seconds": "{seconds} s"
+        "replyToCommentIn": "odpowiedź na komentarz w"
     },
     "scheduleControl": {
         "clickToSchedule": "Kliknij, by zaplanować",

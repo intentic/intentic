@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { listLogFiles, pruneLogFiles, tailLogFile } from "./log-files.js";
@@ -96,17 +96,35 @@ test("resource-metrics.jsonl keeps a week where a debug log keeps 5MB", async ()
     await writeFile(join(root, "daemon.log"), Buffer.alloc(6_000_000, 120));
     await pruneLogFiles(root);
 
-    // Untouched: it is well inside its 40MB budget.
+    // Untouched: it is well inside the 40MB its writer holds it to.
     expect((await stat(join(root, "resource-metrics.jsonl"))).size).toBe(6_000_000);
     // The ordinary log is still held to the shared cap, so the exception is an exception.
     expect((await stat(join(root, "daemon.log"))).size).toBe(1_000_000);
 });
 
-test("past its own cap the series is truncated to a tail that still holds most of the week", async () => {
+test("the series is never cut here, however far past a cap: its writer cuts it under its own append queue", async () => {
     const root = await tempRoot();
     await writeFile(join(root, "resource-metrics.jsonl"), Buffer.alloc(40_000_001, 120));
     await pruneLogFiles(root);
-    expect((await stat(join(root, "resource-metrics.jsonl"))).size).toBe(30_000_000);
+    expect((await stat(join(root, "resource-metrics.jsonl"))).size).toBe(40_000_001);
+});
+
+/* A STAGING FILE IS NOT A LOG, because a killed writer's leftover was hidden from the prune and so kept forever. */
+test("a staging file is never listed, and one a killed writer left behind is removed once it has sat idle", async () => {
+    const root = await tempRoot();
+    await mkdir(join(root, "terminals"));
+    await writeFile(join(root, "terminals", "main-%1.log"), "screen\n");
+    // The name an atomic write stages under, a fresh one mid-write, and the fixed name pane-log-clean used before.
+    await writeFile(join(root, "terminals", ".main-%1.log.0123456789ab.tmp"), "half");
+    await writeFile(join(root, "terminals", ".main-%2.log.ba9876543210.tmp"), "half");
+    await writeFile(join(root, "terminals", "main-%3.log.tmp"), "half");
+    const idle = new Date(Date.now() - 2 * 3_600_000);
+    await utimes(join(root, "terminals", ".main-%1.log.0123456789ab.tmp"), idle, idle);
+    await utimes(join(root, "terminals", "main-%3.log.tmp"), idle, idle);
+
+    expect((await listLogFiles(root)).map((file) => file.name)).toEqual(["terminals/main-%1.log"]);
+    await pruneLogFiles(root);
+    expect((await readdir(join(root, "terminals"))).toSorted()).toEqual([".main-%2.log.ba9876543210.tmp", "main-%1.log"]);
 });
 
 /* A CUT LOG KEEPS WHAT IT DROPPED, because cutting daemon.log from 5MB to 1MB swung its reach between five days and one. */

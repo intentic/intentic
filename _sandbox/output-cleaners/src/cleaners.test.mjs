@@ -427,6 +427,44 @@ test("redact: still takes a real credential, by issuer prefix at any length, or 
     expect(redacted([`API_KEY="a1b2c3d4e5f6g7h8i9j0k1"`])).toEqual([`API_KEY="***"`]);
 });
 
+// No credential-shaped name beside these: the issuer's own prefix and body are the whole signal.
+test("redact: a bare issued token is masked wherever it stands", () => {
+    const jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U";
+    expect(
+        redacted([
+            "gh auth: ghp_16C7e42F292c6912E7710c838347Ae178B4a expired",
+            "openai said sk-proj-Ab12Cd34Ef56Gh78Ij90Kl is invalid",
+            "slack bot xoxb-2410-1230-AbCdEfGhIjKlMnOpQrSt connected",
+            `remote uses ${"glpat-"}xY7zQ2mN4pR8sT1vW3uK`, // prefix split so push protection skips the fixture
+            `curl --cookie session=${jwt}`,
+        ]),
+    ).toEqual(["gh auth: *** expired", "openai said *** is invalid", "slack bot *** connected", "remote uses ***", "curl --cookie session=***"]);
+});
+
+test("redact: a bare issuer prefix in prose is not a token", () => {
+    const prose = ["the sk- prefix marks an OpenAI key", "ghp_ tokens expire", "see task-sk-runner-config-file-name"];
+    expect(redacted(prose)).toEqual(prose);
+});
+
+test("redact: a private key's body is masked across lines, keeping the lines that say what it is", () => {
+    const pem = ["-----BEGIN OPENSSH PRIVATE KEY-----", "b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQ", "AAAAMwAAAAtzc2gtZWQyNTUxOQ", "-----END OPENSSH PRIVATE KEY-----", "done"];
+    expect(redacted(pem)).toEqual(["-----BEGIN OPENSSH PRIVATE KEY-----", "***", "-----END OPENSSH PRIVATE KEY-----", "done"]);
+    // Masking twice changes nothing: the holdout path redacts a body the pipeline already redacted.
+    expect(redacted(redacted(pem))).toEqual(redacted(pem));
+    expect(redacted(["PuTTY-User-Key-File-3: ssh-ed25519", "Encryption: none", "Private-Lines: 1", "AAAAIGr3dHg0", "Private-MAC: ab12ab12"])).toEqual([
+        "PuTTY-User-Key-File-3: ***",
+    ]);
+});
+
+test("redact: a password in any scheme's URL is masked, at any length, and a port before a path is not one", () => {
+    expect(redacted(["psql postgres://u:pw@db/app", "git clone https://bot:s3cr3t@git.example.com/x.git"])).toEqual([
+        "psql postgres://u:***@db/app",
+        "git clone https://bot:***@git.example.com/x.git",
+    ]);
+    const ordinary = ["GET http://localhost:3000/@vite/client", "ssh://git@github.com/org/repo"];
+    expect(redacted(ordinary)).toEqual(ordinary);
+});
+
 // Masking source code would break it: `=***` reads as `!==`, and a masked type annotation loses the type.
 test("redact: leaves source code alone, comparisons, type annotations, property access and calls", () => {
     const code = [

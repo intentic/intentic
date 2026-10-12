@@ -7,6 +7,7 @@ import type { DiagnosisNotice } from "../../features/sandbox/diagnosis/presentat
 import UploadProgressBody from "../../features/workspace/files/upload/UploadProgressBody.vue";
 import { useAppUpdate, type AppUpdate } from "../../app/appUpdate";
 import { hold, type NotificationInput, type NotificationTone } from "../../workbench/notifications/notifications";
+import { onScreen } from "../../workbench/window/onScreen";
 import { type SandboxAvailability, sandboxRequiresGate } from "../../features/sandbox/overview/availability";
 import { RESTART_PATIENCE_MS, restartExpected, type RestartWork } from "../../features/sandbox/live/sandboxRestart";
 import { useLocalShortcut } from "../../client/endpoint/localShortcut";
@@ -370,7 +371,7 @@ export const startNotificationSources = (): void => {
     });
 
     // Never acts on its own, no auto-reload or restart, except the desktop build's update-on-quit.
-    const { offer, take, dismiss: dismissUpdate } = useAppUpdate();
+    const { offer, take, dismiss: dismissUpdate } = useAppUpdate(onScreen);
     // One card, three causes, and each says which it is: an unfetchable chunk is a repair, and calling it a new
     // version would send the reader looking for a changelog. Each states the click's cost up front, since a restart
     // closes the window and a reload drops anything unsent.

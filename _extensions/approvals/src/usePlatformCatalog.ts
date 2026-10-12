@@ -13,7 +13,7 @@ export interface PlatformCatalogEntry {
 export function usePlatformCatalog(): ComputedRef<Map<string, PlatformCatalogEntry>> {
     const api = host();
     const query = useQuery({
-        queryKey: api.sandbox.key(`extensions`),
+        queryKey: api.sandbox.readKey(`extensions.list`),
         queryFn: () => api.sandbox.rpc.extensions.list(),
         enabled: computed(() => api.sandbox.reachable()),
     });

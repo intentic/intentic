@@ -1,7 +1,8 @@
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import { publicContract } from "@intentic/sandbox-contract";
 import { SHARE_DIR } from "@intentic/sandbox-contract/share-paths";
 import { PUBLIC_DIR } from "@intentic/workspace-ignore";
@@ -61,4 +62,55 @@ test("list reports published files and omits the shared conversations", async ()
     const workspace = await outboxWorkspace();
     const listed = await client(workspace).list();
     expect(listed.files.map((file) => file.path)).toEqual(["notes.md"]);
+});
+
+// A folder linking into the vault passes a lexical check (`notes/k/x.json` names no control-plane path) while the copy
+// follows the link: the vault's bytes would be served to anyone with the link.
+test("publish refuses a file reached through a symlinked folder into the control plane", async () => {
+    const workspace = await outboxWorkspace();
+    const vault = join(workspace.root, STATE_DIR, "secrets/auth");
+    await mkdir(vault, { recursive: true });
+    await writeFile(join(vault, "x.json"), '{"token":"secret"}');
+    await mkdir(join(workspace.root, "notes"));
+    await symlink(vault, join(workspace.root, "notes/k"));
+    expect(await errorCode(client(workspace).publish({ path: "notes/k/x.json" }))).toBe("FORBIDDEN");
+    expect(await readdir(join(workspace.root, PUBLIC_DIR))).not.toContain("x.json");
+});
+
+test("publish refuses a file reached through a symlinked folder out of the workspace", async () => {
+    const workspace = await outboxWorkspace();
+    const outside = await mkdtemp(join(tmpdir(), "sandbox-public-outside-"));
+    await writeFile(join(outside, "host.txt"), "host secret");
+    await symlink(outside, join(workspace.root, "away"));
+    expect(await errorCode(client(workspace).publish({ path: "away/host.txt" }))).toBe("BAD_REQUEST");
+    expect(await readdir(join(workspace.root, PUBLIC_DIR))).not.toContain("host.txt");
+});
+
+test("publish copies an ordinary file", async () => {
+    const workspace = await outboxWorkspace();
+    await writeFile(join(workspace.root, "report.md"), "# report");
+    await expect(client(workspace).publish({ path: "report.md" })).resolves.toMatchObject({ path: "report.md" });
+    expect(await readFile(join(workspace.root, PUBLIC_DIR, "report.md"), "utf8")).toBe("# report");
+});
+
+// A folder in the outbox linking elsewhere would carry a recursive rm out of it while the path still reads as inside.
+test("unpublish refuses a path through a symlinked folder, and leaves what it points at", async () => {
+    const workspace = await outboxWorkspace();
+    const kept = join(workspace.root, STATE_DIR, "secrets/auth");
+    await mkdir(kept, { recursive: true });
+    await writeFile(join(kept, "x.json"), "{}");
+    await symlink(kept, join(workspace.root, PUBLIC_DIR, "k"));
+    expect(await errorCode(client(workspace).unpublish({ path: "k/x.json" }))).toBe("BAD_REQUEST");
+    expect(existsSync(join(kept, "x.json"))).toBe(true);
+    // The link itself is the outbox's own entry, and withdrawing it takes the link only.
+    await expect(client(workspace).unpublish({ path: "k" })).resolves.toEqual({ ok: true });
+    expect(existsSync(join(workspace.root, PUBLIC_DIR, "k"))).toBe(false);
+    expect(existsSync(join(kept, "x.json"))).toBe(true);
+});
+
+test("unpublish refuses a link that names the share folder", async () => {
+    const workspace = await outboxWorkspace();
+    await symlink(join(workspace.root, PUBLIC_DIR, SHARE_DIR), join(workspace.root, PUBLIC_DIR, "alias"));
+    expect(await errorCode(client(workspace).unpublish({ path: "alias/index.html" }))).toBe("BAD_REQUEST");
+    expect(existsSync(join(workspace.root, PUBLIC_DIR, SHARE_DIR, "index.html"))).toBe(true);
 });

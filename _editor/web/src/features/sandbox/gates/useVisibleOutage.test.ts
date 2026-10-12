@@ -1,6 +1,7 @@
 import "@intentic/testing/dom";
 import { computed, effectScope, nextTick, ref } from "vue";
 import type { DiagnosisNotice } from "../diagnosis/presentation";
+import { receiveDesktopShown } from "../../../workbench/window/onScreen";
 
 const clock = ref(0);
 const reachable = ref(false);
@@ -14,11 +15,10 @@ jest.mock("../live/sandboxRestart", () => ({ restartExpected: () => undefined })
 jest.mock("../diagnosis/useDiagnosis", () => ({ useDiagnosis: () => computed(() => undefined) }));
 const { useRecoveryDue, useVisibleOutage } = await import("./useVisibleOutage");
 
+// Hidden as onScreen says it: here the desktop app's word, which is the one a Windows window in the tray gives, its
+// document still saying visible.
 it(`excludes hidden time and waits for a failed reconnect after wake`, async () => {
-    let visible = true;
     let now = 0;
-    const original = Object.getOwnPropertyDescriptor(document, `visibilityState`);
-    Object.defineProperty(document, `visibilityState`, { configurable: true, get: () => visible ? `visible` : `hidden` });
     const nowSpy = jest.spyOn(Date, `now`).mockImplementation(() => now);
     const scope = effectScope();
     // A diagnosis with a way back, so the only thing left deciding is whether a failure was seen since the page woke.
@@ -39,12 +39,10 @@ it(`excludes hidden time and waits for a failed reconnect after wake`, async () 
     try {
         now = 10_000;
         clock.value = now;
-        visible = false;
-        document.dispatchEvent(new Event(`visibilitychange`));
+        receiveDesktopShown(false);
         now = 130_000;
         clock.value = now;
-        visible = true;
-        document.dispatchEvent(new Event(`visibilitychange`));
+        receiveDesktopShown(true);
         expect(state.outage.elapsed.value).toBe(10_000);
         expect(state.due.value).toBe(false);
         now = 250_000;
@@ -57,6 +55,6 @@ it(`excludes hidden time and waits for a failed reconnect after wake`, async () 
     } finally {
         scope.stop();
         nowSpy.mockRestore();
-        if (original !== undefined) {Object.defineProperty(document, `visibilityState`, original);}
+        receiveDesktopShown(true);
     }
 });

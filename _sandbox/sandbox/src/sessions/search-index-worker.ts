@@ -1,5 +1,6 @@
 import { setImmediate as yieldTurn } from "node:timers/promises";
 import { parentPort, workerData } from "node:worker_threads";
+import { serialLock } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import { post, type WorkerAnswer } from "@intentic/base/worker-calls";
 import type { SearchAsk, SearchIndexMetrics, SearchKind } from "./search-index.js";
@@ -81,13 +82,13 @@ const answer = async (request: SearchRequest): Promise<SearchAnswer> => {
 };
 
 // Writes queue behind each other; reads skip the queue.
-let writes: Promise<void> = Promise.resolve();
+const writes = serialLock();
 port.on("message", (request: SearchRequest) => {
     if (request.op === "search" || request.op === "versions") {
         void answer(request).then(reply);
         return;
     }
-    writes = writes.then(async () => reply(await answer(request)));
+    void writes(async () => reply(await answer(request)));
 });
 
 reply({ news: store.metrics() });

@@ -26,8 +26,11 @@ export function useActivity(window: Ref<TimeWindow>) {
         getNextPageParam: (last: ActivityEvent[]) => (last.length < PAGE ? undefined : last.at(-1)?.at),
         enabled,
     });
+    // Keyed by its procedure, which the `activity` push and the config-file bindings reach through the host's table of
+    // pushed reads; the feed above stays on a name of its own, since an infinite query holds pages rather than the
+    // procedure's answer.
     const status = useQuery({
-        queryKey: api.sandbox.key(`activity-status`),
+        queryKey: api.sandbox.readKey(`activity.status`),
         queryFn: () => api.sandbox.rpc.activity.status(),
         enabled,
     });

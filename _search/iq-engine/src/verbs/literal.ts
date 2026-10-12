@@ -1,3 +1,4 @@
+import { escapeRegExp } from "@intentic/base/escape";
 import {
     type Catalog,
     catalogHome,
@@ -122,8 +123,6 @@ export const literalCandidates = (query: string): LiteralCandidate[] => {
     }
     return candidates;
 };
-
-const escapeRegExp = (text: string): string => text.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // The rg pattern for a run of text: its words in order, any whitespace between them, either apostrophe, and without the
 // closing punctuation a screenshot ends a sentence on. Case is rg's default here, insensitive.

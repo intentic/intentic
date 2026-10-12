@@ -3,6 +3,8 @@ import { createReadStream } from "node:fs";
 import { mkdir, readFile, rename, rmdir, stat, writeFile } from "node:fs/promises";
 import { basename, join, posix } from "node:path";
 import { Readable } from "node:stream";
+import { writeFileAtomic } from "@intentic/base/fs";
+import { errnoCode, errorMessage, isMissing } from "@intentic/base/errors";
 import type { ExtensionServerApi, ServerActivation } from "@intentic/extension-api";
 import { STATE_DIR } from "@intentic/sandbox-contract";
 import { ENGINES, type DocsState, type Engine, type OpenRequest, type OpenResult } from "../contract.js";
@@ -50,12 +52,6 @@ const bodyOf = (request: Request): Promise<unknown> =>
     // allow(silent-catch): a body that does not parse is the caller's mistake, which the route answers with a 400 or 404.
     request.json().catch(() => undefined);
 
-// The path, or a directory on the way to it, is not there; any other failure is not "missing".
-const isMissing = (error: unknown): boolean => {
-    const code = (error as NodeJS.ErrnoException).code;
-    return code === "ENOENT" || code === "ENOTDIR";
-};
-
 // Generated once per workspace, shared with the container as its JWT secret. Only an absent file is minted over: one
 // that could not be read would be replaced, and the container holding it recreated.
 const loadSecret = async (file: string): Promise<string> => {
@@ -65,7 +61,7 @@ const loadSecret = async (file: string): Promise<string> => {
             return existing;
         }
     } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        if (errnoCode(error) !== "ENOENT") {
             throw error;
         }
     }
@@ -83,7 +79,7 @@ const loadPort = async (file: string, log: (line: string) => void): Promise<numb
         text = await readFile(file, "utf8");
     } catch (error) {
         if (!isMissing(error)) {
-            log(`the listener's last port is unreadable, taking any: ${error instanceof Error ? error.message : String(error)}`);
+            log(`the listener's last port is unreadable, taking any: ${errorMessage(error)}`);
         }
         return 0;
     }
@@ -97,7 +93,7 @@ const recordPort = async (file: string, port: number, log: (line: string) => voi
         await mkdir(posix.dirname(file), { recursive: true });
         await writeFile(file, `${port}\n`);
     } catch (error) {
-        log(`could not record the listener's port, the next run takes any: ${error instanceof Error ? error.message : String(error)}`);
+        log(`could not record the listener's port, the next run takes any: ${errorMessage(error)}`);
     }
 };
 
@@ -156,13 +152,6 @@ export const parseOpen = (body: unknown): OpenRequest | undefined => {
     return request;
 };
 
-// Write beside then rename: the watcher and any reader see the old bytes or the new, never a half-written file.
-const writeAtomically = async (file: string, bytes: Buffer): Promise<void> => {
-    const temporary = `${file}.onlyoffice-${randomBytes(4).toString("hex")}.tmp`;
-    await writeFile(temporary, bytes);
-    await rename(temporary, file);
-};
-
 // The owner's standing choice at boot: with auto-start on, the chosen engine is made ready now (the browser engine's
 // download, or the document server's container) instead of on the first document. A container the engine already runs
 // is adopted either way, so an open on the server engine does not wait on the readiness check.
@@ -211,7 +200,7 @@ const adoptLegacyState = async (api: ExtensionServerApi): Promise<void> => {
         // allow(silent-catch): the old directory holding something else of its own is reason enough to leave it
         await rmdir(legacy).catch(() => undefined);
     } catch (error) {
-        api.log(`what an earlier version kept could not be moved into this extension's own directories: ${error instanceof Error ? error.message : String(error)}`);
+        api.log(`what an earlier version kept could not be moved into this extension's own directories: ${errorMessage(error)}`);
     }
 };
 
@@ -226,12 +215,12 @@ export const activateServer = async (api: ExtensionServerApi): Promise<ServerAct
     // boot; a later flip is acted on by the viewer, which starts the server as it saves the setting. Without it, a
     // container the engine already runs is still adopted, so the first open does not wait on the readiness check.
     const settings = await api.settings.get().catch((error: unknown) => {
-        api.log(`settings unreadable, treating auto-start as off: ${error instanceof Error ? error.message : String(error)}`);
+        api.log(`settings unreadable, treating auto-start as off: ${errorMessage(error)}`);
         return undefined;
     });
     const bundle = new BundleStore({ root: join(api.cacheDir, BUNDLE_DIR), pin: BUNDLE_PIN, log: api.log });
     // Reads what is on disk at once, so the first open knows whether the bundle is there.
-    void bundle.load().catch((error: unknown) => api.log(`the editor bundle cache is unreadable: ${error instanceof Error ? error.message : String(error)}`));
+    void bundle.load().catch((error: unknown) => api.log(`the editor bundle cache is unreadable: ${errorMessage(error)}`));
     prepareAtBoot(settings, { docs, bundle, log: api.log });
 
     // Where the browser reaches the listener: the daemon's forwarded-port hostname, asked for again on every open
@@ -304,7 +293,8 @@ export const activateServer = async (api: ExtensionServerApi): Promise<ServerAct
             throw new Error(`the document server answered ${response.status} for the saved document`);
         }
         const file = join(api.workspaceRoot, document.path);
-        await writeAtomically(file, Buffer.from(await response.arrayBuffer()));
+        // Written beside, then renamed: the watcher and any reader see the old bytes or the new, never a half-written file.
+        await writeFileAtomic(file, Buffer.from(await response.arrayBuffer()));
         const written = await stat(file);
         api.log(`saved ${document.path}`);
         return { size: written.size, mtimeMs: written.mtimeMs };

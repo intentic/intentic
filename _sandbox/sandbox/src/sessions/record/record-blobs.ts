@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { SingleFlight } from "@intentic/base/async";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { constants, zstdCompressSync, zstdDecompressSync } from "node:zlib";
 import { readdir, readFile, rename, rm, stat, utimes } from "node:fs/promises";
@@ -19,7 +20,7 @@ const HASH = /^[0-9a-f]{64}$/u;
 export const hashOf = (text: string): string => createHash("sha256").update(text, "utf8").digest("hex");
 
 // Writes under way, by path: the same text twice in one turn is stored once.
-const writing = new Map<string, Promise<void>>();
+const writing = new SingleFlight<string, void>();
 
 const write = async (path: string, text: string): Promise<void> => {
     // Found, it is named again now: a sweep reads a blob's age as the last time anything named it.
@@ -38,12 +39,7 @@ const write = async (path: string, text: string): Promise<void> => {
 export const putBlob = async (historyRoot: string, text: string): Promise<string> => {
     const hash = hashOf(text);
     const path = blobPath(historyRoot, hash);
-    let pending = writing.get(path);
-    if (pending === undefined) {
-        pending = write(path, text).finally(() => writing.delete(path));
-        writing.set(path, pending);
-    }
-    await pending;
+    await writing.run(path, () => write(path, text));
     return hash;
 };
 

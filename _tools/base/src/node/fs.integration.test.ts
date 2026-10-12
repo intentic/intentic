@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileS
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { freePort, pathExists, pathPresence, queueOnFile, writeFileAtomic, writeFileAtomicSync } from "./fs.js";
+import { freePort, pathExists, pathPresence, queueOnFile, renameOver, stagingOf, syncDirectories, writeChunksAtomic, writeFileAtomic, writeFileAtomicSync } from "./fs.js";
 
 const dir = (): string => mkdtempSync(join(tmpdir(), "fs-"));
 
@@ -70,6 +70,35 @@ describe("writeFileAtomic", () => {
         expect(readdirSync(at)).toEqual(["taken"]);
     });
 
+    // Two worker threads share one process id, and two containers on one volume may both be pid 1: a counted name
+    // collided there, so every staging name is random.
+    it("names every staging file apart, however many are asked for at once", () => {
+        const path = join(dir(), "state.json");
+        const names = new Set(Array.from({ length: 1000 }, () => stagingOf(path)));
+
+        expect(names.size).toBe(1000);
+        expect([...names].every((name) => name.startsWith(join(path, "..", ".state.json.")))).toBe(true);
+    });
+
+    it("lands every one of many concurrent writes of one path, and leaves no staging file", async () => {
+        const at = dir();
+        const path = join(at, "state.json");
+        const bodies = Array.from({ length: 50 }, (_, index) => `{"index":${index}}`);
+
+        await Promise.all(bodies.map(async (body) => await writeFileAtomic(path, body)));
+
+        expect(bodies).toContain(readFileSync(path, "utf8"));
+        expect(readdirSync(at)).toEqual(["state.json"]);
+    });
+
+    it("writes chunks in order as the source yields them", async () => {
+        const path = join(dir(), "record.bin");
+
+        await writeChunksAtomic(path, [Buffer.from("head "), Buffer.from("body "), Buffer.from("tail")], undefined, { durable: true, syncUpTo: "/" });
+
+        expect(readFileSync(path, "utf8")).toBe("head body tail");
+    });
+
     describe.skipIf(process.platform === "win32")("modes", () => {
         it("gives the file exactly the mode asked for, whatever the umask would have cut", async () => {
             const path = join(dir(), "secret.json");
@@ -126,6 +155,48 @@ describe("writeFileAtomicSync", () => {
         expect(() => writeFileAtomicSync(join(at, "taken"), "text")).toThrow(/EISDIR|ENOTEMPTY|EEXIST|EPERM/);
 
         expect(readdirSync(at)).toEqual(["taken"]);
+    });
+});
+
+describe("writeChunksAtomic", () => {
+    it("publishes nothing and leaves no staging file when the source throws part-way", async () => {
+        const at = dir();
+        const path = join(at, "record.bin");
+        writeFileSync(path, "old");
+        const failing = (function* () {
+            yield Buffer.from("partial");
+            throw new Error("frame failed");
+        })();
+
+        await expect(writeChunksAtomic(path, failing)).rejects.toThrow("frame failed");
+
+        expect(readFileSync(path, "utf8")).toBe("old");
+        expect(readdirSync(at)).toEqual(["record.bin"]);
+    });
+});
+
+describe("syncDirectories", () => {
+    // It follows a write that already happened: a directory it cannot open or flush is never that write's failure.
+    it("never throws, for a missing directory, a file, or a walk up to the root", async () => {
+        const at = dir();
+        writeFileSync(join(at, "file"), "");
+
+        await expect(syncDirectories([join(at, "missing"), join(at, "file"), at])).resolves.toBeUndefined();
+        await expect(syncDirectories([join(at, "missing", "deeper")], { upTo: "/" })).resolves.toBeUndefined();
+        await expect(syncDirectories([at], { upTo: join(at, "elsewhere") })).resolves.toBeUndefined();
+    });
+});
+
+describe("renameOver", () => {
+    it("replaces the target with the source", async () => {
+        const at = dir();
+        writeFileSync(join(at, "next"), "new");
+        writeFileSync(join(at, "file"), "old");
+
+        await renameOver(join(at, "next"), join(at, "file"));
+
+        expect(readFileSync(join(at, "file"), "utf8")).toBe("new");
+        expect(readdirSync(at)).toEqual(["file"]);
     });
 });
 

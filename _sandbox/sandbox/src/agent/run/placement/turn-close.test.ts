@@ -35,9 +35,7 @@ describe("a device card still up as the turn closes", () => {
         const settled = Promise.withResolvers<HeldOutcome>();
         const cancelled: string[] = [];
         heldCards.add(conversationId, {
-            machine: "omen",
-            command: "rm -rf /run/podman",
-            typed: false,
+            told: (outcome) => (outcome.decision === "approved" ? 'The owner allowed running "rm -rf /run/podman".' : undefined),
             settled: settled.promise,
             cancel: () => {
                 cancelled.push(conversationId);

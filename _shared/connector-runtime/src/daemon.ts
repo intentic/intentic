@@ -1,6 +1,8 @@
 import type { ExtensionProcessApi } from "@intentic/extension-api/runtime";
 import type { ListenerDispatchFrame, ListenerMessage, ListenerStatus } from "@intentic/sandbox-contract";
 import { type ListenerState, listenerRouteUrl, ListenerStateSchema } from "@intentic/sandbox-contract/listener-protocol";
+import { parsedJsonLines } from "@intentic/base/json-lines";
+import { chunksOf } from "@intentic/base/web-stream";
 import type { Logger } from "./log.js";
 
 // The gateway's client for the daemon's provider-scoped listener routes (app.ts / listener.routes.ts): the daemon holds
@@ -68,27 +70,14 @@ export const createDaemonClient = <TConfig>(provider: string, daemon: DaemonDoor
                 await res.text().catch(() => undefined);
                 throw new Error(`${listenerRouteUrl("dispatch", provider)}?stream returned ${res.status}`);
             }
-            const decoder = new TextDecoder();
-            let buffer = "";
-            const drain = (final: boolean): void => {
-                let newline = buffer.indexOf("\n");
-                while (newline >= 0) {
-                    const line = buffer.slice(0, newline).trim();
-                    buffer = buffer.slice(newline + 1);
-                    if (line !== "") {
-                        onFrame(JSON.parse(line) as ListenerDispatchFrame);
-                    }
-                    newline = buffer.indexOf("\n");
-                }
-                if (final && buffer.trim() !== "") {
-                    onFrame(JSON.parse(buffer.trim()) as ListenerDispatchFrame);
-                }
-            };
-            for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
-                buffer += decoder.decode(chunk, { stream: true });
-                drain(false);
+            // A line that is not JSON costs that line, logged, and never the frames after it: the reply is still
+            // streaming into the owner's channel.
+            const skipped = (line: string): void => log.warn({ line: line.slice(0, 200) }, `${listenerRouteUrl("dispatch", provider)}?stream sent a line that is not JSON`);
+            for await (const frame of parsedJsonLines(chunksOf(res.body), skipped)) {
+                // SAFETY: only the daemon writes these frames (the contract keeps them a type, not a schema), and a line
+                // that did not parse never reaches here.
+                onFrame(frame as ListenerDispatchFrame);
             }
-            drain(true);
         },
         failure: (detail) => report("failure", { detail }, { detail }),
         transcribe: async (wav, language) => {

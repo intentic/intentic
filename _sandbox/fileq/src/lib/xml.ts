@@ -1,3 +1,5 @@
+import { escapeRegExp } from "@intentic/base/escape";
+
 /* The two things every zip-of-XML deriver needs and no library is worth pulling in for: entity decoding for text pulled out of XML by regex. */
 
 export const decodeEntities = (text: string): string =>
@@ -12,7 +14,7 @@ export const decodeEntities = (text: string): string =>
 
 /** The value of `name="…"` (or `name='…'`) inside a tag's attribute text, decoded; undefined when absent. */
 export const attributeOf = (attributes: string, name: string): string | undefined => {
-    const match = new RegExp(`(?:^|\\s)${name.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`).exec(attributes);
+    const match = new RegExp(`(?:^|\\s)${escapeRegExp(name)}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`).exec(attributes);
     if (match === null) {
         return undefined;
     }

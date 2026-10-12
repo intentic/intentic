@@ -130,7 +130,8 @@ describe("createReachReporter", () => {
         expect(reporter.status().detail).toContain("404");
         expect(reporter.status().retrying).toBe(true);
 
-        await advanceTimersByTimeAsync(3_000);
+        // The first wait is jittered between 3s and 6s.
+        await advanceTimersByTimeAsync(6_000);
         expect(posted.filter((post) => (post.body as { reach: string }).reach === "unreachable").length).toBeGreaterThan(1);
     });
 

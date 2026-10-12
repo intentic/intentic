@@ -2,10 +2,10 @@
 // an id is what the next command needs. No box drawing or column alignment; `clip` marks what it truncated rather than
 // cutting silently.
 
-export const clip = (value: string, width: number): string => {
-    const flat = value.replaceAll(/\s+/g, " ").trim();
-    return flat.length <= width ? flat : `${flat.slice(0, width - 1)}…`;
-};
+import { oneLine } from "@intentic/base/one-line";
+
+// Email text reaches a terminal here, so its control characters (ESC, bidi overrides) go along with its line breaks.
+export const clip = (value: string, width: number): string => oneLine(value, width);
 
 // An RFC-3339 timestamp as something a person reads, in the connection's own timezone as Google reported it. Not
 // localized: a fixed shape keeps a list of them scannable.

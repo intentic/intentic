@@ -4,10 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type AgentEvent, type AgentTurn, type Loop, LOOP_DIR } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
+import { SETTLES, waitFor } from "@intentic/testing/bun";
 import { turnRunOf } from "../conversations/actor/conversation-holdings.js";
 import type { Services } from "../composition.js";
 import { fileLoopsStore } from "./loops-store.js";
-import { loopRunning, runLoop } from "./loop-runner.js";
+import { loopRunning, resumeLoops, runLoop } from "./loop-runner.js";
+import { restartResume } from "../agent/run/turn/restart-resume-policy.js";
 import { drivenBy, memoryFleet } from "../testing.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
 import { createDomainEvents } from "../seams/domain-events.js";
@@ -310,4 +312,34 @@ test("a loop whose conversation is disposed stops after the iteration in flight,
     // A bare actor, made by the turn's own transcript tail filing its steer anchors after the dispose (only a test
     // disposes mid-turn: a discard refuses a running conversation); nothing of the loop's.
     expect(services.conversations.traces("c11")).toEqual(["actor"]);
+});
+
+// Loops used to restart on every boot whatever autoResumeOnRestart said, and through a restart storm the boot history
+// forbids resuming in. Under either, a stranded loop now settles stopped, saying why, with no resume spent on it.
+test.each([
+    ["autoResumeOnRestart is off", { ownerAsked: false, storm: false, autoResumeOnRestart: false }, "resuming after a restart is off"],
+    ["a restart storm", { ownerAsked: true, storm: true, autoResumeOnRestart: true }, "restart storm"],
+])("with %s, a loop the daemon died under settles stopped and runs no turn", async (_name, facts, said) => {
+    const services = fakeServices(tempRoot());
+    const prompts: string[] = [];
+    await services.loops.start(baseLoop("cut"), 1);
+
+    expect(await resumeLoops(drivenBy(services, fakeTurn(prompts)), restartResume(facts))).toEqual([]);
+
+    const record = await services.loops.get("cut");
+    expect(record?.state).toBe("stopped");
+    expect(record?.detail).toContain(said);
+    expect(record?.resumed).toBe(0);
+    expect(prompts).toEqual([]);
+});
+
+test("a boot that resumes picks the stranded loop back up and counts the resume", async () => {
+    const services = fakeServices(tempRoot());
+    const prompts: string[] = [];
+    await services.loops.start(baseLoop("cut"), 1);
+
+    expect(await resumeLoops(drivenBy(services, fakeTurn(prompts)), restartResume({ ownerAsked: false, storm: false, autoResumeOnRestart: true }))).toEqual(["cut"]);
+    await waitFor(async () => expect((await services.loops.get("cut"))?.state).not.toBe("running"), SETTLES);
+    expect((await services.loops.get("cut"))?.resumed).toBe(1);
+    expect(prompts.length).toBeGreaterThan(0);
 });

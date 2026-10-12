@@ -1,10 +1,11 @@
 import { cp, mkdir, readFile, readdir, rm, rmdir, stat, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { publishedPage, type SharePayload } from "@intentic/sandbox-contract";
 import { SHARE_DIR, SHARE_VIEWER_DIR } from "@intentic/sandbox-contract/share-paths";
 import { publicRoot } from "../public/public-files.js";
-import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
+import { stateRelPath } from "../state-paths.js";
+import { resolveRealWithin, resolveWithin, resolveWorkspacePath } from "../workspace/files/workspace-files-paths.js";
 import { sharePage } from "./share-page.js";
 import { redactSecrets, type SharePage, type SharePicture } from "./share-payload.js";
 
@@ -34,6 +35,23 @@ const ensureViewer = async (workspaceRoot: string, source: string): Promise<void
     await cp(source, target, { recursive: true, force: true });
 };
 
+// Where the pictures and pages a conversation showed are kept: the agent's own records (browser captures, generated
+// images, attachments, drawn pages), the one part of the control plane a share copies from.
+const ARTIFACTS = stateRelPath(".intentic/records/artifacts/");
+
+// Where a transcript-named source really is, or undefined to copy nothing of it. Asked on disk as well as lexically,
+// since the path is the agent's choice: anything in the workspace outside the control plane, or anything in the
+// records above, and never through a symlinked folder that leads elsewhere (the vault, or out of /work).
+const shareSource = async (workspaceRoot: string, relPath: string): Promise<string | undefined> => {
+    const artifacts = join(workspaceRoot, ARTIFACTS);
+    const lexical = resolveWithin(workspaceRoot, relPath);
+    if (lexical !== undefined && lexical.startsWith(artifacts + sep)) {
+        return (await resolveRealWithin(artifacts, relative(artifacts, lexical)))?.real;
+    }
+    const resolved = await resolveWorkspacePath(workspaceRoot, relPath);
+    return resolved.kind === "inside" ? resolved.real : undefined;
+};
+
 // What is published of a picture's bytes, or undefined to publish nothing of it: the privacy shield's painted copy while
 // it is on.
 export type PictureFilter = (bytes: Buffer) => Promise<Buffer | undefined>;
@@ -43,8 +61,7 @@ export type PictureFilter = (bytes: Buffer) => Promise<Buffer | undefined>;
 // draws the picture's path as text.
 const copyPictures = async (workspaceRoot: string, dir: string, pictures: readonly SharePicture[], filter?: PictureFilter): Promise<void> => {
     for (const picture of pictures) {
-        // Agent-chosen path, resolved against the workspace root and refused if it lands outside, like any other.
-        const source = resolveWithin(workspaceRoot, picture.source);
+        const source = await shareSource(workspaceRoot, picture.source);
         if (source === undefined) {
             continue;
         }
@@ -74,7 +91,7 @@ const MAX_PAGE_BYTES = 25 * 1024 * 1024;
 // draws nothing where it stood.
 const copyPages = async (workspaceRoot: string, dir: string, pages: readonly SharePage[]): Promise<void> => {
     for (const page of pages) {
-        const source = resolveWithin(workspaceRoot, page.source);
+        const source = await shareSource(workspaceRoot, page.source);
         // allow(silent-catch): a page that cannot be read is left out of the share, as this function's comment says.
         const info = source === undefined ? undefined : await stat(source).catch(() => undefined);
         if (source === undefined || info === undefined || !info.isFile() || info.size > MAX_PAGE_BYTES) {

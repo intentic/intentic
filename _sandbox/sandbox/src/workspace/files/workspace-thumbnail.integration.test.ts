@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, utimes, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import sharp from "sharp";
@@ -60,6 +60,20 @@ test("workspaceThumbnail re-renders when the same bytes are rewritten, since mti
 
     await utimes(file, new Date(), new Date(Date.now() + 60_000));
     expect((await workspaceThumbnail(root, file))!.etag).not.toBe(first!.etag);
+});
+
+/* A CACHE THAT CANNOT BE WRITTEN STILL DRAWS, because the bytes are in hand and the cache is allowed to forget. */
+test("workspaceThumbnail answers the picture it rendered even when the cache cannot keep it, and leaves no partial file", async () => {
+    const root = await mkdtemp(join(tmpdir(), "ws-thumb-"));
+    const file = join(root, "shot.png");
+    await writePicture(file, 800, 600);
+    // A file where the cache directory belongs: every write into it fails.
+    await mkdir(join(root, CACHE, ".."), { recursive: true });
+    await writeFile(join(root, CACHE), "not a directory");
+
+    const thumbnail = await workspaceThumbnail(root, file);
+    expect((await sharp(thumbnail!.bytes).metadata()).format).toBe("webp");
+    expect(await readdir(join(root, CACHE, ".."))).toEqual(["thumbnails"]);
 });
 
 test("workspaceThumbnail answers nothing rather than failing, for a file there is no picture in", async () => {

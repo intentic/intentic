@@ -1,6 +1,7 @@
 import { clipboardScript, launchScript } from "./apps-windows.js";
 import { actScript } from "./elements-windows.js";
 import { typeScript } from "./input-windows.js";
+import { psText } from "./powershell.js";
 
 /* The command lines the Windows backend hands powershell.exe, with text an agent chose in them. PowerShell reads ‘ ’ ‚ ‛
    as single quotes as well as ', and `$(...)` and backticks inside double quotes, so any text interpolated into a
@@ -51,4 +52,12 @@ test("the data decodes to the exact text, newlines and unicode included", () => 
     expect(decoded(clipboardScript("naïve 日本語 ✓"))).toContain("naïve 日本語 ✓");
     expect(decoded(launchScript("C:\\Program Files\\x y\\app.exe"))).toContain("C:\\Program Files\\x y\\app.exe");
     expect(decoded(actScript("1", "4.2", "set_value", "It’s fine"))).toContain("It’s fine");
+});
+
+test("psText round-trips text holding every kind of single quote, and the line holds none of them", () => {
+    const text = "it's ‘a’ ‚b‛ x'); calc; ('";
+    const line = psText(text);
+    expect(line).not.toMatch(/[‘’‚‛]/);
+    const literal = /FromBase64String\('([A-Za-z0-9+/=]*)'\)/.exec(line)?.[1] ?? "";
+    expect(Buffer.from(literal, "base64").toString("utf8")).toBe(text);
 });

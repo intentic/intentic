@@ -1,6 +1,7 @@
 import type { RequestPermissionRequest } from "@agentclientprotocol/sdk";
 import { DEFAULT_SAFETY_POLICY } from "@intentic/sandbox-contract";
-import { createCommandGuard } from "../../guard/command-guard.js";
+import { unstubbed } from "@intentic/testing";
+import { type CommandGuard, type CommandWhere, createCommandGuard } from "../../guard/command-guard.js";
 import { createTurnTaint, NO_TAINT } from "../../guard/turn-taint.js";
 import { decidePermission } from "./acp-permissions.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
@@ -157,4 +158,61 @@ test("an asked command raises a permission card and the call runs when the user 
     expect(cards.resolve({ kind: "permission", requestId: card?.requestId ?? "", decision: "once" })).toBe("settled");
     expect(await pending).toEqual({ outcome: { outcome: "selected", optionId: "yes" } });
     expect(events.some((event) => event.kind === "resolved")).toBe(true);
+});
+
+// Both kinds of yes on offer, and a no: what a real agent (Gemini's shell, Claude's) offers for a command.
+const EVERY_OPTION: Parameters<typeof request>[1] = [
+    { optionId: "once", kind: "allow_once" },
+    { optionId: "always", kind: "allow_always" },
+    { optionId: "no", kind: "reject_once" },
+];
+
+// An "always" would let the agent run its next commands without asking, so they would never reach the rulebook.
+test("a command the enforcing rulebook allows is allowed once, never always", async () => {
+    const gate = gateWith("allow");
+    const call = request("execute", EVERY_OPTION, { rawInput: { command: "git push --force origin main" } });
+    expect(await decidePermission(call, "execute", false, gate)).toEqual({ outcome: { outcome: "selected", optionId: "once" } });
+    // Nor for a call it had nothing to read: the agent must still ask about the next one.
+    expect(await decidePermission(request("edit", EVERY_OPTION), "execute", false, gate)).toEqual({
+        outcome: { outcome: "selected", optionId: "once" },
+    });
+});
+
+test("with only a lasting yes on offer while the rulebook enforces, the call is refused rather than allowed for good", async () => {
+    const gate = gateWith("allow");
+    const call = request(
+        "execute",
+        [
+            { optionId: "always", kind: "allow_always" },
+            { optionId: "no", kind: "reject_once" },
+        ],
+        { rawInput: { command: "git push origin feature" } },
+    );
+    expect(await decidePermission(call, "execute", false, gate)).toEqual({ outcome: { outcome: "selected", optionId: "no" } });
+});
+
+test("a check that throws refuses the call instead of allowing it", async () => {
+    const broken = unstubbed<CommandGuard>("gate", {
+        enforcing: true,
+        consult: () => {
+            throw new Error("the card store is gone");
+        },
+    });
+    const call = request("execute", EVERY_OPTION, { rawInput: { command: "git push origin main" } });
+    expect(await decidePermission(call, "execute", false, broken)).toEqual({ outcome: { outcome: "selected", optionId: "no" } });
+});
+
+test("the directory the call names reaches the check; with none, the gate keeps the turn's own", async () => {
+    const where: (CommandWhere | undefined)[] = [];
+    const gate = unstubbed<CommandGuard>("gate", {
+        enforcing: true,
+        async *consult (_program, _subject, at) {
+            where.push(at);
+            yield* [];
+            return { allow: true };
+        },
+    });
+    await decidePermission(request("execute", EVERY_OPTION, { rawInput: { command: "pnpm add zod", cwd: "/srv/repo/video" } }), "execute", false, gate);
+    await decidePermission(request("execute", EVERY_OPTION, { rawInput: { command: "pnpm add zod" } }), "execute", false, gate);
+    expect(where).toEqual([{ cwd: "/srv/repo/video" }, { cwd: undefined }]);
 });

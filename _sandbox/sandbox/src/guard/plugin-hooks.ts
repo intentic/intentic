@@ -1,5 +1,6 @@
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { isRecord } from "@intentic/base/escape";
 import { type FrontmatterHooks, frontmatterHooks, undefinedIfCliSeesNothing } from "./frontmatter-hooks.js";
 
 /* What one Claude Code plugin directory runs as hooks: the `hooks` of its hooks files (hooks/hooks.json, any the manifest
@@ -22,8 +23,6 @@ export interface PluginHooks {
     // Every file a module could load, sorted; empty for a plugin with no module.
     readonly code: readonly string[];
 }
-
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
 // A JSON file the CLI reads, or undefined where it reads nothing: absent, or not strict JSON.
 export const jsonIn = async (path: string): Promise<unknown> => {

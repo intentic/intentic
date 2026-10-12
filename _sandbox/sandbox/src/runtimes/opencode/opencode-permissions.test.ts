@@ -4,7 +4,7 @@ import type { AgentEvent } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { realYield } from "@intentic/testing/bun";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
-import type { CommandGuard } from "../../guard/command-guard.js";
+import type { CommandGuard, CommandWhere } from "../../guard/command-guard.js";
 import { createTurnGate } from "../../guard/turn-gate.js";
 import { memoryFleet } from "../../testing.js";
 import { answerPermission, type PermissionAsk, permissionAskOf, type SessionJudge } from "./opencode-permissions.js";
@@ -118,6 +118,7 @@ test("OpenCode 2's shell ask is read as its id, its session, its action and the 
             sessionID: "ses_ee2a7b0b7ffeRFM9FFPcb0yOv8",
             kind: "shell",
             program: "git push origin main --dry-run",
+            cwd: WORKSPACE_ROOT,
         },
     );
 });
@@ -283,4 +284,33 @@ test("a consult that fails is answered as a refusal rather than left unanswered"
         },
     ]);
     expect(holds).toEqual(["held", "released"]);
+});
+
+test("the directory an ask runs in is the one its metadata names, read against the session's, else the session's", () => {
+    const at = (metadata: Readonly<Record<string, string>>, directory?: string): string | undefined => {
+        const event = asked({ resources: ["pnpm add zod"], metadata });
+        return permissionAskOf(directory === undefined ? event : { ...event, location: { directory } })?.cwd;
+    };
+    expect(at({ workdir: "video" }, WORKSPACE_ROOT)).toBe(`${WORKSPACE_ROOT}/video`);
+    expect(at({ cwd: "/elsewhere" }, WORKSPACE_ROOT)).toBe("/elsewhere");
+    expect(at({}, WORKSPACE_ROOT)).toBe(WORKSPACE_ROOT);
+    expect(at({})).toBeUndefined();
+});
+
+test("the directory an ask runs in reaches the check", async () => {
+    const { client, replies } = server();
+    const where: (CommandWhere | undefined)[] = [];
+    const gate = unstubbed<CommandGuard>("gate", {
+        enforcing: true,
+        async *consult (_program, _subject, at) {
+            where.push(at);
+            yield* [];
+            return { allow: true };
+        },
+    });
+
+    await answerPermission(client, judgeOf(gate).judge, askOf(shellAsked("per_10", "ses_cwd", "pnpm add zod")));
+
+    expect(where).toEqual([{ cwd: WORKSPACE_ROOT }]);
+    expect(replies).toEqual([{ sessionID: "ses_cwd", requestID: "per_10", decision: "once" }]);
 });

@@ -3,7 +3,7 @@ import { Icon, Popover, StatusBadge, toneWash } from "@intentic/extension-ui";
 import type { PipelineStatus } from "@intentic/sandbox-contract";
 import { ref } from "vue";
 import { type PipelineStage, stageLabel } from "./pipelineDag";
-import { formatDuration, STATUS_TONE } from "../statusVisual";
+import { runDuration, STATUS_TONE } from "../statusVisual";
 import { t } from "../i18n.js";
 
 /* The mini pipeline graph that sits in a run row: one circle per stage, connected left→right, each coloured by the worst status inside it. */
@@ -112,8 +112,8 @@ const stageTooltip = (stage: PipelineStage, index: number): string => {
                                 }"
                                 >×{{ recurring.get(job.name) }}</span
                             >
-                            <span v-if="formatDuration(job.durationSeconds)" class="shrink-0 text-2xs text-subtle">
-                                {{ formatDuration(job.durationSeconds) }}
+                            <span v-if="runDuration(job.durationSeconds)" class="shrink-0 text-2xs text-subtle">
+                                {{ runDuration(job.durationSeconds) }}
                             </span>
                         </div>
                     </div>

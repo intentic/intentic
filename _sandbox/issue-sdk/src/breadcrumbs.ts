@@ -1,3 +1,4 @@
+import { oneLine } from "@intentic/base/one-line";
 import type { IssueBreadcrumb } from "@intentic/sandbox-contract";
 
 // What happened before a crash, kept as a bounded ring buffer (count and per-message length capped) since this patches
@@ -14,8 +15,6 @@ export interface Breadcrumbs {
     // Undoes every patch to the page's globals, so a test's console patch is not still live in the next.
     readonly detach: () => void;
 }
-
-const trim = (message: string): string => (message.length > MESSAGE_MAX ? `${message.slice(0, MESSAGE_MAX - 1)}…` : message);
 
 // A console argument as a short string; errors keep their message, and anything that won't stringify becomes its type
 // instead of throwing.
@@ -38,7 +37,7 @@ export const createBreadcrumbs = (): Breadcrumbs => {
     const undo: Array<() => void> = [];
 
     const add = (kind: string, message: string): void => {
-        ring.push({ at: Date.now(), kind, message: trim(message) });
+        ring.push({ at: Date.now(), kind, message: oneLine(message, MESSAGE_MAX) });
         if (ring.length > MAX) {
             ring.shift();
         }

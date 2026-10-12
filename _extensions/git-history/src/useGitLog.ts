@@ -6,7 +6,8 @@ import { useRefRefresh } from "./useRefRefresh.js";
 
 // One repo's commit graph via the daemon's `git log --all` (newest-first, across every ref). Per-commit detail (files
 // touched, then a file's before/after) loads lazily on selection. The cache key is scoped to the active sandbox via
-// `api.sandbox.key`, so switching sandboxes can't show stale history.
+// `api.sandbox.key`, so switching sandboxes can't show stale history; a name of the pack's own rather than the
+// procedure's, since the entry holds pages, never the one answer another reader of `git.log` would store there.
 
 export function useGitLog(repo: Ref<string>) {
     const api = host();
@@ -25,7 +26,7 @@ export function useGitLog(repo: Ref<string>) {
     });
 
     // A ref moving in this repo (agent commit, land, rebase) leaves the log stale with nothing local to invalidate.
-    useRefRefresh(repo, [`log`]);
+    useRefRefresh(repo, [logKey]);
 
     const commits = computed<readonly GitCommit[]>(() => query.data.value?.pages.flatMap((page) => page.commits) ?? []);
     const branch = computed(() => query.data.value?.pages[0]?.branch);

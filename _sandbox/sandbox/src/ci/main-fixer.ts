@@ -1,4 +1,4 @@
-import { serialLock } from "@intentic/base/async";
+import { keyedLock } from "@intentic/base/async";
 import { isInfraStep } from "@intentic/constants/ci-infra-steps";
 import {
     type AgentSummary,
@@ -109,7 +109,7 @@ type HandOverReason = "finished" | "capped";
 // failures already judged, so a job's log is not read twice for them; and each run's failed jobs not yet handed over.
 // Losing them to a restart costs a read: `heard` is written only at a handover, so the boot's replay of the runs since
 // the streak began (resumeMainFixer) parks and hands over again whatever this process held.
-const locks = new Map<string, ReturnType<typeof serialLock>>();
+let serially = keyedLock<string>();
 const fleetJobs = new Set<string>();
 const batches = new Map<string, Batch>();
 let settleCapMs = RUN_SETTLE_CAP_MS;
@@ -123,12 +123,6 @@ const findingOf = (workflow: string, job: string): CiFinding => ({
     source: workflow,
     text: job,
 });
-
-const serially = <T>(key: string, work: () => Promise<T>): Promise<T> => {
-    const lock = locks.get(key) ?? serialLock();
-    locks.set(key, lock);
-    return lock(work);
-};
 
 // Where a best-effort step failed, for its log line.
 interface Where {
@@ -837,7 +831,7 @@ export const resumeMainFixer = async (services: Services, fetchFn: FetchFn = fet
 
 /** Test seam: forget what only this process holds, as a restart does; the failures on file stay. */
 export const resetMainFixer = (options: { readonly settleCapMs?: number } = {}): void => {
-    locks.clear();
+    serially = keyedLock<string>();
     fleetJobs.clear();
     for (const batch of batches.values()) {
         clearTimeout(batch.timer);

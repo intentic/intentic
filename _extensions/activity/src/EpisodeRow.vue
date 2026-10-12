@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ui, DisclosureRow, formatTime, formatTimestamp, Icon, type IconName, StatusBadge, timeAgo } from "@intentic/extension-ui";
+import { ui, DisclosureRow, formatElapsed, formatTime, formatTimestamp, Icon, type IconName, StatusBadge, timeAgo } from "@intentic/extension-ui";
 import { computed, inject, ref } from "vue";
 import { type Episode, sourceLabel, typeLabel } from "./episodes";
 import { host } from "./host";
@@ -21,16 +21,8 @@ const nameOf = (key: string): string => sourceLabel(key, names?.value);
 const KIND_ICONS: Readonly<Record<Episode["kind"], IconName>> = { turn: `sparkles`, message: `arrow-down-left`, event: `cog` };
 const KIND_TINTS: Readonly<Record<Episode["kind"], string>> = { turn: `text-link`, message: `text-info`, event: `text-subtle` };
 
-// Renders as seconds under a minute, `m s` above it; raw milliseconds are unreadable.
-const duration = computed(() => {
-    if (episode.durationMs === undefined) {
-        return undefined;
-    }
-    const seconds = Math.round(episode.durationMs / 1000);
-    return seconds < 60
-        ? t(`episodeRow.durationSeconds`, { seconds })
-        : t(`episodeRow.durationMinutes`, { minutes: Math.floor(seconds / 60), seconds: seconds % 60 });
-});
+// The kit's span of time, as every other duration reads; raw milliseconds are unreadable.
+const duration = computed(() => (episode.durationMs === undefined ? undefined : formatElapsed(Math.round(episode.durationMs / 1000))));
 // Without this, a sub-cent cost would round to $0.00 and read as free.
 const cost = computed(() => (episode.costUsd === undefined ? undefined : episode.costUsd < 0.01 ? `<$0.01` : `$${episode.costUsd.toFixed(2)}`));
 

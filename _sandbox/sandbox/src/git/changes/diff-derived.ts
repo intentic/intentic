@@ -1,9 +1,10 @@
-import { basename, isAbsolute, relative, sep } from "node:path";
+import { basename } from "node:path";
 import { type DerivedSide, diffContract, type DiffSourceQuery } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../../composition.js";
 import type { OrpcContext } from "../../app-env.js";
 import { type BlobLocation, createDiffLocator, DiffLocateError, type Which } from "./diff-locate.js";
+import { insideRel } from "@intentic/base/contained";
 
 // Both sides of a document's diff as text, the twin of /diff/raw: the same locator finds each side, and fileq renders
 // what it finds (derived-blob.ts). Sides render concurrently; an absent side is absent, a side nothing reads says why.
@@ -19,8 +20,8 @@ export const createDiffRoutes = (services: Services) => {
         if (!("file" in located)) {
             return undefined;
         }
-        const rel = relative(services.workspace.root, located.file);
-        return rel === "" || rel.startsWith("..") || isAbsolute(rel) ? undefined : rel.split(sep).join("/");
+        const rel = insideRel(services.workspace.root, located.file);
+        return rel === undefined || rel === "" ? undefined : rel;
     };
 
     // One side rendered, or nothing when the diff has no such side. Refusals of the whole query (an unknown repo or

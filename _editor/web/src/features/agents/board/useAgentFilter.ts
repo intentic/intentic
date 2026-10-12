@@ -1,6 +1,7 @@
 import type { MatchSnippet, Speaker } from "@intentic/sandbox-contract";
 import { keepPreviousData, useQuery } from "@tanstack/vue-query";
-import { computed, onScopeDispose, ref, watch } from "vue";
+import { useSettled } from "@intentic/ui/async";
+import { computed, ref } from "vue";
 import { boolPreference } from "@intentic/ui/preference";
 import type { Conversation } from "../../chat/session/conversation";
 import { useChat } from "../../chat/run/useChat";
@@ -110,17 +111,9 @@ export function useAgentFilter() {
     const needle = computed(() => (matchCase.value ? query.value.trim() : query.value.trim().toLowerCase()));
     const active = computed(() => needle.value.length >= MIN_QUERY);
 
-    // The daemon tier's input, trailing the typed one so a keystroke burst becomes one request. Watched off `needle`,
-    // not `query`, so trimming whitespace doesn't spend a round trip.
-    const settled = ref(``);
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    watch(needle, (value) => {
-        clearTimeout(timer);
-        timer = setTimeout(() => {
-            settled.value = value;
-        }, DEBOUNCE_MS);
-    });
-    onScopeDispose(() => clearTimeout(timer));
+    // The daemon tier's input, trailing the typed one so a keystroke burst becomes one request. Read off `needle`, not
+    // `query`, so trimming whitespace doesn't spend a round trip.
+    const settled = useSettled(needle, DEBOUNCE_MS);
 
     const enabled = computed(() => reachable.value && settled.value.length >= MIN_QUERY);
 

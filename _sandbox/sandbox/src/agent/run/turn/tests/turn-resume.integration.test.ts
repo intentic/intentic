@@ -43,6 +43,7 @@ import type { TurnRun } from "../turn-runs.js";
 import { createTurnResumeScheduler, fireHeldResume, type HeldTurn, resumeInterruptedTurns, startConversationTurn } from "../turn-resume.js";
 import { parkedCards } from "../../../../conversations/actor/parked-cards.js";
 import { opt } from "../../../../opt.js";
+import { restartResume } from "../restart-resume-policy.js";
 
 // `takes` answers each abandon attempt (false: the turn is still unwinding); `armed`/`limitArmed` are per-conversation
 // overrides for outage/limit resume, a missing id follows the sandbox default.
@@ -791,7 +792,7 @@ test("a cut turn's re-run is told what the restart cost it, and its words still 
     await services.turnJournal.recordTurn(journalled("rs-cost", { sessionId: "s-partial" }));
     const prompts: string[] = [];
     const cost = "The whole container restarted, so every process in it ended. /tmp was emptied, so anything written there is gone.";
-    await resumeInterruptedTurns(drivenBy(services, fakeWake(prompts)), BOOT_AT, false, false, cost);
+    await resumeInterruptedTurns(drivenBy(services, fakeWake(prompts)), BOOT_AT, { resume: true, asked: false }, cost);
 
     await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toBe(`${RESUME_NOTES.restart} ${cost}\n\nfinish the report`);
@@ -922,7 +923,7 @@ test("a restart the owner asked to pick up after resumes the cut turns with auto
     const services = await journalServices(mkdtempSync(join(tmpdir(), "restart-")), false);
     await services.turnJournal.recordTurn(journalled("rs-asked", { sessionId: "s-partial" }));
     const prompts: string[] = [];
-    await resumeInterruptedTurns(drivenBy(services, fakeWake(prompts)), BOOT_AT, true);
+    await resumeInterruptedTurns(drivenBy(services, fakeWake(prompts)), BOOT_AT, restartResume({ ownerAsked: true, storm: false, autoResumeOnRestart: false }));
     await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toMatch(/restarted/i);
     expect(prompts[0]).toContain("finish the report");
@@ -935,7 +936,7 @@ test("a restart storm's boot resumes nothing, ask or setting, and leaves each cu
     const services = await journalServices(root, true);
     await services.turnJournal.recordTurn(journalled("rs-storm", { sessionId: "s-partial" }));
     const prompts: string[] = [];
-    await resumeInterruptedTurns(drivenBy(services, fakeWake(prompts)), BOOT_AT, true, true);
+    await resumeInterruptedTurns(drivenBy(services, fakeWake(prompts)), BOOT_AT, restartResume({ ownerAsked: true, storm: true, autoResumeOnRestart: true }));
     expect(prompts).toEqual([]);
     expect(await services.turnJournal.list()).toEqual([]);
     expect((await fileTranscriptRecord(root).read("rs-storm")).at(-1)).toMatchObject({ role: "notice", noticeCode: { code: "restartInterrupted" } });

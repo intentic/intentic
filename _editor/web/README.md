@@ -46,7 +46,10 @@ flowchart LR
   imprint `@intentic/ui` took of its content, stored in IndexedDB as one record per sandbox and view
   (`lib/skeletonPersistence.ts`). The active sandbox's imprints are read before the first route mounts, and every
   other sandbox's at the first idle moment, so a switch draws them on its first frame. They survive a new build,
-  which the query cache does not, and a sign-out clears both. One `/events` stream per active sandbox
+  which the query cache does not, and a sign-out clears both, along with everything else the account left in this
+  browser: the keys `lib/browserStorage.ts` declares as the account's (open chat tabs, closed drafts, recent prompts,
+  question and commit drafts, which sandbox was open), the transcript mirror in IndexedDB, and the sandbox scope's
+  module state. Device preferences (theme, language, layout) stay. One `/events` stream per active sandbox
   (`useSandboxLiveness.ts`) invalidates what each frame makes stale (`systemEvents.ts`). Push refreshes let an
   in-flight read finish and queue one catch-up when another frame arrives. Hello reannounces file, runtime, derived-text and repository changes with wildcard batches to recover
   frames missed while disconnected. Terminals, the browser view and the desktop view (the sandbox's own screen, or one

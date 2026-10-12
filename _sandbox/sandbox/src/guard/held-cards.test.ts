@@ -1,13 +1,22 @@
-import { createHeldCards, type HeldCard, type HeldOutcome } from "./held-cards.js";
+import { createHeldCards, type HeldCard, type HeldOutcome, wakeWords } from "./held-cards.js";
 
 // A held card the test settles by hand, recording what the hold did with it.
 const card = (command: string, options: { readonly typed?: boolean } = {}) => {
     const settled = Promise.withResolvers<HeldOutcome>();
     const did: string[] = [];
+    const typed = options.typed === true;
+    // Worded as the device gate words its own wake (hosts/host-command-guard.ts).
     const held: HeldCard = {
-        machine: "omen",
-        command,
-        typed: options.typed === true,
+        told: wakeWords({
+            doing: `${typed ? "typing this" : "running this"} on "omen"`,
+            call: command,
+            notYet: `It has not ${typed ? "been typed" : "run"} yet`,
+            again: typed
+                ? "Type it now with exactly the same call: the same tool and exactly the same text."
+                : "Run it now with exactly the same call: the same tool, the same command and the same arguments.",
+            declinedSo: `it did not ${typed ? "get typed" : "run"}`,
+            refrain: "Do not run it or anything that does the same thing.",
+        }),
         settled: settled.promise,
         cancel: () => {
             did.push("cancel");
@@ -129,4 +138,23 @@ it("holds nothing for a card its call already collected, nor another conversatio
     await cards.hold("c", undefined);
     expect(said).toEqual([]);
     expect(cards.open("other")).toEqual([elsewhere.held]);
+});
+
+it("words a wake with no call to quote as one sentence, addressed to whoever answers", () => {
+    const told = wakeWords({
+        who: "ada@example.com",
+        doing: "paying 0.10 USDC to api.example.com",
+        notYet: "Nothing was paid yet",
+        again: "Make the same request again.",
+        declinedSo: "nothing was paid",
+        refrain: "Do not pay for it another way.",
+    });
+    expect(told({ decision: "approved" })).toBe(
+        "ada@example.com allowed paying 0.10 USDC to api.example.com after your turn ended. Nothing was paid yet.\n\n" +
+            "Make the same request again. The approval is kept for that exact call and used once; anything different is asked about afresh.",
+    );
+    expect(told({ decision: "declined", feedback: "Too dear." })).toBe(
+        "ada@example.com declined paying 0.10 USDC to api.example.com after your turn ended, so nothing was paid.\n\nTheir note: Too dear.\n\nDo not pay for it another way.",
+    );
+    expect(told({ decision: "unanswered" })).toBe(undefined);
 });

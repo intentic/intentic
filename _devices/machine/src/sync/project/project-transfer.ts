@@ -3,7 +3,15 @@ import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import { claimPidFile, livePidRecord, releasePidFile } from "@intentic/local-agent";
-import { type Pairing, pairingKey, pairingRemoteDir, projectDirection, type ProjectDirection } from "../config.js";
+import type {
+    BringBackResult as PrintedBringBack,
+    ProjectApplied,
+    ProjectChange as PrintedChange,
+    ProjectChangesResult,
+    ProjectSkipped,
+    RestoreResult as PrintedRestore,
+} from "@intentic/sandbox-contract";
+import { type Pairing, pairingKey, pairingRemoteDir, projectDirection } from "../config.js";
 import {
     capped,
     type ChangeKind,
@@ -78,46 +86,25 @@ export interface FolderContext {
     readonly session: SessionControl;
 }
 
+// What the verbs print is the contract's (project-bring-back.ts), the shapes the editor parses the desktop app's relay
+// of them with; each with what this agent always fills held to it.
 // One entry of `sync changes` as printed: a held change is a conflict, which bring-back lists but never writes over.
-export interface ListedChange {
-    readonly path: string;
-    readonly kind: ChangeKind;
-    readonly size?: number;
-    readonly conflict?: true;
-}
+export type ListedChange = PrintedChange;
 
-export interface ChangesResult {
-    readonly ok: true;
-    readonly pairing: string;
-    readonly direction: ProjectDirection;
-    readonly changes: readonly ListedChange[];
-    readonly truncated?: true;
-}
+export type ChangesResult = ProjectChangesResult & { readonly pairing: string };
 
-export interface Applied {
-    readonly path: string;
-    readonly kind: ChangeKind;
-}
+export type Applied = ProjectApplied;
 
-export interface BringBackResult {
-    readonly ok: true;
-    // The restore point that undoes it. One that brought nothing back names a point holding nothing, kept only until
-    // the next bring-back and never listed (restore-points.ts retention).
-    readonly point: string;
-    readonly applied: readonly Applied[];
-    readonly skipped: readonly Skipped[];
-}
+// `point` is the restore point that undoes it. One that brought nothing back names a point holding nothing, kept only
+// until the next bring-back and never listed (restore-points.ts retention).
+export type BringBackResult = PrintedBringBack & { readonly skipped: readonly ProjectSkipped[] };
 
 export interface RestorePointsResult {
     readonly ok: true;
     readonly points: readonly PointSummary[];
 }
 
-export interface RestoreResult {
-    readonly ok: true;
-    readonly restored: number;
-    readonly skipped: readonly Skipped[];
-}
+export type RestoreResult = PrintedRestore & { readonly skipped: readonly ProjectSkipped[] };
 
 // Where the session stood when a listing was taken: `current` only when it was running and a flush had just finished a
 // whole cycle, and the file conflicts Mutagen then reported.

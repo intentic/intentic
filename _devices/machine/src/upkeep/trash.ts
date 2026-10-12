@@ -1,11 +1,9 @@
-import { execFile } from "node:child_process";
 import { lstat, mkdir, readdir, readFile, readlink, rename } from "node:fs/promises";
-import { basename, dirname, join, resolve, sep } from "node:path";
-import { promisify } from "node:util";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { isInside as baseIsInside } from "@intentic/base/contained";
+import { execBounded } from "@intentic/base/process";
 
 // The file moves the manifest's entries share: into this agent's trash, and the checks that come before one.
-
-const exec = promisify(execFile);
 
 // The stamp a trash entry's name begins with: an ISO time with `:` and `.` made safe for every file system, as
 // `trash_file` names its folders (device/tools/files.ts).
@@ -52,8 +50,10 @@ export const moveToTrash = async (base: string, path: string, at: number): Promi
     return destination;
 };
 
-// Whether `path` is `dir` or anything under it, as strings: a dangling link still says where it pointed. Pure.
-export const isInside = (path: string, dir: string): boolean => path === dir || path.startsWith(`${dir}${sep}`);
+// Whether `path` is `dir` or anything under it, as strings: a dangling link still says where it pointed. Pure. A
+// relative string (a process's `-e` or a bare program name) is never a place, so it is not read against this agent's
+// own working directory.
+export const isInside = (path: string, dir: string): boolean => isAbsolute(path) && baseIsInside(dir, path);
 
 // Where a symbolic link points, resolved against its own folder; undefined for anything that is not a link.
 export const linkTarget = async (path: string): Promise<string | undefined> => {
@@ -93,7 +93,7 @@ export const processesFrom = async (dir: string, platform: NodeJS.Platform = pro
     }
     if (platform === "darwin") {
         // allow(silent-catch): a `ps` that does not answer cannot vouch for anything
-        const listed = await exec("ps", ["-axo", "pid=,command="], { maxBuffer: 8 * 1024 * 1024 }).catch(() => undefined);
+        const listed = await execBounded("ps", ["-axo", "pid=,command="], { timeoutMs: 30_000, maxOutput: 8 * 1024 * 1024 }).catch(() => undefined);
         if (listed === undefined) {
             return undefined;
         }

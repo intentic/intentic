@@ -166,4 +166,10 @@
 // and `./testing` holds `fakeExtensionApi`, the backend api on a fake daemon that refuses what the daemon would. Additive:
 // a bundle that returns nothing from activation and never reads the new members is unchanged. The recorded surface grows
 // two grains, the backend api's `settings` and `workspace` members, where those blocks arrived and will grow.
-export const extensionApiVersion = "2.26.0";
+// 2.27.0 adds `api.sandbox.readKey(procedure, input?)`: a contract read's cache key, exactly the one the host files its
+// own read of that procedure under. `api.sandbox.key(...)` takes free names, so two views that each picked `personas`
+// shared one entry while one stored the whole answer and the other a bare list, and whichever filled it broke the
+// other; a read keyed by its own name was also refreshed only by the pushes that happened to use that name. A read keyed
+// by its procedure shares the host's entry and every push for it. Additive: `key` is unchanged for what is not one
+// contract read.
+export const extensionApiVersion = "2.27.0";

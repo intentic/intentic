@@ -138,6 +138,7 @@
             "inHistory": "W historii {count}",
             "markReviewed": "Oznacz przejrzane",
             "markReviewed2": "Oznacz {label} jako przejrzane",
+            "markGroupReviewed": "Oznacz całą grupę jako przejrzaną",
             "nextFile": "Następny plik",
             "notLanded": "niescalone",
             "notLanded2": "Niescalone {count}",
@@ -8833,6 +8834,7 @@
             "resolveFailed": "Rozwiązywanie konfiguracji nie powiodło się.",
             "resolveFailedStatus": "Rozwiązywanie konfiguracji nie powiodło się ({status}).",
             "resolving": "Rozwiązujemy Twoją konfigurację…",
+            "secretsUnreadable": "Nie udało się odczytać, które sekrety ma ten sandbox: {reason}",
             "stalled": "Podgląd utknął, ostatnia aktywność: {activity}. Anuluj i spróbuj ponownie albo sprawdź sandbox.",
             "starting": "uruchamianie"
         },
@@ -10079,10 +10081,11 @@
         },
         "grants": {
             "title": "Na co pozwoliłeś",
-            "hint": "Dostęp dany rozmowom poza ich personą lub obszarem, zwolnione im dane uwierzytelniające, instalacje i sekrety, których mogą używać bez pytania, oraz zgoda na wszystko naraz. Odebranie działa od następnej tury rozmowy; dla instalacji, sekretów i zgody na wszystko od najbliższego pytania.",
+            "hint": "Dostęp dany rozmowom poza ich personą lub obszarem, zwolnione im dane uwierzytelniające, instalacje, sekrety i żądania z danymi uwierzytelniającymi, których mogą używać bez pytania, oraz zgoda na wszystko naraz. Odebranie działa od następnej tury rozmowy; dla instalacji, sekretów, żądań i zgody na wszystko od najbliższego pytania.",
             "installs": "Instaluje pakiety bez pytania",
             "secret": "Wysyła {what} poza strażnika hostów",
             "everything": "Zezwala na wszystko bez pytania",
+            "rule": "Żądania takie jak {what}",
             "capability": "{what}, choć jej persona tego nie obejmuje",
             "folder": "Pliki w {what}",
             "shelf": "Narzędzia: {what}",

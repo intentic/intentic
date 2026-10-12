@@ -2,7 +2,9 @@ import { z } from "zod";
 import type { Services } from "../composition.js";
 import { raiseRequest } from "../guard/card-offers.js";
 import type { LiveRun } from "../conversations/actor/conversation-holdings.js";
-import { createOpenAsks } from "../guard/open-asks.js";
+import { type HeldAnswer, createHeldAsks } from "../guard/held-asks.js";
+import { wakeWords } from "../guard/held-cards.js";
+import { opt } from "../opt.js";
 import { conversationUnattended } from "../guard/turn-taint.js";
 import type { HostGateRefusal } from "./host-command-guard.js";
 import type { HostGuardDeps } from "./host-guard-deps.js";
@@ -15,11 +17,9 @@ import type { HostGuardDeps } from "./host-guard-deps.js";
 // not counted: an agent restarting the ground under itself has chosen to. Matched by slug alone, so the same slug on
 // another of the owner's devices is asked about too, which is the safe way to be wrong.
 
-// How long the card waits, as a device command's does: long enough to return to, short of the hub's connection ceiling.
-const DEADLINE_MS = 10 * 60_000;
-
 // How long one call waits here before answering: under the minute an agent's MCP client gives a call before reporting
-// a timeout of its own. The card stays up for DEADLINE_MS, and the same call again collects its answer.
+// a timeout of its own. The card stays up until it is answered, and the same call again collects its answer
+// (guard/held-asks.ts).
 const CALL_BUDGET_MS = 45_000;
 
 // The one MCP message this gate reads: a tools/call naming a device tool, and of its arguments only the fields that say
@@ -79,8 +79,8 @@ export const agentsMidTurn = (agents: Pick<Services["agents"], "list">, turnRun:
         .filter((agent) => agent.id !== except && turnRun(agent.id)?.done === false)
         .map((agent) => agent.title ?? agent.id);
 
-// Cards still open (or answered and not yet collected) by the call that raised them (guard/open-asks.ts).
-const openAsks = createOpenAsks<HostGateRefusal | undefined>();
+// Cards still open (or answered and not yet collected) by the call that raised them (guard/held-asks.ts).
+const heldAsks = createHeldAsks<HostGateRefusal | undefined>();
 
 const stillWaiting = (machine: string, call: RestartCall): string =>
     `Still waiting for the owner: a card asks them to approve ${call.tool} ${call.op} on "${machine}", and nothing has run yet. ` +
@@ -110,10 +110,9 @@ const stoppingSaid = (ask: RestartAsk): string => {
     return `It restarts the sandbox on ${ask.machine}, which stops ${who} working in it now: ${ask.stopping.join(", ")}. ${after}`;
 };
 
-const askOwner = async (guards: HostGuardDeps, run: LiveRun, ask: RestartAsk): Promise<HostGateRefusal | undefined> => {
-    // The turn's end settles the card at once: a yes given after it would restart the sandbox for nobody.
-    const ended = new AbortController();
-    void run.waitUntilFinished().then(() => ended.abort());
+// `ended` settles the card at once: the turn's end (a yes given after it would restart the sandbox for nobody) or a stop
+// while the turn's close held for it.
+const askOwner = async (guards: HostGuardDeps, run: LiveRun, ended: AbortSignal, ask: RestartAsk): Promise<HeldAnswer<HostGateRefusal | undefined>> => {
     const { doing } = ask.call;
     const answered = await raiseRequest(
         guards.cards,
@@ -132,24 +131,23 @@ const askOwner = async (guards: HostGuardDeps, run: LiveRun, ask: RestartAsk): P
             approves: (answer) => answer.decision !== "deny",
             // Other conversations' turns stop with it, so this conversation's own standing yes is not enough.
             alwaysAsks: true,
-            signal: ended.signal,
-            deadlineMs: DEADLINE_MS,
+            signal: ended,
         },
     );
     if (answered.decision === "unanswered") {
-        return refusal(
-            ended.signal.aborted
-                ? `The turn ended before anyone answered, so the sandbox was not restarted. Do not retry it unasked.`
-                : `Nobody answered within ${DEADLINE_MS / 60_000} minutes, so the sandbox was not restarted. Do not retry it unasked: carry on without it.`,
-        );
+        return {
+            answer: refusal(`The turn ended before anyone answered, so the sandbox was not restarted. Do not retry it unasked.`),
+            outcome: { decision: "unanswered" },
+        };
     }
     if (answered.decision === "declined") {
-        return refusal(
-            answered.reply.feedback?.trim() ||
-                `The owner declined: not now. Do not restart the sandbox another way; say what is left undone until it can be.`,
-        );
+        const feedback = answered.reply.feedback?.trim();
+        return {
+            answer: refusal(feedback || `The owner declined: not now. Do not restart the sandbox another way; say what is left undone until it can be.`),
+            outcome: { decision: "declined", ...opt("feedback", feedback === "" ? undefined : feedback) },
+        };
     }
-    return undefined;
+    return { answer: undefined, outcome: { decision: "approved" } };
 };
 
 /**
@@ -164,17 +162,23 @@ export const judgeHostRestart = async (
 ): Promise<HostGateRefusal | undefined> => {
     const at = Date.now();
     const { conversationId, machine, call } = input;
-    const key = conversationId === undefined ? undefined : `${conversationId}\u0000${machine}\u0000${call.tool}\u0000${call.op}`;
-    const open = key === undefined ? undefined : openAsks.get(key);
-    if (key !== undefined && open !== undefined) {
-        return openAsks.await(key, open, budgetMs - (Date.now() - at), refusal(stillWaiting(machine, call)));
+    const asked = (id: string) => ({
+        conversationId: id,
+        key: `${machine}\u0000${call.tool}\u0000${call.op}`,
+        waiting: () => refusal(stillWaiting(machine, call)),
+        budgetMs,
+        arrivedAt: at,
+    });
+    const open = conversationId === undefined ? undefined : heldAsks.reattach(asked(conversationId));
+    if (open !== undefined) {
+        return open;
     }
     const stopping = agentsMidTurn(services.agents, guards.turnRun, conversationId);
     if (stopping.length === 0) {
         return undefined;
     }
     const run = conversationId === undefined ? undefined : guards.turnRun(conversationId);
-    if (key === undefined || conversationId === undefined || run === undefined || run.done || conversationUnattended(conversationId)) {
+    if (conversationId === undefined || run === undefined || run.done || conversationUnattended(conversationId)) {
         return refusal(
             `Held for the owner: this would restart the sandbox you run in, which stops ${stopping.length} other ` +
                 `${stopping.length === 1 ? "agent" : "agents"} working now (${stopping.join(", ")}), and there is nobody in this turn to ask. ` +
@@ -182,8 +186,17 @@ export const judgeHostRestart = async (
         );
     }
     const { autoResumeOnRestart } = await services.sandboxSettings.get();
-    const asking = askOwner(guards, run, { conversationId, machine, call, stopping, resumes: autoResumeOnRestart });
     // An answer nobody came back for is dropped with its turn: a later turn's same call is asked about afresh.
-    openAsks.hold(key, asking, run.waitUntilFinished());
-    return openAsks.await(key, asking, budgetMs - (Date.now() - at), refusal(stillWaiting(machine, call)));
+    return heldAsks.ask(asked(conversationId), {
+        raise: (ended) => askOwner(guards, run, ended, { conversationId, machine, call, stopping, resumes: autoResumeOnRestart }),
+        told: wakeWords({
+            doing: `${call.tool} ${call.op} of this sandbox on "${machine}"`,
+            notYet: "Nothing has run yet",
+            again: "Make the same call now, with the same arguments.",
+            declinedSo: "the sandbox was not restarted",
+            refrain: "Do not restart the sandbox another way; say what is left undone until it can be.",
+        }),
+        held: guards.held,
+        finished: run.waitUntilFinished(),
+    });
 };

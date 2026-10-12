@@ -5,6 +5,8 @@ import { mkdir, readdir, rename, rm, stat, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { promisify } from "node:util";
+import { SingleFlight } from "@intentic/base/async";
+import { BoundedMap } from "@intentic/base/held";
 import { archiveFormat, archivePrefixOf, archiveRootOf, archiveStem, isBrowsableArchive, type WorkspaceChildren } from "@intentic/sandbox-contract";
 import { tidyUnpacked, unpack } from "./workspace-extract.js";
 import { resolveWithin } from "../workspace-files-paths.js";
@@ -63,7 +65,7 @@ const oneTreeBytes = async (dir: string): Promise<number> => (await treeBytes([d
 // Bounded: a daemon that has seen thousands of archives must not keep a row for each one forever. Insertion order is
 // the eviction order, so the oldest identity goes first.
 const MAX_REMEMBERED_HASHES = 500;
-const hashes = new Map<string, string>();
+const hashes = new BoundedMap<string, string>(MAX_REMEMBERED_HASHES);
 
 const contentHash = async (absArchive: string, size: number, mtimeMs: number): Promise<string> => {
     const identity = `${absArchive}:${size}:${mtimeMs}`;
@@ -76,10 +78,6 @@ const contentHash = async (absArchive: string, size: number, mtimeMs: number): P
         digest.update(chunk as Buffer);
     }
     const hash = digest.digest("hex");
-    const oldest = hashes.size >= MAX_REMEMBERED_HASHES ? hashes.keys().next().value : undefined;
-    if (oldest !== undefined) {
-        hashes.delete(oldest);
-    }
     hashes.set(identity, hash);
     return hash;
 };
@@ -150,7 +148,7 @@ const unpackInto = async (absArchive: string, target: string, maxBytes: number):
 
 // One unpack per hash, however many readers ask at once: the second caller awaits the first's work instead of racing
 // it into the same directory.
-const unpacking = new Map<string, Promise<string>>();
+const unpacking = new SingleFlight<string, string>();
 
 /**
  * The directory holding this archive's contents, unpacking it on first ask. Throws ArchiveTooLargeError for an
@@ -176,18 +174,12 @@ export const unpackedArchiveDir = async (absArchive: string, options?: { maxByte
         await utimes(target, new Date(), new Date()).catch(() => undefined);
         return target;
     }
-    const started = unpacking.get(hash);
-    if (started !== undefined) {
-        return started;
-    }
-    const run = (async (): Promise<string> => {
+    return unpacking.run(hash, async () => {
         await mkdir(CACHE_ROOT, { recursive: true });
         await evict();
         await unpackInto(absArchive, target, maxBytes);
         return target;
-    })().finally(() => unpacking.delete(hash));
-    unpacking.set(hash, run);
-    return run;
+    });
 };
 
 /** Whether an absolute path is an archive file that can be opened as a folder, rather than a folder named like one. */
@@ -249,6 +241,6 @@ export const archiveChildrenOf = async (
 /** Forgets every unpacked tree. For tests, which must not see another test's cache. */
 export const resetArchiveCache = async (): Promise<void> => {
     hashes.clear();
-    unpacking.clear();
+    unpacking.dispose();
     await rm(CACHE_ROOT, { recursive: true, force: true });
 };

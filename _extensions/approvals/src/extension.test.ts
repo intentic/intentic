@@ -57,7 +57,7 @@ const fakeHost = (approvals: ApprovalsList, held: AutomationApproval[], hooks?: 
     const views: ViewRegistration[] = [];
     const api = {
         sandbox: {
-            key: (...parts: readonly string[]) => [`sandbox`, `box`, ...parts],
+            readKey: (procedure: string, input?: unknown) => [procedure, ...(input === undefined ? [] : [input]), `box`],
             reachable: () => true,
             role: () => (hooks === undefined ? `viewer` : `owner`),
             rpc: {
@@ -170,12 +170,12 @@ describe(`what the queue owes`, () => {
         expect(waitingOf([wake(`a`), wake(`b`, { autoRunAt: 2 }), wake(`c`)]).map((entry) => entry.id)).toEqual([`a`, `c`]);
     });
 
-    it(`reads the held wakes from one sandbox-scoped entry, the one the view reads`, async () => {
+    it(`reads the held wakes from the procedure's own entry, the one the view reads`, async () => {
         const { api, procedures } = fakeHost({ approvals: [], invalid: [] }, []);
         bindHost(api);
         const query = heldWakesQuery();
-        expect(query.queryKey).toEqual([`sandbox`, `box`, `automation-approvals`]);
-        await expect(query.queryFn()).resolves.toEqual([]);
+        expect(query.queryKey).toEqual([`automations.pendingList`, `box`]);
+        await expect(query.queryFn()).resolves.toEqual({ approvals: [] });
         expect(procedures).toEqual([`automations.pendingList`]);
     });
 });
@@ -202,9 +202,9 @@ describe(`the asks in Needs you`, () => {
         await waitFor(() => expect(registered?.asks?.().map((ask) => ask.id)).toEqual([`a`, `hooks:h`]));
         // The queries the page reads, so it opens on data, not a spinner.
         expect(registered?.warm?.().map((query) => query.queryKey)).toEqual([
-            [`sandbox`, `box`, `approvals`],
-            [`sandbox`, `box`, `automation-approvals`],
-            [`sandbox`, `box`, `approvals`, `hooks`],
+            [`approvals.list`, `box`],
+            [`automations.pendingList`, `box`],
+            [`approvals.hookRequests`, `box`],
         ]);
     });
 
@@ -213,8 +213,8 @@ describe(`the asks in Needs you`, () => {
         await waitFor(() => expect(approvalsAttention.state.value?.list?.approvals.map((item) => item.id)).toEqual([`a`]));
         expect(views[0]?.asks?.()).toEqual([]);
         expect(views[0]?.warm?.().map((query) => query.queryKey)).toEqual([
-            [`sandbox`, `box`, `approvals`],
-            [`sandbox`, `box`, `automation-approvals`],
+            [`approvals.list`, `box`],
+            [`automations.pendingList`, `box`],
         ]);
     });
 

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ChildProcessByStdio } from "node:child_process";
 import type { Readable, Writable } from "node:stream";
+import { pollFor, within } from "@intentic/base/async";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { plainText } from "@intentic/base/plain-text";
 import { parse as parseToml } from "smol-toml";
@@ -217,32 +218,41 @@ export const startDevinLogin = async (binary: string, mode: DevinLoginMode): Pro
         const opened = ((await readFile(openedFile(dir), "utf8").catch(undefinedIfMissing)) ?? "").trim();
         return opened !== "" ? opened : signInUrlOf(attempt.output);
     };
-    const deadline = Date.now() + URL_WAIT_MS;
-    while (Date.now() < deadline) {
-        const url = await pageOf();
-        if (url !== undefined) {
-            if (mode === "manual") {
-                return { url, handshake, expiresAt };
-            }
-            const landing = landingOf(url);
-            if (landing === undefined) {
+    // Read before the page each probe, so a CLI found gone had already printed all it ever will.
+    let ended = false;
+    void exited.then(() => {
+        ended = true;
+    });
+    const offered = await pollFor(
+        async () => {
+            const over = ended;
+            const url = await pageOf();
+            if (url === undefined && over) {
                 await forget(handshake);
-                throw new Error("Devin's CLI offered a sign-in page that does not come back to it.");
+                const said = lastWords(attempt.output);
+                throw new Error(
+                    said === "" ? "Devin's CLI ended before it offered a sign-in page." : `Devin's CLI ended before it offered a sign-in page: ${said}`,
+                );
             }
-            attempt.landing = landing;
-            return { url, handshake, expiresAt, landing };
-        }
-        const ended = await Promise.race([exited.then(() => true), new Promise<false>((resolve) => setTimeout(() => resolve(false), 100))]);
-        if (ended && (await pageOf()) === undefined) {
-            await forget(handshake);
-            const said = lastWords(attempt.output);
-            throw new Error(
-                said === "" ? "Devin's CLI ended before it offered a sign-in page." : `Devin's CLI ended before it offered a sign-in page: ${said}`,
-            );
-        }
+            return url;
+        },
+        { intervalMs: 100, until: Date.now() + URL_WAIT_MS },
+    );
+    if (offered.kind !== "found") {
+        await forget(handshake);
+        throw new Error("Devin's CLI did not offer a sign-in page in time.");
     }
-    await forget(handshake);
-    throw new Error("Devin's CLI did not offer a sign-in page in time.");
+    const url = offered.value;
+    if (mode === "manual") {
+        return { url, handshake, expiresAt };
+    }
+    const landing = landingOf(url);
+    if (landing === undefined) {
+        await forget(handshake);
+        throw new Error("Devin's CLI offered a sign-in page that does not come back to it.");
+    }
+    attempt.landing = landing;
+    return { url, handshake, expiresAt, landing };
 };
 
 export interface RedeemedDevinLogin {
@@ -298,7 +308,7 @@ export const finishDevinLogin = async (handshake: string, grant: string): Promis
             const response = await fetch(replay, { signal: AbortSignal.timeout(REDEEM_WAIT_MS) });
             await response.body?.cancel();
         }
-        const exit = await Promise.race([attempt.exited, new Promise<"slow">((resolve) => setTimeout(() => resolve("slow"), REDEEM_WAIT_MS))]);
+        const exit = await within(attempt.exited, REDEEM_WAIT_MS, "slow" as const);
         if (exit === "slow") {
             throw new Error("Devin's CLI did not finish signing in in time. Start the sign-in again.");
         }

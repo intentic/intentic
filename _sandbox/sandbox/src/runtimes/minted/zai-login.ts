@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
-import { sleep } from "@intentic/base/async";
+import { retry, sleep } from "@intentic/base/async";
 import type { MintedCredential, MintedLoginAttempt, MintedLoginContext, MintedLoginDriver } from "./minted-login.js";
 
 // Z.ai's sign-in: the ZCode flow on either estate, then provisioning (mintKey) that turns its token, not an inference
@@ -53,6 +53,8 @@ const REDIRECT_WINDOW_MS = 10 * 60_000;
 const REQUEST_TIMEOUT_MS = 30_000;
 // The mainland exchange can answer with a transient `2007 http error` while it validates the code; worth retrying.
 const EXCHANGE_ATTEMPTS = 3;
+// A breath between tries, so a transient upstream error has a moment to clear rather than being asked again at once.
+const EXCHANGE_RETRY_MS = 500;
 
 // The name the provisioned key carries in the vendor's own dashboard; the official client reuses this exact name
 // instead of littering the account with new ones.
@@ -289,31 +291,29 @@ const exchangeBigModelCode = async (input: {
     readonly code: string;
     readonly state: string;
 }): Promise<ZaiIdentity> => {
-    let lastError: unknown;
-    for (let attempt = 1; attempt <= EXCHANGE_ATTEMPTS; attempt += 1) {
-        try {
-            const data = await envelope({
+    // Only the call is retried: an answer that parses but carries no token is the vendor's verdict, and asking again
+    // gets the same one.
+    const data = await retry(
+        () =>
+            envelope({
                 fetchImpl: input.fetchImpl,
                 url: `${input.hosts.oauthBase}/oauth/token`,
                 method: "POST",
                 body: { provider: "bigmodel", code: input.code, redirect_uri: LOOPBACK_REDIRECT, state: input.state },
                 step: "redeeming the sign-in",
-            });
-            const parsed = ExchangeSchema.safeParse(data);
-            if (!parsed.success) {
-                throw new Error("Z.ai answered the sign-in with no token.");
-            }
-            const accessToken = parsed.data.bigmodel.access_token !== "" ? parsed.data.bigmodel.access_token : parsed.data.zai.access_token;
-            const token = parsed.data.token !== "" ? parsed.data.token : accessToken;
-            if (token === "" && accessToken === "") {
-                throw new Error("Z.ai answered the sign-in with no token.");
-            }
-            return { token, accessToken, email: parsed.data.user.email };
-        } catch (error) {
-            lastError = error;
-        }
+            }),
+        { attempts: EXCHANGE_ATTEMPTS, delayMs: () => EXCHANGE_RETRY_MS },
+    );
+    const parsed = ExchangeSchema.safeParse(data);
+    if (!parsed.success) {
+        throw new Error("Z.ai answered the sign-in with no token.");
     }
-    throw lastError instanceof Error ? lastError : new Error("Z.ai would not redeem that sign-in.");
+    const accessToken = parsed.data.bigmodel.access_token !== "" ? parsed.data.bigmodel.access_token : parsed.data.zai.access_token;
+    const token = parsed.data.token !== "" ? parsed.data.token : accessToken;
+    if (token === "" && accessToken === "") {
+        throw new Error("Z.ai answered the sign-in with no token.");
+    }
+    return { token, accessToken, email: parsed.data.user.email };
 };
 
 // Four calls, each named in its own failure. The final credential is `<apiKey>.<secretKey>` internationally (what its

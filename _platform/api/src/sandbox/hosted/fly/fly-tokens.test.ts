@@ -4,11 +4,11 @@ import { mintAppDeployToken, organizationIdOf, revokeDeployToken } from "./fly-t
 
 // The one GraphQL endpoint, stubbed: every call records what it sent and answers what the case says.
 const stubGraphql = (answer: (body: { query: string; variables: Record<string, unknown> }) => unknown, status = 200) => {
-    const calls: { query: string; variables: Record<string, unknown>; headers: Record<string, string> }[] = [];
+    const calls: { query: string; variables: Record<string, unknown>; headers: Headers }[] = [];
     stubGlobal(`fetch`, (url: URL | string, init?: RequestInit): Promise<Response> => {
         expect(String(url)).toBe(`https://api.fly.io/graphql`);
         const body = JSON.parse(String(init?.body)) as { query: string; variables: Record<string, unknown> };
-        calls.push({ ...body, headers: init?.headers as Record<string, string> });
+        calls.push({ ...body, headers: new Headers(init?.headers) });
         return Promise.resolve(new Response(JSON.stringify(answer(body)), { status }));
     });
     return calls;
@@ -23,7 +23,7 @@ describe(`fly deploy tokens`, () => {
         const calls = stubGraphql(() => ({ data: { organization: { id: `org-node` } } }));
         expect(await organizationIdOf(`fly`, `intentic`)).toBe(`org-node`);
         expect(calls[0]?.variables).toEqual({ slug: `intentic` });
-        expect(calls[0]?.headers[`authorization`]).toBe(`Bearer fly`);
+        expect(calls[0]?.headers.get(`authorization`)).toBe(`Bearer fly`);
     });
 
     it(`names a missing organization as the config's fault`, async () => {

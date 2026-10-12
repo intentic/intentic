@@ -1,4 +1,4 @@
-import { sleep } from "@intentic/base/async";
+import { within } from "@intentic/base/async";
 import { TrialAllowanceSchema } from "@intentic/api-contract/ingress";
 import type { TrialHealth } from "@intentic/sandbox-contract";
 import type { Config } from "../env.config.js";
@@ -79,7 +79,7 @@ export const createTrialService = (config: Config, get = getStatus): TrialServic
             inFlight ??= probe().finally(() => {
                 inFlight = undefined;
             });
-            await (options.withinMs === undefined ? inFlight : Promise.race([inFlight, sleep(options.withinMs, { unref: true })]));
+            await (options.withinMs === undefined ? inFlight : within(inFlight, options.withinMs, undefined, { unref: true }));
         },
     };
 };

@@ -3,18 +3,17 @@ import { dirname } from "node:path";
 import { Readable } from "node:stream";
 import { extract, type Header } from "tar-stream";
 import { drain, extractAll, memberPath } from "../../../store/tar-extract.js";
-import { isControlPlanePath, resolveWithin } from "../workspace-files-paths.js";
+import { resolveWorkspacePath } from "../workspace-files-paths.js";
 import { MAX_UPLOAD_BYTES, writeStreamCounted } from "../workspace-files-upload.js";
 import { setWorkspaceMtime } from "../workspace-files.js";
 import { nodeStream } from "@intentic/base/web-stream";
 
-// A tar entry whose path escapes /work aborts the whole extraction with 400.
+// A tar entry whose path escapes /work, as spelled or through a symlinked folder, aborts the whole extraction with 400.
 export class PathEscapeError extends Error {
     constructor() {
         super("invalid path");
     }
 }
-
 
 // True when path exists and is a directory, false otherwise.
 const isDirectory = async (path: string): Promise<boolean> => {
@@ -37,15 +36,18 @@ export const extractTarToWorkspace = async (root: string, body: ReadableStream<U
             await drain(stream);
             return;
         }
-        const target = relPath === undefined ? undefined : resolveWithin(root, relPath);
-        if (target === undefined) {
+        // Asked on disk as well as lexically: an entry under a folder already in /work that links elsewhere would
+        // otherwise be written wherever that link points.
+        const resolved = relPath === undefined ? ({ kind: "outside" } as const) : await resolveWorkspacePath(root, relPath);
+        if (resolved.kind === "outside") {
             throw new PathEscapeError();
         }
         // Skips writes into the daemon's private state instead of aborting the whole extraction.
-        if (isControlPlanePath(root, target)) {
+        if (resolved.kind === "controlPlane") {
             await drain(stream);
             return;
         }
+        const target = resolved.path;
         if (header.type !== "file") {
             if (header.type === "directory") {
                 await mkdir(target, { recursive: true });

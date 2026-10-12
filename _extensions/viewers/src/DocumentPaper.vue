@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { Icon } from "@intentic/extension-ui";
 import { ref } from "vue";
 import { t } from "./i18n.js";
+import ViewerStatus from "./load/ViewerStatus.vue";
 
 /* The paper a document viewer draws on: the scroll surface, its states, and one set of document typography.
    Its pages are built imperatively by whichever viewer owns it, which is why every rule below is `:deep`. */
@@ -17,16 +17,11 @@ defineExpose({ host });
 <template>
     <div class="relative h-full min-h-0">
         <div ref="host" class="odf-doc h-full overflow-auto bg-muted/20"></div>
-        <div v-if="loading" class="absolute inset-0 flex items-center justify-center bg-canvas text-muted">
-            <Icon name="spinner" class="text-xl" spin />
-        </div>
-        <div v-else-if="error !== undefined" class="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-canvas px-6 text-center">
-            <Icon name="exclamation-triangle" class="text-3xl text-danger" />
-            <p class="text-sm text-danger">{{ error }}</p>
-        </div>
-        <div v-else-if="empty === true" class="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-muted">
-            {{ t(`documentPaper.documentNoTextIn`) }}
-        </div>
+        <ViewerStatus overlay :loading="loading" :error="error">
+            <div v-if="empty === true" class="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-muted">
+                {{ t(`documentPaper.documentNoTextIn`) }}
+            </div>
+        </ViewerStatus>
     </div>
 </template>
 

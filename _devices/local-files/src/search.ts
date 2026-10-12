@@ -1,10 +1,11 @@
 import { open } from "node:fs/promises";
 import { sep } from "node:path";
 import { mapPool } from "@intentic/base/async";
+import { escapeRegExp } from "@intentic/base/escape";
 import { rankByFuzzy } from "@intentic/base/fuzzy";
 import { refuse } from "@intentic/contract-serve";
 import {
-    includeGlobs,
+    includeMatcher,
     referenceTails,
     type WorkspaceSearchGroup,
     type WorkspaceSearchHit,
@@ -94,9 +95,6 @@ export const nestsQuantifiers = (source: string): boolean => {
     return false;
 };
 
-// Only the characters that mean something in a pattern, so an escaped query stays valid with the `u` flag.
-const escaped = (text: string): string => text.replaceAll(/[\\^$.*+?()[\]{}|/]/g, `\\$&`);
-
 // A whole word: no letter, digit or underscore on either side, in any script where the pattern allows saying so.
 const bounded = (body: string, unicode: boolean): string =>
     unicode ? `(?<![\\p{L}\\p{N}_])(?:${body})(?![\\p{L}\\p{N}_])` : `(?<![A-Za-z0-9_])(?:${body})(?![A-Za-z0-9_])`;
@@ -127,17 +125,8 @@ export const matcherOf = (search: SearchQuery): Matcher => {
     if (regex !== undefined) {
         return nestsQuantifiers(search.query) ? refuse(TOO_SLOW, 400) : { regex };
     }
-    const plain = compiled(escaped(search.query), word, flags) ?? new RegExp(escaped(search.query), flags);
+    const plain = compiled(escapeRegExp(search.query), word, flags) ?? new RegExp(escapeRegExp(search.query), flags);
     return search.literal === true ? { regex: plain } : { regex: plain, note: NOT_A_PATTERN };
-};
-
-// Whether a root-relative path passes the files-to-include field, in the editor's grammar (search-globs.ts).
-const includer = (include: string | undefined): ((path: string) => boolean) => {
-    const { globs, notGlobs } = includeGlobs(include);
-    const matchers = (patterns: readonly string[]): Bun.Glob[] => patterns.map((pattern) => new Bun.Glob(pattern.replace(/^\.\//, ``)));
-    const admit = matchers(globs);
-    const exclude = matchers(notGlobs);
-    return (path) => (admit.length === 0 || admit.some((glob) => glob.match(path))) && !exclude.some((glob) => glob.match(path));
 };
 
 // A file's text, or undefined for one that is not text a person searches: too large, binary, or unreadable.
@@ -286,7 +275,7 @@ export const searchFolder = async (root: string, search: SearchQuery, bounds = S
     const swept =
         dir === undefined
             ? { files: [], cut: false }
-            : await sweep(root, { dir, includeIgnored: search.includeIgnored === true, maxFiles: bounds.scanned, over, wanted: includer(search.include) });
+            : await sweep(root, { dir, includeIgnored: search.includeIgnored === true, maxFiles: bounds.scanned, over, wanted: includeMatcher(search.include) });
     const found =
         matcher === undefined ? { groups: filesMatching(swept.files, search.query), cut: false } : await findIn(swept.files, matcher.regex, bounds.hits, over);
     const cut = swept.cut || found.cut;

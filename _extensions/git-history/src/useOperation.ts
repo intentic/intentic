@@ -14,13 +14,13 @@ export function useOperation(repo: Ref<string>) {
     const api = host();
     const queryClient = useQueryClient();
 
-    const key = computed(() => api.sandbox.key(`git-history`, `operation`, repo.value));
+    const key = computed(() => api.sandbox.readKey(`git.operation`, { repo: repo.value }));
     const query = useQuery({
         queryKey: key,
         queryFn: () => api.sandbox.rpc.git.operation({ repo: repo.value }),
         enabled: computed(() => api.sandbox.reachable()),
     });
-    useRefRefresh(repo, [`operation`]);
+    useRefRefresh(repo, [key]);
 
     const { busy, error: actionError, run } = useAsyncAction();
 
@@ -37,7 +37,7 @@ export function useOperation(repo: Ref<string>) {
             await Promise.all([
                 queryClient.invalidateQueries({ queryKey: key.value }),
                 queryClient.invalidateQueries({ queryKey: api.sandbox.key(`git-history`, `log`, repo.value) }),
-                queryClient.invalidateQueries({ queryKey: api.sandbox.key(`git-history`, `branches`, repo.value) }),
+                queryClient.invalidateQueries({ queryKey: api.sandbox.readKey(`git.branches`, { repo: repo.value }) }),
             ]);
         }, t(`useOperation.couldntAbort`));
 

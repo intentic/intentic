@@ -1,5 +1,6 @@
 import type { AgentDomainPolicy } from "@intentic/sandbox-contract";
-import { isAbsolute, normalize, relative, sep } from "node:path";
+import { isAbsolute, normalize } from "node:path";
+import { isInside } from "@intentic/base/contained";
 import type { TurnPlacement } from "../conversations/worktrees/isolation.js";
 import { requireAgentDomainRollout } from "./domain/agent-domain-rollout.js";
 import { agentEntrant, namespaceTargetOf, nsenterArgv, type NamespaceEntryReference, type NamespaceEntrant } from "./namespace-entry.js";
@@ -67,8 +68,7 @@ const cleanCwd = (cwd: string): string => {
 };
 const withinView = (root: string, cwd: string): string => {
     const path = cleanCwd(cwd);
-    const rel = relative(root, path);
-    if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
+    if (!isInside(root, path)) {
         return refused("Agent execution cwd does not belong to the admitted view.");
     }
     return path;

@@ -104,3 +104,35 @@ test("reading the sandbox's own config is still allowed", async () => {
     const hooks = personaScopeHooks(scopeFor({ powers: PersonaPowersSchema.parse({ sandbox: false }) })!);
     expect(await attempt(hooks, "Read", { file_path: "/work/.intentic/config/settings.json" })).toBeUndefined();
 });
+
+// The hashline tools stand in for Edit/Write when the hashlineEdits setting is on; a fence that did not see them
+// would let a fenced persona write anywhere.
+test("the hashline tools are fenced like the native ones they replace", async () => {
+    const hooks = personaScopeHooks(scopeFor({ workspace: { folders: ["apps/web"] } })!);
+    expect(await attempt(hooks, "mcp__hashline__write", { path: "/work/apps/api/secret.ts", content: "x" })).toContain("apps/web");
+    expect(await attempt(hooks, "mcp__hashline__edit", { path: "apps/api/secret.ts", anchor: "a", ops: [] })).toContain("apps/web");
+    expect(await attempt(hooks, "mcp__hashline__read", { path: "/work/apps/api/secret.ts" })).toContain("apps/web");
+    expect(await attempt(hooks, "mcp__hashline__write", { path: "/work/apps/web/ok.ts", content: "x" })).toBeUndefined();
+});
+
+test("a persona that may not change the sandbox cannot reach its config through the hashline tools either", async () => {
+    const hooks = personaScopeHooks(scopeFor({ powers: PersonaPowersSchema.parse({ sandbox: false }) })!);
+    expect(await attempt(hooks, "mcp__hashline__write", { path: "/work/public/leak.txt", content: "x" })).toContain(
+        "sandbox's own configuration",
+    );
+    expect(await attempt(hooks, "mcp__hashline__read", { path: "/work/.intentic/config/settings.json" })).toBeUndefined();
+});
+
+// `..stash` is a folder inside the workspace that only looks like a climb; a string-prefix check read it as outside
+// and waved it through before the fence was consulted.
+test("a folder whose name starts with two dots is inside the workspace and judged by the fence", async () => {
+    const hooks = personaScopeHooks(scopeFor({}, ["app"])!);
+    expect(await attempt(hooks, "Write", { file_path: "/work/..stash/a.md" })).toContain("..stash/a.md");
+    expect(await attempt(hooks, "Write", { file_path: "/work/app/../..stash/a.md" })).toEqual(expect.any(String));
+    expect(await attempt(hooks, "Write", { file_path: "/work/app/a.md" })).toBeUndefined();
+});
+
+test("a name inside the outbox that starts with two dots is still inside the outbox", async () => {
+    const hooks = personaScopeHooks(scopeFor({ powers: PersonaPowersSchema.parse({ sandbox: false }) })!);
+    expect(await attempt(hooks, "Write", { file_path: "/work/public/..x" })).toContain("sandbox's own configuration");
+});

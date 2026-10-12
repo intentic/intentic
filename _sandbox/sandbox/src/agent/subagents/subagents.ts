@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
-import { createInterface } from "node:readline";
 import { basename, dirname, join } from "node:path";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import { isMissing } from "@intentic/base/errors";
+import { jsonLines } from "@intentic/base/json-lines";
 import type {
     AgentEvent,
     AgentProvider,
@@ -572,11 +572,11 @@ interface SubagentServed {
 const SERVED_SCAN_LINES = 200;
 
 export const servedOf = async (transcriptPath: string): Promise<SubagentServed | undefined> => {
-    const stream = createReadStream(transcriptPath, { encoding: "utf8" });
-    const lines = createInterface({ input: stream, crlfDelay: Infinity });
+    // Split at LF only: a reply's text may hold a raw U+2028, where readline would cut the record in two.
+    const stream = createReadStream(transcriptPath);
     let read = 0;
     try {
-        for await (const line of lines) {
+        for await (const line of jsonLines(stream)) {
             read += 1;
             if (read > SERVED_SCAN_LINES) {
                 return undefined;
@@ -599,7 +599,6 @@ export const servedOf = async (transcriptPath: string): Promise<SubagentServed |
         }
         throw error;
     } finally {
-        lines.close();
         stream.destroy();
     }
 };

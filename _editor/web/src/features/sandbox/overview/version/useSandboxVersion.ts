@@ -1,3 +1,4 @@
+import { sandboxSlugOf } from "@intentic/sandbox-run/slug";
 import { computed, type Ref } from "vue";
 import { rpcPrefix } from "../../../../lib/queryKeys";
 import { queryClient } from "../../../../lib/queryPersistence";
@@ -53,8 +54,9 @@ export function useSandboxVersion(poll?: Ref<number | false>) {
         return health?.state === `unavailable` ? (health.detail ?? t(`sandbox.useSandboxVersion.runtimeCantServeTurn`)) : undefined;
     };
 
-    // Container name a recreate would target, from /environment; HostRecreate turns it into a button or command.
-    const slug = computed(() => envState.value?.container?.replace(/^intentic-sandbox-/, ``));
+    // Container name a recreate would target, from /environment; HostRecreate turns it into a button or command. A name
+    // that is not a sandbox container's gives no slug, rather than the whole name aimed at as if it were one.
+    const slug = computed(() => sandboxSlugOf(envState.value?.container));
 
     // The owner's "not this one" (`null` offers the newest release again). Read back through /info, which the daemon
     // answers from the same record, so the card redraws from the daemon's word rather than a local guess.

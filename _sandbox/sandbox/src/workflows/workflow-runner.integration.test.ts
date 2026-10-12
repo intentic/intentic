@@ -12,6 +12,7 @@ import { abandonRun, openRun, resumeWorkflowExecution, runWorkflow, stopWorkflow
 import type { TurnStarter } from "../seams/turn-starter.js";
 import { drivenBy, memoryFleet } from "../testing.js";
 import { createDomainEvents } from "../seams/domain-events.js";
+import { restartResume } from "../agent/run/turn/restart-resume-policy.js";
 
 // Scheduler's graph behavior end to end: the seam between steps, not a step's own loop (tested elsewhere). The tree has
 // no git, so `treeDigest` never changes and the stall detector is live: every step needs its own reason to stop.
@@ -53,6 +54,21 @@ const workflow = (steps: readonly WorkflowStep[], over: Partial<Workflow> = {}):
 });
 
 const tempRoot = (): string => mkdtempSync(join(tmpdir(), "workflows-"));
+
+// A step's loop as the scheduler opens it, for a test that stages one the daemon died under.
+const loopOf = (conversationId: string) => ({
+    conversationId,
+    goal: "cut is done",
+    prompt: "do cut",
+    context: "fresh" as const,
+    output: { kind: "claim" as const },
+    checks: [],
+    maxIterations: 20,
+    stallLimit: 3,
+    isolated: true,
+    worktreeBase: [...REPOS],
+    autoLand: false,
+});
 const REPOS = [{ repo: "root", base: "1111111111111111111111111111111111111111" }] as const;
 
 // Writes the verdict a step's loop needs to converge on iteration 1; `claims` decides per step id whether it's done.
@@ -415,7 +431,7 @@ test("restart recovery gives a workflow-owned loop only to the workflow schedule
         1,
     );
 
-    await resumeWorkflowExecution(drivenBy(services, claiming(root, prompts)));
+    await resumeWorkflowExecution(drivenBy(services, claiming(root, prompts)), { resume: true, asked: false });
     await waitFor(async () => expect((await services.workflowRuns.get(opened.runId))?.state).toBe("done"), SETTLES);
 
     expect(prompts).toHaveLength(1);
@@ -463,4 +479,29 @@ test("a run nothing is driving can still be stopped, steps and all", async () =>
     expect(settled?.state).toBe("stopped");
     expect(settled?.endedAt).toBe(2);
     expect(settled?.steps.map((entry) => entry.state)).toEqual(["stopped", "stopped"]);
+});
+
+// A boot that resumes nothing (autoResumeOnRestart off, or a restart storm) used to restart every stranded workflow run
+// anyway; now it settles the run and its loops stopped, saying why, and spends no resume against them.
+test("a boot that resumes nothing settles a stranded workflow run and its loop stopped, and runs no step", async () => {
+    const root = tempRoot();
+    const services = fakeServices(root);
+    const prompts: string[] = [];
+    const opened = openRun(workflow([step("cut"), step("after", { needs: ["cut"] })]), REPOS, 1);
+    const conversationId = opened.steps[0]!.conversationId;
+    await services.workflowRuns.start({
+        ...opened,
+        steps: opened.steps.map((entry, index) => (index === 0 ? { ...entry, state: "running" as const, startedAt: 1 } : entry)),
+    });
+    await services.loops.start({ ...loopOf(conversationId) }, 1);
+
+    await resumeWorkflowExecution(drivenBy(services, claiming(root, prompts)), restartResume({ ownerAsked: true, storm: true, autoResumeOnRestart: true }));
+
+    const run = await services.workflowRuns.get(opened.runId);
+    expect(run?.state).toBe("stopped");
+    expect(run?.detail).toContain("restart storm");
+    expect(run?.resumed).toBe(0);
+    expect(run?.steps.map((entry) => entry.state)).toEqual(["stopped", "stopped"]);
+    expect((await services.loops.get(conversationId))?.state).toBe("stopped");
+    expect(prompts).toEqual([]);
 });

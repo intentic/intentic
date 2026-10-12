@@ -1,7 +1,7 @@
 import type { ChildProcess } from "node:child_process";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { connect } from "node:net";
-import { pollUntil } from "@intentic/base/async";
+import { pollUntil, SingleFlight } from "@intentic/base/async";
 import { spawnAs } from "../../workload/workload-class.js";
 
 // A virtual X display per browser, not shared, since the picture now comes from the display itself (videocast.ts,
@@ -46,7 +46,7 @@ interface Server {
 
 const running = new Map<string, Server>();
 // One spawn per key even with concurrent callers; dropped once settled, so a later death starts a fresh spawn.
-const starting = new Map<string, Promise<Display>>();
+const starting = new SingleFlight<string, Display>();
 
 // Allocation is serialized across keys: probe-then-spawn is two steps; racing keys could land on one number.
 let allocating: Promise<unknown> = Promise.resolve();
@@ -198,13 +198,12 @@ export const ensureDisplay = async (key: string, size: DisplaySize = BROWSER_SIZ
         return existing.display;
     }
     running.delete(key);
-    const pending = starting.get(key);
+    const pending = starting.joined(key);
     if (pending !== undefined) {
         return pending;
     }
     // Queued behind every other allocation: probe-and-claim is two steps; interleaving can collide on one number.
-    const attempt = allocating.then(() => start(key, size)).finally(() => starting.delete(key));
-    starting.set(key, attempt);
+    const attempt = starting.run(key, () => allocating.then(() => start(key, size)));
     // Chain must not break on failure: a display that won't start is this caller's problem, not the next one's.
     allocating = attempt.catch(() => undefined);
     return attempt;

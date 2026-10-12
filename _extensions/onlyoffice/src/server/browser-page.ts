@@ -1,5 +1,6 @@
 import { CONFIG_ELEMENT_ID, type EditorPageConfig } from "../protocol.js";
-import { escapeHtml, scriptJson } from "./host-page.js";
+import { escapeHtml } from "@intentic/base/escape";
+import { scriptJson } from "./host-page.js";
 
 // The page the app frames for a browser-engine session: the bundle's api.js, this extension's editor page script, and
 // the config the script reads. Served on the listener's origin, like the document server's page, so none of the

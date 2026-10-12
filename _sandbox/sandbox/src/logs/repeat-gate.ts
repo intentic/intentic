@@ -7,6 +7,8 @@
 // keeps a long outage visible as one line per window. A line that passes carries `repeated`: how many identical ones
 // were held back since the previous line for that key, so the count is never lost, only folded.
 
+import { BoundedMap } from "@intentic/base/held";
+
 export interface GateVerdict {
     // Write the line.
     readonly log: boolean;
@@ -37,21 +39,14 @@ const MAX_KEYS = 2000;
 export const createRepeatGate = (options: { readonly everyMs?: number; readonly now?: () => number } = {}): RepeatGate => {
     const everyMs = options.everyMs ?? DEFAULT_EVERY_MS;
     const now = options.now ?? Date.now;
-    const entries = new Map<string, Entry>();
+    const entries = new BoundedMap<string, Entry>(MAX_KEYS);
 
     const check = (key: string, state: string): GateVerdict => {
         const at = now();
         const entry = entries.get(key);
         if (entry === undefined || entry.state !== state || at - entry.loggedAt >= everyMs) {
             const repeated = entry !== undefined && entry.state === state ? entry.held : 0;
-            entries.delete(key);
             entries.set(key, { state, loggedAt: at, held: 0 });
-            if (entries.size > MAX_KEYS) {
-                const oldest = entries.keys().next().value;
-                if (oldest !== undefined) {
-                    entries.delete(oldest);
-                }
-            }
             return { log: true, repeated };
         }
         entry.held += 1;

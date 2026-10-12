@@ -73,6 +73,9 @@ describe(`rows`, () => {
     test(`the status line carries the duration, or the status in a word when the job has no clock`, () => {
         expect(jobStatusLine(job(`a`, [], { status: `skipped` }), new Map()).text).not.toBe(``);
         expect(jobStatusLine(job(`a`, [], { durationSeconds: 5 }), new Map([[`a`, 2]])).streak).toBe(2);
+        // The kit's span of time, as every other duration in the app reads: past an hour it counts hours, not 73 minutes.
+        expect(jobStatusLine(job(`a`, [], { durationSeconds: 65 }), new Map()).text).toBe(`1m 5s`);
+        expect(jobStatusLine(job(`a`, [], { durationSeconds: 73 * 60 + 4 }), new Map()).text).toBe(`1h 13m`);
         expect(jobStatusLine(job(`a`, []), new Map([[`a`, 0]])).streak).toBeUndefined();
     });
 });

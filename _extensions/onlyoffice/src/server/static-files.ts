@@ -1,11 +1,12 @@
-import { randomBytes } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, rename, rm, stat } from "node:fs/promises";
+import { mkdir, rm, stat } from "node:fs/promises";
 import type http from "node:http";
 import { dirname, extname, join } from "node:path";
 import type { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createBrotliDecompress, createGzip } from "node:zlib";
+import { renameOver, stagingOf } from "@intentic/base/fs";
+import { errnoCode } from "@intentic/base/errors";
 import { isSafeRelative } from "./bundle.js";
 
 // The editor's static files, served from a verified bundle or this extension's own page build. Every URL carries the
@@ -69,19 +70,20 @@ const gzipCopy = (file: string, copy: string): Promise<void> => {
             await stat(copy);
             return;
         } catch (error) {
-            // SAFETY: fs rejects with a NodeJS.ErrnoException; only its code is read.
-            if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+            if (errnoCode(error) !== "ENOENT") {
                 throw error;
             }
         }
         await mkdir(dirname(copy), { recursive: true });
-        const temporary = `${copy}.${randomBytes(4).toString("hex")}.tmp`;
+        // Streamed, so a large asset is never held whole; staged beside the copy and renamed over it, so a reader never
+        // serves half of one.
+        const staging = stagingOf(copy);
         try {
-            await pipeline(createReadStream(file), createGzip({ level: 6 }), createWriteStream(temporary));
-            await rename(temporary, copy);
-        } catch (error) {
-            await rm(temporary, { force: true });
-            throw error;
+            await pipeline(createReadStream(file), createGzip({ level: 6 }), createWriteStream(staging));
+            await renameOver(staging, copy);
+        } finally {
+            // Already gone after the rename; after a failure, a partial copy nothing would ever reuse.
+            await rm(staging, { force: true });
         }
     })().finally(() => compressing.delete(copy));
     compressing.set(copy, made);

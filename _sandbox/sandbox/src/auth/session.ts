@@ -1,10 +1,9 @@
 import { randomBytes } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
-import { undefinedIfMissing } from "@intentic/base/errors";
+import { writeFileAtomic } from "@intentic/base/fs";
 import { ProofMethodSchema } from "@intentic/sandbox-contract";
 import { jwtVerify, SignJWT } from "jose";
 import { z } from "zod";
+import { loadOrMintKey } from "../store/plain-files/minted-key.js";
 import type { Proof } from "./auth.js";
 
 // Daemon-minted HMAC session: the steady-state browser credential once a Google ID token or a passkey verifies identity.
@@ -14,6 +13,7 @@ import type { Proof } from "./auth.js";
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 // Pins the issuer so no other JWT sharing this secret can pass as a session, and vice versa.
 const ISSUER = "intentic-sandbox-session";
+const SECRET_BYTES = 32;
 
 export interface MintedSession {
     readonly token: string;
@@ -34,35 +34,28 @@ export interface Sessions {
 }
 
 export const createSessions = (secretPath: string): Sessions => {
-    // Secret file is 0600 and persisted across restarts; cached as a promise so concurrent loads share one create.
+    // Secret file is 0600, base64url text, and persisted across restarts (minted-key.ts); cached as a promise so
+    // concurrent loads share one read.
     let secret: Promise<Uint8Array> | undefined;
-    const writeFresh = async (): Promise<Uint8Array> => {
-        const fresh = randomBytes(32);
-        await mkdir(dirname(secretPath), { recursive: true });
-        await writeFile(secretPath, fresh.toString("base64url"), { mode: 0o600 });
-        return fresh;
-    };
-    const loadSecret = (): Promise<Uint8Array> => {
-        secret ??= (async () => {
-            // Only absence re-keys: a key that exists but cannot be read is never replaced, or every session signs out.
-            const stored = await readFile(secretPath, "utf8").catch(undefinedIfMissing);
-            if (stored !== undefined) {
-                const bytes = Buffer.from(stored.trim(), "base64url");
-                // A truncated or corrupt file must not become a weak HMAC key; fall through and re-key.
-                if (bytes.length >= 32) {
-                    return bytes;
-                }
-            }
-            return writeFresh();
-        })();
-        // A failed load is not cached, so the next request retries the read instead of failing until restart.
-        const loading = secret;
+    // A failed load is not cached, so the next request retries the read instead of failing until restart.
+    const keep = (loading: Promise<Uint8Array>): Promise<Uint8Array> => {
+        secret = loading;
         loading.catch(() => {
             if (secret === loading) {
                 secret = undefined;
             }
         });
         return loading;
+    };
+    // Only absence or content too short to be a key mints one; a key that exists but cannot be read is never replaced,
+    // or every session signs out.
+    const loadSecret = (): Promise<Uint8Array> => secret ?? keep(loadOrMintKey(secretPath, { bytes: SECRET_BYTES, encoding: "base64url" }));
+    // Rotation is the one path that replaces a valid key, which loadOrMintKey never does: written whole and flushed, so a
+    // crash mid-rotation leaves the old key or the new one, never a short file the next boot would re-key.
+    const writeFresh = async (): Promise<Uint8Array> => {
+        const fresh = randomBytes(SECRET_BYTES);
+        await writeFileAtomic(secretPath, fresh.toString("base64url"), 0o600, { durable: true });
+        return fresh;
     };
     return {
         mint: async (proof) => {
@@ -104,8 +97,7 @@ export const createSessions = (secretPath: string): Sessions => {
         // Cache is replaced before awaiting the write, so a verify racing rotation uses the new secret, not the
         // retiring one.
         rotate: async () => {
-            secret = writeFresh();
-            await secret;
+            await keep(writeFresh());
         },
     };
 };

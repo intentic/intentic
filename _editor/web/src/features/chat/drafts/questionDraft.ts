@@ -2,12 +2,15 @@ import { sandboxValue } from "@intentic/extension-api";
 import { type Ref, ref } from "vue";
 import { z } from "zod";
 import type { PendingAttachment } from "./useChatAttachments";
+import { questionDraftKey, removeStoredValue, storedJson, storedKeys, storeJson } from "../../../lib/browserStorage";
 
 // Picks for an AskUserQuestion card, kept outside its component so they survive a reload while the run (daemon-side)
 // stays parked. Keyed by requestId, matching the replayed frame, so a draft finds its own card and no other. Dropped
-// once the card stops being pending; the age sweep below catches the ones a closed tab left behind.
+// once the card stops being pending; the age sweep below catches the ones a closed tab left behind, and sign-out every
+// one (lib/browserStorage.ts).
 
-const PREFIX = `intentic.questionDraft.`;
+const key = questionDraftKey;
+const PREFIX = key(``);
 
 // Long enough for a weekend-old question; short enough that abandoned cards don't pile up.
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -51,16 +54,6 @@ const StoredDraftSchema = z.object({
     savedAt: z.number().optional(),
 });
 
-const parseStored = (raw: string): z.infer<typeof StoredDraftSchema> | undefined => {
-    try {
-        return StoredDraftSchema.safeParse(JSON.parse(raw)).data;
-    } catch {
-        // allow(silent-catch): text that is not JSON is no draft, the same answer as one of the wrong shape.
-        return undefined;
-    }
-};
-
-const key = (requestId: string): string => `${PREFIX}${requestId}`;
 
 // A draft replays into a live card, so only picks that card would still accept survive: the first still-legal
 // pick per question, the rest dropped. Typed text always survives; it is the Other row's payload, not a pick.
@@ -80,64 +73,39 @@ const normalize = (draft: QuestionDraft, questions: readonly DraftQuestionShape[
     return { selections, otherTexts: draft.otherTexts, ...(Object.keys(files).length > 0 ? { otherFiles: files } : {}) };
 };
 
+// Storage unavailable, or a draft this build can't read: the card starts empty.
 export const readQuestionDraft = (requestId: string, questions: readonly DraftQuestionShape[]): QuestionDraft => {
-    try {
-        const raw = localStorage.getItem(key(requestId));
-        if (raw === null) {
-            return EMPTY;
-        }
-        const stored = parseStored(raw);
-        if (stored === undefined) {
-            return EMPTY;
-        }
-        return normalize(
-            {
-                selections: stored.selections ?? {},
-                otherTexts: stored.otherTexts ?? {},
-                ...(stored.otherFiles === undefined ? {} : { otherFiles: stored.otherFiles }),
-            },
-            questions,
-        );
-    } catch {
-        // Storage unavailable or a draft this build can't read: the card starts empty.
+    const stored = storedJson(key(requestId), StoredDraftSchema);
+    if (stored === undefined) {
         return EMPTY;
     }
+    return normalize(
+        {
+            selections: stored.selections ?? {},
+            otherTexts: stored.otherTexts ?? {},
+            ...(stored.otherFiles === undefined ? {} : { otherFiles: stored.otherFiles }),
+        },
+        questions,
+    );
 };
 
+// Storage unavailable or full; the in-memory picks still hold for this page.
 export const writeQuestionDraft = (requestId: string, draft: QuestionDraft): void => {
-    const stored: StoredDraft = { ...draft, savedAt: Date.now() };
-    try {
-        localStorage.setItem(key(requestId), JSON.stringify(stored));
-    } catch {
-        // Storage unavailable or full; the in-memory picks still hold for this page.
-    }
+    storeJson(key(requestId), { ...draft, savedAt: Date.now() } satisfies StoredDraft);
 };
 
 export const clearQuestionDraft = (requestId: string): void => {
-    try {
-        localStorage.removeItem(key(requestId));
-    } catch {
-        // Nothing to do; an unwritable bucket has nothing to clear either.
-    }
+    removeStoredValue(key(requestId));
 };
 
 // Drops drafts for cards never settled in this browser (a closed tab, a run that ended elsewhere). Runs once
-// at module load, off the render path.
+// at module load, off the render path. An entry this build cannot read under this prefix is dead weight by definition.
 const sweep = (): void => {
-    try {
-        const cutoff = Date.now() - MAX_AGE_MS;
-        const stale = Object.keys(localStorage).filter((storageKey) => {
-            if (!storageKey.startsWith(PREFIX)) {
-                return false;
-            }
-            // An entry this build cannot read under this prefix is dead weight by definition.
-            return (parseStored(localStorage.getItem(storageKey) ?? `{}`)?.savedAt ?? 0) < cutoff;
-        });
-        for (const storageKey of stale) {
-            localStorage.removeItem(storageKey);
+    const cutoff = Date.now() - MAX_AGE_MS;
+    for (const storageKey of storedKeys(PREFIX)) {
+        if ((storedJson(storageKey, StoredDraftSchema)?.savedAt ?? 0) < cutoff) {
+            removeStoredValue(storageKey);
         }
-    } catch {
-        // Storage unavailable; there is nothing to sweep.
     }
 };
 

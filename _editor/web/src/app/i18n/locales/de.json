@@ -114,6 +114,7 @@
             "inHistory": "In der Historie {count}",
             "markReviewed": "Als geprüft markieren",
             "markReviewed2": "{label} als geprüft markieren",
+            "markGroupReviewed": "Ganze Gruppe als geprüft markieren",
             "nextFile": "Nächste Datei",
             "notLanded": "nicht gelandet",
             "notLanded2": "Nicht gelandet {count}",

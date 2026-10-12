@@ -1,8 +1,7 @@
-import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { dirname, join, posix, win32 } from "node:path";
-import { promisify } from "node:util";
 import { undefinedIfMissing } from "@intentic/base/errors";
+import { execBounded } from "@intentic/base/process";
 import { z } from "zod";
 import { heldDistros, windowsRoot } from "../environments/machine.js";
 import { registeredDistro, WINDOWS_SIDE } from "../environments/wsl.js";
@@ -17,8 +16,6 @@ import { registeredDistro, WINDOWS_SIDE } from "../environments/wsl.js";
 // the children use. From a distro: the Windows side's `sync.json`, through the Windows agent the distro already finds
 // (`windowsRoot`, environments/machine.ts). A side that cannot be read is said by name and skipped, never read as
 // holding nothing: the check it could not make is not a refusal, and not a pass either, which the caller says.
-
-const exec = promisify(execFile);
 
 // A distro's listing through wsl.exe: a cold distro boots in a few seconds, and a stuck one must not hold a setup.
 const READ_TIMEOUT_MS = 20_000;
@@ -63,9 +60,8 @@ export const siblingFoldersIn = (raw: string, environment: string): SiblingFolde
 const SYNC_JSON_IN_DISTRO = `cat "$HOME/.intentic/machine/sync.json" 2>/dev/null || true`;
 
 const distroFolders = async (distro: string): Promise<SiblingFolder[] | undefined> => {
-    const answer = await exec("wsl.exe", ["-d", distro, "--cd", "~", "--exec", "sh", "-c", SYNC_JSON_IN_DISTRO], {
-        timeout: READ_TIMEOUT_MS,
-        windowsHide: true,
+    const answer = await execBounded("wsl.exe", ["-d", distro, "--cd", "~", "--exec", "sh", "-c", SYNC_JSON_IN_DISTRO], {
+        timeoutMs: READ_TIMEOUT_MS,
         env: { ...process.env, WSL_UTF8: "1" },
         // allow(silent-catch): a distro that would not start or answer in time is reported as unread, which readSiblings names to the caller.
     }).catch(() => undefined);

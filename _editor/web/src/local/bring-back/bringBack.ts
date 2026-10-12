@@ -1,65 +1,24 @@
-import { z } from "zod";
+import { type ProjectAnswer, ProjectAnswerSchema, type ProjectChange, type ProjectSkipped } from "@intentic/sandbox-contract";
 import type { SyncDirection } from "../../app/environments/local";
 
 // Bringing an agent's work back from a folder's own sandbox (the desktop app keeps the two in sync, copy-first by
 // default): what the app answers each sandbox verb with, read off the `intentic:project` event, and the state the
-// window's Bring back section draws. Pure, so the whole exchange is testable without a window or an app.
-
-const Direction = z.enum([`to-sandbox`, `both`]);
-const ChangeKind = z.enum([`added`, `modified`, `deleted`]);
-// `conflict`: changed in the folder too, so a bring-back keeps the folder's copy. Any other field is dropped unread.
-const Change = z.object({ path: z.string().min(1), kind: ChangeKind, size: z.number().optional(), conflict: z.boolean().optional() });
-const Failed = z.object({ ok: z.literal(false), error: z.string() });
-const Skipped = z.object({ path: z.string(), reason: z.string() });
+// window's Bring back section draws. Pure, so the whole exchange is testable without a window or an app. The answer's
+// shape is the contract's (project-bring-back.ts), the one the machine agent prints and the app relays whole.
 
 /** One entry the sandbox changed that the folder has not: what the review lists, each with its A/M/D mark. */
-export type SandboxChange = z.infer<typeof Change>;
+export type SandboxChange = ProjectChange;
 /** An entry a bring-back left alone, and why (the folder's copy changed too, say). */
-export type SkippedEntry = z.infer<typeof Skipped>;
+export type SkippedEntry = ProjectSkipped;
 
-const ProjectAnswer = z.discriminatedUnion(`kind`, [
-    z.object({
-        kind: z.literal(`changes`),
-        result: z.union([
-            z.object({
-                ok: z.literal(true),
-                direction: Direction,
-                changes: z.array(Change),
-                truncated: z.boolean().optional(),
-            }),
-            Failed,
-        ]),
-    }),
-    z.object({
-        kind: z.literal(`brought-back`),
-        result: z.union([
-            z.object({
-                ok: z.literal(true),
-                point: z.string().min(1),
-                applied: z.array(z.object({ path: z.string(), kind: ChangeKind })),
-                skipped: z.array(Skipped).optional(),
-            }),
-            Failed,
-        ]),
-    }),
-    z.object({
-        kind: z.literal(`restored`),
-        // What a restore skipped is only counted here, so its entries are not held to a shape.
-        result: z.union([z.object({ ok: z.literal(true), restored: z.number(), skipped: z.array(z.unknown()).optional() }), Failed]),
-    }),
-    z.object({ kind: z.literal(`direction`), result: z.union([z.object({ ok: z.literal(true), direction: Direction }), Failed]) }),
-    // A verb that never reached its sandbox, such as when no machine agent runs on this computer.
-    z.object({ kind: z.literal(`error`), verb: z.string(), error: z.string() }),
-]);
-
-export type ProjectAnswer = z.infer<typeof ProjectAnswer>;
+export type { ProjectAnswer };
 
 /** The answer an `intentic:project` event carries, or nothing for a detail of any other shape. */
 export const projectAnswer = (event: Event): ProjectAnswer | undefined => {
     if (!(event instanceof CustomEvent)) {
         return undefined;
     }
-    const answer = ProjectAnswer.safeParse(event.detail);
+    const answer = ProjectAnswerSchema.safeParse(event.detail);
     return answer.success ? answer.data : undefined;
 };
 

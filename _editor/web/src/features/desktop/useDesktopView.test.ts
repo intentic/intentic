@@ -11,6 +11,7 @@ jest.mock(`../sandbox/session/wsTicket`, () => ({ socketUrl }));
 const { HOLD_MS, useDesktopView } = await import(`./useDesktopView`);
 const { signalConnection } = await import(`../../client/sandbox/useSandbox`);
 const { classifyFailure } = await import(`../../client/sandbox/connection`);
+const { receiveDesktopShown } = await import(`../../workbench/window/onScreen`);
 
 // Records what the view puts on the wire, and plays the daemon's side: opening, answering, closing.
 class FakeSocket {
@@ -116,6 +117,19 @@ test("out of sight, the picture pauses and a hold taken here is handed back", as
 
     visible.value = true;
     await waitFor(() => expect(wire().at(-1)).toEqual({ type: `resume` }));
+});
+
+// A Windows window hidden in the tray says its document is visible; the app's word is what stops the grabbing.
+test("a window the desktop app has hidden in the tray stops the picture, and shown again resumes it", async () => {
+    const { wire } = await opened();
+    try {
+        receiveDesktopShown(false);
+        await waitFor(() => expect(wire().at(-1)).toEqual({ type: `pause` }));
+        receiveDesktopShown(true);
+        await waitFor(() => expect(wire().at(-1)).toEqual({ type: `resume` }));
+    } finally {
+        receiveDesktopShown(true);
+    }
 });
 
 test("a watcher's clicks and keys never reach the desktop", async () => {

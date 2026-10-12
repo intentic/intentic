@@ -10,8 +10,13 @@ import { DAEMON_OWNER, ONE_SHOT_OWNER } from "../seams/workload-stamp.js";
 // Here, below the conversations that implement CardDeps (conversations/actor/card-deps.ts wires the real ones), so a
 // gate in a lower layer (secrets, wallet, sandboxes) raises a card without importing the turn engine.
 
-// How long an unanswered offer waits before settling as unanswered; bounds how long an unattended turn can park.
-export const OFFER_DEADLINE_MS = 10 * 60_000;
+// A card waits for its answer: no clock turns a question nobody has answered yet into a refusal
+// (docs/architecture/conventions.md, "A person's answers"). It settles unanswered only when what waits on it is gone: the
+// caller's own `signal` (a turn stopped, a call whose card goes with it), or the conversation letting its cards go when it
+// is disposed (conversations/actor/parked-cards.ts). A gate whose call cannot wait that long keeps its card up past the
+// call with guard/held-asks.ts, which also holds the turn's close open on it. 2026-10-12: every gate here passed a
+// ten-minute deadline and refused with "Nobody answered" when it fired; rejected, since an owner back from lunch found
+// the work refused rather than waiting.
 
 // Cap on the agent's rationale string on a card: one line of reasoning, not a second request body.
 const WHY_MAX = 280;
@@ -54,9 +59,11 @@ export interface Card<K extends AgentReply["kind"]> {
     readonly alwaysAsks?: boolean;
     // Pushed to the owner's devices even while they are active in the editor, for a card they must not miss.
     readonly insist?: boolean;
-    // The caller's own lifetime; its abort settles the card cancelled instead of leaving it parked unattended.
+    // What the card lives for; its abort settles the card unanswered instead of leaving it parked with nobody waiting.
     readonly signal?: AbortSignal;
-    readonly deadlineMs: number;
+    // A bound of the card's own, for a caller that truly cannot wait longer; none waits until it is answered or `signal`
+    // ends it, which is what every gate here does.
+    readonly deadlineMs?: number;
 }
 
 export interface SettledCard<K extends AgentReply["kind"]> {
@@ -64,7 +71,8 @@ export interface SettledCard<K extends AgentReply["kind"]> {
     readonly reply: Extract<AgentReply, { kind: K }>;
     // Who answered, when the daemon verified an identity on the reply's request.
     readonly caller: Caller | undefined;
-    // `unanswered` is the deadline firing or the caller dying, never a decline, so each gate words it apart.
+    // `unanswered` is what it lived for ending (or a deadline of its own firing), never a decline, so each gate words it
+    // apart.
     readonly decision: "approved" | "declined" | "unanswered";
     // Push a follow-up frame under the settled card, to the run and the registry both.
     readonly say: (event: AgentEvent) => void;
@@ -87,8 +95,11 @@ export const raiseRequest = async <K extends AgentReply["kind"]>(
     // The card says so itself, so its Allow menu never offers a yes that would not answer it.
     say(alwaysAsks && raised.kind === "permission" ? { ...raised, alwaysAsks: true } : raised);
     deps.awaiting(run.conversationId, card.kind, card.insist === true);
-    const deadline = AbortSignal.timeout(card.deadlineMs);
-    const { reply, resolved, caller } = await wait(card.signal === undefined ? deadline : AbortSignal.any([card.signal, deadline]));
+    const bounds = [card.signal, card.deadlineMs === undefined ? undefined : AbortSignal.timeout(card.deadlineMs)].filter(
+        (signal): signal is AbortSignal => signal !== undefined,
+    );
+    // With nothing to end it, only an answer or the conversation letting its cards go settles it.
+    const { reply, resolved, caller } = await wait(bounds.length === 0 ? new AbortController().signal : AbortSignal.any(bounds));
     say(resolved);
     const decision = resolved.reply === undefined ? "unanswered" : card.approves(reply) ? "approved" : "declined";
     return { requestId: id, reply, caller, decision, say };

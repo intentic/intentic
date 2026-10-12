@@ -1,11 +1,13 @@
 import { fitPageRow } from "@intentic/sandbox-contract";
 import type { ChatMessage } from "./transcript";
+import { onAccountCleared, TRANSCRIPT_DATABASE } from "../../../lib/browserStorage";
 
 // Local IndexedDB mirror of each conversation's transcript, so reopening paints from disk instead of a sandbox
 // round-trip; the daemon stays authoritative and replaces the cache once it answers, so a stale mirror only costs a
-// repaint. Keyed by conversationId alone: those are UUIDs, so they can't collide across sandboxes.
+// repaint. Keyed by conversationId alone: those are UUIDs, so they can't collide across sandboxes. The account's: sign-out
+// deletes the database (lib/browserStorage.ts), which this page's connection gives way to on the version change.
 
-const DB_NAME = `intentic.chat`;
+const DB_NAME = TRANSCRIPT_DATABASE;
 const DB_VERSION = 1;
 const STORE = `transcripts`;
 
@@ -77,6 +79,8 @@ const persistable = (messages: readonly ChatMessage[]): ChatMessage[] => message
 // whether the mirror is longer than what it would write, and reading the entry back to learn that cloned the whole
 // record off disk on every turn's end; once this window has touched an entry, it already knows.
 const mirroredRows = new Map<string, number>();
+// What this window remembers of the mirror goes with it.
+onAccountCleared(() => mirroredRows.clear());
 
 // `authoritative` (daemon-confirmed) may shrink the mirror. Any other write only reports what a window happens to show,
 // which can be partial, so it may extend the mirror but never truncate it.

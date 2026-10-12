@@ -1,7 +1,7 @@
-import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
+import { errorMessage } from "@intentic/base/errors";
 import type { CliConfig } from "@intentic/sandbox-contract";
 import { createHash } from "node:crypto";
-import { access, readFile, rm, writeFile } from "node:fs/promises";
+import { access, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { directExec, type ExecInTerminal } from "../../terminal/terminal-run.js";
 import { generateSshKey, publicLineOf } from "../credentials/ssh-keys.js";
@@ -9,6 +9,7 @@ import type { SshKeyStore } from "../ssh-key-store.js";
 import { adoptLegacySshKey, hostConfPath, hostPublicKeyPath, removeSshHost, writeHostPublicKey, writeSshHost } from "../ssh-hosts.js";
 import type { ConnectorHook } from "./connector-hooks.js";
 import { homeDir } from "../../system/home-dir.js";
+import { textFile, type TextFile } from "../../store/plain-files/text-file.js";
 
 // With git access on, the account also names who commits here when the sandbox has no identity (ensureGitIdentity).
 // Git access on gets real git credentials beyond the curl-API skill: HTTPS always, set up first, and SSH best-effort.
@@ -93,18 +94,21 @@ const fileExists = (path: string): Promise<boolean> =>
 // HOME is the home directory of record, read per call so a test can point it at a temp dir.
 const credentialsPath = (): string => join(homeDir(), ".git-credentials");
 
-// Only absence reads as empty: a store that cannot be read is never rewritten as this host's line alone, dropping every
-// other host's credential.
-const readCredentials = async (): Promise<string> => (await readFile(credentialsPath(), "utf8").catch(undefinedIfMissing)) ?? "";
+// 0600 on every write, an existing file's mode included: the store holds every host's token in the clear. textFile reads
+// only absence as empty, so a store that cannot be read is never rewritten as this host's line alone.
+const credentialsFile = (): TextFile => textFile(credentialsPath(), 0o600);
 
-// Upserts the https credential line for this host (rewrites any prior line, e.g. a rotated token); a plain fs write
-// (0600), never a visible command.
+// Upserts the https credential line for this host (rewrites any prior line, e.g. a rotated token); the daemon's own
+// write, never a visible command. What the store held before is kept to tell a rotated token from the same one again.
 const ensureHttpsCredential = async (host: GitHost, exec: ExecInTerminal, log: GitAccessLog = quiet): Promise<void> => {
     await exec("git", ["config", "--global", "credential.helper", "store"]);
     const line = `https://${host.httpsUser}:${encodeURIComponent(host.token)}@${host.host}`;
-    const current = await readCredentials();
-    const kept = current.split("\n").filter((entry) => entry.trim() !== "" && !entry.endsWith(`@${host.host}`));
-    await writeFile(credentialsPath(), `${[...kept, line].join("\n")}\n`, { mode: 0o600 });
+    let current = "";
+    await credentialsFile().update((held) => {
+        current = held;
+        const kept = held.split("\n").filter((entry) => entry.trim() !== "" && !entry.endsWith(`@${host.host}`));
+        return `${[...kept, line].join("\n")}\n`;
+    });
     const previous = storedToken(current, host);
     if (previous !== host.token) {
         log(
@@ -129,12 +133,13 @@ const storedToken = (credentials: string, host: GitHost): string | undefined => 
 };
 
 const removeHttpsCredential = async (host: GitHost): Promise<void> => {
-    const current = await readCredentials();
-    if (current === "") {
-        return;
-    }
-    const kept = current.split("\n").filter((entry) => entry.trim() !== "" && !entry.endsWith(`@${host.host}`));
-    await writeFile(credentialsPath(), kept.length > 0 ? `${kept.join("\n")}\n` : "", { mode: 0o600 });
+    await credentialsFile().update((current) => {
+        if (current === "") {
+            return undefined;
+        }
+        const kept = current.split("\n").filter((entry) => entry.trim() !== "" && !entry.endsWith(`@${host.host}`));
+        return kept.length > 0 ? `${kept.join("\n")}\n` : "";
+    });
 };
 
 // A public line's identity: its type and key, without the comment, which a hand-edited or older file may word otherwise.

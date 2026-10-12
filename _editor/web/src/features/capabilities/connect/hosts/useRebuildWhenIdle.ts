@@ -4,6 +4,7 @@ import { usePollWhile } from "@intentic/ui/async";
 import { computed } from "vue";
 import { sandboxRaw } from "../../../../client/sandbox/sandboxRaw";
 import { ENVIRONMENT_KEY, useEnvironment } from "../../../sandbox/environment/useEnvironment";
+import { onScreen } from "../../../../workbench/window/onScreen";
 
 // "REBUILD WHEN THEY'RE IDLE", as the page sees it. The wait itself is the sandbox's (POST /environment/rebuild-when-idle),
 // so a page closed or a phone locked meanwhile loses nothing; this only asks, withdraws, and reads it back off
@@ -23,6 +24,8 @@ export function useRebuildWhenIdle() {
     // Re-read while the wait moves along; /environment says nothing of its own when it does.
     usePollWhile(() => wait.value?.phase === `waiting` || wait.value?.phase === `rebuilding`, {
         everyMs: POLL_MS,
+        // Only a reading for the page: out of sight it waits, and the window coming back reads at once.
+        visible: onScreen,
         check: async () => {
             await query.refetch();
         },

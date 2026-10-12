@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { accessSync, closeSync, constants, mkdirSync, openSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { delimiter, dirname, join } from "node:path";
+import { errorMessage, isMissing } from "@intentic/base/errors";
 import type { Env } from "./hook-io.js";
 
 // What the hooks start and find around them: the plugin's own files, programs on PATH, and background work that must
@@ -12,10 +13,8 @@ export const pluginRoot = (env: Env = process.env): string =>
     env["CLAUDE_PLUGIN_ROOT"] ?? dirname(import.meta.dirname);
 
 // Gone (never written, never built, deleted), as opposed to there and unreadable: only the first is an ordinary answer.
-export const isMissing = (error: unknown): boolean => {
-    const code = typeof error === "object" && error !== null ? (error as { code?: unknown }).code : undefined;
-    return code === "ENOENT" || code === "ENOTDIR";
-};
+// Re-exported so the hooks keep importing it from here beside the rest of what they find around them.
+export { isMissing } from "@intentic/base/errors";
 
 // A file the build wrote into the plugin, or undefined when it is missing (a dev checkout that was never built).
 export const pluginFile = (parts: readonly string[], env: Env = process.env): string | undefined => {
@@ -75,7 +74,7 @@ export const claimIfDue = (stamp: string, everyMs: number, now: number = Date.no
         writeFileSync(stamp, `${now}\n`);
         return true;
     } catch (error) {
-        process.stderr.write(`intentic: ${stamp} cannot be written (${error instanceof Error ? error.message : String(error)}), so what it paces is skipped\n`);
+        process.stderr.write(`intentic: ${stamp} cannot be written (${errorMessage(error)}), so what it paces is skipped\n`);
         return false;
     }
 };

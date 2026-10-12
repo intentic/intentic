@@ -1,8 +1,8 @@
 // DOM: the desktop app's update event, the visibility-change re-ask, and the `window` marker it injects at load are
 // all meaningless in a bare node context.
 import "@intentic/testing/dom";
-import { freshImport, stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
-import { nextTick } from "vue";
+import { advanceTimersByTimeAsync, freshImport, stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
+import { effectScope, nextTick } from "vue";
 
 // Two failure modes: never appearing defeats the point (a stale workspace nobody reloads); appearing wrongly is
 // worse, since the button it draws reloads the page. Every "no banner" case below is one a naive implementation
@@ -211,5 +211,60 @@ describe(`a local window`, () => {
         reportIncompleteBundle();
         await nextTick();
         expect(offer.value).toEqual({ kind: `incomplete` });
+    });
+});
+
+// Asking every fifteen minutes is the page's business only while something reads the offer, and only until there is one.
+describe(`the clock`, () => {
+    const QUARTER_HOUR = 15 * 60 * 1000;
+    const counting = (deployed: string): { readonly asked: () => number } => {
+        let asked = 0;
+        stubGlobal(`fetch`, () => {
+            asked += 1;
+            return Promise.resolve({ ok: true, json: () => Promise.resolve({ buildId: deployed }) });
+        });
+        return { asked: () => asked };
+    };
+
+    afterEach(() => {
+        jest.useRealTimers();
+    });
+
+    it(`stops asking once the last scope reading the offer is gone`, async () => {
+        const { useAppUpdate } = await load({ running: `1730000000000`, deployed: { buildId: `1730000000000` } });
+        const fetches = counting(`1730000000000`);
+        jest.useFakeTimers();
+        const first = effectScope();
+        const second = effectScope();
+        first.run(() => useAppUpdate());
+        second.run(() => useAppUpdate());
+        await settled();
+        expect(fetches.asked()).toBe(1);
+
+        await advanceTimersByTimeAsync(QUARTER_HOUR);
+        expect(fetches.asked()).toBe(2);
+
+        // One reader leaving keeps the clock for the other.
+        first.stop();
+        await advanceTimersByTimeAsync(QUARTER_HOUR);
+        expect(fetches.asked()).toBe(3);
+
+        second.stop();
+        await advanceTimersByTimeAsync(2 * QUARTER_HOUR);
+        expect(fetches.asked()).toBe(3);
+    });
+
+    it(`stops asking once a deploy has moved, since a later one is the same reload`, async () => {
+        const { useAppUpdate } = await load({ running: `1720000000000`, deployed: { buildId: `1730000000000` } });
+        const fetches = counting(`1730000000000`);
+        jest.useFakeTimers();
+        const scope = effectScope();
+        const offer = scope.run(() => useAppUpdate().offer);
+        await settled();
+        expect(offer?.value).toEqual({ kind: `web` });
+
+        await advanceTimersByTimeAsync(2 * QUARTER_HOUR);
+        expect(fetches.asked()).toBe(1);
+        scope.stop();
     });
 });

@@ -3,12 +3,13 @@ import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pino } from "pino";
-import { waitFor, SETTLES } from "@intentic/testing/bun";
+import { stubGlobal, unstubAllGlobals, waitFor, SETTLES } from "@intentic/testing/bun";
 import {
     buildAuthorizeUrl,
     type ClaudeStore,
     displayLabel,
     ensureFreshToken,
+    exchangeCode,
     holdAccount,
     fileClaudeStore,
     newAccount,
@@ -375,4 +376,35 @@ test("stopping the refresh loop unhooks the release trigger", async () => {
     release();
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(store.current()?.accessToken).toBe("held");
+});
+
+describe("the token endpoint", () => {
+    afterEach(() => {
+        unstubAllGlobals();
+    });
+
+    // The OAuth error code sits at the start of the body, so cutting the body to one line keeps invalid_grant readable.
+    it("refuses with a bounded body that still says invalid_grant", async () => {
+        stubGlobal("fetch", async () => new Response(`{"error":"invalid_grant","error_description":"${"x".repeat(5000)}"}`, { status: 400 }));
+        const failure = await exchangeCode("code#state", "verifier", "state").catch((error: unknown) => error);
+        if (!(failure instanceof TokenRequestError)) {
+            throw new Error(`expected a TokenRequestError, got ${String(failure)}`);
+        }
+        expect(failure.invalidGrant).toBe(true);
+        expect(failure.body.length).toBeLessThan(400);
+    });
+
+    it("reads the grant, and an identity field of the wrong shape only costs the name", async () => {
+        stubGlobal("fetch", async () => Response.json({ access_token: "at", refresh_token: "rt", expires_in: 60, account: { email_address: 7 } }));
+        const tokens = await exchangeCode("code#state", "verifier", "state");
+        expect(tokens).toMatchObject({ accessToken: "at", refreshToken: "rt" });
+        expect(tokens.email).toBeUndefined();
+    });
+
+    it("never quotes a 200 that is not JSON, since it could carry a token", async () => {
+        stubGlobal("fetch", async () => new Response("access_token=secret-value", { status: 200 }));
+        const failure = await exchangeCode("code#state", "verifier", "state").catch((error: unknown) => error);
+        expect(String(failure)).not.toContain("secret-value");
+        expect(failure).not.toBeInstanceOf(TokenRequestError);
+    });
 });

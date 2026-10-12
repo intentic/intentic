@@ -9,6 +9,7 @@ import {
     WEB_SESSION_PREFIX,
 } from "@intentic/sandbox-contract/session-names";
 import type { Logger } from "pino";
+import { type Periodic, startPeriodic } from "@intentic/base/async";
 import { errnoCode } from "@intentic/base/errors";
 import { forkedExec } from "@intentic/base/git";
 import { WORKLOAD_ENV } from "../../seams/workload-stamp.js";
@@ -343,7 +344,7 @@ export const createResourceReaper = (deps: ReaperDeps): ResourceReaper => {
     const asked = new Set<number>();
     let lastDiskSweep = 0;
     let running = false;
-    let timer: ReturnType<typeof setInterval> | undefined;
+    let loop: Periodic | undefined;
     let unsubscribe: (() => void) | undefined;
     const scheduled = new Set<ReturnType<typeof setTimeout>>();
 
@@ -616,12 +617,11 @@ export const createResourceReaper = (deps: ReaperDeps): ResourceReaper => {
     };
 
     const start = (): void => {
-        if (timer !== undefined) {
+        if (loop !== undefined) {
             return;
         }
-        timer = setInterval(() => void sweep(), intervalMs);
-        // The reaper must never be what keeps the daemon alive.
-        timer.unref();
+        // Unref'd by startPeriodic: the reaper must never be what keeps the daemon alive.
+        loop = startPeriodic({ everyMs: intervalMs, run: sweep });
         unsubscribe = deps.onOwnerStopped((owner) => {
             stoppedAt.set(owner, Date.now());
             // Acts grace after the stop, not after a timer notices it, via one scheduled pass per grace edge.
@@ -637,10 +637,8 @@ export const createResourceReaper = (deps: ReaperDeps): ResourceReaper => {
     };
 
     const stop = (): void => {
-        if (timer !== undefined) {
-            clearInterval(timer);
-            timer = undefined;
-        }
+        loop?.dispose();
+        loop = undefined;
         unsubscribe?.();
         unsubscribe = undefined;
         for (const edge of scheduled) {

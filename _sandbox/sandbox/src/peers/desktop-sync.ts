@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { within } from "@intentic/base/async";
 import { queueOnFile, writeFileAtomic } from "@intentic/base/fs";
 import { type DeviceReport, environmentOf } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
@@ -289,14 +290,8 @@ const heardBy = async (report: DeviceReport): Promise<void> => {
     if (reportListeners.size === 0) {
         return;
     }
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const waited = new Promise<void>((resolve) => {
-        timer = setTimeout(resolve, REPORT_LISTENER_WAIT_MS);
-        timer.unref?.();
-    });
     const settled = Promise.allSettled([...reportListeners].map(async (listener) => listener(report)));
-    await Promise.race([settled, waited]);
-    clearTimeout(timer);
+    await within(settled, REPORT_LISTENER_WAIT_MS, undefined, { unref: true });
 };
 
 // Files a report under the enrollment the token matched, never the hostname it claims, so a machine can't post under

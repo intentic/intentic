@@ -1,7 +1,7 @@
 import { lstat, mkdir, mkdtemp, readdir, readFile, realpath, rename, rm, rmdir, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
-import { pathExists, pathPresence, writeFileAtomic } from "@intentic/base/fs";
+import { pathExists, pathPresence } from "@intentic/base/fs";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { keyedLock } from "@intentic/base/async";
 import { undefinedIfMissing } from "@intentic/base/errors";
@@ -9,7 +9,7 @@ import type { Logger } from "pino";
 import { commonDirOf, gitDirOf } from "../../git/git-dir.js";
 import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
 import type { PerfTracker } from "../../system/resources/perf.js";
-import { textFile } from "../../store/text-file.js";
+import { ensureLines } from "../../store/plain-files/text-file.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
 import type { WorkspacePaths } from "../../workspace/workspace.js";
 import { branchSha, dropAgentRef, parkAgentRefs, unparkAgentRef } from "../../git/agent-refs.js";
@@ -474,24 +474,13 @@ export const createAgentWorktrees = (
         if (path === undefined) {
             return;
         }
-        // The owner's own exclude lines live here too: content that exists but cannot be read is never written over.
-        const current = await textFile(path)
-            .read()
-            .catch((error: unknown) => {
-                logger.warn({ err: error, main }, "agents: mirror exclude unreadable, left as it is");
-                return undefined;
-            });
-        if (current === undefined) {
-            return;
-        }
-        const written = new Set(current.split("\n").map((line) => line.trim()));
-        const missing = mirrors.map((rel) => `/${rel}`).filter((pattern) => !written.has(pattern));
-        if (missing.length === 0) {
-            return;
-        }
-        const kept = current.replace(/\n+$/, "");
-        const body = [...(kept === "" ? [] : [kept]), MIRROR_EXCLUDE_NOTE, ...missing, ""].join("\n");
-        await writeFileAtomic(path, body).catch((error: unknown) => logger.warn({ err: error, main }, "agents: mirror exclude write failed"));
+        // Queued on the file, which every worktree of the repo shares and project-installs grows too. The owner's own
+        // exclude lines live here as well: content that exists but cannot be read is never written over.
+        await ensureLines(
+            path,
+            mirrors.map((rel) => `/${rel}`),
+            { note: MIRROR_EXCLUDE_NOTE },
+        ).catch((error: unknown) => logger.warn({ err: error, main }, "agents: mirror exclude not written, left as it is"));
     };
 
     // Mirrors one repo's untracked dependency/build-output dirs from main checkout into the worktree; idempotent, safe

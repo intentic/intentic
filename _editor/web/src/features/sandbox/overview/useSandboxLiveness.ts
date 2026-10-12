@@ -10,7 +10,8 @@ import { SandboxUnaddressedError } from "../../../client/sandbox/sandboxAuthFetc
 import { daemonErrorMessage, daemonErrorStatus, sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { useSandboxSession } from "../../../client/session/sandboxSession";
 import { acquireStreamSlot } from "../../../lib/streamBudget";
-import { watchPageWake } from "../../../client/sandbox/pageWake";
+import { refVisibility, watchPageWake } from "../../../client/sandbox/pageWake";
+import { onScreen } from "../../../workbench/window/onScreen";
 import { applySystemEvent } from "../live/systemEvents";
 import { sandboxQueryPredicate } from "../live/systemEventRouting";
 import { useEndpoint } from "../../../client/endpoint/useEndpoint";
@@ -251,7 +252,9 @@ const loop = async (run: AbortSignal): Promise<void> => {
     }
 };
 
-// Set while running: a page that slept re-checks its loopback address before calls queue on it (useEndpoint.ts).
+// Set while running: a page that slept re-checks its loopback address before calls queue on it (useEndpoint.ts). Away
+// is judged by onScreen, as the chat panes judge it, not by the document alone: a desktop window hidden in the Windows
+// tray still reads visible to its document, so a day there would never count as away.
 let unwatchWake: (() => void) | undefined;
 
 const start = (): void => {
@@ -259,7 +262,7 @@ const start = (): void => {
         return;
     }
     const run = runs.next();
-    unwatchWake = watchPageWake(recheckAfterWake);
+    unwatchWake = watchPageWake(recheckAfterWake, { visibility: refVisibility(onScreen) });
     startDiagnosis();
     void loop(run);
 };

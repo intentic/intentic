@@ -1,3 +1,4 @@
+import { retryAfterMs } from "@intentic/base/async";
 import type { UsageWindow, WindowGates } from "@intentic/sandbox-contract";
 import { type ClaudeStore, ensureFreshToken } from "./claude-credentials.js";
 import type { HeadroomSource } from "../../usage/headroom.js";
@@ -125,9 +126,10 @@ export const RATE_LIMIT_PARK_MS = 10 * 60_000;
 // How long a 429 from this endpoint asks to be left alone for. Shared with claude-limit-reset.ts, which reads the same
 // URL: two readers that disagree about a stay-away are two readers spending one budget.
 export const rateLimitParkMs = (response: Response): number => {
-    // retry-after is whole seconds; anything else falls back to the park rather than to an immediate retry.
-    const seconds = Number(response.headers.get("retry-after"));
-    return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : RATE_LIMIT_PARK_MS;
+    // Seconds or a date; nothing usable, or a stay-away already over, falls back to the park rather than to an
+    // immediate retry.
+    const asked = retryAfterMs(response.headers);
+    return asked !== undefined && asked > 0 ? asked : RATE_LIMIT_PARK_MS;
 };
 
 // Best-effort: every failure reads as "no reading" (caller keeps the last one) and says why, and a 429 always carries a

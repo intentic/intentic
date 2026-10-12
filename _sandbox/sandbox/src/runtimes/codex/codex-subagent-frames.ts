@@ -1,4 +1,5 @@
 import type { AgentEvent, SubagentStatus } from "@intentic/sandbox-contract";
+import { oneLine } from "@intentic/base/one-line";
 import { opt } from "../../opt.js";
 import type { CodexEvent, CodexItem } from "./codex-app-server.js";
 
@@ -68,8 +69,8 @@ const isCollabTool = (tool: string): tool is keyof typeof COLLAB_TOOLS => Object
 // The first line of what a subagent was asked, as the line its card and record go by.
 const DESCRIPTION_CHARS = 120;
 const firstLine = (text: string | undefined): string | undefined => {
-    const line = text?.trim().split("\n", 1)[0]?.trim();
-    return line === undefined || line === "" ? undefined : line.slice(0, DESCRIPTION_CHARS);
+    const line = oneLine(text?.trim().split("\n", 1)[0] ?? "", DESCRIPTION_CHARS, { ellipsis: false });
+    return line === "" ? undefined : line;
 };
 
 /** Whether an event is about one of the turn's own subagents: its multi-agent calls, and its subagents' items and endings. */

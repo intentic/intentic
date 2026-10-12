@@ -1,4 +1,6 @@
 import http from "node:http";
+import { jsonLines } from "@intentic/base/json-lines";
+import { errnoCode, errorMessage } from "@intentic/base/errors";
 
 // The Docker Engine API over its unix socket, the handful of calls running one container needs. No `docker` CLI: the
 // sandbox's engine is a feature pack that may be absent, and its absence is an answer this reports, not a crash.
@@ -177,9 +179,8 @@ const splitRef = (ref: string): { image: string; tag: string } => {
     return colon > slash ? { image: ref.slice(0, colon), tag: ref.slice(colon + 1) } : { image: ref, tag: "latest" };
 };
 
-const pullImage = (socketPath: string, ref: string, onProgress: (percent: number | undefined) => void): Promise<void> =>
+const openPull = (socketPath: string, image: string, tag: string): Promise<http.IncomingMessage> =>
     new Promise((resolve, reject) => {
-        const { image, tag } = splitRef(ref);
         const req = http.request(
             {
                 socketPath,
@@ -187,42 +188,33 @@ const pullImage = (socketPath: string, ref: string, onProgress: (percent: number
                 path: `/images/create?fromImage=${encodeURIComponent(image)}&tag=${encodeURIComponent(tag)}`,
                 headers: { host: "docker" },
             },
-            (res) => {
-                const progress = newPullProgress();
-                let buffered = "";
-                res.setEncoding("utf8");
-                res.on("data", (chunk: string) => {
-                    buffered += chunk;
-                    let newline = buffered.indexOf("\n");
-                    while (newline !== -1) {
-                        const line = buffered.slice(0, newline);
-                        buffered = buffered.slice(newline + 1);
-                        try {
-                            const percent = res.statusCode === 200 ? pullProgressLine(progress, line) : undefined;
-                            if (percent !== undefined) {
-                                onProgress(percent);
-                            }
-                        } catch (error) {
-                            // The stream's own error line: tearing the response down is what rejects, through `error` below.
-                            res.destroy(error instanceof Error ? error : new Error(String(error)));
-                            return;
-                        }
-                        newline = buffered.indexOf("\n");
-                    }
-                });
-                res.on("end", () => {
-                    if (res.statusCode === 200) {
-                        resolve();
-                    } else {
-                        reject(failure(`pulling ${ref}`, { status: res.statusCode ?? 0, body: buffered }));
-                    }
-                });
-                res.on("error", reject);
-            },
+            resolve,
         );
         req.on("error", reject);
         req.end();
     });
+
+const pullImage = async (socketPath: string, ref: string, onProgress: (percent: number | undefined) => void): Promise<void> => {
+    const { image, tag } = splitRef(ref);
+    const res = await openPull(socketPath, image, tag);
+    if (res.statusCode !== 200) {
+        // The whole body is the engine's reason, newlines and all.
+        const chunks: Buffer[] = [];
+        // SAFETY: a response with no encoding set yields Buffers.
+        for await (const chunk of res as AsyncIterable<Buffer>) {
+            chunks.push(chunk);
+        }
+        throw failure(`pulling ${ref}`, { status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString("utf8") });
+    }
+    const progress = newPullProgress();
+    // A line that throws (the stream's own error line) ends the loop, which tears the response down with it.
+    for await (const line of jsonLines(res)) {
+        const percent = pullProgressLine(progress, line);
+        if (percent !== undefined) {
+            onProgress(percent);
+        }
+    }
+};
 
 // The container spec the engine's create call takes: port 80 published on loopback only, the sandbox reachable from
 // inside the container as host.docker.internal, and the engine bringing the container back whenever it starts (a
@@ -299,10 +291,10 @@ const probeEngine = async (socketPath: string): Promise<string | undefined> => {
         const response = await request(socketPath, "GET", "/_ping");
         return response.status === 200 ? undefined : `the Docker engine answered ${response.status} to a ping`;
     } catch (error) {
-        const code = (error as { code?: string }).code;
+        const code = errnoCode(error);
         return code === "ENOENT" || code === "ECONNREFUSED" || code === "EACCES"
             ? "Add the Docker capability on the Capabilities page to turn it on."
-            : `the Docker engine is not answering (${error instanceof Error ? error.message : String(error)})`;
+            : `the Docker engine is not answering (${errorMessage(error)})`;
     }
 };
 

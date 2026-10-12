@@ -1,6 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
 import { undefinedIfMissing } from "@intentic/base/errors";
-import { dirname, isAbsolute, relative, resolve } from "node:path";
+import { dirname, isAbsolute, resolve } from "node:path";
 import {
     type AgentEvent,
     type Page,
@@ -20,6 +20,7 @@ import { carryPage, type CarriedPage, PAGE_CDN_HOSTS } from "./page-assets.js";
 import { checkPage, type PageCheck } from "./page-check.js";
 import { ASK_PAGE_TOOL, SHOW_PAGE_TOOL } from "./page-names.js";
 import { PageNotFoundError, publishPage } from "./page-store.js";
+import { insideRel } from "@intentic/base/contained";
 
 // The agent's way to answer with a page rather than prose: `show_page` draws one inline in the chat, `ask_page` draws one
 // as a card and waits for what the page sends back. Both read the page (written inline, or a file the agent built),
@@ -126,11 +127,11 @@ const sourceOf = async (args: PageArgs, deps: PageToolsDeps): Promise<{ html: st
     if (info.size > MAX_INLINE_CHARS * 2) {
         return { refused: `${args.path} is ${Math.round(info.size / 1024)} KB, too large to show as a page.` };
     }
-    const rel = relative(agentRoot, agentPath);
+    const source = insideRel(agentRoot, agentPath);
     return {
         html: await readFile(file, "utf8"),
         baseDir: dirname(file),
-        ...(rel.startsWith("..") || isAbsolute(rel) ? {} : { source: rel.split("\\").join("/") }),
+        ...(source === undefined ? {} : { source }),
     };
 };
 

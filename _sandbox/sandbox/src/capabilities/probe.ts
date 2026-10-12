@@ -1,13 +1,13 @@
-import { request as httpRequest } from "node:http";
-import { request as httpsRequest } from "node:https";
 import { errorMessage } from "@intentic/base/errors";
-import type { Capability, CapabilityProbe } from "@intentic/sandbox-contract";
+import { isRecord } from "@intentic/base/escape";
+import { type Capability, type CapabilityProbe, parseSseText, sseJson } from "@intentic/sandbox-contract";
 import { versionedBase } from "../endpoints/endpoint-config.js";
+import { nodeRequest } from "../system/tls/node-request.js";
 import { contributionFor, type ResolvedContribution } from "./contributions.js";
 
 // Checks whether a entry's settings actually reach the service, turning a generic failure into a specific reason. A cli
 // entry declares its probe in the manifest; endpoint and mcp are handled directly since their check is the protocol
-// itself. Read-only, and uses node:https since a self-signed certificate must not fail the request.
+// itself. Read-only, and goes over node:http(s) (nodeRequest) since a self-signed certificate must not fail the request.
 
 // A probe is about reachability, not a job: no answer within this long is itself the finding.
 const PROBE_TIMEOUT_MS = 10_000;
@@ -85,40 +85,45 @@ interface HttpProbe {
 
 interface RawAnswer {
     readonly status: number;
+    readonly contentType: string;
     readonly body: string;
 }
 
-const send = (url: URL, probe: HttpProbe): Promise<RawAnswer> =>
-    new Promise((resolve, reject) => {
-        const request = url.protocol === "http:" ? httpRequest : httpsRequest;
-        const call = request(
-            url,
-            {
-                method: probe.method ?? "GET",
-                headers: {
-                    accept: "application/json",
-                    ...probe.headers,
-                    ...(probe.body === undefined ? {} : { "content-type": "application/json" }),
-                },
-                rejectUnauthorized: probe.insecure !== true,
-            },
-            (response) => {
-                let raw = "";
-                response.on("data", (chunk: Buffer) => {
-                    if (raw.length < MAX_BODY_BYTES) {
-                        raw += chunk.toString();
-                    }
-                });
-                response.on("end", () => resolve({ status: response.statusCode ?? 0, body: raw }));
-            },
-        );
-        call.on("error", reject);
-        call.setTimeout(PROBE_TIMEOUT_MS, () => call.destroy(Object.assign(new Error("timed out"), { code: "ETIMEDOUT" })));
-        if (probe.body !== undefined) {
-            call.write(probe.body);
-        }
-        call.end();
+// A body past MAX_BODY_BYTES is cut there: what it holds is then not JSON, and the probe reads it as reached, unnamed.
+const send = async (url: URL, probe: HttpProbe): Promise<RawAnswer> => {
+    const answer = await nodeRequest(url, {
+        method: probe.method ?? "GET",
+        headers: {
+            accept: "application/json",
+            ...probe.headers,
+            ...(probe.body === undefined ? {} : { "content-type": "application/json" }),
+        },
+        body: probe.body,
+        insecure: probe.insecure === true,
+        idleMs: PROBE_TIMEOUT_MS,
+        idleError: () => Object.assign(new Error("timed out"), { code: "ETIMEDOUT" }),
+        maxBytes: MAX_BODY_BYTES,
     });
+    return { status: answer.status, contentType: answer.headers["content-type"] ?? "", body: answer.body.toString("utf8") };
+};
+
+// Who answered, by the entry's dotted path into the answer's JSON. An MCP server may answer `initialize` as a short
+// event stream (the probe's accept header allows it), notifications ahead of the reply among its events: the reply is
+// the message carrying a result or an error.
+const whoAnswered = (answer: RawAnswer, path: string): string | undefined => {
+    if (answer.contentType.includes("text/event-stream")) {
+        const reply = parseSseText(answer.body)
+            .map(sseJson)
+            .find((message) => isRecord(message) && ("result" in message || "error" in message));
+        return identityIn(reply, path);
+    }
+    try {
+        return identityIn(JSON.parse(answer.body), path);
+    } catch {
+        // allow(silent-catch): a body that is not JSON (or was cut at the cap) names nobody; the service was still reached.
+        return undefined;
+    }
+};
 
 const runHttpProbe = async (probe: HttpProbe): Promise<CapabilityProbe> => {
     let url: URL;
@@ -143,13 +148,7 @@ const runHttpProbe = async (probe: HttpProbe): Promise<CapabilityProbe> => {
     if (probe.identity === undefined) {
         return { checked: true, ok: true, message: reached };
     }
-    let body: unknown;
-    try {
-        body = JSON.parse(answer.body);
-    } catch {
-        return { checked: true, ok: true, message: reached };
-    }
-    const who = identityIn(body, probe.identity);
+    const who = whoAnswered(answer, probe.identity);
     return who === undefined
         ? { checked: true, ok: true, message: reached }
         : { checked: true, ok: true, message: `Reached ${probe.subject}, authenticated as ${who}.`, who };

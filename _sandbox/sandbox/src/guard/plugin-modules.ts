@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { HookModule } from "@intentic/sandbox-contract";
 import { errorMessage } from "@intentic/base/errors";
+import { isRecord } from "@intentic/base/escape";
 
 /* What a plugin's hooks module does, as Claude Code itself reads it without running it: `claude plugin validate <dir>
  * --json` notes, per module, the events it hooks and the methods of `$` it calls. The approval card shows both. Only
@@ -17,8 +18,6 @@ const run = promisify(execFile);
 
 // A hung check must not hold a turn's start for long; the card says it could not be read.
 const VALIDATE_TIMEOUT_MS = 20_000;
-
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
 // A note's list, split at the commas outside a matcher's braces (`tool.call{tool=Bash|Edit}, session.start`).
 const listOf = (text: string): string[] => {

@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
+import { isMissing } from "@intentic/base/errors";
 import { promptOf as kindOfPrompt } from "@intentic/iq/transcript";
 import { displayNameOf, toolCategoryOf, toolPathsUnder, toolTarget } from "./tool-calls.js";
 import type { ToolCallFacts } from "./turn-metrics.js";
@@ -95,12 +96,6 @@ const parse = (raw: string): Line | undefined => {
         // allow(silent-catch): a line that is not JSON (a write torn by a crash, a shape a later CLI writes) is one lost line, the rest of the session still reads.
         return undefined;
     }
-};
-
-// Gone (rotated, deleted, never written), as opposed to there and unreadable, which is a failure worth hearing about.
-const isMissing = (error: unknown): boolean => {
-    const code = typeof error === "object" && error !== null ? (error as { code?: unknown }).code : undefined;
-    return code === "ENOENT" || code === "ENOTDIR";
 };
 
 // A prompt a person sent, or a slash command they typed, as opposed to a user line carrying tool results, a caveat the

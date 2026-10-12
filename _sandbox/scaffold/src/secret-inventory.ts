@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
-import { readFile, rename, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseEnv } from "node:util";
+import { writeFileAtomic } from "@intentic/base/fs";
 import { collectSecretUsage, type DesiredStateGraph } from "@intentic/graph";
 import type { SecretInventoryEntry } from "@intentic/sandbox-contract";
 import { ARTIFACT_FILE } from "./workspace-layout.js";
@@ -43,12 +44,9 @@ const readJson = async <T>(path: string): Promise<T | undefined> => {
 
 export const readSyncState = async (dir: string): Promise<SyncState> => (await readJson<SyncState>(join(dir, SYNC_FILE))) ?? {};
 
-// Temp-then-rename: a push reading while another writes sees a whole record, never a torn one it cannot parse.
+// Staged then renamed: a push reading while another writes sees a whole record, never a torn one it cannot parse.
 export const writeSyncState = async (dir: string, state: SyncState): Promise<void> => {
-    const path = join(dir, SYNC_FILE);
-    const staged = `${path}.${process.pid}.tmp`;
-    await writeFile(staged, `${JSON.stringify(state, undefined, 4)}\n`, { mode: 0o600 });
-    await rename(staged, path);
+    await writeFileAtomic(join(dir, SYNC_FILE), `${JSON.stringify(state, undefined, 4)}\n`, 0o600);
 };
 
 // Aggregates the secrets inventory: what the artifact requires, what .env/.secrets.json set (digest-compared against

@@ -30,6 +30,10 @@ export const sessions = sandboxRef<ChatSession[]>(() => []);
 // Why the last history read failed; the menu says it instead of "no previous chats" over a list it never got.
 export const sessionsFailure = sandboxRef<string | undefined>(() => undefined);
 
+// How long a history search box waits for typing to pause before it asks (ChatTabs, ChatSwitcherSheet): one request
+// per burst of keys, each of which would otherwise abort the one before it.
+export const SEARCH_SETTLE_MS = 200;
+
 // Refreshes the history list from the session store; a query filters by title or content server-side. Each
 // call aborts the one before it, so a burst of keystroke-driven searches can't land out of order, and so does a
 // switch, whose history is another store's.

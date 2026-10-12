@@ -1,3 +1,4 @@
+import { retryAfterMs } from "@intentic/base/async";
 import type { TrialHealth } from "@intentic/sandbox-contract";
 import type { Config } from "../config.js";
 
@@ -83,25 +84,12 @@ const FAILURE_QUARANTINE_MS = 10_000;
 // restores it.
 const MODEL_COOLDOWN_MS = 5 * 60_000;
 
-const retryAfterMs = (response: Response, now: number): number | undefined => {
-    const value = response.headers.get(`retry-after`)?.trim();
-    if (value === undefined || value === ``) {
-        return undefined;
-    }
-    const seconds = Number(value);
-    if (Number.isFinite(seconds) && seconds >= 0) {
-        return seconds * 1_000;
-    }
-    const at = Date.parse(value);
-    return Number.isNaN(at) ? undefined : Math.max(0, at - now);
-};
-
 const quarantineMs = (response: Response, now: number): number | undefined => {
     if (response.status === 401 || response.status === 403) {
         return AUTH_QUARANTINE_MS;
     }
     if (response.status === 429) {
-        return retryAfterMs(response, now) ?? QUOTA_QUARANTINE_MS;
+        return retryAfterMs(response.headers, { now }) ?? QUOTA_QUARANTINE_MS;
     }
     return response.status >= 500 ? FAILURE_QUARANTINE_MS : undefined;
 };

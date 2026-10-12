@@ -1,8 +1,10 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { spawnAs } from "../../workload/workload-class.js";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import type { Readable } from "node:stream";
+import { z } from "zod";
 import { errorMessage } from "@intentic/base/errors";
+import { parsedJsonLines } from "@intentic/base/json-lines";
+import { cacheFile } from "../../store/open-document.js";
 import type { RpcMessage } from "../../agent/tools/turn-mounts.js";
 import { networkCallOf, networkCallRefusal, redactNetworkAnswer } from "./network-redaction.js";
 import { SCREENSHOT_VERB } from "../cast/browser-artifacts.js";
@@ -65,29 +67,17 @@ export interface RouterDeps {
 const PROTOCOL_VERSION = "2025-06-18";
 const ROUTER_CLIENT = { name: "intentic-browser-router", version: "1.0.0" };
 
-const lineReader = (onLine: (line: string) => void): ((chunk: Buffer) => void) => {
-    let buffer = "";
-    return (chunk) => {
-        buffer += chunk.toString("utf8");
-        let at;
-        while ((at = buffer.indexOf("\n")) !== -1) {
-            const line = buffer.slice(0, at);
-            buffer = buffer.slice(at + 1);
-            if (line.trim() !== "") {
-                onLine(line);
+// Hands each JSON-RPC object a backend prints to `onMessage`. A stray non-JSON line (a warning printed to stdout), or
+// JSON that is not an object, carries nothing to route and is passed over.
+const onMessages = (stdout: Readable, onMessage: (message: RpcMessage) => void): void => {
+    void (async () => {
+        for await (const value of parsedJsonLines(stdout)) {
+            if (typeof value === "object" && value !== null) {
+                onMessage(value as RpcMessage);
             }
         }
-    };
-};
-
-const parsed = (line: string): RpcMessage | undefined => {
-    try {
-        const message: unknown = JSON.parse(line);
-        return typeof message === "object" && message !== null ? (message as RpcMessage) : undefined;
-    } catch {
-        // allow(silent-catch): a backend's stray non-JSON line (a warning printed to stdout) carries nothing to route.
-        return undefined;
-    }
+        // allow(silent-catch): a stdout torn down with its process ends the reading; the exit handlers settle what was pending.
+    })().catch(() => undefined);
 };
 
 // ---- the tool schemas, probed once per @playwright/mcp version and cached on disk for every later daemon ----------
@@ -108,20 +98,16 @@ const probeTools = (probe: { readonly command: string; readonly args: readonly s
         const send = (message: RpcMessage): void => {
             child.stdin.write(`${JSON.stringify(message)}\n`);
         };
-        child.stdout.on(
-            "data",
-            lineReader((line) => {
-                const message = parsed(line);
-                if (message?.id === "probe-init") {
-                    send({ jsonrpc: "2.0", method: "notifications/initialized" });
-                    send({ jsonrpc: "2.0", id: "probe-tools", method: "tools/list", params: {} });
-                } else if (message?.id === "probe-tools") {
-                    clearTimeout(timer);
-                    child.kill("SIGTERM");
-                    resolve(((message.result as { tools?: McpToolSchema[] } | undefined)?.tools ?? []) as McpToolSchema[]);
-                }
-            }),
-        );
+        onMessages(child.stdout, (message) => {
+            if (message.id === "probe-init") {
+                send({ jsonrpc: "2.0", method: "notifications/initialized" });
+                send({ jsonrpc: "2.0", id: "probe-tools", method: "tools/list", params: {} });
+            } else if (message.id === "probe-tools") {
+                clearTimeout(timer);
+                child.kill("SIGTERM");
+                resolve(((message.result as { tools?: McpToolSchema[] } | undefined)?.tools ?? []) as McpToolSchema[]);
+            }
+        });
         send({
             jsonrpc: "2.0",
             id: "probe-init",
@@ -129,6 +115,21 @@ const probeTools = (probe: { readonly command: string; readonly args: readonly s
             params: { protocolVersion: PROTOCOL_VERSION, capabilities: {}, clientInfo: ROUTER_CLIENT },
         });
     });
+
+// What the cache must hold to be served: a list of named tools whose input schema, when present, has the shape the
+// router extends with `account`. Anything else is probed again and written over.
+const cachedToolList = z.array(
+    z.looseObject({
+        name: z.string(),
+        inputSchema: z
+            .looseObject({
+                type: z.string().exactOptional(),
+                properties: z.record(z.string(), z.unknown()).exactOptional(),
+                required: z.array(z.string()).exactOptional(),
+            })
+            .exactOptional(),
+    }),
+);
 
 // Memoized per cache path: every router in this daemon shares one read, or one probe on a version's first use. A
 // failed probe is forgotten so the next turn tries again rather than inheriting "no browser tools" for the boot.
@@ -139,22 +140,19 @@ export const createSchemaCache = (timeoutMs = 30_000) => {
         if (known !== undefined) {
             return known;
         }
+        // Written atomically, so two daemons probing at once cannot interleave one file.
+        const file = cacheFile<McpToolSchema[] | undefined>(cachePath, {
+            parse: (raw) => cachedToolList.safeParse(raw).data,
+            fallback: () => undefined,
+        });
         const reading = (async () => {
-            const cached = await readFile(cachePath, "utf8").then(
-                (text) => JSON.parse(text) as McpToolSchema[],
-                () => undefined,
-            );
+            const cached = await file.read();
             if (cached !== undefined) {
                 return cached;
             }
             const tools = await probeTools(probe, timeoutMs);
-            // Written through a temp file: two daemons probing at once would otherwise interleave one file.
-            const temp = `${cachePath}.${process.pid}.tmp`;
-            await mkdir(dirname(cachePath), { recursive: true })
-                .then(() => writeFile(temp, JSON.stringify(tools)))
-                .then(() => rename(temp, cachePath))
-                // allow(silent-catch): a cache that could not be written costs the next boot one more probe; this answer is in hand.
-                .catch(() => undefined);
+            // allow(silent-catch): a cache that could not be written costs the next boot one more probe; this answer is in hand.
+            await file.update(() => tools).catch(() => undefined);
             return tools;
         })();
         loaded.set(cachePath, reading);
@@ -298,13 +296,8 @@ export const createBrowserRouter = (manifest: RouterManifest, deps: RouterDeps):
         };
         child.on("error", gone);
         child.on("exit", gone);
-        child.stdout?.on(
-            "data",
-            lineReader((line) => {
-                const message = parsed(line);
-                if (message === undefined) {
-                    return;
-                }
+        if (child.stdout !== null) {
+            onMessages(child.stdout, (message) => {
                 // A backend-initiated request (elicitation, sampling) has no client to reach over a stateless HTTP
                 // answer; refused, so the backend doesn't wait on it forever.
                 if (message.method !== undefined) {
@@ -318,8 +311,8 @@ export const createBrowserRouter = (manifest: RouterManifest, deps: RouterDeps):
                     backend.pending.delete(message.id as number);
                     resolve(message);
                 }
-            }),
-        );
+            });
+        }
         // Replays the handshake the router already answered, so the backend believes it began the conversation; the
         // client's own initialize params ride along.
         void request(

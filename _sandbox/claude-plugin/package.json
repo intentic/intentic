@@ -48,6 +48,7 @@
     },
     "devDependencies": {
         "@intentic/agent-context": "workspace:*",
+        "@intentic/base": "workspace:*",
         "@intentic/fileq": "workspace:*",
         "@intentic/iq": "workspace:*",
         "@intentic/output-cleaners": "workspace:*",

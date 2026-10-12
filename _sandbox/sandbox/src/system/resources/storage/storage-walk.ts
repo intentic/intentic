@@ -1,6 +1,7 @@
 import { lstat, opendir } from "node:fs/promises";
 import type { Stats } from "node:fs";
 import { join } from "node:path";
+import { errnoCode } from "@intentic/base/errors";
 
 // A bounded, cancellable walk of one tree that never follows a link and never leaves the filesystem it started on. It
 // reports what it meets and decides nothing: the scan and the cleaner each bring their own reading of a path.
@@ -37,9 +38,6 @@ export interface WalkOutcome {
 
 const DEFAULT_CONCURRENCY = 8;
 
-const codeOf = (error: unknown): string | undefined =>
-    typeof error === "object" && error !== null && "code" in error && typeof error.code === "string" ? error.code : undefined;
-
 export const abortError = (): DOMException => new DOMException("the storage walk was cancelled", "AbortError");
 
 export const isAbortError = (error: unknown): boolean => error instanceof DOMException && error.name === "AbortError";
@@ -50,7 +48,7 @@ export const walkTree = async <T>(root: string, context: T, visitor: TreeVisitor
     try {
         top = await lstat(root);
     } catch (error) {
-        return { complete: true, unreadable: codeOf(error) === "ENOENT" ? 0 : 1 };
+        return { complete: true, unreadable: errnoCode(error) === "ENOENT" ? 0 : 1 };
     }
     if (!top.isDirectory()) {
         return { complete: true, unreadable: 0 };
@@ -65,7 +63,7 @@ export const walkTree = async <T>(root: string, context: T, visitor: TreeVisitor
     const stat = (path: string): Promise<Stats | undefined> =>
         lstat(path).catch((error: unknown) => {
             // Gone between the listing and the look is the ordinary race with a writer, not a read failure.
-            unreadable += codeOf(error) === "ENOENT" ? 0 : 1;
+            unreadable += errnoCode(error) === "ENOENT" ? 0 : 1;
             return undefined;
         });
     const visit = async (path: string, inherited: T): Promise<void> => {
@@ -91,7 +89,7 @@ export const walkTree = async <T>(root: string, context: T, visitor: TreeVisitor
     };
     const readFolder = async (dir: string, inherited: T): Promise<void> => {
         const handle = await opendir(dir).catch((error: unknown) => {
-            unreadable += codeOf(error) === "ENOENT" ? 0 : 1;
+            unreadable += errnoCode(error) === "ENOENT" ? 0 : 1;
             return undefined;
         });
         if (handle === undefined) {

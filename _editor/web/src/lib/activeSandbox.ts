@@ -1,12 +1,13 @@
 import { ref } from "vue";
-import { storedValue } from "./browserStorage";
+import { ACTIVE_SANDBOX_KEY, storedValue } from "./browserStorage";
 
 // Which sandbox the browser is pointed at, and the query-key suffix that scopes cached server state to it. Split
 // from useSandbox to stay import-light: this touches only vue and localStorage, so anything can depend on it.
 // useSandbox owns the rest (the list, the connection, selecting one).
 
-// The key the active sandbox id is persisted under, so a reload keeps the same one selected.
-export const ACTIVE_KEY = `intentic.activeSandboxId`;
+// The key the active sandbox id is persisted under, so a reload keeps the same one selected; the account's, so sign-out
+// forgets it.
+export const ACTIVE_KEY = ACTIVE_SANDBOX_KEY;
 
 // allow(module-state): the scope's own key: what a switch changes
 export const activeSandboxId = ref<string | undefined>(storedValue(ACTIVE_KEY));

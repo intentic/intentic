@@ -10,7 +10,7 @@ import { t } from "./i18n";
 export function useSourceNames(): ComputedRef<ReadonlyMap<string, string>> {
     const api = host();
     const query = useQuery({
-        queryKey: api.sandbox.key(`extensions`),
+        queryKey: api.sandbox.readKey(`extensions.list`),
         queryFn: () => api.sandbox.rpc.extensions.list(),
         enabled: computed(() => api.sandbox.reachable()),
     });

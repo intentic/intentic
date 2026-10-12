@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { BottomSheet, SearchBar, timeAgo } from "@intentic/ui";
-import { onBeforeUnmount, ref, watch } from "vue";
+import { useSettled } from "@intentic/ui/async";
+import { ref, watch } from "vue";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { statusIcon } from "../models/catalog";
 import { useChat } from "../run/useChat";
+import { SEARCH_SETTLE_MS } from "../run/useChat-sessions";
 import { viewersOfSession } from "../../../workbench/presence/usePresence";
 import PresenceAvatars from "../../../workbench/presence/PresenceAvatars.vue";
 import PastChatList from "../panel/PastChatList.vue";
@@ -42,12 +44,7 @@ const twinFact = (c: Conversation): string | undefined => {
 // The history search box. Filters the list by chat title or content (content scanned server-side over recent
 // sessions). Debounced so a keystroke burst becomes one request; the list binds directly to `sessions`.
 const query = ref(``);
-let searchTimer: ReturnType<typeof setTimeout> | undefined;
-watch(query, (value) => {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => void loadSessions(value.trim() || undefined), 200);
-});
-onBeforeUnmount(() => clearTimeout(searchTimer));
+watch(useSettled(query, SEARCH_SETTLE_MS, { trim: true }), (settled) => void loadSessions(settled || undefined));
 
 // Opening starts clean and re-reads the stored sessions, so the list is current as of the tap.
 watch(open, (showing) => {

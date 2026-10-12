@@ -123,6 +123,18 @@ test("watching, it reads and logs but sends everything as it came; off or truste
     }
 });
 
+// Hop-by-hop headers describe the runtime's connection to this door, never the call: the server gets none of them.
+test("hop-by-hop headers, and any the Connection header names, do not reach the server", async () => {
+    const { upstream, send } = await harness({ mode: "off" });
+    await send(call("x"), { connection: "x-runtime-hop", "x-runtime-hop": "1", "proxy-authorization": "Basic cHJveHk6cGFzcw", te: "trailers", "x-kept": "yes" });
+    const sent = upstream.seen[0]?.headers;
+    for (const name of ["connection", "x-runtime-hop", "proxy-authorization", "te"]) {
+        expect(sent?.has(name)).toBe(false);
+    }
+    expect(sent?.get("x-kept")).toBe("yes");
+    expect(sent?.get("authorization")).toBe("Bearer turn-1");
+});
+
 test("a session nobody signed is refused", async () => {
     const fake = privacySliceFake({ policy: { mode: "on" } });
     const app = new Hono<AppEnv>();

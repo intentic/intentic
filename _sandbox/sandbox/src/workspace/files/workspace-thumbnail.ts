@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
-import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { readdir, readFile, rm, stat } from "node:fs/promises";
 import { extname, join } from "node:path";
+import { SingleFlight } from "@intentic/base/async";
+import { writeFileAtomic } from "@intentic/base/fs";
 import sharp, { type ResizeOptions } from "sharp";
 import { statePath } from "../../state-paths.js";
 
@@ -53,7 +55,7 @@ const keyOf = (target: string, size: number, mtimeMs: number, rendition: Renditi
     createHash("sha256").update(`${target}\n${size}\n${Math.trunc(mtimeMs)}\n${rendition}\n${type}`).digest("hex");
 
 // Renders in flight, keyed by cache file, so a screenful of tiles landing on one picture decodes it once.
-const rendering = new Map<string, Promise<Buffer | undefined>>();
+const rendering = new SingleFlight<string, Buffer | undefined>();
 
 // Renders running at once. Each holds one of libuv's four threads for its whole decode and encode, and those threads
 // serve every file read the daemon makes, so an unbounded burst of pictures stalls unrelated requests behind it.
@@ -117,11 +119,10 @@ const render = async (target: string, file: string, rendition: Rendition, type: 
         return undefined;
     }
     const dir = join(file, "..");
-    await mkdir(dir, { recursive: true });
-    // Written beside and renamed in: two tabs asking at once must never read a half-written file.
-    const partial = `${file}.${process.pid}.part`;
-    await writeFile(partial, bytes);
-    await rename(partial, file).catch(() => undefined);
+    // Replaced whole, so two tabs asking at once never read a half-written file. A write that fails costs the next look
+    // a render, never this one its picture: the bytes are already in hand.
+    // allow(silent-catch): a cache is allowed to forget, see sweep
+    await writeFileAtomic(file, bytes).catch(() => undefined);
     await sweep(dir);
     return bytes;
 };
@@ -140,9 +141,7 @@ const renditionOf = async (root: string, target: string, rendition: Rendition, t
     if (cached !== undefined) {
         return { bytes: cached, type, etag };
     }
-    const pending = rendering.get(file) ?? render(target, file, rendition, type).finally(() => rendering.delete(file));
-    rendering.set(file, pending);
-    const bytes = await pending;
+    const bytes = await rendering.run(file, () => render(target, file, rendition, type));
     return bytes === undefined ? undefined : { bytes, type, etag };
 };
 

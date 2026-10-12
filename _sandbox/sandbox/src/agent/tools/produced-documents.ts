@@ -1,3 +1,4 @@
+import { within } from "@intentic/base/async";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { stat } from "node:fs/promises";
 import { isAbsolute, join, posix, relative } from "node:path";
@@ -151,23 +152,6 @@ const commandsRunning = (now: () => number): ((event: AgentEvent) => SettledComm
     };
 };
 
-// A scan that gives up after `ms`, answering nothing, so a stuck git never holds a turn's last frame.
-const within = <T>(work: Promise<T>, ms: number, fallback: T): Promise<T> =>
-    new Promise((resolve) => {
-        const timer = setTimeout(() => resolve(fallback), ms);
-        timer.unref?.();
-        void work.then(
-            (value) => {
-                clearTimeout(timer);
-                resolve(value);
-            },
-            () => {
-                clearTimeout(timer);
-                resolve(fallback);
-            },
-        );
-    });
-
 // The scans a turn owes, and the updates their answers make: the card's locations plus what the command wrote.
 const scansOwed = (scan: DocumentScan) => {
     const ready: AgentEvent[] = [];
@@ -175,7 +159,10 @@ const scansOwed = (scan: DocumentScan) => {
     return {
         look: (call: SettledCommand): void => {
             const named = [call.command, call.output].filter((text) => text !== "");
-            const done: Promise<void> = within(scan(call.since, named), SCAN_BUDGET_MS, []).then((paths) => {
+            // A scan that fails or gives up after its budget answers nothing, so a stuck git never holds a turn's last frame.
+            // allow(silent-catch): a scan that failed only means no documents are named for this command.
+            const scanned = scan(call.since, named).catch((): readonly string[] => []);
+            const done: Promise<void> = within(scanned, SCAN_BUDGET_MS, [], { unref: true }).then((paths) => {
                 owed.delete(done);
                 const known = call.locations ?? [];
                 const added = paths.filter((path) => !known.some((location) => location.path === path));

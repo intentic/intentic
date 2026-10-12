@@ -34,6 +34,8 @@ const THROTTLE_MS: Record<RuntimeDomain, number> = {
     activity: 1000,
     // What an automatic update waits on moves with every turn's start and end; a page needs the gist, not each beat.
     update: 1000,
+    // A yes is one click, but a purge forgets a conversation's grants and releases in the same moment.
+    grants: 250,
 };
 
 // Each subscriber, with where its own failure is reported: the /events connection's logger, or none.

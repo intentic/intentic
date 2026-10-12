@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { errorMessage } from "@intentic/base/errors";
 import { NAMESPACE, type DocsState, type OpenRequest } from "../contract.js";
 import { documentTypeOf, extensionOf } from "../formats.js";
 import { createBrowserEngine, type BrowserEngine } from "./browser-engine.js";
@@ -205,7 +206,7 @@ export const createLocalOffice = (deps: LocalOfficeDeps): LocalOffice => {
             const ended = await bundle.settled();
             return ended.state === "ready" ? { state: "ready" } : { state: "failed", error: ended.state === "failed" ? ended.detail : `The editor download stopped (${ended.state}).` };
         } catch (error) {
-            return { state: "failed", error: error instanceof Error ? error.message : String(error) };
+            return { state: "failed", error: errorMessage(error) };
         } finally {
             clearInterval(progress);
         }

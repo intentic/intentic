@@ -65,7 +65,7 @@ const NO_TEMPLATES: readonly AutomationTemplate[] = [];
 export function useCatalog() {
     const api = host();
     const query = useQuery({
-        queryKey: api.sandbox.key(`automation-catalog`),
+        queryKey: api.sandbox.readKey(`automations.catalog`),
         queryFn: () => api.sandbox.rpc.automations.catalog(),
         enabled: computed(() => api.sandbox.reachable()),
     });

@@ -17,7 +17,7 @@ export function useFailureHistory(runs: Ref<readonly PipelineRun[]>) {
     const queries = useQueries({
         queries: computed(() =>
             failedRuns.value.map((run) => ({
-                queryKey: api.sandbox.key(`ci-jobs`, run.repo, String(run.runId)),
+                queryKey: api.sandbox.readKey(`ci.jobs`, { repo: run.repo, runId: run.runId }),
                 queryFn: (): Promise<CiJobsResponse> => api.sandbox.rpc.ci.jobs({ repo: run.repo, runId: run.runId }),
                 enabled: api.sandbox.reachable(),
                 staleTime: 60_000,

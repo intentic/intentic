@@ -1,6 +1,7 @@
 import { constants } from "node:fs";
 import { lstat, mkdir, open, realpath } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
+import { insideRel } from "@intentic/base/contained";
 import { statePath } from "../../state-paths.js";
 
 const MAX_IMAGE_BYTES = 32 * 1024 * 1024;
@@ -23,10 +24,8 @@ const safeFilename = (id: string): string => {
     return safe === "" ? "generated_image" : safe;
 };
 
-const isInside = (root: string, path: string): boolean => {
-    const fromRoot = relative(root, path);
-    return fromRoot !== "" && fromRoot !== ".." && !fromRoot.startsWith(`..${sep}`) && !isAbsolute(fromRoot);
-};
+// Strictly under `root`: the folder itself is never the file or folder asked for.
+const isInside = (root: string, path: string): boolean => (insideRel(root, path) ?? "") !== "";
 
 const savedImage = async (codexHome: string, path: string): Promise<Buffer> => {
     if (!isAbsolute(path)) {

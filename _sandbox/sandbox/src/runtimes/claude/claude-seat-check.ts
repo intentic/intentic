@@ -1,3 +1,4 @@
+import { SingleFlight } from "@intentic/base/async";
 import { CLAUDE_SEED_MODELS } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { z } from "zod";
@@ -131,7 +132,7 @@ export const createClaudeSeatCheck = (deps: ClaudeSeatCheckDeps): ClaudeSeatChec
     const now = deps.now ?? Date.now;
     // In memory: a restart may probe once early, which costs one token, and no store has to hold a schedule.
     const planned = new Map<string, Planned>();
-    const asking = new Map<string, Promise<boolean>>();
+    const asking = new SingleFlight<string, boolean>();
 
     // When the account was first refused: its seat mark, or an entitlement refusal that covers it (a refusal naming no
     // account covers every account, and serviceState blocks on either one).
@@ -181,7 +182,7 @@ export const createClaudeSeatCheck = (deps: ClaudeSeatCheckDeps): ClaudeSeatChec
                 return true;
             }
             // Read after the await, so two callers arriving together share one probe.
-            const pending = asking.get(id);
+            const pending = asking.joined(id);
             if (pending !== undefined) {
                 return pending;
             }
@@ -189,9 +190,7 @@ export const createClaudeSeatCheck = (deps: ClaudeSeatCheckDeps): ClaudeSeatChec
             if (options.force !== true && now() < plan.due) {
                 return false;
             }
-            const run = attempt(id, plan).finally(() => asking.delete(id));
-            asking.set(id, run);
-            return run;
+            return asking.run(id, () => attempt(id, plan));
         },
     };
 };

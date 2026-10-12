@@ -1,4 +1,5 @@
-import { isolatedExit, psQuote, SANDBOX_APP_DIR, SANDBOX_LOG_DIR, startScript, windowsSandboxMissing, wsbConfig } from "./isolated.js";
+import { psText } from "@intentic/desktop-automation";
+import { isolatedExit, SANDBOX_APP_DIR, SANDBOX_LOG_DIR, startScript, windowsSandboxMissing, wsbConfig } from "./isolated.js";
 
 // What Windows Sandbox is handed for an isolated run: the build's folder read-only, the run's log folder writable, a
 // logon command that starts the program with its output captured and its exit code kept; nothing more of the machine.
@@ -24,12 +25,23 @@ test("the .wsb maps the build read-only and the log folder writable, and turns t
 
 test("the start script runs the program from the mapped folder, quotes what it is given, and keeps its exit code", () => {
     const script = startScript(spec);
-    expect(script).toContain(`-FilePath 'C:\\app\\bin\\intentic desktop.exe'`);
-    expect(script).toContain(`-ArgumentList @('--flag', '"two words"', 'it''s')`);
-    expect(script).toContain(`[Environment]::SetEnvironmentVariable('RUST_LOG', 'debug', 'Process')`);
+    expect(script).toContain(`-FilePath ${psText("C:\\app\\bin\\intentic desktop.exe")} -ArgumentList`);
+    expect(script).toContain(` -WorkingDirectory 'C:\\app' `);
+    expect(script).toContain(`-ArgumentList @(${psText("--flag")}, ${psText('"two words"')}, ${psText("it's")})`);
+    expect(script).toContain(`[Environment]::SetEnvironmentVariable(${psText("RUST_LOG")}, ${psText("debug")}, 'Process')`);
     expect(script).toContain(`-RedirectStandardOutput 'C:\\intentic-log\\output.log'`);
     expect(script).toContain(`Set-Content -Path 'C:\\intentic-log\\exit-code' -Value $p.ExitCode`);
-    expect(psQuote("a'b")).toBe("'a''b'");
+});
+
+// PowerShell ends a single-quoted literal at ‘ ’ ‚ ‛ as well as at ', so a doubled-ASCII literal let an agent's argument
+// run code inside the VM. What the agent chose reaches the script only as base64.
+test("the start script carries the agent's program, arguments and environment as data, typographic quotes included", () => {
+    const hostile = "x’); calc; (‘y";
+    const script = startScript({ ...spec, program: `bin/${hostile}.exe`, args: [hostile, "it's ‘quoted’"], env: { [`K${hostile}`]: hostile } });
+    expect(script).not.toMatch(/[‘’‚‛]/);
+    expect(script).not.toContain("calc");
+    const decoded = [...script.matchAll(/FromBase64String\('([A-Za-z0-9+/=]*)'\)/g)].map((match) => Buffer.from(match[1] ?? "", "base64").toString("utf8"));
+    expect(decoded).toEqual([`K${hostile}`, hostile, `C:\\app\\bin\\${hostile}.exe`, `"${hostile}"`, `"it's ‘quoted’"`]);
 });
 
 test("what the program inside said about its end is read back in words", () => {

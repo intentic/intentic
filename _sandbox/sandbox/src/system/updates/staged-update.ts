@@ -1,8 +1,8 @@
-import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type PreparingUpdate, PreparingUpdateSchema, type StagedUpdate, StagedUpdateSchema, type UpdateOutcome, UpdateOutcomeSchema } from "@intentic/sandbox-contract";
 import type { z } from "zod";
 import { defineDocument } from "../../store/evolution/documents.js";
+import { readJsonMarker } from "../../store/plain-files/json-marker.js";
 
 // What the host says about this sandbox's version, in the files it writes onto /history. Advisory only: the update,
 // the swap and going back are the host's, and each marker is only how the sandbox and its owner hear of them.
@@ -28,14 +28,8 @@ export const updateOutcomeDocument = defineDocument({ root: "history", path: "up
 
 // One of the host's markers, or undefined. Never throws: a missing, unreadable, or newer-format marker all read as
 // nothing said, since each is only ever advice.
-const hostMarker = async <T>(historyRoot: string, path: string, schema: z.ZodType<T>): Promise<T | undefined> => {
-    try {
-        const parsed = schema.safeParse(JSON.parse(await readFile(join(historyRoot, path), "utf8")));
-        return parsed.success ? parsed.data : undefined;
-    } catch {
-        return undefined;
-    }
-};
+const hostMarker = async <T>(historyRoot: string, path: string, schema: z.ZodType<T>): Promise<T | undefined> =>
+    await readJsonMarker(join(historyRoot, path), schema);
 
 // What the host left for us, or undefined when nothing is staged.
 export const stagedUpdate = (historyRoot: string): Promise<StagedUpdate | undefined> => hostMarker(historyRoot, stagedUpdateDocument.path, StagedUpdateSchema);

@@ -7,12 +7,14 @@ import type {
     PrivacyShieldStatus,
 } from "@intentic/sandbox-contract";
 import { keepPreviousData, useMutation } from "@tanstack/vue-query";
-import { computed, onScopeDispose, type Ref, ref, watch } from "vue";
+import { useSettled } from "@intentic/ui/async";
+import { computed, type Ref } from "vue";
 import { rpcQuery } from "../../../../client/sandbox/rpcQuery";
 import { sandboxRpc } from "../../../../client/sandbox/sandboxRpc";
 import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
 import { rpcKey } from "../../../../lib/queryKeys";
 import { queryClient } from "../../../../lib/queryPersistence";
+import { optimisticUpdate, restoreChanged } from "../../../../lib/optimistic";
 
 // The privacy shield's reads and the owner's two writes, through the daemon's privacy routes. Its own composable
 // rather than part of useSandboxSettings: the policy is stored off the workspace and only the owner may change it, so
@@ -23,29 +25,18 @@ export function usePrivacyShield() {
 
     const save = useMutation(
         {
-            mutationFn: (policy: PrivacyShieldPolicy) => sandboxRpc.privacy.setPolicy(policy),
             // Written into the cache before the request lands, since every switch on the panel reads the policy from it;
             // otherwise a toggle shows its old state for the whole round trip, and a second toggle builds on stale data.
-            onMutate: async (policy) => {
-                const key = rpcKey(`privacy.status`);
-                // A refetch in flight could land after this write and put the pre-click policy back on screen.
-                await queryClient.cancelQueries({ queryKey: key });
-                const previous = queryClient.getQueryData<PrivacyShieldStatus>(key);
-                if (previous !== undefined) {
-                    queryClient.setQueryData<PrivacyShieldStatus>(key, { ...previous, policy });
-                }
-                return { previous };
-            },
-            // A refused write (a member who is not the owner gets a 403) puts back what was on screen before the press,
-            // so no switch claims a policy the daemon did not keep.
-            onError: (_error, _policy, context) => {
-                if (context?.previous !== undefined) {
-                    queryClient.setQueryData<PrivacyShieldStatus>(rpcKey(`privacy.status`), context.previous);
-                }
-            },
-            onSettled: async () => {
-                await queryClient.invalidateQueries({ queryKey: rpcKey(`privacy.status`) });
-            },
+            // A refused write (a member who is not the owner gets a 403) takes back the switches this press moved, so
+            // no switch claims a policy the daemon did not keep, and leaves a second press still in flight standing.
+            // Re-read either way.
+            mutationFn: (policy: PrivacyShieldPolicy) =>
+                optimisticUpdate(
+                    rpcKey(`privacy.status`),
+                    (status: PrivacyShieldStatus) => ({ ...status, policy }),
+                    () => sandboxRpc.privacy.setPolicy(policy),
+                    { settle: true, undo: (current, before) => ({ ...current, policy: restoreChanged(policy)(current.policy, before.policy) }), client: queryClient },
+                ),
         },
         // Named rather than injected, as useSandboxQuery does: a write can start from a plain handler.
         queryClient,
@@ -157,15 +148,7 @@ const DICTIONARY_DEBOUNCE_MS = 200;
 // the query is empty; the previous answer stays on screen while the next one is fetched, so the words do not blink out
 // between keystrokes. Memory only: one entry per query typed is nothing worth keeping across reloads.
 export function usePrivacyDictionary(query: Ref<string>, debounceMs = DICTIONARY_DEBOUNCE_MS) {
-    const settled = ref(query.value.trim());
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    watch(query, (value) => {
-        clearTimeout(timer);
-        timer = setTimeout(() => {
-            settled.value = value.trim();
-        }, debounceMs);
-    });
-    onScopeDispose(() => clearTimeout(timer));
+    const settled = useSettled(query, debounceMs, { trim: true });
 
     const { query: read, error } = useSandboxQuery({
         ...rpcQuery(`privacy.dictionary`, () => (settled.value === `` ? {} : { query: settled.value }), { unpersisted: true }),

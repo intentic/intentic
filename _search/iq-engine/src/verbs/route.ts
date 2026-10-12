@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join, posix } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
+import { escapeRegExp } from "@intentic/base/escape";
 import { type RgOptions, rgSearch } from "../engines/lexical.js";
 import { jsxRoutes, matchRoutes, parseRouteAddress, type RouteAddress, type RouteDecl, type RouteMatch, routeTable } from "../engines/routes.js";
 import type { FileEntry, RankedGroup, RankedHit } from "../types.js";
@@ -31,8 +32,6 @@ const BLOCK_LINES = 15;
 const NAV_IMPORTS = 10;
 // Component names listed per branch in the capsule.
 const LISTED_COMPONENTS = 6;
-
-const escapeRegExp = (text: string): string => text.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // A relative or `@/`-rooted import from `from`, as a workspace path the sweep admits; a package import is not one.
 export const resolveImport = (from: string, spec: string, allowed: ReadonlySet<string>): string | undefined => {

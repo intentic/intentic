@@ -1,4 +1,5 @@
 import type { HookCallback, HookCallbackMatcher } from "@anthropic-ai/claude-agent-sdk";
+import { BoundedMap } from "@intentic/base/held";
 import { agentCommand, commandWords, toolResultText } from "../../providers/agent-installs.js";
 
 // One line under a command's output when that output shows a failure whose cause is not in the code the agent is
@@ -59,19 +60,13 @@ export const placeholderNotice = (connection: string): string =>
 // Conversations keep their SDK session id across resumed turns, so a subject told in one turn stays told in the next.
 // Bounded: the oldest conversation's memory goes first, and the worst that costs is one repeated line.
 const REMEMBERED_SESSIONS = 200;
-const toldBySession = new Map<string, Set<string>>();
+const toldBySession = new BoundedMap<string, Set<string>>(REMEMBERED_SESSIONS);
 
 const firstTelling = (session: string, subject: string): boolean => {
     let told = toldBySession.get(session);
     if (told === undefined) {
         told = new Set();
         toldBySession.set(session, told);
-        if (toldBySession.size > REMEMBERED_SESSIONS) {
-            const oldest = toldBySession.keys().next().value;
-            if (oldest !== undefined) {
-                toldBySession.delete(oldest);
-            }
-        }
     }
     if (told.has(subject)) {
         return false;

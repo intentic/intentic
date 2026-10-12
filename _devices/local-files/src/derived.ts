@@ -1,7 +1,9 @@
-import { createHash, randomBytes } from "node:crypto";
-import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { within } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
+import { writeFileAtomic } from "@intentic/base/fs";
 import { estimateTokens } from "@intentic/base/format";
 import { neutralizeOutsideText } from "@intentic/base/outside-text";
 import { refuse } from "@intentic/contract-serve";
@@ -233,32 +235,17 @@ export class DerivedTexts {
 
     // Written whole or not at all, so a reader never finds half a rendering.
     async #keep(key: string, cached: Cached): Promise<void> {
-        const target = join(this.deps.dir, `${key}.json`);
-        const temporary = `${target}.${randomBytes(4).toString(`hex`)}.tmp`;
         try {
-            await mkdir(this.deps.dir, { recursive: true });
-            await writeFile(temporary, JSON.stringify(cached));
-            await rename(temporary, target);
+            await writeFileAtomic(join(this.deps.dir, `${key}.json`), JSON.stringify(cached));
         } catch (error) {
             // A rendering that cannot be kept is still the answer; the next ask renders it again.
             this.deps.log(`could not keep a document's text in ${this.deps.dir}: ${errorMessage(error)}`);
-            await rm(temporary, { force: true });
         }
     }
 
     // The rendering, or why it is not here yet once the timeout passes; it goes on, and is kept when it lands.
-    async #bounded(rendering: Promise<Outcome>): Promise<Outcome> {
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        const late = new Promise<Outcome>((resolve) => {
-            timer = setTimeout(
-                () => resolve({ kind: `failed`, reason: `Reading it is taking a while. Its text will be kept once it is ready; ask again then.` }),
-                this.deps.timeoutMs ?? DERIVE_TIMEOUT_MS,
-            );
-        });
-        try {
-            return await Promise.race([rendering, late]);
-        } finally {
-            clearTimeout(timer);
-        }
+    #bounded(rendering: Promise<Outcome>): Promise<Outcome> {
+        const late: Outcome = { kind: `failed`, reason: `Reading it is taking a while. Its text will be kept once it is ready; ask again then.` };
+        return within(rendering, this.deps.timeoutMs ?? DERIVE_TIMEOUT_MS, late);
     }
 }

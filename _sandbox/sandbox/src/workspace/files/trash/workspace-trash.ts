@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { cp, lstat, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, join, sep } from "node:path";
-import { undefinedIfMissing } from "@intentic/base/errors";
+import { errnoCode, undefinedIfMissing } from "@intentic/base/errors";
 
 // The file view's trash: a delete moves the entry here instead of erasing it, so Undo can put it back. One folder per
 // delete holds the entry itself and where it came from. A rename is instant for a folder of any size; the trash sits
@@ -21,14 +21,12 @@ interface Origin {
     readonly path: string;
 }
 
-const codeOf = (failure: unknown): string | undefined => (failure as NodeJS.ErrnoException | undefined)?.code;
-
 // A rename, or a copy and erase when the two paths sit on different volumes (a mounted repo, say).
 const relocate = async (from: string, to: string): Promise<void> => {
     try {
         await rename(from, to);
     } catch (failure) {
-        if (codeOf(failure) !== "EXDEV") {
+        if (errnoCode(failure) !== "EXDEV") {
             throw failure;
         }
         await cp(from, to, { recursive: true, preserveTimestamps: true, verbatimSymlinks: true });
@@ -89,7 +87,7 @@ export const createWorkspaceTrash = (trashDir: string): WorkspaceTrash => {
         } catch (failure) {
             await rm(slot, { recursive: true, force: true });
             // Gone between the check and the move: someone else deleted it, which is the outcome asked for.
-            if (codeOf(failure) === "ENOENT" && !(await exists(abs))) {
+            if (errnoCode(failure) === "ENOENT" && !(await exists(abs))) {
                 return undefined;
             }
             throw failure;

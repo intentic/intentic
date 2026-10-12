@@ -135,8 +135,6 @@
         "unreadable": "This tab doesn't name a run."
     },
     "statusVisual": {
-        "minutesSeconds": "{minutes}m {seconds}s",
-        "seconds": "{seconds}s",
         "status": {
             "canceled": "canceled",
             "failed": "failed",

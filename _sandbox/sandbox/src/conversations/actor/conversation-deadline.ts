@@ -1,3 +1,4 @@
+import { serialLock } from "@intentic/base/async";
 import type { Holding, Holdings, HoldingsIndex } from "./conversation-holdings.js";
 
 // A conversation's deadline: one timer per conversation per kind, set for the exact instant something is due, instead
@@ -29,13 +30,13 @@ export interface Deadlines {
 const MAX_DELAY_MS = 2_147_483_647;
 
 // The fires of one kind, chained, per conversations index.
-const chains = new WeakMap<Holdings<Pending>, { tail: Promise<void> }>();
+const chains = new WeakMap<Holdings<Pending>, ReturnType<typeof serialLock>>();
 
 // `failed` hears a fire that threw, by the conversation it was for; the next fire runs regardless.
 export const deadlines = (conversations: Pick<HoldingsIndex, "holdings">, kind: DeadlineKind, failed: (conversationId: string, error: Error) => void): Deadlines => {
     const held = conversations.holdings(kind);
-    const chain = chains.get(held) ?? { tail: Promise.resolve() };
-    chains.set(held, chain);
+    const inOrder = chains.get(held) ?? serialLock();
+    chains.set(held, inOrder);
     const clear = (conversationId: string): void => {
         const pending = held.get(conversationId);
         if (pending !== undefined) {
@@ -49,7 +50,7 @@ export const deadlines = (conversations: Pick<HoldingsIndex, "holdings">, kind: 
             const timer = setTimeout(
                 () => {
                     held.drop(conversationId);
-                    chain.tail = chain.tail.then(async () => {
+                    void inOrder(async () => {
                         try {
                             await fire();
                         } catch (error) {

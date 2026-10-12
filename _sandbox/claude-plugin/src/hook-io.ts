@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { errorMessage } from "@intentic/base/errors";
 
 // What every hook entry shares: reading Claude Code's JSON payload, answering it, and failing open. A hook here is
 // unsolicited help, so whatever goes wrong costs the help and never the session: an unreadable payload, a throw, or a
@@ -60,7 +61,7 @@ export const runHook = async (handle: (input: HookInput, raw: string) => Promise
         }
     } catch (error) {
         // Stderr from a hook that exits 0 is only shown in debug output, which is where a broken hook should be found.
-        process.stderr.write(`intentic: ${error instanceof Error ? error.message : String(error)}\n`);
+        process.stderr.write(`intentic: ${errorMessage(error)}\n`);
     }
 };
 

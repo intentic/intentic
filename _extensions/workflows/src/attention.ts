@@ -12,7 +12,7 @@ const { state: runs, start: startRunAttention } = sandboxPoll<WorkflowRun[]>({
     host,
     everyMs: 2 * 60_000,
     initial: () => [],
-    read: async (api) => api.sandbox.fetch(workflowRunsQuery()),
+    read: async (api) => (await api.sandbox.fetch(workflowRunsQuery())).runs,
 });
 
 // Started by activate(), so an overnight run still seats the tile from login; disposed with the extension.

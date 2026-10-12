@@ -1,4 +1,5 @@
 import { DEFAULT_SYNC_ROOT, oneLinerFits, PLATFORM_WEB_ORIGIN } from "@intentic/constants";
+import { powershellQuote, shellQuote } from "@intentic/sandbox-run/quote";
 import { bashCommand, oneLiner, psCommand } from "../../../app/environments/scriptCommand";
 
 // The install command a reader pastes on their own device. Almost always the one-liner, `…/setup/<code>` (plus the
@@ -6,7 +7,9 @@ import { bashCommand, oneLiner, psCommand } from "../../../app/environments/scri
 // cannot carry keeps the older form with the values as environment: the own-zone Cloudflare token, the local-dev
 // platform, a page origin other than the default, a sync folder somewhere else. Everything between the pipe and `sh`
 // on unix; `$env:` assignments ahead of the script on Windows. Never `sudo`: connect.sh asks for root itself, at the
-// one step that needs it.
+// one step that needs it. Every value is quoted by its shell's one quoter (@intentic/sandbox-run/quote, which imports
+// nothing and so bundles for the browser): a folder or a token holding a quote stays one value, and PowerShell's
+// typographic quotes ‘ ’ ‚ ‛ cannot end its literal either.
 
 // Locally built dev image; without it connect.sh pulls `:stable`, whose daemon predates unreleased routes.
 export const DEV_SANDBOX_IMAGE = `intentic-sandbox:dev`;
@@ -41,22 +44,22 @@ export const webOriginOf = (origin: string): string | undefined => (origin === P
 const devEnv = ({ platformUrl, fromCheckout }: CommandInput): string =>
     platformUrl === undefined
         ? ``
-        : ` PLATFORM_URL='${platformUrl}' INTENTIC_AGENT_AUTH_VOLUME='intentic-dev-agent-auth'${fromCheckout ? ` SANDBOX_IMAGE='${DEV_SANDBOX_IMAGE}'` : ``}`;
+        : ` PLATFORM_URL=${shellQuote(platformUrl)} INTENTIC_AGENT_AUTH_VOLUME='intentic-dev-agent-auth'${fromCheckout ? ` SANDBOX_IMAGE='${DEV_SANDBOX_IMAGE}'` : ``}`;
 
 const devEnvPs = ({ platformUrl, fromCheckout }: CommandInput): string =>
     platformUrl === undefined
         ? ``
-        : `$env:PLATFORM_URL='${platformUrl}'; $env:INTENTIC_AGENT_AUTH_VOLUME='intentic-dev-agent-auth'; ${
+        : `$env:PLATFORM_URL=${powershellQuote(platformUrl)}; $env:INTENTIC_AGENT_AUTH_VOLUME='intentic-dev-agent-auth'; ${
               fromCheckout ? `$env:SANDBOX_IMAGE='${DEV_SANDBOX_IMAGE}'; ` : ``
           }`;
 
 // Everything between the pipe and `sh`: the runner, then one `env` carrying every assignment.
 export const unixPrefix = (input: CommandInput): string => {
     const envs = [
-        input.cfToken === undefined ? `` : ` CF_TOKEN='${input.cfToken}'`,
+        input.cfToken === undefined ? `` : ` CF_TOKEN=${shellQuote(input.cfToken)}`,
         devEnv(input),
-        input.webOrigin === undefined ? `` : ` WEB_ORIGIN='${input.webOrigin}'`,
-        input.syncDir === undefined ? `` : ` SYNC_DIR='${input.syncDir}'`,
+        input.webOrigin === undefined ? `` : ` WEB_ORIGIN=${shellQuote(input.webOrigin)}`,
+        input.syncDir === undefined ? `` : ` SYNC_DIR=${shellQuote(input.syncDir)}`,
     ].join(``);
     return envs === `` ? `` : `env${envs} `;
 };
@@ -65,10 +68,10 @@ export const unixPrefix = (input: CommandInput): string => {
 export const windowsEnv = (input: CommandInput): string =>
     [
         devEnvPs(input),
-        input.webOrigin === undefined ? `` : `$env:WEB_ORIGIN='${input.webOrigin}'; `,
-        input.cfToken === undefined ? `` : `$env:CF_TOKEN='${input.cfToken}'; `,
-        input.syncDir === undefined ? `` : `$env:SYNC_DIR='${input.syncDir}'; `,
-        `$env:SETUP_CODE='${input.code}'; `,
+        input.webOrigin === undefined ? `` : `$env:WEB_ORIGIN=${powershellQuote(input.webOrigin)}; `,
+        input.cfToken === undefined ? `` : `$env:CF_TOKEN=${powershellQuote(input.cfToken)}; `,
+        input.syncDir === undefined ? `` : `$env:SYNC_DIR=${powershellQuote(input.syncDir)}; `,
+        `$env:SETUP_CODE=${powershellQuote(input.code)}; `,
     ].join(``);
 
 // The one-liner's arguments, or undefined where something rides that the URL cannot carry. The sync folder rides as its
@@ -90,7 +93,7 @@ export const installCommand = (input: CommandInput): string => {
     if (args !== undefined) {
         return oneLiner(`setup`, args, input.os);
     }
-    return input.os === `windows` ? psCommand(`ps1`, windowsEnv(input)) : bashCommand(`sh`, unixPrefix(input), input.code);
+    return input.os === `windows` ? psCommand(`ps1`, windowsEnv(input)) : bashCommand(`sh`, unixPrefix(input), shellQuote(input.code));
 };
 
 // The undo offered beside it: lists the sandboxes on the device and removes the one picked, recoverable for 7 days.

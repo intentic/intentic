@@ -157,6 +157,12 @@ Use the color swatches or custom picker, switch accessories and backgrounds, and
 samples. Card-size props carry the specialty; the smallest toolbar faces primarily carry color and silhouette.
 The [interactive preview](src/components/brand/assistants/modular/preview.html) shows every preset combination.
 
+Browser storage has one door, `@intentic/ui/storage` (`lib/browserStorage.ts`), for the kit and the editor alike:
+reads and writes that never throw (site data off, a full quota), JSON read back through a schema so another build's
+value reads as absent, and every key declared in its scope. A `deviceKey` (theme, language, layout, a rail's last
+pick) survives sign-out; an `accountKey`, `accountKeys` family or `sandboxKeys` family, and anything registered with
+`onAccountCleared`, goes with `clearAccountStorage`.
+
 ## Layout
 
 | Directory | Holds |
@@ -167,7 +173,7 @@ The [interactive preview](src/components/brand/assistants/modular/preview.html) 
 | `markdown/` | The markdown engine: render, figures, frontmatter, code blocks, block editing, history |
 | `styles/` | Tokens, motion, colour scales, the PrimeVue skin; `opt-in/` for prose and the extension class surface |
 | `icons/` | Native SVG glyph sets and file-type icons |
-| `lib/` | Class recipes, formatting, paths, overlay placement, clipboard, press handling |
+| `lib/` | Class recipes, formatting, paths, overlay placement, clipboard, browser storage, press handling |
 | `i18n/` | vue-i18n setup and the kit's own strings per language |
 
 ## Key files

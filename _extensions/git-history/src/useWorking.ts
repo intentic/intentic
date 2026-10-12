@@ -4,16 +4,16 @@ import { computed, type Ref } from "vue";
 import { host } from "./host.js";
 
 // This repo's uncommitted work, shown as row zero so the graph's committed history and the Changes panel's uncommitted
-// view meet. Reads the workspace-wide `/git/changes` rather than a route of its own, so the row can never disagree with
-// the panel; the daemon coalesces the scan, so the extra reader costs little.
+// view meet. Reads the workspace-wide `/git/changes` under the panel's own key rather than a route of its own, so the
+// row can never disagree with the panel and moves with every push that refreshes it.
 
 export function useWorking(repo: Ref<string>) {
     const api = host();
 
     const query = useQuery({
         // Not keyed by repo: the response covers the whole workspace, so per-repo keys would refetch the same scan.
-        queryKey: api.sandbox.key(`git-history`, `working`),
-        queryFn: () => api.sandbox.rpc.git.changes({}),
+        queryKey: api.sandbox.readKey(`git.changes`),
+        queryFn: () => api.sandbox.rpc.git.changes(),
         enabled: computed(() => api.sandbox.reachable()),
     });
 

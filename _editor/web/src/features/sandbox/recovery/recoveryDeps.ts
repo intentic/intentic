@@ -1,4 +1,4 @@
-import { RelinkAnswerSchema, type RelinkAnswer, type RelinkRequest } from "@intentic/sandbox-contract";
+import { DaemonHealthReadingSchema, RelinkAnswerSchema, type RelinkAnswer, type RelinkRequest } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { apiClient } from "../../../lib/useApi";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
@@ -17,7 +17,6 @@ const HEALTH_BUDGET_MS = 10_000;
 // on the daemon's side; this only stops a dead tunnel from holding the button forever.
 const RELINK_BUDGET_MS = 150_000;
 
-const HealthSchema = z.object({ sandboxId: z.string().optional() });
 const RefusalSchema = z.object({ error: z.string() });
 
 const health = async (daemonUrl: string): Promise<{ readonly sandboxId: string | undefined } | undefined> => {
@@ -26,7 +25,8 @@ const health = async (daemonUrl: string): Promise<{ readonly sandboxId: string |
         if (!response.ok) {
             return undefined;
         }
-        const parsed = HealthSchema.safeParse(await response.json());
+        // The contract's loose reading of a daemon's health: a daemon of any age answers it.
+        const parsed = DaemonHealthReadingSchema.safeParse(await response.json());
         return { sandboxId: parsed.success ? parsed.data.sandboxId : undefined };
     } catch {
         // allow(silent-catch): DNS, TLS, CORS and a dead tunnel all mean the same thing here: nothing answers.

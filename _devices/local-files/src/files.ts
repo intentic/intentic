@@ -1,10 +1,11 @@
 import { createHash, randomBytes } from "node:crypto";
 import { constants, createReadStream } from "node:fs";
-import { chmod, lstat, open, readFile, rename, rm, stat } from "node:fs/promises";
+import { chmod, lstat, open, readFile, rm, stat } from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { errnoCode } from "@intentic/base/errors";
+import { renameOver } from "@intentic/base/fs";
 import { decodeUtf16Window, UTF16_PROBE, utf16ByBom } from "@intentic/base/utf16-text";
 import { isUtf8, trimUtf8Window } from "@intentic/base/utf8-text";
 import { nodeStream, webStream } from "@intentic/base/web-stream";
@@ -259,7 +260,8 @@ export const writeFileWhole = async (
         if (previous?.isFile() === true) {
             await chmod(temporary, previous.mode & 0o7777);
         }
-        await rename(temporary, abs);
+        // Waits out Windows' brief refusal while an editor, indexer or antivirus holds the file, rather than refusing the save as busy.
+        await renameOver(temporary, abs);
         return undefined;
     } catch (error) {
         await rm(temporary, { force: true });

@@ -1,9 +1,10 @@
-import { serialLock } from "@intentic/base/async";
+import { Delayer, serialLock } from "@intentic/base/async";
 import { randomUUID } from "node:crypto";
 import { mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathExists } from "@intentic/base/fs";
 import { freshness } from "@intentic/base/held";
+import { oneLine } from "@intentic/base/one-line";
 import { type FileDiff, type Snapshot, type SnapshotChange, SnapshotTriggerSchema, type SnapshotTrigger } from "@intentic/sandbox-contract";
 import { defaultGit } from "@intentic/base/git";
 import { IGNORED_DIRS } from "@intentic/workspace-ignore";
@@ -79,11 +80,7 @@ interface ScopeCommit {
 // Labels live in commit bodies from free-form prompts; collapsed to one bounded line for git log parsing and the
 // timeline row.
 const sanitizeLabel = (label: string): string | undefined => {
-    const clean = label
-        .replaceAll(/[\p{Cc}\p{Cf}]+/gu, " ")
-        .replaceAll(/\s+/gu, " ")
-        .trim()
-        .slice(0, MAX_LABEL_LENGTH);
+    const clean = oneLine(label, MAX_LABEL_LENGTH, { ellipsis: false });
     return clean === "" ? undefined : clean;
 };
 
@@ -510,7 +507,8 @@ export const createWorkspaceHistory = (
     };
 
     let timer: NodeJS.Timeout | undefined;
-    let userWriteTimer: NodeJS.Timeout | undefined;
+    // Unref'd: a pending user snapshot never holds the daemon open.
+    const userWrites = new Delayer<void>(USER_WRITE_DEBOUNCE_MS, { unref: true });
     let unsubscribe: (() => void) | undefined;
     const snapshot = (trigger: SnapshotTrigger, label?: string): Promise<string | undefined> => serialize(() => snapshotAll(trigger, label));
 
@@ -545,21 +543,13 @@ export const createWorkspaceHistory = (
                 clearInterval(timer);
                 timer = undefined;
             }
-            if (userWriteTimer !== undefined) {
-                clearTimeout(userWriteTimer);
-                userWriteTimer = undefined;
-            }
+            userWrites.cancel();
         },
         snapshot,
         notifyUserWrite: () => {
-            if (userWriteTimer !== undefined) {
-                clearTimeout(userWriteTimer);
-            }
-            userWriteTimer = setTimeout(() => {
-                userWriteTimer = undefined;
+            void userWrites.trigger(() => {
                 void snapshot("user").catch((error: unknown) => logger.warn({ err: error }, "history: user snapshot failed"));
-            }, USER_WRITE_DEBOUNCE_MS);
-            userWriteTimer.unref();
+            });
         },
         list: async () =>
             (await visibleGroups()).map(({ id, at, trigger, label }) => (label !== undefined ? { id, at, trigger, label } : { id, at, trigger })),

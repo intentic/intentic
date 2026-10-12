@@ -321,12 +321,15 @@ export const DeviceSandboxIdSchema = z
     .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/);
 // A folder on the DEVICE for `sync-install` to keep in step. The only caller-supplied string that reaches a command
 // line, so its shape is the guard: `~`, an absolute POSIX path or a drive letter, and none of the characters that would
-// end the argument it sits in. `~` is expanded by the daemon, which is why `$` is not allowed to arrive here.
+// end the argument it sits in. `~` is expanded by the daemon, which is why `$` is not allowed to arrive here. The line
+// may be PowerShell, which reads the typographic quotes “ ” „ as double quotes and ‘ ’ ‚ ‛ as single quotes beside the
+// ASCII ones, so those are refused too: the daemon quotes the folder, and this keeps a second guard where one quoter
+// misses a character.
 export const DeviceLocalDirSchema = z
     .string()
     .min(1)
     .max(4096)
-    .regex(/^(?:~|\/|[A-Za-z]:[\\/])[^"'`$;|&\n\r]*$/);
+    .regex(/^(?:~|\/|[A-Za-z]:[\\/])[^"'`$;|&\n\r“”„‘’‚‛]*$/);
 // A TCP port number, the one value a caller supplies that reaches a command line as a number rather than a string.
 export const PortNumberSchema = z.number().int().min(1).max(65535);
 export const DeviceCommandInputSchema = z.object({

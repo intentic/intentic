@@ -25,11 +25,8 @@ export const charsOfTokens = (tokens: number): number => tokens * CHARS_PER_TOKE
 export const plural = (count: number, one: string, many?: string): string =>
     `${count} ${count === 1 ? one : (many ?? (/(s|x|z|ch|sh)$/.test(one) ? `${one}es` : `${one}s`))}`;
 
-const HTML_ENTITIES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
-
-// Replaces the five characters that are active in HTML text and attribute contexts; safe for both template-literal HTML
-// and v-html injection.
-export const escapeHtml = (text: string): string => text.replace(/[&<>"']/g, (ch) => HTML_ENTITIES[ch] ?? ch);
+// Kept here for the callers that already import it from this module; the escape lives in escape.ts.
+export { escapeHtml } from "./text/escape.js";
 
 // Constrains a value to [min, max]; used everywhere a pixel, percentage, or index must stay in bounds.
 export const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));

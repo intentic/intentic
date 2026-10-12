@@ -1,5 +1,6 @@
 import { readdir, readFile, readlink } from "node:fs/promises";
 import { join } from "node:path";
+import { cachedAsync } from "@intentic/base/held";
 import { parentPid, parseProcStat } from "../system/resources/proc-stat.js";
 
 // Discovers every listening TCP socket via procfs, no lsof/ss dependency. The only way to see ports bound outside the
@@ -160,17 +161,10 @@ export const cachedScan = <T>(
     fingerprint: () => Promise<string>,
     { maxAgeMs = 30_000, now = Date.now }: { readonly maxAgeMs?: number; readonly now?: () => number } = {},
 ): (() => Promise<T>) => {
-    let held: { readonly print: string; readonly at: number; readonly value: T } | undefined;
-    return async () => {
-        const print = await fingerprint();
-        const at = now();
-        if (held !== undefined && held.print === print && at - held.at < maxAgeMs) {
-            return held.value;
-        }
-        const value = await scan();
-        held = { print, at, value };
-        return value;
-    };
+    // Keyed by the fingerprint, holding only the last: a socket opened or closed is a new key, and pollers asking at
+    // once share one scan.
+    const held = cachedAsync<string, T>({ ttlMs: maxAgeMs, maxEntries: 1, now });
+    return async () => held.get(await fingerprint(), scan);
 };
 
 // Every forwardable TCP port in the sandbox's netns, attributed to its owning process where procfs allows. procRoot is

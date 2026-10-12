@@ -1,4 +1,4 @@
-import { request } from "node:https";
+import { nodeRequest } from "./node-request.js";
 
 // Only hosts this daemon may skip certificate verification for (a self-signed dev platform on
 // localhost/host.docker.internal); centralized so every caller agrees, and never configurable.
@@ -16,29 +16,15 @@ export const localTolerantFetch = (async (input: RequestInfo | URL, init?: Reque
     if (url.protocol !== "https:" || !isLocalHost(url.hostname)) {
         return fetch(input, init);
     }
-    return new Promise<Response>((resolve, reject) => {
-        const req = request(
-            url,
-            {
-                method: init?.method ?? "GET",
-                headers: (init?.headers ?? {}) as Record<string, string>,
-                rejectUnauthorized: false,
-            },
-            (response) => {
-                const chunks: Buffer[] = [];
-                response.on("data", (chunk: Buffer) => chunks.push(chunk));
-                response.on("end", () => {
-                    const status = response.statusCode ?? 502;
-                    resolve(new Response(bodiless(status) ? null : Buffer.concat(chunks), { status: status < 200 ? 502 : status }));
-                });
-            },
-        );
-        req.on("error", reject);
+    const body = init?.body;
+    const answer = await nodeRequest(url, {
+        method: init?.method ?? "GET",
+        headers: Object.fromEntries(new Headers(init?.headers).entries()),
+        // Only the bodies its callers send; a stream or a form never came through here.
+        body: typeof body === "string" || body instanceof Uint8Array ? body : undefined,
+        insecure: true,
         // Uses the caller's own deadline (each sets an AbortSignal.timeout) rather than inventing a second one.
-        init?.signal?.addEventListener(`abort`, () => req.destroy(new Error(`aborted`)));
-        if (typeof init?.body === "string") {
-            req.write(init.body);
-        }
-        req.end();
+        signal: init?.signal ?? undefined,
     });
+    return new Response(bodiless(answer.status) ? null : answer.body, { status: answer.status < 200 ? 502 : answer.status });
 }) as unknown as typeof fetch;

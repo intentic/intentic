@@ -42,6 +42,13 @@ export const normalizeHost = (raw: string): string | undefined => {
 export const hostMatches = (pattern: string, host: string): boolean =>
     pattern.startsWith(WILDCARD) ? host.endsWith(pattern.slice(1)) : host === pattern;
 
+// Whether one entry of a domain list covers a host: a plain entry names a domain and every host under it at any depth
+// (`example.com` covers `example.com` and `api.example.com`, never `notexample.com`), a wildcard only the hosts under it.
+// Both sides are expected normalized. The wallet's allow and deny lists read their entries this way; a secret's host
+// guard reads its own exactly (hostMatches).
+export const hostCovers = (entry: string, host: string): boolean =>
+    entry.startsWith(WILDCARD) ? hostMatches(entry, host) : host === entry || host.endsWith(`.${entry}`);
+
 export const hostAllowed = (patterns: readonly string[], host: string): boolean => patterns.some((pattern) => hostMatches(pattern, host));
 
 // Whether every host `pattern` matches is already matched by `patterns`: an exact host by any pattern that matches it, a

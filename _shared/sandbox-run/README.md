@@ -24,7 +24,13 @@ flowchart LR
   editor and machine agent compute it without being told.
 - `DATA_MOUNTS` names where a sandbox's stored data lives in its container and the state planner's flag for each; the
   update pre-flight in `ic` mounts exactly these, read-only, and its copy is held to `golden/data-mounts.json`.
-- `./quote` holds the shell, SQL and env-file quoters the daemon, providers and CLI share.
+- `./quote` holds the shell, SQL and env-file quoters the daemon, providers, CLI and editor share. It imports
+  nothing, so a browser bundle can take it. `powershellQuote` doubles all five characters PowerShell reads as a
+  single quote (`'` and the typographic `‘ ’ ‚ ‛`), not only the ASCII one.
+- `./slug` reads a sandbox's names back: the slug off a container name (`sandboxSlugOf`, which never guesses from a
+  name that is not a sandbox's), off a daemon's address (`slugOfDaemonUrl`, guarded and lowercased, undefined rather
+  than a throw), and the 12-hex id off a connect token through Web Crypto (`sandboxIdOfToken`, the browser's twin of
+  the contract's `sandboxIdFromToken`). It imports nothing, so the editor takes it without the run emitter.
 - `flyMachineConfig` declares no Fly service or check: a hosted machine is reached only down the tunnel its daemon
   dials to the edge, like every other sandbox, so nothing on Fly routes to it.
 
@@ -33,4 +39,5 @@ flowchart LR
 - [src/index.ts](src/index.ts) — names, capabilities, caps, directives, replay env and `sandboxRunArgv`.
 - [src/fly.ts](src/fly.ts) — the hosted flavour: `flyMachineConfig` and the single-volume layout.
 - [src/quote.ts](src/quote.ts) — quoters to compose outward, one per parser a value crosses.
+- [src/slug.ts](src/slug.ts) — a sandbox's slug and id read back off a container name, an address or a token.
 - [src/index.test.ts](src/index.test.ts) — the emitted argv and directive handling, by example.

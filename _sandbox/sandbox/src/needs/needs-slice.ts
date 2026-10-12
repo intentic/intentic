@@ -19,7 +19,7 @@ import { deliverWake } from "../agent/run/turn/wake-delivery.js";
 import { deliverToListenerChannel } from "../extensions/listener/listener-deliver.js";
 import { needRaised, needResolved } from "../push/notifications.js";
 import { upsertEnv } from "../secrets/env-text.js";
-import { textFile } from "../store/text-file.js";
+import { textFile } from "../store/plain-files/text-file.js";
 import { capabilityNeed } from "./kinds/capability-need.js";
 import { automationNeed } from "./kinds/automation-need.js";
 import { environmentNeed } from "./kinds/environment-need.js";

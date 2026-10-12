@@ -1,5 +1,7 @@
 import { lstat, readFile, realpath, writeFile } from "node:fs/promises";
-import { dirname, join, relative, sep } from "node:path";
+import { dirname, join } from "node:path";
+import { keyedLock } from "@intentic/base/async";
+import { isInside } from "@intentic/base/contained";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import {
     DEVICE_FEATURE_PROJECT_DELIVERY,
@@ -272,11 +274,6 @@ export const writablePath = (path: string): boolean => {
     return path.split("/").every((segment) => segment !== "" && segment !== "." && segment !== ".." && segment !== ".git");
 };
 
-const within = (root: string, path: string): boolean => {
-    const rel = relative(root, path);
-    return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !rel.startsWith(sep));
-};
-
 // Whether a merged path may be written under `root` (already resolved): a plain relative path, whose directory resolves
 // inside the folder through any link, and on which no link or directory stands.
 const safeTarget = async (realRoot: string, root: string, path: string): Promise<string | undefined> => {
@@ -285,7 +282,7 @@ const safeTarget = async (realRoot: string, root: string, path: string): Promise
     }
     const target = join(root, ...path.split("/"));
     const parent = await realpath(dirname(target)).catch(undefinedIfMissing);
-    if (parent === undefined || !within(realRoot, parent)) {
+    if (parent === undefined || !isInside(realRoot, parent)) {
         return undefined;
     }
     const standing = await lstat(target).catch(undefinedIfMissing);
@@ -531,13 +528,15 @@ export const createProjectDelivery = (
 
     // One delivery per project folder at a time: two into the same folder would race the machine's restore point and
     // each other's merges.
-    const chains = new Map<string, Promise<unknown>>();
+    const lock = keyedLock<string>();
+    // Every delivery queued and not yet finished, so `settled` can wait on them all.
+    const underWay = new Set<Promise<unknown>>();
     const inOrder = <T>(project: string, task: () => Promise<T>): Promise<T> => {
-        const next = (chains.get(project) ?? Promise.resolve()).then(task, task);
-        // allow(silent-catch): the caller holds `next` and hears its rejection; the chain only orders what comes after
-        const tail = next.catch(() => undefined);
-        chains.set(project, tail);
-        void tail.then(() => chains.get(project) === tail && chains.delete(project));
+        const next = lock(project, task);
+        // allow(silent-catch): the caller holds `next` and hears its rejection; this only marks when it is done
+        const done = next.catch(() => undefined);
+        underWay.add(done);
+        void done.then(() => underWay.delete(done));
         return next;
     };
 
@@ -736,7 +735,7 @@ export const createProjectDelivery = (
         landed,
         retry,
         settled: async () => {
-            await Promise.all(chains.values());
+            await Promise.all(underWay);
         },
     };
 };

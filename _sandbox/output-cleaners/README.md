@@ -23,9 +23,15 @@ flowchart LR
   repeated runs and anything past a generous tail. Every path redacts, and any error answers with the raw text.
 - `filter-stats.mjs` is the only reading of the ledger: the daemon's savings route and the plugin's stats command
   both call `summarizeStats`, so the two reports cannot disagree.
-- Secret values come from the sandbox's own stores (`secretValues`); outside a sandbox that list is empty and only the
-  credential-shaped patterns redact. `surfaceForms` (raw, JSON-escaped, percent-encoded) is the daemon's too: its
-  masking of tool results imports it from here, so the two lanes match the same forms of a value.
+- Secret values come from the sandbox's own stores (`secretValues`), the ones `SECRET_STORES` lists: the desired-state
+  `.env` (read with `util.parseEnv`) and `.secrets.json`, and the auth root's `sandbox-secrets.json` and capability
+  vault. Outside a sandbox that list is empty and only the credential-shaped patterns redact. The daemon's tool-result
+  masking imports `SECRET_STORES`, `surfaceForms`, `secretReference` and `SECRET_VALUE_MIN` from here, so the two lanes
+  read the same stores and mask the same forms of a value to the same reference.
+- Being builtins-only, it keeps its own copies of two contract tables: `SECRET_REFERENCE` (the `{{secret:name}}`
+  pattern) and `CREDENTIAL_ISSUERS` (issuer prefixes and token bodies). The daemon's
+  `src/secrets/terminal-masking-parity.test.ts` fails when either copy parts from the contract's. Beside a
+  credential-shaped name an issuer prefix alone marks a value; elsewhere only the whole token shape does.
 
 ## Key files
 

@@ -1,10 +1,8 @@
 import { z } from "zod";
-import { FlyError } from "./fly.js";
+import { FlyError, flyRequest, isFlyOk } from "./fly.js";
 
 // Fly's managed Prometheus, read with the same org token as the Machines API: one instant query, answered per machine.
 // `instance` in Fly's labels is the machine id, which is what tells a sandbox's machine from a builder in the same app.
-
-const METRICS_TIMEOUT_MS = 30_000;
 
 const vectorSchema = z.object({
     status: z.literal(`success`),
@@ -25,16 +23,18 @@ export const queryMachineMetric = async (
     promql: string,
 ): Promise<MachineSample[]> => {
     const url = `${metrics.metricsUrl.replace(/\/$/, ``)}/${encodeURIComponent(metrics.flyOrg)}/api/v1/query?query=${encodeURIComponent(promql)}`;
-    let response: Response;
-    try {
-        response = await fetch(url, { headers: { authorization: `Bearer ${metrics.flyApiToken}` }, signal: AbortSignal.timeout(METRICS_TIMEOUT_MS) });
-    } catch (error) {
-        throw new FlyError(`Fly's metrics API could not be reached: ${error instanceof Error ? error.message : `transport failure`}`);
-    }
-    if (!response.ok) {
+    const response = await flyRequest(url, {
+        method: `GET`,
+        token: metrics.flyApiToken,
+        unanswered: {
+            timedOut: (seconds) => `Fly's metrics API did not answer within ${seconds}s`,
+            unreachable: (detail) => `Fly's metrics API could not be reached: ${detail}`,
+        },
+    });
+    if (!isFlyOk(response)) {
         throw new FlyError(`Fly's metrics API answered HTTP ${response.status} for ${promql}`, response.status);
     }
-    const parsed = vectorSchema.safeParse(await response.json().catch(() => undefined));
+    const parsed = vectorSchema.safeParse(response.json);
     if (!parsed.success) {
         throw new FlyError(`Fly's metrics API answered an unexpected shape for ${promql}`);
     }

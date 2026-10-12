@@ -1,3 +1,5 @@
+import { within } from "./async.js";
+
 // Teardown as a store rather than a maintained list: what needs undoing registers at creation, so shutdown is one call
 // that cannot skip anything. Disposal is never partial; a member that throws does not stop the rest, and failures
 // surface together as one AggregateError.
@@ -119,12 +121,8 @@ export class DisposableStore implements IDisposable {
             }
         }
         if (pending.length > 0) {
-            let timer: ReturnType<typeof setTimeout> | undefined;
-            const deadline = new Promise<void>((resolve) => {
-                timer = setTimeout(resolve, deadlineMs);
-            });
-            await Promise.race([Promise.all(pending), deadline]);
-            clearTimeout(timer);
+            // Unref'd: the deadline is a ceiling on the wait, never a reason for an exiting process to stay up.
+            await within(Promise.all(pending), deadlineMs, undefined, { unref: true });
         }
         return { failed: [...failed], unfinished };
     }

@@ -1,7 +1,8 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { mkdir, open, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { SingleFlight, sleep } from "@intentic/base/async";
+import { SingleFlight, sleep, startPeriodic } from "@intentic/base/async";
+import { FetchJsonError, fetchJson } from "@intentic/base/fetch-json";
 import type { OauthAccount } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { z } from "zod";
@@ -149,19 +150,20 @@ export const toAccount = (stored: StoredAccount): OauthAccount => ({
     ...(stored.revokedAt !== undefined ? { needsReauth: true, detail: stored.revokedReason ?? "Signed out, reconnect to keep using it." } : {}),
 });
 
-// Token-endpoint response shape; everything but access_token is optional since it's the provider's to send (see
-// readIdentity).
-interface TokenResponse {
-    access_token: string;
-    refresh_token?: string;
-    expires_in?: number;
-    scope?: string;
-    account?: { email_address?: string };
-    organization?: { name?: string };
-}
+// Token-endpoint response shape; everything but access_token is optional since it's the provider's to send, and a
+// field of the wrong shape reads as absent rather than failing the grant (see readIdentity).
+const tokenResponseSchema = z.object({
+    access_token: z.string(),
+    refresh_token: z.string().optional().catch(undefined),
+    expires_in: z.number().optional().catch(undefined),
+    scope: z.string().optional().catch(undefined),
+    account: z.object({ email_address: z.string().optional().catch(undefined) }).optional().catch(undefined),
+    organization: z.object({ name: z.string().optional().catch(undefined) }).optional().catch(undefined),
+});
+type TokenResponse = z.infer<typeof tokenResponseSchema>;
 
 // A non-2xx from the token endpoint; invalidGrant distinguishes a dead refresh token (stop retrying) from a transient
-// failure.
+// failure. `body` is the start of the endpoint's answer, one bounded line, which is where OAuth puts its `error` code.
 export class TokenRequestError extends Error {
     constructor(
         readonly status: number,
@@ -186,17 +188,30 @@ const readIdentity = (json: TokenResponse): Pick<TokenSet, "email" | "organizati
 const TOKEN_REQUEST_TIMEOUT_MS = 20_000;
 
 const requestTokens = async (body: Record<string, string>): Promise<TokenSet> => {
-    const response = await fetch(TOKEN_URL, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-        // A timeout throws TimeoutError, not TokenRequestError, so it reads as transient, never as invalid_grant.
-        signal: AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS),
-    });
-    if (!response.ok) {
-        throw new TokenRequestError(response.status, await response.text().catch(() => ""));
+    let answer: unknown;
+    try {
+        answer = await fetchJson(TOKEN_URL, { method: "POST", json: body, timeoutMs: TOKEN_REQUEST_TIMEOUT_MS, label: "Claude token request" });
+    } catch (error) {
+        if (!(error instanceof FetchJsonError)) {
+            throw error;
+        }
+        // A refusal's body is cut to one bounded line, where an HTML error page used to land in the log whole.
+        if (error.kind === "status" && error.status !== undefined) {
+            throw new TokenRequestError(error.status, error.body ?? "");
+        }
+        // A 200 that is not JSON could still carry tokens, so its excerpt never reaches a message or a log.
+        if (error.kind === "parse") {
+            throw new Error("Claude token request answered something that is not JSON", { cause: error });
+        }
+        // A timeout or a dead socket is not a TokenRequestError, so it reads as transient, never as invalid_grant.
+        throw error;
     }
-    const json = (await response.json()) as TokenResponse;
+    const parsed = tokenResponseSchema.safeParse(answer);
+    // Says only what is missing: the answer itself may hold a refresh token, so none of it goes into the message.
+    if (!parsed.success) {
+        throw new Error("Claude token request answered without an access_token");
+    }
+    const json = parsed.data;
     return {
         accessToken: json.access_token,
         ...(json.refresh_token !== undefined ? { refreshToken: json.refresh_token } : {}),
@@ -473,12 +488,10 @@ export const startClaudeRefresh = (store: ClaudeStore, intervalMs = 5 * 60_000, 
     };
     // Fire-and-forget: a turn's finally must not wait on an HTTPS round-trip for a result it wouldn't use.
     releaseQuiet = (id) => void quietly(id);
-    const timer = setInterval(() => void tick(), intervalMs);
-    // A background refresh must never hold the process open.
-    timer.unref();
-    void tick();
+    // Unref'd by startPeriodic: a background refresh must never hold the process open.
+    const loop = startPeriodic({ warmupMs: 0, everyMs: intervalMs, run: tick });
     return () => {
         releaseQuiet = undefined;
-        clearInterval(timer);
+        loop.dispose();
     };
 };

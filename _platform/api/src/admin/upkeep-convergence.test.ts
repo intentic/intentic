@@ -1,5 +1,5 @@
 import type { HostReport } from "@intentic/api-contract";
-import { convergenceDigestLines, newerVersion, upkeepConvergence } from "./upkeep-convergence.js";
+import { convergenceDigestLines, upkeepConvergence } from "./upkeep-convergence.js";
 
 const report = (machine: string, at: string, upkeep?: HostReport[`upkeep`], env?: string): HostReport => ({
     source: `agent`,
@@ -36,9 +36,10 @@ describe(`upkeepConvergence`, () => {
         expect(convergenceDigestLines(upkeepConvergence([report(`rog`, `2026-10-06T10:00:00Z`, { found: 2, fixed: 2, skipped: 0, agentVersion: `1.330.0` })]))).toEqual([]);
     });
 
-    it(`orders versions by their numbers, not as text`, () => {
-        expect(newerVersion(`1.330.0`, `1.99.9`)).toBeGreaterThan(0);
-        expect(newerVersion(`1.329.2`, `1.330.0`)).toBeLessThan(0);
-        expect(newerVersion(`1.330.0`, `1.330.0`)).toBe(0);
+    it(`orders versions by their numbers, not as text, a prerelease below its release and "unknown" last`, () => {
+        const versions = [`1.99.9`, `1.330.0-rc.1`, undefined, `1.330.0`, `1.329.2`].map((agentVersion, index) =>
+            report(`machine-${index}`, `2026-10-06T10:00:00Z`, { found: 0, fixed: 0, skipped: 0, ...(agentVersion === undefined ? {} : { agentVersion }) }),
+        );
+        expect(upkeepConvergence(versions).map((row) => row.version)).toEqual([`1.330.0`, `1.330.0-rc.1`, `1.329.2`, `1.99.9`, `unknown`]);
     });
 });

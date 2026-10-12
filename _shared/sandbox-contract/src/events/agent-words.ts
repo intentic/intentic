@@ -1,3 +1,4 @@
+import { oneLine } from "@intentic/base/one-line";
 import type { SubagentVerification } from "../schemas/terminal.js";
 import type { TranscriptAgentWords, TranscriptRow } from "./transcript.js";
 import { needWakeRow } from "./need-wake.js";
@@ -11,11 +12,9 @@ const CHILD_OPENING = "Report from a subagent you started: ";
 // What a report opened with before a spawned agent was called a subagent like every other; still in stored prompts.
 const LEGACY_CHILD_OPENING = "Report from a child agent you started: ";
 
-// The parser reads the first line only, so a title may not break it.
-const oneLine = (text: string): string => text.replaceAll(/\s+/gu, " ").trim();
-
 // `sub-x7` or `sub-x7 ("Port the parser")`.
 const senderOf = (from: string, title: string | undefined): string => {
+    // The parser reads the first line only, so a title may not break it.
     const label = title === undefined ? "" : oneLine(title);
     return label === "" ? `\`${from}\`` : `\`${from}\` ("${label}")`;
 };

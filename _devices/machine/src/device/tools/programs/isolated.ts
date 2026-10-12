@@ -1,9 +1,7 @@
-import { execFile } from "node:child_process";
+import { psText } from "@intentic/desktop-automation";
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
-import { promisify } from "node:util";
-
-const exec = promisify(execFile);
+import { execBounded } from "@intentic/base/process";
 
 // A PROGRAM RUN INSIDE WINDOWS SANDBOX (app_start with `isolated`): a throwaway VM Windows Pro, Enterprise and Education
 // carry, which starts clean, sees the build's folder read-only and one log folder it may write, and forgets everything
@@ -38,8 +36,6 @@ export const windowsSandboxMissing = async (): Promise<string | undefined> => {
 };
 
 const xml = (text: string): string => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-// A PowerShell single-quoted literal: nothing inside is expanded, and a quote is doubled.
-export const psQuote = (text: string): string => `'${text.replace(/'/g, "''")}'`;
 
 export interface IsolatedSpec {
     // The folder on this machine holding the program, mapped read-only at C:\app.
@@ -81,17 +77,19 @@ export const wsbConfig = (spec: IsolatedSpec): string =>
         "",
     ].join("\r\n");
 
-// What runs at logon inside the VM: the program, its output into the log folder, its exit code when it ends.
+// What runs at logon inside the VM: the program, its output into the log folder, its exit code when it ends. The
+// program, its arguments and its environment are the agent's, so each travels as psText (base64 decoded in place): a
+// quoted literal would let a typographic quote end it. Only this file's own constant paths are written as literals.
 export const startScript = (spec: IsolatedSpec): string => {
     const program = `${SANDBOX_APP_DIR}\\${spec.program.replace(/\//g, "\\")}`;
-    const log = (name: string): string => psQuote(`${SANDBOX_LOG_DIR}\\${name}`);
-    const args = spec.args.length === 0 ? "" : ` -ArgumentList @(${spec.args.map((arg) => psQuote(arg.includes(" ") ? `"${arg}"` : arg)).join(", ")})`;
+    const log = (name: string): string => `'${SANDBOX_LOG_DIR}\\${name}'`;
+    const args = spec.args.length === 0 ? "" : ` -ArgumentList @(${spec.args.map((arg) => psText(arg.includes(" ") ? `"${arg}"` : arg)).join(", ")})`;
     return [
         "$ErrorActionPreference = 'Stop'",
-        ...Object.entries(spec.env).map(([key, value]) => `[Environment]::SetEnvironmentVariable(${psQuote(key)}, ${psQuote(value)}, 'Process')`),
+        ...Object.entries(spec.env).map(([key, value]) => `[Environment]::SetEnvironmentVariable(${psText(key)}, ${psText(value)}, 'Process')`),
         `Set-Content -Path ${log("started")} -Value (Get-Date -Format o)`,
         "try {",
-        `  $p = Start-Process -FilePath ${psQuote(program)}${args} -WorkingDirectory ${psQuote(SANDBOX_APP_DIR)} -RedirectStandardOutput ${log("output.log")} -RedirectStandardError ${log("error.log")} -PassThru -Wait`,
+        `  $p = Start-Process -FilePath ${psText(program)}${args} -WorkingDirectory '${SANDBOX_APP_DIR}' -RedirectStandardOutput ${log("output.log")} -RedirectStandardError ${log("error.log")} -PassThru -Wait`,
         `  Set-Content -Path ${log("exit-code")} -Value $p.ExitCode`,
         "} catch {",
         `  Add-Content -Path ${log("error.log")} -Value $_.Exception.Message`,
@@ -106,7 +104,7 @@ export const windowsSandboxRunning = async (): Promise<boolean> => {
     if (process.platform !== "win32") {
         return false;
     }
-    const { stdout } = await exec("tasklist", ["/FO", "CSV", "/NH"], { windowsHide: true, maxBuffer: 8 * 1024 * 1024 });
+    const { stdout } = await execBounded("tasklist", ["/FO", "CSV", "/NH"], { timeoutMs: 30_000, maxOutput: 8 * 1024 * 1024 });
     const names = new Set(stdout.split(/\r?\n/).map((line) => line.split('","')[0]?.replace(/^"/, "").toLowerCase()));
     return SANDBOX_CLIENTS.some((name) => names.has(name.toLowerCase()));
 };
@@ -116,7 +114,7 @@ export const stopWindowsSandbox = async (): Promise<void> => {
     for (const name of SANDBOX_CLIENTS) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- three names, one after another so the client goes first
         // allow(silent-catch): taskkill fails for a client that is not running, which is the state this wants.
-        await exec("taskkill", ["/IM", name, "/T", "/F"], { windowsHide: true }).catch(() => undefined);
+        await execBounded("taskkill", ["/IM", name, "/T", "/F"], { timeoutMs: 30_000 }).catch(() => undefined);
     }
 };
 

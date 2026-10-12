@@ -18,14 +18,14 @@ export function useBranches(repo: Ref<string>) {
     const api = host();
     const queryClient = useQueryClient();
 
-    const branchesKey = computed(() => api.sandbox.key(`git-history`, `branches`, repo.value));
+    const branchesKey = computed(() => api.sandbox.readKey(`git.branches`, { repo: repo.value }));
     const query = useQuery({
         queryKey: branchesKey,
         queryFn: () => api.sandbox.rpc.git.branches({ repo: repo.value }),
         enabled: computed(() => api.sandbox.reachable()),
     });
     // Ahead/behind and the checked-out branch move with refs, mostly the agent's doing rather than this switcher's.
-    useRefRefresh(repo, [`branches`]);
+    useRefRefresh(repo, [branchesKey]);
 
     const branches = computed<readonly GitBranch[]>(() => query.data.value?.branches ?? []);
     const remotes = computed<readonly GitRemoteBranch[]>(() => query.data.value?.remotes ?? []);

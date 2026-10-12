@@ -968,6 +968,9 @@ importers:
       '@agentclientprotocol/sdk':
         specifier: 'catalog:'
         version: 1.7.0(zod@4.6.5)
+      '@intentic/base':
+        specifier: workspace:*
+        version: link:../../_tools/base
       '@intentic/constants':
         specifier: workspace:*
         version: link:../../_tools/constants
@@ -1027,6 +1030,9 @@ importers:
 
   _devices/desktop-automation:
     dependencies:
+      '@intentic/base':
+        specifier: workspace:*
+        version: link:../../_tools/base
       tslib:
         specifier: 'catalog:'
         version: 2.8.1
@@ -1866,6 +1872,9 @@ importers:
 
   _extensions/onlyoffice:
     dependencies:
+      '@intentic/base':
+        specifier: workspace:*
+        version: link:../../_tools/base
       '@intentic/extension-api':
         specifier: workspace:*
         version: link:../../_shared/extension-api
@@ -2332,6 +2341,9 @@ importers:
 
   _sandbox/agent-context:
     dependencies:
+      '@intentic/base':
+        specifier: workspace:*
+        version: link:../../_tools/base
       '@intentic/iq':
         specifier: workspace:*
         version: link:../../_search/iq
@@ -2363,6 +2375,9 @@ importers:
       '@intentic/agent-context':
         specifier: workspace:*
         version: link:../agent-context
+      '@intentic/base':
+        specifier: workspace:*
+        version: link:../../_tools/base
       '@intentic/fileq':
         specifier: workspace:*
         version: link:../fileq
@@ -2519,6 +2534,9 @@ importers:
 
   _sandbox/issue-sdk:
     devDependencies:
+      '@intentic/base':
+        specifier: workspace:*
+        version: link:../../_tools/base
       '@intentic/sandbox-contract':
         specifier: workspace:*
         version: link:../../_shared/sandbox-contract
@@ -2821,6 +2839,9 @@ importers:
 
   _sandbox/scaffold:
     dependencies:
+      '@intentic/base':
+        specifier: workspace:*
+        version: link:../../_tools/base
       '@intentic/constants':
         specifier: workspace:*
         version: link:../../_tools/constants
@@ -3834,6 +3855,12 @@ importers:
       '@intentic/base':
         specifier: workspace:*
         version: link:../base
+      '@intentic/sandbox-contract':
+        specifier: workspace:*
+        version: link:../../_shared/sandbox-contract
+      '@intentic/sandbox-run':
+        specifier: workspace:*
+        version: link:../../_shared/sandbox-run
     devDependencies:
       '@intentic/constants':
         specifier: workspace:*

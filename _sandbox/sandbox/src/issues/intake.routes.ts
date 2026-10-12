@@ -20,6 +20,7 @@ import { ISSUES_PROVIDER } from "../automations/catalog.js";
 import { wakeBrief } from "./issue-payload.js";
 import { fileIssuesStore, issuesDocument, type IssuesStore } from "./issues-store.js";
 import { issueInstallsDocument } from "../store/installs.js";
+import { readBoundedJson } from "../http/bounded-body.js";
 
 // The daemon's second public door (report), differing from the Visitor chat after admission: every report is a file
 // write, only sometimes a turn, since nobody waits on a crashing page. Grouping happens before anything can wake
@@ -89,18 +90,15 @@ const wakeWanted = (automation: AutomationRecord, kind: string, origin: string |
 // One refusal shape for every gate below, so the handler has exactly one way to say no.
 type Refusal = { status: 400 | 403 | 404 | 409 | 413 | 429; error: string };
 
-// The parsed body, or a refusal; checks declared size before parsing JSON, so an oversized body is never fully read
-// first.
+// The parsed body, or a refusal; the size is capped while the body is read, so an oversized one is never held whole.
 const parsed = async (c: Context<AppEnv, "/intake/:id/report">): Promise<Refusal | { body: z.infer<typeof IssueIngestSchema> }> => {
-    const declared = Number(c.req.header("content-length"));
-    if (Number.isFinite(declared) && declared > ISSUE_PAYLOAD_MAX) {
+    // Counted as it streams, not by the declared length alone: a chunked body declares none.
+    const read = await readBoundedJson(c.req.raw, ISSUE_PAYLOAD_MAX);
+    if (read.kind === "tooLarge") {
         return { status: 413, error: "payload too large" };
     }
-    try {
-        return { body: IssueIngestSchema.parse(await c.req.json()) };
-    } catch {
-        return { status: 400, error: "invalid report body" };
-    }
+    const body = read.kind === "ok" ? IssueIngestSchema.safeParse(read.value) : undefined;
+    return body?.success === true ? { body: body.data } : { status: 400, error: "invalid report body" };
 };
 
 // The door's gates, in order, between a well-formed report and one that may be recorded. One departure: the anti-bot
@@ -210,7 +208,6 @@ export const startWake = async (
             overlap: "queue",
             origin: { automationId: automation.id, provider: ISSUES_PROVIDER, channelId: issue.id },
             title: brief.title,
-            ...(automation.allowedTools !== undefined ? { allowedTools: automation.allowedTools } : {}),
         },
         (conversationId) => issues.noteRun(issue.id, conversationId, Date.now()),
     );

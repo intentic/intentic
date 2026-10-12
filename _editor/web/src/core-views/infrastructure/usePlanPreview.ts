@@ -1,10 +1,10 @@
 import { useQueryClient } from "@tanstack/vue-query";
 import { messageOr } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
-import { computed, ref } from "vue";
+import { computed, onScopeDispose, ref } from "vue";
 import { type PlanOrphan, type PlanStep, readPlanSteps } from "../../features/extensions/reconcileStatus";
 import { useSecretKeys } from "../../features/capabilities/connect/secrets/useSecrets";
-import { readIntenticLines } from "../../lib/intenticStream";
+import { untilResult } from "../../lib/intenticStream";
 import { SandboxHttpError } from "../../client/sandbox/sandboxHttpError";
 import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { useTerminalPanel } from "../../features/terminal/useTerminalPanel";
@@ -63,26 +63,31 @@ export function usePlanPreview() {
                 ? new Error(failure.said.error ?? t(`views.planPreview.resolveFailedStatus`, { status: failure.status }))
                 : failure;
         });
-        for await (const line of readIntenticLines(lines)) {
-            // Heartbeats only prove the daemon's tail is alive, not the CLI; arming on them would neuter the watchdog.
-            if (line[`kind`] !== `heartbeat`) {
-                armStall();
+        try {
+            const result = await untilResult(lines, {
+                failed: () => t(`views.planPreview.resolveFailed`),
+                signal,
+                onLine: (line) => {
+                    // Heartbeats only prove the daemon's tail is alive, not the CLI; arming on them would neuter the watchdog.
+                    if (line.kind !== `heartbeat`) {
+                        armStall();
+                    }
+                    // The run executes visibly in a tmux session; open its tab so the user watches the actual command.
+                    if (line.kind === `terminal` && typeof line[`session`] === `string`) {
+                        openFocused(line[`session`]);
+                    }
+                },
+            });
+            const envSecrets = result[`envSecrets`];
+            if (Array.isArray(envSecrets)) {
+                requiredEnv.value = envSecrets.filter((key): key is string => typeof key === `string`);
             }
-            // The run executes visibly in a tmux session; open its tab so the user watches the actual command.
-            if (line[`kind`] === `terminal` && typeof line[`session`] === `string`) {
-                openFocused(line[`session`]);
-            }
-            if (line[`kind`] === `result` && Array.isArray(line[`envSecrets`])) {
-                requiredEnv.value = line[`envSecrets`].filter((key): key is string => typeof key === `string`);
-            }
-            if (line[`kind`] === `error`) {
-                const message = line[`message`] ?? line[`text`];
-                throw new Error(typeof message === `string` ? message : t(`views.planPreview.resolveFailed`));
-            }
+        } finally {
+            // resolve rewrites desired-state.json and names its secrets as it goes, so the graph and secrets queries are
+            // re-read however it ended.
+            await queryClient.refetchQueries({ queryKey: rpcKey(`secrets.list`) });
+            void queryClient.invalidateQueries({ queryKey: WORKSPACE_STATE.of() });
         }
-        // Refreshes the graph and secrets queries after resolve rewrote desired-state.json and named its secrets.
-        await queryClient.refetchQueries({ queryKey: rpcKey(`secrets.list`) });
-        void queryClient.invalidateQueries({ queryKey: WORKSPACE_STATE.of() });
     };
 
     // plan (streamed): per-resource create/update/noop verdicts plus the orphan list, narrating as it reads.
@@ -146,7 +151,7 @@ export function usePlanPreview() {
             await resolve(signal);
             // Unread keys would list every required secret as missing and ask for values the sandbox already holds.
             if (keysError.value !== undefined && requiredEnv.value.length > 0) {
-                throw new Error(`Couldn't read which secrets this sandbox holds: ${keysError.value}`);
+                throw new Error(t(`views.planPreview.secretsUnreadable`, { reason: keysError.value }));
             }
             if (missingSecrets.value.length > 0) {
                 awaitingSecrets.value = true;
@@ -169,6 +174,9 @@ export function usePlanPreview() {
             stale.value = false;
         });
     };
+
+    // A run left going when the view goes would hold its request (and a stream permit) until the command finished.
+    onScopeDispose(cancel, true);
 
     return {
         running,

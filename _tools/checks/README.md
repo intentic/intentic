@@ -52,7 +52,7 @@ A finding that is right where it stands is excused in one of two forms, each rea
 
 - `// allow(<check>): <reason>` at the site, on its line or in the comment block right above it. It sits on the
   declaration it excuses, so a rename carries it and a deletion takes it away. `silent-catch`, `process-tiers`,
-  `contract-paths`, `md-links` and the editor's `module-state` guard read it.
+  `primitive-tiers`, `contract-paths`, `md-links` and the editor's `module-state` guard read it.
 - `Allow: <check> — <reason>` as a commit trailer, for a whole change: CI's push check (`verify-push.mjs`) accepts what
   that range adds to a tidy check with that manifest id.
 
@@ -105,6 +105,7 @@ pnpm checks                                  # all of them; pnpm checks:tidy for
 | [process-tiers](process-tiers.mjs) | a daemon process started by hand instead of through `runCheck`, `spawnAs` or `@intentic/base/git`'s `exec` (ratcheted: `baselines/process-tiers.json`) |
 | [quote-splices](quote-splices.mjs) | a value spliced into a command between bare quotes instead of through `@intentic/sandbox-run/quote`, or a file carrying secrets to a host that stopped importing it |
 | [home-dir](home-dir.mjs) | `homedir()` in the device agent (`_devices/machine/src`) instead of `homeDir()` from `@intentic/local-agent` |
+| [primitive-tiers](primitive-tiers.mjs) | a hand-rolled copy of a job with one shared door: a header-only body cap, a local hop-by-hop list, a `..` prefix containment test, an inline sleep, a card deadline, raw browser storage, a promisified `execFile` ([conventions](../../docs/architecture/conventions.md#one-door-per-concern); ratcheted: `baselines/primitive-tiers.json`) |
 | [time-zones](time-zones.mjs) | a cron, date format or day bucket with no zone |
 | [format-tiers](format-tiers.mjs) | a number or date the editor or an extension formats by hand instead of through the kit (ratcheted: `baselines/format-tiers.json`) |
 | [clipboard-tiers](clipboard-tiers.mjs) | the clipboard reached through `navigator.clipboard` in the editor or an extension instead of through the kit |

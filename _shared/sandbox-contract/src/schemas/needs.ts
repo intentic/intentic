@@ -57,6 +57,13 @@ export type CapabilityNeed = z.infer<typeof CapabilityNeedSchema>;
 // The alphabet a `{{secret:NAME}}` reference resolves; a pasted value is stored under exactly this name.
 export const SECRET_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
 
+// A `{{secret:name}}` reference wherever it stands in text, capturing the name. Wider than SECRET_NAME, since a
+// reference also names the other stores' entries (`<capability>/<field>`). Not global, so a shared instance carries no
+// `lastIndex` between callers: a site that replaces or spans every one derives its own /g copy from it. The terminal
+// filter (@intentic/output-cleaners, builtins only) keeps a copy, pinned to this one by the daemon's
+// src/secrets/terminal-masking-parity.test.ts.
+export const SECRET_REFERENCE = /\{\{secret:([A-Za-z0-9_./-]+)\}\}/;
+
 export const SecretNeedSchema = z.object({
     kind: z.literal("secret"),
     name: z.string().regex(SECRET_NAME).describe("The name it is stored under, and what `{{secret:NAME}}` will resolve."),
@@ -283,6 +290,16 @@ export const AgentNeedSchema = z.object({
 });
 export type AgentNeed = z.infer<typeof AgentNeedSchema>;
 
+// A credential gateway card's "Allow requests like this with <name> in this conversation": the `ask` rule it answered
+// stops asking that conversation, until somebody takes it back. Kept by the rule's own content, so editing the rule
+// asks again.
+export const BrokerRulePassSchema = z.object({
+    capability: z.string().describe("The capability whose rule asked, by id."),
+    rule: z.string().describe("The rule's own identity (its content), so an edited rule is a different one and asks again."),
+    said: z.string().describe('The request in a person\'s words, as the card put it: "GET api.github.com/repos/x with GitHub".'),
+});
+export type BrokerRulePass = z.infer<typeof BrokerRulePassSchema>;
+
 // What a person allowed one conversation beyond its persona and area, from a grant need's card
 // (personas/conversation-grants.ts). Honoured from that conversation's next turn on, and revocable on the Grants page.
 export const ConversationGrantSchema = z.object({
@@ -306,6 +323,11 @@ export const ConversationGrantSchema = z.object({
         .boolean()
         .default(false)
         .describe("Whether every request an allow-once could settle is allowed without asking, until somebody takes it back."),
+    // Answered on a credential gateway card, read live by the gateway as each request its rules would ask about arrives.
+    rules: z
+        .array(BrokerRulePassSchema)
+        .default([])
+        .describe("Credential gateway rules that no longer ask before its requests, each with the words a person allowed it in."),
     updatedAt: z.number().describe("When it last changed, in milliseconds."),
     by: z.string().optional().describe("Who last allowed something here."),
 });
@@ -323,6 +345,7 @@ export const StandingGrantsSchema = z.object({
             installs: z.boolean().default(false).describe("Whether its own dependency installs run without asking."),
             secrets: z.array(z.string()).default([]).describe("Secrets it may send past their host guard without asking."),
             everything: z.boolean().default(false).describe("Whether every request an allow-once could settle is allowed without asking."),
+            rules: z.array(BrokerRulePassSchema).default([]).describe("Credential gateway rules that no longer ask before its requests."),
             by: z.string().optional().describe("Who last allowed one of those."),
             updatedAt: z.number().optional().describe("When one of those last changed, in milliseconds."),
             releases: z
@@ -336,11 +359,14 @@ export type StandingGrants = z.infer<typeof StandingGrantsSchema>;
 export const GrantRevokeSchema = z.object({
     conversationId: z.string(),
     kind: z
-        .enum(["capability", "folder", "shelf", "release", "install", "secret", "everything"])
+        .enum(["capability", "folder", "shelf", "release", "install", "secret", "everything", "rule"])
         .describe(
-            "Which kind of yes: a grant past the persona or area, a credential's release, letting its installs run unasked, a secret sent past its host guard, or allowing everything.",
+            "Which kind of yes: a grant past the persona or area, a credential's release, letting its installs run unasked, a secret sent past its host guard, allowing everything, or a credential gateway rule that stopped asking.",
         ),
-    what: z.string().describe("The capability id, folder, shelf, released credential or secret it named; empty for installs and everything."),
+    what: z
+        .string()
+        .describe("The capability id, folder, shelf, released credential or secret it named, or the rule's identity; empty for installs and everything."),
+    capability: z.string().optional().describe("For a rule, the capability whose rule it is; a rule's identity alone does not say."),
 });
 export type GrantRevoke = z.infer<typeof GrantRevokeSchema>;
 

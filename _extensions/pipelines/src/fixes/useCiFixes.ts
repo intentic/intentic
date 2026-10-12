@@ -22,14 +22,17 @@ const sentFromHere = (agent: AgentSummary): boolean => agent.id.startsWith(CI_FI
 export function useCiFixes(enabled: Ref<boolean>) {
     const api = host();
     const queryClient = useQueryClient();
-    const queryKey = computed(() => api.sandbox.key(`ci-fixes`));
+    const queryKey = computed(() => api.sandbox.readKey(`agents.list`));
 
     const query = useQuery({
         queryKey,
         enabled: computed(() => api.sandbox.reachable() && enabled.value),
-        queryFn: async (): Promise<AgentSummary[]> => (await api.sandbox.rpc.agents.list()).agents,
+        // The fleet's own entry, the shell's roster read included, so a fix started here shows on the board at once.
+        queryFn: () => api.sandbox.rpc.agents.list(),
+        select: (answer): AgentSummary[] => answer.agents,
         // `awaiting` is not moving: a parked agent only changes when answered elsewhere, so the resting pace is enough.
-        refetchInterval: (state) => ((state.state.data ?? []).some((agent) => sentFromHere(agent) && moving(agent)) ? LIVE_POLL_MS : RESTING_POLL_MS),
+        refetchInterval: (state) =>
+            (state.state.data?.agents ?? []).some((agent) => sentFromHere(agent) && moving(agent)) ? LIVE_POLL_MS : RESTING_POLL_MS,
     });
 
     return {

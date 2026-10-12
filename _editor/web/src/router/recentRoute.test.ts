@@ -9,6 +9,7 @@ it(`ignores stale, root, and external destinations`, () => {
     expect(recentRoute(JSON.stringify({ path: `/agents/picked`, at: 1000 }), 1000 + 30 * 60_000)).toBeUndefined();
     expect(recentRoute(JSON.stringify({ path: `/`, at: 1000 }), 1001)).toBeUndefined();
     expect(recentRoute(JSON.stringify({ path: `//elsewhere.example`, at: 1000 }), 1001)).toBeUndefined();
+    expect(recentRoute(JSON.stringify({ path: `/\\elsewhere.example`, at: 1000 }), 1001)).toBeUndefined();
     expect(recentRoute(`not json`, 1001)).toBeUndefined();
 });
 

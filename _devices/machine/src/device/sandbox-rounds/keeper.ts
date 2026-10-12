@@ -1,8 +1,7 @@
-import { execFile } from "node:child_process";
 import { hostname } from "node:os";
-import { promisify } from "node:util";
 import { HISTORY_ROOT } from "@intentic/constants";
 import { errorMessage } from "@intentic/base/errors";
+import { execBounded, runBounded } from "@intentic/base/process";
 import type { Log } from "@intentic/local-agent";
 import { z } from "zod";
 import { readMachineConfig } from "../../environments/machine.js";
@@ -123,7 +122,9 @@ export const fixProgress = (line: string): FixProgress | undefined => {
     return parsed === undefined ? undefined : { slug: parsed.slug, doing: parsed.report?.doing ?? parsed.doing };
 };
 
-const jsonLines = (output: string): string[] =>
+// The object lines of a run's whole captured output, already decoded as one string; base's json-lines reads a stream as
+// it arrives, which this never sees.
+const objectLines = (output: string): string[] =>
     output
         .split(/\r?\n/)
         .map((line) => line.trim())
@@ -131,13 +132,13 @@ const jsonLines = (output: string): string[] =>
 
 // The final lines of a run, one per sandbox; a progress line, prose, or JSON of another shape is none.
 export const fixAnswers = (output: string): FixAnswer[] =>
-    jsonLines(output)
+    objectLines(output)
         .map((line) => lineAs(FixAnswerSchema, line))
         .filter((answer) => answer !== undefined);
 
 // The machine's report of a run that found no sandbox, when it printed one.
 const machineAnswer = (output: string): FixReport | undefined =>
-    jsonLines(output)
+    objectLines(output)
         .map((line) => lineAs(FixMachineSchema, line)?.report)
         .find((report) => report !== undefined);
 
@@ -307,14 +308,9 @@ export const trashedFrom = (volumes: string): string[] =>
         .map((name) => /^intentic-trashed-\d+-(.+)$/.exec(name.trim())?.[1])
         .filter((slug): slug is string => slug !== undefined);
 
-const exec = promisify(execFile);
-
 // Throws when docker does not answer: an unread trash is not an empty one.
 const readTrashed = async (): Promise<string[]> => {
-    const { stdout } = await exec("docker", ["volume", "ls", "--format", "{{.Name}}", "--filter", "name=intentic-trashed-"], {
-        timeout: 20_000,
-        windowsHide: true,
-    });
+    const { stdout } = await execBounded("docker", ["volume", "ls", "--format", "{{.Name}}", "--filter", "name=intentic-trashed-"], { timeoutMs: 20_000 });
     return trashedFrom(stdout);
 };
 
@@ -591,16 +587,10 @@ const sideOf = async (): Promise<RestartSide> => {
 
 // Written beside and moved into place, so the daemon never reads half a file. Resolves whatever happens.
 const writeIntentInto = async (container: string, intent: RestartIntent): Promise<void> => {
-    await new Promise<void>((resolve) => {
-        const child = execFile(
-            "docker",
-            ["exec", "-i", container, "sh", "-c", `cat > ${RESTART_INTENT_PATH}.tmp && mv -f ${RESTART_INTENT_PATH}.tmp ${RESTART_INTENT_PATH}`],
-            { timeout: INTENT_DEADLINE_MS, windowsHide: true },
-            () => resolve(),
-        );
-        // allow(silent-catch): a container mid-restart may close its stdin first; the intent is best-effort
-        child.stdin?.on("error", () => undefined);
-        child.stdin?.end(`${JSON.stringify(intent)}\n`);
+    // runBounded never throws: a container mid-restart that closes its stdin first is an answer, and the intent is best-effort.
+    await runBounded("docker", ["exec", "-i", container, "sh", "-c", `cat > ${RESTART_INTENT_PATH}.tmp && mv -f ${RESTART_INTENT_PATH}.tmp ${RESTART_INTENT_PATH}`], {
+        timeoutMs: INTENT_DEADLINE_MS,
+        input: `${JSON.stringify(intent)}\n`,
     });
 };
 

@@ -1,38 +1,14 @@
 import type { Context } from "hono";
 import type { AppEnv } from "../../app-env.js";
+import { forwardHeaders, REQUEST_REFRAMED, RESPONSE_REFRAMED } from "../../http/forward-headers.js";
 import { BACKEND_CARD_HEADER, BACKEND_HOST_HEADER } from "./backend-host-config.js";
 
 // One request forwarded to the extension backend host: the /x/<id>/* route (backend-proxy.routes.ts) and the MCP door
 // (extension-mcp.ts) both go through it, so neither has to import the other's layer to reach a backend.
 
-// HTTP/1.1 host headers (Connection, Keep-Alive) abort an HTTP/2 response if forwarded untouched; strip both
-// directions.
-// `Connection` may list further hop-by-hop fields, so read it before removing this fixed set.
-const HOP_BY_HOP_HEADERS = [
-    "connection",
-    "keep-alive",
-    "proxy-authenticate",
-    "proxy-authorization",
-    "proxy-connection",
-    "te",
-    "trailer",
-    "transfer-encoding",
-    "upgrade",
-] as const;
-
-const endToEndHeaders = (source: Headers): Headers => {
-    const headers = new Headers(source);
-    for (const token of headers.get("connection")?.split(",") ?? []) {
-        const name = token.trim();
-        if (name !== "") {
-            headers.delete(name);
-        }
-    }
-    for (const name of HOP_BY_HOP_HEADERS) {
-        headers.delete(name);
-    }
-    return headers;
-};
+// HTTP/1.1 connection headers (Connection, Keep-Alive and the rest of the hop-by-hop set) abort an HTTP/2 response if
+// forwarded untouched, so both directions go through forwardHeaders. fetch decodes a gzip or br answer itself and frames
+// the request body again, so the encoding and length headers of either side no longer describe the bytes relayed.
 
 // Shorter than the browser's own deadline (sandboxAuthFetch.ts), so a handler that never answers is named here rather
 // than abandoned there with nothing to attribute it to. Covers time-to-headers only; the body may then take as long as
@@ -53,10 +29,7 @@ export const forwardToBackend = async (
     extension: string,
     headersDeadlineMs = HEADERS_DEADLINE_MS,
 ): Promise<Response> => {
-    const headers = endToEndHeaders(c.req.raw.headers);
-    for (const name of ["authorization", BACKEND_HOST_HEADER, BACKEND_CARD_HEADER]) {
-        headers.delete(name);
-    }
+    const headers = forwardHeaders(c.req.raw.headers, [...REQUEST_REFRAMED, "authorization", BACKEND_HOST_HEADER, BACKEND_CARD_HEADER]);
     for (const [name, value] of Object.entries(target.headers)) {
         headers.set(name, value);
     }
@@ -71,7 +44,7 @@ export const forwardToBackend = async (
     }
     try {
         const upstream = await fetch(`http://127.0.0.1:${target.port}${url.pathname}${url.search}`, init);
-        return new Response(upstream.body, { status: upstream.status, headers: endToEndHeaders(upstream.headers) });
+        return new Response(upstream.body, { status: upstream.status, headers: forwardHeaders(upstream.headers, RESPONSE_REFRAMED) });
     } catch (error) {
         if (!stalled.signal.aborted) {
             throw error;

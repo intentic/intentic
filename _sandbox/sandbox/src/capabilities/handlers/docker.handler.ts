@@ -1,12 +1,12 @@
 import { existsSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { pollUntil } from "@intentic/base/async";
 import { forkedExec } from "@intentic/base/git";
-import { undefinedIfMissing } from "@intentic/base/errors";
 import type { CapabilityStatus, DockerConfig, IntenticLine } from "@intentic/sandbox-contract";
 import { packFragment } from "../../image/packs.js";
 import type { CapabilityCtx, CapabilityHandler } from "../capability.js";
 import { DOCKER_PANEL_KEY } from "../../ports/panel-keys.js";
+import { textFile } from "../../store/plain-files/text-file.js";
 
 // In-sandbox Docker Engine, dormant and unprivileged until this capability is added. Its fragment is a single
 // `--privileged` runtime directive; `apply` starts dockerd as the panel-docker session once privileged, restored on
@@ -78,9 +78,9 @@ export const withEngineSettings = (current: Record<string, unknown>, config: unk
 };
 
 // Missing, empty or corrupt all read as {}; the merge then writes back a clean file, the only useful response to any of
-// the three. A file that exists but cannot be read throws, or the merge would drop what it holds (the GPU runtime).
-const readDaemonJson = async (): Promise<Record<string, unknown>> => {
-    const raw = (await readFile(DAEMON_JSON, "utf8").catch(undefinedIfMissing)) ?? "";
+// the three. A file that exists but cannot be read throws (textFile's read), or the merge would drop what it holds (the
+// GPU runtime).
+const parseDaemonJson = (raw: string): Record<string, unknown> => {
     try {
         const parsed: unknown = JSON.parse(raw);
         return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
@@ -126,13 +126,18 @@ const startDockerd = async (ctx: CapabilityCtx): Promise<boolean> => {
 // Syncs daemon.json to the engine options and restarts dockerd only if that changed something (restarting stops
 // whatever's running on it). Best-effort: dockerd not running yet is not a failure, the next start reads the file.
 const applyEngineSettings = async (ctx: CapabilityCtx, config: unknown): Promise<string | undefined> => {
-    const current = await readDaemonJson();
-    const next = withEngineSettings(current, config);
-    if (JSON.stringify(next) === JSON.stringify(current)) {
+    let changed = false;
+    // textFile, not ctx.files: that service is scoped to the workspace, and /etc isn't in it. Queued and atomic, so
+    // dockerd starting mid-write never reads half a file, and two applies never drop each other's settings.
+    await textFile(DAEMON_JSON).update((raw) => {
+        const current = parseDaemonJson(raw);
+        const next = withEngineSettings(current, config);
+        changed = JSON.stringify(next) !== JSON.stringify(current);
+        return changed ? `${JSON.stringify(next, null, 4)}\n` : undefined;
+    });
+    if (!changed) {
         return undefined;
     }
-    // node's writeFile, not ctx.files: that service is scoped to the workspace, and /etc isn't in it.
-    await writeFile(DAEMON_JSON, `${JSON.stringify(next, null, 4)}\n`);
     if (!(await dockerUp())) {
         return "Engine settings saved: they apply when the Docker Engine starts.";
     }

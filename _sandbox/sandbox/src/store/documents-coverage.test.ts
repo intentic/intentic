@@ -52,6 +52,8 @@ test("no module outside the store opens a file without the document that describ
 // Caches kept outside a runtime, each an answer the daemon fetches or measures again whenever the file is gone or
 // unreadable.
 const CACHES_OUTSIDE_RUNTIMES = [
+    // The browser MCP's tool list, probed from the backend again whenever the file is gone or not a list.
+    "browser/tools/browser-router.ts",
     // A custom endpoint's last discovered model list, standing in while its server is down.
     "endpoints/endpoint-catalog.ts",
     // A geo exit provider's relay or server catalog, refreshed past its TTL.
@@ -96,6 +98,8 @@ const RAW_JSON_WRITERS = [
     // The exit marker, written synchronously from the exit hook for the next boot to read, and beside it the restart
     // intent a stop announces and the boot's restarts.jsonl record, written as synchronously.
     "system/boot/boot-marker.ts",
+    // The container claim, taken synchronously before the daemon has a store, so a second daemon finds it whole.
+    "system/boot/container-owner.ts",
 ];
 
 test("JSON written whole outside the store goes through a document, or is one of the few named above", () => {

@@ -2,6 +2,7 @@
 // namespace keeps zod's 60 locales (~250 kB) that esbuild can otherwise drop. _devices/webext/scripts/size-budget.mjs holds the ceiling.
 import { prettifyError, toJSONSchema } from "zod";
 import type * as z from "zod";
+import { isRecord } from "@intentic/base/escape";
 
 // The MCP version every peer announces, here rather than in host-protocol.ts because a browser extension bundles this
 // module and would otherwise carry the machine handshake's schemas to a store. Also read by the daemon's peer bridge,
@@ -98,8 +99,6 @@ export interface McpServerSpec<Ctx> {
     // Called with every outcome; best-effort, a logging failure here must never fail the answer.
     readonly audit: (entry: McpAuditEntry) => Promise<void> | void;
 }
-
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
 // Handles one JSON-RPC message; returns undefined for a notification. `ctx` is read per call, so a grant pushed
 // mid-session takes effect on the next call.

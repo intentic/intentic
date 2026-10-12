@@ -5,10 +5,11 @@ import { host } from "./host";
 
 // The sandbox's approvals queue (.intentic/config/approvals/): the agent creates items via its file tools, this is the
 // owner's side. `save` upserts by id (approve/edit/retry are a re-post with one field changed); `remove` rejects. The
-// manifest wires that directory straight to this query key, so a mid-conversation proposal appears without a poll.
+// manifest wires that directory to the name `approvals`, which the host's table of pushed reads turns into this read's
+// key, so a mid-conversation proposal appears without a poll.
 
 export const approvalsQuery = () => ({
-    queryKey: host().sandbox.key(`approvals`),
+    queryKey: host().sandbox.readKey(`approvals.list`),
     queryFn: (): Promise<ApprovalsList> => host().sandbox.rpc.approvals.list(),
 });
 

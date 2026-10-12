@@ -3,6 +3,7 @@ import { gatedPaidFetch, type PaidFetchRequest, type PaymentGateDeps } from "./p
 import type { PaymentRow, WalletLedgerStore } from "./wallet-ledger.js";
 import { parkedCards } from "../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../testing.js";
+import { createHeldCards } from "../guard/held-cards.js";
 
 // Where a turn here parks its cards: one fleet's actors.
 const cards = parkedCards(memoryFleet().conversations);
@@ -77,6 +78,10 @@ interface Fake {
     readonly paidHeaders: (string | null)[];
     // Every card the owner's devices were told a turn now waits on.
     readonly awaited: { readonly conversationId: string; readonly kind: string }[];
+    // Ends the turn the cards went up in (and starts the next, as a wake does), which settles a card nobody answered.
+    readonly endTurn: () => void;
+    readonly held: ReturnType<typeof createHeldCards>;
+    readonly woken: string[];
 }
 
 const fake = (
@@ -88,8 +93,12 @@ const fake = (
     const paidHeaders: (string | null)[] = [];
     const awaited: { conversationId: string; kind: string }[] = [];
     const ledger = memoryLedger();
+    let turn = Promise.withResolvers<void>();
+    const woken: string[] = [];
+    const held = createHeldCards(async (_conversationId, prompt) => void woken.push(prompt));
     const deps: PaymentGateDeps = {
         cards,
+        hold: { held, finished: () => turn.promise },
         wallet: async () => wallet(),
         ledger,
         sign: async (request) => {
@@ -116,7 +125,11 @@ const fake = (
         tainted: () => false,
         ...over,
     };
-    return { deps, frames, signed, ledger, paidHeaders, awaited };
+    const endTurn = (): void => {
+        turn.resolve();
+        turn = Promise.withResolvers<void>();
+    };
+    return { deps, frames, signed, ledger, paidHeaders, awaited, endTurn, held, woken };
 };
 
 const asked = (over: Partial<PaidFetchRequest> = {}): PaidFetchRequest => ({
@@ -196,12 +209,71 @@ it("a skip signs nothing and tells the agent to continue without it", async () =
     expect(ledger.rows.at(-1)).toMatchObject({ outcome: "declined" });
 });
 
-it("an unanswered offer expires without spending, and says nobody answered", async () => {
-    const { deps, signed } = fake({ deadlineMs: 10 });
-    const answer = await gatedPaidFetch(deps, asked());
+it("an offer nobody answered before its turn ended spends nothing, and says so", async () => {
+    const { deps, signed, frames, endTurn, ledger } = fake();
+    const pending = gatedPaidFetch(deps, asked());
+    while (frames.length === 0) {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+    endTurn();
+    const answer = await pending;
     expect(answer.status).toBe(408);
     expect(signed).toEqual([]);
-    expect(answer.body).toContain("unanswered");
+    expect(answer.body).toContain("The turn ended before the owner answered");
+    expect(ledger.rows.at(-1)).toMatchObject({ outcome: "unanswered" });
+});
+
+it("waits for the owner however long it takes: an approval long past ten minutes still pays", async () => {
+    jest.useFakeTimers();
+    const { deps, frames, signed } = fake();
+    const pending = gatedPaidFetch(deps, asked());
+    try {
+        for (let tick = 0; tick < 50 && frames.length === 0; tick += 1) {
+            await Promise.resolve();
+            jest.advanceTimersByTime(1);
+        }
+        jest.advanceTimersByTime(3 * 60 * 60_000);
+    } finally {
+        jest.useRealTimers();
+    }
+    await answerCard(frames, true);
+    expect((await pending).status).toBe(200);
+    expect(signed).toHaveLength(1);
+});
+
+it("keeps the offer up when the CLI stops waiting; a late yes wakes the conversation and the same request pays once with no second card", async () => {
+    const { deps, frames, signed, held, woken, endTurn } = fake();
+    const gone = new AbortController();
+    const first = gatedPaidFetch(deps, asked({ signal: gone.signal }));
+    while (frames.length === 0) {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+    gone.abort();
+    const waiting = await first;
+    expect(waiting.status).toBe(409);
+    expect(waiting.body).toContain("Still waiting for the owner");
+
+    const closing = held.hold("conv-1", undefined);
+    await answerCard(frames, true);
+    await closing;
+    endTurn();
+    expect(woken).toHaveLength(1);
+    expect(woken[0]).toContain("The owner allowed paying $0.10 to api.example.com after your turn ended.");
+
+    expect((await gatedPaidFetch(deps, asked())).status).toBe(200);
+    expect(signed).toHaveLength(1);
+    expect(frames.filter((frame) => frame.kind === "payment_offer")).toHaveLength(1);
+    // Used once: the next request asks afresh.
+    const again = gatedPaidFetch(deps, asked());
+    while (frames.filter((frame) => frame.kind === "payment_offer").length < 2) {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+    const second = frames.findLast((frame) => frame.kind === "payment_offer");
+    if (second?.kind !== "payment_offer") {
+        throw new Error("no second offer");
+    }
+    cards.resolve({ kind: "payment_offer", requestId: second.requestId, approve: false });
+    expect((await again).status).toBe(403);
 });
 
 it("refuses a price over the per-payment ceiling without even raising a card", async () => {
@@ -291,6 +363,69 @@ it("refuses a denied host outright, whatever the price", async () => {
     expect(answer.body).toContain("deny list");
     expect(frames).toEqual([]);
     expect(signed).toEqual([]);
+});
+
+// A deny entry means its domain however the host is spelled and however the entry was pasted: before, a trailing dot on
+// the URL's host slipped the list and, under the band with no allow list, paid with no card at all.
+describe("deny and allow lists read hosts the way secret host lists do", () => {
+    const denied = async (deny: string, url: string) => {
+        const { deps, signed, frames } = fake({ wallet: async () => wallet({ autoApproveUnderUsd: "1.00", deny }) });
+        const answer = await gatedPaidFetch(deps, asked({ url }));
+        return { answer, signed, frames };
+    };
+
+    it.each([
+        ["evil.com", "https://evil.com./x"],
+        ["evil.com", "https://API.Evil.com/x"],
+        ["https://evil.com", "https://evil.com/x"],
+        ["https://evil.com/pay", "https://api.evil.com/x"],
+        ["*.evil.com", "https://api.evil.com/x"],
+        ["Evil.com.", "https://evil.com/x"],
+        ["evil.com:443", "https://evil.com/x"],
+    ])("a deny entry %s refuses %s", async (deny, url) => {
+        const { answer, signed, frames } = await denied(deny, url);
+        expect(answer.status).toBe(403);
+        expect(answer.body).toContain("deny list");
+        expect(signed).toEqual([]);
+        expect(frames).toEqual([]);
+    });
+
+    it("a wildcard covers only the hosts under it, and a domain never a lookalike", async () => {
+        const wildcard = await denied("*.evil.com", "https://evil.com/x");
+        expect(wildcard.answer.status).toBe(200);
+        const lookalike = await denied("evil.com", "https://notevil.com/x");
+        expect(lookalike.answer.status).toBe(200);
+    });
+
+    it("a host no list can name is never paid unasked, and is refused while a deny list stands", async () => {
+        const banded = fake({ wallet: async () => wallet({ autoApproveUnderUsd: "1.00" }) });
+        const pending = gatedPaidFetch(banded.deps, asked({ url: "https://[::1]/x" }));
+        await answerCard(banded.frames, true);
+        expect((await pending).status).toBe(200);
+        expect(banded.frames[0]).toMatchObject({ kind: "payment_offer" });
+
+        const { answer, signed } = await denied("other.example", "https://[::1]/x");
+        expect(answer.status).toBe(403);
+        expect(answer.body).toContain("cannot be checked against the wallet's deny list");
+        expect(signed).toEqual([]);
+    });
+
+    it("an allow entry pasted as a URL or with a trailing dot still lets the band pay unasked", async () => {
+        for (const allow of ["https://api.example.com/v1", "example.com.", "*.example.com"]) {
+            const { deps, frames, signed } = fake({ wallet: async () => wallet({ autoApproveUnderUsd: "0.25", allow }) });
+            expect((await gatedPaidFetch(deps, asked())).status).toBe(200);
+            expect(frames).toEqual([]);
+            expect(signed).toHaveLength(1);
+        }
+    });
+
+    it("an allow list of nothing readable still cards every payment", async () => {
+        const { deps, frames } = fake({ wallet: async () => wallet({ autoApproveUnderUsd: "0.25", allow: "not a host!" }) });
+        const pending = gatedPaidFetch(deps, asked());
+        await answerCard(frames, true);
+        expect((await pending).status).toBe(200);
+        expect(frames[0]).toMatchObject({ kind: "payment_offer" });
+    });
 });
 
 it("refuses a rail the wallet does not hold, naming what the endpoint accepts", async () => {

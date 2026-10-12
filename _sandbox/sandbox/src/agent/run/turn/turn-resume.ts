@@ -53,6 +53,7 @@ import { spentRung } from "../../models/role-model-quota.js";
 import { recordInterrupted } from "./interrupted-ledger.js";
 import { previousRun } from "../../../system/boot/restarts/boot-marker.js";
 import { restartCost } from "../../../system/boot/restarts/restart-record.js";
+import { notResumedReason, type RestartResume, restartResume } from "./restart-resume-policy.js";
 
 // Re-runs a turn once its blocker clears. Two kinds live here and should not be confused: the daemon's own bookkeeping
 // (a rotated token, a restart, a session past its window), which needs nobody's permission, and the three walls the
@@ -1086,17 +1087,14 @@ const settleParked = async (services: Services, entry: JournalledTurn, reason: s
 
 // Runs once at boot, before anything else starts a turn on these conversations. Surviving means never settled; each
 // entry is consumed (spent or deleted) before it restarts, so a turn that kills the daemon can't loop the boot. An
-// automation's interrupted fire is its scheduler's to re-fire (automations/fire-resume.ts). `ownerAsked`: the restart
-// this boot follows was one the owner started and asked to pick up after (restart-resume.ts), which resumes the turns
-// it cut as autoResumeOnRestart would, this once. `restartStorm`: this boot is one of a restart storm
-// (system/boot/boot-history.ts), which resumes nothing, ask or setting, and leaves every cut turn interrupted on the
-// record (2026-10-05). `cost`: what the restart cost the turns it cut (restart-record.ts), told to each one it re-runs,
+// automation's interrupted fire is its scheduler's to re-fire (automations/fire-resume.ts). `policy`: whether this
+// boot resumes what the restart cut at all (restart-resume-policy.ts), decided once for every pass; absent, it is the
+// settings' autoResumeOnRestart alone, with no owner's ask and no storm. `cost`: what the restart cost the turns it cut (restart-record.ts), told to each one it re-runs,
 // so it knows whether its background commands still run and /tmp still holds what it wrote; read off this boot's marker.
 export const resumeInterruptedTurns = async (
     services: Services,
     now: number = Date.now(),
-    ownerAsked = false,
-    restartStorm = false,
+    policy?: RestartResume,
     cost: string | undefined = restartCostNow(),
 ): Promise<void> => {
     const listed = await services.turnJournal.list().catch((error: unknown): JournalEntry[] => {
@@ -1107,7 +1105,8 @@ export const resumeInterruptedTurns = async (
     if (interrupted.length === 0) {
         return;
     }
-    const autoResumeOnRestart = !restartStorm && (ownerAsked || (await services.sandboxSettings.get()).autoResumeOnRestart);
+    const resume = policy ?? (await settingsResume(services));
+    const resumedWhy = resume.resume && resume.asked ? "the owner asked this restart to pick up after" : "autoResumeOnRestart";
     for (const entry of interrupted) {
         // Skips every gate below: rehydration spends nothing and isn't an attempt, so autoResumeOnRestart, staleness
         // and the attempt cap don't apply. Not cleared here either; the placeholder re-journals it, so a second restart
@@ -1117,7 +1116,7 @@ export const resumeInterruptedTurns = async (
             continue;
         }
         const { spent, stale } = resumeBars(entry, now);
-        if (!autoResumeOnRestart || spent || stale) {
+        if (!resume.resume || spent || stale) {
             // Recorded from the provider's own session store before the entry clears, so a failed write keeps the
             // journal instead of losing the turn. Uses the journal's session id, not the registry's, which may still
             // point at the prior turn.
@@ -1130,10 +1129,10 @@ export const resumeInterruptedTurns = async (
                 continue;
             }
             await consumeEntry(services, entry);
-            const why = notResumedWhy({ spent, stale, autoResumeOnRestart, restartStorm });
+            const why = notResumedWhy(resume, spent);
             recordInterrupted(services, entry, `not resumed: ${why}`, now);
             services.logger.info(
-                { ...cutTurnFields(services, entry), why, spent, stale, autoResumeOnRestart, restartStorm },
+                { ...cutTurnFields(services, entry), why, spent, stale, policy: resume },
                 "interrupted turn not resumed: the interruption stands on the record",
             );
             continue;
@@ -1150,20 +1149,22 @@ export const resumeInterruptedTurns = async (
         }
         // The attempt is spent on disk before the turn restarts; this write has to survive the death it guards against.
         await spendAttempt(services, entry);
-        await restartCutTurn(services, entry, { why: ownerAsked ? "the owner asked this restart to pick up after" : "autoResumeOnRestart", cost }, now);
+        await restartCutTurn(services, entry, { why: resumedWhy, cost }, now);
     }
 };
 
-// Why a cut turn stays on the record rather than running again, in the words its line and its ledger row carry.
-const notResumedWhy = (bars: { spent: boolean; stale: boolean; autoResumeOnRestart: boolean; restartStorm: boolean }): string => {
-    if (bars.restartStorm) {
-        return "this boot is one of a restart storm";
+// Why a cut turn stays on the record rather than running again, in the words its line and its ledger row carry: the
+// boot's policy first, then the turn's own bars.
+const notResumedWhy = (resume: RestartResume, spent: boolean): string => {
+    if (!resume.resume) {
+        return notResumedReason(resume);
     }
-    if (!bars.autoResumeOnRestart) {
-        return "autoResumeOnRestart is off";
-    }
-    return bars.spent ? "its one re-run is already spent" : "it is older than a re-run is wanted";
+    return spent ? "its one re-run is already spent" : "it is older than a re-run is wanted";
 };
+
+// The policy a pass called without one runs under: the setting alone, as a boot with no ask and no storm would decide.
+export const settingsResume = async (services: Pick<Services, "sandboxSettings">): Promise<RestartResume> =>
+    restartResume({ ownerAsked: false, storm: false, autoResumeOnRestart: (await services.sandboxSettings.get()).autoResumeOnRestart });
 
 // What every line about a journalled turn a restart cut says of it: which conversation, the run it was, the session it
 // ran in, and where it ran.

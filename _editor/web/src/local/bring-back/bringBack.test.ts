@@ -20,11 +20,18 @@ describe(`reading the app's answer`, () => {
                 kind: `brought-back`,
                 result: { ok: true, point: `rp-1`, applied: [{ path: `src/new.ts`, kind: `added` }], skipped: [{ path: `a`, reason: `b` }] },
             },
-            { kind: `restored`, result: { ok: true, restored: 2, skipped: [`anything`] } },
+            { kind: `restored`, result: { ok: true, restored: 2, skipped: [{ path: `a`, reason: `b` }] } },
             { kind: `direction`, result: { ok: true, direction: `both` } },
             { kind: `error`, verb: `changes`, error: `No machine agent runs on this computer.` },
         ];
         expect(answers.map((detail) => projectAnswer(event(detail)))).toEqual(answers);
+    });
+
+    it(`reads a restore whose skipped list it cannot read as one that names none`, () => {
+        expect(projectAnswer(event({ kind: `restored`, result: { ok: true, restored: 2, skipped: [`anything`] } }))).toEqual({
+            kind: `restored`,
+            result: { ok: true, restored: 2 },
+        });
     });
 
     it(`reads nothing out of a shape it has no answer for`, () => {

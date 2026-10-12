@@ -33,6 +33,22 @@ test("a call the manifest declares reaches the daemon, and one it does not is re
     ]);
 });
 
+test("a JSON call sends a caller's body as JSON, and a refusal quotes one bounded line of the daemon's words", async () => {
+    const sent: (string | null)[] = [];
+    const extension = await fake({
+        manifest: { ...manifest, permissions: { daemon: ["GET /ports", "POST /ports"] } },
+        daemon: (request) => {
+            sent.push(request.headers.get("content-type"));
+            return request.method === "POST" ? Response.json({ ok: true }) : new Response(`nope ${"x".repeat(2000)}`, { status: 500 });
+        },
+    });
+    expect(await extension.api.daemon.json<{ ok: boolean }>("/ports", { method: "POST", body: JSON.stringify({ port: 1 }) })).toEqual({ ok: true });
+    expect(sent).toEqual(["application/json"]);
+    const failure = await extension.api.daemon.json("/ports").catch((error: unknown) => error);
+    expect(String(failure)).toMatch(/^Error: daemon answered 500 for GET \/ports: nope x+…$/);
+    expect(String(failure).length).toBeLessThan(400);
+});
+
 test("a typed call outside permissions.daemon is refused before anything is sent", async () => {
     const extension = await fake({ manifest });
     await expect(extension.api.daemon.rpc.extensions.settings({ id: "acme.probe" })).rejects.toThrow(/declare it in permissions\.daemon/);

@@ -62,6 +62,7 @@ const SAFE_HEADERS: ReadonlySet<string> = new Set([
     "host",
     "if-modified-since",
     "if-none-match",
+    // allow(primitive-tiers): header names a capture keeps unmasked, not a list of what a proxy forwards.
     "keep-alive",
     "last-modified",
     "location",

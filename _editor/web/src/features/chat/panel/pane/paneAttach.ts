@@ -9,6 +9,7 @@ import { hydrateOnce, refreshAfterSleep } from "../../run/useChat-sessions";
 import type { Conversation } from "../../session/conversation";
 import { newerQueue } from "../../session/turnClient";
 import { onScreen } from "../../../../workbench/window/onScreen";
+import { refVisibility, watchPageWake } from "../../../../client/sandbox/pageWake";
 
 // What keeps a pane attached to the chat it shows: the typewriter runs in the focused pane alone; a chat the daemon hadn't
 // created when the pane first read it hydrates once the roster says it exists, or that its turn moved; a chat the roster
@@ -33,8 +34,6 @@ const inFlight = (turn: CardTurn): boolean => turn !== undefined && turn !== fal
 // A hide this long (a laptop lid, a phone in a pocket) leaves what a shown chat painted stale and the reads queued before
 // it possibly dead; a shorter one only re-attaches a turn the card says is running.
 const LONG_SLEEP_MS = 5 * 60_000;
-// How often a shown page checks its own clock for a sleep visibility did not report.
-const BEAT_MS = 30_000;
 
 export const usePaneAttach = (pane: PaneAttachHost): void => {
     // An effect rather than a mount step, since a pane's conversation and focus both move: the chat it leaves must stop
@@ -114,49 +113,20 @@ export const usePaneAttach = (pane: PaneAttachHost): void => {
         hydrateOnce(chat);
     });
     // The page coming back into view. A turn the card says is in flight while this pane streams nothing lost its stream to
-    // the sleep (a frozen phone page drops it), so it attaches again; after a long sleep the whole chat is asked again,
-    // past the cache, with "Reconnecting…" over what is painted (a woken PC's chats would not open for minutes). A page
-    // the back-forward cache restores may say nothing through visibility, so its `pageshow` counts the same.
-    let hiddenAt: number | undefined;
-    // When the last beat ran (below); a hide or a return starts it over, so one sleep is never counted twice.
-    let beatAt = Date.now();
-    const cameBack = (): void => {
-        const away = hiddenAt === undefined ? 0 : Date.now() - hiddenAt;
-        hiddenAt = undefined;
-        beatAt = Date.now();
-        const chat = pane.conversation();
-        if (away >= LONG_SLEEP_MS) {
-            refreshAfterSleep(chat);
-        } else if (!pane.streaming.value && inFlight(fleetTurn.value)) {
-            hydrateOnce(chat);
-        }
-    };
-    watch(onScreen, (shown) => {
-        if (shown) {
-            cameBack();
-        } else {
-            hiddenAt = Date.now();
-            beatAt = Date.now();
-        }
+    // the sleep (a frozen phone page drops it), so it attaches again; after a long sleep (pageWake.ts: hidden that long,
+    // a machine that slept with the page shown, or a back-forward cache restore) the whole chat is asked again, past the
+    // cache, with "Reconnecting…" over what is painted (a woken PC's chats would not open for minutes). Every pane reads
+    // the window's one beat; on screen is onScreen's word, so a window hidden in the tray is away.
+    const stopWake = watchPageWake(() => refreshAfterSleep(pane.conversation()), {
+        gapMs: LONG_SLEEP_MS,
+        visibility: refVisibility(onScreen),
+        returned: () => {
+            if (!pane.streaming.value && inFlight(fleetTurn.value)) {
+                hydrateOnce(pane.conversation());
+            }
+        },
     });
-    // A machine that slept with this page on screen (a PC left open overnight) may say nothing through visibility: its
-    // timers just stop. A beat that runs a long sleep later than it was set for is that sleep, told by the clock.
-    const beat = setInterval(() => {
-        const now = Date.now();
-        const late = now - beatAt;
-        beatAt = now;
-        if (late >= LONG_SLEEP_MS && hiddenAt === undefined && onScreen.value) {
-            refreshAfterSleep(pane.conversation());
-        }
-    }, BEAT_MS);
-    onBeforeUnmount(() => clearInterval(beat));
-    const restored = (event: PageTransitionEvent): void => {
-        if (event.persisted) {
-            cameBack();
-        }
-    };
-    window.addEventListener(`pageshow`, restored);
-    onBeforeUnmount(() => window.removeEventListener(`pageshow`, restored));
+    onBeforeUnmount(stopWake);
     // Waiting on a person (a question, a plan, a permission) while this pane shows no such card: the tab was open when the
     // turn parked and its attach stream is gone, so nothing would draw the card until a send forced a reattach (one
     // question sat unseen for hours). Checked each time the chat is shown, the page comes back into view, or the roster

@@ -127,3 +127,44 @@ test("a poll held to a condition runs while it holds and stops when it lets go",
 
     expect({ looks, polling: poll.polling.value }).toEqual({ looks: 2, polling: false });
 });
+
+test("given a visibility source, pauses while it says hidden and looks at once when it says shown", async () => {
+    let looks = 0;
+    const visible = ref(true);
+    const { value: poll } = inScope(() => usePoll({ everyMs: 1_000, check: () => void (looks += 1), visible }));
+
+    poll.start();
+    await advanceTimersByTimeAsync(2_000);
+    expect(looks).toBe(3);
+
+    visible.value = false;
+    await nextTick();
+    await advanceTimersByTimeAsync(10_000);
+    // The document's word no longer counts: a tray-hidden window says visible and is still out of sight.
+    document.dispatchEvent(new Event(`visibilitychange`));
+    window.dispatchEvent(new Event(`focus`));
+    await advanceTimersByTimeAsync(0);
+    expect({ looks, polling: poll.polling.value }).toEqual({ looks: 3, polling: true });
+
+    visible.value = true;
+    await nextTick();
+    await advanceTimersByTimeAsync(0);
+    expect(looks).toBe(4);
+    await advanceTimersByTimeAsync(2_000);
+    expect(looks).toBe(6);
+});
+
+test("a wait started out of sight neither looks nor ticks until the window is shown", async () => {
+    let looks = 0;
+    const visible = ref(false);
+    const { value: poll } = inScope(() => usePoll({ everyMs: 1_000, check: () => void (looks += 1), visible }));
+
+    poll.start();
+    await advanceTimersByTimeAsync(5_000);
+    expect({ looks, polling: poll.polling.value }).toEqual({ looks: 0, polling: true });
+
+    visible.value = true;
+    await nextTick();
+    await advanceTimersByTimeAsync(1_000);
+    expect(looks).toBe(2);
+});

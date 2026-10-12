@@ -83,21 +83,27 @@ const startRootSweeps = (phase: BootPhase): void => {
     void sweepVanishedWorktrees(phase).catch((error: unknown) => logger.warn({ err: error }, "agents: boot worktree sweep failed"));
     void sweepOrphanUnits(phase).catch((error: unknown) => logger.warn({ err: error }, "conversations: boot directory sweep failed"));
     void sweepAgedArchive(phase);
-    setInterval(() => void sweepAgedArchive(phase), HOURLY_MS).unref();
+    const archiveSweep = setInterval(() => void sweepAgedArchive(phase), HOURLY_MS);
+    archiveSweep.unref();
+    shutdown.push(() => clearInterval(archiveSweep));
     void sweepStateAtBoot(services.workspace.root, logger).catch((error: unknown) => logger.warn({ err: error }, "state janitor: boot sweep failed"));
-    setInterval(
+    const stateSweep = setInterval(
         () =>
             void sweepAgedState(services.workspace.root, Date.now(), logger).catch((error: unknown) =>
                 logger.warn({ err: error }, "state janitor: aged sweep failed"),
             ),
         HOURLY_MS,
-    ).unref();
+    );
+    stateSweep.unref();
+    shutdown.push(() => clearInterval(stateSweep));
     // Must run before any turn: panes inherit this daemon's mounts, and a pre-existing server can't be pinned later. The
     // owner's ssh agent socket only where the tmux server is the container's: a daemon on someone's own machine shares
     // their tmux, and their own agent is theirs.
     const serverEnv = role.container ? { SSH_AUTH_SOCK: services.sshAgent.owner } : {};
     void pinTmuxServer(logger, serverEnv).then(() => reportTmuxServerNamespace(logger));
-    setInterval(() => void reportTmuxServerNamespace(logger), 15 * 60 * 1000).unref();
+    const tmuxReport = setInterval(() => void reportTmuxServerNamespace(logger), 15 * 60 * 1000);
+    tmuxReport.unref();
+    shutdown.push(() => clearInterval(tmuxReport));
     // Root-scoped: a guest sharing the history root prunes nothing.
     const pruneLogs = (): Promise<void> =>
         pruneLogFiles(logsRoot(config.historyRoot)).catch((error: unknown) => logger.warn({ err: error }, "logs: the retention sweep failed"));

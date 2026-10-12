@@ -1,4 +1,5 @@
 import type { SandboxSummary, User } from "@intentic/api-contract";
+import { resetSandboxScope } from "@intentic/extension-api";
 import { t } from "@intentic/ui/i18n";
 import { createAuthClient } from "better-auth/client";
 import { ref } from "vue";
@@ -8,6 +9,7 @@ import { environment } from "../../app/environments/environment";
 import { localFace } from "../../app/environments/local";
 import { clearImprints } from "@intentic/ui/skeleton-store";
 import { clearPersistedQueries } from "../../lib/queryPersistence";
+import { clearAccountStorage } from "../../lib/browserStorage";
 import { useSandboxSession } from "../session/sandboxSession";
 import { useGoogleIdentity } from "./useGoogleIdentity";
 import { invalidatePlatformAuth, onPlatformAuthInvalidated } from "../../lib/authLifecycle";
@@ -38,8 +40,13 @@ onPlatformAuthInvalidated(async () => {
     clearSessions();
     // The desktop app's local windows list this account's sandboxes from what this page told it; none are theirs now.
     announceDesktopRoster([]);
-    // The remembered loading imprints are the account's sandboxes' too: how many secrets, rows, agents each one held.
-    await Promise.all([clearPersistedQueries(), clearImprints()]);
+    // The remembered loading imprints are the account's sandboxes' too: how many secrets, rows, agents each one held. So
+    // is everything the account left in storage (open chats, drafts, recent prompts, the transcript mirror, which
+    // sandbox was open); a device preference (theme, language, layout) stays. lib/browserStorage.ts declares which.
+    await Promise.all([clearPersistedQueries(), clearImprints(), clearAccountStorage()]);
+    // Module state that belongs to one sandbox (the open tabs, the roster, set-aside drafts, extensions' badges) is
+    // emptied last, so what refills it on its next read finds the storage already cleared.
+    resetSandboxScope();
 });
 
 const refresh = async (): Promise<User | null> => {

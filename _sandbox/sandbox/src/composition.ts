@@ -78,6 +78,7 @@ import { fileShareStore, sharesDocument, type ShareStore } from "./share/share-s
 import { createSpeech, type Speech } from "./speech/transcribe.js";
 import { fileSafetyLog, type SafetyLog, safetyLogDocument } from "./safety/safety-log.js";
 import { createHeldCards, type HeldCards } from "./guard/held-cards.js";
+import { holdDepsOf } from "./guard/held-asks.js";
 import { heldCardWake } from "./agent/run/turn/held-card-wake.js";
 import { type SafetyPolicyStore, fileSafetyPolicyStore } from "./safety/safety-policy-store.js";
 import { fileSandboxSettingsStore, type SandboxSettingsStore, settingsDocument } from "./settings/settings-store.js";
@@ -126,6 +127,7 @@ import { createSecretsSlice, type SecretsSlice } from "./secrets/secrets-slice.j
 import { type BrokerSlice, createBrokerSlice } from "./capabilities/broker/broker-slice.js";
 import { createPrivacySlice, type PrivacySlice } from "./privacy/privacy-slice.js";
 import { createNeedsSlice, type NeedsSlice } from "./needs/needs-slice.js";
+import { grantsChanged } from "./needs/standing-grants.js";
 import { type ConversationGrants, conversationGrantsDocument, fileConversationGrants } from "./personas/conversation-grants.js";
 import { createExtensionsSlice, type ExtensionsSlice } from "./extensions/extensions-slice.js";
 import { type AutomationsSlice, createAutomationsSlice, type IntakeMembers } from "./automations/automations-slice.js";
@@ -524,6 +526,10 @@ const createDaemonMembers = (
 
 // Builds production services from config, one slice builder at a time in the order their dependencies ask for: each
 // takes what it reads as a typed argument, so a dependency missing here is a compile error, not a first-request crash.
+// Where a gate holds a card its caller stopped waiting on: the turn close's registry, and the conversation's own turn.
+const turnHold = (heldCards: HeldCards, conversations: Parameters<typeof turnRunOf>[0]) =>
+    holdDepsOf(heldCards, (conversationId) => turnRunOf(conversations, conversationId));
+
 export const createServices = (config: Config, logger: Logger): Services => {
     // The one late binding left. A few services do work that reaches back into most of the daemon (a turn, a land's
     // breakage route, the provider catalogs, the safety judge, filing a browser account, a host's reach); they read the
@@ -575,11 +581,19 @@ export const createServices = (config: Config, logger: Logger): Services => {
     });
     const { capabilities } = capabilitiesParts.slice;
     const conversationGrants = fileConversationGrants(join(authRoot, conversationGrantsDocument.path));
+    // A yes a card writes mid-turn moves no need, so the Allowed list hears it from the feed instead.
+    conversationGrants.onChange(grantsChanged);
+    // A settled card wakes its conversation through the turns composed in this same object, read through `whole`. Made
+    // here, before the gates that hold their cards on it (guard/held-asks.ts).
+    const heldCards = createHeldCards(heldCardWake(whole, logger));
+    const hold = turnHold(heldCards, conversations);
     const secretsSlice = createSecretsSlice({
         workspace,
         authRoot,
         secretVault: capabilitiesParts.secretVault,
         cards: cardDeps({ conversations, cards, events }),
+        hold,
+        releasesChanged: grantsChanged,
         conversationGrants,
         // The same host the extension enumerators read, so a connector's hosts come from exactly the installed set.
         connectorHosts: () => connectorHostDefaults({ workspace, files: workspaceSlice.files, capabilities, config }),
@@ -590,6 +604,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
     const brokerSlice = createBrokerSlice({
         authRoot,
         cards: cardDeps({ conversations, cards, events }),
+        hold,
+        conversationGrants,
         host: { workspace, files: workspaceSlice.files, capabilities, config },
         credentialGate: secretsSlice.credentialGate,
         secretUses: secretsSlice.secretUses,
@@ -734,8 +750,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         // A native install's notification passes the privacy shield on its way to Apple; read through `whole` since the
         // shield is composed in this same object.
         pushSender: createPushSender(push, logger, (text) => whole().privacyShield.redactForDisplay(text)),
-        // A settled card wakes its conversation through the turns composed in this same object, read through `whole`.
-        heldCards: createHeldCards(heldCardWake(whole, logger)),
+        heldCards,
         events,
         reaper,
         // Each source reads the finished services per call; none runs before composing returns.

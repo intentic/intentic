@@ -288,13 +288,18 @@ export const matches = (episode: Episode, query: string): boolean => {
         .includes(needle);
 };
 
-// "Today"/"Yesterday" for the two most recent days; a date, not a relative count, for anything older.
+// Midnight on the reader's own calendar: the day an instant falls on is the reader's, not UTC's.
+const dayStart = (at: number): number => new Date(at).setHours(0, 0, 0, 0);
+
+// "Today"/"Yesterday" for the two most recent days; a date, not a relative count, for anything older. Days are
+// counted between the two midnights and rounded, as the kit's formatUntil counts them (timeWindow.ts), because the
+// day a clock change falls on is 23 or 25 hours long: yesterday's midnight is not today's minus 24 hours then.
 const dayLabel = (at: number, now: number): string => {
-    const midnight = new Date(now).setHours(0, 0, 0, 0);
-    if (at >= midnight) {
+    const days = Math.round((dayStart(now) - dayStart(at)) / 86_400_000);
+    if (days <= 0) {
         return t(`episodes.today`);
     }
-    return at >= midnight - 86_400_000 ? t(`episodes.yesterday`) : formatDayMonth(at);
+    return days === 1 ? t(`episodes.yesterday`) : formatDayMonth(at);
 };
 
 // Episodes grouped into consecutive day runs, order preserved; the timeline renders these as sections.

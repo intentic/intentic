@@ -308,6 +308,22 @@ test("a second turn's router answers tools/list straight from the cache: no prob
     expect(await exists(join(second.dir, "probe.pid"))).toBe(false);
 });
 
+// A cache is only served when it still holds a tool list: one some other build left in another shape is probed again
+// and written over, rather than handed to the client as tools.
+test("a cache that is not a tool list is probed again and replaced", async () => {
+    const harness = await startRouter();
+    await writeFile(harness.schemaCachePath, JSON.stringify([{ description: "no name" }]));
+    await handshake(harness);
+    const list = await rpc(harness.router, { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} });
+    // SAFETY: a tools/list answer carries `result.tools`, the router's own shape.
+    const tools = (list["result"] as { tools: { name: string }[] }).tools;
+    expect(tools.map((tool) => tool.name)).toEqual(["browser_probe", "browser_webmcp_call"]);
+    // The probe's answer, not the rejected list, is what the cache now holds.
+    expect(JSON.parse(await readFile(harness.schemaCachePath, "utf8"))).toEqual([
+        { name: "browser_probe", description: "canary tool", inputSchema: { type: "object", properties: {} } },
+    ]);
+});
+
 test("an owner is prepared once, on its first call, however many calls name it", async () => {
     const harness = await startRouter();
     await handshake(harness);

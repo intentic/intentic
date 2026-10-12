@@ -1,4 +1,5 @@
 import { PLATFORM_SITE_ORIGIN } from "@intentic/constants";
+import { escapeRegExp } from "@intentic/base/escape";
 import type { PrismaClient } from "@intentic/prisma";
 import type { Logger } from "pino";
 import type { Config } from "../../../config.js";
@@ -36,17 +37,14 @@ interface Reading {
 // The reason written on the account when the watch suspends it; read back to the owner in every refusal.
 export const ABUSE_SUSPENSION_REASON = `repeated full-load use of a free hosted machine`;
 
-// Prometheus anchors a label regex whole; the prefix is a literal inside it.
-const regexLiteral = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, `\\$&`);
-
 // Non-idle centiseconds per second over the window, summed over the machine's CPUs and NOT divided here: one query
 // covers the whole fleet, and the fleet no longer runs one CPU count. verdictFor divides by the machine's own.
 const cpuQuery = (config: Config): string =>
-    `sum by (app, instance) (rate(fly_instance_cpu{app=~"${regexLiteral(config.hosted.appPrefix)}-.*", mode!="idle"}[${config.hosted.abuseWindowMinutes}m]))`;
+    `sum by (app, instance) (rate(fly_instance_cpu{app=~"${escapeRegExp(config.hosted.appPrefix)}-.*", mode!="idle"}[${config.hosted.abuseWindowMinutes}m]))`;
 
 // Bytes sent per second over the window, as GB per hour.
 const egressQuery = (config: Config): string =>
-    `sum by (app, instance) (rate(fly_instance_net_sent_bytes{app=~"${regexLiteral(config.hosted.appPrefix)}-.*"}[${config.hosted.abuseWindowMinutes}m])) * 3600 / 1e9`;
+    `sum by (app, instance) (rate(fly_instance_net_sent_bytes{app=~"${escapeRegExp(config.hosted.appPrefix)}-.*"}[${config.hosted.abuseWindowMinutes}m])) * 3600 / 1e9`;
 
 // The whole fleet in one query per rule; a rule at 0 is not asked.
 const readFleet = async (config: Config): Promise<Reading[]> => {

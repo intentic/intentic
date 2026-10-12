@@ -1,8 +1,8 @@
-import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { writeFileAtomic } from "@intentic/base/fs";
 import { isConversationId, type SystemPromptDisclosure, SystemPromptDisclosureSchema } from "@intentic/sandbox-contract";
 import { conversationUnit } from "../../store/conversation-units.js";
+import { readJsonMarker } from "../../store/plain-files/json-marker.js";
 
 // What each conversation was last told, one small JSON in its unit beside its transcript. Overwritten by every turn
 // rather than appended: the reader's question is what this conversation runs on NOW, and a history of a prompt that is
@@ -10,6 +10,9 @@ import { conversationUnit } from "../../store/conversation-units.js";
 //
 // Kept out of the transcript deliberately. A composed prompt is tens of kilobytes; carried in the record it would ride
 // to every browser that opens the chat, for something read only when someone asks.
+
+// A composed prompt runs to tens of kilobytes; this is room for one far past that, and still a bound on a damaged file.
+const PROMPT_RECORD_MAX_BYTES = 4 * 1024 * 1024;
 
 // Ids are filename-safe by construction; a name that fails validation is never trusted into a path.
 const fileOf = (historyRoot: string, conversationId: string): string | undefined =>
@@ -37,15 +40,7 @@ export const filePromptRecord = (historyRoot: string): PromptRecord => ({
         if (path === undefined) {
             return undefined;
         }
-        const raw = await readFile(path, "utf8").catch(() => undefined);
-        if (raw === undefined) {
-            return undefined;
-        }
-        try {
-            // A record written by an older shape is nothing rather than an error: the next turn overwrites it.
-            return SystemPromptDisclosureSchema.safeParse(JSON.parse(raw)).data;
-        } catch {
-            return undefined;
-        }
+        // A record written by an older shape is nothing rather than an error: the next turn overwrites it.
+        return await readJsonMarker(path, SystemPromptDisclosureSchema, { maxBytes: PROMPT_RECORD_MAX_BYTES });
     },
 });

@@ -1,6 +1,5 @@
 import { dirname, join } from "node:path";
-import { setTimeout as delay } from "node:timers/promises";
-import { within } from "@intentic/base/async";
+import { pollFor, sleep, within } from "@intentic/base/async";
 import { OpenCode, type OpenCodeClient } from "@opencode/client";
 import { engineBinary } from "../../engines/engine-resolve.js";
 import { DAEMON_OWNER, WORKLOAD_ENV } from "../../seams/workload-stamp.js";
@@ -133,15 +132,14 @@ const mcpHolds = (client: () => Promise<OpenCodeClient>) => {
     const keyOf = (directory: string, name: string): string => `${directory}\u0000${name}`;
 
     const connectedOrGone = async (opencode: OpenCodeClient, directory: string, name: string): Promise<void> => {
-        const deadline = Date.now() + MCP_CONNECT_MS;
-        while (Date.now() < deadline) {
-            const listed = await opencode.mcp.list({ location: { directory } });
-            const status = listed.data.find((server) => server.name === name)?.status.status;
-            if (status !== "pending") {
-                return;
-            }
-            await delay(MCP_POLL_MS);
-        }
+        await pollFor(
+            async () => {
+                const listed = await opencode.mcp.list({ location: { directory } });
+                const status = listed.data.find((server) => server.name === name)?.status.status;
+                return status === "pending" ? undefined : true;
+            },
+            { intervalMs: MCP_POLL_MS, until: Date.now() + MCP_CONNECT_MS },
+        );
     };
 
     // Brings one name's client in line with its newest holder, after whatever change to it is already under way.
@@ -188,7 +186,7 @@ const mcpHolds = (client: () => Promise<OpenCodeClient>) => {
             }
             const changed = await Promise.all(servers.map((server) => settle(opencode, directory, server.name)));
             if (changed.some(Boolean)) {
-                await delay(MCP_SETTLE_MS);
+                await sleep(MCP_SETTLE_MS);
             }
             let released = false;
             return async () => {

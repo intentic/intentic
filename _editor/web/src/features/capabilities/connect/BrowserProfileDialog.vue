@@ -3,12 +3,10 @@ import { Button, ui, Modal, Notice, type NoticeModel } from "@intentic/ui";
 import { noticeFrom, noticeOf } from "@intentic/ui/async";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useOperation } from "../../../workbench/operations/operations";
-import { FRAME_WEBP, videoTag } from "../../browsers/frameUrls";
 import { keyIntent, type BrowserCommand, type KeyFrame } from "../../browsers/keyIntent";
 import { pointerFrame, type PointerAction } from "../../browsers/pointerFrame";
 import { selectionCopy } from "../../browsers/selectionCopy";
-import { videoSink } from "../../browsers/videoSink";
-import { liveSocket, webSocketChannel } from "../../../client/session/liveSocket";
+import { type ScreencastMessage, useScreencast } from "../../browsers/useScreencast";
 import { socketUrl as wsSocketUrl } from "../../sandbox/session/wsTicket";
 import { useT } from "@intentic/ui/i18n";
 
@@ -28,67 +26,25 @@ const t = useT();
 const props = defineProps<{ visible: boolean; capability: string; label: string; mode: "login" | "browse" }>();
 const emit = defineEmits<{ (event: "update:visible", value: boolean): void; (event: "done"): void }>();
 
-// Throttles pointer moves to roughly one display frame, so a drag isn't traced at network-call granularity.
-const MOVE_THROTTLE_MS = 16;
-// A size is asked once the surface has held still this long; the modal only changes shape with the window.
-const RESIZE_DEBOUNCE_MS = 250;
-
 // Whether anything has painted yet; the picture itself lives in the canvas, not in reactive state.
 const painting = ref(false);
-// Decoder painting into the canvases connected below; reports back through `status`/`errorMsg`.
-const video = videoSink((message) => {
-    status.value = "error";
-    errorMsg.value = noticeOf(message);
-});
 const status = ref<"connecting" | "ready" | "saving" | "error">("connecting");
 const errorMsg = ref<NoticeModel>();
-// The picture's size in display pixels, and display pixels per CSS pixel, both off `ready`; pointer coordinates are
-// measured against the first.
-const viewW = ref(1280);
-const viewH = ref(800);
-const viewScale = ref(1);
 // What the page shows under the pointer; the picture carries no cursor of its own.
 const cursor = ref("default");
 const surface = ref<HTMLElement>();
 // Null, not undefined, once the dialog's content has unmounted: that is what Vue writes to a template ref.
 const canvasEl = ref<HTMLCanvasElement | null>(null);
 const stillEl = ref<HTMLCanvasElement | null>(null);
-// Canvases mount with the dialog; the decoder outlives them, so the two are wired together here.
-watch([canvasEl, stillEl], ([canvas, still]) => video.attach(canvas, still));
-let lastMove = 0;
 // Keystrokes go to the display while Chromium's find bar has them.
 let rawKeys = false;
-let resizeTimer: number | undefined;
 let observer: ResizeObserver | undefined;
 const browsing = computed(() => props.mode === "browse");
 
-// The live socket below, declared ahead so every verb can say something on it.
-const sendMsg = (message: object): void => live.send(message);
+// The screencast below, declared ahead so every verb can say something on it.
+const sendMsg = (message: object): void => cast.live.send(message);
 // Ctrl+C over the picture puts the page's selection on the user's own clipboard.
 const copy = selectionCopy(sendMsg);
-
-// The box inside the surface's border, where the canvases are, so the viewport is exactly what the modal shows
-// rather than scaled into it: the border box is two pixels larger each way, which resampled every pixel of the picture.
-const askSize = (): void => {
-    const box = surface.value;
-    if (box === undefined || box.clientWidth < 1 || box.clientHeight < 1) {
-        return;
-    }
-    sendMsg({ type: "resize", width: box.clientWidth, height: box.clientHeight });
-};
-
-watch(surface, (element) => {
-    observer?.disconnect();
-    observer = undefined;
-    if (element === undefined) {
-        return;
-    }
-    observer = new ResizeObserver(() => {
-        window.clearTimeout(resizeTimer);
-        resizeTimer = window.setTimeout(askSize, RESIZE_DEBOUNCE_MS);
-    });
-    observer.observe(element);
-});
 
 // The daemon's refusal of a save, in its own words.
 class SaveRefused extends Error {
@@ -108,23 +64,18 @@ const shownError = computed(() => errorMsg.value ?? save.failure.value);
 const close = (): void => {
     copy.cancel();
     if (answer === undefined) {
-        live.close();
+        cast.live.close();
     }
 };
 
-// Sets the picture's size and configures the decoder. Codec is read out of the stream by the daemon rather than
-// assumed; a fresh `ready` also follows every resize, since that is a fresh stream.
-const onReady = (message: { width?: number; height?: number; scale?: number; codec?: string }): void => {
+// The picture is on its way: a fresh `ready` also follows every resize, since that is a fresh stream, and only the
+// first of a socket takes the keyboard.
+const onReady = (): void => {
     const first = status.value !== "ready";
     status.value = "ready";
     errorMsg.value = undefined;
-    viewW.value = message.width ?? viewW.value;
-    viewH.value = message.height ?? viewH.value;
-    viewScale.value = message.scale !== undefined && message.scale > 0 ? message.scale : 1;
-    video.configure(message.codec ?? "");
     if (first) {
         surface.value?.focus();
-        askSize();
     }
 };
 
@@ -132,25 +83,12 @@ const onSaved = (): void => {
     answer?.saved();
 };
 
-// Everything on this socket that isn't a picture frame, kept as its own dispatch rather than inline branches.
-const handleJson = (raw: string): void => {
-    const message = JSON.parse(raw) as {
-        type: string;
-        width?: number;
-        height?: number;
-        scale?: number;
-        codec?: string;
-        message?: string;
-        text?: string;
-        cursor?: string;
-    };
-    if (gone && message.type !== "saved" && message.type !== "error" && message.type !== "pong") {
+// Everything on this socket that isn't a picture or `ready`, kept as its own dispatch rather than inline branches.
+const onMessage = (message: ScreencastMessage): void => {
+    if (gone && message.type !== "saved" && message.type !== "error") {
         return;
     }
     switch (message.type) {
-        case "ready":
-            onReady(message);
-            break;
         case "cursor":
             cursor.value = message.cursor ?? "default";
             break;
@@ -160,30 +98,11 @@ const handleJson = (raw: string): void => {
         case "saved":
             onSaved();
             break;
-        case "pong":
-            live.ponged();
-            break;
         case "error":
             fail(noticeOf(message.message ?? t(`capabilities.browserProfileDialog.couldntStartBrowser`)));
             break;
         default:
             break;
-    }
-};
-
-// A picture: one tag byte, then video (keyframe or delta, quiet or not) into the decoder, or a sharp still of the
-// settled page over it.
-const takePicture = (data: ArrayBuffer): void => {
-    if (gone) {
-        return;
-    }
-    const bytes = new Uint8Array(data);
-    const coded = videoTag(bytes[0]);
-    if (coded !== undefined) {
-        video.push(bytes.subarray(1), coded.key, coded.quiet);
-        painting.value = true;
-    } else if (bytes[0] === FRAME_WEBP) {
-        video.still(bytes.subarray(1));
     }
 };
 
@@ -193,7 +112,7 @@ const restart = (): void => {
     painting.value = false;
 };
 const fail = (notice: NoticeModel): void => {
-    live.end();
+    cast.live.end();
     if (answer !== undefined) {
         answer.refused(notice);
         return;
@@ -206,32 +125,69 @@ const fail = (notice: NoticeModel): void => {
 // elsewhere); asking again would get the same answer.
 const CLOSE_REFUSED = 1008;
 
-// Disposed by hand rather than with this component: a save in flight outlives the window (see above).
-const live = liveSocket<string>({
+// The page's viewport as video, with a sharp still of the settled page over it, into the canvases connected below.
+// Its socket is disposed by hand rather than with this component: a save in flight outlives the window (see above).
+const cast = useScreencast({
     mint: () => wsSocketUrl(`/system/browser-profile`, { capability: props.capability, mode: props.mode }),
-    open: webSocketChannel({ text: handleJson, binary: takePicture }),
-    // A daemon from before this route answered pings says nothing back, and a still sign-in page sends no frames.
-    staleCheck: "once-ponged",
-    // A session that couldn't be minted is said, and asked again on the ladder rather than left as a dead window.
-    onMintFailed: (error) => {
-        restart();
-        errorMsg.value = noticeFrom(error, t(`capabilities.browserProfileDialog.couldntStartBrowser`));
+    pointer: pointerFrame,
+    outlivesScope: true,
+    // What arrives on a socket a save holds only answers the save.
+    detached: () => gone,
+    onMessage,
+    onReady,
+    onUnsupported: () => {
+        status.value = "error";
+        errorMsg.value = noticeOf(t(`browsers.browserView.unsupported`));
     },
-    onUnreachable: () => {
-        restart();
-        errorMsg.value = noticeOf(t(`capabilities.browserProfileDialog.couldntStartBrowser`));
+    onVideoError: (message) => {
+        status.value = "error";
+        errorMsg.value = noticeOf(message);
     },
-    onDrop: (code) => {
-        if (answer !== undefined) {
-            // The profile may or may not have been saved; a fresh window would hide which.
-            fail(noticeOf(t(`capabilities.browserProfileDialog.droppedWhileSaving`)));
-        } else if (code === CLOSE_REFUSED || status.value === "error") {
-            // Refused, or the daemon already said why it is giving up (`error`, then a close).
-            fail(errorMsg.value ?? noticeOf(t(`capabilities.browserProfileDialog.couldntStartBrowser`)));
-        } else {
+    onPicture: () => {
+        painting.value = true;
+    },
+    socket: {
+        // A daemon from before this route answered pings says nothing back, and a still sign-in page sends no frames.
+        staleCheck: "once-ponged",
+        // A session that couldn't be minted is said, and asked again on the ladder rather than left as a dead window.
+        onMintFailed: (error) => {
             restart();
-        }
+            errorMsg.value = noticeFrom(error, t(`capabilities.browserProfileDialog.couldntStartBrowser`));
+        },
+        onUnreachable: () => {
+            restart();
+            errorMsg.value = noticeOf(t(`capabilities.browserProfileDialog.couldntStartBrowser`));
+        },
+        // A window behind another tab, or hidden in the tray, need not stream; the daemon is told on every open.
+        onOpen: (): void => cast.syncVisibility(),
+        onDrop: (code) => {
+            if (answer !== undefined) {
+                // The profile may or may not have been saved; a fresh window would hide which.
+                fail(noticeOf(t(`capabilities.browserProfileDialog.droppedWhileSaving`)));
+            } else if (code === CLOSE_REFUSED || status.value === "error") {
+                // Refused, or the daemon already said why it is giving up (`error`, then a close).
+                fail(errorMsg.value ?? noticeOf(t(`capabilities.browserProfileDialog.couldntStartBrowser`)));
+            } else {
+                restart();
+            }
+        },
     },
+});
+const { live, video } = cast;
+// Canvases mount with the dialog; the decoder outlives them, so the two are wired together here.
+watch([canvasEl, stillEl], ([canvas, still]) => video.attach(canvas, still));
+
+// The box inside the surface's border, where the canvases are, so the viewport is exactly what the modal shows
+// rather than scaled into it: the border box is two pixels larger each way, which resampled every pixel of the picture.
+// The modal only changes shape with the window; the screencast waits for it to hold still and asks once per size.
+watch(surface, (element) => {
+    observer?.disconnect();
+    observer = undefined;
+    if (element === undefined) {
+        return;
+    }
+    observer = new ResizeObserver(() => cast.requestSize(element.clientWidth, element.clientHeight));
+    observer.observe(element);
 });
 
 const connect = (): void => {
@@ -272,9 +228,7 @@ onBeforeUnmount(() => {
         live.dispose();
     }
     observer?.disconnect();
-    window.clearTimeout(resizeTimer);
-    // A decoder holds buffers from its stream; close it or a dialog opened/closed repeatedly leaks them.
-    video.close();
+    // The decoder's buffers, and the size waiting to be asked, go with the component's scope (useScreencast).
 });
 
 // Every pointer event, built by the shared rule (pointerFrame) so this window and the agent's browser view describe
@@ -283,25 +237,19 @@ onBeforeUnmount(() => {
 // ref reaches viewportCoords as a dereference inside a native event handler. A canvas still hidden by `v-show` has no
 // box either, and pointerFrame answers undefined rather than the origin; nothing is sent until there is a picture to
 // aim at.
+// Moves are throttled to one display frame (useScreencast), so a drag isn't traced at network-call granularity.
 const sendPointer = (action: PointerAction, event: MouseEvent): void => {
     const canvas = canvasEl.value;
     if (canvas === null) {
         return;
     }
-    const frame = pointerFrame(action, event, canvas, viewW.value, viewH.value);
+    const frame = cast.pointerAt(action, event, canvas);
     if (frame !== undefined) {
         sendMsg(frame);
     }
 };
 
-const onMouseMove = (event: MouseEvent): void => {
-    const now = Date.now();
-    if (now - lastMove < MOVE_THROTTLE_MS) {
-        return;
-    }
-    lastMove = now;
-    sendPointer("move", event);
-};
+const onMouseMove = (event: MouseEvent): void => sendPointer("move", event);
 const onMouseDown = (event: MouseEvent): void => {
     surface.value?.focus();
     // A click puts the keyboard back on the page, wherever the find bar left it.

@@ -1,7 +1,8 @@
 // The name `ic` knows this sandbox by, which every command printed for its machine carries, found without the daemon:
 // the container name the daemon last reported first, then the first label of its address on the platform's row, the
 // same key `ic sandbox connect` took the container's name from.
-import { servingSlug, slugOfDaemonUrl } from "./servingSlug";
+import { slugOfDaemonUrl } from "@intentic/sandbox-run/slug";
+import { servingSlug } from "./servingSlug";
 
 it(`reads the slug off the daemon's address the way ic named the container`, () => {
     expect(slugOfDaemonUrl(`https://sandbox-3c469e9d6c58.intentic.dev`)).toBe(`sandbox-3c469e9d6c58`);

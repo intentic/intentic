@@ -1,5 +1,6 @@
 import { DAEMON_PORT, HISTORY_ROOT, LOCAL_PORT, WORKSPACE_ROOT } from "@intentic/constants";
 import { shellQuote } from "./quote.js";
+import { SANDBOX_CONTAINER_PREFIX } from "./slug.js";
 
 // The sandbox container's run contract: every way a sandbox starts, composed from one definition instead of four
 // hand-copied dialects. TS consumers import it (drift is a compile error); scripts that can't import execute `intentic
@@ -17,18 +18,9 @@ export interface SandboxNames {
     readonly network: string;
 }
 
-// Every container name below the workspace one is this plus a slug; exported so reading a slug back off a name is the
-// same string as writing it (`sandboxSlugOf`), not a regex copied per caller. `ic` and the desktop app spell it again
-// in Rust, which cannot import it: names.fixture.json is the one record all three are tested against.
-export const SANDBOX_CONTAINER_PREFIX = "intentic-sandbox-";
+// The name and slug readers live in slug.ts, which the browser imports on its own; re-exported here for Node callers.
+export { SANDBOX_CONTAINER_PREFIX, sandboxIdOfToken, sandboxSlugOf, slugOfDaemonUrl, slugOfHostname } from "./slug.js";
 export const SANDBOX_TUNNEL_PREFIX = `${SANDBOX_CONTAINER_PREFIX}tunnel-`;
-
-// The slug inside a container name, or undefined for a name that is not one (an empty env, another project's
-// container). Never guesses: a caller with no slug has to say so rather than aim an action at a plausible one.
-export const sandboxSlugOf = (container: string | undefined): string | undefined => {
-    const slug = container?.startsWith(SANDBOX_CONTAINER_PREFIX) === true ? container.slice(SANDBOX_CONTAINER_PREFIX.length) : undefined;
-    return slug === "" ? undefined : slug;
-};
 
 export const sandboxNames = (slug: string): SandboxNames => ({
     container: `${SANDBOX_CONTAINER_PREFIX}${slug}`,

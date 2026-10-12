@@ -1,5 +1,4 @@
-import type { Rule, RuleCondition, RuleMoment, RuleOutcome } from "@intentic/sandbox-contract";
-import { globToRegExp } from "@intentic/iq-engine";
+import { globMatcher, type Rule, type RuleCondition, type RuleMoment, type RuleOutcome } from "@intentic/sandbox-contract";
 
 // Rule resolution is a pure function over data the caller already has: the owner's rules and the repositories' checks
 // as one list. `matching` returns what matched; the caller decides what an empty result means, since each moment's
@@ -10,9 +9,17 @@ import { globToRegExp } from "@intentic/iq-engine";
 // can reorder.
 const decidesAt = (moment: RuleMoment): boolean => moment === "agent.finished";
 
+// A rule's path glob as the contract's one matcher reads it, after the reading rules have always had (ripgrep's -g, as
+// `iq` takes a scope): a glob without a slash names a file at any depth, a leading `./` is the root, and a trailing `/`
+// is the directory and everything under it.
+const pathMatcher = (glob: string): ((path: string) => boolean) => {
+    const rooted = glob.includes("/") ? glob.replace(/^\.\//, "") : `**/${glob}`;
+    return globMatcher(rooted.endsWith("/") ? `${rooted}**` : rooted);
+};
+
 const touches = (paths: readonly string[], globs: readonly string[]): boolean => {
-    const patterns = globs.map(globToRegExp);
-    return paths.some((path) => patterns.some((pattern) => pattern.test(path)));
+    const patterns = globs.map(pathMatcher);
+    return paths.some((path) => patterns.some((matches) => matches(path)));
 };
 
 // Every field optional: a moment supplies only what it knows, and a condition naming a fact the moment lacks does not

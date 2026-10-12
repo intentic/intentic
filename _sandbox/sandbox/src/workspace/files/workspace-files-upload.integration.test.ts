@@ -43,3 +43,21 @@ test("writeWorkspaceFileStream counts the offset against the limit and keeps the
     expect(existsSync(target)).toBe(true);
     await rm(dir, { recursive: true, force: true });
 });
+
+// A chunked upload declares no length, so the route's header check never sees it; the writer's count is the cap. This
+// body never ends: the write must stop as the count passes the limit, rather than buffer or write it whole.
+test("writeWorkspaceFileStream cuts an endless chunked body at the limit and leaves nothing on disk", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "wf-"));
+    const target = join(dir, "endless.bin");
+    let pulled = 0;
+    const endless = new ReadableStream<Uint8Array>({
+        pull(controller) {
+            pulled += 4096;
+            controller.enqueue(new Uint8Array(4096));
+        },
+    });
+    await expect(writeWorkspaceFileStream(target, endless, 64 * 1024)).rejects.toBeInstanceOf(UploadTooLargeError);
+    expect(existsSync(target)).toBe(false);
+    expect(pulled).toBeLessThan(64 * 1024 + 32 * 4096);
+    await rm(dir, { recursive: true, force: true });
+});

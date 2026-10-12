@@ -2,6 +2,7 @@ import type { ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { pollFor, pollUntil } from "@intentic/base/async";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import type { Browser, BrowserContext } from "playwright";
 import { z } from "zod";
@@ -189,26 +190,22 @@ const reapOrphans = async (userDataDir: string): Promise<void> => {
         }
     }
     // Chromium refuses a profile whose lock names a live pid; a killed one is cleared on the next start.
-    const deadline = Date.now() + CLOSE_TIMEOUT_MS;
-    while (orphans.some((pid) => existsSync(`/proc/${String(pid)}`)) && Date.now() < deadline) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- waiting on the kernel to finish the kill
-        await new Promise((resolve) => setTimeout(resolve, 50));
-    }
+    await pollUntil(() => !orphans.some((pid) => existsSync(`/proc/${String(pid)}`)), { intervalMs: 50, timeoutMs: CLOSE_TIMEOUT_MS });
 };
 
 const waitForPort = async (child: ChildProcess, file: string): Promise<number> => {
-    const deadline = Date.now() + START_TIMEOUT_MS;
-    while (Date.now() < deadline) {
-        if (child.exitCode !== null || child.signalCode !== null) {
-            throw new Error(`the browser exited while starting (${child.exitCode ?? child.signalCode})`);
-        }
-        // allow(silent-catch): no file yet is a browser still starting
-        const port = parseActivePort(await readFile(file, "utf8").catch(() => ""));
-        if (port !== undefined) {
-            return port;
-        }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- polling one file until Chromium writes it
-        await new Promise((resolve) => setTimeout(resolve, 100));
+    const found = await pollFor(
+        async () => {
+            if (child.exitCode !== null || child.signalCode !== null) {
+                throw new Error(`the browser exited while starting (${child.exitCode ?? child.signalCode})`);
+            }
+            // allow(silent-catch): no file yet is a browser still starting
+            return parseActivePort(await readFile(file, "utf8").catch(() => ""));
+        },
+        { intervalMs: 100, until: Date.now() + START_TIMEOUT_MS },
+    );
+    if (found.kind === "found") {
+        return found.value;
     }
     throw new Error(`the browser did not open its debugging port within ${START_TIMEOUT_MS / 1000}s`);
 };

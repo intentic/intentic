@@ -9,7 +9,8 @@ import { memoryDoorTokens } from "../auth/tokens/door-tokens.js";
 import type { Services } from "../composition.js";
 import { compressResponses } from "../http/compress-responses.js";
 import { fileLoopsStore } from "../loops/loops-store.js";
-import { createGateRoute } from "./gate.routes.js";
+import { createGateRoute, settledWithin } from "./gate.routes.js";
+import { PAYLOAD_MAX } from "../automations/scheduler.js";
 import { fileWorkflowRunsStore, fileWorkflowsStore } from "./workflows-store.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
 import { drivenBy, memoryFleet } from "../testing.js";
@@ -92,12 +93,17 @@ const appFor = (services: Services, wake: TurnStarter["stream"], heartbeatMs?: n
 
 const tempRoot = (): string => mkdtempSync(join(tmpdir(), "gate-"));
 
+const THREE_HOURS = 3 * 60 * 60 * 1000;
+
 // No query uses the door's own credential as the bearer header; a query supplies the test's own wording (wrong token,
 // deadline) riding the URL like a webhook sender's would.
 const post = async (app: Hono, id: string, query?: string, body = ""): Promise<Response> =>
     query === undefined
         ? app.request(`/workflows/${id}/gate`, { method: "POST", body, headers: { authorization: `Bearer ${await token(id)}` } })
         : app.request(`/workflows/${id}/gate?${query}`, { method: "POST", body });
+
+// What a Request with a stream body needs besides RequestInit: without it the runtime refuses to send one.
+const STREAMED = { duplex: "half" };
 
 test("a passing judgment ships, and the run is the one the gate started", async () => {
     const root = tempRoot();
@@ -257,4 +263,45 @@ test("a run that outlasts the deadline is stopped and answers blocked", async ()
 
     expect((await response.json()).outcome).toBe("blocked");
     expect(elapsed).toBeLessThan(2_000);
+});
+
+// The deadline runs up to three hours; the race used to leave its timer armed that long behind a run that settled in
+// seconds. Counted by hand: every timer the wait arms is cleared by the time it answers.
+test("the gate's wait clears its deadline timer the moment the run settles", async () => {
+    const armed = jest.spyOn(globalThis, "setTimeout");
+    const cleared = jest.spyOn(globalThis, "clearTimeout");
+    try {
+        expect(await settledWithin(Promise.resolve(), THREE_HOURS)).toBe(true);
+        const deadline = armed.mock.calls.findIndex((args) => args[1] === THREE_HOURS);
+        expect(deadline).toBeGreaterThanOrEqual(0);
+        const timer: unknown = armed.mock.results[deadline]?.value;
+        expect(cleared.mock.calls.some((args) => args[0] === timer)).toBe(true);
+        expect(await settledWithin(new Promise(() => {}), 5)).toBe(false);
+    } finally {
+        armed.mockRestore();
+        cleared.mockRestore();
+    }
+});
+
+test("an oversized request sent chunked, with no length declared, is refused 413 before a run starts", async () => {
+    const root = tempRoot();
+    const services = fakeServices(root);
+    await services.workflows.save(gated("chunked"), true);
+    const app = appFor(services, judging(root, "ship"));
+    const bytes = new TextEncoder().encode("x".repeat(PAYLOAD_MAX + 1));
+    const body = new ReadableStream<Uint8Array>({
+        start: (controller) => {
+            for (let at = 0; at < bytes.length; at += 4096) {
+                controller.enqueue(bytes.slice(at, at + 4096));
+            }
+            controller.close();
+        },
+    });
+    // A stream body needs `duplex: "half"`, which this lib's RequestInit does not name, so it rides in from outside.
+    const init: RequestInit = { method: "POST", headers: { authorization: `Bearer ${await token("chunked")}` }, body };
+    const request = new Request("http://door/workflows/chunked/gate", { ...init, ...STREAMED });
+    expect(request.headers.get("content-length")).toBeNull();
+    const res = await app.request(request);
+    expect(res.status).toBe(413);
+    expect(await services.workflowRuns.list()).toEqual([]);
 });

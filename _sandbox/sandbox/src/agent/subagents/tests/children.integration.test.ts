@@ -1163,7 +1163,7 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
                 held: true,
                 // Says why the owner is asked and how long the card waits, so the parent can tell a rule from a taint and
                 // knows it may ask again.
-                note: "Held for the owner's approval, because spawning subagents on claude requires owner approval. A card in your chat asks them, and you carry on meanwhile. The card lasts while your turn does (at most 6 hours): if nobody answers by then the move does not happen, nothing is declined, and you may ask again. It starts once they allow it; wait on it like any child, which also keeps your turn, and the card, open. If they decline, or nobody answers in time, it ends as failed without having run.",
+                note: "Held for the owner's approval, because spawning subagents on claude requires owner approval. A card in your chat asks them, and you carry on meanwhile. The card lasts while your turn does: if nobody answers by then the move does not happen, nothing is declined, and you may ask again. It starts once they allow it; wait on it like any child, which also keeps your turn, and the card, open. If they decline, or your turn ends first, it ends as failed without having run.",
             });
             // Filed as a child already, so the parent's wait parks on it like any other.
             expect(listSubagentSessions(actors).find((session) => session.id === result.id)).toMatchObject({
@@ -1508,7 +1508,7 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
             const services = heldServices(HOLD, fakeTurn(turns));
             expect(await sendToChild(services, parent, first.id, "Now the lexer too.")).toEqual({
                 ok: true,
-                note: "Held for the owner's approval, because spawning subagents on claude requires owner approval. A card in your chat asks them, and you carry on meanwhile. The card lasts while your turn does (at most 6 hours): if nobody answers by then the move does not happen, nothing is declined, and you may ask again. It goes to the child once they allow it, and you are told if it does not.",
+                note: "Held for the owner's approval, because spawning subagents on claude requires owner approval. A card in your chat asks them, and you carry on meanwhile. The card lasts while your turn does: if nobody answers by then the move does not happen, nothing is declined, and you may ask again. It goes to the child once they allow it, and you are told if it does not.",
             });
             // One message waits on the owner at a time.
             expect(await sendToChild(services, parent, first.id, "And the docs.")).toEqual({

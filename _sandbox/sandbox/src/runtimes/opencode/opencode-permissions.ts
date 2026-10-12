@@ -1,7 +1,9 @@
 import type { OpenCodeClient, OpenCodeEvent } from "@opencode/client";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { displayNameOf } from "@intentic/agent-context/tool-calls";
-import { type CommandGuard, consultWith, type GuardOutcome, vendorSubject } from "../../guard/command-guard.js";
+import type { CommandGuard } from "../../guard/command-guard.js";
+import { opt } from "../../opt.js";
+import { answerVendorAsk, askCwdOf, askProgramOf, VendorToolInputSchema } from "../decorators/vendor-ask.js";
 
 // Who answers OpenCode's permission asks. The server's rules ask about the commands the owner's rulebook should see
 // (opencode-config.ts) and allow everything else; an ask lands on the server's one event stream, and this answers it.
@@ -29,17 +31,9 @@ export interface PermissionAsk {
     readonly kind: string;
     // What the classifier reads: the command the metadata names, else the resources the ask is about.
     readonly program: string | undefined;
+    // Where it runs: the directory the metadata names, else the one the session runs in.
+    readonly cwd?: string;
 }
-
-const named = (metadata: Readonly<Record<string, unknown>> | undefined): string | undefined => {
-    for (const key of ["command", "cmd", "script", "input"]) {
-        const value = metadata?.[key];
-        if (typeof value === "string" && value.trim() !== "") {
-            return value;
-        }
-    }
-    return undefined;
-};
 
 /** The ask an event raises, or undefined for every other event. */
 export const permissionAskOf = (event: OpenCodeEvent): PermissionAsk | undefined => {
@@ -47,43 +41,29 @@ export const permissionAskOf = (event: OpenCodeEvent): PermissionAsk | undefined
         return undefined;
     }
     const { id, sessionID, action, resources, metadata } = event.data;
+    const input = VendorToolInputSchema.parse(metadata);
     // A shell ask's one resource is the command line it would run (checked against 2.0.26).
-    const listed = resources.join(" ");
-    return { id, sessionID, kind: action, program: named(metadata) ?? (listed.trim() === "" ? undefined : listed) };
+    return {
+        id,
+        sessionID,
+        kind: action,
+        program: askProgramOf(input, resources.join(" ")),
+        ...opt("cwd", askCwdOf(input, event.location?.directory)),
+    };
 };
 
 // One answer as OpenCode takes it. A refusal carries its reason, which OpenCode hands the model as the call's failure
-// and keeps the turn going. Never `always`: OpenCode 2 turns it into a saved rule for the whole project, which every
-// later ask there would then skip, the owner's rulebook included.
+// and keeps the turn going. Never `always`, even where no rule is watching: OpenCode 2 turns it into a saved rule for
+// the whole project, which every later ask there would then skip, the owner's rulebook included once a turn enforces it.
 type PermissionReply = { readonly decision: "once" } | { readonly decision: "reject"; readonly message: string };
-
-// Fail closed: a consult that threw has no verdict to stand on, and an unanswered ask would stall the turn instead.
-const CONSULT_FAILED =
-    "This could not be checked against your owner's safety policy, so it was refused. " +
-    "Do not retry: carry on with what you can do without it, and say plainly what you left undone.";
 
 /**
  * Answers one permission: the owner's rulebook if this session has a judge, the standing yes otherwise. A hold parks
  * on a card like Codex's: the turn's watchdog is held for the whole consult, and the card's frames reach the turn's
- * stream through the judge.
+ * stream through the judge. A consult that fails is a refusal: an unanswered ask would stall the turn instead.
  */
 export const answerPermission = async (client: OpenCodeClient, judge: SessionJudge | undefined, ask: PermissionAsk): Promise<void> => {
-    const reply = async (answer: PermissionReply): Promise<void> => {
-        await client.permission.reply({ sessionID: ask.sessionID, requestID: ask.id, ...answer });
-    };
-    if (judge === undefined || !judge.gate.enforcing || ask.program === undefined) {
-        await reply({ decision: "once" });
-        return;
-    }
-    const release = judge.hold();
-    let outcome: GuardOutcome;
-    try {
-        outcome = await consultWith(judge.gate, ask.program, vendorSubject(displayNameOf(ask.kind)), judge.push);
-    } catch {
-        // allow(silent-catch): answered below as a refusal naming the failure, the only verdict left to give
-        outcome = { allow: false, reason: CONSULT_FAILED };
-    } finally {
-        release();
-    }
-    await reply(outcome.allow ? { decision: "once" } : { decision: "reject", message: outcome.reason });
+    const answer = await answerVendorAsk(judge, { tool: displayNameOf(ask.kind), program: ask.program, cwd: ask.cwd, canRefuse: true });
+    const reply: PermissionReply = answer.allow ? { decision: "once" } : { decision: "reject", message: answer.reason };
+    await client.permission.reply({ sessionID: ask.sessionID, requestID: ask.id, ...reply });
 };

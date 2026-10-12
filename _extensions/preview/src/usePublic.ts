@@ -5,12 +5,13 @@ import { host } from "./host";
 
 // Workspace outbox via the daemon's `public` procedures, the file-shaped counterpart to `usePorts`: a file is exposed
 // just by sitting in `public/`, no process needed. Observed via the manifest's `contributes.files` binding, pushed by
-// the daemon's file watcher, so an agent's own writes there are seen too.
+// the daemon's file watcher under the name `public`, which the host turns into this read's key (the shell's outbox
+// shares it), so an agent's own writes there are seen too.
 
 export function usePublic() {
     const api = host();
     const queryClient = useQueryClient();
-    const queryKey = api.sandbox.key(`public`);
+    const queryKey = api.sandbox.readKey(`public.list`);
 
     const query = useQuery({
         queryKey,

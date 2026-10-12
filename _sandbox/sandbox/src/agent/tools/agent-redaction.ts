@@ -1,5 +1,6 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import { errnoCode } from "@intentic/base/errors";
+import { SECRET_VALUE_MIN } from "@intentic/output-cleaners/cleaners";
 import { classifyCommand, maskCredentialMaterial } from "@intentic/sandbox-contract";
 import { type NamedSecret, SecretStoreUnreadableError, secretReference, surfaceForms } from "../../secrets/secret-registry.js";
 
@@ -7,8 +8,9 @@ import { type NamedSecret, SecretStoreUnreadableError, secretReference, surfaceF
 // fetched. Values mask to `{{secret:name}}`, not a blank, so a read-then-rewrite round-trips. A second, shape-based
 // pass covers credential files the vault never stored, judged by the call's own input.
 
-// Same floor as the terminal filter: below this a value isn't distinctive enough to blank safely.
-const MIN_LENGTH = 12;
+// The terminal filter's own floor, so the two lanes leave the same short values unmasked: below it a value isn't
+// distinctive enough to blank safely.
+const MIN_LENGTH = SECRET_VALUE_MIN;
 const LINE_MASK = "***";
 
 export interface MaskTarget {

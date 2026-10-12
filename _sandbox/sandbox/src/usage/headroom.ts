@@ -1,4 +1,4 @@
-import { SingleFlight } from "@intentic/base/async";
+import { SingleFlight, within } from "@intentic/base/async";
 import type { AccountUsage, AgentProvider, UsageWindow } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import type { AccountUsageStore } from "./account-usage.js";
@@ -91,12 +91,6 @@ const IDLE_MS = 15 * 60_000;
 const CONCURRENCY = 4;
 // How often one account's one reason for an unread reading may be written while it stands.
 const FAILURE_LOG_EVERY_MS = 60 * 60_000;
-
-const deadline = (ms: number): Promise<void> =>
-    new Promise((resolve) => {
-        // Unref'd: a caller that stopped waiting must not hold the process open until this fires.
-        setTimeout(resolve, ms).unref();
-    });
 
 export const createHeadroomService = (deps: {
     readonly store: AccountUsageStore;
@@ -276,7 +270,8 @@ export const createHeadroomService = (deps: {
     const refresh = async (options: RefreshOptions = {}): Promise<void> => {
         await seed();
         const pending = sweep(options).catch((error: unknown) => deps.logger.warn({ err: error }, "headroom: sweep failed, the next trigger retries"));
-        return options.withinMs === undefined ? pending : Promise.race([pending, deadline(options.withinMs)]);
+        // Unref'd: a caller that stopped waiting must not hold the process open until the wait is up.
+        return options.withinMs === undefined ? pending : within(pending, options.withinMs, undefined, { unref: true });
     };
 
     return {

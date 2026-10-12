@@ -316,6 +316,8 @@ test("the page registers its opener only inside the app, and routes only its own
     open?.(`/setup`);
     // Not a path of this page: another host, or no root at all.
     open?.(`//elsewhere.example/x`);
+    // A browser reads the backslash as a slash, so this is `//elsewhere.example` too, and the load fallback would go there.
+    open?.(`/\\elsewhere.example`);
     open?.(`https://elsewhere.example/`);
     open?.(`setup`);
     expect(went).toEqual([`/?sandbox=cm2research`, `/setup`]);

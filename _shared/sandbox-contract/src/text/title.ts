@@ -1,3 +1,5 @@
+import { oneLine } from "@intentic/base/one-line";
+
 // The title a chat tab, fleet card and agent detail header show until a model names the conversation. Reads the prompt
 // as prose first, stripping openers, quotes and fences, and cuts on a sentence or word boundary rather than truncating
 // at a fixed length. Browser and daemon both call this so a prompt titles the same regardless of where it enters.
@@ -37,12 +39,6 @@ const IMPERATIVE =
 
 // An unmistakable ask: an instruction verb, or a question mark.
 const isAsk = (sentence: string): boolean => sentence.endsWith("?") || IMPERATIVE.test(sentence);
-
-const collapse = (text: string): string =>
-    text
-        .replaceAll(/[\p{Cc}\p{Cf}]+/gu, " ")
-        .replaceAll(/\s+/g, " ")
-        .trim();
 
 // Prompt lines minus fenced code blocks and quoted lines; those are evidence attached to the ask, not the ask itself.
 const proseLines = (prompt: string): string[] => {
@@ -180,7 +176,7 @@ export const planParts = (text: string): { title?: string; body: string } => {
 // as its own first line.
 export const deriveTitle = (prompt: string): string => {
     const prose = proseLines(prompt)
-        .map(collapse)
+        .map((line) => oneLine(line))
         .filter((line) => line !== "");
     // Prose lines, openers stripped, letters required; first is the default title, rest matter only if narration.
     const lines = prose.map(withoutOpener).filter((line) => /\p{L}/u.test(line));
@@ -197,6 +193,6 @@ export const deriveTitle = (prompt: string): string => {
         return capitalized(clamped(firstSentence(collapseReferences(ask ?? primary))));
     }
     // Nothing had letters (code, quote or greeting only); title as the first raw line rather than leaving it blank.
-    const fallback = prose[0] ?? collapse(prompt.replaceAll(/^\s*(?:```|~~~).*$/gm, ""));
-    return clamped(collapseReferences(fallback === "" ? collapse(prompt) : fallback));
+    const fallback = prose[0] ?? oneLine(prompt.replaceAll(/^\s*(?:```|~~~).*$/gm, ""));
+    return clamped(collapseReferences(fallback === "" ? oneLine(prompt) : fallback));
 };

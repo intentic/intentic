@@ -1,5 +1,6 @@
 import { type Ref, ref } from "vue";
 import { desktopApp, openDesktopLink } from "./desktop";
+import { inAppPath } from "../../lib/routes/inAppPath";
 
 // The desktop app's own notifications and the mark on its icon, as the workspace asks for them (desktop-app notice.rs,
 // badge.rs), one link each and built here alone. Like every link to the app, a navigation the app intercepts, never IPC.
@@ -83,9 +84,6 @@ export interface DesktopNotice {
     readonly silent: boolean;
 }
 
-// A route of this page, as the app takes one: rooted, never `//`, which a navigation reads as another host.
-const PAGE_ROUTE = /^\/(?!\/)/;
-
 export const desktopNoticeLink = (notice: DesktopNotice): string => {
     const params = new URLSearchParams({ do: `show`, key: oneLine(notice.key, KEY_MAX), kind: notice.kind });
     const title = oneLine(notice.title, TITLE_MAX);
@@ -94,8 +92,10 @@ export const desktopNoticeLink = (notice: DesktopNotice): string => {
     if (body !== ``) {
         params.set(`body`, body);
     }
-    if (notice.path !== undefined && PAGE_ROUTE.test(notice.path) && !notice.path.includes(`\\`)) {
-        params.set(`path`, notice.path);
+    // Only a route of this page: the app opens it as one, and `//x` or `/\x` would read as another host.
+    const path = notice.path === undefined ? undefined : inAppPath(notice.path);
+    if (path !== undefined) {
+        params.set(`path`, path);
     }
     if (notice.silent) {
         params.set(`silent`, `1`);

@@ -4,6 +4,7 @@ import { readFile, rename, rm, stat } from "node:fs/promises";
 import { basename, dirname, extname, join, posix } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { errnoCode, errorMessage } from "@intentic/base/errors";
 import type { DocsState, OpenRequest, OpenResult } from "../contract.js";
 import { documentTypeOf, extensionOf, READ_ONLY_IN_BROWSER } from "../formats.js";
 import type { EditorPageConfig } from "../protocol.js";
@@ -81,8 +82,7 @@ export const copyNameFor = async (root: string, path: string): Promise<string> =
         try {
             await stat(join(root, candidate));
         } catch (error) {
-            // SAFETY: fs rejects with a NodeJS.ErrnoException; only its code is read.
-            if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+            if (errnoCode(error) === "ENOENT") {
                 return candidate;
             }
             throw error;
@@ -125,7 +125,7 @@ export const createBrowserEngine = (deps: BrowserEngineDeps): BrowserEngine => {
             const script = await readFile(join(deps.pageDir, "editor.js"));
             page = { id: createHash("sha256").update(script).digest("hex").slice(0, 16) };
         } catch (error) {
-            deps.log(`the browser engine's editor page is not built: ${error instanceof Error ? error.message : String(error)}`);
+            deps.log(`the browser engine's editor page is not built: ${errorMessage(error)}`);
         }
         return page;
     };
@@ -145,8 +145,7 @@ export const createBrowserEngine = (deps: BrowserEngineDeps): BrowserEngine => {
         try {
             found = await stat(file);
         } catch (error) {
-            // SAFETY: fs rejects with a NodeJS.ErrnoException; only its code is read.
-            if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+            if (errnoCode(error) === "ENOENT") {
                 return undefined;
             }
             throw error;
@@ -158,8 +157,7 @@ export const createBrowserEngine = (deps: BrowserEngineDeps): BrowserEngine => {
         try {
             return versionOfStat(await stat(file));
         } catch (error) {
-            // SAFETY: fs rejects with a NodeJS.ErrnoException; only its code is read.
-            if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+            if (errnoCode(error) === "ENOENT") {
                 return undefined;
             }
             throw error;

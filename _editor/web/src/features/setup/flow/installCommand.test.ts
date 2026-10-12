@@ -1,4 +1,4 @@
-import { PLATFORM_WEB_ORIGIN } from "@intentic/constants";
+import { installScriptUrl, PLATFORM_WEB_ORIGIN } from "@intentic/constants";
 import { bashCommand, psCommand, scriptSource } from "../../../app/environments/scriptCommand";
 import { type CommandInput, installCommand, platformUrlOf, setupOneLinerArgs, uninstallCommand, unixPrefix, webOriginOf, windowsEnv } from "./installCommand";
 
@@ -64,7 +64,7 @@ describe(`the one-liner`, () => {
 describe(`the unix command`, () => {
     it(`puts every assignment on one env, token, platform, origin, then sync, and never root`, () => {
         expect(unixPrefix(loaded)).toBe(
-            `env CF_TOKEN='cf-token' PLATFORM_URL='https://localhost:6480' INTENTIC_AGENT_AUTH_VOLUME='intentic-dev-agent-auth' SANDBOX_IMAGE='intentic-sandbox:dev' WEB_ORIGIN='https://app.example.dev' SYNC_DIR='~/intentic/workspace' `,
+            `env CF_TOKEN=cf-token PLATFORM_URL=https://localhost:6480 INTENTIC_AGENT_AUTH_VOLUME='intentic-dev-agent-auth' SANDBOX_IMAGE='intentic-sandbox:dev' WEB_ORIGIN=https://app.example.dev SYNC_DIR='~/intentic/workspace' `,
         );
         expect(installCommand(loaded)).toBe(bashCommand(`sh`, unixPrefix(loaded), `vphf3wkQ7xK`));
         expect(installCommand(loaded)).not.toContain(`sudo`);
@@ -72,7 +72,7 @@ describe(`the unix command`, () => {
 
     it(`builds the dev image only from a checkout`, () => {
         expect(unixPrefix({ ...bare, platformUrl: `https://localhost:6480` })).toBe(
-            `env PLATFORM_URL='https://localhost:6480' INTENTIC_AGENT_AUTH_VOLUME='intentic-dev-agent-auth' `,
+            `env PLATFORM_URL=https://localhost:6480 INTENTIC_AGENT_AUTH_VOLUME='intentic-dev-agent-auth' `,
         );
     });
 });
@@ -84,6 +84,61 @@ describe(`the Windows command`, () => {
             `$env:PLATFORM_URL='https://localhost:6480'; $env:INTENTIC_AGENT_AUTH_VOLUME='intentic-dev-agent-auth'; $env:SANDBOX_IMAGE='intentic-sandbox:dev'; $env:WEB_ORIGIN='https://app.example.dev'; $env:CF_TOKEN='cf-token'; $env:SYNC_DIR='~/intentic/workspace'; $env:SETUP_CODE='vphf3wkQ7xK'; `,
         );
         expect(installCommand(input)).toBe(psCommand(`ps1`, windowsEnv(input)));
+    });
+});
+
+// The folder and the token are the reader's own, so a quote in either must stay inside its value: one argument to
+// `env` in sh, one literal in PowerShell, including the typographic quotes PowerShell also ends a literal at.
+describe(`a value holding a quote`, () => {
+    const quoted: CommandInput = { ...bare, cfToken: `tok'en`, syncDir: `~/My Work/it's` };
+
+    // The words of a line as sh splits them, for the subset the quoter writes: a space outside quotes ends a word, a
+    // single-quoted run is literal, and a backslash outside quotes takes the next character as itself.
+    const shWords = (line: string): string[] => {
+        const words: string[] = [];
+        let word: string | undefined;
+        for (let index = 0; index < line.length; index += 1) {
+            const char = line[index] ?? ``;
+            if (char === ` `) {
+                if (word !== undefined) {
+                    words.push(word);
+                }
+                word = undefined;
+            } else if (char === `'`) {
+                const close = line.indexOf(`'`, index + 1);
+                word = (word ?? ``) + line.slice(index + 1, close);
+                index = close;
+            } else if (char === `\\`) {
+                word = (word ?? ``) + (line[index + 1] ?? ``);
+                index += 1;
+            } else {
+                word = (word ?? ``) + char;
+            }
+        }
+        return word === undefined ? words : [...words, word];
+    };
+
+    it(`stays one argument to env on unix`, () => {
+        expect(unixPrefix(quoted)).toBe(`env CF_TOKEN='tok'\\''en' SYNC_DIR='~/My Work/it'\\''s' `);
+        expect(shWords(unixPrefix(quoted))).toEqual([`env`, `CF_TOKEN=tok'en`, `SYNC_DIR=~/My Work/it's`]);
+        expect(shWords(installCommand(quoted))).toEqual([
+            `curl`,
+            `-fsSL`,
+            installScriptUrl(`sh`),
+            `|`,
+            `env`,
+            `CF_TOKEN=tok'en`,
+            `SYNC_DIR=~/My Work/it's`,
+            `sh`,
+            `-s`,
+            `--`,
+            `vphf3wkQ7xK`,
+        ]);
+    });
+
+    it(`stays one literal on Windows, typographic quotes included`, () => {
+        const env = windowsEnv({ ...quoted, os: `windows`, syncDir: `C:\\it's ‘x’` });
+        expect(env).toBe(`$env:CF_TOKEN='tok''en'; $env:SYNC_DIR='C:\\it''s ‘‘x’’'; $env:SETUP_CODE='vphf3wkQ7xK'; `);
     });
 });
 

@@ -2,6 +2,7 @@ import { open, realpath, stat } from "node:fs/promises";
 import { extname, join, relative, resolve, sep } from "node:path";
 import { PUBLIC_DIR } from "@intentic/workspace-ignore";
 import { holdsCredentialToken } from "@intentic/sandbox-contract";
+import { insideRel } from "@intentic/base/contained";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { escapeHtml } from "@intentic/base/format";
 import type { Refusal } from "../panels/interstitial.js";
@@ -148,6 +149,14 @@ const requestPath = (url: string | undefined): string | undefined => {
     return decoded.includes("\0") ? undefined : decoded;
 };
 
+// Where `path` really is, links followed, and its outbox-relative name there; undefined when it resolves to nothing or
+// to anywhere but a file under the outbox (the outbox itself included).
+const realUnder = async (realRoot: string, path: string): Promise<{ readonly real: string; readonly realRel: string } | undefined> => {
+    const real = await realpath(path).catch(() => undefined);
+    const realRel = real === undefined ? undefined : insideRel(realRoot, real);
+    return real === undefined || realRel === undefined || realRel === "" ? undefined : { real, realRel };
+};
+
 // One request to what to serve; a missing `root` is just "publishing is off", answered like a missing file.
 export const resolvePublicFile = async (root: string, url: string | undefined): Promise<PublicResolution> => {
     const requested = requestPath(url);
@@ -160,7 +169,8 @@ export const resolvePublicFile = async (root: string, url: string | undefined): 
         return notFound();
     }
     const target = resolve(realRoot, `.${requested}`);
-    if (target !== realRoot && !target.startsWith(realRoot + sep)) {
+    const relPath = insideRel(realRoot, target);
+    if (relPath === undefined) {
         return notFound();
     }
     const stats = await stat(target).catch(() => undefined);
@@ -175,17 +185,13 @@ export const resolvePublicFile = async (root: string, url: string | undefined): 
         return notFound();
     }
     // Rule 1: the path is inside the root, but a symlink can still point its bytes elsewhere.
-    const real = await realpath(target).catch(() => undefined);
-    if (real === undefined || !real.startsWith(realRoot + sep)) {
-        return notFound();
-    }
+    const resolved = await realUnder(realRoot, target);
     // Rules 2, 3 and 5 judge the resolved name, not the requested one, or a same-outbox symlink launders both:
     // `logo.png -> .env` would serve, and its `.png` extension would skip the sniff too.
-    const relPath = relative(realRoot, target).split(sep).join("/");
-    const realRel = relative(realRoot, real).split(sep).join("/");
-    if (blockByName(realRel) !== undefined) {
+    if (resolved === undefined || blockByName(resolved.realRel) !== undefined) {
         return notFound();
     }
+    const { real, realRel } = resolved;
     if (stats.size > MAX_BYTES) {
         return {
             kind: "refused",
@@ -243,12 +249,12 @@ export const listPublicFiles = async (root: string): Promise<PublicEntry[]> => {
         const entry = { path: relative(realRoot, abs).split(sep).join("/"), size: stats.size, modifiedAt: stats.mtimeMs };
         // Judged on the resolved name, like the serve path, so the two can never disagree about a symlink; one whose
         // bytes escape reports here as `escapes`.
-        const real = await realpath(abs).catch(() => undefined);
-        if (real === undefined || !real.startsWith(realRoot + sep)) {
+        const resolved = await realUnder(realRoot, abs);
+        if (resolved === undefined) {
             entries.push({ ...entry, blocked: "escapes" });
             continue;
         }
-        const realRel = relative(realRoot, real).split(sep).join("/");
+        const { real, realRel } = resolved;
         const blocked =
             blockByName(realRel) ?? (stats.size > MAX_BYTES ? ("too-large" as const) : await blockByContent(real, contentTypeOf(realRel).type));
         // Deleted mid-walk, like a file whose stat found nothing above.

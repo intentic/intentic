@@ -1,5 +1,5 @@
 import { cp, mkdir, readdir, rm, rmdir, stat } from "node:fs/promises";
-import { basename, join, sep } from "node:path";
+import { basename, join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { publicContract } from "@intentic/sandbox-contract";
 import { SHARE_DIR } from "@intentic/sandbox-contract/share-paths";
@@ -7,7 +7,7 @@ import { isPublicPath, toRelPath } from "@intentic/workspace-ignore";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
-import { isControlPlanePath, resolveWithin } from "../workspace/files/workspace-files-paths.js";
+import { isUnder, realPathOf, resolveRealWithin, resolveWorkspacePath } from "../workspace/files/workspace-files-paths.js";
 import { BLOCK_REASON, blockByName, listPublicFiles, publicRoot } from "./public-files.js";
 import { publicAddressOf } from "../env.config.js";
 
@@ -44,18 +44,21 @@ export const createPublicRoutes = (services: PublicRoutesDeps) => {
         })),
 
         publish: i.publish.handler(async ({ input }) => {
-            const source = resolveWithin(services.workspace.root, input.path);
-            if (source === undefined) {
+            // Asked lexically and on disk: a folder linking into .intentic/ would otherwise copy the vault's bytes into
+            // the outbox while its path names an ordinary file.
+            const resolved = await resolveWorkspacePath(services.workspace.root, input.path);
+            if (resolved.kind === "outside") {
                 throw new ORPCError("BAD_REQUEST", { message: `"${input.path}" is not a path inside the workspace` });
             }
             // The control plane holds identity, provider tokens and private state and can never be published.
-            if (isControlPlanePath(services.workspace.root, source)) {
+            if (resolved.kind === "controlPlane") {
                 throw new ORPCError("FORBIDDEN", { message: `"${input.path}" is sandbox-private state and can never be published` });
             }
-            if (isPublicPath(toRelPath(services.workspace.root, source))) {
+            const source = resolved.path;
+            if (isPublicPath(toRelPath(services.workspace.root, source)) || isPublicPath(resolved.realRel)) {
                 throw new ORPCError("BAD_REQUEST", { message: `"${input.path}" is already published` });
             }
-            const stats = await stat(source).catch(undefinedIfMissing);
+            const stats = await stat(resolved.real).catch(undefinedIfMissing);
             if (stats === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: `"${input.path}" does not exist` });
             }
@@ -71,22 +74,25 @@ export const createPublicRoutes = (services: PublicRoutesDeps) => {
                 throw new ORPCError("BAD_REQUEST", { message: `"${name}" can't be published, ${BLOCK_REASON[blocked]}` });
             }
             await mkdir(root, { recursive: true });
-            await cp(source, join(root, name), { recursive: true, force: true });
+            // Copied from where it really is, the path just checked, so a published link is its bytes rather than a
+            // link the serve path would refuse.
+            await cp(resolved.real, join(root, name), { recursive: true, force: true });
             return { path: name, ...(fileUrl(base, name) === undefined ? {} : { url: fileUrl(base, name)! }) };
         }),
 
         unpublish: i.unpublish.handler(async ({ input }) => {
-            const target = resolveWithin(root, input.path);
-            if (target === undefined) {
+            // The entry itself, not what it may link to: rm takes a link and leaves its target, but a linked folder on
+            // the way would carry the removal out of the outbox.
+            const resolved = await resolveRealWithin(root, input.path, { entry: true });
+            if (resolved === undefined) {
                 throw new ORPCError("BAD_REQUEST", { message: `"${input.path}" is not a published path` });
             }
-            // Compares the resolved path, matching what rm takes below; shared conversations are withdrawn via their
-            // own action, not here.
-            const shares = join(root, SHARE_DIR);
-            if (target === shares || target.startsWith(shares + sep)) {
+            // Compares where rm really lands; shared conversations are withdrawn via their own action, not here.
+            const shares = await realPathOf(join(root, SHARE_DIR));
+            if (isUnder(shares, resolved.real) !== undefined) {
                 throw new ORPCError("BAD_REQUEST", { message: "shared conversations are withdrawn from the Shared conversations list" });
             }
-            await rm(target, { recursive: true, force: true });
+            await rm(resolved.real, { recursive: true, force: true });
             // Emptying the outbox turns publishing off; a failed cleanup self-heals on the next unpublish.
             const remaining = await readdir(root).catch(() => ["keep"]);
             if (remaining.length === 0) {

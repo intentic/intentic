@@ -6,11 +6,10 @@ import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
 import { remoteIpOf } from "../http/remote-ip.js";
 import { threadKey } from "../seams/thread-key.js";
-import { dailyBudget } from "../store/daily-budget.js";
-import { rateWindow } from "../store/rate-window.js";
 import { fileInstallsStore, type InstallsDocument, type InstallsStore } from "../store/installs.js";
 import type { AutomationRecord } from "./automations-store.js";
-import { fireAutomation, type FireOptions, type FireOutcome } from "./scheduler.js";
+import { doorAdmission } from "./door-admission.js";
+import { fireOnThread, type FireOutcome, type ThreadFireOptions } from "./scheduler.js";
 
 // Public door: routes an anonymous browser reaches directly (Visitor chat, bug intake), each a stranger's script tag
 // rather than an extension, driving fireAutomation directly. No credential; app.ts's auth skip names exactly these
@@ -45,7 +44,6 @@ export interface PublicDoorSpec<Config> {
 // found, since the install panel's most useful case is a real door refused by an origin not on its list.
 export type Resolved<Config> = { readonly automation: AutomationRecord; readonly config: Config } | { readonly status: 403 | 404 | 409; readonly error: string; readonly automation?: AutomationRecord };
 
-const RATE_WINDOW_MS = 60_000;
 const CONVERSATION_ID_MAX = 60;
 
 export interface PublicDoor<Config> {
@@ -63,7 +61,7 @@ export interface PublicDoor<Config> {
         automation: AutomationRecord,
         thread: { readonly key: string; readonly conversationId: string },
         ttlMs: number,
-        options: Omit<FireOptions, "conversationId" | "sessionId">,
+        options: ThreadFireOptions,
         onOpened?: (conversationId: string) => Promise<void>,
     ) => Promise<FireOutcome>;
     readonly routes: {
@@ -90,8 +88,8 @@ export const createPublicDoor = <Config>(
     spec: PublicDoorSpec<Config>,
     installs: InstallsStore = fileInstallsStore(spec.installs, join(services.workspace.root, spec.installs.path)),
 ): PublicDoor<Config> => {
-    const window = rateWindow(RATE_WINDOW_MS);
-    const daily = dailyBudget();
+    // Called in two halves: the proof-of-work sits between them, cheaper to refuse on than a day's budget to spend.
+    const ceilings = doorAdmission();
 
     const resolve = async (id: string, origin: string | undefined, key?: string): Promise<Resolved<Config>> => {
         const automation = await services.automations.get(id);
@@ -128,25 +126,20 @@ export const createPublicDoor = <Config>(
 
     return {
         resolve,
-        rateLimited: (key, now) => window.limited(key, spec.rateMax, now),
-        overDailyCeiling: (automationId, max, now) => daily.spend(automationId, max, now),
+        rateLimited: (key, now) => ceilings.rateLimited(key, spec.rateMax, now),
+        overDailyCeiling: ceilings.overDailyCeiling,
         antiBotPassed: (mode, config, answer, callerId, c, now) => antiBotAccepted(mode, config, answer, callerId, remoteIpOf(c), now),
         thread,
-        fireOnThread: async (automation, threadOf, ttlMs, options, onOpened) => {
+        // Same conversation every time, so a chat or a recurring crash stays one card and one worktree.
+        fireOnThread: (automation, threadOf, ttlMs, options, onOpened) => {
             const now = Date.now();
-            const session = await services.threadSessions.open(threadOf.key, () => mintedOn(threadOf.conversationId, now), ttlMs, now);
-            await onOpened?.(session.conversationId);
-            const settled = await fireAutomation(services as Services, automation, {
-                ...options,
-                // Same conversation every time, so a chat or a recurring crash stays one card and one worktree.
-                conversationId: session.conversationId,
-                ...(session.sessionId !== undefined ? { sessionId: session.sessionId } : {}),
-                // Snapshotted with a held wake, so an approved run settles this thread rather than guessing its key.
-                thread: threadOf.key,
-            });
-            // Learn the provider session so the next arrival continues this thread rather than restating it.
-            await services.threadSessions.settle(threadOf.key, settled.sessionId, Date.now());
-            return settled;
+            return fireOnThread(
+                services as Services,
+                automation,
+                { key: threadOf.key, ttlMs, mint: () => mintedOn(threadOf.conversationId, now) },
+                options,
+                onOpened,
+            );
         },
         routes: {
             config: async (c) => {

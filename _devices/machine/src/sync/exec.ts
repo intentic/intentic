@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { runBounded } from "@intentic/base/process";
 
 // Children of the mirror watcher spawn asynchronously: spawnSync would block the event agent serving the SSH transport
 // (tunnel.ts) they ride, deadlocking every sync/forward/git-bridge call. spawnSync remains correct for one-shot CLI
@@ -16,34 +16,16 @@ export interface ExecResult {
 // since the callers that know their work set their own, shorter ones; this only turns "forever" into "a long while".
 export const CHILD_TIMEOUT_MS = 10 * 60_000;
 
+// The shared runner holds the rest of the bound: at the deadline it ends the child's whole process group (an ssh a
+// mutagen or git started goes with it), it settles once the child has exited even while something it left behind
+// still holds the pipes, and it keeps each stream's output in bounded memory.
 export const runProcess = async (
     command: string,
     args: readonly string[],
     options: { readonly cwd?: string | undefined; readonly timeoutMs?: number | undefined } = {},
-): Promise<ExecResult> =>
-    await new Promise<ExecResult>((resolve) => {
-        // windowsHide avoids Windows popping a console window for a child of this console-less detached process.
-        const child = spawn(command, [...args], {
-            ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
-            stdio: ["ignore", "pipe", "pipe"],
-            windowsHide: true,
-        });
-        let stdout = "";
-        let stderr = "";
-        child.stdout.setEncoding("utf8");
-        child.stderr.setEncoding("utf8");
-        child.stdout.on("data", (chunk: string) => (stdout += chunk));
-        child.stderr.on("data", (chunk: string) => (stderr += chunk));
-
-        const timer = setTimeout(() => {
-            child.kill("SIGKILL");
-        }, options.timeoutMs ?? CHILD_TIMEOUT_MS);
-
-        const settle = (status: number | null, failure?: Error): void => {
-            clearTimeout(timer);
-            resolve({ status, stdout, stderr: failure === undefined ? stderr : `${stderr}${failure.message}` });
-        };
-        // Spawn failure (e.g. missing binary) resolves as a failed result, not a throw.
-        child.on("error", (error: Error) => settle(null, error));
-        child.on("close", (code) => settle(code));
-    });
+): Promise<ExecResult> => {
+    const result = await runBounded(command, args, { cwd: options.cwd, timeoutMs: options.timeoutMs ?? CHILD_TIMEOUT_MS });
+    // A spawn failure (e.g. a missing binary) resolves as a failed result with its reason after stderr, not a throw.
+    const failure = result.spawnError?.message ?? "";
+    return { status: result.exitCode, stdout: result.stdout.text, stderr: `${result.stderr.text}${failure}` };
+};

@@ -4,6 +4,8 @@ import { envSuffix } from "@intentic/sandbox-contract";
 import { contributionFor, contributionRegistry } from "../contributions.js";
 import type { ExtensionHost } from "../../extensions/installed-extensions.js";
 import type { CardDeps } from "../../guard/card-offers.js";
+import type { HoldDeps } from "../../guard/held-asks.js";
+import type { ConversationGrants } from "../../personas/conversation-grants.js";
 import type { CredentialGate } from "../../secrets/gates/credential-gate.js";
 import type { SecretUsesStore } from "../../secrets/secret-uses.js";
 import { fileSshKeyStore, SSH_KEYS_DIR, type SshKeyStore } from "../ssh-key-store.js";
@@ -17,7 +19,7 @@ import { heldSshKeys } from "./ssh-agent-keys.js";
 import { createSshAgentSockets, type SshAgentSockets } from "./ssh-agent-sockets.js";
 
 // The credential broker's own state: the key the gateway's addresses are signed with and the owner's per-card policy,
-// both beside the vault in the auth root, the passes a person's "allow in this conversation" leaves for the `ask` rules,
+// both beside the vault in the auth root, the card behind the `ask` rules (its passes kept with the conversation grants),
 // and the SSH half: the private keys the sandbox holds (also in the auth root) and the ssh agent that signs with them.
 
 // A registry name (`github/token`) whose credential the gateway holds, and the variables that reach its service instead.
@@ -44,6 +46,10 @@ export interface BrokerSlice {
 export interface BrokerDeps {
     readonly authRoot: string;
     readonly cards: CardDeps;
+    // Where a card whose request stopped waiting is held for the turn's close (guard/held-asks.ts).
+    readonly hold: HoldDeps;
+    // Where an `ask` rule's "allow requests like this in this conversation" is kept, listed and taken back.
+    readonly conversationGrants: Pick<ConversationGrants, "all" | "of" | "allowRule" | "onChange">;
     // The installed connectors and connected cards, read live.
     readonly host: ExtensionHost;
     // Who may release a gated card's key for a signature: the gate every credential exit consults.
@@ -86,7 +92,7 @@ const signRecorder = (secretUses: Pick<SecretUsesStore, "record">, warn: BrokerD
     };
 };
 
-export const createBrokerSlice = ({ authRoot, cards, host, credentialGate, secretUses, warn, sshAgentDir }: BrokerDeps): BrokerSlice => {
+export const createBrokerSlice = ({ authRoot, cards, hold, conversationGrants, host, credentialGate, secretUses, warn, sshAgentDir }: BrokerDeps): BrokerSlice => {
     const credentialPolicy = fileCredentialPolicy(join(authRoot, credentialPolicyDocument.path));
     const sessions = brokerSessions(join(authRoot, BROKER_KEY_FILE));
     const sshKeys = fileSshKeyStore(join(authRoot, SSH_KEYS_DIR));
@@ -122,7 +128,7 @@ export const createBrokerSlice = ({ authRoot, cards, host, credentialGate, secre
         gatewayHeld,
         brokerSessions: sessions,
         credentialPolicy,
-        rulePrompts: createRulePrompts(cards),
+        rulePrompts: createRulePrompts({ ...cards, grants: conversationGrants, hold, warn }),
         gatewayOrigin: `http://127.0.0.1:${String(BROKER_PORT)}`,
         sshKeys,
         sshAgent: createSshAgentSockets({

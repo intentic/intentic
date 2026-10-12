@@ -1,10 +1,11 @@
-// Device cards whose answer the agent has not collected, by the conversation that raised them, so a turn whose agent
-// stops calling does not take its card down with it. A device call waits only a short budget for its card
-// (hosts/host-command-guard.ts), so an agent that gives up and ends its turn would otherwise cancel a card its owner
-// has not even seen. Instead the turn's close (agent/run/placement/turn-close.ts) holds the turn open, parked on the
-// card, until it settles. An approval is then kept for the same call and the conversation is woken to make it again; a
-// decline with a note wakes it with the note. A bare decline, or no answer at all, wakes nobody, as a resumed turn treats
-// a bare deny (turn-resume.ts).
+// Cards whose answer the agent has not collected, by the conversation that raised them, so a turn whose agent stops
+// calling does not take its card down with it. A gated call may stop waiting for its card before the card is answered
+// (guard/held-asks.ts: a device call's short budget, a CLI whose connection went), so an agent that gives up and ends its
+// turn would otherwise cancel a card its owner has not even seen. Instead the turn's close
+// (agent/run/placement/turn-close.ts) holds the turn open, parked on the card, until it settles. An approval is then
+// kept for the same call and the conversation is woken to make it again; a decline with a note wakes it with the note. A
+// bare decline, or no answer at all, wakes nobody, as a resumed turn treats a bare deny (turn-resume.ts). What the wake
+// says is the card's own: each gate words what to repeat.
 
 import { unlessAborted } from "@intentic/base/async";
 
@@ -15,10 +16,8 @@ export interface HeldOutcome {
 }
 
 export interface HeldCard {
-    readonly machine: string;
-    readonly command: string;
-    // Typed into the device rather than run on it, which is how the wake words what to repeat.
-    readonly typed: boolean;
+    // What the wake tells the agent of this card's outcome; undefined wakes nobody for it.
+    readonly told: (outcome: HeldOutcome) => string | undefined;
     readonly settled: Promise<HeldOutcome>;
     // Settles the card unanswered now: the turn holding for it was stopped.
     readonly cancel: () => void;
@@ -46,27 +45,42 @@ const fenced = (text: string): string => {
     return `${fence}\n${text}\n${fence}`;
 };
 
+// The parts of a wake a gate words for itself, read into one sentence shape so every gate's wake reads alike.
+export interface WakeWords {
+    // Who answers the card; "The owner" unless it is addressed to someone else.
+    readonly who?: string;
+    // What was asked, as "allowed <doing>" reads it: `running this on "omen"`.
+    readonly doing: string;
+    // The exact call, quoted in a fence, when there is text worth quoting.
+    readonly call?: string;
+    // That nothing happened yet: "It has not run yet".
+    readonly notYet: string;
+    // How to make the same call again.
+    readonly again: string;
+    // What a decline left undone, as "so <declinedSo>" reads it: "it did not run".
+    readonly declinedSo: string;
+    // What a decline forbids from here on.
+    readonly refrain: string;
+}
+
 // What one settled card tells the agent, or undefined where it wakes nobody.
-const toldOf = (card: HeldCard, outcome: HeldOutcome): string | undefined => {
-    const doing = card.typed ? "typing this" : "running this";
-    if (outcome.decision === "approved") {
-        const again = card.typed
-            ? "Type it now with exactly the same call: the same tool and exactly the same text."
-            : "Run it now with exactly the same call: the same tool, the same command and the same arguments.";
-        return (
-            `The owner allowed ${doing} on "${card.machine}" after your turn ended. It has not ${card.typed ? "been typed" : "run"} yet:\n\n` +
-            `${fenced(card.command)}\n\n${again} The approval is kept for that exact call and used once; anything different is asked about afresh.`
-        );
-    }
-    const note = outcome.feedback?.trim();
-    if (outcome.decision === "declined" && note !== undefined && note !== "") {
-        return (
-            `The owner declined ${doing} on "${card.machine}" after your turn ended, so it did not ${card.typed ? "get typed" : "run"}:\n\n` +
-            `${fenced(card.command)}\n\nTheir note: ${note}\n\nDo not run it or anything that does the same thing.`
-        );
-    }
-    return undefined;
-};
+export const wakeWords =
+    (words: WakeWords) =>
+    (outcome: HeldOutcome): string | undefined => {
+        const who = words.who ?? "The owner";
+        const quoted = (lead: string): string => (words.call === undefined ? `${lead}.` : `${lead}:\n\n${fenced(words.call)}`);
+        if (outcome.decision === "approved") {
+            return (
+                `${quoted(`${who} allowed ${words.doing} after your turn ended. ${words.notYet}`)}\n\n` +
+                `${words.again} The approval is kept for that exact call and used once; anything different is asked about afresh.`
+            );
+        }
+        const note = outcome.feedback?.trim();
+        if (outcome.decision === "declined" && note !== undefined && note !== "") {
+            return `${quoted(`${who} declined ${words.doing} after your turn ended, so ${words.declinedSo}`)}\n\nTheir note: ${note}\n\n${words.refrain}`;
+        }
+        return undefined;
+    };
 
 export const createHeldCards = (wake: HeldCardWake): HeldCards => {
     const held = new Map<string, Set<HeldCard>>();
@@ -105,7 +119,7 @@ export const createHeldCards = (wake: HeldCardWake): HeldCards => {
                 if (outcome === undefined) {
                     return [];
                 }
-                const said = toldOf(card, outcome);
+                const said = card.told(outcome);
                 if (said !== undefined && outcome.decision === "approved") {
                     card.carry();
                 }

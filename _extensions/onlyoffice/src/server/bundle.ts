@@ -6,6 +6,7 @@ import { Readable } from "node:stream";
 import { finished } from "node:stream/promises";
 import { once } from "node:events";
 import { createGunzip } from "node:zlib";
+import { errnoCode, errorMessage } from "@intentic/base/errors";
 import type { BundlePin } from "./bundle-pin.js";
 import { readTar, type TarBody } from "./tar.js";
 
@@ -165,8 +166,7 @@ export class BundleStore {
         try {
             marker = (await readFile(join(this.dir, MARKER), "utf8")).trim();
         } catch (error) {
-            // SAFETY: fs rejects with a NodeJS.ErrnoException; only its code is read.
-            if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+            if (errnoCode(error) !== "ENOENT") {
                 throw error;
             }
         }
@@ -232,7 +232,7 @@ export class BundleStore {
         } catch (error) {
             // Stops the transfer when what failed was the tar or the disk, not the network.
             controller.abort();
-            const detail = stalled ? `the download stalled` : error instanceof Error ? error.message : String(error);
+            const detail = stalled ? `the download stalled` : errorMessage(error);
             this.current = { state: "failed", detail: `The editor could not be downloaded: ${detail}.` };
             log(`editor bundle download failed: ${detail}`);
             await rm(this.partial, { recursive: true, force: true }).catch((cleanup: Error) => {

@@ -117,6 +117,7 @@
             "inHistory": "En el historial {count}",
             "markReviewed": "Marcar revisado",
             "markReviewed2": "Marcar {label} como revisado",
+            "markGroupReviewed": "Marcar todo el grupo como revisado",
             "nextFile": "Archivo siguiente",
             "notLanded": "sin integrar",
             "notLanded2": "Sin integrar {count}",

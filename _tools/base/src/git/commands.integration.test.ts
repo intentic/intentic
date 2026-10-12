@@ -76,7 +76,7 @@ test("gitClone with no options is a bare clone", async () => {
 
 test("gitStatus reports branch, dirtiness, and porcelain files", async () => {
     const { git } = recordingGit({ "rev-parse --abbrev-ref HEAD": "main\n", "status --porcelain": " M src/app.ts\n?? new.ts\n" });
-    expect(await gitStatus("/work/app", git)).toEqual({ branch: "main", dirty: true, files: ["M src/app.ts", "?? new.ts"] });
+    expect(await gitStatus("/work/app", git)).toEqual({ branch: "main", dirty: true, files: [" M src/app.ts", "?? new.ts"] });
 });
 
 test("gitStatus on a clean tree is not dirty", async () => {

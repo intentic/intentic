@@ -1,4 +1,5 @@
 import { sandboxIdFromUrl } from "@intentic/sandbox-contract";
+import { slugOfDaemonUrl } from "@intentic/sandbox-run/slug";
 import type { SwapRecord } from "../device/sandbox-rounds/swap-records.js";
 import type { Pairing } from "./config.js";
 
@@ -18,8 +19,7 @@ export const PROBATION_HOLD_MS = 15 * 60_000;
 // first label, or the id in it, is the slug of the one sandbox it is: the mapping needs no guessing.
 export const pairingSlugs = (sandboxUrl: string): string[] => {
     const id = sandboxIdFromUrl(sandboxUrl);
-    const label = URL.canParse(sandboxUrl) ? new URL(sandboxUrl).hostname.split(".")[0] : undefined;
-    return [...new Set([label, id].filter((slug): slug is string => slug !== undefined && slug !== ""))];
+    return [...new Set([slugOfDaemonUrl(sandboxUrl), id].filter((slug): slug is string => slug !== undefined && slug !== ""))];
 };
 
 // This pairing's sandbox's record, when this machine runs it and ic has one naming a phase.

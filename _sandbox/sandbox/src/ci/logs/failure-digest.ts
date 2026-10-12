@@ -8,6 +8,8 @@
    name an error, and those steps' own last lines. A run's digest then lists each error once, with every job that
    printed it, before the steps' own words. Pure, so what a log means can be tested without a forge. */
 
+import { oneLine } from "@intentic/base/one-line";
+
 // One failed job as heard: its name, its page, the steps that failed it (GitHub names them; GitLab has none), and its
 // log as plain text, whole.
 export interface FailedJobLog {
@@ -127,10 +129,7 @@ const RUNNER_ENDED = /^##\[error\](?:The job running on runner .+ has exceeded t
 const WORKSPACE_PATH = /(?:\/__w|\/home\/runner\/work)\/[^/\s]+\/[^/\s]+\//g;
 const DURATION = /\s*[[(]\d+(?:\.\d+)?m?s[\])]$/;
 
-const clip = (text: string, max: number): string => (text.length <= max ? text : `${text.slice(0, max - 1)}…`);
-
-export const normalizeErrorLine = (line: string): string =>
-    clip(line.replace(WORKSPACE_PATH, "").replace(DURATION, "").replace(/\s+/g, " ").trim(), ERROR_LINE_MAX);
+export const normalizeErrorLine = (line: string): string => oneLine(line.replace(WORKSPACE_PATH, "").replace(DURATION, ""), ERROR_LINE_MAX);
 
 // The log's lines without the runner's timestamps.
 const linesOf = (log: string): string[] => log.split("\n").map((line) => line.replace(TIMESTAMP, "").replace(/\r$/, ""));
@@ -427,7 +426,7 @@ export const excerptOf = (job: FailedJobLog): JobExcerpt => {
     return { name: job.name, url: job.url, steps: [...job.steps], ends, errors, tail, logPath: job.logPath };
 };
 
-const stepList = (steps: readonly string[]): string => (steps.length === 0 ? "" : `: ${steps.map((step) => `"${clip(step, STEP_NAME_MAX)}"`).join(", ")}`);
+const stepList = (steps: readonly string[]): string => (steps.length === 0 ? "" : `: ${steps.map((step) => `"${oneLine(step, STEP_NAME_MAX)}"`).join(", ")}`);
 
 // Each error once, with every job that printed it, in the order they were first seen, within its share of the digest.
 const errorList = (excerpts: readonly JobExcerpt[], maxBytes: number): string => {

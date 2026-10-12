@@ -1,6 +1,5 @@
 import { setTimeout as delay } from "node:timers/promises";
-import { parseVitals, VITALS_FILE, VITALS_PATH } from "@intentic/sandbox-contract";
-import { z } from "zod";
+import { type DaemonHealthReading, DaemonHealthReadingSchema, parseVitals, VITALS_FILE, VITALS_PATH } from "@intentic/sandbox-contract";
 import type { Config } from "../../../config.js";
 import { MINUTE_MS } from "../../../durations.js";
 import { execMachine, type FlyMachineDetail, getMachineDetail } from "../fly/fly.js";
@@ -47,28 +46,22 @@ export const JOURNAL_BUDGET_MS = 10 * MINUTE_MS;
 // Fly states a machine passes through on its way up or down; a reading of one is a reason to look again, not a verdict.
 const PASSING = new Set([`created`, `starting`, `replacing`, `stopping`, `suspending`]);
 
-// What one answer of `/health` says, read loosely: a field of an unexpected shape is a field that is not there.
-const HealthAnswerSchema = z.object({
-    ready: z.boolean().optional().catch(undefined),
-    boot: z.object({ ready: z.boolean().optional().catch(undefined) }).optional().catch(undefined),
-    state: z.object({ journal: z.string().optional().catch(undefined) }).optional().catch(undefined),
-});
-
 export interface DaemonHealthAnswer {
     // `boot.ready`, else the top-level `ready` of a daemon older than the boot report, else true.
     readonly ready: boolean;
     readonly journal: "open" | "failed" | "closed";
 }
 
-// One answer of `/health`, or undefined when it is not one (empty, not JSON, not an object).
+// One answer of `/health`, or undefined when it is not one (empty, not JSON, not an object). Read with the contract's
+// loose reading of the answer, where a field of an unexpected shape is a field that is not there.
 export const readDaemonHealth = (stdout: string): DaemonHealthAnswer | undefined => {
     const text = stdout.trim();
     if (text === ``) {
         return undefined;
     }
-    let parsed: z.infer<typeof HealthAnswerSchema>;
+    let parsed: DaemonHealthReading;
     try {
-        parsed = HealthAnswerSchema.parse(JSON.parse(text));
+        parsed = DaemonHealthReadingSchema.parse(JSON.parse(text));
     } catch {
         // allow(silent-catch): not JSON or not a /health shape, which is what undefined answers
         return undefined;

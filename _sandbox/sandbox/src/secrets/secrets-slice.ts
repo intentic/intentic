@@ -2,6 +2,7 @@ import { join } from "node:path";
 import type { SecretHostGuard } from "@intentic/sandbox-contract";
 import type { SecretVault } from "../capabilities/credentials/secret-vault.js";
 import type { CardDeps } from "../guard/card-offers.js";
+import type { HoldDeps } from "../guard/held-asks.js";
 import type { ConversationGrants } from "../personas/conversation-grants.js";
 import type { WorkspacePaths } from "../workspace/workspace.js";
 import { createCredentialGate, type CredentialGate } from "./gates/credential-gate.js";
@@ -19,7 +20,8 @@ export interface SecretsSlice {
     readonly secretRegistry: () => Promise<readonly NamedSecret[]>;
     // Use ledger those exits feed, one row per resolved reference, joined onto the secrets inventory as last-used.
     readonly secretUses: SecretUsesStore;
-    // Which credentials need a person's click: policy is owner-written, grants in-memory, gate the shared consult.
+    // Which credentials need a person's click: policy is owner-written, releases kept in the auth root, gate the shared
+    // consult.
     readonly credentialGates: CredentialGatesStore;
     readonly credentialGrants: CredentialGrants;
     readonly credentialGate: CredentialGate;
@@ -41,6 +43,10 @@ export interface SecretsDeps {
     readonly secretVault: SecretVault;
     // How a gate parks a turn on a release card and says so.
     readonly cards: CardDeps;
+    // Where a card whose caller stopped waiting is held for the turn's close (guard/held-asks.ts).
+    readonly hold: HoldDeps;
+    // Hears the conversation whose releases a card answer or a take-back changed, so the Allowed list reads again.
+    readonly releasesChanged?: (conversationId: string) => void;
     // Where a host guard card's "anywhere in this conversation" is kept, and read at every later use.
     readonly conversationGrants: Pick<ConversationGrants, "of" | "add">;
     // The hosts each connected capability's connector declares for its credential (host-guards.ts connectorHostDefaults).
@@ -57,15 +63,18 @@ export const createSecretsSlice = ({
     authRoot,
     secretVault,
     cards,
+    hold,
+    releasesChanged,
     conversationGrants,
     connectorHosts,
     ownerEmail,
     warn,
 }: SecretsDeps): SecretsSlice => {
     const credentialGates = fileCredentialGates(join(authRoot, "credential-gates.json"));
-    const credentialGrants = fileCredentialGrants(join(authRoot, credentialReleasesDocument.path), (error) =>
+    const keptReleases = fileCredentialGrants(join(authRoot, credentialReleasesDocument.path), (error) =>
         warn("credential releases: the stored releases could not be read or written", error),
     );
+    const credentialGrants = releasesChanged === undefined ? keptReleases : notifyingCredentialGrants(keptReleases, releasesChanged);
     const sandboxSecrets = fileSandboxSecrets(join(authRoot, sandboxSecretsDocument.path));
     const secretHostGuards = fileSecretHostGuards(join(authRoot, secretHostGuardsDocument.path));
     // Read fresh each call, like the registry: a guard the owner tightens mid-turn holds from the very next use.
@@ -88,6 +97,7 @@ export const createSecretsSlice = ({
                 },
             },
             ...cards,
+            hold,
         }),
         sandboxSecrets,
         secretRegistry: secretRegistryOf(secretVault, () => workspace.repos["desired-state"], sandboxSecrets),
@@ -95,6 +105,40 @@ export const createSecretsSlice = ({
         credentialGates,
         credentialGrants,
         // Grants must be one map: a release clicked at the shell exit must be the release the browser reads next turn.
-        credentialGate: createCredentialGate({ gates: credentialGates, grants: credentialGrants, ...cards }),
+        credentialGate: createCredentialGate({ gates: credentialGates, grants: credentialGrants, ...cards, hold }),
+    };
+};
+
+// Releases are kept by the secrets slice and read synchronously by the gates, so they are announced by wrapping the store
+// rather than from inside it: every release, take-back and forgetting tells `changed` which conversation moved, so the
+// list where a person takes a yes back moves with it. A take-back that found nothing is no news.
+export const notifyingCredentialGrants = (grants: CredentialGrants, changed: (conversationId: string) => void): CredentialGrants => {
+    const tell = (conversationId: string): void => {
+        try {
+            changed(conversationId);
+        } catch {
+            // allow(silent-catch): the announcement only refreshes a view; the release is already made or taken back, and its failure must not undo or fail that.
+        }
+    };
+    return {
+        ...grants,
+        grant: (conversationId, subject, grant) => {
+            grants.grant(conversationId, subject, grant);
+            tell(conversationId);
+        },
+        revoke: (conversationId, subject) => {
+            const revoked = grants.revoke(conversationId, subject);
+            if (revoked) {
+                tell(conversationId);
+            }
+            return revoked;
+        },
+        forget: (conversationId) => {
+            const had = grants.all().some((release) => release.conversationId === conversationId);
+            grants.forget(conversationId);
+            if (had) {
+                tell(conversationId);
+            }
+        },
     };
 };

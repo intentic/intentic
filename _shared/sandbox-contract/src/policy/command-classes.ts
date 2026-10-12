@@ -1,5 +1,6 @@
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import { type CommandClass, CommandClassSchema, type CommandLocus } from "../schemas/agent.js";
+import { SECRET_REFERENCE } from "../schemas/needs.js";
 import { inertRegions, isLive } from "../text/shell-regions.js";
 
 // Classifies a shell command, shared by the sandbox gate and the machine agent's shell tool so they can't drift on what
@@ -72,7 +73,7 @@ const GIT_DESTRUCTIVE = [
 const GIT_BRANCH_SWITCH = [/\bgit\s+switch\b/, /\bgit\s+checkout\b(?![^|;&]*\s--\s)(?![^|;&]*\s\.(?:\s|$))/];
 
 // The credential is IN the command, not in a file; there is nothing for a filesystem to fact-check here.
-const SECRET_REFERENCES = [/\{\{secret:[A-Za-z0-9_./-]+\}\}/];
+const SECRET_REFERENCES = [SECRET_REFERENCE];
 
 // A path that usually holds a credential, a guess about a FILE, so every entry here is subject to holdsSecret.
 // The directory in front of a filename, so a pattern spans the whole path, not just the file inside it.

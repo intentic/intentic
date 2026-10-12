@@ -20,6 +20,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { withGitCaller } from "@intentic/base/git";
 import { freshness } from "@intentic/base/held";
+import { oneLine } from "@intentic/base/one-line";
 import { isFailureSentence, isSelfIdentityAnswer, isToolCallStandIn } from "../../agent/providers/failure-sentences.js";
 import { routingFor } from "../../agent/providers/accounts/routing.js";
 import type { JournalledTurn, TurnJournalRows } from "../../agent/run/turn/turn-journal.js";
@@ -67,14 +68,10 @@ const MAX_TITLE_LENGTH = 80;
 const STANDINGS_MAX_MS = 60_000;
 // Numeric so promoteTitle's comparison is one `<=`; an entry with no title reads as `derived`, replaceable by anything.
 const TITLE_RANK: Record<AgentTitleSource, number> = { derived: 0, model: 1, plan: 2, user: 3 };
-// Collapses control characters and whitespace to single spaces and cuts to `limit`. A parameter, not a constant, since
-// a title's card width and a changelog sentence's length must not share one ceiling.
+// One line cut silently to `limit`: what is stored is compared and re-sent, where a `…` would be noise. A parameter, not
+// a constant, since a title's card width and a changelog sentence's length must not share one ceiling.
 const sanitizeLine = (text: string, limit: number): string | undefined => {
-    const clean = text
-        .replaceAll(/[\p{Cc}\p{Cf}]+/gu, " ")
-        .replaceAll(/\s+/gu, " ")
-        .trim()
-        .slice(0, limit);
+    const clean = oneLine(text, limit, { ellipsis: false });
     return clean === "" ? undefined : clean;
 };
 

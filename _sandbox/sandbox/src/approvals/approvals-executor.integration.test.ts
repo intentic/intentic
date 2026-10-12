@@ -324,12 +324,14 @@ test("an item changed after the owner approved it is not carried out, whatever c
     }
 });
 
-test("a picture swapped after the yes is a change too: the yes covers the bytes the post attaches", async () => {
-    const chart = "posts/chart.png";
+// `..posts` is a folder name like any other, which a `startsWith("..")` test once fingerprinted as "outside the
+// workspace" for every picture in it, so a swap there went unseen.
+test.each(["posts", "..posts"])("a picture swapped after the yes is a change too: the yes covers the bytes the post attaches (%s)", async (folder) => {
+    const chart = `${folder}/chart.png`;
     const swapped = post({ id: "media", media: [chart], status: "approved", scheduledAt: NOW - 1 });
     const kept = post({ id: "kept", media: [chart.replace("chart", "logo")], status: "approved", scheduledAt: NOW - 1 });
     const services = await servicesWith();
-    await mkdir(join(services.roots.workspaceRoot, "posts"), { recursive: true });
+    await mkdir(join(services.roots.workspaceRoot, folder), { recursive: true });
     await writeFile(join(services.roots.workspaceRoot, chart), "the chart the owner saw");
     await writeFile(join(services.roots.workspaceRoot, chart.replace("chart", "logo")), "the logo");
     for (const item of [swapped, kept]) {

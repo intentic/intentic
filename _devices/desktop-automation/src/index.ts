@@ -10,6 +10,7 @@ import { capture, displays, frame } from "./screen.js";
 import { type Desktop, DesktopError, type Notice, type NoticeEvents } from "./types.js";
 
 export { windowsSession } from "./windows/apps-windows.js";
+export { psText } from "./windows/powershell.js";
 export { CuaClient, cuaDesktop, cuaDriverCandidates, cuaKey, findCuaDriver, parseCuaElements, parseCuaWindows } from "./cua.js";
 export { parseChord, windowsChord, wtypeArgs, xdotoolChord, type Chord, type Modifier } from "./keys.js";
 export { focusRefusal, looksLikeUrl, parseSessionJson, parseSwayTree, parseWindowsJson, parseWmctrl } from "./parse.js";

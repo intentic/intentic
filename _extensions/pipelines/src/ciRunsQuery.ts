@@ -10,7 +10,7 @@ export const CI_RUNS_STALE_MS = 20_000;
 export const ciRunsQuery = (): HostQuery<CiRunsResponse> => {
     const api = host();
     return {
-        queryKey: api.sandbox.key(`ci-runs`),
+        queryKey: api.sandbox.readKey(`ci.runs`),
         queryFn: (): Promise<CiRunsResponse> => api.sandbox.rpc.ci.runs(),
         staleTime: CI_RUNS_STALE_MS,
     };

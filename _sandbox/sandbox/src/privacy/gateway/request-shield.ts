@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
+import { BoundedMap } from "@intentic/base/held";
 import { PRIVACY_REPLACEMENTS_MAX, type PrivacyImages } from "@intentic/sandbox-contract";
+import { readCappedBytes } from "@intentic/base/capped-read";
 import { type PaintedImage, paintRegions, readingText, regionsFor } from "../image-mask.js";
 import type { ClassCounts, Masker, Replacement } from "../masker.js";
 import type { PrivacyImageArchive } from "../privacy-images.js";
@@ -50,17 +52,11 @@ export interface Memo<T> {
 }
 
 const createMemo = <T>(limit: number): Memo<T> => {
-    const entries = new Map<string, T | undefined>();
+    const entries = new BoundedMap<string, T | undefined>(limit);
     return {
         get: (key) => (entries.has(key) ? entries.get(key) : null),
         set: (key, value) => {
             entries.set(key, value);
-            if (entries.size > limit) {
-                const oldest = entries.keys().next().value;
-                if (oldest !== undefined) {
-                    entries.delete(oldest);
-                }
-            }
         },
     };
 };
@@ -97,8 +93,9 @@ export const fetchRemoteImage = async (url: string, send: typeof fetch = fetch):
         if (!response.ok || !type.toLowerCase().startsWith("image/") || length > IMAGE_FETCH_LIMIT) {
             return undefined;
         }
-        const bytes = Buffer.from(await response.arrayBuffer());
-        return bytes.byteLength > IMAGE_FETCH_LIMIT ? undefined : { mediaType: type.split(";")[0]?.trim() ?? type, data: bytes.toString("base64") };
+        // Counted as it streams, since a chunked answer declares no length for the check above to refuse.
+        const { bytes, truncated } = await readCappedBytes(response, IMAGE_FETCH_LIMIT);
+        return truncated ? undefined : { mediaType: type.split(";")[0]?.trim() ?? type, data: Buffer.from(bytes).toString("base64") };
     } catch {
         // allow(silent-catch): an image that cannot be fetched cannot be checked, which the caller answers by holding it back.
         return undefined;

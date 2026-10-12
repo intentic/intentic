@@ -6,6 +6,7 @@ import { Hono } from "hono";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
 import { redeemTicket } from "../auth/tokens/ws-tickets.js";
+import { readBoundedBytes } from "../http/bounded-body.js";
 import { rawRouteServer } from "../http/raw-route-server.js";
 import { MAX_UTTERANCE_WAV_BYTES, type Speech, SpeechModelNotReadyError, SpeechUnprovisionedError } from "./transcribe.js";
 import { pcm16Samples, WavFormatError, wavSamples } from "./wav.js";
@@ -29,14 +30,12 @@ export const createSpeechRoute = (services: SpeechRoutesDeps): Hono<AppEnv> => {
     serve("POST /speech/prepare", async (c) => c.json(await services.speech.prepare(c.req.query("lang"))));
 
     serve("POST /speech/transcribe", async (c) => {
-        const declared = Number(c.req.header("content-length"));
-        if (Number.isFinite(declared) && declared > MAX_UTTERANCE_WAV_BYTES) {
+        // Counted as it arrives: a chunked body declares no length, and would otherwise be read whole first.
+        const body = await readBoundedBytes(c.req.raw, MAX_UTTERANCE_WAV_BYTES);
+        if (body.kind !== "ok") {
             return c.json({ error: "utterance too long" }, 413);
         }
-        const wav = Buffer.from(await c.req.arrayBuffer());
-        if (wav.byteLength > MAX_UTTERANCE_WAV_BYTES) {
-            return c.json({ error: "utterance too long" }, 413);
-        }
+        const wav = Buffer.from(body.value.buffer, body.value.byteOffset, body.value.byteLength);
         if (wav.byteLength === 0) {
             return c.json({ error: "empty audio" }, 400);
         }

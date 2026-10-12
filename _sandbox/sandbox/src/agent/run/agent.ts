@@ -29,7 +29,7 @@ import {
     type UsageWindow,
 } from "@intentic/sandbox-contract";
 import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
-import { join, normalize, relative, sep } from "node:path";
+import { join, normalize } from "node:path";
 import { claudeStatePath } from "../../sessions/session-store.js";
 import { z } from "zod";
 import { daemonMountNs, handoffDirOf, type IsolationAnchor, ownWorktree, TMUX_NS_ENV } from "../../conversations/worktrees/isolation.js";
@@ -58,6 +58,7 @@ import { mcpServersOf } from "../tools/agent-tools.js";
 import { agentShellBusy, bashTmuxHooks, tmuxRunEnabled } from "../tools/agent-terminals.js";
 import { terminalHelpServer } from "../../terminal/terminal-help.js";
 import { EventQueue } from "./event-queue.js";
+import { insideRel } from "@intentic/base/contained";
 import { planRevision } from "../prompt/plan-revision.js";
 import { trialUnavailableFrame } from "./error-frames.js";
 import type { AgentRequest, HarnessCredential } from "../providers/agent-request.js";
@@ -789,8 +790,8 @@ const relativePath = (absolute: string | undefined, cwd: string): string | undef
     if (absolute === undefined || absolute === "") {
         return undefined;
     }
-    const rel = relative(cwd, absolute);
-    return rel === "" || rel.startsWith("..") ? absolute : rel.split(sep).join("/");
+    const rel = insideRel(cwd, absolute);
+    return rel === undefined || rel === "" ? absolute : rel;
 };
 
 /* What an approval card would show: the turn's latest prose, else a plan file it wrote, with that file attached when it

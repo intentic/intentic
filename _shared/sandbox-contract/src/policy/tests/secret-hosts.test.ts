@@ -1,4 +1,4 @@
-import { hostAllowed, hostMatches, normalizeHost, normalizeHostPattern, tightensHostGuard } from "../secret-hosts.js";
+import { hostAllowed, hostCovers, hostMatches, normalizeHost, normalizeHostPattern, tightensHostGuard } from "../secret-hosts.js";
 
 // The pattern a person writes against the host a use would reach. Every boundary a limit turns on is pinned by value:
 // the apex a wildcard leaves out, the look-alike that only shares a suffix, and which edits take hosts away.
@@ -85,5 +85,21 @@ describe("tightensHostGuard", () => {
         expect(tightensHostGuard(on("*.github.com"), on("*.api.github.com"))).toBe(true);
         expect(tightensHostGuard(on("*.github.com"), on("github.com"))).toBe(false);
         expect(tightensHostGuard(on("api.github.com"), on("*.api.github.com"))).toBe(false);
+    });
+});
+
+describe("hostCovers", () => {
+    it("reads a plain entry as a domain and every host under it, never a lookalike", () => {
+        expect(hostCovers("example.com", "example.com")).toBe(true);
+        expect(hostCovers("example.com", "api.example.com")).toBe(true);
+        expect(hostCovers("example.com", "a.b.example.com")).toBe(true);
+        expect(hostCovers("example.com", "notexample.com")).toBe(false);
+        expect(hostCovers("example.com", "example.com.evil.net")).toBe(false);
+    });
+
+    it("reads a wildcard as the hosts under it only", () => {
+        expect(hostCovers("*.example.com", "api.example.com")).toBe(true);
+        expect(hostCovers("*.example.com", "example.com")).toBe(false);
+        expect(hostCovers("*.example.com", "notexample.com")).toBe(false);
     });
 });

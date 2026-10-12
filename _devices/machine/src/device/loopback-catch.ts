@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { Socket } from "node:net";
 import { watchQueue } from "@intentic/base/async";
+import { escapeHtml } from "@intentic/base/escape";
 import { LOOPBACK_CATCH_LONGEST_MS, type LoopbackCatch, type LoopbackCatchEvent } from "@intentic/sandbox-contract";
 
 // A sign-in's loopback redirect, caught on this machine (schemas/loopback-catch.ts in the contract). The provider sends
@@ -8,9 +9,6 @@ import { LOOPBACK_CATCH_LONGEST_MS, type LoopbackCatch, type LoopbackCatchEvent 
 // this listens there instead, for the attempt's lifetime only, and hands every landing back up the stream. It checks
 // nothing: the state and the PKCE verifier live in the sandbox, which alone can tell the sign-in from anything else on
 // this machine that happens to hit the port. Loopback only, so nothing off this machine can reach it.
-
-const escapeHtml = (text: string): string =>
-    text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
 
 // What the tab shows once it lands: the sign-in is finishing in the sandbox, so the tab has nothing left to do.
 const landedPage = (title: string): string => `<!doctype html>

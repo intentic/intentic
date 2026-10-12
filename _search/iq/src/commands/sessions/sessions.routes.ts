@@ -1,5 +1,7 @@
 import { countParser } from "@intentic/agent-cli/flags";
+import { within } from "@intentic/base/async";
 import { estimateTokens } from "@intentic/base/format";
+import { oneLine } from "@intentic/base/one-line";
 import { buildCommand, buildRouteMap, type CommandContext } from "@stricli/core";
 import { createRecall, parseLine, readLines, type Recall, type SessionMatch, typedPromptOf } from "../../recall/recall.js";
 import { loadConfig } from "../../env.config.js";
@@ -20,10 +22,6 @@ const rootFromEnv = (): string => {
 
 // UTC day. Sessions are grouped by it rather than by the reader's, so the same listing from two machines matches.
 const utcDayOf = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
-
-const collapse = (text: string): string => text.replaceAll(/\s+/gu, " ").trim();
-
-const cap = (text: string, max: number): string => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 
 const ingestCommand = buildCommand({
     docs: { brief: "Index new transcript lines from ~/.claude/projects (incremental, self-managing)" },
@@ -159,21 +157,6 @@ const forkCommandOf = (recall: Recall, match: SessionMatch, prompt: string): str
 const INGEST_BUDGET_MS = 2_500;
 const HOOK_BUDGET_MS = 5_000;
 
-// Resolves to `undefined` if `work` hasn't finished in time; the work itself keeps running, a SQLite write better
-// finished than aborted, and the process exits either way.
-const withinBudget = async <T>(budgetMs: number, work: Promise<T>): Promise<T | undefined> => {
-    let timer: NodeJS.Timeout | undefined;
-    const expiry = new Promise<undefined>((resolve) => {
-        timer = setTimeout(() => resolve(undefined), budgetMs);
-        timer.unref();
-    });
-    try {
-        return await Promise.race([work, expiry]);
-    } finally {
-        clearTimeout(timer);
-    }
-};
-
 interface HookPayload {
     session_id?: string;
     transcript_path?: string;
@@ -213,8 +196,9 @@ export const runHookMatch = async (input: string, write: (chunk: string) => void
     const recall = recallFor(root);
     const deadline = Date.now() + HOOK_BUDGET_MS;
     try {
-        // A stale index still answers; the SessionStart hook already backgrounds a full, unbudgeted ingest.
-        await withinBudget(INGEST_BUDGET_MS, recall.ingest({ budgetMs: INGEST_BUDGET_MS }));
+        // A stale index still answers; the SessionStart hook already backgrounds a full, unbudgeted ingest. The ingest
+        // keeps running past the budget, a SQLite write better finished than aborted, and the process exits either way.
+        await within(recall.ingest({ budgetMs: INGEST_BUDGET_MS }), INGEST_BUDGET_MS, undefined, { unref: true });
         if (Date.now() >= deadline) {
             return;
         }
@@ -234,7 +218,7 @@ export const runHookMatch = async (input: string, write: (chunk: string) => void
         });
         const fragments = excerpts.map(
             (excerpt) =>
-                `- "${excerpt.title ?? excerpt.sessionId}" ${utcDayOf(excerpt.ts)} · asked: ${cap(collapse(excerpt.prompt), 160)}${excerpt.fragment === "" ? "" : ` · answered: ${cap(collapse(excerpt.fragment), 280)}`}`,
+                `- "${excerpt.title ?? excerpt.sessionId}" ${utcDayOf(excerpt.ts)} · asked: ${oneLine(excerpt.prompt, 160)}${excerpt.fragment === "" ? "" : ` · answered: ${oneLine(excerpt.fragment, 280)}`}`,
         );
         const context =
             fragments.length === 0
@@ -318,13 +302,13 @@ const grab = buildCommand({
                     const block = [
                         // `×N` marks a recurring prompt collapsed to one row instead of N rows saying the same thing.
                         `${excerpt.score.toFixed(2)}  ${excerpt.sessionId}/${excerpt.ordinal}  ${utcDayOf(excerpt.ts)}  ${excerpt.title ?? "(untitled)"}${excerpt.repeats > 0 ? `  ×${excerpt.repeats + 1}` : ""}`,
-                        `    asked: ${cap(collapse(excerpt.prompt), 240)}`,
-                        ...(excerpt.fragment === "" ? [] : [`    answered: ${cap(collapse(excerpt.fragment), 480)}`]),
+                        `    asked: ${oneLine(excerpt.prompt, 240)}`,
+                        ...(excerpt.fragment === "" ? [] : [`    answered: ${oneLine(excerpt.fragment, 480)}`]),
                         // What the session around the hit opened and closed on, giving a mid-session match its context.
                         ...(excerpt.bookends === undefined
                             ? []
                             : [
-                                  `    session (${excerpt.bookends.turns} turns): opened "${cap(collapse(excerpt.bookends.first), 120)}" → ended "${cap(collapse(excerpt.bookends.last), 120)}"`,
+                                  `    session (${excerpt.bookends.turns} turns): opened "${oneLine(excerpt.bookends.first, 120)}" → ended "${oneLine(excerpt.bookends.last, 120)}"`,
                               ]),
                     ].join("\n");
                     spent += estimateTokens(block);

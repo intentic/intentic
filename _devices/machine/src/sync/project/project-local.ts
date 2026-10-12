@@ -1,11 +1,10 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { chmod, lstat, mkdir, open, readdir, readFile, rename, rm, rmdir, stat } from "node:fs/promises";
+import { chmod, lstat, mkdir, open, readdir, readFile, rm, rmdir, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
-import { setTimeout as sleep } from "node:timers/promises";
 import { errnoCode, undefinedIfMissing } from "@intentic/base/errors";
-import { writeFileAtomic } from "@intentic/base/fs";
+import { renameOver, writeFileAtomic } from "@intentic/base/fs";
 import { z } from "zod";
 import { type FileStamp, isPortablePath, type Listed } from "./project-files.js";
 
@@ -217,26 +216,6 @@ export const localFile = async (root: string, path: string): Promise<LocalFile |
     return info === undefined ? undefined : { size: info.size, hash: await hashFile(target), mode: info.mode & 0o7777 };
 };
 
-// Windows refuses a rename over a file another process holds open for a moment (an editor, an indexer); these codes are
-// that moment. Anywhere else they are a permission, which waiting never changes.
-const TRANSIENT_RENAME = new Set(["EPERM", "EACCES", "EBUSY"]);
-
-const renameInto = async (from: string, to: string): Promise<void> => {
-    for (let attempt = 1; ; attempt += 1) {
-        try {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- a bounded retry of one rename
-            await rename(from, to);
-            return;
-        } catch (error) {
-            if (process.platform !== "win32" || attempt >= 10 || !TRANSIENT_RENAME.has(errnoCode(error) ?? "")) {
-                throw error;
-            }
-            // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
-            await sleep(50);
-        }
-    }
-};
-
 // The permission bits a written file gets: exactly those a file had (a backup put back, a file replaced), or a new
 // file's, which this device's umask decides, executable where the sandbox's copy is.
 export type FileMode = { readonly exact: number } | { readonly executable: boolean };
@@ -264,7 +243,8 @@ export const installFile = async (root: string, path: string, source: string, mo
         // Its bytes on the disk before the rename puts its name there, so a crash never leaves an empty file in its place.
         await realDurability.file(temporary);
         await localTarget(root, path);
-        await renameInto(temporary, target);
+        // Waits out Windows' brief refusal while an editor or indexer holds the target open.
+        await renameOver(temporary, target);
     } finally {
         await rm(temporary, { force: true });
     }

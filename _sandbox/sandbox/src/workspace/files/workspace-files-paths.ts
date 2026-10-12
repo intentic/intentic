@@ -62,6 +62,55 @@ export const realWithin = async (root: string, absPath: string): Promise<string 
     return isUnder(realRoot, await realPathOf(absPath));
 };
 
+// Where relPath lands inside dir once every symlink on the way is followed, for reads and writes alike; undefined when
+// it climbs out lexically or a symlinked folder leads out. `path` is the lexical answer callers open, `real` and
+// `realRel` (relative to dir's own real path) are what they check: a folder linked elsewhere inside /work keeps the
+// path inside, but can still lead somewhere a caller refuses. A write target that does not exist yet resolves through
+// its deepest existing ancestor. `entry` asks about the entry itself rather than what a final symlink points at, for
+// a removal, which takes the link and leaves its target alone.
+export const resolveRealWithin = async (
+    dir: string,
+    relPath: string,
+    options: { readonly entry?: boolean } = {},
+): Promise<{ readonly path: string; readonly real: string; readonly realRel: string } | undefined> => {
+    const path = resolveWithin(dir, relPath);
+    if (path === undefined) {
+        return undefined;
+    }
+    const realDir = await realPathOf(resolve(dir));
+    const real = options.entry === true ? join(await realPathOf(dirname(path)), basename(path)) : await realPathOf(path);
+    // The dir itself is refused, as resolveWithin refuses it: a symlink naming the root is not a path inside it.
+    if (real === realDir || isUnder(realDir, real) === undefined) {
+        return undefined;
+    }
+    return { path, real, realRel: relative(realDir, real) };
+};
+
+// A workspace path as every write and copy out of /work must see it: inside the root on disk, and outside the control
+// plane both as spelled and as it really lands, since a symlinked folder can lead into .intentic/ without leaving /work.
+export type WorkspacePath =
+    | { readonly kind: "inside"; readonly path: string; readonly real: string; readonly realRel: string }
+    | { readonly kind: "outside" }
+    | { readonly kind: "controlPlane" };
+
+export const resolveWorkspacePath = async (root: string, relPath: string): Promise<WorkspacePath> => {
+    const lexical = resolveWithin(root, relPath);
+    if (lexical === undefined) {
+        return { kind: "outside" };
+    }
+    if (isControlPlanePath(root, lexical)) {
+        return { kind: "controlPlane" };
+    }
+    const contained = await resolveRealWithin(root, relPath);
+    if (contained === undefined) {
+        return { kind: "outside" };
+    }
+    if (isLockedWorkspacePath(contained.realRel)) {
+        return { kind: "controlPlane" };
+    }
+    return { kind: "inside", ...contained };
+};
+
 // Whether a resolved path is root or under it, given both sides already resolved; avoids re-resolving root per entry.
 export const isUnder = (realRoot: string, real: string): string | undefined =>
     real === realRoot || real.startsWith(realRoot + sep) ? real : undefined;

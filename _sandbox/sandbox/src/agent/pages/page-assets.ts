@@ -1,6 +1,8 @@
 import { readFile, realpath, stat } from "node:fs/promises";
-import { dirname, isAbsolute, resolve, sep } from "node:path";
+import { dirname, isAbsolute, resolve } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
+import { readCappedBytes } from "@intentic/base/capped-read";
+import { isInside } from "@intentic/base/contained";
 
 // A page carries everything it shows inside itself, since the chat draws it in a frame that can reach nothing: the
 // pictures, stylesheets and scripts it names on disk are read in as data, and the ones it names on a well-known
@@ -111,7 +113,7 @@ const carrierFor = (context: PageCarryContext) => {
     const fetches = new Map<string, Promise<Uint8Array | undefined>>();
     const doFetch = context.fetch ?? fetch;
 
-    const inside = (path: string): boolean => context.roots.some((root) => path === root || path.startsWith(root.endsWith(sep) ? root : `${root}${sep}`));
+    const inside = (path: string): boolean => context.roots.some((root) => isInside(root, path));
 
     const readLocal = (path: string): Promise<Uint8Array | undefined> => {
         let reading = reads.get(path);
@@ -144,8 +146,9 @@ const carrierFor = (context: PageCarryContext) => {
                     if (!response.ok) {
                         return undefined;
                     }
-                    const bytes = new Uint8Array(await response.arrayBuffer());
-                    return bytes.byteLength > MAX_FILE_BYTES ? undefined : bytes;
+                    // Stops downloading at the cap, so a CDN file past it costs no more than the cap to refuse.
+                    const { bytes, truncated } = await readCappedBytes(response, MAX_FILE_BYTES);
+                    return truncated ? undefined : bytes;
                 } catch {
                     // allow(silent-catch): an asset that cannot be fetched is not carried, and the page draws it as missing.
                     return undefined;

@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { setTimeout as delay } from "node:timers/promises";
+import { sleep } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import type { Capability, LocalModelConfig } from "@intentic/sandbox-contract";
 import { packFragment } from "../../image/packs.js";
@@ -121,7 +121,7 @@ const waitUntilServing = async (ctx: CapabilityCtx, id: string, signal: AbortSig
         if (!ctx.panels.running(localModelPanelKey(id))) {
             return false;
         }
-        await delay(SERVING_POLL_MS, undefined, { signal }).catch(() => undefined);
+        await sleep(SERVING_POLL_MS, { signal });
     }
     return false;
 };

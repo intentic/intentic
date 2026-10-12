@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import { isRecord } from "@intentic/base/escape";
 
 // What a manifest field MEANS to the host, declared on the field itself with `.meta()`, so the schema is the one place
 // that says it: the powers an update re-asks for (powers-diff.ts), what adding a card does to the sandbox (the capability
@@ -57,8 +58,6 @@ export const unwrapMeaning = (schema: z.ZodType): Unwrapped => {
         }
     }
 };
-
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
 const lookup = (context: Record<string, unknown>, path: string): unknown =>
     path.split(".").reduce<unknown>((at, part) => (isRecord(at) ? at[part] : undefined), context);

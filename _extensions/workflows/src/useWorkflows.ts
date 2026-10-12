@@ -5,13 +5,13 @@ import { host } from "./host";
 import { workflowRunsQuery } from "./runsQuery";
 
 // Workflow manifest and run ledger, via the daemon's `workflows` procedures. Not polled: both files ride the daemon's
-// file-change push, which invalidates the `workflows`/`workflow-runs` keys directly, so there's nothing an interval
-// would discover between writes that the push hasn't already delivered.
+// file-change push, which refreshes the `workflows.list`/`workflows.runs` reads, so there's nothing an interval would
+// discover between writes that the push hasn't already delivered.
 
 export function useWorkflows() {
     const api = host();
     const queryClient = useQueryClient();
-    const queryKey = api.sandbox.key(`workflows`);
+    const queryKey = api.sandbox.readKey(`workflows.list`);
     // Shared with the rail badge's poll; whichever asks first fills the entry the other paints from.
     const runs = workflowRunsQuery();
     const runsKey = runs.queryKey;
@@ -19,10 +19,11 @@ export function useWorkflows() {
 
     const query = useQuery({
         queryKey,
-        queryFn: async (): Promise<WorkflowSummary[]> => (await api.sandbox.rpc.workflows.list()).workflows,
+        queryFn: () => api.sandbox.rpc.workflows.list(),
+        select: (answer): WorkflowSummary[] => answer.workflows,
         enabled,
     });
-    const runsQuery = useQuery({ ...runs, enabled });
+    const runsQuery = useQuery({ ...runs, enabled, select: (answer): WorkflowRun[] => answer.runs });
 
     const invalidate = async (): Promise<void> => {
         await queryClient.invalidateQueries({ queryKey });

@@ -1,4 +1,5 @@
 import { TimeoutError, withDeadline } from "@intentic/base/async";
+import { escapeRegExp } from "@intentic/base/escape";
 import type { QueryRequest, ResidentEngine } from "@intentic/iq-engine";
 import type { Logger } from "pino";
 
@@ -69,7 +70,7 @@ const isGreppable = (literal: string): boolean => /[A-Za-z0-9_]/.test(literal) &
 // A bare filename that some fuller path already covers, and an uncheckpointed path that a `path:line` already covers, are
 // the same evidence twice: the regexes overlap by design, so the narrower form wins.
 const isCoveredBy = (path: string, others: readonly string[]): boolean =>
-    others.some((other) => other !== path && (other.endsWith(`/${path}`) || new RegExp(`^${path.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)}:\\d+$`).test(other)));
+    others.some((other) => other !== path && (other.endsWith(`/${path}`) || new RegExp(`^${escapeRegExp(path)}:\\d+$`).test(other)));
 
 // What the daemon looks up, in weight order: a file the user named beats text they quoted, which beats the prompt read
 // as a question. Paths are the strongest class precisely BECAUSE the user already located the code — the gate this
@@ -95,7 +96,7 @@ const pathsIn = (text: string): string[] => {
         ...new Set(
             [...framesIn(text), ...namedIn(text, EXPLICIT_PATH), ...namedIn(text, EXPLICIT_FILE)]
                 // An absolute or escaping path is not this workspace's to open, and the engine would reject it anyway.
-                .filter((path) => path !== "" && !path.startsWith("/") && !path.startsWith("..")),
+                .filter((path) => path !== "" && !path.startsWith("/") && path !== ".." && !path.startsWith("../")),
         ),
     ];
     return found.filter((path) => !isCoveredBy(path, found)).slice(0, MAX_PATHS);

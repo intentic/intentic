@@ -112,18 +112,33 @@ describe(`fly`, () => {
     });
 
     it(`fails a hung Fly call as a status-less FlyError, so nothing reads it as "gone"`, async () => {
+        // The deadline fires at once, and fetch rejects the way undici does when its signal aborts.
+        const expired = AbortSignal.abort(new DOMException(`timed out`, `TimeoutError`));
+        stubGlobal(
+            `AbortSignal`,
+            class extends AbortSignal {
+                static override timeout(): AbortSignal {
+                    return expired;
+                }
+            },
+        );
         stubGlobal(`fetch`, (_url: URL | string, init?: RequestInit): Promise<Response> => {
-            // What AbortSignal.timeout produces when it fires; undici rejects with this shape.
-            const aborted = new Error(`The operation was aborted due to timeout`);
-            aborted.name = `TimeoutError`;
-            expect(init?.signal).toBeInstanceOf(AbortSignal);
-            return Promise.reject(aborted);
+            expect(init?.signal?.aborted).toBe(true);
+            return Promise.reject(init?.signal?.reason);
         });
         const failure = await getMachine(`tok`, `app`, `m1`).catch((error: unknown) => error);
         expect(failure).toBeInstanceOf(FlyError);
         expect((failure as FlyError).status).toBeUndefined();
         expect(isFlyGone(failure)).toBe(false);
         expect((failure as FlyError).message).toMatch(/did not answer GET .*within 30s/);
+    });
+
+    // A dead socket is not a deadline: the message says Fly could not be reached, not that it was slow.
+    it(`tells a transport failure apart from the deadline`, async () => {
+        stubGlobal(`fetch`, (): Promise<Response> => Promise.reject(new TypeError(`fetch failed`)));
+        const failure = await getMachine(`tok`, `app`, `m1`).catch((error: unknown) => error);
+        expect(failure).toBeInstanceOf(FlyError);
+        expect(failure).toMatchObject({ status: undefined, message: `Fly could not be reached for GET /apps/app/machines/m1: fetch failed` });
     });
 
     it(`names the operator's problem on 401 and relays Fly's refusal otherwise`, async () => {

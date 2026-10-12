@@ -58,7 +58,9 @@ const asString = (value: unknown): string | undefined => (typeof value === `stri
 const countOf = (value: unknown): number => (Array.isArray(value) ? value.length : 0);
 
 // Leading-integer parts of a version, compared positionally rather than via full semver; prerelease/build metadata
-// can't change which position differs first.
+// can't change which position differs first. Not the contract's compareVersions: this asks which part an upgrade steps
+// (major, minor or patch), not which version is newer, and it reads whatever pnpm prints, `1.2.3(peer@1)` included,
+// where the semver reader would refuse the whole string.
 const versionParts = (version: string): number[] =>
     version
         .replace(/^[^\d]*/, ``)

@@ -1,21 +1,20 @@
 <script setup lang="ts">
 import { unzipParts } from "./zip/unzip";
-import { Icon, useLatest } from "@intentic/extension-ui";
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { openOdf, type OdfPackage } from "./odf/pkg";
 import { renderBlocks } from "./odf/render";
 import { readPresentation, type Slide } from "./odf/slides";
 import { t } from "./i18n.js";
+import ViewerStatus from "./load/ViewerStatus.vue";
+import { useViewerLoad } from "./load/useViewerLoad.js";
 
 /* OpenDocument presentation and drawing (.odp, .odg) preview: every slide at its own size, scaled to fit. */
 
 const { blob } = defineProps<{ blob: Blob }>();
 
 const container = ref<HTMLElement>();
-const loading = ref(true);
-const error = ref<string>();
+const { loading, error, start } = useViewerLoad(() => t(`odfSlidesViewer.couldNotRender`));
 const count = ref(0);
-const latest = useLatest();
 let open: OdfPackage | undefined;
 // One observer for the whole strip: every slide is the same width, so the scale is a single number.
 let observer: ResizeObserver | undefined;
@@ -95,11 +94,8 @@ const render = async (source: Blob): Promise<void> => {
     if (host === undefined) {
         return;
     }
-    const isLatest = latest();
-    loading.value = true;
-    error.value = undefined;
-    host.replaceChildren();
-    try {
+    await start(async (isLatest) => {
+        host.replaceChildren();
         const parts = await unzipParts(new Uint8Array(await source.arrayBuffer()));
         if (!isLatest()) {
             return;
@@ -121,16 +117,7 @@ const render = async (source: Blob): Promise<void> => {
         fit();
         observer = new ResizeObserver(fit);
         observer.observe(host);
-    } catch (caught) {
-        if (!isLatest()) {
-            return;
-        }
-        error.value = caught instanceof Error ? caught.message : t(`odfSlidesViewer.couldNotRender`);
-    } finally {
-        if (isLatest()) {
-            loading.value = false;
-        }
-    }
+    });
 };
 
 onMounted(() => void render(blob));
@@ -144,16 +131,11 @@ onBeforeUnmount(release);
 <template>
     <div class="relative h-full min-h-0">
         <div ref="container" class="odf-deck h-full overflow-auto bg-muted/20"></div>
-        <div v-if="loading" class="absolute inset-0 flex items-center justify-center bg-canvas text-muted">
-            <Icon name="spinner" class="text-xl" spin />
-        </div>
-        <div v-else-if="error" class="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-canvas px-6 text-center">
-            <Icon name="exclamation-triangle" class="text-3xl text-danger" />
-            <p class="text-sm text-danger">{{ error }}</p>
-        </div>
-        <div v-else-if="count === 0" class="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-muted">
-            {{ t(`odfSlidesViewer.presentationNoSlides`) }}
-        </div>
+        <ViewerStatus overlay :loading="loading" :error="error">
+            <div v-if="count === 0" class="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-muted">
+                {{ t(`odfSlidesViewer.presentationNoSlides`) }}
+            </div>
+        </ViewerStatus>
     </div>
 </template>
 

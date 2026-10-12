@@ -49,6 +49,17 @@
                 "@intentic/src": "./src/quote.ts",
                 "default": "./dist/quote.js"
             }
+        },
+        "./slug": {
+            "types": "./dist/slug.d.ts",
+            "import": {
+                "@intentic/src": "./src/slug.ts",
+                "default": "./dist/slug.js"
+            },
+            "require": {
+                "@intentic/src": "./src/slug.ts",
+                "default": "./dist/slug.js"
+            }
         }
     },
     "scripts": {

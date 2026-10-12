@@ -258,6 +258,83 @@
                 "@intentic/src": "./src/git/index.ts",
                 "default": "./dist/git/index.js"
             }
+        },
+        "./json-lines": {
+            "types": "./dist/node/json-lines.d.ts",
+            "import": {
+                "@intentic/src": "./src/node/json-lines.ts",
+                "default": "./dist/node/json-lines.js"
+            },
+            "require": {
+                "@intentic/src": "./src/node/json-lines.ts",
+                "default": "./dist/node/json-lines.js"
+            }
+        },
+        "./capped-read": {
+            "types": "./dist/web/capped-read.d.ts",
+            "import": {
+                "@intentic/src": "./src/web/capped-read.ts",
+                "default": "./dist/web/capped-read.js"
+            },
+            "require": {
+                "@intentic/src": "./src/web/capped-read.ts",
+                "default": "./dist/web/capped-read.js"
+            }
+        },
+        "./one-line": {
+            "types": "./dist/text/one-line.d.ts",
+            "import": {
+                "@intentic/src": "./src/text/one-line.ts",
+                "default": "./dist/text/one-line.js"
+            },
+            "require": {
+                "@intentic/src": "./src/text/one-line.ts",
+                "default": "./dist/text/one-line.js"
+            }
+        },
+        "./contained": {
+            "types": "./dist/node/contained.d.ts",
+            "import": {
+                "@intentic/src": "./src/node/contained.ts",
+                "default": "./dist/node/contained.js"
+            },
+            "require": {
+                "@intentic/src": "./src/node/contained.ts",
+                "default": "./dist/node/contained.js"
+            }
+        },
+        "./process": {
+            "types": "./dist/node/process.d.ts",
+            "import": {
+                "@intentic/src": "./src/node/process.ts",
+                "default": "./dist/node/process.js"
+            },
+            "require": {
+                "@intentic/src": "./src/node/process.ts",
+                "default": "./dist/node/process.js"
+            }
+        },
+        "./escape": {
+            "types": "./dist/text/escape.d.ts",
+            "import": {
+                "@intentic/src": "./src/text/escape.ts",
+                "default": "./dist/text/escape.js"
+            },
+            "require": {
+                "@intentic/src": "./src/text/escape.ts",
+                "default": "./dist/text/escape.js"
+            }
+        },
+        "./fetch-json": {
+            "types": "./dist/web/fetch-json.d.ts",
+            "import": {
+                "@intentic/src": "./src/web/fetch-json.ts",
+                "default": "./dist/web/fetch-json.js"
+            },
+            "require": {
+                "@intentic/src": "./src/web/fetch-json.ts",
+                "default": "./dist/web/fetch-json.js"
+            }
         }
     },
     "scripts": {

@@ -2,6 +2,7 @@
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { parseArgs } from "node:util";
+import { within } from "@intentic/base/async";
 import { createLocalOffice } from "@intentic/ext-onlyoffice/local-office";
 import { Asks } from "./asks.js";
 import { controlChannel } from "./channel.js";
@@ -80,7 +81,9 @@ const serveFolders = async (argv: readonly string[]): Promise<void> => {
     // binary, past the app's own exit, so an installer could not replace it (2026-10-05).
     lines.on(`close`, () => {
         asks.close();
-        void boundedClose(office.close(), OFFICE_CLOSE_MS).finally(() => {
+        // A close that fails or hangs never keeps the process alive. The timer stays ref'd: it is the ceiling on this exit.
+        // allow(silent-catch): this process is exiting either way, and a close that failed has nothing left to report to.
+        void within(office.close().catch(() => undefined), OFFICE_CLOSE_MS, undefined).finally(() => {
             void listening.stop(true);
             process.exit(0);
         });
@@ -89,19 +92,6 @@ const serveFolders = async (argv: readonly string[]): Promise<void> => {
 
 /** How long the office editor gets to close before this process exits anyway. */
 const OFFICE_CLOSE_MS = 3_000;
-
-/** `closing`, or `limit` ms, whichever is first: a close that fails or hangs never keeps the process alive. */
-const boundedClose = (closing: Promise<void>, limit: number): Promise<void> =>
-    new Promise((resolve) => {
-        const timer = setTimeout(resolve, limit);
-        void closing
-            // allow(silent-catch): this process is exiting either way, and a close that failed has nothing left to report to.
-            .catch(() => undefined)
-            .finally(() => {
-                clearTimeout(timer);
-                resolve();
-            });
-    });
 
 const [command = `serve`, ...rest] = process.argv.slice(2);
 if (command === `version`) {

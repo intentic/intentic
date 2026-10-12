@@ -1,5 +1,6 @@
 import { cp, lstat, mkdir, readdir, readFile, rename, rm, rmdir, stat } from "node:fs/promises";
-import { basename, dirname, join, sep } from "node:path";
+import { basename, dirname, join } from "node:path";
+import { insideRel, isInside } from "@intentic/base/contained";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import { writeFileAtomic } from "@intentic/base/fs";
 import type { Logger } from "pino";
@@ -77,8 +78,6 @@ interface Overlay {
     readonly kind: (path: string) => Promise<"file" | "directory" | undefined>;
 }
 
-const within = (path: string, root: string): boolean => path === root || path.startsWith(`${root}${sep}`);
-
 const createOverlay = (): Overlay => {
     const writes = new Map<string, string | undefined>();
     const copies = new Map<string, string>();
@@ -87,15 +86,18 @@ const createOverlay = (): Overlay => {
         let current = path;
         // Bounded: each hop moves to a source, and a plan holds finitely many; a cycle would be a planning bug.
         for (let hop = 0; hop <= copies.size + renames.size; hop++) {
-            const match = [...copies, ...renames].find(([, to]) => within(current, to));
-            if (match === undefined) {
+            const at = current;
+            const match = [...copies, ...renames]
+                .map(([from, to]) => ({ from, rel: insideRel(to, at) }))
+                .find((candidate) => candidate.rel !== undefined);
+            if (match?.rel === undefined) {
                 return current;
             }
-            current = `${match[0]}${current.slice(match[1].length)}`;
+            current = join(match.from, match.rel);
         }
         return current;
     };
-    const movedAway = (path: string): boolean => [...renames.keys()].some((from) => within(path, from));
+    const movedAway = (path: string): boolean => [...renames.keys()].some((from) => isInside(from, path));
     const read = async (path: string): Promise<string | undefined> => {
         if (writes.has(path)) {
             return writes.get(path);

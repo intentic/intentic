@@ -1,3 +1,4 @@
+import { within } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import type { WorkPlace } from "../../workload/resource-budget.js";
 import { conversationProfile, isIsolated, worktreeOf } from "../../conversations/registry/agents-store.js";
@@ -302,15 +303,7 @@ const outlast = async (services: Services, childId: string, kid: ChildRecord | u
         kid.behind = true;
     }
     noteSpawnedChild(services.conversations, childId, { status: "pending", summary: BEHIND_SUMMARY });
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const ended = await Promise.race([
-        (other?.waitUntilFinished() ?? Promise.resolve()).then(() => true),
-        new Promise<false>((resolve) => {
-            timer = setTimeout(() => resolve(false), BEHIND_MAX_MS);
-            timer.unref();
-        }),
-    ]);
-    clearTimeout(timer);
+    const ended = await within((other?.waitUntilFinished() ?? Promise.resolve()).then(() => true), BEHIND_MAX_MS, false, { unref: true });
     if (kid !== undefined) {
         kid.behind = false;
     }
@@ -839,10 +832,6 @@ const MOVE_TITLE: Readonly<Record<ChildMove, string>> = {
 };
 const MOVE_BUTTON: Readonly<Record<ChildMove, string>> = { spawn: "Start it", send: "Send it", answer: "Answer it" };
 
-// A card lives as long as the parent's turn, which an orchestration can keep open for hours, since nothing waits on it
-// any more; past this a question nobody answers stops holding a move.
-const SUPERVISION_DEADLINE_MS = 6 * 60 * 60_000;
-
 // The card's second allow: this move, and every held one on the same provider for the rest of the parent's turn.
 const ALWAYS_LABEL = "Allow for the rest of this turn";
 
@@ -853,12 +842,12 @@ const MESSAGE_SHOWN = 600;
 const nowhereToAsk = (reason: string): string =>
     `Held for the owner: ${reason}. This call arrived outside a live turn, so there was nowhere to ask them. Ask in chat; they can also set the agents.spawn action rule.`;
 
-// What a move that went unanswered tells its parent: why the owner was asked, how long the card waited, and that it may
-// ask again, which raises a new card; nothing about it was declined.
-const unansweredWords = (move: ChildMove, reason: string, turnEnded: boolean): string =>
-    `Nobody answered the owner's card to ${move === "spawn" ? "start" : move} this subagent before ${
-        turnEnded ? "your turn ended" : `${SUPERVISION_DEADLINE_MS / 3_600_000} hours passed`
-    }, so it did not run. It was held because ${reason}. Nothing was declined: you may ask again, which raises a new card, and waiting on it keeps your turn (and so the card) open. If the work cannot wait for the owner, say what you left undone.`;
+// What a move that went unanswered tells its parent: why the owner was asked, and that it may ask again, which raises a
+// new card; nothing about it was declined. A card lives exactly as long as the parent's turn: no clock ends it
+// (docs/architecture/conventions.md, "A person's answers"). 2026-10-12: it also ended after six hours; dropped, since
+// the turn that holds it is the one bound that means anything to the owner.
+const unansweredWords = (move: ChildMove, reason: string): string =>
+    `Nobody answered the owner's card to ${move === "spawn" ? "start" : move} this subagent before your turn ended, so it did not run. It was held because ${reason}. Nothing was declined: you may ask again, which raises a new card, and waiting on it keeps your turn (and so the card) open. If the work cannot wait for the owner, say what you left undone.`;
 
 // Raises the card on the parent's live turn and settles with the owner's answer, however long that takes; nobody's call
 // waits on it. The two refusals differ because the model's next move differs, and only one is the owner declining.
@@ -890,7 +879,6 @@ const askOwner = async (services: Services, parent: string, run: LiveRun, ask: C
             },
             approves: (answer) => answer.decision !== "deny",
             signal: ended.signal,
-            deadlineMs: SUPERVISION_DEADLINE_MS,
         },
     );
     const { decision, reply, caller } = await settled.finally(() => {
@@ -909,7 +897,7 @@ const askOwner = async (services: Services, parent: string, run: LiveRun, ask: C
             return picked !== undefined && !sameChildRun(ask, picked) ? { ok: true, run: childRunOf(picked) } : { ok: true };
         }
         case "unanswered":
-            return { ok: false, message: unansweredWords(move, reason, ended.signal.aborted) };
+            return { ok: false, message: unansweredWords(move, reason) };
         case "declined":
             return {
                 ok: false,
@@ -1099,9 +1087,9 @@ const childPlacement = async (
 // What a parent is told of a move held for the owner: why it was held, and how long the card waits. Nothing holds its
 // call open while they decide: it carries on, and hears what becomes of the move.
 const heldFor = (reason: string): string =>
-    `Held for the owner's approval, because ${reason}. A card in your chat asks them, and you carry on meanwhile. The card lasts while your turn does (at most ${SUPERVISION_DEADLINE_MS / 3_600_000} hours): if nobody answers by then the move does not happen, nothing is declined, and you may ask again.`;
+    `Held for the owner's approval, because ${reason}. A card in your chat asks them, and you carry on meanwhile. The card lasts while your turn does: if nobody answers by then the move does not happen, nothing is declined, and you may ask again.`;
 const heldStart = (reason: string): string =>
-    `${heldFor(reason)} It starts once they allow it; wait on it like any child, which also keeps your turn, and the card, open. If they decline, or nobody answers in time, it ends as failed without having run.`;
+    `${heldFor(reason)} It starts once they allow it; wait on it like any child, which also keeps your turn, and the card, open. If they decline, or your turn ends first, it ends as failed without having run.`;
 const heldMessage = (reason: string): string => `${heldFor(reason)} It goes to the child once they allow it, and you are told if it does not.`;
 const heldAnswer = (reason: string): string => `${heldFor(reason)} Your answer goes once they allow it, and you are told if it does not.`;
 // What a held start's roster row says while the owner decides.

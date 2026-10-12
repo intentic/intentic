@@ -1,4 +1,4 @@
-import { normalizeHost } from "@intentic/sandbox-contract";
+import { normalizeHost, SECRET_REFERENCE } from "@intentic/sandbox-contract";
 
 // Where one use of a secret would send it, read from the reference-form text before anything runs, for the host limit
 // (host-guard-gate.ts). Heuristic by nature, so it reads the other way round from a classifier: it proves nothing, and
@@ -26,7 +26,8 @@ const unreadable = (why: string): Destination => ({ certain: false, why });
 
 // A reference stands in as a character no host, flag or operator contains, so a secret spelled into a host or a program
 // name fails every test below instead of passing as whatever its value happens to be.
-const REFERENCE = /\{\{secret:[A-Za-z0-9_./-]+\}\}/g;
+// Its own /g copy: replace needs one, and the shared pattern stays free of `lastIndex` state.
+const REFERENCE = new RegExp(SECRET_REFERENCE.source, "g");
 const STAND_IN = "\u0001";
 
 // One shell word with its quoting taken off; `dynamic` when a `$` expansion inside double quotes fills part of it, whose

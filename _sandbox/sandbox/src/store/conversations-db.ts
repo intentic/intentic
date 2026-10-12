@@ -83,6 +83,17 @@ export const CONVERSATIONS_STEPS: readonly SqliteStep[] = [
         describe: "adds turn_journal.run",
         up: (db) => db.exec("ALTER TABLE turn_journal ADD COLUMN run TEXT CHECK (run IS NULL OR json_valid(run))"),
     },
+    {
+        // The sender's lane, thread and provider session of a fire in flight, so a restart's re-fire wears the persona its
+        // sender was given and continues the thread it belonged to (turn-journal.ts). Null on every row written before.
+        describe: "adds fire_journal.lane, fire_journal.thread and fire_journal.session_id",
+        up: (db) =>
+            db.exec(`
+                ALTER TABLE fire_journal ADD COLUMN lane TEXT CHECK (lane IS NULL OR json_valid(lane));
+                ALTER TABLE fire_journal ADD COLUMN thread TEXT;
+                ALTER TABLE fire_journal ADD COLUMN session_id TEXT;
+            `),
+    },
 ];
 
 // The upgrade runs in the boot step (store/evolution/state-convergence.ts), under its journal, with the database and its sidecars

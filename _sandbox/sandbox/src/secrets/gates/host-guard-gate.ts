@@ -1,7 +1,9 @@
 import type { HostGuardSetting, ProgramAsk, SecretHostGuard } from "@intentic/sandbox-contract";
-import { type CardDeps, cardRun, OFFER_DEADLINE_MS, raiseRequest } from "../../guard/card-offers.js";
+import { type CardDeps, cardRun, type LiveCard, raiseRequest } from "../../guard/card-offers.js";
 import { secretSend } from "../../guard/actions.js";
 import { guard } from "../../guard/guard.js";
+import { type HeldAnswer, type HeldAsks, type HoldDeps, createHeldAsks } from "../../guard/held-asks.js";
+import { wakeWords } from "../../guard/held-cards.js";
 import { opt } from "../../opt.js";
 import { type HostReading, type GuardedName, readHosts } from "../host-guards.js";
 import type { SecretTarget } from "../secret-access.js";
@@ -13,7 +15,9 @@ import { commandDestination, type Destination, pageDestination, SCRIPT_DESTINATI
 // person, and is refused when there is nobody to ask. A secret whose guard is off is never asked about here. No judge is
 // consulted, so none can let a guarded use through, and none being unreachable does either. The one standing yes is a
 // person's own: a card's "Allow <secret> anywhere in this conversation" lets that conversation send it past its guard
-// from then on, until it is taken back on the Grants page.
+// from then on, until it is taken back on the Grants page. A card waits for its answer however long that takes
+// (guard/held-asks.ts): a caller that stops waiting leaves it up, held for the turn's close, and a yes given after that
+// wakes the conversation to make the same call again.
 
 export interface HostGuardGateDeps extends CardDeps {
     // The guards in force; a rejection (the owner's file exists but cannot be read) refuses rather than lets anything by.
@@ -22,7 +26,7 @@ export interface HostGuardGateDeps extends CardDeps {
     readonly ownerEmail: () => Promise<string | undefined>;
     // Secrets a conversation may send past their guard, answered on this gate's own card; absent keeps every use asking.
     readonly grants?: SecretPasses;
-    readonly deadlineMs?: number;
+    readonly hold: HoldDeps;
 }
 
 // "Allow <secret> anywhere in this conversation", kept per conversation by registry name.
@@ -147,7 +151,11 @@ const standing = (request: WidenRequest): string =>
         ? `${request.subject}'s host guard asks before every use now.`
         : `${request.subject}'s host guard lets it go unasked only to ${either(request.from.hosts)} now. Anything else asks first, every time.`;
 
-const widen = async (deps: HostGuardGateDeps, request: WidenRequest): Promise<WidenVerdict> => {
+// What a call that stopped waiting on a card reads: nothing happened yet, the card is up, and how to collect its answer.
+const STILL_WAITING =
+    "The card stays up until it is answered. Make exactly the same call again to collect the answer, or carry on with other work and end your turn: if it is allowed after, you are woken to make the call again.";
+
+const widen = async (deps: HostGuardGateDeps, asks: HeldAsks<WidenVerdict>, request: WidenRequest): Promise<WidenVerdict> => {
     const card = cardRun(deps, request.conversationId);
     // Asked in the conversation whoever started its turn: a card nobody has answered yet waits, and only a call with no
     // live conversation to ask in is refused.
@@ -158,6 +166,33 @@ const widen = async (deps: HostGuardGateDeps, request: WidenRequest): Promise<Wi
                 "Do not retry: say which host the task needed, so the owner can add it on the Secrets view.",
         };
     }
+    const asked = {
+        conversationId: card.conversationId,
+        key: `${request.subject}\u0000${JSON.stringify(request.to)}`,
+        waiting: () => ({
+            refusal: `Still waiting for the owner to answer the card asking to loosen ${request.subject}'s host guard; nothing changed yet. ${STILL_WAITING}`,
+        }),
+        signal: request.signal,
+    };
+    return (
+        asks.reattach(asked) ??
+        asks.ask(asked, {
+            raise: (ended) => askToWiden(deps, card, request, ended),
+            told: wakeWords({
+                doing: `loosening ${request.subject}'s host guard`,
+                notYet: "Nothing has changed yet",
+                again: "Make the same request again now, with the same hosts.",
+                declinedSo: "the guard is unchanged",
+                refrain: "Do not ask again for the same change.",
+            }),
+            held: deps.hold.held,
+            finished: deps.hold.finished(card.conversationId),
+        })
+    );
+};
+
+// Raises the widening card and settles with the owner's answer; `ended` settles it unanswered.
+const askToWiden = async (deps: HostGuardGateDeps, card: LiveCard, request: WidenRequest, ended: AbortSignal): Promise<HeldAnswer<WidenVerdict>> => {
     const owner = await deps.ownerEmail();
     const raised = await raiseRequest(deps, card, {
         kind: "permission",
@@ -177,17 +212,22 @@ const widen = async (deps: HostGuardGateDeps, request: WidenRequest): Promise<Wi
                 ? undefined
                 : `Only the owner (${owner}) can loosen a secret's host guard.`,
         approves: (reply) => reply.decision !== "deny",
-        signal: request.signal,
-        deadlineMs: deps.deadlineMs ?? OFFER_DEADLINE_MS,
+        signal: ended,
     });
     if (raised.decision === "approved") {
-        return raised.caller === undefined ? {} : { approvedBy: raised.caller.email };
+        return { answer: raised.caller === undefined ? {} : { approvedBy: raised.caller.email }, outcome: { decision: "approved" } };
+    }
+    if (raised.decision === "declined") {
+        return {
+            answer: { refusal: `${declinedOf(request)}: nothing changed. Do not ask again for the same change.` },
+            outcome: { decision: "declined", ...opt("feedback", raised.reply.feedback) },
+        };
     }
     return {
-        refusal:
-            raised.decision === "declined"
-                ? `${declinedOf(request)}: nothing changed. Do not ask again for the same change.`
-                : `Nobody answered, so the guard is unchanged. Say which host the task needed, so the owner can add it on the Secrets view.`,
+        answer: {
+            refusal: `The turn ended before anyone answered, so the guard is unchanged. Say which host the task needed, so the owner can add it on the Secrets view.`,
+        },
+        outcome: { decision: "unanswered" },
     };
 };
 
@@ -202,77 +242,129 @@ const passed = async (deps: HostGuardGateDeps, conversationId: string, names: re
     return names.every((name) => granted.includes(name));
 };
 
-export const createHostGuardGate = (deps: HostGuardGateDeps): HostGuardGate => ({
-    widen: (request) => widen(deps, request),
-    check: async (input) => {
-        let reading: HostReading;
-        try {
-            reading = readHosts(await deps.guards(), input.names, destinationOf(input.target));
-        } catch {
-            return {
-                allow: false,
-                reason:
-                    "The secret could not be used: the owner's secret host guards could not be read, so it was refused rather than sent on a guess. " +
-                    "Do not retry: tell the owner their secret host guards are unreadable.",
-            };
-        }
-        const card = cardRun(deps, input.conversationId);
-        const verdict = guard(secretSend, {
-            guarded: reading.destination !== "none",
-            destination: reading.destination === "none" ? "inside" : reading.destination,
-            canPark: card !== undefined,
-        });
-        if (verdict.effect === "allow" || reading.destination === "none" || reading.destination === "inside") {
-            return { allow: true };
-        }
-        const sentence = sentenceOf(reading, input.target);
-        const names = reading.guarded.map((entry) => entry.name);
-        if (card !== undefined && (await passed(deps, card.conversationId, names))) {
-            return { allow: true };
-        }
-        if (verdict.effect === "deny" || card === undefined) {
-            return refusal(
-                sentence,
-                `There is no live conversation to ask in: it was not used. Do not retry: carry on without it, and say what you left undone. ${TO_SEND_FREELY}`,
-            );
-        }
-        const program = programAskOf(input.target, reading.guarded);
-        const raised = await raiseRequest(deps, card, {
+// The send card for one use: raised, and settled with the person's answer; `ended` settles it unanswered.
+const askToSend = async (
+    deps: HostGuardGateDeps,
+    card: LiveCard,
+    input: HostGuardCheck,
+    reading: Asked,
+    ended: AbortSignal,
+): Promise<HeldAnswer<HostGuardVerdict>> => {
+    const sentence = sentenceOf(reading, input.target);
+    const names = reading.guarded.map((entry) => entry.name);
+    const program = programAskOf(input.target, reading.guarded);
+    const raised = await raiseRequest(deps, card, {
+        kind: "permission",
+        // `deny` in the abort stand-in reads a stopped turn as "not sent", never as a yes nobody gave.
+        onAbort: { kind: "permission", requestId: "", decision: "deny" },
+        raised: (requestId) => ({
             kind: "permission",
-            // `deny` in the abort stand-in reads a stopped turn as "not sent", never as a yes nobody gave.
-            onAbort: { kind: "permission", requestId: "", decision: "deny" },
-            raised: (requestId) => ({
-                kind: "permission",
-                requestId,
-                toolName: input.target.tool,
-                title: titleOf(reading, input.target),
-                displayName: "Send secret",
-                ...opt("program", program),
-                explain: sentence,
-                ...opt("alwaysLabel", deps.grants === undefined ? undefined : `Allow ${both(names)} anywhere in this conversation`),
-            }),
-            approves: (reply) => reply.decision !== "deny",
-            signal: input.signal,
-            deadlineMs: deps.deadlineMs ?? OFFER_DEADLINE_MS,
-        });
-        if (raised.decision === "unanswered") {
-            return refusal(
+            requestId,
+            toolName: input.target.tool,
+            title: titleOf(reading, input.target),
+            displayName: "Send secret",
+            ...opt("program", program),
+            explain: sentence,
+            ...opt("alwaysLabel", deps.grants === undefined ? undefined : `Allow ${both(names)} anywhere in this conversation`),
+        }),
+        approves: (reply) => reply.decision !== "deny",
+        signal: ended,
+    });
+    if (raised.decision === "unanswered") {
+        return {
+            answer: refusal(
                 sentence,
-                "Nobody answered, so it was not used. Carry on without it and say what you left undone; ask again only if somebody is around.",
-            );
-        }
-        if (raised.decision === "declined") {
-            return refusal(
+                "The turn ended before anyone answered, so it was not used. Carry on without it and say what you left undone; ask again only if somebody is around.",
+            ),
+            outcome: { decision: "unanswered" },
+        };
+    }
+    if (raised.decision === "declined") {
+        const feedback = raised.reply.feedback?.trim();
+        return {
+            answer: refusal(
                 sentence,
-                raised.reply.feedback?.trim() ||
-                    "The person declined: it was not used. Do not retry, and do not look for another way to send it there.",
+                feedback || "The person declined: it was not used. Do not retry, and do not look for another way to send it there.",
+            ),
+            outcome: { decision: "declined", ...opt("feedback", feedback) },
+        };
+    }
+    if (raised.reply.decision === "always") {
+        // Kept before the use goes, so the very next one reads it; a write that fails costs only a second card.
+        // allow(silent-catch): the person's yes for this use stands either way; a grant not kept only asks again next time.
+        await deps.grants?.add(card.conversationId, names, raised.caller?.email).catch(() => undefined);
+    }
+    return {
+        answer: raised.caller === undefined ? { allow: true } : { allow: true, approvedBy: raised.caller.email },
+        outcome: { decision: "approved" },
+    };
+};
+
+// The exact use within its conversation: the same names to the same place by the same text.
+const sendKey = (input: HostGuardCheck): string =>
+    [input.target.tool, ...input.names, input.target.kind === "page" ? input.target.url : input.target.text].join("\u0000");
+
+export const createHostGuardGate = (deps: HostGuardGateDeps): HostGuardGate => {
+    // One registry per kind of card, so a widening never answers a send.
+    const widenings = createHeldAsks<WidenVerdict>();
+    const sends = createHeldAsks<HostGuardVerdict>();
+    return {
+        widen: (request) => widen(deps, widenings, request),
+        check: async (input) => {
+            let reading: HostReading;
+            try {
+                reading = readHosts(await deps.guards(), input.names, destinationOf(input.target));
+            } catch {
+                return {
+                    allow: false,
+                    reason:
+                        "The secret could not be used: the owner's secret host guards could not be read, so it was refused rather than sent on a guess. " +
+                        "Do not retry: tell the owner their secret host guards are unreadable.",
+                };
+            }
+            const card = cardRun(deps, input.conversationId);
+            const verdict = guard(secretSend, {
+                guarded: reading.destination !== "none",
+                destination: reading.destination === "none" ? "inside" : reading.destination,
+                canPark: card !== undefined,
+            });
+            if (verdict.effect === "allow" || reading.destination === "none" || reading.destination === "inside") {
+                return { allow: true };
+            }
+            const sentence = sentenceOf(reading, input.target);
+            const names = reading.guarded.map((entry) => entry.name);
+            if (card !== undefined && (await passed(deps, card.conversationId, names))) {
+                return { allow: true };
+            }
+            if (verdict.effect === "deny" || card === undefined) {
+                return refusal(
+                    sentence,
+                    `There is no live conversation to ask in: it was not used. Do not retry: carry on without it, and say what you left undone. ${TO_SEND_FREELY}`,
+                );
+            }
+            const asked = {
+                conversationId: card.conversationId,
+                key: sendKey(input),
+                waiting: () => refusal(sentence, `Still waiting for a person to answer the card: it has not been used yet. ${STILL_WAITING}`),
+                signal: input.signal,
+            };
+            return (
+                sends.reattach(asked) ??
+                sends.ask(asked, {
+                    raise: (ended) => askToSend(deps, card, input, reading, ended),
+                    told: wakeWords({
+                        who: "A person",
+                        doing: `sending ${both(names)} past its host guard`,
+                        ...opt("call", input.target.kind === "page" ? input.target.url : input.target.text),
+                        notYet: "It has not been used yet",
+                        again: "Make it now with exactly the same call: the same tool and exactly the same text.",
+                        declinedSo: "it was not used",
+                        refrain: "Do not retry, and do not look for another way to send it there.",
+                    }),
+                    held: deps.hold.held,
+                    finished: deps.hold.finished(card.conversationId),
+                })
             );
-        }
-        if (raised.reply.decision === "always") {
-            // Kept before the use goes, so the very next one reads it; a write that fails costs only a second card.
-            // allow(silent-catch): the person's yes for this use stands either way; a grant not kept only asks again next time.
-            await deps.grants?.add(card.conversationId, names, raised.caller?.email).catch(() => undefined);
-        }
-        return raised.caller === undefined ? { allow: true } : { allow: true, approvedBy: raised.caller.email };
-    },
-});
+        },
+    };
+};

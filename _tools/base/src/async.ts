@@ -12,15 +12,35 @@ import type { IDisposable } from "./lifecycle.js";
 // an abort) and leave the work running.
 
 // Trailing debounce: `trigger` restarts the wait, so the task runs once, `delay` after the last call; every caller in
-// the window shares that result. Superseded callers are not rejected, only the effect was requested.
+// the window shares that result. Superseded callers are not rejected, only the effect was requested. `maxWaitMs` is a
+// ceiling on the restarts: a source that never goes quiet (a log under a live agent) still runs that long after the
+// window opened, instead of never. `unref` keeps a pending run from holding a process open that has nothing else to do.
 export class Delayer<T> implements IDisposable {
     private handle: ReturnType<typeof setTimeout> | undefined;
+    private ceiling: ReturnType<typeof setTimeout> | undefined;
     private pending:
         | { readonly promise: Promise<T>; readonly resolve: (value: T | PromiseLike<T>) => void; readonly reject: (error: unknown) => void }
         | undefined;
     private task: (() => T | Promise<T>) | undefined;
+    private readonly maxWaitMs: number | undefined;
+    private readonly unref: boolean;
 
-    constructor(private readonly delay: number) {}
+    constructor(
+        private readonly delay: number,
+        options?: { readonly maxWaitMs?: number | undefined; readonly unref?: boolean },
+    ) {
+        this.maxWaitMs = options?.maxWaitMs;
+        this.unref = options?.unref === true;
+    }
+
+    private schedule(ms: number): ReturnType<typeof setTimeout> {
+        const timer = setTimeout(() => this.fire(), ms);
+        if (this.unref) {
+            // SAFETY: Node's timers carry unref and a browser's numeric handle does not; the optional call covers both
+            (timer as { unref?: () => void }).unref?.();
+        }
+        return timer;
+    }
 
     trigger(task: () => T | Promise<T>): Promise<T> {
         this.task = task;
@@ -30,23 +50,37 @@ export class Delayer<T> implements IDisposable {
         if (this.pending === undefined) {
             const { promise, resolve, reject } = Promise.withResolvers<T>();
             this.pending = { promise, resolve, reject };
+            if (this.maxWaitMs !== undefined) {
+                this.ceiling = this.schedule(this.maxWaitMs);
+            }
         }
         const pending = this.pending;
-        this.handle = setTimeout(() => {
-            this.handle = undefined;
-            this.pending = undefined;
-            const run = this.task;
-            this.task = undefined;
-            if (run === undefined) {
-                return;
-            }
-            try {
-                pending.resolve(run());
-            } catch (error) {
-                pending.reject(error);
-            }
-        }, this.delay);
+        this.handle = this.schedule(this.delay);
         return pending.promise;
+    }
+
+    // Runs the window's last task now, whichever timer got here first, and closes the window.
+    private fire(): void {
+        const pending = this.pending;
+        this.clearTimers();
+        this.pending = undefined;
+        const run = this.task;
+        this.task = undefined;
+        if (run === undefined || pending === undefined) {
+            return;
+        }
+        try {
+            pending.resolve(run());
+        } catch (error) {
+            pending.reject(error);
+        }
+    }
+
+    private clearTimers(): void {
+        clearTimeout(this.handle);
+        clearTimeout(this.ceiling);
+        this.handle = undefined;
+        this.ceiling = undefined;
     }
 
     get isPending(): boolean {
@@ -56,10 +90,7 @@ export class Delayer<T> implements IDisposable {
     // Drops the pending run without settling its promise: callers `void` it for the effect, so resolving with nothing
     // or rejecting would both be wrong.
     cancel(): void {
-        if (this.handle !== undefined) {
-            clearTimeout(this.handle);
-            this.handle = undefined;
-        }
+        this.clearTimers();
         this.pending = undefined;
         this.task = undefined;
     }
@@ -274,16 +305,26 @@ export const withDeadline = async <T>(
     }
 };
 
-// What `promise` settles to, or `fallback` once `ms` pass first; the timer is cleared however it ends. The work goes on
+// What `work` settles to, or `fallback` once `ms` pass first; the timer is cleared however it ends. The work goes on
 // regardless: this is for a wait that may give up on an answer it can live without (a best-effort read, a close that
-// may never come), never for stopping anything. Stopping is withDeadline's.
-export const within = async <T, F>(promise: Promise<T>, ms: number, fallback: F): Promise<T | F> => {
+// may never come), never for stopping anything. Stopping is withDeadline's. `work` may be a function, so one that throws
+// before it returns a promise rejects like any other failure instead of throwing past the race. `unref` keeps the wait
+// from holding a process open that has nothing else left to do (a CLI exiting, a daemon shutting down).
+export const within = async <T, F>(
+    work: Promise<T> | (() => T | Promise<T>),
+    ms: number,
+    fallback: F,
+    options?: { readonly unref?: boolean },
+): Promise<T | F> => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
         return await Promise.race([
-            promise,
+            work instanceof Promise ? work : Promise.resolve().then(work),
             new Promise<F>((resolve) => {
                 timer = setTimeout(() => resolve(fallback), ms);
+                if (options?.unref === true) {
+                    (timer as { unref?: () => void }).unref?.();
+                }
             }),
         ]);
     } finally {
@@ -370,6 +411,105 @@ export class Latest implements IDisposable {
     }
 }
 
+export interface PeriodicOptions {
+    // The wait before the first run: a boot that has more urgent work gets this long to do it first. Defaults to one
+    // interval, as setInterval's first tick; 0 starts the first run at once.
+    readonly warmupMs?: number;
+    readonly everyMs: number;
+    // Handed a signal that aborts when the loop is disposed, so a long run can stop with it.
+    readonly run: (signal: AbortSignal) => void | Promise<void>;
+    // The loop is disposed when this aborts, for a loop whose owner stops by signal rather than by dispose.
+    readonly signal?: AbortSignal | undefined;
+    // Hears a run that threw or rejected; the loop carries on either way. Without it a failed tick is an unhandled
+    // rejection, as the `void run()` it replaces was, so a run that can fail should catch its own or pass this.
+    readonly onError?: (error: unknown) => void;
+}
+
+export interface Periodic extends IDisposable {
+    // Starts a run now unless one is going, and answers when that run ends either way: a refresh someone asked for
+    // joins the run already in flight rather than overlapping it. Rejects with the run's own failure.
+    readonly runNow: () => Promise<void>;
+    readonly running: boolean;
+}
+
+// A background loop: the first run after `warmupMs`, then one every `everyMs`, never two at once (a tick that finds the
+// last run still going is skipped, not queued, so a slow run cannot pile up behind itself). Its timers are unref'd, so
+// it never holds a process open by itself, and dispose stops them however far it got, warm-up included.
+export const startPeriodic = ({ warmupMs, everyMs, run, signal, onError }: PeriodicOptions): Periodic => {
+    const stop = new AbortController();
+    let current: Promise<void> | undefined;
+    let warmup: ReturnType<typeof setTimeout> | undefined;
+    let interval: ReturnType<typeof setInterval> | undefined;
+    const runNow = (): Promise<void> => {
+        if (current !== undefined) {
+            return current;
+        }
+        if (stop.signal.aborted) {
+            return Promise.resolve();
+        }
+        // Started in this call rather than a microtask later, so a loop with no warm-up has begun by the time it is
+        // returned; a run that throws synchronously rejects like one that rejects.
+        let begun: Promise<void>;
+        try {
+            begun = Promise.resolve(run(stop.signal));
+        } catch (error) {
+            begun = Promise.reject(error);
+        }
+        const started: Promise<void> = begun.finally(() => {
+            if (current === started) {
+                current = undefined;
+            }
+        });
+        current = started;
+        return started;
+    };
+    const tick = (): void => {
+        if (current !== undefined) {
+            return;
+        }
+        const started = runNow();
+        if (onError !== undefined) {
+            started.catch(onError);
+        } else {
+            void started;
+        }
+    };
+    const unref = (timer: ReturnType<typeof setTimeout>): void => {
+        // SAFETY: Node's timers carry unref and a browser's numeric handle does not; the optional call covers both
+        (timer as { unref?: () => void }).unref?.();
+    };
+    const begin = (): void => {
+        warmup = undefined;
+        tick();
+        interval = setInterval(tick, everyMs);
+        unref(interval);
+    };
+    const dispose = (): void => {
+        clearTimeout(warmup);
+        clearInterval(interval);
+        warmup = undefined;
+        interval = undefined;
+        stop.abort();
+        unsubscribe();
+    };
+    const unsubscribe = whenAborted(signal, dispose);
+    if (!stop.signal.aborted) {
+        if (warmupMs === 0) {
+            begin();
+        } else {
+            warmup = setTimeout(begin, warmupMs ?? everyMs);
+            unref(warmup);
+        }
+    }
+    return {
+        runNow,
+        get running() {
+            return current !== undefined;
+        },
+        dispose,
+    };
+};
+
 export interface RetryOptions {
     // Tries in all, the first included; Infinity for a loop only the signal ends.
     readonly attempts: number;
@@ -377,7 +517,12 @@ export interface RetryOptions {
     // backoff ladder. A failure that is an answer rather than a blip (a refusal) should not be thrown at all: return it.
     readonly delayMs: (attempt: number) => number;
     readonly signal?: AbortSignal | undefined;
+    // The wait between tries, for a test that counts what was slept instead of sleeping it. Handed the signal; the
+    // default is `sleep`, which ends early on an abort.
+    readonly wait?: ((ms: number, signal: AbortSignal | undefined) => Promise<void>) | undefined;
 }
+
+const waitOut = (ms: number, signal: AbortSignal | undefined): Promise<void> => sleep(ms, { signal });
 
 // Read through a call, so a check after an await is not narrowed away by the same check before it.
 const isAborted = (signal: AbortSignal | undefined): boolean => signal?.aborted === true;
@@ -397,7 +542,7 @@ export const retry = async <T>(task: (attempt: number) => Promise<T>, options: R
                 throw error;
             }
             // oxlint-disable-next-line eslint/no-await-in-loop -- the wait between tries
-            await sleep(options.delayMs(attempt), { signal });
+            await (options.wait ?? waitOut)(options.delayMs(attempt), signal);
             if (signal !== undefined && isAborted(signal)) {
                 // oxlint-disable-next-line typescript/only-throw-error -- the abort's own reason, as fetch rejects with it
                 throw signal.reason;
@@ -419,20 +564,25 @@ export interface PollForOptions {
     // A probe that throws is a blip, probed again next interval (a sign-in's status read across a network hiccup).
     // Otherwise a throw propagates.
     readonly retryOnError?: boolean;
+    // Gives up after this many probes, as at the deadline: a bound that holds when the clock does not move (a test's
+    // stubbed sleep, a clock the caller injected), which a deadline alone would spin through forever.
+    readonly maxProbes?: number;
     readonly now?: (() => number) | undefined;
+    // The wait between probes, as retry's: injectable so a test counts it, and handed the signal to end it early.
+    readonly wait?: ((ms: number, signal: AbortSignal | undefined) => Promise<void>) | undefined;
 }
 
-// Probes until one answers with a value (undefined: not yet), the deadline passes, or the signal aborts. A probe that
+// Probes until one answers with a value (undefined: not yet), the deadline or the probe cap passes, or the signal aborts. A probe that
 // answers after its poll was aborted speaks for nobody: the outcome is `aborted`, so a superseded attempt cannot act on
 // what it read. One that answers after the deadline but before an abort still counts: what it found did land.
 export const pollFor = async <T>(probe: () => Promise<T | undefined>, options: PollForOptions): Promise<PollOutcome<T>> => {
     const now = options.now ?? Date.now;
     const { signal } = options;
-    const wait = (): Promise<void> => sleep(Math.max(0, Math.min(options.intervalMs, options.until - now())), { signal });
+    const wait = (): Promise<void> => (options.wait ?? waitOut)(Math.max(0, Math.min(options.intervalMs, options.until - now())), signal);
     if (options.delayFirst === true) {
         await wait();
     }
-    for (;;) {
+    for (let probes = 1; ; probes += 1) {
         if (isAborted(signal)) {
             return { kind: `aborted` };
         }
@@ -453,6 +603,10 @@ export const pollFor = async <T>(probe: () => Promise<T | undefined>, options: P
         }
         if (value !== undefined) {
             return { kind: `found`, value };
+        }
+        // Said at once: a wait after the last probe allowed would only delay the same answer.
+        if (probes >= (options.maxProbes ?? Infinity)) {
+            return { kind: `expired` };
         }
         // oxlint-disable-next-line eslint/no-await-in-loop -- the wait between probes
         await wait();
@@ -527,6 +681,28 @@ export const createBackoff = ({ floorMs, capMs, stableMs, random = Math.random }
             rung = floorMs;
         },
     };
+};
+
+// How long a `Retry-After` asks to be left alone for, in ms, from the response's headers or the header's own value:
+// whole seconds, or an HTTP date read against `now`. Undefined when it is absent or unreadable, so the caller's own
+// fallback decides rather than an immediate retry; `capMs` bounds a server that asks for hours.
+export const retryAfterMs = (
+    source: Headers | string | null | undefined,
+    options?: { readonly now?: number; readonly capMs?: number },
+): number | undefined => {
+    const value = (source instanceof Headers ? source.get(`retry-after`) : source)?.trim();
+    if (value === undefined || value === ``) {
+        return undefined;
+    }
+    const seconds = Number(value);
+    let ms: number | undefined;
+    if (Number.isFinite(seconds)) {
+        ms = seconds >= 0 ? seconds * 1_000 : undefined;
+    } else {
+        const at = Date.parse(value);
+        ms = Number.isNaN(at) ? undefined : Math.max(0, at - (options?.now ?? Date.now()));
+    }
+    return ms === undefined || options?.capMs === undefined ? ms : Math.min(ms, options.capMs);
 };
 
 export interface NarratedLine {
@@ -635,6 +811,7 @@ export const watchQueue = <T>({ signal, until, longestMs, now = Date.now }: Watc
             try {
                 for (;;) {
                     if (queue.length > 0) {
+                        // SAFETY: the queue was just checked non-empty, so shift returns one of its values
                         yield queue.shift() as T;
                         continue;
                     }

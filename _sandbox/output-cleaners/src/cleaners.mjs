@@ -5,6 +5,7 @@
 import { createHash } from "node:crypto";
 import { closeSync, fstatSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import * as util from "node:util";
 
 // CSI sequences, OSC sequences (title sets, hyperlinks), and lone two-byte escapes; always stripped as noise.
 // eslint-disable-next-line no-control-regex
@@ -351,14 +352,62 @@ const QUOTED_VALUE = String.raw`(["'\x60])([^"'\x60\n]{6,})\2`;
 // No `.` (property access) and not a call: `usage.inputTokens` and `computed(` are expressions, not values.
 const BARE_VALUE = String.raw`[\w+/=~-]{6,}(?![\w+/=~(-])`;
 
+// Credentials that name their own issuer: the literal prefix it mints them with and the body that follows. The contract
+// holds the same table (_shared/sandbox-contract/src/policy/credential-material.ts); this is a copy only because this
+// package imports nothing but node builtins, and the daemon's src/secrets/terminal-masking-parity.test.ts fails the moment
+// the two part. The sides read it with different appetites, on purpose:
+//   - here, beside a credential-shaped NAME, the prefix alone marks the value at any length (`TOKEN=ghp_x`): the name
+//     already said it is a credential, so recall wins;
+//   - anywhere else in output, and in the contract everywhere, only the whole shape counts, since a bare `sk-` in prose
+//     or a CSS class is not one.
+export const CREDENTIAL_ISSUERS = [
+    { prefix: "npm_", body: "[A-Za-z0-9]{30,}" },
+    { prefix: "ghp_", body: "[A-Za-z0-9]{20,}" },
+    { prefix: "gho_", body: "[A-Za-z0-9]{20,}" },
+    { prefix: "ghu_", body: "[A-Za-z0-9]{20,}" },
+    { prefix: "ghs_", body: "[A-Za-z0-9]{20,}" },
+    { prefix: "ghr_", body: "[A-Za-z0-9]{20,}" },
+    { prefix: "github_pat_", body: "[A-Za-z0-9_]{50,}" },
+    { prefix: "glpat-", body: "[A-Za-z0-9_-]{16,}" },
+    { prefix: "xoxa-", body: "[A-Za-z0-9-]{10,}" },
+    { prefix: "xoxb-", body: "[A-Za-z0-9-]{10,}" },
+    { prefix: "xoxo-", body: "[A-Za-z0-9-]{10,}" },
+    { prefix: "xoxp-", body: "[A-Za-z0-9-]{10,}" },
+    { prefix: "xoxr-", body: "[A-Za-z0-9-]{10,}" },
+    { prefix: "xoxs-", body: "[A-Za-z0-9-]{10,}" },
+    { prefix: "sk-", body: "[A-Za-z0-9_-]{20,}" },
+    { prefix: "pk-", body: "[A-Za-z0-9_-]{20,}" },
+    { prefix: "rk-", body: "[A-Za-z0-9_-]{20,}" },
+    { prefix: "sk_live_", body: "[A-Za-z0-9]{16,}" },
+    { prefix: "rk_live_", body: "[A-Za-z0-9]{16,}" },
+    { prefix: "AKIA", body: String.raw`[0-9A-Z]{16}\b` },
+    { prefix: "ASIA", body: String.raw`[0-9A-Z]{16}\b` },
+    { prefix: "AIza", body: String.raw`[0-9A-Za-z_-]{35}\b` },
+    { prefix: "ya29.", body: "[0-9A-Za-z_-]{20,}" },
+    { prefix: "hf_", body: "[A-Za-z0-9]{30,}" },
+    { prefix: "dop_v1_", body: "[a-f0-9]{60,}" },
+    { prefix: "shpat_", body: "[a-fA-F0-9]{32,}" },
+    // SendGrid: a key id and its secret, dot-separated.
+    { prefix: "SG.", body: String.raw`[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}` },
+    // A JWT: three base64url segments, the first two of which decode from `{"` and so always begin `eyJ` and `ey`.
+    { prefix: "eyJ", body: String.raw`[A-Za-z0-9_-]{9,}\.ey[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]*` },
+];
+export const CREDENTIAL_ISSUER_PREFIXES = CREDENTIAL_ISSUERS.map(({ prefix }) => prefix);
+
+// RegExp.escape is Node 24; the plugin runs this file on whatever node a person has.
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+const ISSUER_PREFIX = new RegExp(`^(?:${CREDENTIAL_ISSUER_PREFIXES.map(escapeRegExp).join("|")})`);
+// Starts where no word or kebab-case word runs into it: `task-sk-runner-config-file` is a name, not a key. The other
+// side builds its patterns the same way.
+const ISSUED_TOKENS = CREDENTIAL_ISSUERS.map(({ prefix, body }) => new RegExp(String.raw`(?<![\w-])${escapeRegExp(prefix)}${body}`, "g"));
+
 // What counts as a credential once the NAME already matched: machine-generated values carry letters and digits
 // together, but so do plain counts and paths.
-//   1. A known issuer prefix (`sk-`, `ghp_`, `AKIA`, `eyJ`, …) is a credential at any length.
+//   1. A known issuer prefix (CREDENTIAL_ISSUER_PREFIXES) is a credential at any length.
 //   2. Otherwise it must be entropic and not: all-digits, a path/URL/`${template}`, or SCREAMING_SNAKE (a name, not a
 //      value).
 //   3. And longer than a human would type, or it might be a fixture value like `"tok-abc-123"`.
 // The gap is deliberate: a handwritten passphrase reads exactly like an identifier.
-const ISSUER_PREFIX = /^(?:sk-|pk-|rk-|ghp_|gho_|ghu_|ghs_|ghr_|github_pat_|xox[abposr]-|AKIA|ASIA|eyJ|AIza|ya29\.|glpat-|dop_v1_|shpat_|SG\.|npm_)/;
 const NUMERIC_VALUE = /^[\d_,.]+$/;
 const STRUCTURAL_VALUE = /[\s/\\${}]/;
 const ENV_NAME_VALUE = /^[A-Z0-9_]+$/;
@@ -372,24 +421,77 @@ const looksLikeCredential = (value) =>
         !STRUCTURAL_VALUE.test(value) &&
         !ENV_NAME_VALUE.test(value));
 
+// A `{{secret:name}}` reference, capturing the name: the alphabet every store below names a value with (env keys,
+// `<id>/<field>`). The contract's SECRET_REFERENCE is the same pattern, pinned to this one by the daemon's parity test.
+// Not global, so it carries no `lastIndex` between callers.
+export const SECRET_REFERENCE = /\{\{secret:([A-Za-z0-9_./-]+)\}\}/;
+// Double braces, not a value-lookalike, since substitution must be exact-match; a key-shaped token invites a model to
+// "fix" it or reason about its length. The daemon's tool-result masking re-exports this one.
+export const secretReference = (name) => `{{secret:${name}}}`;
+
 const SECRET_PATTERNS = [
     [
         new RegExp(`\\b(${SECRET_NAME}${ASSIGN})(?:${QUOTED_VALUE}|(${BARE_VALUE}))`, "gi"),
         // Quoted and bare arrive in different groups because only the quoted one has a quote to put back.
         (match, assignment, quote, quoted, bare) => (looksLikeCredential(quoted ?? bare) ? `${assignment}${quote ?? ""}***${quote ?? ""}` : match),
     ],
-    [/\bAKIA[0-9A-Z]{16}\b/g, "***"],
+    ...ISSUED_TOKENS.map((token) => [token, "***"]),
     // Same rule for a bearer value: prose about tokens carries no digit, every real bearer token does.
     [/\b(Bearer\s+)(?=[\w.-]*\d)[\w.-]{8,}/gi, "$1***"],
-    [/\b(https?:\/\/[^:@\s/]+:)[^@\s]+@/gi, "$1***@"],
+    // scheme://user:password@host for any scheme (a postgres DSN as much as an https remote). Any length, unlike the
+    // contract's three-character floor: output reaching a model is not a file someone meant to publish. A `/` ends the
+    // password, so `http://host:3000/@scope/pkg` is a port and a path, and a reference already standing in is kept.
+    [/\b([a-z][a-z0-9+.-]*:\/\/[^:@\s/]+:)(?!\{\{secret:)[^@\s/]+@/gi, "$1***@"],
 ];
+
+// A private key spans lines, which the per-line patterns above cannot see, so these run over the joined body first; the
+// same shapes as the contract's maskCredentialMaterial, so the terminal and the tools mask a key alike (the daemon's
+// parity test compares the two on the same keys). A PEM keeps its header and footer with its body masked through to
+// the matching footer, or through its last body line when the output was cut short; a PuTTY key keeps its first line's
+// label. Already-masked text is skipped, so masking twice changes nothing.
+const MASKED_NEXT = String.raw`(?!(?:\s|\\[nr])*\*\*\*)`;
+// One armored body line after a newline or a `\n` escape: a whole line of base64, or a `Proc-Type: 4,ENCRYPTED` style
+// header.
+const ARMOR_LINES = String.raw`(?:(?:\s|\\[nr])+(?:[A-Za-z-]+:[^\n\\]*|[A-Za-z0-9+/=]+(?=[ \t]*(?:[\r\n"'\x60<>,;})\]]|\\[nr]|$))))*`;
+const PRIVATE_KEY_BLOCK = new RegExp(
+    String.raw`(-----BEGIN ((?:[A-Z0-9]+ )*)PRIVATE KEY( BLOCK)?-----)${MASKED_NEXT}(?:[\s\S]*?(-----END \2PRIVATE KEY\3-----)|${ARMOR_LINES})`,
+    "g",
+);
+const PUTTY_KEY = new RegExp(String.raw`(PuTTY-User-Key-File-\d:)${MASKED_NEXT}[^\n\\]*${ARMOR_LINES}`, "g");
+const maskKeyBlocks = (text) =>
+    // The cheap test first: almost no output holds a key, and the block patterns scan the whole body.
+    text.includes("PRIVATE KEY") || text.includes("PuTTY-User-Key-File-")
+        ? text
+              .replace(PRIVATE_KEY_BLOCK, (_block, header, _label, _kind, footer) =>
+                  footer === undefined ? `${header}\n***` : `${header}\n***\n${footer}`,
+              )
+              .replace(PUTTY_KEY, "$1 ***")
+        : text;
+
 // Known secret VALUES (from the daemon's own env) mask exactly, with no per-field upkeep; name patterns above are a
 // backstop only for a value not stored here. A known value masks to its reference (`{{secret:name}}`); a multi-line
-// value masks per line to the anonymous mask instead, since a reference stands for the whole value.
-const SECRET_VALUE_MIN = 12;
+// value masks per line to the anonymous mask instead, since a reference stands for the whole value. Below this length a
+// value is not distinctive enough to blank safely; the daemon's tool-result masking uses the same floor.
+export const SECRET_VALUE_MIN = 12;
+
+// Every store a stored secret value lives in, in the order a name two of them hold resolves. The daemon's registry
+// (src/secrets/secret-registry.ts) walks this same list, so the terminal cannot miss a store the tools mask. `root` is
+// the auth root (AGENT_AUTH_DIR) or the desired-state repo; `layout` is how the file holds its values:
+//   - `env`: a dotenv, read with util.parseEnv like the deploy tooling reads it (quotes, backticks, `# comments`);
+//   - `flat`: JSON {name: value};
+//   - `vault`: JSON {id: {field: value}}, each value named `<id>/<field>`.
+// `source` is what the registry records a value as coming from.
+export const SECRET_STORES = [
+    { root: "desiredState", path: ".env", layout: "env", source: "env" },
+    // Pasted on a need's card or the Secrets view (src/secrets/sandbox-secrets.ts).
+    { root: "auth", path: "sandbox-secrets.json", layout: "flat", source: "sandbox" },
+    { root: "desiredState", path: ".secrets.json", layout: "flat", source: "generated" },
+    { root: "auth", path: "capability-secrets.json", layout: "vault", source: "capability" },
+];
+
 const secretValueCache = new Map();
 
-const readIfChanged = (path, name) => {
+const readIfChanged = (path, layout) => {
     try {
         // Opens once, then stats and reads that descriptor: a path-level stat then read would let a symlink swap
         // redirect the reader in between.
@@ -401,7 +503,7 @@ const readIfChanged = (path, name) => {
             if (cached?.stamp === stamp) {
                 return cached.values;
             }
-            const values = harvest(readFileSync(descriptor, "utf8"), path, name);
+            const values = harvest(readFileSync(descriptor, "utf8"), layout);
             secretValueCache.set(path, { stamp, values });
             return values;
         } finally {
@@ -436,36 +538,27 @@ export const surfaceForms = (value) => {
     return forms;
 };
 
-// Every {target, replacement} to mask, from one of three files: the vault is {id: {field: value}} (named
-// `<id>/<field>`), `.env` is KEY=value, `.secrets.json` is flat {KEY: value}. Reads only VALUES; a key name is not a
-// secret.
-const harvest = (text, path, name) => {
-    const named = [];
-    if (path.endsWith("capability-secrets.json")) {
-        for (const [id, entry] of Object.entries(JSON.parse(text))) {
-            if (entry === null || typeof entry !== "object") {
-                continue;
-            }
-            for (const [field, value] of Object.entries(entry)) {
-                if (typeof value === "string") {
-                    named.push([name(id, field), value]);
-                }
-            }
-        }
-    } else if (path.endsWith(".json")) {
-        for (const [key, value] of Object.entries(JSON.parse(text))) {
-            if (typeof value === "string") {
-                named.push([name(key), value]);
-            }
-        }
-    } else {
-        for (const line of text.split("\n")) {
-            const match = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(line);
-            if (match !== null) {
-                named.push([name(match[1]), (match[2] ?? "").trim().replace(/^(["'])([\s\S]*)\1$/, "$2")]);
-            }
-        }
+// [name, value] for every string value a store's text holds, by its SECRET_STORES layout. Reads only VALUES; a key name
+// is not a secret.
+const namedValues = (text, layout) => {
+    if (layout === "env") {
+        // Called through the namespace: parseEnv is Node 20.12+, and a named import missing from an older node fails the
+        // whole module at link time; a call that throws only costs this one store.
+        return Object.entries(util.parseEnv(text));
     }
+    const parsed = JSON.parse(text);
+    if (layout === "flat") {
+        return Object.entries(parsed).filter(([, value]) => typeof value === "string");
+    }
+    return Object.entries(parsed).flatMap(([id, entry]) =>
+        entry === null || typeof entry !== "object"
+            ? []
+            : Object.entries(entry).flatMap(([field, value]) => (typeof value === "string" ? [[`${id}/${field}`, value]] : [])),
+    );
+};
+
+// Every {target, replacement} to mask from one store's text.
+const harvest = (text, layout) => {
     const byTarget = new Map();
     const add = (target, replacement) => {
         const trimmed = target.trim();
@@ -473,10 +566,10 @@ const harvest = (text, path, name) => {
             byTarget.set(trimmed, { target: trimmed, replacement });
         }
     };
-    for (const [reference, value] of named) {
+    for (const [name, value] of namedValues(text, layout)) {
         // Trimmed first: whitespace padding is never masked, so an untrimmed target would never match anything.
         for (const form of surfaceForms(value.trim())) {
-            add(form, `{{secret:${reference}}}`);
+            add(form, secretReference(name));
         }
         if (value.includes("\n")) {
             for (const line of value.split("\n")) {
@@ -488,31 +581,32 @@ const harvest = (text, path, name) => {
     return [...byTarget.values()].toSorted((a, b) => b.target.length - a.target.length);
 };
 
-// Where the three stores live, from the daemon's own env for this turn. AGENT_AUTH_DIR is the provider-credential root;
+// Where the stores live, from the daemon's own env for this turn. AGENT_AUTH_DIR is the provider-credential root;
 // unset falls back to .intentic/secrets/auth, matching composition.ts.
 export const secretValues = (env = process.env) => {
-    const authRoot =
-        env.AGENT_AUTH_DIR !== undefined && env.AGENT_AUTH_DIR !== ""
-            ? env.AGENT_AUTH_DIR
-            : join(env.WORKSPACE_ROOT ?? "/work", ".intentic/secrets/auth");
-    const repo = join(env.WORKSPACE_ROOT ?? "/work", "desired-state");
-    return [
-        ...readIfChanged(join(authRoot, "capability-secrets.json"), (id, field) => `${id}/${field}`),
-        ...readIfChanged(join(repo, ".env"), (key) => key),
-        ...readIfChanged(join(repo, ".secrets.json"), (key) => key),
-    ].toSorted((a, b) => b.target.length - a.target.length);
+    const roots = {
+        auth: env.AGENT_AUTH_DIR !== undefined && env.AGENT_AUTH_DIR !== "" ? env.AGENT_AUTH_DIR : join(env.WORKSPACE_ROOT ?? "/work", ".intentic/secrets/auth"),
+        desiredState: join(env.WORKSPACE_ROOT ?? "/work", "desired-state"),
+    };
+    return SECRET_STORES.flatMap(({ root, path, layout }) => readIfChanged(join(roots[root], path), layout)).toSorted(
+        (a, b) => b.target.length - a.target.length,
+    );
+};
+
+// Every line masked: key blocks across the joined body first (a token shape matched inside a key's body would cut the
+// body short), then known values and the per-line patterns.
+const redactLines = (lines, values = []) => {
+    const joined = lines.join("\n");
+    const keyed = maskKeyBlocks(joined);
+    return (keyed === joined ? lines : keyed.split("\n")).map((line) => redactLine(line, values));
 };
 
 // Masks a whole body for the two paths that skip the pipeline: the holdout and the fail-open catch. Neither excuses
 // handing over a credential; idempotent, so re-running it after the pipeline already masked a line costs a scan and
 // changes nothing.
-export const redactText = (text, values = []) =>
-    text
-        .split("\n")
-        .map((line) => redactLine(line, values))
-        .join("\n");
+export const redactText = (text, values = []) => redactLines(text.split("\n"), values).join("\n");
 
-const redactLine = (line, values = []) => {
+const redactLine = (line, values) => {
     let masked = line;
     for (const { target, replacement } of values) {
         if (masked.includes(target)) {
@@ -674,7 +768,7 @@ export const cleanLines = (lines, { command, exitCode, enabled, values = [] }) =
     if (enabled.has("redact")) {
         out = ran(
             "redact",
-            out.map((line) => redactLine(line, values)),
+            redactLines(out, values),
         );
     }
     return { lines: out, stages };

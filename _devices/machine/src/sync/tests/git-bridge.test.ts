@@ -89,7 +89,7 @@ describe("bridgeRepo", () => {
     });
 
     it("leaves a config that already reads modes the sandbox's way alone", async () => {
-        const { calls, exec } = scripted({ "git config --get core.fileMode": "false\n", "git ls-remote": undefined }, [DIR, join(DIR, ".git")]);
+        const { calls, exec } = scripted({ "git config --local --get core.fileMode": "false\n", "git ls-remote": undefined }, [DIR, join(DIR, ".git")]);
         await bridgeRepo(exec, ALIAS, LOCAL, "proj", () => undefined);
         expect(calls).not.toContain("git config core.fileMode false");
     });

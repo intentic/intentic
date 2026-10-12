@@ -1,12 +1,14 @@
-import { appendFile, mkdir, readdir } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import { loadavg } from "node:os";
 import { join } from "node:path";
 import { monitorEventLoopDelay, performance, PerformanceObserver } from "node:perf_hooks";
 import { getHeapSpaceStatistics, getHeapStatistics } from "node:v8";
 import { PROCESS_ROLES, type ProcessRole } from "@intentic/sandbox-contract";
+import { startPeriodic } from "@intentic/base/async";
 import { gitRunCallers, gitRunCounts, gitSpawnStats } from "@intentic/base/git";
 import type { Logger } from "pino";
 import { logsRoot } from "../../seams/logs-root.js";
+import { lineLog } from "../../store/open-document.js";
 import { flatKeyed, readCgroup, readText } from "./cgroup.js";
 import { scanProcesses, type ScannedProcess } from "./process-scan.js";
 import { queueSnapshot } from "./queue-slots.js";
@@ -17,6 +19,11 @@ import { holdWarnSeconds, SHIPPED_HEAVY_COMMANDS } from "@intentic/constants/hea
 
 const SAMPLE_INTERVAL_MS = 60_000;
 export const RESOURCE_METRICS_FILE = "resource-metrics.jsonl";
+
+// The series caps itself, cut under the same queue as its appends, so a cut never loses a sample written beside it; the
+// logs prune leaves it alone. Its own figures, not the logs tree's 5MB: that would hold under a day of samples, and these
+// keep about a week.
+const SERIES_CAP = { overBytes: 40_000_000, keepBytes: 30_000_000 };
 
 export interface ProcessRow {
     readonly pid: number;
@@ -456,14 +463,14 @@ export const startResourceMetrics = ({
     // Pools already reported as stuck, so the warning fires on the edge and not every minute the slot stays held.
     let warnedPools = new Set<string>();
     const path = resourceMetricsPath(historyRoot);
+    const series = lineLog(path, { cap: SERIES_CAP });
     const sample = (): Promise<void> => {
         if (inFlight !== undefined) {
             return inFlight;
         }
         inFlight = (async () => {
             const snapshot = await sampler.sample();
-            await mkdir(logsRoot(historyRoot), { recursive: true });
-            await appendFile(path, `${JSON.stringify(snapshot)}\n`, "utf8");
+            await series.append(JSON.stringify(snapshot));
             persistenceFailed = false;
             // Persisted before diffing, so the record on disk doesn't depend on the alarm firing.
             const killed = previous === undefined ? undefined : oomSinceSample(previous, snapshot);
@@ -499,13 +506,11 @@ export const startResourceMetrics = ({
             });
         return inFlight;
     };
-    void sample();
-    const timer = setInterval(() => void sample(), intervalMs);
-    timer.unref();
+    const loop = startPeriodic({ warmupMs: 0, everyMs: intervalMs, run: sample });
     return {
         sample,
         stop: () => {
-            clearInterval(timer);
+            loop.dispose();
             sampler.stop();
         },
     };

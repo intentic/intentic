@@ -1,6 +1,7 @@
 import type { PersonalDataClass, PrivacyLedgerAction, PrivacyShieldPolicy } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
 import type { AppEnv } from "../../app-env.js";
+import { REQUEST_REFRAMED, RESPONSE_REFRAMED, forwardHeaders } from "../../http/forward-headers.js";
 import { GATEWAY_PATH, type PrivacyShield } from "../privacy-shield.js";
 import { type GatewayProtocol, protocolOf, restoreResponse, restoreStream, shieldRequest } from "./protocols/index.js";
 import { emptyTally, maskingShield, watchingShield } from "./request-shield.js";
@@ -21,21 +22,6 @@ export interface GatewayRouteDeps {
     readonly fetch?: typeof fetch;
     readonly now?: () => Date;
 }
-
-// Hop-by-hop and framing headers, which describe this connection rather than the request; `accept-encoding` too, so the
-// answer arrives as text the stream transform can read.
-const REQUEST_DROPPED = new Set(["host", "connection", "content-length", "transfer-encoding", "accept-encoding", "keep-alive", "upgrade"]);
-const RESPONSE_DROPPED = new Set(["content-length", "content-encoding", "transfer-encoding", "connection", "keep-alive"]);
-
-const forwardHeaders = (from: Headers, dropped: ReadonlySet<string>): Headers => {
-    const headers = new Headers();
-    for (const [name, value] of from) {
-        if (!dropped.has(name.toLowerCase())) {
-            headers.set(name, value);
-        }
-    }
-    return headers;
-};
 
 // Shaped like each wire's own error, so the runtime shows the sentence instead of a parse failure. A 400, not a 5xx: a
 // runtime retries a server error, and a refusal does not get better by asking again.
@@ -197,7 +183,7 @@ export const createGatewayRoute = ({ shield, warn, fetch: send = fetch, now = ()
         }
 
         const upstreamUrl = `${session.upstream.replace(/\/$/u, "")}${rest}`;
-        const headers = forwardHeaders(c.req.raw.headers, REQUEST_DROPPED);
+        const headers = forwardHeaders(c.req.raw.headers, REQUEST_REFRAMED);
         headers.set("accept-encoding", "identity");
         let upstream: Response;
         try {
@@ -223,7 +209,7 @@ export const createGatewayRoute = ({ shield, warn, fetch: send = fetch, now = ()
                 502,
             );
         }
-        const responseHeaders = forwardHeaders(upstream.headers, RESPONSE_DROPPED);
+        const responseHeaders = forwardHeaders(upstream.headers, RESPONSE_REFRAMED);
         const type = upstream.headers.get("content-type");
         // Tokens can come back even from a request that carried none: the model repeats what earlier ones carried.
         if (!masking || protocol === undefined || upstream.body === null) {

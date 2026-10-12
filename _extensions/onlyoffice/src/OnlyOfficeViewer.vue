@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { errorMessage } from "@intentic/base/errors";
 import { activeLocale, appLink, Button, Checkbox, ConfirmDialog, formatDateTime, Icon, Notice, ProgressRing, ui } from "@intentic/extension-ui";
 import { computed, onBeforeUnmount, onMounted, ref, type VNode, watch } from "vue";
 import type { DocsState } from "./contract.js";
@@ -80,7 +81,7 @@ const load = async (): Promise<void> => {
             status.value = undefined;
         }
     } catch (error) {
-        failure.value = error instanceof Error ? error.message : String(error);
+        failure.value = errorMessage(error);
         waited.value = true;
     }
 };
@@ -165,7 +166,7 @@ const restore = async (): Promise<void> => {
     try {
         await restoreOriginal(path);
     } catch (error) {
-        note.value = { kind: `restore-failed`, detail: error instanceof Error ? error.message : String(error) };
+        note.value = { kind: `restore-failed`, detail: errorMessage(error) };
         return;
     } finally {
         restoring.value = false;
@@ -190,7 +191,7 @@ const start = async (): Promise<void> => {
         status.value = await startDocs(engine.value);
         await load();
     } catch (error) {
-        failure.value = error instanceof Error ? error.message : String(error);
+        failure.value = errorMessage(error);
     }
 };
 

@@ -1,7 +1,9 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash } from "node:crypto";
 import { constants } from "node:fs";
-import { copyFile, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile, rename, rm, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
+import { writeFileAtomic } from "@intentic/base/fs";
+import { errorMessage } from "@intentic/base/errors";
 import { scratchBeside } from "./browser-engine.js";
 
 // What a document on the user's own computer held before this process first wrote over it, kept in the app's cache
@@ -117,9 +119,7 @@ export class Originals {
 
     // Names a copy made aside the original: meta.json written whole, or not at all.
     async #commit(meta: Meta): Promise<void> {
-        const temporary = join(this.#folder(meta.path), `${META}.${randomBytes(4).toString("hex")}.tmp`);
-        await writeFile(temporary, JSON.stringify(meta));
-        await rename(temporary, join(this.#folder(meta.path), META));
+        await writeFileAtomic(join(this.#folder(meta.path), META), JSON.stringify(meta));
     }
 
     // The original kept of the document at its real path, if one is.
@@ -139,7 +139,7 @@ export class Originals {
                 await this.#commit(await this.#copyAside(real));
                 this.#kept.add(real);
             } catch (error) {
-                this.deps.log(`could not keep the original of ${real}: ${error instanceof Error ? error.message : String(error)}`);
+                this.deps.log(`could not keep the original of ${real}: ${errorMessage(error)}`);
             }
         });
     }

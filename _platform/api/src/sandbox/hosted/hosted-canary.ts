@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { FREE_TIER, PAID_TIERS } from "@intentic/constants";
 import type { PrismaClient } from "@intentic/prisma";
-import { sleep as pause } from "@intentic/base/async";
+import { pollFor, sleep as pause } from "@intentic/base/async";
 import { previewUrl, STARTER_APP, STARTER_REPO } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import type { Config } from "../../config.js";
@@ -83,47 +83,48 @@ const collectPreviousRuns = async (prisma: PrismaClient, config: Config, logger:
     }
 };
 
-// Polls the row the daemon's announce writes until it appears or attempts run out. Bounded by a count, not the clock,
-// so a stubbed sleep in tests can't spin forever.
+// How many looks a wait of `deadlineMs` gets: one now and one after each poll, so the waits add up to the deadline and
+// the last look lands on it. Bounded by a count, not the clock, so a stubbed sleep in tests can't spin forever.
+const looksWithin = (deadlineMs: number): number => Math.ceil(deadlineMs / POLL_MS) + 1;
+
+// Polls the row the daemon's announce writes until it appears or the looks run out.
 const waitForAnnounce = async (
     prisma: PrismaClient,
     sandboxId: string,
     deadlineMs: number,
     sleep: (ms: number) => Promise<void>,
 ): Promise<boolean> => {
-    for (let attempt = 0; attempt < Math.ceil(deadlineMs / POLL_MS); attempt += 1) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- a poll loop is the shape of this wait
-        const row = await prisma.sandbox.findUnique({ where: { id: sandboxId }, select: { lastSeenAt: true } });
-        if (row?.lastSeenAt != null) {
-            return true;
-        }
-        // oxlint-disable-next-line eslint/no-await-in-loop
-        await sleep(POLL_MS);
-    }
-    return false;
+    const announced = await pollFor(
+        async () => {
+            const row = await prisma.sandbox.findUnique({ where: { id: sandboxId }, select: { lastSeenAt: true } });
+            return row?.lastSeenAt != null ? true : undefined;
+        },
+        { intervalMs: POLL_MS, until: Infinity, maxProbes: looksWithin(deadlineMs), wait: sleep },
+    );
+    return announced.kind === `found`;
 };
 
 // The browser's next wait: the starter's preview address through the edge, until its proxy says serving. Bounded by a
 // count, like the announce wait.
 const waitForStarter = async (url: string, deadlineMs: number, sleep: (ms: number) => Promise<void>): Promise<boolean> => {
-    for (let attempt = 0; attempt < Math.ceil(deadlineMs / POLL_MS); attempt += 1) {
-        try {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- a poll loop is the shape of this wait
-            const response = await fetch(`${url}${PREVIEW_PROBE_PATH}`, { signal: AbortSignal.timeout(10_000) });
-            if (response.ok) {
-                // oxlint-disable-next-line eslint/no-await-in-loop
-                const body = (await response.json().catch(() => undefined)) as { proxy?: unknown; state?: unknown } | undefined;
-                if (body?.proxy === `intentic-preview` && body.state === `serving`) {
-                    return true;
+    const serving = await pollFor(
+        async () => {
+            try {
+                const response = await fetch(`${url}${PREVIEW_PROBE_PATH}`, { signal: AbortSignal.timeout(10_000) });
+                if (response.ok) {
+                    const body = (await response.json().catch(() => undefined)) as { proxy?: unknown; state?: unknown } | undefined;
+                    if (body?.proxy === `intentic-preview` && body.state === `serving`) {
+                        return true;
+                    }
                 }
+            } catch {
+                // Not answering yet is ordinary while the tunnel is still binding.
             }
-        } catch {
-            // Not answering yet is ordinary while the tunnel is still binding.
-        }
-        // oxlint-disable-next-line eslint/no-await-in-loop
-        await sleep(POLL_MS);
-    }
-    return false;
+            return undefined;
+        },
+        { intervalMs: POLL_MS, until: Infinity, maxProbes: looksWithin(deadlineMs), wait: sleep },
+    );
+    return serving.kind === `found`;
 };
 
 // Nothing proved, nothing failed: the answer for a run that should not happen.

@@ -1,5 +1,7 @@
 /* The static fetch path — where every page starts, and where most docs pages end. */
 
+import { readCappedBytes } from "@intentic/base/capped-read";
+
 export interface HttpFetchOptions {
     readonly timeoutMs?: number;
     readonly maxBytes?: number;
@@ -37,7 +39,7 @@ export const httpFetch = async (url: string, options: HttpFetchOptions = {}): Pr
         },
     });
     const contentType = response.headers.get("content-type") ?? "";
-    const { bytes, truncated } = await readCapped(response, maxBytes, timeoutMs);
+    const { bytes, truncated } = await readCappedBytes(response, maxBytes, { timeoutMs });
     return {
         url,
         finalUrl: response.url === "" ? url : response.url,
@@ -46,42 +48,6 @@ export const httpFetch = async (url: string, options: HttpFetchOptions = {}): Pr
         body: decode(bytes, contentType),
         truncated,
     };
-};
-
-const readCapped = async (response: Response, maxBytes: number, timeoutMs: number): Promise<{ bytes: Uint8Array; truncated: boolean }> => {
-    if (response.body === null) {
-        return { bytes: new Uint8Array(0), truncated: false };
-    }
-    const deadline = Date.now() + timeoutMs;
-    const chunks: Uint8Array[] = [];
-    let total = 0;
-    const reader = response.body.getReader();
-    for (;;) {
-        if (Date.now() > deadline) {
-            await reader.cancel();
-            return { bytes: concat(chunks, total), truncated: true };
-        }
-        const { done, value } = await reader.read();
-        if (done) {
-            return { bytes: concat(chunks, total), truncated: false };
-        }
-        chunks.push(value);
-        total += value.byteLength;
-        if (total >= maxBytes) {
-            await reader.cancel();
-            return { bytes: concat(chunks, total).slice(0, maxBytes), truncated: true };
-        }
-    }
-};
-
-const concat = (chunks: Uint8Array[], total: number): Uint8Array => {
-    const merged = new Uint8Array(total);
-    let offset = 0;
-    for (const chunk of chunks) {
-        merged.set(chunk, offset);
-        offset += chunk.byteLength;
-    }
-    return merged;
 };
 
 const decode = (bytes: Uint8Array, contentType: string): string => {

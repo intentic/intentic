@@ -3,9 +3,9 @@ import { getCurrentScope, onScopeDispose, ref, toValue, watch, type MaybeRefOrGe
 // ASKING AGAIN UNTIL SOMETHING HAS HAPPENED: a restart landing, a payment going through, a start finishing. One clock
 // per wait, never two checks at once, an end (the check says done, or the deadline passes), and a check the moment the
 // window is looked at again: a hidden tab's interval is throttled to a minute or more, so a reader coming back to it
-// would otherwise wait out a stale rung before the page caught up. A wait on a query's own data is better said with
-// vue-query's `refetchInterval` as a function (useHostedBuild.ts); this is for waits that span several reads, or whose
-// query belongs to someone else.
+// would otherwise wait out a stale rung before the page caught up. Given a `visible` source, a wait out of sight
+// pauses instead. A wait on a query's own data is better said with vue-query's `refetchInterval` as a function
+// (useHostedBuild.ts); this is for waits that span several reads, or whose query belongs to someone else.
 
 export interface PollOptions {
     readonly everyMs: number;
@@ -13,6 +13,11 @@ export interface PollOptions {
     readonly check: () => boolean | void | Promise<boolean | void>;
     // Look at once when the wait starts, rather than one period in. Defaults to true.
     readonly immediate?: boolean;
+    // Whether the window is looked at, from a source that knows better than the document (the editor's onScreen: a
+    // Windows webview hidden in the tray still reports itself visible). Given, the wait pauses while it is false (no
+    // clock, no looks; the deadline still runs) and looks at once when it turns true. Without it, the document's
+    // visibility, and a hidden tab keeps its throttled clock.
+    readonly visible?: MaybeRefOrGetter<boolean>;
 }
 
 export interface Poll {
@@ -23,7 +28,7 @@ export interface Poll {
     readonly stop: () => void;
 }
 
-export const usePoll = ({ everyMs, check, immediate = true }: PollOptions): Poll => {
+export const usePoll = ({ everyMs, check, immediate = true, visible }: PollOptions): Poll => {
     const polling = ref(false);
     let timer: ReturnType<typeof setInterval> | undefined;
     let deadline = 0;
@@ -54,8 +59,15 @@ export const usePoll = ({ everyMs, check, immediate = true }: PollOptions): Poll
         }
     };
 
+    const seen = (): boolean => (visible === undefined ? document.visibilityState === `visible` : toValue(visible));
+
+    const runClock = (): void => {
+        clearInterval(timer);
+        timer = setInterval(() => void look(), everyMs);
+    };
+
     const onReturn = (): void => {
-        if (document.visibilityState === `visible`) {
+        if (seen()) {
             void look();
         }
     };
@@ -66,13 +78,35 @@ export const usePoll = ({ everyMs, check, immediate = true }: PollOptions): Poll
             return;
         }
         polling.value = true;
-        timer = setInterval(() => void look(), everyMs);
+        // Out of sight: the clock and the first look wait for the window to come back.
+        if (visible !== undefined && !toValue(visible)) {
+            return;
+        }
+        runClock();
         if (immediate) {
             void look();
         }
     };
 
-    document.addEventListener(`visibilitychange`, onReturn);
+    if (visible === undefined) {
+        document.addEventListener(`visibilitychange`, onReturn);
+    } else {
+        watch(
+            () => toValue(visible),
+            (shown) => {
+                if (!polling.value) {
+                    return;
+                }
+                if (shown) {
+                    runClock();
+                    void look();
+                    return;
+                }
+                clearInterval(timer);
+                timer = undefined;
+            },
+        );
+    }
     window.addEventListener(`focus`, onReturn);
     if (getCurrentScope() !== undefined) {
         onScopeDispose(() => {

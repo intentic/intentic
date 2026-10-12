@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { unzipParts } from "./zip/unzip";
-import { Icon, useLatest } from "@intentic/extension-ui";
+import { Icon } from "@intentic/extension-ui";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { Deck, ImageBox, Paragraph, TextBox } from "./pptx/deck-model";
 import { t } from "./i18n.js";
+import ViewerStatus from "./load/ViewerStatus.vue";
+import { useViewerLoad } from "./load/useViewerLoad.js";
 
 /* PPTX preview: the deck unpacked in the tab and drawn as slides. All the reading is in src/pptx — this file only
    turns boxes into elements, so anything that looks wrong on a slide was decided by the parse, not here. */
@@ -11,13 +13,11 @@ import { t } from "./i18n.js";
 const { blob } = defineProps<{ blob: Blob }>();
 
 const deck = ref<Deck>();
-const loading = ref(true);
-const error = ref<string>();
+const { loading, error, start } = useViewerLoad(() => t(`pptxViewer.couldNotRead`));
 const notesShown = ref(true);
 // One slide is drawn at its true pixel size and scaled as a whole, so every position inside it stays exact.
 const scale = ref(1);
 const surface = ref<HTMLElement>();
-const latest = useLatest();
 // Object URLs live as long as the deck that owns them; a switched file revokes every one of them.
 const pictures = new Map<ImageBox, string>();
 
@@ -55,11 +55,8 @@ const fit = (): void => {
     scale.value = Math.min(MAX_SCALE, (available - GUTTER) / width);
 };
 
-const render = async (source: Blob): Promise<void> => {
-    const isLatest = latest();
-    loading.value = true;
-    error.value = undefined;
-    try {
+const render = (source: Blob): Promise<void> =>
+    start(async (isLatest) => {
         // Lazy: fflate and the whole OOXML reader stay out of the bundle until someone opens a deck.
         const { readDeck } = await import("./pptx/deck");
         const parts = await unzipParts(new Uint8Array(await source.arrayBuffer()));
@@ -69,17 +66,7 @@ const render = async (source: Blob): Promise<void> => {
         revokePictures();
         deck.value = readDeck(parts);
         fit();
-    } catch (caught) {
-        if (!isLatest()) {
-            return;
-        }
-        error.value = caught instanceof Error ? caught.message : t(`pptxViewer.couldNotRead`);
-    } finally {
-        if (isLatest()) {
-            loading.value = false;
-        }
-    }
-};
+    });
 
 const observer = new ResizeObserver(() => fit());
 
@@ -173,92 +160,87 @@ const hasNotes = computed(() => deck.value?.slides.some((slide) => slide.notes.l
             </button>
         </div>
         <div ref="surface" class="ui-softscroll relative min-h-0 flex-1 overflow-auto bg-muted/20 px-4 py-4">
-            <div v-if="loading" class="absolute inset-0 flex items-center justify-center bg-canvas text-muted">
-                <Icon name="spinner" class="text-xl" spin />
-            </div>
-            <div v-else-if="error" class="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-canvas px-6 text-center">
-                <Icon name="exclamation-triangle" class="text-3xl text-danger" />
-                <p class="text-sm text-danger">{{ error }}</p>
-            </div>
-            <p v-else-if="deck === undefined || deck.slides.length === 0" class="py-10 text-center text-sm text-muted">
-                {{ t(`pptxViewer.presentationNoSlides`) }}
-            </p>
-            <div v-else class="mx-auto flex flex-col items-center gap-6">
-                <figure v-for="slide of deck.slides" :key="slide.number" class="flex flex-col items-center gap-1">
-                    <div class="pptx-frame overflow-hidden rounded-sm shadow-md ring-1 ring-line" :style="frameStyle">
-                        <!-- Drawn at the deck's own pixel size and scaled as one piece: every box inside keeps its exact place. -->
-                        <div
-                            class="pptx-slide relative origin-top-left overflow-hidden"
-                            :style="{ ...slideStyle, transform: `scale(${scale})`, background: slide.background ?? `#ffffff` }"
-                        >
-                            <template v-for="(box, index) of slide.boxes" :key="index">
-                                <div v-if="box.kind === `text`" class="pptx-box absolute flex flex-col" :style="textStyle(box)">
-                                    <p
-                                        v-for="(paragraph, line) of box.paragraphs"
-                                        :key="line"
-                                        class="pptx-para flex"
-                                        :style="paragraphStyle(paragraph)"
+            <ViewerStatus overlay :loading="loading" :error="error">
+                <p v-if="deck === undefined || deck.slides.length === 0" class="py-10 text-center text-sm text-muted">
+                    {{ t(`pptxViewer.presentationNoSlides`) }}
+                </p>
+                <div v-else class="mx-auto flex flex-col items-center gap-6">
+                    <figure v-for="slide of deck.slides" :key="slide.number" class="flex flex-col items-center gap-1">
+                        <div class="pptx-frame overflow-hidden rounded-sm shadow-md ring-1 ring-line" :style="frameStyle">
+                            <!-- Drawn at the deck's own pixel size and scaled as one piece: every box inside keeps its exact place. -->
+                            <div
+                                class="pptx-slide relative origin-top-left overflow-hidden"
+                                :style="{ ...slideStyle, transform: `scale(${scale})`, background: slide.background ?? `#ffffff` }"
+                            >
+                                <template v-for="(box, index) of slide.boxes" :key="index">
+                                    <div v-if="box.kind === `text`" class="pptx-box absolute flex flex-col" :style="textStyle(box)">
+                                        <p
+                                            v-for="(paragraph, line) of box.paragraphs"
+                                            :key="line"
+                                            class="pptx-para flex"
+                                            :style="paragraphStyle(paragraph)"
+                                        >
+                                            <span v-if="paragraph.bullet !== undefined" class="pptx-bullet" :style="bulletStyle(paragraph)">{{
+                                                paragraph.bullet
+                                            }}</span>
+                                            <span class="min-w-0 flex-1">
+                                                <span v-for="(run, spot) of paragraph.runs" :key="spot" :style="runStyle(run)">{{ run.text }}</span>
+                                            </span>
+                                        </p>
+                                    </div>
+                                    <img
+                                        v-else-if="box.kind === `image`"
+                                        class="pptx-box absolute"
+                                        :style="boxStyle(box)"
+                                        :src="pictureOf(box)"
+                                        :alt="box.description ?? t(`pptxViewer.pictureOnSlide`, { number: slide.number })"
+                                    />
+                                    <table v-else-if="box.kind === `table`" class="pptx-table absolute" :style="boxStyle(box)">
+                                        <colgroup>
+                                            <col v-for="(width, column) of box.columns" :key="column" :style="{ width: px(width) }" />
+                                        </colgroup>
+                                        <tbody>
+                                            <tr v-for="(row, line) of box.rows" :key="line" :style="{ height: px(row.height) }">
+                                                <td
+                                                    v-for="(cell, spot) of row.cells"
+                                                    :key="spot"
+                                                    :colspan="cell.colSpan"
+                                                    :rowspan="cell.rowSpan"
+                                                    :style="cell.fill === undefined ? {} : { background: cell.fill }"
+                                                >
+                                                    <p v-for="(paragraph, index2) of cell.paragraphs" :key="index2" :style="paragraphStyle(paragraph)">
+                                                        <span v-for="(run, spot2) of paragraph.runs" :key="spot2" :style="runStyle(run)">{{
+                                                            run.text
+                                                        }}</span>
+                                                    </p>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                    <!-- Named rather than dropped: a chart this viewer cannot draw is still something on the slide. -->
+                                    <div
+                                        v-else
+                                        class="pptx-box absolute flex flex-col items-center justify-center gap-1 rounded border border-dashed border-line text-muted"
+                                        :style="boxStyle(box)"
                                     >
-                                        <span v-if="paragraph.bullet !== undefined" class="pptx-bullet" :style="bulletStyle(paragraph)">{{
-                                            paragraph.bullet
-                                        }}</span>
-                                        <span class="min-w-0 flex-1">
-                                            <span v-for="(run, spot) of paragraph.runs" :key="spot" :style="runStyle(run)">{{ run.text }}</span>
-                                        </span>
-                                    </p>
-                                </div>
-                                <img
-                                    v-else-if="box.kind === `image`"
-                                    class="pptx-box absolute"
-                                    :style="boxStyle(box)"
-                                    :src="pictureOf(box)"
-                                    :alt="box.description ?? t(`pptxViewer.pictureOnSlide`, { number: slide.number })"
-                                />
-                                <table v-else-if="box.kind === `table`" class="pptx-table absolute" :style="boxStyle(box)">
-                                    <colgroup>
-                                        <col v-for="(width, column) of box.columns" :key="column" :style="{ width: px(width) }" />
-                                    </colgroup>
-                                    <tbody>
-                                        <tr v-for="(row, line) of box.rows" :key="line" :style="{ height: px(row.height) }">
-                                            <td
-                                                v-for="(cell, spot) of row.cells"
-                                                :key="spot"
-                                                :colspan="cell.colSpan"
-                                                :rowspan="cell.rowSpan"
-                                                :style="cell.fill === undefined ? {} : { background: cell.fill }"
-                                            >
-                                                <p v-for="(paragraph, index2) of cell.paragraphs" :key="index2" :style="paragraphStyle(paragraph)">
-                                                    <span v-for="(run, spot2) of paragraph.runs" :key="spot2" :style="runStyle(run)">{{
-                                                        run.text
-                                                    }}</span>
-                                                </p>
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                                <!-- Named rather than dropped: a chart this viewer cannot draw is still something on the slide. -->
-                                <div
-                                    v-else
-                                    class="pptx-box absolute flex flex-col items-center justify-center gap-1 rounded border border-dashed border-line text-muted"
-                                    :style="boxStyle(box)"
-                                >
-                                    <Icon name="box" class="text-xl" />
-                                    <span class="text-xs">{{ box.label }}</span>
-                                </div>
-                            </template>
+                                        <Icon name="box" class="text-xl" />
+                                        <span class="text-xs">{{ box.label }}</span>
+                                    </div>
+                                </template>
+                            </div>
                         </div>
-                    </div>
-                    <figcaption class="flex flex-col items-center gap-1 text-2xs text-subtle" :style="{ width: frameStyle.width }">
-                        <span>{{ t(`pptxViewer.slide`, { number: slide.number }) }}</span>
-                        <div
-                            v-if="notesShown && slide.notes.length > 0"
-                            class="w-full rounded border border-line bg-canvas px-3 py-2 text-left text-xs text-muted"
-                        >
-                            <p v-for="(note, index) of slide.notes" :key="index" class="whitespace-pre-wrap">{{ note }}</p>
-                        </div>
-                    </figcaption>
-                </figure>
-            </div>
+                        <figcaption class="flex flex-col items-center gap-1 text-2xs text-subtle" :style="{ width: frameStyle.width }">
+                            <span>{{ t(`pptxViewer.slide`, { number: slide.number }) }}</span>
+                            <div
+                                v-if="notesShown && slide.notes.length > 0"
+                                class="w-full rounded border border-line bg-canvas px-3 py-2 text-left text-xs text-muted"
+                            >
+                                <p v-for="(note, index) of slide.notes" :key="index" class="whitespace-pre-wrap">{{ note }}</p>
+                            </div>
+                        </figcaption>
+                    </figure>
+                </div>
+            </ViewerStatus>
         </div>
     </div>
 </template>

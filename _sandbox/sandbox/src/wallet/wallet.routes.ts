@@ -2,6 +2,8 @@ import type { WalletConfig } from "@intentic/sandbox-contract";
 import { atomicToUsd, usdcNetworkOf, usdToAtomic } from "@intentic/sandbox-contract/x402";
 import type { Context } from "hono";
 import { cardDeps } from "../conversations/actor/card-deps.js";
+import { turnRunOf } from "../conversations/actor/conversation-holdings.js";
+import { holdDepsOf } from "../guard/held-asks.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
 import { answerResponse, cliBody } from "../http/cli-answer.js";
@@ -32,9 +34,7 @@ export const createWalletRoutes = (services: Services) => ({
         const spent = spentTodayAtomic(rows, Date.now(), usdToAtomic);
         const cap = usdToAtomic(config.dailyCapUsd);
         const balance =
-            network !== undefined && config.address !== undefined && config.address !== ""
-                ? await usdcBalance(network, config.address)
-                : undefined;
+            network !== undefined && config.address !== undefined && config.address !== "" ? await usdcBalance(network, config.address) : undefined;
         return c.json({
             connected: true,
             address: config.address ?? null,
@@ -67,6 +67,7 @@ export const createWalletRoutes = (services: Services) => ({
                 ledger: services.walletLedger,
                 sign: (request) => relayWalletSign(services.config, request),
                 ...cardDeps(services),
+                hold: holdDepsOf(services.heldCards, (conversationId) => turnRunOf(services.conversations, conversationId)),
                 tainted: conversationTainted,
                 // Only where people sign in: a loopback daemon's replies carry nobody, and its one person answers.
                 ...(services.auth !== undefined ? { ownerEmail: services.ownerEmail } : {}),

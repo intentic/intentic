@@ -18,7 +18,7 @@ const fakeHost = (reachable = true) => {
     const fetched: HostQuery[] = [];
     const api = {
         sandbox: {
-            key: (...parts: readonly string[]) => [`sandbox`, `box`, ...parts],
+            readKey: (procedure: string, input?: unknown) => [procedure, ...(input === undefined ? [] : [input]), `box`],
             reachable: () => reachable,
             rpc: {
                 ci: {
@@ -54,13 +54,13 @@ afterEach(() => {
 });
 
 describe(`the Pipelines opening query`, () => {
-    it(`uses one sandbox-scoped entry and the daemon sweep's freshness window`, async () => {
+    it(`uses the shell's own entry for ci.runs and the daemon sweep's freshness window`, async () => {
         const { api, procedures } = fakeHost();
         bindHost(api);
 
         const query = ciRunsQuery();
 
-        expect(query.queryKey).toEqual([`sandbox`, `box`, `ci-runs`]);
+        expect(query.queryKey).toEqual([`ci.runs`, `box`]);
         expect(query.staleTime).toBe(CI_RUNS_STALE_MS);
         await expect(query.queryFn()).resolves.toEqual(answer);
         expect(procedures).toEqual([`ci.runs`]);
@@ -76,9 +76,9 @@ describe(`the Pipelines opening query`, () => {
         const registered = views[0];
         expect(registered?.id).toBe(`pipelines`);
         // Activation starts the badge poll, which must fill the same entry before the view is ever mounted.
-        expect(fetched[0]).toMatchObject({ queryKey: [`sandbox`, `box`, `ci-runs`], staleTime: CI_RUNS_STALE_MS });
+        expect(fetched[0]).toMatchObject({ queryKey: [`ci.runs`, `box`], staleTime: CI_RUNS_STALE_MS });
         expect(registered?.warm?.()[0]).toMatchObject({
-            queryKey: [`sandbox`, `box`, `ci-runs`],
+            queryKey: [`ci.runs`, `box`],
             staleTime: CI_RUNS_STALE_MS,
         });
     });
@@ -99,6 +99,6 @@ describe(`the Pipelines tile`, () => {
         expect(view?.detect([], [])).toEqual([]);
         expect(view?.badge?.(tile)).toBeUndefined();
         // The one read the board opens on is warmed, so it does not wait behind a spinner.
-        expect(view?.warm?.().map((query) => query.queryKey)).toEqual([[`sandbox`, `box`, `ci-runs`]]);
+        expect(view?.warm?.().map((query) => query.queryKey)).toEqual([[`ci.runs`, `box`]]);
     });
 });

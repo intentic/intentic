@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { parseResponse } from "../core/inputs.js";
-import { responseDetail } from "../core/response-detail.js";
+import { vendorRequest } from "../core/rest-client.js";
 
 // Resource summary (id + unique name). Komodo's API is POST /{auth|read|write|execute}/{Operation} with a
 // {type,params} body, non-2xx on error; read responses are validated, write/execute ignore the body.
@@ -121,27 +121,21 @@ interface PostArgs {
     readonly jwt?: string;
 }
 
-// POSTs the {type,params} envelope, throwing on non-2xx; `read` layers response validation on top of this.
-const post = async (args: PostArgs): Promise<Response> => {
-    const response = await fetch(`${args.baseUrl}/${args.module}`, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
+// POSTs the {type,params} envelope and answers the parsed body, throwing on non-2xx; `read` layers response
+// validation on top of this.
+const post = async (args: PostArgs): Promise<unknown> =>
+    (
+        await vendorRequest(`${args.baseUrl}/${args.module}`, {
+            method: "POST",
             // Komodo expects the bare JWT in Authorization (no "Bearer " prefix), unlike most APIs.
-            ...(args.jwt !== undefined ? { Authorization: args.jwt } : {}),
-        },
-        body: JSON.stringify({ type: args.type, params: args.params }),
-        // Bound a stalled connection (undici's default headers timeout is ~5 minutes).
-        signal: AbortSignal.timeout(30_000),
-    });
-    if (!response.ok) {
-        throw new Error(`Komodo ${args.module}/${args.type} failed (HTTP ${response.status}): ${await responseDetail(response)}`);
-    }
-    return response;
-};
+            headers: args.jwt === undefined ? {} : { Authorization: args.jwt },
+            json: { type: args.type, params: args.params },
+            label: `Komodo ${args.module}/${args.type}`,
+        })
+    ).json;
 
 const read = async <S extends z.ZodType>(args: PostArgs, schema: S): Promise<z.infer<S>> =>
-    parseResponse(schema, await (await post(args)).json(), `Komodo ${args.module}/${args.type}`);
+    parseResponse(schema, await post(args), `Komodo ${args.module}/${args.type}`);
 
 const project = (items: readonly z.infer<typeof listItemSchema>[]): readonly KomodoResource[] =>
     items.map((item) => ({ id: item.id, name: item.name }));
@@ -149,16 +143,12 @@ const project = (items: readonly z.infer<typeof listItemSchema>[]): readonly Kom
 export const komodoApi: KomodoApi = {
     login: async ({ baseUrl, username, password }) => {
         // Auth POSTs bare params to /auth/login/<Operation>, not the {type,params} envelope used elsewhere.
-        const response = await fetch(`${baseUrl}/auth/login/LoginLocalUser`, {
+        const response = await vendorRequest(`${baseUrl}/auth/login/LoginLocalUser`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ username, password }),
-            signal: AbortSignal.timeout(30_000),
+            json: { username, password },
+            label: "Komodo auth/login/LoginLocalUser",
         });
-        if (!response.ok) {
-            throw new Error(`Komodo auth/login/LoginLocalUser failed (HTTP ${response.status}): ${await responseDetail(response)}`);
-        }
-        const result = parseResponse(loginSchema, await response.json(), "Komodo auth/login/LoginLocalUser");
+        const result = parseResponse(loginSchema, response.json, "Komodo auth/login/LoginLocalUser");
         if (result.type !== "Jwt" || result.data === undefined) {
             throw new Error(`Komodo login did not return a Jwt (got "${result.type}"; 2FA is not supported)`);
         }

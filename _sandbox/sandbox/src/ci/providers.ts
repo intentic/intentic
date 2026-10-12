@@ -1,5 +1,7 @@
 import { isPipelineInFlight, type PipelineJob, type PipelineRun, type PipelineStatus } from "@intentic/sandbox-contract";
 import { githubHeaders } from "../capabilities/cli/git-access.js";
+import { retryAfterMs } from "@intentic/base/async";
+import { BoundedMap, type CachedAsync, cachedAsync } from "@intentic/base/held";
 import { plainText } from "@intentic/base/plain-text";
 import type { CiProject } from "./projects.js";
 import { z } from "zod";
@@ -96,9 +98,9 @@ const rateLimitLifts = (response: Response, body: string, now: number): number |
     ) {
         return undefined;
     }
-    const seconds = retryAfter === null ? Number.NaN : Number(retryAfter);
-    if (Number.isFinite(seconds) && seconds >= 0) {
-        return now + seconds * 1000;
+    const wait = retryAfterMs(retryAfter, { now });
+    if (wait !== undefined) {
+        return now + wait;
     }
     const reset = Number(headers.get("x-ratelimit-reset") ?? headers.get("ratelimit-reset") ?? Number.NaN);
     return Number.isFinite(reset) && reset > 0 ? reset * 1000 : now + RATE_LIMIT_FALLBACK_MS;
@@ -150,47 +152,27 @@ interface JobLists<T> {
 }
 
 const jobLists = <T>(settled: (jobs: readonly T[]) => boolean): JobLists<T> => {
-    const byTransport = new WeakMap<FetchFn, Map<string, { readonly at: number; readonly jobs: Promise<T[]> }>>();
-    const listsOf = (fetchFn: FetchFn): Map<string, { readonly at: number; readonly jobs: Promise<T[]> }> => {
+    const byTransport = new WeakMap<FetchFn, CachedAsync<string, T[]>>();
+    const listsOf = (fetchFn: FetchFn): CachedAsync<string, T[]> => {
         const known = byTransport.get(fetchFn);
         if (known !== undefined) {
             return known;
         }
-        const fresh = new Map<string, { readonly at: number; readonly jobs: Promise<T[]> }>();
+        const fresh = cachedAsync<string, T[]>({ ttlMs: JOB_LISTS_FRESH_MS, maxEntries: JOB_LISTS_KEPT, keep: settled });
         byTransport.set(fetchFn, fresh);
         return fresh;
     };
-    const read: JobLists<T>["read"] = (fetchFn, key, list) => {
-        const lists = listsOf(fetchFn);
-        const jobs = list();
-        // Re-inserted, so the oldest entry is always the first one the map yields.
-        lists.delete(key);
-        lists.set(key, { at: Date.now(), jobs });
-        const oldest = lists.size > JOB_LISTS_KEPT ? lists.keys().next().value : undefined;
-        if (oldest !== undefined) {
-            lists.delete(oldest);
-        }
-        // Only this read's own entry: a later read of the same run may already stand in its place.
-        const drop = (): void => {
-            if (lists.get(key)?.jobs === jobs) {
-                lists.delete(key);
-            }
-        };
-        jobs.then((answered) => {
-            if (!settled(answered)) {
-                drop();
-            }
-        }, drop);
-        return jobs;
-    };
     return {
-        read,
-        kept: (fetchFn, key, list) => {
-            const held = listsOf(fetchFn).get(key);
-            return held !== undefined && Date.now() - held.at < JOB_LISTS_FRESH_MS ? held.jobs : read(fetchFn, key, list);
+        read: (fetchFn, key, list) => {
+            const lists = listsOf(fetchFn);
+            // The list kept before, and any read still out, go first: this read's answer must postdate the asking, and if
+            // it finds the run moving again (a re-run), a kept reader must join it, never be handed the old settled list.
+            lists.drop(key);
+            return lists.get(key, list);
         },
+        kept: (fetchFn, key, list) => listsOf(fetchFn).get(key, list),
         forget: (fetchFn, key) => {
-            listsOf(fetchFn).delete(key);
+            listsOf(fetchFn).drop(key);
         },
     };
 };
@@ -275,15 +257,7 @@ interface WorkflowSource {
 // A run's workflow files are read at its own head sha, so they never change once resolved: read once per run however
 // often its jobs are re-read. Only successes are kept, and the window is a board's worth of runs, not a history.
 const WORKFLOW_SOURCES_KEPT = 100;
-const workflowSources = new Map<string, WorkflowSource>();
-
-const rememberWorkflowSource = (key: string, source: WorkflowSource): void => {
-    workflowSources.set(key, source);
-    const oldest = workflowSources.size > WORKFLOW_SOURCES_KEPT ? workflowSources.keys().next().value : undefined;
-    if (oldest !== undefined) {
-        workflowSources.delete(oldest);
-    }
-};
+const workflowSources = new BoundedMap<string, WorkflowSource>(WORKFLOW_SOURCES_KEPT);
 
 // One job of a run's list as Actions serves it, read whole by both the row's graph (allJobs) and a fix (jobsOf).
 interface GithubJob {
@@ -375,7 +349,7 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
             }
         }
         const source: WorkflowSource = { root, called };
-        rememberWorkflowSource(cacheKey, source);
+        workflowSources.set(cacheKey, source);
         return source;
     };
     const post = async (project: CiProject, path: string, what: string, body?: object): Promise<void> => {

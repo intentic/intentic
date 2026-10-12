@@ -1,6 +1,9 @@
+import { escapeHtml } from "@intentic/base/escape";
+import { FetchJsonError, fetchJson } from "@intentic/base/fetch-json";
+
 // The zod-free half of an embed's wire and look, shared by the two embeds (webchat-widget, issue-sdk) and the daemon's
-// doors behind them. No imports, ever: this bundles into someone else's page, and the contract's barrel would drag in
-// zod (measured at 1.1 MB for two strings).
+// doors behind them. Nothing imported but base's dependency-free subpaths: this bundles into someone else's page, and
+// the contract's barrel would drag in zod (measured at 1.1 MB for two strings).
 
 // Where an embed talks to: the daemon it came from, and the automation it is the public face of.
 export interface EmbedEndpoint {
@@ -29,13 +32,19 @@ export const embedFailure = async (response: Response): Promise<EmbedError> => {
 export const embedUrl = ({ base, automationId }: EmbedEndpoint, slug: string, path: string): string =>
     `${base}/${slug}/${encodeURIComponent(automationId)}/${path}`;
 
-// One GET against a public door, answered as JSON or refused with the server's own sentence.
+// One GET against a public door, answered as JSON or refused with the server's own sentence. Base's transport gives it
+// a deadline, so a door that stalls fails in 30 s instead of leaving the visitor's widget waiting on it for minutes,
+// and names a timeout as one. The label is what a visitor reads when the server cannot be reached.
 export const fetchEmbedJson = async <T>(url: string): Promise<T> => {
-    const response = await fetch(url);
-    if (!response.ok) {
-        throw await embedFailure(response);
+    try {
+        // SAFETY: the caller names the shape its door answers; the embed bundles no schema library to check it with.
+        return (await fetchJson(url, { label: "The server" })) as T;
+    } catch (error) {
+        // A refusal's body arrives as the start of its text; embedFailure reads the sentence out of it as for any response.
+        throw error instanceof FetchJsonError && error.kind === "status" && error.status !== undefined
+            ? await embedFailure(new Response(error.body ?? "", { status: error.status }))
+            : error;
     }
-    return (await response.json()) as T;
 };
 
 // Find a nonce whose SHA-256 of `salt:nonce` has `difficulty` leading zero bits, signed to one caller's id so it can't
@@ -81,6 +90,7 @@ export const solveProofOfWork = async (challenge: PowChallenge, insecure: string
         if (nonce % BATCH === BATCH - 1) {
             onProgress?.(nonce + 1);
             // Hands the main thread back so the page (and the "checking..." line) keeps painting.
+            // allow(primitive-tiers): a yield to the page's event loop, not a wait; this bundle imports no async helpers.
             await new Promise((resolve) => setTimeout(resolve, 0));
         }
     }
@@ -174,6 +184,5 @@ export const onAccent = (accent: string, dark: string): string => {
 };
 
 // Text for innerHTML, safe both between tags and inside a quoted attribute: neither an owner's config nor what a
-// visitor typed is trusted with markup.
-export const escapeHtml = (value: string): string =>
-    value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] ?? char);
+// visitor typed is trusted with markup. Base's one escaper, re-exported for the embeds that import it from here.
+export { escapeHtml };

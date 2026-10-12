@@ -4,37 +4,27 @@ import { reloadOnHotUpdate } from "../../../app/hotReload";
 import { onChatNote, postChatNote } from "../run/chatChannel";
 import { readStoredTabs, type StoredTab } from "../tabs/tabSnapshot";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
+import { closedDraftsKey, storedValue, storeJson } from "../../../lib/browserStorage";
 
 // Composer drafts (words, staged attachments) a chat close would otherwise lose, kept per
 // browser (not per window) in localStorage and broadcast over chatChannel so every window's board reflects them
-// immediately. Scoped per sandbox; an entry leaves only when claimed (reopened) or dismissed, never by expiry.
+// immediately. Scoped per sandbox; an entry leaves only when claimed (reopened) or dismissed, never by expiry, and all of
+// them with the account on sign-out (lib/browserStorage.ts).
 
 // Max closed drafts kept per sandbox; oldest evicted on overflow.
 const KEEP = 30;
 
-const storageKey = (sandboxId: string): string => `intentic.closedDrafts.${sandboxId}`;
-
+// Read through the tab strip's own parser (readStoredTabs), since a set-aside draft is a stored tab; storage that is off
+// or unreadable reads as no drafts set aside.
 const read = (sandboxId: string | undefined): readonly StoredTab[] => {
-    if (sandboxId === undefined) {
-        return [];
-    }
-    try {
-        const raw = localStorage.getItem(storageKey(sandboxId));
-        return raw === null ? [] : readStoredTabs(raw);
-    } catch {
-        // Storage unavailable or unreadable: treated as no drafts set aside.
-        return [];
-    }
+    const raw = sandboxId === undefined ? undefined : storedValue(closedDraftsKey(sandboxId));
+    return raw === undefined ? [] : readStoredTabs(raw);
 };
 
+// Unavailable or over quota; the in-memory set still holds until reload.
 const write = (sandboxId: string | undefined, tabs: readonly StoredTab[]): void => {
-    if (sandboxId === undefined) {
-        return;
-    }
-    try {
-        localStorage.setItem(storageKey(sandboxId), JSON.stringify({ tabs }));
-    } catch {
-        // Unavailable or over quota; the in-memory set still holds until reload.
+    if (sandboxId !== undefined) {
+        storeJson(closedDraftsKey(sandboxId), { tabs });
     }
 };
 

@@ -14,7 +14,7 @@ const fakeHost = (runs: WorkflowRun[]) => {
     const fetched: HostQuery[] = [];
     const api = {
         sandbox: {
-            key: (...parts: readonly string[]) => [`sandbox`, `box`, ...parts],
+            readKey: (procedure: string, input?: unknown) => [procedure, ...(input === undefined ? [] : [input]), `box`],
             reachable: () => true,
             rpc: {
                 workflows: {
@@ -27,7 +27,7 @@ const fakeHost = (runs: WorkflowRun[]) => {
             // Returns the entry directly rather than running queryFn, so callers can hand it minimal run fixtures.
             fetch: async <T>(query: HostQuery<T>): Promise<T> => {
                 fetched.push(query);
-                return runs as unknown as T;
+                return { runs } as unknown as T;
             },
         },
         views: {
@@ -51,13 +51,13 @@ afterEach(() => {
 const tile: Activation = { key: `workflows`, title: `Workflows` };
 
 describe(`the run ledger`, () => {
-    it(`uses the entry the daemon's own file push already invalidates`, async () => {
+    it(`uses the shell's own entry for the read, which the daemon's file push refreshes`, async () => {
         const { api, procedures } = fakeHost([]);
         bindHost(api);
 
         const query = workflowRunsQuery();
-        expect(query.queryKey).toEqual([`sandbox`, `box`, `workflow-runs`]);
-        await expect(query.queryFn()).resolves.toEqual([]);
+        expect(query.queryKey).toEqual([`workflows.runs`, `box`]);
+        await expect(query.queryFn()).resolves.toEqual({ runs: [] });
         expect(procedures).toEqual([`workflows.runs`]);
     });
 
@@ -80,8 +80,8 @@ describe(`the Workflows tile`, () => {
         // The running channel, not a count chip: a fan-out in flight is not an errand, and it still seats the tile.
         // Nothing else may be set, or the rail would draw a plate for it beside the mark.
         await waitFor(() => expect(registered?.badge?.(tile)).toEqual({ running: `1 running` }));
-        expect(fetched[0]).toMatchObject({ queryKey: [`sandbox`, `box`, `workflow-runs`] });
-        expect(registered?.warm?.()[0]).toMatchObject({ queryKey: [`sandbox`, `box`, `workflow-runs`] });
+        expect(fetched[0]).toMatchObject({ queryKey: [`workflows.runs`, `box`] });
+        expect(registered?.warm?.()[0]).toMatchObject({ queryKey: [`workflows.runs`, `box`] });
     });
 
     it(`stands down once the last run ends, rather than counting history for ever`, async () => {

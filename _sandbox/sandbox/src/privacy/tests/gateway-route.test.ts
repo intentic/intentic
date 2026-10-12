@@ -187,6 +187,28 @@ describe("what passes untouched", () => {
         expect(fake.privacyLedger.entries[0]?.counts["national-id"]).toBe(1);
     });
 
+    // Hop-by-hop headers describe the runtime's connection to the gateway and the provider's to it, never the request.
+    test("hop-by-hop headers, and any the Connection header names, are not passed on either way", async () => {
+        const answer = (): Response =>
+            new Response("{}", { headers: { "content-type": "application/json", connection: "x-upstream-hop", "x-upstream-hop": "1", "x-kept": "yes" } });
+        const { provider, send } = await harness({ mode: "on", trusted: ["claude"] }, "claude", answer);
+        const response = await send("/v1/messages", request("hello"), {
+            connection: "x-runtime-hop",
+            "x-runtime-hop": "1",
+            "proxy-authorization": "Basic cHJveHk6cGFzcw",
+            te: "trailers",
+            "x-kept": "yes",
+        });
+        const sent = provider.seen[0]?.headers;
+        for (const name of ["connection", "x-runtime-hop", "proxy-authorization", "te"]) {
+            expect(sent?.has(name)).toBe(false);
+        }
+        expect(sent?.get("x-kept")).toBe("yes");
+        expect(sent?.get("authorization")).toBe("Bearer sk-oauth");
+        expect(response.headers.has("x-upstream-hop")).toBe(false);
+        expect(response.headers.get("x-kept")).toBe("yes");
+    });
+
     test("with the shield off no gateway address is handed out at all", async () => {
         const { base } = await harness({ mode: "off" }, "claude");
         expect(base).toBeUndefined();

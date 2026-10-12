@@ -1,5 +1,5 @@
 import { localDaemonPort, localDaemonUrlInsecure } from "@intentic/sandbox-run";
-import { sha256Hex } from "../../lib/files/contentHash";
+import { sandboxIdOfToken } from "@intentic/sandbox-run/slug";
 
 // Which address this browser dials for the active daemon: pure, so the policy is testable without a network.
 // Never infers "same machine" (unanswerable from a browser); only asks "does this address reach my daemon" via a
@@ -40,9 +40,10 @@ export const phoneBrowser = (userAgent: string): boolean => /android|iphone|ipad
 export const couldBeOnThisMachine = (sandbox: Pick<Addressing, "hosted">, userAgent: string = globalThis.navigator?.userAgent ?? ``): boolean =>
     sandbox.hosted === null && !phoneBrowser(userAgent);
 
-// 12-hex sandbox id from the connect token (WebCrypto twin of `sandboxIdFromToken`). Derived from the token, not
-// the daemon URL: on own-Cloudflare, the URL's subdomain need not match the token-derived port.
-export const sandboxIdOf = async (connectToken: string): Promise<string> => (await sha256Hex(connectToken)).slice(0, 12);
+// 12-hex sandbox id from the connect token (the run contract's WebCrypto twin of `sandboxIdFromToken`). Derived from
+// the token, not the daemon URL: on own-Cloudflare, the URL's subdomain need not match the token-derived port. An empty
+// token has no id, and the empty string it reads as here matches no daemon's answer.
+export const sandboxIdOf = async (connectToken: string): Promise<string> => (await sandboxIdOfToken(connectToken)) ?? ``;
 
 // Certified loopback address: hostname from the platform, port from the container's publish
 // (@intentic/sandbox-run). The platform is the only source for the name.

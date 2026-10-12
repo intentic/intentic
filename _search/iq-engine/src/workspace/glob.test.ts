@@ -26,3 +26,10 @@ test("a globstar spans complete directories only", () => {
     expect(globToRegExp("src/**").test("srcish/a.ts")).toBe(false);
     expect(globToRegExp("src/**/util.ts").test("src/util.ts")).toBe(true); // ** may span nothing
 });
+
+// The matcher is the contract's, so a set reads as Bun.Glob reads it: `[!t]` is "anything but t", not the characters
+// `!` and `t`.
+test("a negated set excludes its members", () => {
+    expect(globToRegExp("a[!t].md").test("docs/ab.md")).toBe(true);
+    expect(globToRegExp("a[!t].md").test("docs/at.md")).toBe(false);
+});
