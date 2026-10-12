@@ -33,7 +33,7 @@ jest.mock(`../../client/auth/useGoogleIdentity`, () => ({
     useGoogleIdentity: () => ({ getIdToken, renderButton, adoptIdToken, refusedCredentials }),
 }));
 // The stall's funnel event, recorded rather than sent.
-jest.mock(`../../app/analytics`, () => ({ track: jest.fn() }));
+jest.mock(`../../app/analytics`, () => ({ track: jest.fn(), replaySessionId: () => undefined }));
 const signInWithGoogle = jest.fn<(callbackPath?: string) => Promise<void>>().mockResolvedValue(undefined);
 // What this window's session resolves to; null means a signed-out browser, covered by the tests below.
 const user = ref<{ email: string } | null>({ email: `owner@example.com` });

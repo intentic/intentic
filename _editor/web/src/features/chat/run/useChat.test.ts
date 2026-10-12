@@ -68,7 +68,7 @@ const daemonRefusal = (status: number, message = `Request failed (${status}).`):
 // The field of a call's input a test answers by: which provider, which conversation.
 const field = (input: unknown, name: string): unknown => (input as Record<string, unknown> | undefined)?.[name];
 // Avoids the window.env chain; send() only needs track() mocked.
-jest.mock("../../../app/analytics", () => ({ track: jest.fn() }));
+jest.mock("../../../app/analytics", () => ({ track: jest.fn(), replaySessionId: () => undefined }));
 // Avoids the window.env chain; tab persistence only reads activeSandboxId + reachable. The id is the app's own one ref,
 // as in the app, since the run view restores from it too.
 activeSandboxId.value = `sb1`;

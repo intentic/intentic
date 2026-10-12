@@ -37,7 +37,7 @@ const refusedCredentials = ref(0);
 jest.mock(`../../client/auth/useGoogleIdentity`, () => ({ useGoogleIdentity: () => ({ getIdToken, renderButton, refusedCredentials }) }));
 // The stall's funnel event, recorded rather than sent.
 const track = jest.fn();
-jest.mock(`../../app/analytics`, () => ({ track }));
+jest.mock(`../../app/analytics`, () => ({ track, replaySessionId: () => undefined }));
 // Available desktop build for this visitor; undefined is the default, overridden only where a test needs one.
 const desktopInstaller = jest.fn<() => { platform: string; label: string; href: string } | undefined>(() => undefined);
 // Partial, over the real module: the page reaches for whatever the desktop lane grows next, and a mock listing its

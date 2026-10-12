@@ -7,7 +7,7 @@ import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { effectScope, type EffectScope, ref } from "vue";
 
 const track = jest.fn();
-jest.mock(`../../app/analytics`, () => ({ track }));
+jest.mock(`../../app/analytics`, () => ({ track, replaySessionId: () => undefined }));
 
 const { useGooglePress } = await import("./googlePress");
 

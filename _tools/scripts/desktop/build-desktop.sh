@@ -196,6 +196,10 @@ if [ "$ASSEMBLE" -eq 0 ]; then
     # (stage-local-files.sh): tauri-build refuses to bundle an `externalBin` that is not there.
     if [ "$WINDOWS_ONLY" -eq 1 ]; then
         INTENTIC_VERSION="$VERSION" bash "$ROOT/_tools/scripts/desktop/stage-local-files.sh" x86_64-pc-windows-msvc
+    elif [ "$LINUX_ONLY" -eq 1 ]; then
+        # No Windows bundle, so no Windows sidecar: compiling one fetches bun's Windows runtime, a download
+        # desktop-verify should not need.
+        INTENTIC_VERSION="$VERSION" bash "$ROOT/_tools/scripts/desktop/stage-local-files.sh" "$(rustc -vV | sed -n 's/^host: //p')"
     else
         INTENTIC_VERSION="$VERSION" bash "$ROOT/_tools/scripts/desktop/stage-local-files.sh" "$(rustc -vV | sed -n 's/^host: //p')" x86_64-pc-windows-msvc
     fi

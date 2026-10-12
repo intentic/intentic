@@ -13,7 +13,7 @@ const run = jest.fn(async (_turn: ProcedureInput<`agent.run`>) => {
     throw new SandboxHttpError(404, `Request failed (404).`);
 });
 jest.mock("../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agent: { run } }) }));
-jest.mock("../../../app/analytics", () => ({ track: jest.fn() }));
+jest.mock("../../../app/analytics", () => ({ track: jest.fn(), replaySessionId: () => undefined }));
 jest.mock("../../../client/sandbox/useSandbox", () => {
     const activeSandboxId = ref<string | undefined>(`sb1`);
     const reachable = ref(false);

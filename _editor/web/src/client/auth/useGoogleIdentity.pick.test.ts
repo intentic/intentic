@@ -22,7 +22,7 @@ import { advanceTimersByTimeAsync, freshImport } from "@intentic/testing/bun";
 jest.mock(`../../app/environments/desktop`, () => ({ desktopVersion: () => undefined }));
 // The gate's funnel event, recorded rather than sent.
 const track = jest.fn();
-jest.mock(`../../app/analytics`, () => ({ track }));
+jest.mock(`../../app/analytics`, () => ({ track, replaySessionId: () => undefined }));
 
 // The module is one instance holding one credential and one mint, so each test takes its own copy rather than the
 // state the last one left: a mint nothing settled is still in flight, and GIS still initialized for it.

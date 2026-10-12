@@ -11,7 +11,7 @@ jest.mock(`../../../../client/sandbox/sandboxClient`, () => ({ sandboxJson }));
 // No socket in a test: the link falls back to the WAV door, which this file's sandboxJson answers.
 jest.mock(`../../../sandbox/session/wsTicket`, () => ({ socketUrl: async () => undefined }));
 const track = jest.fn();
-jest.mock(`../../../../app/analytics`, () => ({ track }));
+jest.mock(`../../../../app/analytics`, () => ({ track, replaySessionId: () => undefined }));
 
 const { useVoiceInput, voiceUnsupported } = await import(`./useVoiceInput`);
 

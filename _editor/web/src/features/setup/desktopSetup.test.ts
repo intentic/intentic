@@ -2,7 +2,7 @@
 import "@intentic/testing/dom";
 import { freshImport, mocked } from "@intentic/testing/bun";
 
-jest.mock("../../app/analytics", () => ({ track: jest.fn() }));
+jest.mock("../../app/analytics", () => ({ track: jest.fn(), replaySessionId: () => undefined }));
 
 const load = async () => {
     const { track } = await import(`../../app/analytics`);

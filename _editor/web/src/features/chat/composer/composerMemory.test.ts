@@ -32,7 +32,7 @@ jest.mock("../../../client/sandbox/sandboxRpc", () => ({
         endpoints: { trial: async () => TrialStatusSchema.parse({ available: false, allowance: 0, used: 0, remaining: 0, health: `unknown` }) },
     }),
 }));
-jest.mock("../../../app/analytics", () => ({ track: jest.fn() }));
+jest.mock("../../../app/analytics", () => ({ track: jest.fn(), replaySessionId: () => undefined }));
 // The app's one active-sandbox ref, as every store reads it.
 activeSandboxId.value = `sb1`;
 jest.mock("../../../client/sandbox/useSandbox", () => {

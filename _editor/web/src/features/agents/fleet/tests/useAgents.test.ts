@@ -5,7 +5,7 @@ import { fakeSandboxRpc } from "../../../../testing/sandboxRpcFake";
 // canArchive is pure, but the fleet store it lives beside pulls useChat and the app shell at import time. These
 // mocks cut the edges that reach `window.env` (router, analytics, sandbox client) without touching what's tested.
 jest.mock("../../../../router/index", () => ({ router: { push: jest.fn() } }));
-jest.mock("../../../../app/analytics", () => ({ track: jest.fn() }));
+jest.mock("../../../../app/analytics", () => ({ track: jest.fn(), replaySessionId: () => undefined }));
 jest.mock("../../../../client/sandbox/useSandbox", () => {
     return { useSandbox: () => ({ activeSandboxId: ref<string | undefined>(undefined), reachable: ref(false) }) };
 });

@@ -22,7 +22,7 @@ jest.mock("../../../../client/sandbox/sandboxClient", () => ({
 // The real router pulls the auth/environment chain, which needs window.env; nothing here navigates.
 jest.mock("../../../../router/index", () => ({ router: { push: jest.fn() } }));
 // Same window.env chain via analytics; the action only fires a milestone event through track.
-jest.mock("../../../../app/analytics", () => ({ track: jest.fn() }));
+jest.mock("../../../../app/analytics", () => ({ track: jest.fn(), replaySessionId: () => undefined }));
 // Same window.env chain via useSandbox; the tab persistence only reads activeSandboxId and reachable.
 jest.mock("../../../../client/sandbox/useSandbox", () => {
     const activeSandboxId = ref<string | undefined>(`sb1`);

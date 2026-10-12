@@ -35,7 +35,7 @@ jest.mock("../../../client/sandbox/sandboxRpc", () => ({
     }),
 }));
 jest.mock("../../../router", () => ({ router: { push: jest.fn() } }));
-jest.mock("../../../app/analytics", () => ({ track: jest.fn() }));
+jest.mock("../../../app/analytics", () => ({ track: jest.fn(), replaySessionId: () => undefined }));
 jest.mock("../../../client/sandbox/useSandbox", () => {
     // Already bound when the module graph loads, the ordinary case for a refresh of an open sandbox.
     const activeSandboxId = ref<string | undefined>(`sb1`);

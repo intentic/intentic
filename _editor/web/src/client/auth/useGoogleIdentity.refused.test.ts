@@ -19,7 +19,7 @@ import { freshImport } from "@intentic/testing/bun";
 jest.mock(`../../app/environments/desktop`, () => ({ desktopVersion: () => undefined }));
 // The gate's funnel event, recorded rather than sent.
 const track = jest.fn();
-jest.mock(`../../app/analytics`, () => ({ track }));
+jest.mock(`../../app/analytics`, () => ({ track, replaySessionId: () => undefined }));
 
 // One module instance per test: a mint nothing settled is still in flight, and GIS still initialized for it.
 type Identity = ReturnType<(typeof import("./useGoogleIdentity"))[`useGoogleIdentity`]>;

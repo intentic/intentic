@@ -4,7 +4,7 @@ import { fakeSandboxRpc } from "../../../../testing/sandboxRpcFake";
 
 // Same edges useAgents.test.ts cuts: importing the fleet store pulls in useChat and the app shell behind it.
 jest.mock("../../../../router/index", () => ({ router: { push: jest.fn() } }));
-jest.mock("../../../../app/analytics", () => ({ track: jest.fn() }));
+jest.mock("../../../../app/analytics", () => ({ track: jest.fn(), replaySessionId: () => undefined }));
 jest.mock("../../../../client/sandbox/useSandbox", () => {
     return {
         useSandbox: () => ({ activeSandboxId: ref<string | undefined>(undefined), reachable: ref(false) }),

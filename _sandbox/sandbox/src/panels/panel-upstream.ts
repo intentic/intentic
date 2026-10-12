@@ -92,12 +92,14 @@ export const createPanelUpstreamResolver = (deps: {
     readonly listeners: () => Promise<readonly ListeningPort[]>;
     readonly portOf: (key: string) => number | undefined;
     readonly ttlMs?: number;
+    // The clock the scan window is read on; a test passes its own, since the suite's wall clock is shared and can be set.
+    readonly now?: () => number;
 }): PanelUpstreamResolver => {
     const ttl = deps.ttlMs ?? 2000;
     type Snapshot = { readonly repos: readonly string[]; readonly listeners: readonly ListeningPort[] };
     // Coalesced by the in-flight read as well as the window: callers within one tick share the running walk's answer.
     // Only a successful scan is cached; a failure leaves nothing, so the next request retries instead of an error.
-    const scans = cachedAsync<undefined, Snapshot>({ ttlMs: ttl });
+    const scans = cachedAsync<undefined, Snapshot>({ ttlMs: ttl, now: deps.now ?? Date.now });
     const state = (): Promise<Snapshot> =>
         scans.get(undefined, async () => {
             const [repos, listeners] = await Promise.all([deps.repos(), deps.listeners()]);

@@ -1054,7 +1054,7 @@ describe(`ChatMessageView added-notes mark`, () => {
 
         const row = element.querySelector(`.chat-notes-row`)!;
         const prompt = element.querySelector(`.chat-prompt`)!;
-        expect(row.compareDocumentPosition(prompt) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(row.compareDocumentPosition(prompt) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     });
 
     it(`sits outside the prompt, so it never rides in the pinned band`, () => {

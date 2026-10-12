@@ -12,7 +12,7 @@ import { insideRun, laneOfRun, runIdsInLedger, runMatches, runsInLane, useWorkfl
 // Importing these functions pulls in the fleet store, which reads `window.env` at import time; mocked here even
 // though this file never touches it.
 jest.mock("../../../../router/index", () => ({ router: { push: jest.fn() } }));
-jest.mock("../../../../app/analytics", () => ({ track: jest.fn() }));
+jest.mock("../../../../app/analytics", () => ({ track: jest.fn(), replaySessionId: () => undefined }));
 // The two filing verbs this file presses; any other call names itself.
 const archiveRun = jest.fn();
 const unarchiveRun = jest.fn();

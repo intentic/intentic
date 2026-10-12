@@ -10,7 +10,7 @@ const { replyRoute } = { replyRoute: jest.fn<SandboxRpc["agent"]["reply"]>(async
 
 // The fleet store pulls the app shell at import time; the same cuts as useAgents-provisional.test.ts.
 jest.mock("../../../../router/index", () => ({ router: { push: jest.fn() } }));
-jest.mock("../../../../app/analytics", () => ({ track: jest.fn() }));
+jest.mock("../../../../app/analytics", () => ({ track: jest.fn(), replaySessionId: () => undefined }));
 jest.mock("../../../../client/sandbox/useSandbox", () => ({
     useSandbox: () => ({ activeSandboxId: ref<string | undefined>(undefined), reachable: ref(false) }),
 }));

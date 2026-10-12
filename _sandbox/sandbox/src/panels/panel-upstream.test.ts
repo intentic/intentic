@@ -97,6 +97,7 @@ describe("whose directory a panel key names", () => {
 describe("the live resolver", () => {
     it("shares one scan across a burst of requests, then re-reads once the window passes", async () => {
         let scans = 0;
+        let clock = 0;
         const resolver = createPanelUpstreamResolver({
             workspaceRoot: ROOT,
             repos: () => Promise.resolve(REPOS),
@@ -105,7 +106,8 @@ describe("the live resolver", () => {
                 return Promise.resolve([listener(3000, "/work/app")]);
             },
             portOf: () => undefined,
-            ttlMs: 0,
+            ttlMs: 1000,
+            now: () => clock,
         });
         const burst = await Promise.all([resolver("app"), resolver("app"), resolver("app")]);
         expect(burst).toEqual([
@@ -114,7 +116,9 @@ describe("the live resolver", () => {
             { state: "serving", port: 3000, assigned: false },
         ]);
         expect(scans).toBe(1);
-        await new Promise((resolve) => setTimeout(resolve, 2));
+        await resolver("app");
+        expect(scans).toBe(1);
+        clock = 1000;
         await resolver("app");
         expect(scans).toBe(2);
     });

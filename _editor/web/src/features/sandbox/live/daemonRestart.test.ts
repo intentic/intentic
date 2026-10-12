@@ -7,7 +7,7 @@ import { ref } from "vue";
 // Mocks the router, analytics and sandbox client so only the wire between the stream router and the fleet store is
 // exercised.
 jest.mock("../../../router", () => ({ router: { push: jest.fn() } }));
-jest.mock("../../../app/analytics", () => ({ track: jest.fn() }));
+jest.mock("../../../app/analytics", () => ({ track: jest.fn(), replaySessionId: () => undefined }));
 const activeSandboxId = ref<string | undefined>(undefined);
 const reachable = ref(false);
 jest.mock("../../../client/sandbox/useSandbox", () => ({

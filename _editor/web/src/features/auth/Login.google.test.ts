@@ -36,7 +36,7 @@ jest.mock(`../../client/auth/useAuth`, () => ({
 jest.mock(`../../app/environments/desktop`, () => ({ ...actualDesktop, desktopVersion: () => undefined }));
 jest.mock(`../../app/environments/desktopDownloads`, () => ({ desktopInstaller: () => undefined }));
 const track = jest.fn();
-jest.mock(`../../app/analytics`, () => ({ track }));
+jest.mock(`../../app/analytics`, () => ({ track, replaySessionId: () => undefined }));
 
 const { default: Login } = await import("./Login.vue");
 const { useGoogleIdentity } = await import("../../client/auth/useGoogleIdentity");

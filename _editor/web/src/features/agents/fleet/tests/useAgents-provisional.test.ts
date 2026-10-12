@@ -8,7 +8,7 @@ const daemon = { rename: jest.fn(), autoLand: jest.fn(), breakPolicy: jest.fn(),
 // The fleet store pulls useChat and the app shell at import time; these cut the edges that reach `window.env` (router,
 // analytics, sandbox client, diagnostics) without touching the merge under test. The same cuts as useAgents.test.ts.
 jest.mock("../../../../router/index", () => ({ router: { push: jest.fn() } }));
-jest.mock("../../../../app/analytics", () => ({ track: jest.fn() }));
+jest.mock("../../../../app/analytics", () => ({ track: jest.fn(), replaySessionId: () => undefined }));
 jest.mock("../../../../client/sandbox/useSandbox", () => ({
     useSandbox: () => ({ activeSandboxId: ref<string | undefined>(undefined), reachable: ref(false) }),
 }));

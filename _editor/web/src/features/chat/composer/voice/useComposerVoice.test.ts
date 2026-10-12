@@ -9,7 +9,7 @@ import type { Heard, VoiceError, VoiceInput, VoiceState } from "./useVoiceInput"
 
 jest.mock(`../../../../client/sandbox/sandboxClient`, () => ({ sandboxJson: () => Promise.reject(new Error(`unmocked`)) }));
 jest.mock(`../../../sandbox/session/wsTicket`, () => ({ socketUrl: async () => undefined }));
-jest.mock(`../../../../app/analytics`, () => ({ track: jest.fn() }));
+jest.mock(`../../../../app/analytics`, () => ({ track: jest.fn(), replaySessionId: () => undefined }));
 
 const { useComposerVoice } = await import(`./useComposerVoice`);
 type Voice = ReturnType<typeof useComposerVoice>;
