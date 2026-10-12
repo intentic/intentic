@@ -8,15 +8,33 @@ import { createMemoryHistory, createRouter } from "vue-router";
 import { waitFor } from "@intentic/testing/bun";
 import { IconStub } from "@intentic/ui/testing";
 import { formatDate } from "@intentic/ui/format";
+import type { SandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // Import chain touches the API client and a media query (UI barrel's useDevice) at module eval; hence jsdom.
 
 const sandboxJson = jest.fn(async (..._args: unknown[]): Promise<unknown> => ({ members: [] }));
 jest.mock(`../../../client/sandbox/sandboxClient`, () => ({ sandboxJson: (...args: unknown[]) => sandboxJson(...(args as [])) }));
-// The door inventory's reads (automations, workflows, CI) go unstubbed: each names itself and counts as unknown, which
-// is all this suite asks of them.
-jest.mock(`../../../client/sandbox/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc() }));
+// The door inventory's reads (automations, workflows, CI, devices) fail unless a test answers them, so a door counts as
+// unknown by default; runners ride sandboxJson, whose default answer does not parse as a runner list.
+const unread = async (): Promise<never> => {
+    throw new Error(`not answered in this test`);
+};
+type Answer<G extends keyof SandboxRpc, P extends keyof SandboxRpc[G]> = SandboxRpc[G][P] extends (...args: never[]) => Promise<infer A> ? A : never;
+const doorReads = {
+    automations: jest.fn(async (): Promise<Answer<`automations`, `list`>> => unread()),
+    workflows: jest.fn(async (): Promise<Answer<`workflows`, `list`>> => unread()),
+    ci: jest.fn(async (): Promise<Answer<`ci`, `runs`>> => unread()),
+    devices: jest.fn(async (): Promise<Answer<`system`, `devices`>> => unread()),
+};
+jest.mock(`../../../client/sandbox/sandboxRpc`, () => ({
+    sandboxRpc: fakeSandboxRpc({
+        automations: { list: () => doorReads.automations() },
+        workflows: { list: () => doorReads.workflows() },
+        ci: { runs: () => doorReads.ci() },
+        system: { devices: () => doorReads.devices() },
+    }),
+}));
 
 const create = jest.fn();
 const list = jest.fn(async (): Promise<{ members: unknown[] }> => ({ members: [] }));
@@ -113,6 +131,10 @@ const daemonMembers = jest.fn((): unknown[] => []);
 afterEach(() => {
     sandboxJson.mockReset();
     sandboxJson.mockResolvedValue({ members: [] });
+    for (const read of Object.values(doorReads)) {
+        read.mockReset();
+        read.mockImplementation(unread);
+    }
     role.value = `owner`;
     create.mockReset();
     setRole.mockReset();
@@ -198,7 +220,7 @@ it(`shows what the mail provider said when it refused`, async () => {
     expect(shown()).toContain(`https://app.test/invite/tok`);
 });
 
-it(`names this browser and says why the others cannot be listed`, async () => {
+it(`names this browser and nothing it cannot list`, async () => {
     mount();
     await nextTick();
 
@@ -207,8 +229,7 @@ it(`names this browser and says why the others cannot be listed`, async () => {
     // Europe and the 25th at UTC+14. Asserted through the same formatter the row uses rather than spelled out: a
     // hardcoded day here tests where the suite runs, not what the row says.
     expect(shown()).toContain(`owner@example.com · signed in until ${formatDate(sessionExpiresAt.value as number)}`);
-    expect(shown()).toContain(`Other browsers aren't listed`);
-    expect(shown()).toMatch(/doesn't track devices/);
+    expect(shown()).not.toContain(`Other browsers`);
 });
 
 // undefined pass expiry means a daemon predating the session exchange, not merely absent.
@@ -482,4 +503,36 @@ it(`gives a maintainer the token, sign-out and door surfaces, and keeps the rost
     expect(list).not.toHaveBeenCalled();
     expect(document.body.querySelector(`input[type=email]`)).toBeNull();
     expect(shown()).toContain(`Only the sandbox owner can invite people or change roles.`);
+});
+
+// Every door read answers "none in use": a zero is a door nobody opened, so the group has nothing to say and is not drawn.
+it(`leaves out the other ways in when no door is in use`, async () => {
+    doorReads.automations.mockResolvedValue({ automations: [] });
+    doorReads.workflows.mockResolvedValue({ workflows: [] });
+    doorReads.ci.mockResolvedValue({ repos: [], runs: [] });
+    doorReads.devices.mockResolvedValue({ devices: [] });
+    sandboxJson.mockImplementation(async (path: unknown) => (path === `/system/runners` ? { runners: [] } : { members: [] }));
+    mount();
+    await settle();
+
+    expect(shown()).toContain(`Signed-in browsers`);
+    expect(shown()).not.toContain(`Other ways in`);
+});
+
+// Only the doors in use are rows, and a paired machine is counted rather than described; a door the daemon could not
+// read stays, since an unread door is not a closed one.
+it(`lists only the doors in use, with paired machines counted`, async () => {
+    doorReads.automations.mockResolvedValue({ automations: [] });
+    doorReads.ci.mockResolvedValue({ repos: [], runs: [] });
+    doorReads.devices.mockResolvedValue({ devices: [{ key: `laptop`, label: `laptop` }, { key: `desk`, label: `desk` }] });
+    sandboxJson.mockImplementation(async (path: unknown) => (path === `/system/runners` ? { runners: [] } : { members: [] }));
+    mount();
+    await settle();
+
+    expect(shown()).toContain(`Other ways in`);
+    expect(shown()).not.toContain(`Webhooks`);
+    expect(shown()).not.toContain(`CI notifications`);
+    expect(shown()).toContain(`Release gates`);
+    expect(shown()).toContain(`2 devices, each holding its own enrollment key.`);
+    expect(shown()).not.toContain(`0 runners`);
 });

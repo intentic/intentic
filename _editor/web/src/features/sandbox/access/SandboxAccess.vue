@@ -227,25 +227,60 @@ const handover = computed(() => (notice.value !== undefined && notice.value === 
 // Other doors, counted, not managed here; answers what else can reach the sandbox without a person.
 const { inventory, loading: inventoryLoading } = useAccessInventory();
 
-const webhooksLine = computed(() =>
-    inventory.value.webhooks === undefined
-        ? t(`sandbox.sandboxAccess.notReadableRightNow`)
-        : t(`sandbox.sandboxAccess.webhooksLine`, { count: inventory.value.webhooks }, inventory.value.webhooks),
-);
-const gatesLine = computed(() =>
-    inventory.value.gates === undefined
-        ? t(`sandbox.sandboxAccess.notReadableRightNow`)
-        : t(`sandbox.sandboxAccess.gatesLine`, { count: inventory.value.gates }, inventory.value.gates),
-);
-const ciLine = computed(() => {
-    const repos = inventory.value.ciRepos;
-    if (repos === undefined) {
-        return t(`sandbox.sandboxAccess.notReadableRightNow`);
+// Only doors in use are listed: a count of zero is a door nobody opened, so it says nothing here. A count the daemon
+// could not read stays, since an unread door is not a closed one.
+// "2 devices", "1 runner", or both: a kind nobody paired is left out of the sentence rather than counted as zero.
+const pairedWhat = (devices: number, runners: number): string => {
+    const devicesPart = t(`sandbox.sandboxAccess.pairedDevices`, { count: devices }, devices);
+    const runnersPart = t(`sandbox.sandboxAccess.pairedRunners`, { count: runners }, runners);
+    if (devices > 0 && runners > 0) {
+        return t(`sandbox.sandboxAccess.pairedBoth`, { devices: devicesPart, runners: runnersPart });
     }
-    if (repos.total === 0) {
-        return t(`sandbox.sandboxAccess.ciLineNone`);
+    return devices > 0 ? devicesPart : runnersPart;
+};
+const notReadable = (): string => t(`sandbox.sandboxAccess.notReadableRightNow`);
+const doors = computed(() => {
+    const { webhooks, gates, ciRepos, paired } = inventory.value;
+    const rows: { key: string; icon: string; title: string; description: string }[] = [];
+    if (webhooks !== 0) {
+        rows.push({
+            key: `webhooks`,
+            icon: `bolt`,
+            title: t(`sandbox.sandboxAccess.webhooks`),
+            description: webhooks === undefined ? notReadable() : t(`sandbox.sandboxAccess.webhooksLine`, { count: webhooks }, webhooks),
+        });
     }
-    return t(`sandbox.sandboxAccess.ciLine`, { count: repos.total, hooked: repos.hooked }, repos.total);
+    if (gates !== 0) {
+        rows.push({
+            key: `gates`,
+            icon: `shield`,
+            title: t(`sandbox.sandboxAccess.releaseGates`),
+            description: gates === undefined ? notReadable() : t(`sandbox.sandboxAccess.gatesLine`, { count: gates }, gates),
+        });
+    }
+    if (ciRepos?.total !== 0) {
+        rows.push({
+            key: `ci`,
+            icon: `sitemap`,
+            title: t(`sandbox.sandboxAccess.ciNotifications`),
+            description:
+                ciRepos === undefined
+                    ? notReadable()
+                    : t(`sandbox.sandboxAccess.ciLine`, { count: ciRepos.total, hooked: ciRepos.hooked }, ciRepos.total),
+        });
+    }
+    if (paired === undefined || paired.devices + paired.runners > 0) {
+        rows.push({
+            key: `paired`,
+            icon: `desktop`,
+            title: t(`sandbox.sandboxAccess.pairedDevicesRunners`),
+            description:
+                paired === undefined
+                    ? notReadable()
+                    : t(`sandbox.sandboxAccess.pairedLine`, { what: pairedWhat(paired.devices, paired.runners) }),
+        });
+    }
+    return rows;
 });
 
 // Clears what this tab has to say before the next write: the link went with the notice, and a link with no sentence,
@@ -723,13 +758,6 @@ const revoke = async (target: string): Promise<void> => {
                 <template #meta><StatusBadge variant="success" :label="t(`sandbox.sandboxAccess.signedIn`)" size="xs" /></template>
             </Row>
 
-            <!-- The empty list, explained where the reader asks about it, rather than left as a blank surface. -->
-            <Row
-                icon="shield"
-                :title="t(`sandbox.sandboxAccess.otherBrowsersArentListed`)"
-                :description="t(`sandbox.sandboxAccess.sandboxDoesntTrackDevices`)"
-            />
-
             <Row icon="sign-out" tone="danger" :title="t(`sandbox.sandboxAccess.signOutEverywhere`)">
                 <template #description>{{ t(`sandbox.sandboxAccess.revokesEveryPassStay`) }}</template>
                 <template #control>
@@ -778,15 +806,13 @@ const revoke = async (target: string): Promise<void> => {
                     <div role="status" aria-busy="true"><SkeletonRows :rows="3" /></div>
                 </RowGroup>
             </SkeletonSnapshot>
-            <RowGroup v-else v-skeleton-source="`sandbox.access.other-ways-in`" :label="t(`sandbox.sandboxAccess.otherWaysIn`)" equal-rows>
-                <Row icon="bolt" :title="t(`sandbox.sandboxAccess.webhooks`)" :description="webhooksLine" />
-                <Row icon="shield" :title="t(`sandbox.sandboxAccess.releaseGates`)" :description="gatesLine" />
-                <Row icon="sitemap" :title="t(`sandbox.sandboxAccess.ciNotifications`)" :description="ciLine" />
-                <Row
-                    icon="desktop"
-                    :title="t(`sandbox.sandboxAccess.pairedDevicesRunners`)"
-                    :description="t(`sandbox.sandboxAccess.eachHoldsOwnEnrollment`)"
-                />
+            <RowGroup
+                v-else-if="doors.length > 0"
+                v-skeleton-source="`sandbox.access.other-ways-in`"
+                :label="t(`sandbox.sandboxAccess.otherWaysIn`)"
+                equal-rows
+            >
+                <Row v-for="door in doors" :key="door.key" :icon="door.icon" :title="door.title" :description="door.description" />
             </RowGroup>
         </template>
 
