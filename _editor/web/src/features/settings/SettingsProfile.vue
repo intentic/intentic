@@ -77,72 +77,74 @@ const linkGoogle = async (): Promise<void> => {
 </script>
 
 <template>
-    <RowGroup :label="t(`settings.settingsProfile.profile`)">
-        <RowNote variant="block">
-            <div class="flex min-w-0 items-center gap-3">
-                <button
-                    type="button"
-                    :disabled="avatarBusy"
-                    :aria-label="t(`settings.settingsProfile.changeAvatar`)"
-                    v-tooltip.bottom="t(`settings.settingsProfile.changeAvatar`)"
-                    class="group relative h-14 w-14 shrink-0 cursor-pointer rounded-full"
-                    @click="avatarInput?.click()"
-                >
-                    <Avatar :size="56" :src="user?.image" :name="user?.name" />
-                    <span
-                        class="absolute inset-0 flex items-center justify-center rounded-full bg-canvas/70 text-content transition-opacity"
-                        :class="avatarBusy ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100'"
+    <div class="flex flex-col gap-6">
+        <RowGroup :label="t(`settings.settingsProfile.profile`)">
+            <RowNote variant="block">
+                <div class="flex min-w-0 items-center gap-3">
+                    <button
+                        type="button"
+                        :disabled="avatarBusy"
+                        :aria-label="t(`settings.settingsProfile.changeAvatar`)"
+                        v-tooltip.bottom="t(`settings.settingsProfile.changeAvatar`)"
+                        class="group relative h-14 w-14 shrink-0 cursor-pointer rounded-full"
+                        @click="avatarInput?.click()"
                     >
-                        <Icon :name="avatarBusy ? `spinner` : `camera`" :spin="avatarBusy" class="text-base" />
-                    </span>
-                </button>
-                <input ref="avatarInput" type="file" accept="image/*" class="hidden" @change="pickAvatar" />
+                        <Avatar :size="56" :src="user?.image" :name="user?.name" />
+                        <span
+                            class="absolute inset-0 flex items-center justify-center rounded-full bg-canvas/70 text-content transition-opacity"
+                            :class="avatarBusy ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100'"
+                        >
+                            <Icon :name="avatarBusy ? `spinner` : `camera`" :spin="avatarBusy" class="text-base" />
+                        </span>
+                    </button>
+                    <input ref="avatarInput" type="file" accept="image/*" class="hidden" @change="pickAvatar" />
 
-                <div class="min-w-0 flex-1">
-                    <div class="flex min-w-0 items-center gap-2">
-                        <!-- The name is the field: one box for both states, so the plan chip beside it never moves. -->
-                        <h2 class="flex min-w-0 text-base font-medium">
-                            <InlineRename
-                                :value="user?.name"
-                                :write="writeName"
-                                :label="t(`settings.settingsProfile.displayName`)"
-                                :action="t(`settings.settingsProfile.renameDisplayName`)"
-                                fallback="Account"
-                                :maxlength="60"
-                                failure="Couldn't save your display name."
+                    <div class="min-w-0 flex-1">
+                        <div class="flex min-w-0 items-center gap-2">
+                            <!-- The name is the field: one box for both states, so the plan chip beside it never moves. -->
+                            <h2 class="flex min-w-0 text-base font-medium">
+                                <InlineRename
+                                    :value="user?.name"
+                                    :write="writeName"
+                                    :label="t(`settings.settingsProfile.displayName`)"
+                                    :action="t(`settings.settingsProfile.renameDisplayName`)"
+                                    fallback="Account"
+                                    :maxlength="60"
+                                    failure="Couldn't save your display name."
+                                />
+                            </h2>
+
+                            <!-- THE LANE THIS ACCOUNT IS ON, the same chip the account menu wears (hostedHours.ts). -->
+                            <StatusBadge
+                                v-if="planBadge"
+                                :variant="planBadge.variant"
+                                :label="planBadge.label"
+                                class="shrink-0"
+                                v-tooltip.bottom="planBadge.detail"
                             />
-                        </h2>
-
-                        <!-- THE LANE THIS ACCOUNT IS ON, the same chip the account menu wears (hostedHours.ts). -->
-                        <StatusBadge
-                            v-if="planBadge"
-                            :variant="planBadge.variant"
-                            :label="planBadge.label"
-                            class="shrink-0"
-                            v-tooltip.bottom="planBadge.detail"
-                        />
+                        </div>
+                        <p v-if="avatarError" class="h-4 truncate px-1 text-xs leading-4 text-danger">{{ avatarError }}</p>
                     </div>
-                    <p v-if="avatarError" class="h-4 truncate px-1 text-xs leading-4 text-danger">{{ avatarError }}</p>
                 </div>
-            </div>
-        </RowNote>
-    </RowGroup>
+            </RowNote>
+        </RowGroup>
 
-    <RowGroup v-if="showsSignIn" :label="t(`settings.settingsProfile.signIn`)">
-        <Row icon="envelope" :title="t(`settings.settingsProfile.emailCode`)" :description="t(`settings.settingsProfile.emailCodeDetail`, { email: user?.email ?? `` })" />
-        <Row
-            icon="google"
-            :title="t(`settings.settingsProfile.google`)"
-            :description="googleLinked ? t(`settings.settingsProfile.googleLinked`) : t(`settings.settingsProfile.googleNotLinked`)"
-        >
-            <template v-if="!googleLinked" #control>
-                <Button :label="t(`settings.settingsProfile.linkGoogle`)" size="small" tier="boring" :loading="linking" @click="linkGoogle">
-                    <template #icon><Icon name="google" /></template>
-                </Button>
-            </template>
-        </Row>
-        <RowNote v-if="linkError" variant="block">
-            <p class="text-xs text-danger">{{ linkError }}</p>
-        </RowNote>
-    </RowGroup>
+        <RowGroup v-if="showsSignIn" :label="t(`settings.settingsProfile.signIn`)">
+            <Row icon="envelope" :title="t(`settings.settingsProfile.emailCode`)" :description="t(`settings.settingsProfile.emailCodeDetail`, { email: user?.email ?? `` })" />
+            <Row
+                icon="google"
+                :title="t(`settings.settingsProfile.google`)"
+                :description="googleLinked ? t(`settings.settingsProfile.googleLinked`) : t(`settings.settingsProfile.googleNotLinked`)"
+            >
+                <template v-if="!googleLinked" #control>
+                    <Button :label="t(`settings.settingsProfile.linkGoogle`)" size="small" tier="boring" :loading="linking" @click="linkGoogle">
+                        <template #icon><Icon name="google" /></template>
+                    </Button>
+                </template>
+            </Row>
+            <RowNote v-if="linkError" variant="block">
+                <p class="text-xs text-danger">{{ linkError }}</p>
+            </RowNote>
+        </RowGroup>
+    </div>
 </template>
