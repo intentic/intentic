@@ -401,13 +401,13 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                                 >
                                     <Icon name="chevron-up" class="text-2xs" />{{ t(`ui.action.showFewer`) }}
                                 </button>
-                                <!-- Archive feedback highlights the destination counter. -->
+                                <!-- Archive feedback highlights the destination counter. 20px, not the chip's 26: in the header's 32px row that leaves 6px above the first card, where 26 left 3. -->
                                 <button
                                     v-if="archiveSize > 0"
                                     type="button"
                                     :aria-label="t(`agents.agentsView.openArchive`, { archiveSize })"
                                     v-tooltip.bottom="{ title: t(`shared.archived`), rows: [{ label: t(`shared.agents`), value: archiveSize }], note: t(`agents.words.allKept`) }"
-                                    :class="ui.chip({ on: pulsing }, `shrink-0 gap-1`, pulsing && `ring-1 ring-primary-500/50`)"
+                                    :class="ui.chip({ on: pulsing }, `shrink-0 gap-1 px-2 py-px`, pulsing && `ring-1 ring-primary-500/50`)"
                                     @click="toggleArchive"
                                 >
                                     <Icon name="history" class="text-2xs" />{{ archiveSize }}
