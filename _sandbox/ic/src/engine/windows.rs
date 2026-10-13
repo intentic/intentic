@@ -715,16 +715,27 @@ pub(super) fn keep_own_handles() {
 fn spawn_keeper(distro: &str, port: u16) -> Result<std::process::Child, String> {
     use std::os::windows::process::CommandExt;
     keep_own_handles();
+    // A console of its own with no window, rather than no console: System32's wsl.exe hands the command on to the
+    // Store WSL's `C:\Program Files\WSL\wsl.exe`, and a console program started by a process with no console gets a new
+    // one. With DETACHED_PROCESS (beside which Windows ignores CREATE_NO_WINDOW) that one was a window, which Windows
+    // Terminal opened as a tab running the engine until somebody closed it (radarsu-rog, 2026-10-13). A console of its
+    // own is still not ic's, so closing ic's window does not end the keeper, and the new process group keeps ic's Ctrl+C
+    // from it.
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    const DETACHED_PROCESS: u32 = 0x0000_0008;
     const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
     let argv = wsl::keeper_argv(distro, port);
     let mut cmd = Command::new(&argv[0]);
     cmd.args(&argv[1..]);
+    // Not the folder ic was started in: the keeper would hold it for the days it runs (Windows refuses to delete a
+    // folder a process stands in), and one in another WSL distro (`\\wsl.localhost\…`, ic run from a WSL shell) has no
+    // path in the engine's, which wsl.exe says on the console.
+    if let Some(root) = std::env::var_os("SystemRoot") {
+        cmd.current_dir(root);
+    }
     cmd.stdin(Stdio::null());
     cmd.stdout(Stdio::null());
     cmd.stderr(Stdio::null());
-    cmd.creation_flags(CREATE_NO_WINDOW | DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
+    cmd.creation_flags(CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP);
     cmd.spawn()
         .map_err(|error| format!("could not start the engine keeper: {error}"))
 }
