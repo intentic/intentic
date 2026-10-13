@@ -26,14 +26,14 @@ afterEach(() => {
 
 // The readings, one a line: the seal's accessible name, the same words its card says.
 const readings = (seal: HTMLElement): string[] => seal.getAttribute(`aria-label`)?.split(`\n`) ?? [];
-const inks = (seal: HTMLElement): string[] => [`text-success`, `text-muted`, `text-danger`].filter((ink) => seal.classList.contains(ink));
+const inks = (seal: HTMLElement): string[] => [`text-success`, `text-faint`, `text-danger`].filter((ink) => seal.classList.contains(ink));
 
 it(`closes in green, and in the row's own ink on a receipt, where a pass is history`, async () => {
     const proof: ProofMark = { verification: `verified`, check: `pnpm test` };
     const seal = await mount({ proof });
     expect([seal.dataset[`sealKind`], inks(seal)]).toEqual([`closed`, [`text-success`]]);
     app?.unmount();
-    expect(inks(await mount({ proof, quiet: true }))).toEqual([`text-muted`]);
+    expect(inks(await mount({ proof, quiet: true }))).toEqual([`text-faint`]);
 });
 
 it(`breaks in red on a failed check, a receipt's included`, async () => {

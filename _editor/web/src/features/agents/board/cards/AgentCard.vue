@@ -42,6 +42,7 @@ import {
     attentionReason,
     conflictIsYours,
     contextPct,
+    cornerInk,
     type FamilyChip,
     type FleetLane,
     landedAway,
@@ -292,10 +293,9 @@ const receipt = computed(
         lane.value === `finished` &&
         (props.agent.archivedAt !== undefined || (props.agent.status !== `ready` && props.agent.status !== `landing` && !relandOffered.value)),
 );
-// Statuses whose ink is already quiet (`idle`, `resumed`, `stopped`) keep it: flattening those to `muted` would make
-// a receipt LOUDER than it is today, which is the opposite of the errand.
-const QUIET_INK: ReadonlySet<string> = new Set([`text-subtle`, `text-muted`]);
-const statusMeta = computed(() => (receipt.value && !QUIET_INK.has(meta.value.class) ? { ...meta.value, class: `text-muted` } : meta.value));
+// A receipt's corner is history, so whatever its standing it says it in the corner's quiet ink, as a quiet standing on a
+// live card does (cornerInk): one ink for every mark that is only telling, never the type ink a filled glyph went dark in.
+const statusMeta = computed(() => ({ ...meta.value, class: receipt.value ? `text-faint` : cornerInk(meta.value.class) }));
 // The two lanes about work in flight get the bigger card: a step up in title size and padding, so which lane a card
 // is in is legible from its weight and not only from which column it landed in.
 // Hierarchy through the CARD rather than through the column: widening Attention and Active instead would have bought
@@ -693,11 +693,13 @@ const grab = (event: PointerEvent): void => {
                 v-tooltip.top="statusMeta.label"
                 :aria-label="statusMeta.label"
                 role="img"
-                class="shrink-0 text-sm"
+                class="shrink-0 text-base"
                 :class="statusMeta.class"
             />
-            <!-- What its last turn showed of its own work, one glyph, its words in its hover (CardSeal). -->
-            <CardSeal v-if="proof !== undefined" :proof="proof" :quiet="receipt" :status="sealStandsIn ? statusMeta.label : undefined" class="text-sm" />
+            <!-- What its last turn showed of its own work, one glyph, its words in its hover (CardSeal). The corner's marks are
+                 a step over the title's size, as the rail's are: a board card is bigger, its ring is 28px to the rail's
+                 24, and at the title's own size the two marks read as specks beside it. -->
+            <CardSeal v-if="proof !== undefined" :proof="proof" :quiet="receipt" :status="sealStandsIn ? statusMeta.label : undefined" class="text-base" />
         </div>
         <p v-if="edit.error !== undefined" class="text-2xs text-danger">{{ edit.error }}</p>
 

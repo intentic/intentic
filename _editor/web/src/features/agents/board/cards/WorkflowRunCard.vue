@@ -48,7 +48,7 @@ const TONE: Record<WorkflowRun["state"], string> = {
     running: `text-link`,
     done: `text-success`,
     failed: `text-danger`,
-    stopped: `text-subtle`,
+    stopped: `text-faint`,
     overspent: `text-warning`,
     error: `text-danger`,
 };
@@ -153,7 +153,7 @@ const TONE: Record<WorkflowRun["state"], string> = {
             >
                 <Icon :name="stopping ? `spinner` : `stop`" :spin="stopping" class="text-2xs" />
             </button>
-            <Icon v-else :name="run.state === `done` ? `check-circle` : `sitemap`" class="shrink-0 text-xs" :class="TONE[run.state]" />
+            <Icon v-else :name="run.state === `done` ? `check-circle` : `sitemap`" class="shrink-0 text-base" :class="TONE[run.state]" />
         </div>
 
         <!-- What it was asked to do; absent for a run started on the workflows page, with no composer to read one from. -->

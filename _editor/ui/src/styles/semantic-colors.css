@@ -73,6 +73,10 @@
     --color-content:     var(--role-content);
     --color-muted:       var(--role-muted);
     --color-subtle:      var(--role-subtle);
+/* THE QUIET MARK — a resting glyph that is a SHAPE, not a word: an idle card's dot, a receipt's closed check. `subtle`
+   is tuned for type (4.7:1), and a filled disc in a type ink reads several steps darker than a word in it, so on light
+   paper those marks were the heaviest things on their cards. This sits at ~3:1, the floor for a mark that still means. */
+    --color-faint:       var(--role-faint);
     --color-link:        var(--role-link);
 /* THE ACCENT AS A MARK — a ticked option, a selected lane's glyph, a ring that is filling, a word that names the live
    state. Not a link, and not a fill: an ink, so it has to be legible as one on every surface it lands on. */
@@ -139,6 +143,7 @@
     --role-content:     color-mix(in oklab, var(--color-surface-900) 92%, var(--color-brand-800));
     --role-muted:       color-mix(in oklab, var(--color-surface-600) 88%, var(--color-brand-950));
     --role-subtle:      color-mix(in oklab, var(--color-surface-500) 78%, var(--color-brand-950));
+    --role-faint:       color-mix(in oklab, var(--role-subtle) 68%, var(--role-card));
 /* 800 RATHER THAN 700, because 700 is 58% L and orange at 58% on near-white is 4.3:1 — the accent colour. */
     --role-link:        var(--color-primary-800);
 /* HALFWAY BETWEEN THE FILL AND THE LINK — 500, which every accent mark used to be written in, is 2.4:1 on the canvas: a
@@ -240,6 +245,8 @@
     --role-content:     color-mix(in oklab, var(--color-surface-100) 50%, var(--color-surface-200));
     --role-muted:       var(--color-surface-400);
     --role-subtle:      var(--color-surface-500);
+/* On near-black a mark in `subtle` is already as quiet as it can be and still read, so the two are one here. */
+    --role-faint:       var(--role-subtle);
     --role-link:        var(--color-primary-400);
     --role-accent:      var(--color-primary-500);
     --role-danger:      var(--color-danger-400);

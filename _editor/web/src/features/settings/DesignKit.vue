@@ -93,6 +93,7 @@ const ROLE_COLORS = [
     { name: `content`, swatch: `bg-content` },
     { name: `muted`, swatch: `bg-muted` },
     { name: `subtle`, swatch: `bg-subtle` },
+    { name: `faint`, swatch: `bg-faint` },
     { name: `link`, swatch: `bg-link` },
     { name: `accent`, swatch: `bg-accent` },
     { name: `danger`, swatch: `bg-danger` },

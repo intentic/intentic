@@ -5,6 +5,7 @@ import {
     activityIcon,
     activityLine,
     agentStatusMeta,
+    cornerInk,
     endingByHand,
     type StandingChip,
     standingChip,
@@ -57,11 +58,11 @@ export interface CardView {
 const statusOf = (entry: OpenChat): CardView[`status`] => {
     if (entry.agent !== undefined) {
         const meta = agentStatusMeta(entry.agent.status);
-        return { name: meta.icon, spin: meta.spin, class: `text-xs ${meta.class}`, "aria-label": meta.label };
+        return { name: meta.icon, spin: meta.spin, class: `text-xs ${cornerInk(meta.class)}`, "aria-label": meta.label };
     }
     const status = entry.conversation.status.value;
     const icon = statusIcon(status);
-    return { name: icon.name, spin: icon.spin, class: `text-xs ${icon.class}`, "aria-label": statusLabel(status) };
+    return { name: icon.name, spin: icon.spin, class: `text-xs ${cornerInk(icon.class)}`, "aria-label": statusLabel(status) };
 };
 
 // Model label as the pickers show it; falls back to the provider name when no model is recorded yet. `activeModel` is

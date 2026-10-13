@@ -15,7 +15,7 @@ const t = useT();
 
 const props = defineProps<{
     proof: ProofMark;
-    // A receipt card (AgentCard): a closed seal is history there, so it takes the row's ink instead of green.
+    // A receipt card (AgentCard): a closed seal is history there, so it takes the corner's quiet ink instead of green.
     quiet?: boolean;
     // The status this glyph stands in for in the card's corner (Landed, Idle), said first in the card so the corner
     // still says what it said before the seal took it.
@@ -28,7 +28,9 @@ const tone = computed(() => {
     if (kind.value === `broke`) {
         return `text-danger`;
     }
-    return kind.value === `closed` && props.quiet !== true ? `text-success` : `text-muted`;
+    // Anything short of a verdict to read is the corner's quiet mark (agentStatus.cornerInk): `muted` is a type ink, and
+    // the seal is a filled shape that went near-black in it on a light card.
+    return kind.value === `closed` && props.quiet !== true ? `text-success` : `text-faint`;
 });
 // The overlay's own glyph always wears the verdict's colour: it is read, not scanned past.
 const headTone = computed(() => (kind.value === `broke` ? `text-danger` : kind.value === `closed` ? `text-success` : `text-warning`));

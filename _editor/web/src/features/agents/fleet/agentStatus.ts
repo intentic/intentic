@@ -244,6 +244,17 @@ export const agentStandingMeta = (
 ): { icon: IconName; spin?: boolean; label: string; class: string } =>
     memoryHeld(agent) ? { icon: `pause`, label: t(`agents.agentStatus.heldMemory`), class: `text-warning` } : agentStatusMeta(agent.status);
 
+// THE CORNER'S QUIET INK. A session card's corner glyph is a solid mark beside the title, not a word: drawn in a type
+// ink (`subtle`, `muted`) an idle dot or a stopped square read as the darkest thing on a light card. Wherever a status
+// says it quietly, the corner says it in `faint`, the mark ink (semantic-colors.css), which the dark scheme answers as
+// `subtle` and so leaves as it was. Every other ink (a spinner's link, a failure's danger) is the corner's to keep.
+const QUIET_INKS: ReadonlySet<string> = new Set([`text-subtle`, `text-muted`]);
+export const cornerInk = (classes: string): string =>
+    classes
+        .split(` `)
+        .map((name) => (QUIET_INKS.has(name) ? `text-faint` : name))
+        .join(` `);
+
 // The same glyphs for a subagent a runtime ran in-process, which has no conversation and so no AgentStatus, only the
 // roster's word (SubagentStatus). Where the two vocabularies name the same standing they wear the same glyph, so a tray
 // holding both kinds reads as one list: working spins as `running` does, a failure is `error`'s, a stop `stopped`'s.
