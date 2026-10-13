@@ -5,23 +5,31 @@ import type { RunThroughState } from "../models/run-settings/useRunThrough";
 import { t } from "@intentic/ui/i18n";
 
 // One rule for the composer row vs overflow: a control at its default is a named row in the overflow
-// menu; set to anything else, it becomes a chip on the row. A pure, testable table; placement, model
-// and effort aren't here since the row places them itself (effort draws nothing at all under Auto).
+// menu; set to anything else, it becomes a chip on the row. A pure, testable table; model and effort
+// aren't here since the row places them itself (effort draws nothing at all under Auto).
 
 // When the message goes is not one of them: it is the send's own caret (ChatPane), beside the press it changes.
-export type ComposerControl = `mode` | `persona` | `runThrough` | `voice` | `land`;
+export type ComposerControl = `mode` | `placement` | `persona` | `runThrough` | `voice` | `land`;
 
 /**
  * Order the controls read in, row and menu alike, so muscle memory doesn't depend on which half they're on. Whether the
  * work lands by itself comes last, beside the Send it follows.
  */
-export const CONTROL_ORDER: readonly ComposerControl[] = [`mode`, `persona`, `runThrough`, `voice`, `land`];
+export const CONTROL_ORDER: readonly ComposerControl[] = [`mode`, `placement`, `persona`, `runThrough`, `voice`, `land`];
 
 export interface ComposerControlSituation {
     /** The posture the next turn starts in, or the running turn's if the agent has moved itself. */
     readonly mode: PermissionMode;
     /** This chat's own untouched posture (Auto for isolated, Plan for main-tree), not one hard-coded default. */
     readonly startingMode: PermissionMode;
+    /**
+     * Whether there is anywhere else to run, and a pick still to make: a runner is paired, or another sandbox is
+     * reachable, and the board has not yet seen the chat (placement latches with its branch). A chat already placed
+     * elsewhere keeps its chip, which says where it went, so that is offered whatever else holds.
+     */
+    readonly placementOffered: boolean;
+    /** Running somewhere other than this sandbox: on one of its runners, or in another box. */
+    readonly placed: boolean;
     readonly persona: string | undefined;
     readonly runThrough: RunThroughState;
     readonly voiceAgent: boolean;
@@ -53,6 +61,7 @@ export const DESCRIPTION_LIMIT = 40;
 /** Whether the control exists for this chat at all. A control that isn't offered is in neither place. */
 const offeredIn = (situation: ComposerControlSituation): Record<ComposerControl, boolean> => ({
     mode: true,
+    placement: situation.placementOffered,
     persona: situation.personaOffered,
     runThrough: true,
     voice: situation.voiceOffered,
@@ -63,6 +72,7 @@ const offeredIn = (situation: ComposerControlSituation): Record<ComposerControl,
 // running loop counts (its badge is also its stop), and so does a mode the agent moved itself into.
 const setIn = (situation: ComposerControlSituation): Record<ComposerControl, boolean> => ({
     mode: situation.mode !== situation.startingMode,
+    placement: situation.placed,
     persona: situation.persona !== undefined,
     runThrough: situation.runThrough !== `idle`,
     voice: situation.voiceAgent,
@@ -75,6 +85,7 @@ export const ridesRow = (situation: ComposerControlSituation): Record<ComposerCo
     const set = setIn(situation);
     return {
         mode: offered.mode && set.mode,
+        placement: offered.placement && set.placement,
         persona: offered.persona && set.persona,
         runThrough: offered.runThrough && set.runThrough,
         voice: offered.voice && set.voice,
@@ -95,6 +106,15 @@ const rowFor = (control: ComposerControl, situation: ComposerControlSituation): 
                 description: t(`chat.composerMore.howMuchMayDo`),
             };
         }
+        // Always this sandbox: a chat placed elsewhere has left the menu for a chip that names where it went.
+        case `placement`:
+            return {
+                key: control,
+                icon: `desktop`,
+                label: t(`chat.words.whereRuns`),
+                value: t(`shared.thisSandbox`),
+                description: t(`chat.composerMore.whereRunsNote`),
+            };
         case `persona`:
             return {
                 key: control,

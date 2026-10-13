@@ -16,13 +16,15 @@ import { startingMode } from "../../run/turnDefaults";
 import type { Conversation } from "../../session/conversation";
 import type { ChatMessage } from "../../transcript/transcript";
 
-// The composer's row of controls for one pane: which pills ride the row and which wait in the overflow, where the
-// conversation runs, what each pill reads, the one open flag per picker, and the precedence between the choices that
-// rewrite what Send means (an armed edit, a workflow badge, the agent's voice).
+// The composer's row of controls for one pane: which pills ride the row and which wait in the overflow (where the
+// conversation runs among them: a chip once it is placed elsewhere, an overflow row while it is here), what each pill
+// reads, the one open flag per picker, and the precedence between the choices that rewrite what Send means (an armed
+// edit, a workflow badge, the agent's voice).
 
 // Where each picker opens while its own chip rides the row; the overflow button stands in for it otherwise.
 export interface ControlPills {
     readonly mode: Readonly<Ref<HTMLElement | undefined>>;
+    readonly placement: Readonly<Ref<HTMLElement | undefined>>;
     readonly persona: Readonly<Ref<HTMLElement | undefined>>;
     readonly runThrough: Readonly<Ref<HTMLElement | undefined>>;
     readonly more: Readonly<Ref<HTMLElement | undefined>>;
@@ -43,12 +45,18 @@ export const placeConversation = (
     return true;
 };
 
+// Somewhere other than this sandbox: the one placement that rides the row, since it is not the default.
+const placedElsewhere = (conversation: Conversation): boolean => conversation.runner.value !== undefined || conversation.box.value !== undefined;
+
 // What each overflow row opens: the flag of the panel that owns the choice, or, for the two with nothing to pick, the
 // press itself (writing as the agent arms; landing turns the other way).
 const openersOf = (flags: Record<Exclude<ComposerControl, `land`>, Ref<boolean>>, toggleLanding: () => void) =>
     ({
         mode: () => {
             flags.mode.value = true;
+        },
+        placement: () => {
+            flags.placement.value = true;
         },
         persona: () => {
             flags.persona.value = true;
@@ -121,6 +129,9 @@ export const useComposerControls = (host: ControlsHost) => {
     const controlSituation = computed(() => ({
         mode: host.mode.value,
         startingMode: startingMode(conversation().isolated.value),
+        // A chat the board has seen is placed for good, so at the default there is nothing left to pick.
+        placementOffered: placementShown.value && (!conversation().registered.value || placedElsewhere(conversation())),
+        placed: placedElsewhere(conversation()),
         persona: conversation().selection.actsAs.value,
         runThrough: runThrough.state.value,
         voiceAgent: voiceAgent.value,
@@ -139,7 +150,7 @@ export const useComposerControls = (host: ControlsHost) => {
     const anchorOf = (control: ComposerControl, own: Readonly<Ref<HTMLElement | undefined>>) =>
         computed(() => (inRow.value[control] ? own.value : host.pills.more.value));
 
-    const OPENERS = openersOf({ mode: modeOpen, persona: personaOpen, runThrough: runThrough.open, voice: voiceAgent }, landing.toggle);
+    const OPENERS = openersOf({ mode: modeOpen, placement: placementOpen, persona: personaOpen, runThrough: runThrough.open, voice: voiceAgent }, landing.toggle);
 
     // Only one answer to "what does send do" can hold, and an armed edit wins as the most specific act; cleared visibly
     // rather than disabled, so the precedence is seen rather than discovered by pressing Send.
@@ -196,6 +207,7 @@ export const useComposerControls = (host: ControlsHost) => {
             (): Tip => ({ title: t(`chat.chatPane.moreComposerSettings`), rows: moreRows.value.map((row) => ({ label: row.label, value: row.value })) }),
         ),
         modeAnchor: anchorOf(`mode`, host.pills.mode),
+        placementAnchor: anchorOf(`placement`, host.pills.placement),
         personaAnchor: anchorOf(`persona`, host.pills.persona),
         runThroughAnchor: anchorOf(`runThrough`, host.pills.runThrough),
         // A row hands off to the control that owns the choice, closing the overflow first so the next panel's

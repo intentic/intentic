@@ -175,9 +175,6 @@ const { takeFocus, closeHint } = usePaneFocus({
     grow,
 });
 
-// Placed somewhere other than here: the one placement the scratch pad shows, since it is not the default.
-const placed = computed(() => props.conversation.runner.value !== undefined || props.conversation.box.value !== undefined);
-
 // The badge for what the next message runs through: a loop, a workflow, or nothing.
 const runThrough = useRunThrough(chat, { reachable, connected, staged, draft });
 const {
@@ -224,6 +221,7 @@ const {
     moreRows,
     moreHint,
     modeAnchor,
+    placementAnchor,
     personaAnchor,
     runThroughAnchor,
     laterOffered,
@@ -238,6 +236,7 @@ const {
     editing,
     pills: {
         mode: modePill,
+        placement: placementPill,
         persona: personaPill,
         runThrough: runThroughPill,
         more: computed(() => morePill.value ?? composerForm.value),
@@ -699,9 +698,10 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                                 <Icon name="chevron-down" class="text-2xs text-subtle @max-md:hidden" />
                                             </button>
 
-                                            <!-- Placement controls the machine, not the message. -->
+                                            <!-- Placement controls the machine, not the message. It rides the row only once the chat is placed
+                                                 somewhere else, which the scratch pad shows too; at "here" it waits in the overflow. -->
                                             <button
-                                                v-if="placementShown && (!strip || placed)"
+                                                v-if="inRow.placement"
                                                 ref="placementPill"
                                                 type="button"
                                                 class="composer-ghost composer-glyph h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
@@ -1022,7 +1022,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
         <ResponsiveOverlay v-model="personaOpen" :anchor="personaAnchor" cross="end" :header="t(`chat.words.acts`)" panel-class="w-80 p-1">
             <ChatPersonaMenu :picked="conversation.selection.actsAs.value" @picked="pickPersona($event)" />
         </ResponsiveOverlay>
-        <ResponsiveOverlay v-model="placementOpen" :anchor="placementPill" cross="end" :header="t(`chat.words.whereRuns`)" panel-class="w-80 p-1">
+        <ResponsiveOverlay v-model="placementOpen" :anchor="placementAnchor" cross="end" :header="t(`chat.words.whereRuns`)" panel-class="w-80 p-1">
             <ChatPlacementMenu :conversation="conversation" @selected="placementOpen = false" />
         </ResponsiveOverlay>
         <ResponsiveOverlay

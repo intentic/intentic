@@ -3233,6 +3233,7 @@
             "landsInTranscriptNo": "Ląduje w zapisie rozmowy, bez odpowiedzi.",
             "loopRunWorkflow": "Zapętl to albo uruchom workflow.",
             "onePersonasAccountsOnly": "Tylko konta jednej persony.",
+            "whereRunsNote": "Na którym komputerze działa agent.",
             "runThrough": "Przepuść przez",
             "writeAgent": "Pisz jako agent",
             "landWhenDone": "Scal po zakończeniu",

@@ -3233,6 +3233,7 @@
             "landsInTranscriptNo": "Lands in the transcript, no reply.",
             "loopRunWorkflow": "Loop it, or run a workflow.",
             "onePersonasAccountsOnly": "One persona's accounts only.",
+            "whereRunsNote": "Which computer its agent runs on.",
             "runThrough": "Run through",
             "writeAgent": "Write as agent",
             "landWhenDone": "Land when done",

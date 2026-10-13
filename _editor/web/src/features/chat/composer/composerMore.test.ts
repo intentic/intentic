@@ -7,6 +7,8 @@ import { type ComposerControlSituation, CONTROL_ORDER, DESCRIPTION_LIMIT, overfl
 const PLAIN: ComposerControlSituation = {
     mode: `bypassPermissions`,
     startingMode: `bypassPermissions`,
+    placementOffered: true,
+    placed: false,
     persona: undefined,
     runThrough: `idle`,
     voiceAgent: false,
@@ -20,13 +22,14 @@ const chat = (state: Partial<ComposerControlSituation>): ComposerControlSituatio
 const keys = (situation: ComposerControlSituation): string[] => overflowRows(situation).map((row) => row.key);
 
 // When the message goes is not among them: it is the send's own caret, beside the press it changes (ChatPane).
-it(`keeps an ordinary chat's row empty and offers all five in the overflow`, () => {
-    expect(ridesRow(PLAIN)).toEqual({ mode: false, persona: false, runThrough: false, voice: false, land: false });
-    expect(keys(PLAIN)).toEqual([`mode`, `persona`, `runThrough`, `voice`, `land`]);
+it(`keeps an ordinary chat's row empty and offers all six in the overflow`, () => {
+    expect(ridesRow(PLAIN)).toEqual({ mode: false, placement: false, persona: false, runThrough: false, voice: false, land: false });
+    expect(keys(PLAIN)).toEqual([`mode`, `placement`, `persona`, `runThrough`, `voice`, `land`]);
 });
 
 it(`promotes each control into the row the moment it is set`, () => {
     expect(ridesRow(chat({ mode: `plan` })).mode).toBe(true);
+    expect(ridesRow(chat({ placed: true })).placement).toBe(true);
     expect(ridesRow(chat({ persona: `ada` })).persona).toBe(true);
     expect(ridesRow(chat({ runThrough: `workflow` })).runThrough).toBe(true);
     expect(ridesRow(chat({ voiceAgent: true })).voice).toBe(true);
@@ -49,8 +52,9 @@ it(`puts every offered control in exactly one of the two places`, () => {
     const situations = [
         PLAIN,
         chat({ mode: `plan` }),
+        chat({ placed: true }),
         chat({ persona: `ada`, voiceAgent: true }),
-        chat({ mode: `plan`, persona: `ada`, runThrough: `running`, voiceAgent: true }),
+        chat({ mode: `plan`, placed: true, persona: `ada`, runThrough: `running`, voiceAgent: true }),
         chat({ landOwn: true, lands: true }),
     ];
     for (const situation of situations) {
@@ -76,11 +80,25 @@ it(`keeps a running loop in the row`, () => {
     expect(keys(chat({ runThrough: `running` }))).not.toContain(`runThrough`);
 });
 
+// Where the chat runs rides the row only once it is somewhere else: a chat in another box or on a runner must never be
+// out of sight, while "this sandbox" is the default and waits in the overflow like the rest. An offered pick that is
+// still open sits in the overflow either way; a chat the board has seen has none left, which the host says by not
+// offering it (composerControls.ts).
+it(`keeps where the chat runs in the overflow while it is here, and on the row once it is placed elsewhere`, () => {
+    expect(keys(PLAIN)).toContain(`placement`);
+    expect(ridesRow(PLAIN).placement).toBe(false);
+
+    expect(ridesRow(chat({ placed: true })).placement).toBe(true);
+    expect(keys(chat({ placed: true }))).not.toContain(`placement`);
+    // Placed for good and at the default: nothing left to pick, so it is in neither place.
+    expect(keys(chat({ placementOffered: false }))).not.toContain(`placement`);
+});
+
 // A control this chat can't have is in neither place: personas are one daemon's personas, voice needs a
 // transcript.
 it(`drops the controls this chat is not offered`, () => {
-    const away = chat({ personaOffered: false, voiceOffered: false, landOffered: false });
-    expect(ridesRow(away)).toEqual({ mode: false, persona: false, runThrough: false, voice: false, land: false });
+    const away = chat({ placementOffered: false, personaOffered: false, voiceOffered: false, landOffered: false });
+    expect(ridesRow(away)).toEqual({ mode: false, placement: false, persona: false, runThrough: false, voice: false, land: false });
     expect(keys(away)).toEqual([`mode`, `runThrough`]);
     // An answer given before the chat stopped being this reader's to land gets no chip either.
     expect(ridesRow(chat({ landOffered: false, landOwn: true })).land).toBe(false);
@@ -90,8 +108,8 @@ it(`drops the controls this chat is not offered`, () => {
 
 it(`carries the current value and a sentence on every overflow row`, () => {
     const rows = overflowRows(PLAIN);
-    expect(rows.map((row) => row.label)).toEqual([`Agent mode`, `Acts as`, `Run through`, `Write as agent`, `Land when done`]);
-    expect(rows.map((row) => row.value)).toEqual([`Auto`, `Anyone`, `Just this chat`, `Off`, `Off`]);
+    expect(rows.map((row) => row.label)).toEqual([`Agent mode`, `Where this runs`, `Acts as`, `Run through`, `Write as agent`, `Land when done`]);
+    expect(rows.map((row) => row.value)).toEqual([`Auto`, `This sandbox`, `Anyone`, `Just this chat`, `Off`, `Off`]);
     expect(rows.every((row) => row.description.length > 0)).toBe(true);
     // The mode row names the posture this chat is actually in, so a main-tree chat's menu doesn't say "Auto".
     expect(overflowRows(chat({ mode: `plan`, startingMode: `plan` }))[0]?.value).toBe(`Plan`);

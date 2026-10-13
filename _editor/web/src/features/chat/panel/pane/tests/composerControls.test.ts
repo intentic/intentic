@@ -38,6 +38,7 @@ const rowOf = () => {
     const editing = ref<ChatMessage | undefined>();
     const pills = {
         mode: ref<HTMLElement>(document.createElement(`button`)),
+        placement: ref<HTMLElement>(document.createElement(`button`)),
         persona: ref<HTMLElement>(),
         runThrough: ref<HTMLElement>(),
         more: ref<HTMLElement>(document.createElement(`button`)),
@@ -76,19 +77,19 @@ describe(`the row and its overflow`, () => {
     it(`keeps each control in the overflow at this chat's default, and brings a set one into the row`, () => {
         const { chat, mode, runState, row } = rowOf();
         expect(keys(row)).toEqual([`mode`, `persona`, `runThrough`, `land`]);
-        expect(row.inRow.value).toEqual({ mode: false, persona: false, runThrough: false, voice: false, land: false });
+        expect(row.inRow.value).toEqual({ mode: false, placement: false, persona: false, runThrough: false, voice: false, land: false });
         expect(row.laterOffered.value).toBe(true);
 
         mode.value = `plan`;
         chat.selection.apply({ kind: `set`, picks: { actsAs: `backend` } });
         chat.autoLandDraft.value = true;
         expect(keys(row)).toEqual([`runThrough`]);
-        expect(row.inRow.value).toEqual({ mode: true, persona: true, runThrough: false, voice: false, land: true });
+        expect(row.inRow.value).toEqual({ mode: true, placement: false, persona: true, runThrough: false, voice: false, land: true });
 
         // A loop takes the send somewhere a booking cannot follow: the send's caret offers no later then.
         runState.value = `loop`;
         expect(keys(row)).toEqual([]);
-        expect(row.inRow.value).toEqual({ mode: true, persona: true, runThrough: true, voice: false, land: true });
+        expect(row.inRow.value).toEqual({ mode: true, placement: false, persona: true, runThrough: true, voice: false, land: true });
         expect(row.laterOffered.value).toBe(false);
     });
 
@@ -120,7 +121,7 @@ describe(`the row and its overflow`, () => {
 
     it(`hands a row to the picker that owns it, closing itself first; the voice and landing rows are the press`, () => {
         const { chat, runThrough, row } = rowOf();
-        const picks = [`mode`, `persona`, `runThrough`, `voice`, `land`] as const;
+        const picks = [`mode`, `placement`, `persona`, `runThrough`, `voice`, `land`] as const;
         for (const control of picks) {
             row.moreOpen.value = true;
             row.openFromMore(control);
@@ -128,6 +129,7 @@ describe(`the row and its overflow`, () => {
         }
 
         expect(row.modeOpen.value).toBe(true);
+        expect(row.placementOpen.value).toBe(true);
         expect(row.personaOpen.value).toBe(true);
         expect(runThrough.open.value).toBe(true);
         expect(row.voiceAgent.value).toBe(true);
@@ -201,6 +203,49 @@ describe(`where the chat runs`, () => {
         runners.value = [RunnerSummarySchema.parse({ id: `r1`, online: true, parity: `unknown` })];
 
         expect(row.placementShown.value).toBe(true);
+    });
+
+    it(`waits in the overflow while it is here, and opens over the overflow button`, () => {
+        const { pills, row } = rowOf();
+        expect(keys(row)).not.toContain(`placement`);
+
+        runners.value = [RunnerSummarySchema.parse({ id: `r1`, online: true, parity: `unknown` })];
+
+        expect(keys(row)).toEqual([`mode`, `placement`, `persona`, `runThrough`, `land`]);
+        expect(row.inRow.value.placement).toBe(false);
+        expect(row.moreRows.value.find((entry) => entry.key === `placement`)).toMatchObject({ label: `Where this runs`, value: `This sandbox` });
+        expect(row.placementAnchor.value).toBe(pills.more.value);
+
+        row.openFromMore(`placement`);
+        expect(row.placementOpen.value).toBe(true);
+    });
+
+    it(`rides the row as a chip once the chat is placed elsewhere, and opens over it`, () => {
+        const { chat, pills, row } = rowOf();
+        runners.value = [RunnerSummarySchema.parse({ id: `r1`, online: true, parity: `unknown` })];
+
+        chat.runner.value = `r1`;
+
+        expect(row.inRow.value.placement).toBe(true);
+        expect(keys(row)).not.toContain(`placement`);
+        expect(row.placementAnchor.value).toBe(pills.placement.value);
+
+        // Another box is the same: the chip names where the chat went, so it is never out of sight.
+        chat.runner.value = undefined;
+        chat.box.value = `box-2`;
+        expect(row.inRow.value.placement).toBe(true);
+    });
+
+    it(`has no pick left once the board has seen the chat here, and keeps its chip when it is placed`, () => {
+        const { chat, row } = rowOf();
+        runners.value = [RunnerSummarySchema.parse({ id: `r1`, online: true, parity: `unknown` })];
+
+        chat.registered.value = true;
+        expect(keys(row)).not.toContain(`placement`);
+        expect(row.inRow.value.placement).toBe(false);
+
+        chat.runner.value = `r1`;
+        expect(row.inRow.value.placement).toBe(true);
     });
 });
 
