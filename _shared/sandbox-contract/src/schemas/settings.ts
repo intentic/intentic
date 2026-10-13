@@ -717,17 +717,19 @@ export const InputSavingsSchema = z.object({
 export type InputSavings = z.infer<typeof InputSavingsSchema>;
 // One arm of a turn-level experiment; mean is per turn, since the two arms never hold the same count.
 // `mean` is over samples capped at both arms' pooled 95th percentile, so one runaway conversation cannot carry an arm.
+// For a yes/no reading (`openedWithListing`) it is the share of yeses, 0 to 1, and uncapped.
 export const SavingsArmSchema = z.object({ turns: z.number(), mean: z.number() });
 // One metric's reading of a turn-level experiment (the two arms, plus the arithmetic over them). `metric` says what
 // `mean`/`deltaPct` count:
 // searchCalls: searches a turn ran (the search teaching).
 // openingSearches: same, narrowed to before the turn first touched a file.
-// openingListings: directory listings a turn ran to orient itself (the project map).
+// openedWithListing: whether a turn listed directories to orient itself, as a share of turns (the project map).
 // callsBeforeTarget: how far a turn walked before touching a file it went on to edit.
 // failedCalls: tool calls that ended in error (the field notes, whose largest section is a failure taxonomy).
+// Every reading is the main agent's own: a subagent's calls are counted toward the turn and read for nothing.
 // Never cost: each mechanism moves one small part of a turn's work, inside the noise of the rest.
 export const TurnMetricReadingSchema = z.object({
-    metric: z.enum(["searchCalls", "openingSearches", "openingListings", "callsBeforeTarget", "failedCalls"]),
+    metric: z.enum(["searchCalls", "openingSearches", "openedWithListing", "callsBeforeTarget", "failedCalls"]),
     on: SavingsArmSchema,
     off: SavingsArmSchema,
     // Additional control turns to reach a fixed target resolution, not today's delta (which inherits noise and always
@@ -760,6 +762,12 @@ export const TurnExperimentSchema = z.object({
     // Content-addressed treatment version; the reader filters to the latest so two instruction revisions don't blur
     // into one experiment.
     cohort: z.string().optional(),
+    // The latest earlier cohort that reached an answer, with only its answered readings (a margin, with or without a
+    // delta), so restarting a comparison does not wipe a finding off the screen while the new one is early. `from` and
+    // `to` are its first and last measured turn inside the window read, epoch ms. Absent when no earlier one answered.
+    previous: z
+        .object({ from: z.number(), to: z.number(), cohort: z.string().optional(), metrics: z.array(TurnMetricReadingSchema) })
+        .optional(),
 });
 export type TurnExperiment = z.infer<typeof TurnExperimentSchema>;
 // What the settings row can say about the brief without opening it: whether there is one, how much of it this budget

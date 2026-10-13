@@ -2,19 +2,35 @@
 // the populated panel is also measured in the source-backed demo at narrow desktop-pane widths.
 import "@intentic/testing/dom";
 import { type App, createApp, h, nextTick } from "vue";
+import type { TurnExperiment } from "@intentic/sandbox-contract";
 import MeasurementPanel from "./MeasurementPanel.vue";
 import { tableOf } from "./experimentReadings";
 
+const SETTLED: TurnExperiment = {
+    metrics: [{ metric: `searchCalls`, on: { turns: 133, mean: 3.2 }, off: { turns: 40, mean: 6.4 }, deltaPct: -50, marginPct: 10 }],
+    minTurns: 30,
+};
+
+// The map's first day under a restarted comparison: neither row has an answer, and the one before it had one.
+const RESTARTED: TurnExperiment = {
+    metrics: [
+        { metric: `openedWithListing`, on: { turns: 29, mean: 0.3 }, off: { turns: 27, mean: 0.22 } },
+        { metric: `callsBeforeTarget`, on: { turns: 16, mean: 84.1 }, off: { turns: 19, mean: 52.1 } },
+    ],
+    minTurns: 30,
+    sampleUnit: `opening turns`,
+    previous: {
+        from: Date.UTC(2026, 8, 13, 12),
+        to: Date.UTC(2026, 9, 6, 12),
+        metrics: [{ metric: `openedWithListing`, on: { turns: 601, mean: 0.17 }, off: { turns: 165, mean: 0.31 }, deltaPct: -45.2, marginPct: 20.1 }],
+    },
+};
+
 let app: App | undefined;
-const mount = (populated = true, onCommit = jest.fn()): HTMLElement => {
+const mount = (populated: boolean | TurnExperiment = true, onCommit = jest.fn()): HTMLElement => {
     const host = document.createElement(`div`);
     document.body.append(host);
-    const table = populated
-        ? tableOf({
-              metrics: [{ metric: `searchCalls`, on: { turns: 133, mean: 3.2 }, off: { turns: 40, mean: 6.4 }, deltaPct: -50, marginPct: 10 }],
-              minTurns: 30,
-          })
-        : undefined;
+    const table = populated === false ? undefined : tableOf(populated === true ? SETTLED : populated);
     app = createApp({
         render: () =>
             h(MeasurementPanel, {
@@ -76,4 +92,28 @@ it(`uses the empty-state sentence without an empty scrolling region`, () => {
     expect(host.querySelector(`table`)).toBeNull();
     expect(host.textContent).toContain(`No results yet`);
     expect(host.querySelector(`input[type="number"]`)).not.toBeNull();
+});
+
+const rowText = (host: HTMLElement): string[] =>
+    [...host.querySelectorAll(`tbody tr`)].map((row) => [...row.children].map((cell) => cell.textContent?.trim() ?? ``).join(` | `));
+
+it(`withholds an open row's averages and says how far along it is instead`, () => {
+    const rows = rowText(mount(RESTARTED));
+    expect(rows).toContain(`First turns that listed directories | – | – | Too early · 27 of 30`);
+    expect(rows).toContain(`Tool calls before the right file | – | – | Too early · 16 of 30`);
+    expect(rows.join(`\n`)).not.toContain(`84.1`);
+});
+
+it(`shows the last comparison that answered under a restarted one, its shares as percentages`, () => {
+    const host = mount(RESTARTED);
+    const rows = rowText(host);
+    expect(rows).toContain(`Last result, Sep 13 – Oct 6`);
+    expect(rows).toContain(`First turns that listed directories | 17% | 31% | ↓ 45% fewer`);
+    expect(host.textContent).toContain(`A result shows once both groups have at least 30.`);
+});
+
+it(`drops the earlier comparison once the current one has an answer of its own`, () => {
+    const host = mount({ ...SETTLED, previous: RESTARTED.previous });
+    expect(host.textContent).not.toContain(`Last result`);
+    expect(host.textContent).not.toContain(`A result shows once`);
 });

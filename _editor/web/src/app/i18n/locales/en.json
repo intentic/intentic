@@ -6226,15 +6226,17 @@
             "change": "Change",
             "comparisonGroup": "Comparison group",
             "controlGroupPercentage": "Comparison group, as a percentage",
+            "earlyProgress": "Too early · {have} of {need}",
             "effect": "Effect on the agent",
             "fewer": "{pct}% fewer",
+            "lastResult": "Last result, {from} – {to}",
             "less": "{pct}% less",
             "likelyFewer": "Likely between {low}% and {high}% fewer",
             "likelyMore": "Likely between {low}% and {high}% more",
             "metric": {
                 "callsBeforeTarget": "Tool calls before the right file",
                 "failedCalls": "Failed tool calls per turn",
-                "openingListings": "Directory listings on the first turn",
+                "openedWithListing": "First turns that listed directories",
                 "openingSearches": "Searches before opening a file",
                 "outputReached": "Output reaching the agent",
                 "searchCalls": "Searches per turn"
@@ -6244,9 +6246,10 @@
                 "conversations": "About {needed} more conversations in the comparison group would settle it.",
                 "turns": "About {needed} more turns in the comparison group would settle it."
             },
+            "needsEach": "Needs {need} in each group",
             "noClearDifference": "No clear difference",
             "noResultsYet": "No results yet. They fill in as the agent works.",
-            "resultsAppearAt": "Results show once each group has at least {minimum}; {shortfall} more to go.",
+            "resultsAppearAt": "A result shows once both groups have at least {minimum}.",
             "sample": {
                 "commands": "Commands",
                 "conversations": "Conversations",
@@ -6255,7 +6258,7 @@
             "savedSoFar": {
                 "callsBeforeTarget": "About {count} fewer tool calls so far.",
                 "failedCalls": "About {count} fewer failed calls so far.",
-                "openingListings": "About {count} fewer directory listings so far.",
+                "openedWithListing": "About {count} fewer first turns listed directories so far.",
                 "openingSearches": "About {count} fewer searches so far.",
                 "searchCalls": "About {count} fewer searches so far."
             },

@@ -69,6 +69,29 @@ test("a turn that edited nothing has no reading rather than a reading of zero", 
     expect(readingOf([call("Read", { paths: ["src/a.ts"] })], ["src/elsewhere.ts"]).callsBeforeTarget).toBeUndefined();
 });
 
+// A researcher the turn sent out walks its own path, interleaved with the main agent's and never shown the map or the
+// notes: its calls count toward the turn's total and toward no reading, failures included.
+test("a subagent's calls are counted but read nothing", () => {
+    const metrics = createTurnMetrics(ROOT);
+    metrics.call(call("Agent"));
+    metrics.call({ ...call("Bash", { target: "ls" }), id: "researcher-ls", subagent: true });
+    metrics.call({ ...call("Read", { paths: ["src/right.ts"] }), id: "researcher-read", subagent: true });
+    metrics.failed("researcher-ls");
+    metrics.call(call("Bash", { target: "rg needle" }));
+    metrics.call(call("Read", { paths: ["src/right.ts"] }));
+    metrics.call(call("Edit", { paths: ["src/right.ts"] }));
+
+    expect({ ...metrics.reading(["src/right.ts"]), calls: metrics.calls() }).toStrictEqual({
+        calls: 6,
+        searchCalls: 1,
+        openingSearches: 1,
+        openingListings: 0,
+        failedCalls: 0,
+        // The main agent's Agent call and its search came first; the researcher's read of the same file is not its touch.
+        callsBeforeTarget: 2,
+    });
+});
+
 test("a failure is counted once per call, however often it is reported", () => {
     const metrics = createTurnMetrics(ROOT);
     metrics.call(call("Bash", { target: "pnpm test" }));

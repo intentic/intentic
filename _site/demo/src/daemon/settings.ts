@@ -177,19 +177,19 @@ export const DEMO_SAVINGS: SavingsReport = {
         sampleUnit: `conversations`,
         metrics: [
             {
-                metric: `openingListings`,
-                on: { turns: 355, mean: 0.6 },
-                off: { turns: 100, mean: 1.7 },
+                metric: `openedWithListing`,
+                on: { turns: 355, mean: 0.17 },
+                off: { turns: 100, mean: 0.31 },
                 marginPct: 29.6,
-                deltaPct: -63.7,
-                saved: 388,
+                deltaPct: -45.2,
+                saved: 50,
             },
             { metric: `callsBeforeTarget`, on: { turns: 355, mean: 5.2 }, off: { turns: 100, mean: 5.4 }, marginPct: 17.8, controlTurnsNeeded: 640 },
         ],
     },
     // The field notes in their third state, the one neither block above shows: not enough control conversations yet, so
-    // both arms are reported and no claim is made. `cohort` is the revision in play, which is what a monthly rewrite
-    // moves.
+    // each row says how far along it is and no claim is made. `cohort` is the revision in play, which is what a monthly
+    // rewrite moves; the revision before it had an answer, which stands under the new one until that has its own.
     notes: {
         minTurns: 30,
         sampleUnit: `conversations`,
@@ -198,5 +198,14 @@ export const DEMO_SAVINGS: SavingsReport = {
             { metric: `failedCalls`, on: { turns: 84, mean: 1.3 }, off: { turns: 21, mean: 2.1 } },
             { metric: `callsBeforeTarget`, on: { turns: 84, mean: 4.9 }, off: { turns: 21, mean: 5.1 } },
         ],
+        previous: {
+            from: Date.UTC(2026, 8, 1, 9),
+            to: Date.UTC(2026, 8, 30, 18),
+            cohort: `7c03be51`,
+            metrics: [
+                { metric: `failedCalls`, on: { turns: 212, mean: 1.1 }, off: { turns: 64, mean: 1.6 }, marginPct: 22.4, deltaPct: -31.3 },
+                { metric: `callsBeforeTarget`, on: { turns: 212, mean: 5 }, off: { turns: 64, mean: 5.2 }, marginPct: 14.9 },
+            ],
+        },
     },
 };

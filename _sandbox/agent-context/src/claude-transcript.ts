@@ -228,8 +228,8 @@ const turnAt = (turns: readonly TranscriptTurn[], at: number | undefined): Trans
     return found;
 };
 
-// A whole session: its main transcript, with each subagent's calls counted as the turn's own that was running when they
-// were made, the way the sandbox's live readings count them.
+// A whole session: its main transcript, with each subagent's calls filed under the turn that was running when they were
+// made, the way the sandbox's live frames arrive; turn-metrics counts them and reads nothing off them.
 export const readClaudeSession = (file: string, options: TranscriptOptions): TranscriptSession | undefined => {
     let text: string;
     try {

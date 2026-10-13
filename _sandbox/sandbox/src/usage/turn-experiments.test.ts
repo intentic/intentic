@@ -143,20 +143,37 @@ test("failed and cancelled turns are dropped from the population", async () => {
 
 /* ---- the project map, judged on the opening turn it was sent to ---- */
 
-const mapConversation = (id: string, arm: boolean, listings: readonly number[]): UsageTurn[] =>
-    listings.map((openingListings, index) => turn({ conversationId: id, mapArm: arm, turnIndex: index, at: index + 1, openingListings }));
+const mapConversation = (id: string, arm: boolean, listings: readonly number[], over: Partial<UsageTurn> = {}): UsageTurn[] =>
+    listings.map((openingListings, index) => turn({ conversationId: id, mapArm: arm, turnIndex: index, at: index + 1, openingListings, ...over }));
 
-const mapArms = (on: number, off: number, onListings: number, offListings: number): UsageTurn[] => [
-    ...Array.from({ length: on }, (_, index) => mapConversation(`on-${index}`, true, [onListings])).flat(),
-    ...Array.from({ length: off }, (_, index) => mapConversation(`off-${index}`, false, [offListings])).flat(),
+// `onShare` of the treated conversations' opening turns list the root once and the rest list nothing; likewise `offShare`.
+const mapArms = (on: number, off: number, onShare: number, offShare: number, over: Partial<UsageTurn> = {}): UsageTurn[] => [
+    ...Array.from({ length: on }, (_, index) => mapConversation(`on-${index}`, true, [index < Math.round(on * onShare) ? 1 : 0], over)).flat(),
+    ...Array.from({ length: off }, (_, index) => mapConversation(`off-${index}`, false, [index < Math.round(off * offShare) ? 1 : 0], over)).flat(),
 ];
 
-test("the map is judged on the listings its note tells the turn not to run", async () => {
+test("the map is judged on the share of opening turns that listed directories", async () => {
     const { map } = await readTurnExperiments(storeOf(mapArms(40, 40, 0.3, 0.6)), {});
-    expect(map?.metrics.map((reading) => reading.metric)).toEqual(["openingListings", "callsBeforeTarget"]);
+    expect(map?.metrics.map((reading) => reading.metric)).toEqual(["openedWithListing", "callsBeforeTarget"]);
     expect(map?.sampleUnit).toBe("opening turns");
     expect(map?.metrics[0]).toMatchObject({ on: { turns: 40, mean: 0.3 }, off: { turns: 40, mean: 0.6 } });
     expect(map?.metrics[0].deltaPct).toBeCloseTo(-50, 0);
+});
+
+// Three listings are one turn that listed, not three times the evidence.
+test("a turn that listed several times counts once", async () => {
+    const arms = [
+        ...Array.from({ length: 30 }, (_, index) => mapConversation(`on-${index}`, true, [index < 15 ? 3 : 0])).flat(),
+        ...Array.from({ length: 30 }, (_, index) => mapConversation(`off-${index}`, false, [index < 15 ? 1 : 0])).flat(),
+    ];
+    const { map } = await readTurnExperiments(storeOf(arms), {});
+    expect(map?.metrics[0]).toMatchObject({ on: { mean: 0.5 }, off: { mean: 0.5 } });
+});
+
+// Capped at the pooled 95th percentile, a share under 5% would read as nobody listing at all.
+test("a rare listing is not capped away", async () => {
+    const { map } = await readTurnExperiments(storeOf(mapArms(100, 100, 0.03, 0.04)), {});
+    expect(map?.metrics[0]).toMatchObject({ on: { mean: 0.03 }, off: { mean: 0.04 } });
 });
 
 /* Only the opening turn is sampled because later turns lack the opening note. */
@@ -166,19 +183,55 @@ test("only the opening turn of a conversation is the map's sample", async () => 
         ...Array.from({ length: 40 }, (_, index) => mapConversation(`off-${index}`, false, [2, 9, 9, 9])).flat(),
     ];
     const { map } = await readTurnExperiments(storeOf(arms), {});
-    expect(map?.metrics[0]).toMatchObject({ on: { turns: 40, mean: 0 }, off: { turns: 40, mean: 2 } });
+    expect(map?.metrics[0]).toMatchObject({ on: { turns: 40, mean: 0 }, off: { turns: 40, mean: 1 } });
 });
 
 /* A conversation whose opening turn fell outside the window contributes nothing rather than offering its. */
 test("a conversation whose opening turn is missing is not counted", async () => {
     const arms = [
-        ...mapArms(30, 30, 1, 2),
+        ...mapArms(30, 30, 0.5, 1),
         ...Array.from({ length: 20 }, (_, index) =>
             [4, 5].map((turnIndex) => turn({ conversationId: `late-${index}`, mapArm: true, turnIndex, at: turnIndex, openingListings: 9 })),
         ).flat(),
     ];
     const { map } = await readTurnExperiments(storeOf(arms), {});
-    expect(map?.metrics[0]).toMatchObject({ on: { turns: 30, mean: 1 }, off: { turns: 30, mean: 2 } });
+    expect(map?.metrics[0]).toMatchObject({ on: { turns: 30, mean: 0.5 }, off: { turns: 30, mean: 1 } });
+});
+
+/* ---- an earlier comparison's answer, kept while a restarted one is early ---- */
+
+const cohortArms = (cohort: string | undefined, at: number, on: number, off: number, onShare: number, offShare: number): UsageTurn[] =>
+    mapArms(on, off, onShare, offShare, cohort === undefined ? { at } : { at, mapCohort: cohort }).map((row) => ({
+        ...row,
+        conversationId: `${cohort ?? "unstamped"}-${row.conversationId ?? ""}`,
+    }));
+
+test("a restarted comparison carries the last one that reached an answer, with its dates", async () => {
+    const rows = [...cohortArms(undefined, 1000, 60, 60, 0.2, 0.5), ...cohortArms("map-vs-none-2", 5000, 5, 5, 0, 1)];
+    const { map } = await readTurnExperiments(storeOf(rows), {});
+    expect(map?.cohort).toBe("map-vs-none-2");
+    expect(map?.metrics[0].marginPct).toBeUndefined();
+    expect(map?.previous).toMatchObject({ from: 1000, to: 1000, metrics: [{ metric: "openedWithListing", on: { mean: 0.2 }, off: { mean: 0.5 } }] });
+    expect(map?.previous?.metrics[0]?.deltaPct).toBeCloseTo(-60, 0);
+    // Opening turns edited nothing here, so the second reading never answered and is not carried.
+    expect(map?.previous?.metrics).toHaveLength(1);
+});
+
+test("an earlier comparison of two maps is not carried as the map against none", async () => {
+    const rows = [
+        ...cohortArms(undefined, 1000, 60, 60, 0.2, 0.5),
+        ...cohortArms("compact-vs-full", 3000, 60, 60, 0.1, 0.4),
+        ...cohortArms("map-vs-none-2", 5000, 5, 5, 0, 1),
+    ];
+    const { map } = await readTurnExperiments(storeOf(rows), {});
+    expect(map?.previous?.from).toBe(1000);
+    expect(map?.previous?.cohort).toBeUndefined();
+});
+
+test("nothing is carried when no earlier comparison reached an answer", async () => {
+    const rows = [...cohortArms("map-vs-none", 1000, 10, 10, 0.2, 0.5), ...cohortArms("map-vs-none-2", 5000, 5, 5, 0, 1)];
+    const { map } = await readTurnExperiments(storeOf(rows), {});
+    expect(map?.previous).toBeUndefined();
 });
 
 test("a sandbox measuring neither mechanism reports neither", async () => {

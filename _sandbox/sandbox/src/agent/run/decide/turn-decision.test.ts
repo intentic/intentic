@@ -269,6 +269,14 @@ test.each([
         { turnIndex: 0 },
     ],
     [
+        "a child another conversation spawned, taken out of the experiment",
+        MAP_MEASURED,
+        { conversationId: MAP_TREATED },
+        "spawned",
+        false,
+        { turnIndex: 0 },
+    ],
+    [
         "a workspace with the map off",
         SandboxSettingsSchema.parse({ workspaceMapHoldout: 0.5 }),
         { conversationId: MAP_TREATED },
@@ -277,7 +285,9 @@ test.each([
         { turnIndex: 0 },
     ],
 ] as const)("the map on %s", (_case, settings, input, turns, sent, experiments) => {
-    const entry = turns === undefined ? undefined : conversationAfter(turns);
+    // A spawned child's starter is latched as its parent before its opening turn is planned.
+    const entry =
+        turns === undefined ? undefined : turns === "spawned" ? conversationAfter(0, { identity: { startedBy: "agent:parent" } }) : conversationAfter(turns);
 
     const decision = decided({ ...FACTS, settings, entry, personas: [LEAN], mapNote: MAP }, turn(input));
 

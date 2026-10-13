@@ -3100,15 +3100,17 @@
             "change": "Écart",
             "comparisonGroup": "Groupe de comparaison",
             "controlGroupPercentage": "Groupe de comparaison, en pourcentage",
+            "earlyProgress": "Trop tôt · {have} sur {need}",
             "effect": "Effet sur l'agent",
             "fewer": "{pct} % de moins",
+            "lastResult": "Dernier résultat, {from} – {to}",
             "less": "{pct} % de moins",
             "likelyFewer": "Probablement entre {low} % et {high} % de moins",
             "likelyMore": "Probablement entre {low} % et {high} % de plus",
             "metric": {
                 "callsBeforeTarget": "Appels d'outils avant le bon fichier",
                 "failedCalls": "Appels d'outils échoués par tour",
-                "openingListings": "Listages de dossiers au premier tour",
+                "openedWithListing": "Premiers tours ayant listé des dossiers",
                 "openingSearches": "Recherches avant d'ouvrir un fichier",
                 "outputReached": "Sortie qui parvient à l'agent",
                 "searchCalls": "Recherches par tour"
@@ -3118,9 +3120,10 @@
                 "conversations": "Environ {needed} conversations de plus dans le groupe de comparaison trancheraient.",
                 "turns": "Environ {needed} tours de plus dans le groupe de comparaison trancheraient."
             },
+            "needsEach": "Il en faut {need} par groupe",
             "noClearDifference": "Pas d'écart net",
             "noResultsYet": "Pas encore de résultats. Ils arrivent à mesure que l'agent travaille.",
-            "resultsAppearAt": "Les résultats s'affichent dès que chaque groupe en compte au moins {minimum} ; il en manque {shortfall}.",
+            "resultsAppearAt": "Un résultat s'affiche dès que les deux groupes en comptent au moins {minimum}.",
             "sample": {
                 "commands": "Commandes",
                 "conversations": "Conversations",
@@ -3129,7 +3132,7 @@
             "savedSoFar": {
                 "callsBeforeTarget": "Environ {count} appels d'outils de moins jusqu'ici.",
                 "failedCalls": "Environ {count} appels échoués de moins jusqu'ici.",
-                "openingListings": "Environ {count} listages de dossiers de moins jusqu'ici.",
+                "openedWithListing": "Environ {count} premiers tours de moins ont listé des dossiers jusqu'ici.",
                 "openingSearches": "Environ {count} recherches de moins jusqu'ici.",
                 "searchCalls": "Environ {count} recherches de moins jusqu'ici."
             },

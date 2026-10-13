@@ -52,7 +52,7 @@ Run `/intentic:stats` for this project, or `/intentic:stats all` for every proje
 Biggest cleaners: cap 1.1M (96 commands), pnpm 210k (40 commands), dedup 88k (131 commands).
 
 ## Session context
-Project map, root listings in the opening turn: -71.4% ±18.2pp (95%): 0.4 with it vs 1.4 without, over 118 and 31 opening turns.
+Project map, opening turns that listed directories: -45.2% ±20.1pp (95%): 17% with it vs 31% without, over 118 and 31 opening turns.
 Field notes, failed tool calls per turn: no difference yet beyond ±24.1pp (95%): 0.6 with it vs 0.7 without, over 104 and 33 conversations.
 iq teaching, search calls per turn: measuring, 12 of 30 conversations in the smaller arm: 2.1 with it vs 2.9 without, over 96 and 12 conversations.
 ```
@@ -60,7 +60,7 @@ iq teaching, search calls per turn: measuring, 12 of 30 conversations in the sma
 The numbers above are an illustration of the format. The report reads two things:
 
 - The cleaners' ledger, one row per command with the bytes before and after and what each cleaner removed. That saving is exact. With `output_holdout` above 0 it also compares the median cleaned output against commands left uncleaned.
-- Claude Code's own session transcripts, compared across the two arms each session was drawn into. A hash of the session id puts `holdout` of the sessions in the control arm for each mechanism, so the draw needs no state and gives the same answer every time it is read. The map is judged on directory listings of the project root in the first turn, the field notes on failed tool calls, and the iq teaching on search calls. A change is stated only once both arms hold 30 samples and the 95% margin excludes zero.
+- Claude Code's own session transcripts, compared across the two arms each session was drawn into. A hash of the session id puts `holdout` of the sessions in the control arm for each mechanism, so the draw needs no state and gives the same answer every time it is read. The map is judged on the share of first turns that listed the project's directories, the field notes on failed tool calls, and the iq teaching on search calls, each counting the main agent's calls and not its subagents'. A change is stated only once both arms hold 30 samples and the 95% margin excludes zero.
 
 The arithmetic is the one behind the savings page of an Intentic sandbox, from the same packages, so a number here means what it means there.
 

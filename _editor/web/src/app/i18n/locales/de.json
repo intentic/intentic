@@ -3097,15 +3097,17 @@
             "change": "Änderung",
             "comparisonGroup": "Vergleichsgruppe",
             "controlGroupPercentage": "Vergleichsgruppe in Prozent",
+            "earlyProgress": "Noch zu früh · {have} von {need}",
             "effect": "Wirkung auf den Agenten",
             "fewer": "{pct} % weniger",
+            "lastResult": "Letztes Ergebnis, {from} – {to}",
             "less": "{pct} % weniger",
             "likelyFewer": "Wahrscheinlich zwischen {low} % und {high} % weniger",
             "likelyMore": "Wahrscheinlich zwischen {low} % und {high} % mehr",
             "metric": {
                 "callsBeforeTarget": "Tool-Aufrufe bis zur richtigen Datei",
                 "failedCalls": "Fehlgeschlagene Tool-Aufrufe pro Runde",
-                "openingListings": "Verzeichnisauflistungen in der ersten Runde",
+                "openedWithListing": "Erste Runden mit Verzeichnisauflistung",
                 "openingSearches": "Suchen vor dem ersten Öffnen einer Datei",
                 "outputReached": "Ausgabe, die den Agenten erreicht",
                 "searchCalls": "Suchen pro Runde"
@@ -3115,9 +3117,10 @@
                 "conversations": "Etwa {needed} weitere Unterhaltungen in der Vergleichsgruppe würden es klären.",
                 "turns": "Etwa {needed} weitere Runden in der Vergleichsgruppe würden es klären."
             },
+            "needsEach": "Braucht {need} pro Gruppe",
             "noClearDifference": "Kein klarer Unterschied",
             "noResultsYet": "Noch keine Ergebnisse. Sie füllen sich, während der Agent arbeitet.",
-            "resultsAppearAt": "Ergebnisse erscheinen, sobald jede Gruppe mindestens {minimum} hat; noch {shortfall}.",
+            "resultsAppearAt": "Ein Ergebnis erscheint, sobald beide Gruppen mindestens {minimum} haben.",
             "sample": {
                 "commands": "Befehle",
                 "conversations": "Unterhaltungen",
@@ -3126,7 +3129,7 @@
             "savedSoFar": {
                 "callsBeforeTarget": "Bisher etwa {count} Tool-Aufrufe weniger.",
                 "failedCalls": "Bisher etwa {count} fehlgeschlagene Aufrufe weniger.",
-                "openingListings": "Bisher etwa {count} Verzeichnisauflistungen weniger.",
+                "openedWithListing": "Bisher etwa {count} erste Runden weniger mit Verzeichnisauflistung.",
                 "openingSearches": "Bisher etwa {count} Suchen weniger.",
                 "searchCalls": "Bisher etwa {count} Suchen weniger."
             },

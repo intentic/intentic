@@ -41,8 +41,10 @@ interface Experiment<Reading> {
 
 // What the map experiment compares, stamped on both arms so a reading never mixes it with the rows of an earlier
 // comparison: the unstamped map-or-none rows, whose holdout share moved between 10% and 54% while the population moved
-// under it, and the compact-vs-full rows (2026-10-06 to 10-12), whose arm meant another thing.
-export const MAP_COMPARISON = "map-vs-none";
+// under it; the compact-vs-full rows (2026-10-06 to 10-12), whose arm meant another thing; and the first "map-vs-none"
+// day (2026-10-12 to 10-13), which read subagents' calls as the main agent's (999 calls before the edited file where its
+// own agent took 97) and drew spawned children an arm.
+export const MAP_COMPARISON = "map-vs-none-2";
 
 // Annotated, not inferred: a nested ternary over a literal and a union widens to `string`.
 const deliveryOf = (outcome: TurnContextOutcome | undefined): TurnContextSkip | "delivered" | undefined =>

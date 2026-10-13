@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
     MECHANISMS,
+    isShareMetric,
     measureExperiment,
     MIN_ARM_TURNS,
     type Design,
@@ -127,7 +128,12 @@ export const turnsOf = (row: SessionRow): PluginTurn[] => {
 };
 
 const DESIGNS: readonly { readonly title: string; readonly option: keyof Options; readonly design: Design<PluginTurn>; readonly reads: string }[] = [
-    { title: "Project map", option: "project_map", design: { ...MECHANISMS.map, arm: (turn) => turn.mapArm, cohort: () => undefined }, reads: "root listings in the opening turn" },
+    {
+        title: "Project map",
+        option: "project_map",
+        design: { ...MECHANISMS.map, arm: (turn) => turn.mapArm, cohort: () => undefined },
+        reads: "opening turns that listed directories",
+    },
     {
         title: "Field notes",
         option: "field_notes",
@@ -140,7 +146,8 @@ const DESIGNS: readonly { readonly title: string; readonly option: keyof Options
 // Said the way the sandbox's savings chart says it: the change once the margin excludes zero, the margin in percentage
 // points at 95%, and the two arms' means with the samples behind them.
 const readingLine = (reading: TurnMetricReading, unit: SampleUnit): string => {
-    const arms = `${reading.on.mean} with it vs ${reading.off.mean} without, over ${reading.on.turns} and ${reading.off.turns} ${unit}`;
+    const said = (mean: number): string => (isShareMetric(reading.metric) ? `${Math.round(mean * 100)}%` : String(mean));
+    const arms = `${said(reading.on.mean)} with it vs ${said(reading.off.mean)} without, over ${reading.on.turns} and ${reading.off.turns} ${unit}`;
     if (reading.deltaPct !== undefined && reading.marginPct !== undefined) {
         return `${reading.deltaPct > 0 ? "+" : ""}${reading.deltaPct}% ±${reading.marginPct}pp (95%): ${arms}.`;
     }

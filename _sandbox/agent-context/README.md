@@ -30,11 +30,21 @@ flowchart LR
     leaning the full map's way). Its one gain was 1,600 fewer characters, under 500 tokens once per conversation.
     Before it, the map-or-none comparison (2026-09-05 to 10-06, 826 against 242 opening turns) measured −47% (±20)
     opening listings and −18% (±18) calls before the edited file, which is what the daemon measures again now.
+  - 2026-10-13: the first day of measuring the map against none again read 84 calls before the edited file with the
+    map against 52 without, on 16 against 19 opening turns. Three first turns that fanned out to subagents carried it:
+    their researchers' calls counted as the main agent's, so one read 999 where its own agent took 97. Across the
+    ledger, the 7% of first turns that fan out held 83% of that reading's spread. Readings now come off the main agent's
+    calls alone, a child another conversation spawned gets no map and no arm (201 of 213 such children opened on a
+    brief that already named file paths, and 60 had drawn the other arm from their parent), and the headline is the
+    share of opening turns that listed directories, where the mean count read "0.4 against 0.3". The comparison
+    restarted under a new cohort for it.
 - `field-notes` slices a ranked TOON brief to a budget, and `field-notes-prompt` is the brief both writers of that
   file are given, so the writer and the reader cannot drift apart.
 - `experiments` draws a conversation's arm from a salted hash of its id, `turn-metrics` scores one turn's tool calls
-  (searches, orientation listings, calls before the edited file, failures), and `arm-stats` compares the two arms of
-  each mechanism with a Welch margin that withholds a delta until it is real.
+  (searches, orientation listings, calls before the edited file, failures) off the main agent's calls, counting a
+  subagent's toward the turn and reading nothing off them, and `arm-stats` compares the two arms of each mechanism with
+  a Welch margin that withholds a delta until it is real. Beside the current cohort it carries the latest earlier one
+  that reached an answer, so a restarted comparison does not wipe a finding off the screen while it is early.
 - `claude-transcript` reads a Claude Code session, subagents included, into the same turns and calls, so the
   sandbox's benches and the plugin's report count identically. Which user line a person wrote (a prompt, a slash
   command, or a compaction summary, an interruption, a harness line) is `@intentic/iq/transcript`'s `promptOf`, the

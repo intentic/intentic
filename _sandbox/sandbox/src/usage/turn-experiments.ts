@@ -16,9 +16,16 @@ const iqCohortOf = (turn: UsageTurn): string | undefined =>
 
 const SEARCH_DESIGN: Design<UsageTurn> = { ...MECHANISMS.search, arm: (turn) => turn.iqSearchArm, cohort: iqCohortOf };
 
-// Cohorted by comparison rather than by revision (the map is recomputed on every send): the map-vs-none rows are read
-// apart from the comparisons before them (experiments.ts MAP_COMPARISON).
-const MAP_DESIGN: Design<UsageTurn> = { ...MECHANISMS.map, arm: (turn) => turn.mapArm, cohort: (turn) => turn.mapCohort };
+// Cohorted by comparison rather than by revision (the map is recomputed on every send): the current rows are read apart
+// from the comparisons before them (experiments.ts MAP_COMPARISON). Every earlier one also compared the map against none
+// and may stand in while the current one is early, except the compact-vs-full rows, whose arms were two maps.
+const OTHER_MAP_COMPARISONS: ReadonlySet<string | undefined> = new Set(["compact-vs-full"]);
+const MAP_DESIGN: Design<UsageTurn> = {
+    ...MECHANISMS.map,
+    arm: (turn) => turn.mapArm,
+    cohort: (turn) => turn.mapCohort,
+    comparable: (cohort) => !OTHER_MAP_COMPARISONS.has(cohort),
+};
 
 // Cohorted, unlike the map, because the file is rewritten monthly and a window wide enough to reach MIN_ARM_TURNS is
 // wide enough to hold two revisions.

@@ -14,10 +14,13 @@ const Z_95 = 1.96;
 // What a turn is judged on, as the savings contract spells each reading:
 // searchCalls: searches a turn ran (the search teaching).
 // openingSearches: same, narrowed to before the turn first touched a file.
-// openingListings: directory listings a turn ran to orient itself (the project map).
+// openedWithListing: whether a turn listed directories to orient itself, as a share of turns (the project map).
 // callsBeforeTarget: how far a turn walked before touching a file it went on to edit.
 // failedCalls: tool calls that ended in error (the field notes, whose largest section is a failure taxonomy).
-export type MetricName = "searchCalls" | "openingSearches" | "openingListings" | "callsBeforeTarget" | "failedCalls";
+export type MetricName = "searchCalls" | "openingSearches" | "openedWithListing" | "callsBeforeTarget" | "failedCalls";
+
+// The readings whose arm mean is a share of turns, 0 to 1, rather than a count per turn; said as a percentage.
+export const isShareMetric = (metric: MetricName): boolean => metric === "openedWithListing";
 
 // One turn as the arithmetic reads it: which conversation it belongs to, when and where in it it ran, and its readings.
 // Absent readings are unmeasured, never zero.
@@ -35,7 +38,7 @@ export interface MeasuredTurn {
 export type SampleUnit = "turns" | "conversations" | "opening turns";
 
 // One arm of an experiment; mean is per turn, since the two arms never hold the same count, and taken over samples
-// capped at the pooled 95th percentile (CAP_QUANTILE).
+// capped at the pooled 95th percentile (CAP_QUANTILE). For a yes/no reading the mean is the share of yeses.
 export interface ArmReading {
     readonly turns: number;
     readonly mean: number;
@@ -55,6 +58,16 @@ export interface TurnMetricReading {
     readonly saved?: number;
 }
 
+// An earlier comparison's answers, kept beside a restarted one so a finding does not vanish from the screen the day the
+// treatment or the measurement changes. Only the readings that reached an answer: a margin, with or without a delta.
+export interface EarlierExperiment {
+    // Its first and last measured turn inside the window read, epoch ms.
+    readonly from: number;
+    readonly to: number;
+    readonly cohort?: string;
+    readonly metrics: TurnMetricReading[];
+}
+
 export interface TurnExperiment {
     // A head and a tail, so "always a headline" is a type fact rather than a check every reader repeats.
     readonly metrics: [TurnMetricReading, ...TurnMetricReading[]];
@@ -62,21 +75,35 @@ export interface TurnExperiment {
     readonly sampleUnit?: SampleUnit;
     // The treatment's revision the reading covers; the latest one, so two revisions never blur into one experiment.
     readonly cohort?: string;
+    // The latest earlier cohort that reached an answer; absent when none did.
+    readonly previous?: EarlierExperiment;
 }
 
 interface Metric {
     readonly name: MetricName;
     readonly of: (turn: MeasuredTurn) => number | undefined;
     readonly round: (value: number) => number;
+    // A yes/no reading has no tail to cut, and capping it at the pooled 95th percentile would turn every yes into a no
+    // whenever fewer than one turn in twenty says yes.
+    readonly uncapped?: true;
 }
 
 const round1 = (value: number): number => Math.round(value * 10) / 10;
+// A share to a tenth of a percent.
+const round3 = (value: number): number => Math.round(value * 1000) / 1000;
 
 // Rounded to a tenth: an arm delta is a fraction of one call.
 const SEARCH_CALLS: Metric = { name: "searchCalls", of: (turn) => turn.searchCalls, round: round1 };
 const OPENING_SEARCHES: Metric = { name: "openingSearches", of: (turn) => turn.openingSearches, round: round1 };
-// The map's two readings: what it stops the turn doing, and whether it got there sooner.
-const ROOT_LISTINGS: Metric = { name: "openingListings", of: (turn) => turn.openingListings, round: round1 };
+// The map's two readings: what it stops the turn doing, and whether it got there sooner. The first as a share of opening
+// turns that listed at all, not a mean count: most list nothing and a few list three times, so the count's mean read
+// "0.4 against 0.3", a figure nobody counts in, where the share reads "27% of first turns against 22%".
+const OPENED_WITH_LISTING: Metric = {
+    name: "openedWithListing",
+    of: (turn) => (turn.openingListings === undefined ? undefined : Number(turn.openingListings > 0)),
+    round: round3,
+    uncapped: true,
+};
 const CALLS_BEFORE_TARGET: Metric = { name: "callsBeforeTarget", of: (turn) => turn.callsBeforeTarget, round: round1 };
 // The field notes' headline: the brief's largest section is a taxonomy of what fails, so calls that ended in error is
 // the reading it either moves or does not.
@@ -170,7 +197,7 @@ export const MECHANISMS = {
     // The search teaching rides every turn, so every turn is evidence.
     search: { metrics: [SEARCH_CALLS, OPENING_SEARCHES], sampleUnit: "conversations", sample: meanOfTurns },
     // The map is sent once and judged on the turn it was sent to; `callsBeforeTarget` exists only on turns that edited.
-    map: { metrics: [ROOT_LISTINGS, CALLS_BEFORE_TARGET], sampleUnit: "opening turns", sample: openingTurn },
+    map: { metrics: [OPENED_WITH_LISTING, CALLS_BEFORE_TARGET], sampleUnit: "opening turns", sample: openingTurn },
     // The brief rides the whole session, so turn 40 is as much evidence as turn 1.
     notes: { metrics: [FAILED_CALLS, CALLS_BEFORE_TARGET], sampleUnit: "conversations", sample: meanOfTurns },
 } as const satisfies Record<string, Mechanism>;
@@ -180,6 +207,9 @@ export interface Design<Row extends MeasuredTurn> extends Mechanism {
     readonly arm: (turn: Row) => boolean | undefined;
     // The treatment's revision; undefined for a mechanism with no revisions to mix (the map is recomputed every send).
     readonly cohort: (turn: Row) => string | undefined;
+    // Whether an earlier cohort compared the same two things, so its answers can stand in for the current one's while
+    // that is still early; absent means every cohort did.
+    readonly comparable?: (cohort: string | undefined) => boolean;
 }
 
 interface ConversationSample<Row> {
@@ -187,14 +217,8 @@ interface ConversationSample<Row> {
     readonly turns: readonly Row[];
 }
 
-// Undefined when no conversation carries an arm at all, which readers show as "not measured", never as zero.
-export const measureExperiment = <Row extends MeasuredTurn>(turns: readonly Row[], design: Design<Row>): TurnExperiment | undefined => {
-    const latest = turns
-        .filter((turn) => design.arm(turn) !== undefined && design.cohort(turn) !== undefined)
-        .toSorted((left, right) => right.at - left.at)[0];
-    const cohort = latest === undefined ? undefined : design.cohort(latest);
-    const cohortTurns =
-        cohort === undefined ? turns.filter((turn) => design.cohort(turn) === undefined) : turns.filter((turn) => design.cohort(turn) === cohort);
+// One cohort's readings, from its conversations: undefined when none of them carries an arm.
+const readCohort = <Row extends MeasuredTurn>(cohortTurns: readonly Row[], design: Design<Row>): [TurnMetricReading, ...TurnMetricReading[]] | undefined => {
     const grouped = new Map<string, { arm: boolean; valid: boolean; turns: Row[] }>();
     for (const turn of cohortTurns) {
         const arm = design.arm(turn);
@@ -222,14 +246,59 @@ export const measureExperiment = <Row extends MeasuredTurn>(turns: readonly Row[
                 const value = sample.arm === arm ? design.sample(sample.turns, metric) : undefined;
                 return value === undefined ? [] : [value];
             });
-        const arms = capped(values(true), values(false));
+        const arms = metric.uncapped === true ? { on: values(true), off: values(false) } : capped(values(true), values(false));
         return readingOfArms(armOfValues(arms.on), armOfValues(arms.off), metric, false);
     };
     const [headline, ...rest] = design.metrics;
-    return {
-        metrics: [reading(headline), ...rest.map(reading)],
-        minTurns: MIN_ARM_TURNS,
-        sampleUnit: design.sampleUnit,
-        ...(cohort !== undefined ? { cohort } : {}),
-    };
+    return [reading(headline), ...rest.map(reading)];
+};
+
+const answered = (reading: TurnMetricReading): boolean => reading.marginPct !== undefined;
+
+// Earlier cohorts newest first by their last measured turn; the first one with an answered reading, unless the design
+// says it compared something else.
+const previousOf = <Row extends MeasuredTurn>(turns: readonly Row[], design: Design<Row>, current: string | undefined): EarlierExperiment | undefined => {
+    const spans = new Map<string | undefined, { from: number; to: number }>();
+    for (const turn of turns) {
+        const cohort = design.cohort(turn);
+        if (design.arm(turn) === undefined || cohort === current || design.comparable?.(cohort) === false) {
+            continue;
+        }
+        const span = spans.get(cohort);
+        spans.set(cohort, { from: Math.min(span?.from ?? turn.at, turn.at), to: Math.max(span?.to ?? turn.at, turn.at) });
+    }
+    for (const [cohort, span] of [...spans].toSorted((left, right) => right[1].to - left[1].to)) {
+        const metrics = readCohort(
+            turns.filter((turn) => design.cohort(turn) === cohort),
+            design,
+        )?.filter(answered);
+        if (metrics !== undefined && metrics.length > 0) {
+            return cohort === undefined ? { ...span, metrics } : { ...span, cohort, metrics };
+        }
+    }
+    return undefined;
+};
+
+// Undefined when no conversation carries an arm at all, which readers show as "not measured", never as zero.
+export const measureExperiment = <Row extends MeasuredTurn>(turns: readonly Row[], design: Design<Row>): TurnExperiment | undefined => {
+    const latest = turns
+        .filter((turn) => design.arm(turn) !== undefined && design.cohort(turn) !== undefined)
+        .toSorted((left, right) => right.at - left.at)[0];
+    const cohort = latest === undefined ? undefined : design.cohort(latest);
+    const metrics = readCohort(
+        turns.filter((turn) => design.cohort(turn) === cohort),
+        design,
+    );
+    if (metrics === undefined) {
+        return undefined;
+    }
+    let experiment: TurnExperiment = { metrics, minTurns: MIN_ARM_TURNS, sampleUnit: design.sampleUnit };
+    if (cohort !== undefined) {
+        experiment = { ...experiment, cohort };
+    }
+    const previous = previousOf(turns, design, cohort);
+    if (previous !== undefined) {
+        experiment = { ...experiment, previous };
+    }
+    return experiment;
 };

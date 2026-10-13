@@ -5845,15 +5845,17 @@
             "change": "Zmiana",
             "comparisonGroup": "Grupa porównawcza",
             "controlGroupPercentage": "Grupa porównawcza, w procentach",
+            "earlyProgress": "Za wcześnie · {have} z {need}",
             "effect": "Wpływ na agenta",
             "fewer": "{pct}% mniej",
+            "lastResult": "Ostatni wynik, {from} – {to}",
             "less": "{pct}% mniej",
             "likelyFewer": "Prawdopodobnie od {low}% do {high}% mniej",
             "likelyMore": "Prawdopodobnie od {low}% do {high}% więcej",
             "metric": {
                 "callsBeforeTarget": "Wywołania narzędzi przed właściwym plikiem",
                 "failedCalls": "Nieudane wywołania narzędzi na turę",
-                "openingListings": "Listowania katalogów w pierwszej turze",
+                "openedWithListing": "Pierwsze tury z listowaniem katalogów",
                 "openingSearches": "Wyszukiwania przed otwarciem pliku",
                 "outputReached": "Wyjście docierające do agenta",
                 "searchCalls": "Wyszukiwania na turę"
@@ -5863,9 +5865,10 @@
                 "conversations": "Około {needed} kolejnych rozmów w grupie porównawczej to rozstrzygnie.",
                 "turns": "Około {needed} kolejnych tur w grupie porównawczej to rozstrzygnie."
             },
+            "needsEach": "Potrzeba {need} w każdej grupie",
             "noClearDifference": "Brak wyraźnej różnicy",
             "noResultsYet": "Nie ma jeszcze wyników. Pojawią się, gdy agent popracuje.",
-            "resultsAppearAt": "Wyniki pojawią się, gdy każda grupa będzie miała co najmniej {minimum}; brakuje jeszcze {shortfall}.",
+            "resultsAppearAt": "Wynik pojawi się, gdy obie grupy będą miały co najmniej {minimum}.",
             "sample": {
                 "commands": "Polecenia",
                 "conversations": "Rozmowy",
@@ -5874,7 +5877,7 @@
             "savedSoFar": {
                 "callsBeforeTarget": "Dotąd około {count} wywołań narzędzi mniej.",
                 "failedCalls": "Dotąd około {count} nieudanych wywołań mniej.",
-                "openingListings": "Dotąd około {count} listowań katalogów mniej.",
+                "openedWithListing": "Dotąd około {count} pierwszych tur mniej z listowaniem katalogów.",
                 "openingSearches": "Dotąd około {count} wyszukiwań mniej.",
                 "searchCalls": "Dotąd około {count} wyszukiwań mniej."
             },

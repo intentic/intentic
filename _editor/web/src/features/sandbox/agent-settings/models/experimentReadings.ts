@@ -16,15 +16,29 @@ export type Outcome =
     | { readonly kind: `lower` | `higher`; readonly pct: number; readonly low?: number; readonly high?: number; readonly saved?: number }
     // Enough data on both sides, and any difference is still inside the noise: `within` is how big it could be.
     | { readonly kind: `unclear`; readonly within?: number; readonly needed?: number }
-    // Too few samples on one side for any answer yet.
-    | { readonly kind: `early` };
+    // Too few samples on one side for any answer yet: `have` is what the smaller group holds, `need` what each needs.
+    | { readonly kind: `early`; readonly have?: number; readonly need?: number };
 
 export interface ResultRow {
     readonly key: RowKey;
     /** Each group's average, when the metric has one; the cleaners compare shares and have none. */
     readonly on?: number;
     readonly off?: number;
+    /** The averages are shares of the sample, 0 to 1, said as percentages. */
+    readonly share?: boolean;
+    /**
+     * The samples behind this row, which can be fewer than the table's: the calls before the edited file are read only
+     * on turns that edited something.
+     */
+    readonly samples?: { readonly on: number; readonly off: number };
     readonly outcome: Outcome;
+}
+
+/** An earlier comparison's answered rows and the days they span, kept while a restarted one has none of its own. */
+export interface EarlierResult {
+    readonly from: number;
+    readonly to: number;
+    readonly rows: readonly ResultRow[];
 }
 
 export interface ResultTable {
@@ -35,13 +49,15 @@ export interface ResultTable {
     /** Samples each group needs before any row can answer; absent when the experiment publishes no threshold. */
     readonly minimum?: number;
     readonly rows: readonly ResultRow[];
+    readonly previous?: EarlierResult;
 }
 
 const whole = (value: number): number => Math.round(Math.abs(value));
 
-export const outcomeOf = (reading: TurnMetricReading): Outcome => {
+// `minimum` is the experiment's threshold, which turns an early row into how far along it is.
+export const outcomeOf = (reading: TurnMetricReading, minimum?: number): Outcome => {
     if (reading.marginPct === undefined) {
-        return { kind: `early` };
+        return minimum === undefined ? { kind: `early` } : { kind: `early`, have: Math.min(reading.on.turns, reading.off.turns), need: minimum };
     }
     if (reading.deltaPct === undefined) {
         return {
@@ -62,6 +78,18 @@ export const outcomeOf = (reading: TurnMetricReading): Outcome => {
     };
 };
 
+// The readings whose averages are shares of turns rather than counts per turn.
+const SHARE_ROWS: ReadonlySet<RowKey> = new Set([`openedWithListing`]);
+
+const rowOf = (reading: TurnMetricReading, minimum: number | undefined): ResultRow => ({
+    key: reading.metric,
+    on: reading.on.mean,
+    off: reading.off.mean,
+    share: SHARE_ROWS.has(reading.metric),
+    samples: { on: reading.on.turns, off: reading.off.turns },
+    outcome: outcomeOf(reading, minimum),
+});
+
 // An opening turn is one per conversation, so the reader counts conversations either way.
 const unitOf = (experiment: TurnExperiment): SampleUnit => (experiment.sampleUnit === `turns` || experiment.sampleUnit === undefined ? `turns` : `conversations`);
 
@@ -70,16 +98,19 @@ export const tableOf = (experiment: TurnExperiment | undefined): ResultTable | u
     if (experiment === undefined) {
         return undefined;
     }
-    // Every reading is over the same coin flip, so the first one's group sizes are every row's.
+    // Every reading is over the same coin flip, so the first one's group sizes are the table's; a row that reads only
+    // some of those samples carries its own.
     const [first] = experiment.metrics;
-    return {
+    const table: ResultTable = {
         unit: unitOf(experiment),
         on: first.on.turns,
         off: first.off.turns,
         minimum: experiment.minTurns,
-        rows: experiment.metrics.map((reading) => ({ key: reading.metric, on: reading.on.mean, off: reading.off.mean, outcome: outcomeOf(reading) })),
+        rows: experiment.metrics.map((reading) => rowOf(reading, experiment.minTurns)),
     };
+    const { previous } = experiment;
+    if (previous === undefined || previous.metrics.length === 0) {
+        return table;
+    }
+    return { ...table, previous: { from: previous.from, to: previous.to, rows: previous.metrics.map((reading) => rowOf(reading, undefined)) } };
 };
-
-/** How many more samples the smaller group needs before rows can answer; 0 once both have enough. */
-export const shortfallOf = (table: ResultTable): number => (table.minimum === undefined ? 0 : Math.max(0, table.minimum - Math.min(table.on, table.off)));

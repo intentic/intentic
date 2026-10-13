@@ -3110,15 +3110,17 @@
             "change": "Cambio",
             "comparisonGroup": "Grupo de comparación",
             "controlGroupPercentage": "Grupo de comparación, en porcentaje",
+            "earlyProgress": "Aún es pronto · {have} de {need}",
             "effect": "Efecto en el agente",
             "fewer": "{pct} % menos",
+            "lastResult": "Último resultado, {from} – {to}",
             "less": "{pct} % menos",
             "likelyFewer": "Probablemente entre un {low} % y un {high} % menos",
             "likelyMore": "Probablemente entre un {low} % y un {high} % más",
             "metric": {
                 "callsBeforeTarget": "Llamadas a herramientas antes del archivo correcto",
                 "failedCalls": "Llamadas a herramientas fallidas por turno",
-                "openingListings": "Listados de directorios en el primer turno",
+                "openedWithListing": "Primeros turnos que listaron directorios",
                 "openingSearches": "Búsquedas antes de abrir un archivo",
                 "outputReached": "Salida que llega al agente",
                 "searchCalls": "Búsquedas por turno"
@@ -3128,9 +3130,10 @@
                 "conversations": "Unas {needed} conversaciones más en el grupo de comparación lo aclararían.",
                 "turns": "Unos {needed} turnos más en el grupo de comparación lo aclararían."
             },
+            "needsEach": "Necesita {need} en cada grupo",
             "noClearDifference": "Sin diferencia clara",
             "noResultsYet": "Aún no hay resultados. Aparecen a medida que el agente trabaja.",
-            "resultsAppearAt": "Los resultados aparecen cuando cada grupo tiene al menos {minimum}; faltan {shortfall}.",
+            "resultsAppearAt": "Un resultado aparece cuando ambos grupos tienen al menos {minimum}.",
             "sample": {
                 "commands": "Comandos",
                 "conversations": "Conversaciones",
@@ -3139,7 +3142,7 @@
             "savedSoFar": {
                 "callsBeforeTarget": "Unas {count} llamadas a herramientas menos hasta ahora.",
                 "failedCalls": "Unas {count} llamadas fallidas menos hasta ahora.",
-                "openingListings": "Unos {count} listados de directorios menos hasta ahora.",
+                "openedWithListing": "Unos {count} primeros turnos menos listaron directorios hasta ahora.",
                 "openingSearches": "Unas {count} búsquedas menos hasta ahora.",
                 "searchCalls": "Unas {count} búsquedas menos hasta ahora."
             },

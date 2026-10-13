@@ -71,7 +71,7 @@ test("the cleaners' saving, and a measured mechanism's effect with its margin", 
     expect(report).toContain("1 command trimmed: 10k tokens of output became 1.0k (90% saved, exact per command).");
     expect(report).toContain("Biggest cleaners: pnpm 9.0k (1 command).");
     expect(report).toContain(`${2 * (MIN_ARM_TURNS + 5)} recorded sessions`);
-    expect(report).toMatch(/Project map, root listings in the opening turn: -100% ±\d+(\.\d)?pp \(95%\): 0 with it vs 1\.5 without, over 35 and 35 opening turns\./);
+    expect(report).toMatch(/Project map, opening turns that listed directories: -100% ±\d+(\.\d)?pp \(95%\): 0% with it vs 100% without, over 35 and 35 opening turns\./);
 });
 
 test("a mechanism that is off, or measured by nobody, says which", () => {

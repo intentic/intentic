@@ -1,5 +1,6 @@
 import { type AgentCapabilities, type AgentHarness, type AgentProvider, type AgentTurn, type Area, type ConversationGrant, type Persona, type SandboxSettings, capabilitiesOf, type RoutedAgentTurn } from "@intentic/sandbox-contract";
 import { conversationFence } from "../../../areas/area-scope.js";
+import { parentOfActor } from "../../../auth/principal.js";
 import { compactedSinceLastTurn, type PersistedAgent } from "../../../conversations/registry/agents-store.js";
 import { type TurnPersona, turnPersona, widenPersona } from "../../../personas/personas.js";
 import { type TurnBriefing, briefingOf } from "../../prompt/turn-briefing.js";
@@ -54,10 +55,18 @@ export interface TurnPremise {
     readonly send: { readonly map: boolean; readonly landingChecks: boolean; readonly iqTeaching: boolean };
 }
 
+// Whether the conversation gets the map at all. A child another conversation spawned does not: it opens on a brief its
+// parent wrote, which named file paths in 201 of 213 children (a median 4,573 characters against 254 for a person's
+// opening), so the map has nothing left to orient; and drawn an arm of its own, it carried its parent's map into the
+// control group in 60 of them. Asked of the latched starter, which `begin` writes before the turn is planned. A card
+// that dropped the map is likewise out, and never in the experiment `arm` measures.
+const mapped = (briefing: TurnBriefing, entry: ConversationEntry | undefined): boolean =>
+    briefing.sends("map") && parentOfActor(entry?.identity.startedBy) === undefined;
+
 // The opening (non-fork) message only: the map stays in the transcript, and the layout has not moved by the second
-// turn. The card is asked first, since a card that dropped the map is never in the experiment `arm` measures.
-const mapDue = (briefing: TurnBriefing, settings: SandboxSettings, arm: boolean | undefined, input: AgentTurn, turns: number): boolean =>
-    briefing.sends("map") && (arm ?? EXPERIMENTS.workspaceMap.on(settings)) && input.forkOf === undefined && turns === 0;
+// turn.
+const mapDue = (settings: SandboxSettings, arm: boolean | undefined, input: AgentTurn, turns: number): boolean =>
+    (arm ?? EXPERIMENTS.workspaceMap.on(settings)) && input.forkOf === undefined && turns === 0;
 
 // Said once on the opening message, and again after a compaction summarizes away the history that held it. `>=`
 // inside compactedSinceLastTurn, since the turn after the one a compaction is filed under is the one that owes it.
@@ -83,8 +92,9 @@ export const premiseOf = (facts: PremiseFacts, input: AgentTurn, runtime: TurnRu
     const briefing = briefingOf(persona.persona);
     const search = armOf(EXPERIMENTS.iqSearch, settings, input.conversationId);
     const iqSearchEnabled = search ?? EXPERIMENTS.iqSearch.on(settings);
-    // A card that drops the map takes its conversation out of the experiment, not into its control group.
-    const map = briefing.sends("map") ? armOf(EXPERIMENTS.workspaceMap, settings, input.conversationId) : undefined;
+    // A conversation the map never reaches is out of the experiment, not in its control group.
+    const sendsMap = mapped(briefing, entry);
+    const map = sendsMap ? armOf(EXPERIMENTS.workspaceMap, settings, input.conversationId) : undefined;
     return {
         persona,
         briefing,
@@ -92,7 +102,7 @@ export const premiseOf = (facts: PremiseFacts, input: AgentTurn, runtime: TurnRu
         iqSearchEnabled,
         startIn: persona.workspace?.startIn ?? entry?.identity.startIn ?? input.startIn,
         send: {
-            map: mapDue(briefing, settings, map, input, runtime.conversationTurns),
+            map: sendsMap && mapDue(settings, map, input, runtime.conversationTurns),
             landingChecks: briefing.sends("checks") && landingChecksDue(input, entry, runtime.conversationTurns),
             iqTeaching: iqTeachingDue(runtime, iqSearchEnabled),
         },

@@ -130,11 +130,12 @@ export const createTurnFrames = (root: string, resumed: string | undefined): Tur
     const metrics = createTurnMetrics(root);
     // The call ledger is runtime-neutral (it also scores Claude Code transcripts for the plugin); this is its fold over
     // frames. Only `tool_call` is a call: `tool_call_update` is a later SNAPSHOT of one already counted, and the one
-    // reading taken off it is whether the call failed, which is not known when it starts.
+    // reading taken off it is whether the call failed, which is not known when it starts. A frame nested under another
+    // call is a subagent's, which the ledger counts but reads nothing off.
     const callMetrics = {
         note: (event: AgentEvent): void => {
             if (event.kind === "tool_call") {
-                metrics.call(event);
+                metrics.call({ ...event, subagent: event.parentToolUseId !== undefined });
             } else if (event.kind === "tool_call_update" && event.status === "failed") {
                 metrics.failed(event.id);
             }
