@@ -32,6 +32,9 @@ const MINUTES_WSL_KERNEL: u32 = 5;
 const MINUTES_DOCKER_DESKTOP: u32 = 12;
 const MINUTES_ENGINE: u32 = 10;
 const MINUTES_ENGINE_START: u32 = 2;
+/// Carrying a PC's sandboxes off Docker Desktop: on omen a 1.5 GB sandbox's volumes crossed in a minute and its 8.75 GB
+/// image in about one more (engine/moves.rs); Docker Desktop's own start comes first when it is not running.
+const MINUTES_ENGINE_MOVE: u32 = 5;
 const MINUTES_DOCKER_RUNNING: u32 = 4;
 
 /// Everything the probe reads, plus the three docker facts the caller fills from [`crate::docker`]. One
@@ -125,6 +128,10 @@ pub struct Facts {
     /// never installed, started or repaired.
     #[serde(default)]
     pub bring_your_own: bool,
+    /// This side's sandboxes still run on Docker Desktop (or the person's own engine), and the setup puts them on ours:
+    /// they are carried across (`engine-move`) before the PC switches (engine/choice.rs `move_first`).
+    #[serde(default)]
+    pub move_first: bool,
     #[serde(default)]
     pub engine_running: bool,
 }
@@ -396,7 +403,8 @@ pub fn chosen_engine(facts: &Facts) -> crate::engine::Kind {
 
 /// The `"admin"` and `"ours"` fields on each `intentic-requirement:` line.
 pub fn requirement_admin_ours(requirement: &Requirement) -> (bool, bool) {
-    let ours = matches!(requirement.id, "engine" | "engine-start") || requirement.action.ours();
+    let ours = matches!(requirement.id, "engine" | "engine-start" | "engine-move")
+        || requirement.action.ours();
     let admin = requirement.action == Action::FixElevated;
     (admin, ours)
 }
@@ -736,7 +744,8 @@ fn append_intentic_engine(found: &mut Vec<Requirement>, facts: &Facts) {
             "We will start it and wait until it answers.",
             Action::Fix,
         ));
-    } else if !facts.docker_daemon && !facts.docker_denied {
+    } else if !facts.move_first && !facts.docker_daemon && !facts.docker_denied {
+        // `docker` reaches our engine only once it is active; while sandboxes wait to be moved it still reaches theirs.
         found.push(req(
             "engine-start",
             "the intentic engine running",
@@ -744,6 +753,27 @@ fn append_intentic_engine(found: &mut Vec<Requirement>, facts: &Facts) {
             "We will start it and wait until it answers.",
             Action::Fix,
         ));
+    }
+    if facts.move_first {
+        let theirs = if facts.docker_desktop_path.is_empty() {
+            "your own Docker"
+        } else {
+            "Docker Desktop"
+        };
+        let mut requirement = req(
+            "engine-move",
+            "Sandboxes moved to the intentic engine",
+            &format!("This PC's sandboxes still run on {theirs}."),
+            &format!(
+                "We will move them to the intentic engine. Each stops while its files are copied, and {theirs} keeps its copy for 7 days."
+            ),
+            Action::Fix,
+        );
+        if waiting {
+            requirement.detail =
+                Some("This step runs after the intentic engine is installed.".to_string());
+        }
+        found.push(requirement);
     }
 }
 
@@ -854,6 +884,7 @@ fn minutes_for(requirement: &Requirement) -> u32 {
         "docker-running" | "docker-linux-containers" => MINUTES_DOCKER_RUNNING,
         "engine" => MINUTES_ENGINE,
         "engine-start" => MINUTES_ENGINE_START,
+        "engine-move" => MINUTES_ENGINE_MOVE,
         _ => 0,
     }
 }
@@ -1037,7 +1068,10 @@ pub const AREAS: [(&str, &[&str]); 9] = [
         "Docker's engine",
         &["docker-running", "docker-linux-containers"],
     ),
-    ("the intentic engine", &["engine", "engine-start"]),
+    (
+        "the intentic engine",
+        &["engine", "engine-start", "engine-move"],
+    ),
     ("Free disk space", &["disk-space"]),
 ];
 
@@ -1212,6 +1246,7 @@ mod tests {
             engine_installed: false,
             engine_running: false,
             bring_your_own: false,
+            move_first: false,
             test_engine: None,
         }
     }
@@ -1238,6 +1273,49 @@ mod tests {
 
     fn ids(facts: &Facts) -> Vec<&'static str> {
         requirements(facts).into_iter().map(|r| r.id).collect()
+    }
+
+    /* rog, 2026-10-13: Docker Desktop installed and stopped, and ic's records of sandboxes on this side. The setup put
+    "Your own Docker: Docker Desktop is not running" on a new install's card; it moves them to our engine instead. */
+    #[test]
+    fn sandboxes_on_docker_desktop_are_moved_to_our_engine_never_a_reason_to_start_docker_desktop()
+    {
+        let holding = |facts: Facts| Facts {
+            test_engine: Some(crate::engine::Kind::Intentic),
+            move_first: true,
+            docker_daemon: false,
+            ..facts
+        };
+        assert_eq!(ids(&holding(healthy())), vec!["engine", "engine-move"]);
+        // Installed and running beside Docker Desktop: `docker` still reaches theirs, so a stopped Docker Desktop is no
+        // reason to start ours again. What is left is the move.
+        let beside = holding(Facts {
+            engine_installed: true,
+            engine_running: true,
+            ..healthy()
+        });
+        let left = requirements(&beside);
+        assert_eq!(
+            left.iter().map(|r| r.id).collect::<Vec<_>>(),
+            vec!["engine-move"]
+        );
+        assert_eq!(left[0].action, Action::Fix);
+        assert!(
+            left[0].problem.contains("Docker Desktop"),
+            "{}",
+            left[0].problem
+        );
+        assert!(!requirements(&beside)
+            .iter()
+            .any(|r| r.id == "docker-own" || r.id == "docker-running"));
+        // Moved: the PC is on ours, and nothing is left.
+        let moved = Facts {
+            move_first: false,
+            docker_daemon: true,
+            ..beside
+        };
+        assert!(requirements(&moved).is_empty());
+        assert_eq!(prepare_summary(&moved, &[], false).engine, "intentic");
     }
 
     #[test]
@@ -2077,6 +2155,7 @@ mod tests {
             "docker-linux-containers",
             "engine",
             "engine-start",
+            "engine-move",
             "disk-space",
         ] {
             assert!(known.contains(&id), "{id} is not on any checklist row");

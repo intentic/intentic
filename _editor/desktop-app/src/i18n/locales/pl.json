@@ -431,6 +431,7 @@
             "windows-edition": "Wydanie Windows",
             "engine": "Silnik kontenerów",
             "engine-start": "Silnik kontenerów działa",
+            "engine-move": "Sandboxy przeniesione z Docker Desktop",
             "docker-desktop": "Docker Desktop",
             "docker-path": "Docker w PATH",
             "docker-users": "Uprawnienia Docker dla tego konta",

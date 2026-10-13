@@ -33,13 +33,12 @@ pub fn run_fetch() -> Result<()> {
 pub fn status_json(
     in_use: Kind,
     facts: &super::choice::Facts,
-    default: Kind,
     status: &Status,
 ) -> serde_json::Value {
     use super::choice;
     serde_json::json!({
         "engine": in_use.id(),
-        "chosen": choice::for_new_setup(facts, default).id(),
+        "chosen": choice::for_new_setup(facts).id(),
         "installed": status.installed,
         "running": status.running,
         "version": status.version,
@@ -52,9 +51,9 @@ pub fn status_json(
         "ownEngine": facts.own_engine,
         "preferred": facts.preferred.map(Kind::id),
         "gpu": facts.gpu,
-        "bringYourOwn": choice::bring_your_own(facts, default, in_use),
+        "bringYourOwn": choice::bring_your_own(in_use),
         "canMove": choice::can_move(facts, in_use),
-        "offerMove": choice::offer_move(facts, default, in_use),
+        "offerMove": choice::offer_move(facts, in_use),
         "moves": super::moves::summary(),
     })
 }
@@ -66,10 +65,7 @@ pub fn run_status(json: bool) -> Result<()> {
         let mut facts = super::choice_facts(docker_desktop_installed());
         facts.gpu = gpu_in_use();
         // allow(terminal-output): --json: one document on stdout for the desktop app and the smoke tests.
-        println!(
-            "{}",
-            status_json(kind, &facts, super::choice::DOCKER_DESKTOP_PCS, &status)
-        );
+        println!("{}", status_json(kind, &facts, &status));
         return Ok(());
     }
     print_human_status(kind, &status);
@@ -77,9 +73,10 @@ pub fn run_status(json: bool) -> Result<()> {
 }
 
 pub fn run_install() -> Result<()> {
-    // A fresh device's engine is the one its sandboxes run on. On a device with Docker Desktop, installing makes it ready and
-    // switches nothing: Docker Desktop's sandboxes would otherwise vanish from every `docker` this account runs.
-    let activate = chosen() == Kind::Intentic;
+    // A device's engine is the one its sandboxes run on. On a device whose sandboxes are still on Docker Desktop,
+    // installing makes it ready and switches nothing: they would otherwise vanish from every `docker` this account runs,
+    // so the switch is the move's (`ic engine move --to intentic`), at its end.
+    let activate = chosen() == Kind::Intentic && !super::move_first();
     ui::act("Installing the intentic engine");
     // A line per step and per percent, not per downloaded chunk.
     let mut last: Option<(String, Option<u64>)> = None;
@@ -185,25 +182,31 @@ pub fn run_remove(yes: bool) -> Result<()> {
     Ok(())
 }
 
-/// The engine a fresh setup here would pick.
+/// The engine a setup here picks.
 pub fn chosen() -> Kind {
     super::choose(docker_desktop_installed())
 }
 
-/// `ic engine prefer <intentic|docker-desktop>`: the person's word, saved for every later choice (choice.rs). Moving
-/// nothing: `ic engine move` is what carries sandboxes across.
+/// `ic engine prefer <intentic|docker-desktop>`: the person's word on the move, saved (choice.rs). `docker-desktop` is
+/// the desktop app's "Not now": the move stops being put in front of them. `intentic` puts it back. It moves nothing and
+/// chooses no engine: a setup always puts this PC's sandboxes on ours, and `ic engine move` is what carries them across.
 pub fn run_prefer(engine: &str) -> Result<()> {
     let Some(kind) = Kind::parse(engine).filter(|kind| *kind != Kind::Native) else {
         return Err(Fail(format!(
             "prefer `intentic` or `docker-desktop`, not '{engine}'."
         )));
     };
-    ui::act(&format!("Choosing {} for new sandboxes", kind.name()));
+    ui::act("Saving your word on the move to the intentic engine");
     super::set_preferred(kind).map_err(Fail::from)?;
-    ui::done(&format!(
-        "New sandboxes on this device use {} from now on.",
-        kind.name()
-    ));
+    if kind == Kind::DockerDesktop {
+        ui::done("The move to the intentic engine is no longer offered here. Sandboxes on Docker Desktop stay there until they are moved.");
+        ui::later(&[(
+            "move sandboxes".to_string(),
+            "ic engine move --to intentic".to_string(),
+        )]);
+    } else {
+        ui::done("The move to the intentic engine is offered again while sandboxes here run on Docker Desktop.");
+    }
     Ok(())
 }
 
@@ -348,9 +351,10 @@ mod tests {
             sandboxes_here: true,
             ..Default::default()
         };
-        let json = status_json(Kind::DockerDesktop, &facts, Kind::DockerDesktop, &status);
+        let json = status_json(Kind::DockerDesktop, &facts, &status);
         assert_eq!(json["engine"], "dockerDesktop");
-        assert_eq!(json["chosen"], "dockerDesktop");
+        // Sandboxes on Docker Desktop never keep a setup there: it chooses ours, and carries them across.
+        assert_eq!(json["chosen"], "intentic");
         assert_eq!(json["installed"], true);
         assert_eq!(json["active"], false);
         assert_eq!(json["dockerDesktop"], true);
@@ -358,12 +362,12 @@ mod tests {
         assert_eq!(json["network"], "isolated");
         assert_eq!(json["pipe"], "npipe:////./pipe/intentic-engine.me");
         assert_eq!(json["canMove"], true);
-        assert_eq!(json["offerMove"], false);
-        assert_eq!(json["bringYourOwn"], false);
+        // The move is offered, and Docker Desktop is the person's own to keep running until it happens.
+        assert_eq!(json["offerMove"], true);
+        assert_eq!(json["bringYourOwn"], true);
         assert!(json.get("held").is_some());
-        // The switch flipped: the move is offered, and Docker Desktop is the person's own to keep running.
-        let flipped = status_json(Kind::DockerDesktop, &facts, Kind::Intentic, &status);
-        assert_eq!(flipped["offerMove"], true);
-        assert_eq!(flipped["bringYourOwn"], true);
+        let on_ours = status_json(Kind::Intentic, &facts, &status);
+        assert_eq!(on_ours["offerMove"], false);
+        assert_eq!(on_ours["bringYourOwn"], false);
     }
 }

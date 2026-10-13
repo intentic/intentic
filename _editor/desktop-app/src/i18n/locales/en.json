@@ -431,6 +431,7 @@
             "windows-edition": "Windows edition",
             "engine": "Container engine",
             "engine-start": "Container engine running",
+            "engine-move": "Sandboxes moved off Docker Desktop",
             "docker-desktop": "Docker Desktop",
             "docker-path": "Docker on PATH",
             "docker-users": "Docker permission for this account",

@@ -1,33 +1,29 @@
-//! WHICH ENGINE A PC'S SANDBOXES GO ON (2026-10-09) — the rules, pure, and the switch that changes them.
+//! WHICH ENGINE A PC'S SANDBOXES GO ON — the rules, pure.
 #![cfg_attr(not(windows), allow(dead_code))]
 
-/* Three things decide it, in this order. The person's own word: `IC_ENGINE`, then the preference the desktop app
-saves (`ic engine prefer`). What the PC already holds: sandboxes that run on Docker Desktop stay there until they are
-moved (`ic engine move`), because a setup that switched engines under them would leave them where no `docker` looks;
-and a sandbox handed this device's GPU stays on Docker Desktop, since the intentic engine cannot pass a GPU through yet. Then
-the default for a PC with Docker Desktop, which is the one switch of the migration plan. Flipped to ours on 2026-10-10:
-every new setup goes onto the intentic engine, Docker Desktop installed or not, so a new install has one engine to run and
-repair whatever else the PC holds. What it cannot flip is above it: sandboxes already on Docker Desktop (until moved), a
-GPU sandbox, and the person's own word.
+/* On a Windows PC it is the intentic engine, always (2026-10-13). Docker Desktop installed or not, sandboxes already on it
+or not, the person's "Not now" on the move or not: a setup puts this PC's sandboxes on ours. Sandboxes still on Docker
+Desktop are not a reason to stay there: the setup carries them across itself (`ic engine move --to intentic`, the
+`engine-move` step of prepare/plan.rs) before the PC switches, so none is left where no `docker` looks. Until 2026-10-13
+three things kept a PC on Docker Desktop instead: any sandbox record of ic's (stale ones too), a "Not now" on the move
+offer (saved as a preference for Docker Desktop), and Rancher Desktop being installed; each put "Your own Docker" on a
+new install's setup card and asked the person to start an engine Intentic no longer uses.
 
-The same switch decides what Intentic promises a Docker Desktop that stays. Before it flips, Docker Desktop is an engine
-Intentic sets up and repairs. After, it is the person's own engine (bring your own Docker): Intentic checks that it
-answers and runs Linux containers, says so when it does not, and leaves installing, starting and repairing it to its
-owner. Another engine of a person's own (Rancher Desktop) is that from the start. */
+`IC_ENGINE=docker-desktop` is the one way onto Docker Desktop, for a test or CI run that must exercise it.
+
+Until a PC's sandboxes are moved, the Docker Desktop they run on is the person's own engine (bring your own Docker):
+Intentic checks that it answers and runs Linux containers, says so when it does not, and leaves installing, starting and
+repairing it to its owner. The same holds for Rancher Desktop. */
 
 use super::Kind;
-
-/// What a PC with Docker Desktop gets by default: our engine, the migration's switch flipped (2026-10-10). New setups
-/// there go onto it, the desktop app offers the move to sandboxes already on Docker Desktop, and a Docker Desktop that
-/// stays becomes the person's own engine. `Kind::DockerDesktop` here puts it back.
-pub const DOCKER_DESKTOP_PCS: Kind = Kind::Intentic;
 
 /// What the choice is made from.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Facts {
     /// `IC_ENGINE`, read: `docker-desktop` or `intentic`.
     pub forced: Option<Kind>,
-    /// What the person said in the app (`ic engine prefer`).
+    /// What the person said in the app (`ic engine prefer`). It only decides whether the move is put in front of them
+    /// (`offer_move`); it never keeps a setup on Docker Desktop.
     pub preferred: Option<Kind>,
     pub docker_desktop: bool,
     /// Another engine of the person's own on Windows (Rancher Desktop).
@@ -38,38 +34,28 @@ pub struct Facts {
     pub gpu: bool,
 }
 
-/// The engine a NEW setup on this device puts its sandboxes on, when none is active yet. `default` is
-/// [`DOCKER_DESKTOP_PCS`], passed in so tests can hold the switch either way.
-pub fn for_new_setup(facts: &Facts, default: Kind) -> Kind {
-    if let Some(forced) = facts.forced {
-        return forced;
-    }
-    if !facts.docker_desktop && !facts.own_engine {
-        return Kind::Intentic;
-    }
-    // Docker Desktop's (or the person's own engine's) sandboxes are not left behind by a setup.
-    if facts.sandboxes_here || facts.gpu {
-        return Kind::DockerDesktop;
-    }
-    match facts.preferred {
-        Some(kind) => kind,
-        None if facts.own_engine && !facts.docker_desktop => Kind::DockerDesktop,
-        None => default,
-    }
+/// The engine a setup on this device puts its sandboxes on: ours, unless `IC_ENGINE` says otherwise.
+pub fn for_new_setup(facts: &Facts) -> Kind {
+    facts.forced.unwrap_or(Kind::Intentic)
 }
 
-/// Whether a Docker Desktop (or another engine of the person's) that this device's sandboxes run on is theirs to keep
-/// running: true once the switch has flipped, and always for an engine Intentic does not install.
-pub fn bring_your_own(facts: &Facts, default: Kind, in_use: Kind) -> bool {
+/// Whether a setup that chose `chosen` has sandboxes to carry across first: this side keeps sandboxes, and they run on
+/// another engine (Docker Desktop, or the person's own). Installing our engine and switching alone would leave them
+/// where no `docker` looks, so the switch is the move's, at its end.
+pub fn move_first(facts: &Facts, chosen: Kind, in_use: Kind) -> bool {
+    chosen == Kind::Intentic && in_use == Kind::DockerDesktop && facts.sandboxes_here
+}
+
+/// Whether the Docker this device's sandboxes run on is the person's own to keep running: Docker Desktop (or another
+/// engine of theirs) for as long as they are still on it. Intentic installs, starts and repairs only its own engine.
+pub fn bring_your_own(in_use: Kind) -> bool {
     in_use == Kind::DockerDesktop
-        && (default == Kind::Intentic || (facts.own_engine && !facts.docker_desktop))
 }
 
-/// Whether the desktop app should put the move in front of the person rather than only keep it in reach: the switch
-/// has flipped, the sandboxes are still on Docker Desktop, and nothing says they should stay there.
-pub fn offer_move(facts: &Facts, default: Kind, in_use: Kind) -> bool {
-    default == Kind::Intentic
-        && in_use == Kind::DockerDesktop
+/// Whether the desktop app should put the move in front of the person rather than only keep it in reach: the
+/// sandboxes are still on Docker Desktop, and nothing says they should stay there for now.
+pub fn offer_move(facts: &Facts, in_use: Kind) -> bool {
+    in_use == Kind::DockerDesktop
         && facts.docker_desktop
         && !facts.gpu
         && facts.preferred != Some(Kind::DockerDesktop)
@@ -94,127 +80,76 @@ mod tests {
     }
 
     #[test]
-    fn a_pc_with_no_engine_of_its_own_gets_ours() {
-        for default in [Kind::DockerDesktop, Kind::Intentic] {
-            assert_eq!(for_new_setup(&pc(), default), Kind::Intentic);
+    fn every_setup_gets_ours_whatever_the_pc_holds() {
+        let holding_everything = Facts {
+            preferred: Some(Kind::DockerDesktop),
+            docker_desktop: true,
+            own_engine: true,
+            sandboxes_here: true,
+            gpu: true,
+            ..pc()
+        };
+        for facts in [pc(), holding_everything] {
+            assert_eq!(for_new_setup(&facts), Kind::Intentic);
         }
     }
 
     #[test]
-    fn before_the_switch_docker_desktop_pcs_keep_docker_desktop() {
-        let desktop = Facts {
-            docker_desktop: true,
-            ..pc()
-        };
-        assert_eq!(
-            for_new_setup(&desktop, Kind::DockerDesktop),
-            Kind::DockerDesktop
-        );
-        // …unless the person asked for ours.
-        let asked = Facts {
-            preferred: Some(Kind::Intentic),
-            ..desktop.clone()
-        };
-        assert_eq!(for_new_setup(&asked, Kind::DockerDesktop), Kind::Intentic);
-    }
-
-    #[test]
-    fn after_the_switch_a_fresh_docker_desktop_pc_gets_ours_and_one_with_sandboxes_keeps_them_where_they_are(
-    ) {
-        let desktop = Facts {
-            docker_desktop: true,
-            ..pc()
-        };
-        assert_eq!(for_new_setup(&desktop, Kind::Intentic), Kind::Intentic);
-        let holding = Facts {
-            sandboxes_here: true,
-            ..desktop.clone()
-        };
-        assert_eq!(for_new_setup(&holding, Kind::Intentic), Kind::DockerDesktop);
-        let gpu = Facts {
-            gpu: true,
-            ..desktop.clone()
-        };
-        assert_eq!(for_new_setup(&gpu, Kind::Intentic), Kind::DockerDesktop);
-        let stays = Facts {
-            preferred: Some(Kind::DockerDesktop),
-            ..desktop
-        };
-        assert_eq!(for_new_setup(&stays, Kind::Intentic), Kind::DockerDesktop);
-    }
-
-    #[test]
-    fn the_person_forcing_an_engine_wins_over_everything() {
+    fn only_ic_engine_puts_a_setup_on_docker_desktop() {
         let forced = Facts {
-            forced: Some(Kind::Intentic),
+            forced: Some(Kind::DockerDesktop),
+            ..pc()
+        };
+        assert_eq!(for_new_setup(&forced), Kind::DockerDesktop);
+    }
+
+    #[test]
+    fn sandboxes_on_docker_desktop_are_moved_first_and_never_keep_the_pc_there() {
+        let holding = Facts {
             docker_desktop: true,
             sandboxes_here: true,
             ..pc()
         };
-        assert_eq!(for_new_setup(&forced, Kind::DockerDesktop), Kind::Intentic);
-    }
-
-    #[test]
-    fn rancher_desktop_is_the_persons_own_engine_from_the_start() {
-        let rancher = Facts {
-            own_engine: true,
-            ..pc()
-        };
-        assert_eq!(
-            for_new_setup(&rancher, Kind::DockerDesktop),
-            Kind::DockerDesktop
-        );
-        assert!(bring_your_own(
-            &rancher,
+        assert_eq!(for_new_setup(&holding), Kind::Intentic);
+        assert!(move_first(&holding, Kind::Intentic, Kind::DockerDesktop));
+        // Already on ours, a fresh PC, or a setup forced onto Docker Desktop: nothing to carry.
+        assert!(!move_first(&holding, Kind::Intentic, Kind::Intentic));
+        assert!(!move_first(&pc(), Kind::Intentic, Kind::DockerDesktop));
+        assert!(!move_first(
+            &holding,
             Kind::DockerDesktop,
             Kind::DockerDesktop
         ));
     }
 
     #[test]
-    fn docker_desktop_becomes_the_persons_own_only_once_the_switch_has_flipped() {
-        let desktop = Facts {
-            docker_desktop: true,
-            ..pc()
-        };
-        assert!(!bring_your_own(
-            &desktop,
-            Kind::DockerDesktop,
-            Kind::DockerDesktop
-        ));
-        assert!(bring_your_own(
-            &desktop,
-            Kind::Intentic,
-            Kind::DockerDesktop
-        ));
+    fn the_docker_sandboxes_still_run_on_is_the_persons_own() {
+        assert!(bring_your_own(Kind::DockerDesktop));
         // A PC on our engine has nothing of Docker Desktop's to promise.
-        assert!(!bring_your_own(&desktop, Kind::Intentic, Kind::Intentic));
+        assert!(!bring_your_own(Kind::Intentic));
+        assert!(!bring_your_own(Kind::Native));
     }
 
     #[test]
-    fn the_move_is_offered_after_the_switch_and_only_where_it_can_go() {
+    fn the_move_is_offered_only_where_it_can_go() {
         let desktop = Facts {
             docker_desktop: true,
             sandboxes_here: true,
             ..pc()
         };
-        assert!(!offer_move(
-            &desktop,
-            Kind::DockerDesktop,
-            Kind::DockerDesktop
-        ));
-        assert!(offer_move(&desktop, Kind::Intentic, Kind::DockerDesktop));
-        assert!(!offer_move(&desktop, Kind::Intentic, Kind::Intentic));
+        assert!(offer_move(&desktop, Kind::DockerDesktop));
+        assert!(!offer_move(&desktop, Kind::Intentic));
         let gpu = Facts {
             gpu: true,
             ..desktop.clone()
         };
-        assert!(!offer_move(&gpu, Kind::Intentic, Kind::DockerDesktop));
-        let stays = Facts {
+        assert!(!offer_move(&gpu, Kind::DockerDesktop));
+        // "Not now" quiets the offer; it no longer keeps a setup on Docker Desktop (above).
+        let not_now = Facts {
             preferred: Some(Kind::DockerDesktop),
             ..desktop.clone()
         };
-        assert!(!offer_move(&stays, Kind::Intentic, Kind::DockerDesktop));
+        assert!(!offer_move(&not_now, Kind::DockerDesktop));
         assert!(can_move(&desktop, Kind::DockerDesktop));
         assert!(!can_move(&gpu, Kind::DockerDesktop));
         assert!(can_move(&desktop, Kind::Intentic));

@@ -176,7 +176,8 @@ export const moveEngine = async (to: MoveTarget, offered: boolean): Promise<void
     finish(end, failure);
 };
 
-/** "Not now": the reader's word for Docker Desktop, which ic keeps, so the offer stands down. Moves nothing. */
+/** "Not now": the reader's word, which ic keeps, so the offer stands down. Moves nothing, and keeps no setup of this PC on
+ * Docker Desktop: since 2026-10-13 a setup always chooses our engine and carries sandboxes across (ic's engine/choice.rs). */
 export const declineEngineMove = async (): Promise<void> => {
     engineOfferError.value = undefined;
     track(`desktop_engine_offer`, { action: `declined` });

@@ -1,9 +1,9 @@
 //! OUR OWN CONTAINER ENGINE (2026-10-09): on a Windows PC, sandboxes run on the open-source Docker engine in a small
 #![cfg_attr(not(windows), allow(dead_code))]
-//! WSL distro of ours (`intentic-engine`), which ic imports, starts and points every `docker` it runs at. Every new
-//! setup goes onto it, Docker Desktop installed or not (choice.rs, since 2026-10-10). Sandboxes already on Docker
-//! Desktop stay there until their owner moves them over (`ic engine move`): until then the engine is installed beside
-//! it inactive, and only the move switches the PC onto it.
+//! WSL distro of ours (`intentic-engine`), which ic imports, starts and points every `docker` it runs at. Every setup
+//! goes onto it, Docker Desktop installed or not (choice.rs, always since 2026-10-13). Sandboxes already on Docker
+//! Desktop are carried across by the setup (`ic engine move`): until then the engine is installed beside it inactive,
+//! and only the move switches the PC onto it.
 
 pub mod choice;
 mod commands;
@@ -98,15 +98,23 @@ pub struct Status {
     pub pipe: Option<String>,
 }
 
-/// The engine a fresh setup on this device would put sandboxes on (choice.rs has the rules and the migration's switch).
+/// The engine a setup on this device puts sandboxes on (choice.rs has the rules): ours on Windows, unless `IC_ENGINE`
+/// says otherwise.
 pub fn choose(docker_desktop_installed: bool) -> Kind {
     if !cfg!(windows) {
         return Kind::Native;
     }
-    choice::for_new_setup(
-        &choice_facts(docker_desktop_installed),
-        choice::DOCKER_DESKTOP_PCS,
-    )
+    choice::for_new_setup(&choice_facts(docker_desktop_installed))
+}
+
+/// Whether a setup here has this side's sandboxes to carry across from Docker Desktop before the PC switches to our
+/// engine (choice.rs `move_first`). While it does, installing the engine leaves it inactive: the move switches the PC.
+pub fn move_first() -> bool {
+    if !cfg!(windows) {
+        return false;
+    }
+    let facts = choice_facts(commands::docker_desktop_installed());
+    choice::move_first(&facts, choice::for_new_setup(&facts), in_use())
 }
 
 /// What the choice is made from, read off this device: `IC_ENGINE`, the saved preference, the engines installed, and
@@ -143,28 +151,24 @@ pub fn stamp() -> &'static str {
 }
 
 /// Whether the engine this device's sandboxes run on is the person's own to keep running (choice.rs `bring_your_own`):
-/// Docker Desktop once the migration's switch has flipped, or Rancher Desktop. Intentic then checks it and repairs
-/// nothing of it.
+/// Docker Desktop or Rancher Desktop, for as long as they are still on it. Intentic then checks it and repairs nothing
+/// of it.
 pub fn bring_your_own() -> bool {
     if !cfg!(windows) {
         return false;
     }
-    choice::bring_your_own(
-        &choice_facts(commands::docker_desktop_installed()),
-        choice::DOCKER_DESKTOP_PCS,
-        in_use(),
-    )
+    choice::bring_your_own(in_use())
 }
 
 /// Whether the move onto our engine is to be put in front of the person now (choice.rs `offer_move`): read off this device,
 /// GPU sandboxes included, so an update can say it.
 pub fn move_offered() -> bool {
-    if !cfg!(windows) || choice::DOCKER_DESKTOP_PCS != Kind::Intentic {
+    if !cfg!(windows) {
         return false;
     }
     let mut facts = choice_facts(commands::docker_desktop_installed());
     facts.gpu = commands::gpu_in_use();
-    choice::offer_move(&facts, choice::DOCKER_DESKTOP_PCS, in_use())
+    choice::offer_move(&facts, in_use())
 }
 
 /// The preference the desktop app saved (`ic engine prefer`): `~/.intentic/engine/preference.json`.

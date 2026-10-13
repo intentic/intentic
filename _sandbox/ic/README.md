@@ -277,9 +277,9 @@ flowchart LR
   only — nothing is added to the user's PATH. `ic engine status --json` answers for the desktop app; `ic sandbox fix`
   can start a stopped intentic engine automatically. Build: [engine/](engine/); implementation: [src/engine/](src/engine/).
   - **Installed is not in use (2026-10-09).** `engine.json` has an `active` switch: only an active record points
-    `docker` at our engine (ic, the desktop app, the machine agent alike). A fresh PC's setup installs it active; on a
-    PC with Docker Desktop, `ic engine install` installs it inactive and switches nothing, since Docker Desktop's
-    sandboxes would otherwise vanish from every `docker` this account runs.
+    `docker` at our engine (ic, the desktop app, the machine agent alike). A PC's setup installs it active; on a PC
+    whose sandboxes are still on Docker Desktop, it installs it inactive and switches nothing, since those sandboxes
+    would otherwise vanish from every `docker` this account runs: the setup's next step moves them, and the move switches.
   - **Moving between engines.** `ic engine move --to intentic|docker-desktop` carries every sandbox this side of the
     PC keeps: stopped and set aside as `<name>.moved`, its exact image across by `docker save | docker load`, each
     volume by a tar stream checked against a list of every file and its size, then made again by the ordinary reshape
@@ -290,12 +290,13 @@ flowchart LR
     on Docker Desktop. Measured on omen: 1.47 GB of volumes
     with checksums matching in 61 s once the image was there (about 70 MB/s onto our engine, 26 MB/s back); the
     8.75 GB image crossed as its 2.36 GB export at about 45 MB/s. See [src/engine/moves.rs](src/engine/moves.rs).
-  - **Which engine, and the switch.** [src/engine/choice.rs](src/engine/choice.rs): `IC_ENGINE`, then
-    `ic engine prefer`, then what the PC already holds (sandboxes on Docker Desktop stay until moved; a GPU sandbox
-    keeps the PC on Docker Desktop), then `DOCKER_DESKTOP_PCS`, the one constant that puts new Docker Desktop PCs onto
-    our engine, offers the move after updates, and makes a Docker Desktop that stays the person's own: checked, never
-    installed or repaired (bring your own Docker). Rancher Desktop is that from the start. Flipped to our engine on
-    2026-10-10, so every new setup runs on it.
+  - **Which engine.** [src/engine/choice.rs](src/engine/choice.rs): ours, on every Windows PC, since 2026-10-13.
+    Only `IC_ENGINE=docker-desktop` (a test or CI run) puts a setup on Docker Desktop. Nothing the PC holds keeps it
+    there: sandboxes still on Docker Desktop are carried across by the setup's `engine-move` step
+    ([src/prepare/plan.rs](src/prepare/plan.rs)), and `ic engine prefer docker-desktop` (the desktop app's "Not now")
+    only stops the move being offered. Until a PC's sandboxes are moved, the Docker Desktop (or Rancher Desktop) they
+    run on is the person's own: checked, never installed, started or repaired (bring your own Docker). A GPU sandbox
+    cannot move yet, so a setup that meets one stops and says so.
   - **Staying up, and held.** `ic engine stop` holds the engine down (`~/.intentic/engine/held`); the sign-in start,
     the desktop app's keeper and `ic sandbox fix` leave a held engine alone, and `ic engine start` ends the hold. A
     `wsl --shutdown` repair restarts our engine, not Docker Desktop, when the PC runs on ours.

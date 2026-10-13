@@ -101,10 +101,23 @@ exit 1\n";
 #[cfg(windows)]
 pub fn install_intentic_engine() -> Fixed {
     let mut progress = |sentence: &str, _percent: Option<u64>| super::progress(sentence);
-    // `ic docker prepare` installs the engine only where it chose it: this device's sandboxes run on it.
-    crate::engine::install(&mut progress, true)
+    // `ic docker prepare` installs the engine only where it chose it: this device's sandboxes run on it. Where they
+    // still run on Docker Desktop it goes in beside it, inactive, and the move that follows (`engine-move`) switches.
+    crate::engine::install(&mut progress, !crate::engine::move_first())
         .map(|_| Done::Now)
         .map_err(Trouble::Failed)
+}
+
+/// Carry this side's sandboxes off Docker Desktop onto our engine, and switch the PC at the end: the move the desktop
+/// app's card offers, run by the setup that chose our engine (engine/choice.rs). Clicking "Set up this PC" is the yes.
+#[cfg(windows)]
+pub fn move_to_intentic_engine() -> Fixed {
+    crate::engine::moves::run(crate::engine::moves::Args {
+        to: "intentic".to_string(),
+        yes: true,
+    })
+    .map(|_| Done::Now)
+    .map_err(|failure| Trouble::Failed(failure.0))
 }
 
 #[cfg(windows)]

@@ -196,9 +196,11 @@ pub fn run(args: Args) -> Result<()> {
     log.line(&format!("move from {} to {}", from.id(), to.id()));
     let target = ready_target(to, &log)?;
     // No Docker Desktop and no engine answering where it would: nothing can be on it, so there is nothing to carry,
-    // and waiting for a Docker Desktop that is not installed would be five minutes of nothing.
+    // and waiting for a Docker Desktop that is not installed would be five minutes of nothing. Not so with Rancher
+    // Desktop installed and stopped: its sandboxes are there, and switching would leave them where no `docker` looks.
     if from == Kind::DockerDesktop
         && !super::docker_desktop_installed()
+        && !super::own_engine_installed()
         && !answers(&Target::DockerDesktop)
     {
         switch(to)?;

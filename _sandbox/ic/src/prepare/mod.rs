@@ -507,7 +507,9 @@ pub fn run(args: Args) -> Result<()> {
                 announce(requirement);
                 return restart(std::slice::from_ref(requirement), args.yes, &facts);
             }
-            if requirement.id == "engine" && plan::engine_blocked_on_wsl(&facts) {
+            if matches!(requirement.id, "engine" | "engine-move")
+                && plan::engine_blocked_on_wsl(&facts)
+            {
                 continue;
             }
             if !requirement.action.ours() {
@@ -630,6 +632,7 @@ fn apply(
         "docker-linux-containers" => "switching Docker to Linux containers...",
         "engine" => "installing the intentic engine...",
         "engine-start" => "starting the intentic engine...",
+        "engine-move" => "moving this PC's sandboxes to the intentic engine...",
         _ => "preparing Docker...",
     };
     step("installing-docker", doing);
@@ -650,6 +653,7 @@ fn apply(
         "docker-linux-containers" => fix::switch_to_linux_containers(facts),
         "engine" => fix::install_intentic_engine(),
         "engine-start" => fix::start_intentic_engine(),
+        "engine-move" => fix::move_to_intentic_engine(),
         other => Err(fix::Trouble::Failed(format!(
             "no idea how to fix '{other}' - this is a bug in intentic, please report it."
         ))),

@@ -218,7 +218,7 @@ enum EngineCommand {
         #[arg(long)]
         now: bool,
     },
-    /// Say which engine this device's new sandboxes should use from now on: `intentic` or `docker-desktop` (moves nothing)
+    /// Say whether the move to the intentic engine is offered: `docker-desktop` stops offering it, `intentic` offers it again (moves nothing)
     Prefer { engine: String },
     /// Fetch newer docker binaries into the running distro and restart
     Update,
