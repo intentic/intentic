@@ -3120,6 +3120,7 @@
             "kindReads": "Reads",
             "kindSearches": "Searches",
             "kindSubagents": "Subagents",
+            "kindSubagentsMaker": "Helpers",
             "kindWeb": "Web",
             "showSteps": "Show {count} step | Show {count} steps",
             "showThinkingAndSteps": "Show thinking and {count} step | Show thinking and {count} steps",
@@ -3740,6 +3741,27 @@
             "noMatches": "no matches",
             "noOutput": "no output",
             "truncated": "truncated"
+        },
+        "toolWords": {
+            "ask": "Asking you a question",
+            "browser": "Using the browser",
+            "checks": "Running checks",
+            "command": "Running a task",
+            "connected": "Using a connected tool",
+            "edit": "Editing a file",
+            "editNamed": "Editing {file}",
+            "helper": "Working with a helper",
+            "helperName": "Helper",
+            "install": "Installing something",
+            "lookThrough": "Looking through the project",
+            "other": "Working on it",
+            "page": "Showing you a page",
+            "plan": "Updating its to-do list",
+            "read": "Reading a file",
+            "readNamed": "Reading {file}",
+            "search": "Searching the project",
+            "webPage": "Reading a web page",
+            "webSearch": "Searching the web"
         },
         "providerWords": {
             "claude": {

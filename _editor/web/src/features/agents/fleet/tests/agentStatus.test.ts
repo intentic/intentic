@@ -1,13 +1,16 @@
 import type { AgentJob, AgentStatus, AgentWatch } from "@intentic/sandbox-contract";
 import { formatWhen } from "@intentic/ui/format";
+import { useAudience } from "../../../../app/useAudience";
 import {
     type AgentStanding,
     agentStandingMeta,
     agentStatusMeta,
     attentionCalls,
     attentionCards,
+    activityLine,
     attentionReason,
     awaitingUser,
+    currentAction,
     blocked,
     callsOwner,
     heardByParent,
@@ -1122,5 +1125,24 @@ describe("a conversation with messages booked for later", () => {
         expect(standingFrom(timed).queue).toEqual({ paused: `scheduled`, until: at });
         expect(standingFrom(waiting).queue).toEqual({ paused: `scheduled`, after: `brave-otter` });
         expect(standingFrom({ status: `idle`, attention: none, queue: { paused: `stopped` } })).not.toHaveProperty(`queue`);
+    });
+});
+
+describe(`what the agent is doing, in the reader's words`, () => {
+    const activity = { tool: `Bash`, target: `cd /work && rg -n "size=" src` };
+    afterEach(() => useAudience().setAudience(`developer`));
+
+    it(`names the tool and what it reached for, for a developer`, () => {
+        expect(currentAction(activity)).toBe(`Bash cd /work && rg -n "size=" src`);
+        expect(activityLine({ activity })).toBe(`Bash`);
+    });
+
+    it(`says the act, and never the tool or the shell line, for a maker`, () => {
+        useAudience().setAudience(`maker`);
+        expect(currentAction(activity)).toBe(`Looking through the project`);
+        expect(activityLine({ activity })).toBe(`Running a task`);
+        expect(currentAction({ tool: `Read`, target: `/work/a/main.ts` })).toBe(`Reading main.ts`);
+        // Its own list item is already prose.
+        expect(currentAction({ todo: `Fix the badge` })).toBe(`Fix the badge`);
     });
 });

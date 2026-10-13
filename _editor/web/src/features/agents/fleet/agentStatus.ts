@@ -20,7 +20,9 @@ import {
 } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
 import { toneWash } from "@intentic/ui/tone";
+import { useAudience } from "../../../app/useAudience";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
+import { plainToolWords } from "../../../lib/toolWords/toolWords";
 import { parentOf } from "../board/ownership";
 
 // Every projection of a fleet agent's state (lane, attention label, drill-in verb, glyphs). Nothing else may
@@ -1047,13 +1049,23 @@ export const familyChip = (calls: readonly (AgentStanding & { readonly title?: s
 };
 
 // The concrete step a turn is on: the tool with what it reached for, else the checklist item it is working through.
-export const currentAction = (activity: AgentSummary["activity"]): string | undefined =>
-    activity?.tool !== undefined ? [activity.tool, activity.target].filter(Boolean).join(` `) : activity?.todo;
+// A maker reads it as the act ("Reading app.ts"), not as the tool and its arguments ("Bash cd /work && rg ...").
+export const currentAction = (activity: AgentSummary["activity"]): string | undefined => {
+    if (activity?.tool === undefined) {
+        return activity?.todo;
+    }
+    return useAudience().maker.value
+        ? plainToolWords({ name: activity.tool, target: activity.target })
+        : [activity.tool, activity.target].filter(Boolean).join(` `);
+};
 
 /* A working child's activity takes precedence over its parent's idle tool. */
 export const activityLine = (agent: Pick<AgentSummary, "activity" | "subagents">): string | undefined => {
     const activity = agent.activity;
-    const own = activity === undefined ? undefined : (activity.todo ?? activity.tool);
+    const own =
+        activity === undefined
+            ? undefined
+            : (activity.todo ?? (activity.tool !== undefined && useAudience().maker.value ? plainToolWords({ name: activity.tool }) : activity.tool));
     const running = agent.subagents?.running ?? 0;
     if (running === 0) {
         return own;

@@ -9,6 +9,8 @@ import ChatToolDiff from "./ChatToolDiff.vue";
 import { present } from "./toolPresentation";
 import { subagentView } from "./subagentCard";
 import { useT } from "@intentic/ui/i18n";
+import { useAudience } from "../../../app/useAudience";
+import { plainToolWords } from "../../../lib/toolWords/toolWords";
 
 // One tool call: per-tool facts (icon, summary, output shape, default-open) come from the presentation
 // registry (toolPresentation.ts); this component renders them and owns fold/open-in-workspace. Everything that
@@ -16,6 +18,7 @@ import { useT } from "@intentic/ui/i18n";
 // surface has nothing to click.
 
 const t = useT();
+const { maker } = useAudience();
 
 const props = defineProps<{
     tool: TranscriptTool;
@@ -125,7 +128,15 @@ const subagent = computed(() => started.value?.subagent);
 const subagentLive = computed(() => started.value?.working === true);
 // A call that starts a subagent is named as the subagent it starts, not as the door it came through (`Agent`, the spawn
 // tool, a shell's `agents spawn`).
-const name = computed(() => (view.value.delegates ? t(`shared.subagent`) : props.tool.name));
+// A maker is told what the call does ("Reading a file"), not which tool it was ("Read"); a command's own text is left for
+// the fold, since a header line of shell is the thing that reads as code.
+const name = computed(() => {
+    if (view.value.delegates) {
+        return maker.value ? t(`chat.toolWords.helperName`) : t(`shared.subagent`);
+    }
+    return maker.value ? plainToolWords({ name: props.tool.name, target: props.tool.target, category: props.tool.category }, { file: false }) : props.tool.name;
+});
+const target = computed(() => (maker.value && props.tool.category === `execute` ? undefined : props.tool.target));
 // The row above the fold, in reading order: what type it runs as, then what it was asked to do.
 const subagentTitle = computed(() => [subagent.value?.agentType, subagent.value?.description].filter(Boolean).join(` · `));
 // The quiet numbers line: tokens are the child's own spend, worth stating since the parent's cost readout
@@ -145,7 +156,7 @@ const subagentFacts = computed<string[]>(() => {
 // The row already says this diff's file and line counts: the call's one diff, on the path the row shows, and whole. Paths
 // are compared by their tail, since a row may show a path relative to the workspace and the diff carry it absolute.
 const namesDiff = (diff: { readonly path: string; readonly truncated?: boolean }): boolean => {
-    const shown = props.tool.target ?? location.value?.path;
+    const shown = target.value ?? location.value?.path;
     return (
         view.value.diffs.length === 1 &&
         diff.truncated !== true &&
@@ -247,9 +258,9 @@ const openSubagent = (event: MouseEvent): void => {
                 v-tooltip.top="t(`chat.words.openFile`)"
                 @click="openFile(location.path, location.line)"
             >
-                {{ tool.target ?? location.path }}
+                {{ target ?? location.path }}
             </button>
-            <span v-else-if="location || tool.target" class="min-w-0 truncate font-mono">{{ tool.target ?? location?.path }}</span>
+            <span v-else-if="location || target" class="min-w-0 truncate font-mono">{{ target ?? location?.path }}</span>
             <!-- Working in the background while the parent moved on: why this card can sit unfinished for minutes. -->
             <span v-if="subagent?.background === true && subagentLive" class="ui-status-pill shrink-0 bg-overlay text-2xs text-subtle">{{
                 t(`chat.chatToolCard.background`)

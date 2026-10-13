@@ -6,8 +6,11 @@ import ChatToolCard from "./ChatToolCard.vue";
 import { type ToolGroup, groupDiffSummary } from "./toolGrouping";
 import { delegates, present } from "./toolPresentation";
 import { useT } from "@intentic/ui/i18n";
+import { useAudience } from "../../../app/useAudience";
+import { plainToolWords } from "../../../lib/toolWords/toolWords";
 
 const t = useT();
+const { maker } = useAudience();
 
 /* A collapsed run of consecutive same-name+same-target tool calls. */
 
@@ -27,7 +30,14 @@ const toggle = (): void => {
 // Use the first tool's presentation for the icon (all tools in the group share the same name).
 const icon = computed(() => present(props.group.tools[0]!).icon);
 // A run of calls that each started a subagent is named as the subagents they are, as each card is (ChatToolCard).
-const name = computed(() => (delegates(props.group.tools[0]!) ? t(`shared.subagent`) : props.group.name));
+const name = computed(() => {
+    if (delegates(props.group.tools[0]!)) {
+        return maker.value ? t(`chat.toolWords.helperName`) : t(`shared.subagent`);
+    }
+    // Said as the act, as a single call's card says it (ChatToolCard).
+    return maker.value ? plainToolWords({ name: props.group.name, target: props.group.target, category: props.group.category }, { file: false }) : props.group.name;
+});
+const target = computed(() => (maker.value && props.group.category === `execute` ? undefined : props.group.target));
 
 // Whether any tool in the group is still running: shows the spinner instead of the icon.
 const running = computed(() => props.group.tools.some((tool) => tool.status === `pending` || tool.status === `in_progress`));
@@ -68,9 +78,9 @@ const location = computed(() => {
                 v-tooltip.top="t(`chat.words.openFile`)"
                 @click="openFile(location.path, location.line)"
             >
-                {{ group.target ?? location.path }}
+                {{ target ?? location.path }}
             </button>
-            <span v-else-if="location || group.target" class="min-w-0 truncate font-mono">{{ group.target ?? location?.path }}</span>
+            <span v-else-if="location || target" class="min-w-0 truncate font-mono">{{ target ?? location?.path }}</span>
             <span class="ml-auto flex shrink-0 items-center gap-2">
                 <span v-if="summary" class="tabular-nums" :class="failed ? 'text-danger' : 'text-subtle'">{{ summary }}</span>
                 <!-- A count like any other row's figure: plain, subtle, tabular. A pill made it the one boxed number in the run. -->

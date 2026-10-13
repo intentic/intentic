@@ -6,6 +6,7 @@ import { STATE_DIR } from "@intentic/constants";
 import type { SubagentSession, TranscriptTool } from "@intentic/sandbox-contract";
 import type { ChatSurface } from "./chatToolSurface";
 import { IconStub } from "@intentic/ui/testing";
+import { useAudience } from "../../../app/useAudience";
 
 // Import chain reads window.matchMedia and window.env at module load; bun.setup.ts stands both up before
 // this file loads, same as the real page.
@@ -31,6 +32,7 @@ const mount = (tool: TranscriptTool, live = true, surface?: ChatSurface): HTMLEl
 };
 
 afterEach(() => {
+    useAudience().setAudience(`developer`);
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
@@ -279,5 +281,30 @@ describe(`ChatToolCard`, () => {
             false,
         );
         expect(element.querySelector(`[data-spin]`)).toBeNull();
+    });
+
+    // A maker is told what the call does, never the tool's name or the shell line it ran.
+    it(`names a command by what it does, and keeps its shell line out of the row, for a maker`, () => {
+        useAudience().setAudience(`maker`);
+        const element = mount({
+            id: `c1`,
+            name: `Bash`,
+            category: `execute`,
+            status: `completed`,
+            target: `cd /work/app && cat a.ts; rg -n "size=" src`,
+            content: [{ type: `text`, text: `a.ts:1` }],
+        });
+        const header = element.querySelector(`.group\\/tool`)?.textContent ?? ``;
+        expect(header).toContain(`Looking through the project`);
+        expect(header).not.toContain(`Bash`);
+        expect(header).not.toContain(`rg -n`);
+    });
+
+    it(`keeps the file's path beside the plain verb for a maker`, () => {
+        useAudience().setAudience(`maker`);
+        const element = mount({ id: `r1`, name: `Read`, category: `read`, status: `completed`, target: `src/main.ts` });
+        const header = element.querySelector(`.group\\/tool`)?.textContent ?? ``;
+        expect(header).toContain(`Reading a file`);
+        expect(header).toContain(`src/main.ts`);
     });
 });

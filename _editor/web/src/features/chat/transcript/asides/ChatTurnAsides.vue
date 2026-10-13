@@ -7,6 +7,7 @@ import ChatSpineNode from "./ChatSpineNode.vue";
 import { useToolCalls } from "../../tools/useToolCalls";
 import { summarizeRun, type RunKind } from "../../tools/toolRun";
 import { useT } from "@intentic/ui/i18n";
+import { useAudience } from "../../../../app/useAudience";
 
 const t = useT();
 
@@ -24,6 +25,7 @@ const props = defineProps<{
 }>();
 
 const { showToolCalls } = useToolCalls();
+const { maker } = useAudience();
 
 const thought = computed(() => (props.thinking === undefined || props.thinking === `` ? undefined : props.thinking));
 const run = computed(() => (showToolCalls.value ? undefined : summarizeRun(props.tools ?? [])));
@@ -43,7 +45,7 @@ const onFound = (): void => {
 };
 
 const KIND_LABELS = {
-    subagents: () => t(`chat.chatTurnAsides.kindSubagents`),
+    subagents: () => (maker.value ? t(`chat.chatTurnAsides.kindSubagentsMaker`) : t(`chat.chatTurnAsides.kindSubagents`)),
     edits: () => t(`chat.chatTurnAsides.kindEdits`),
     commands: () => t(`chat.chatTurnAsides.kindCommands`),
     web: () => t(`chat.chatTurnAsides.kindWeb`),

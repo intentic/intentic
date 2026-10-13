@@ -3120,6 +3120,7 @@
             "kindReads": "Odczyty",
             "kindSearches": "Wyszukiwania",
             "kindSubagents": "Podagenci",
+            "kindSubagentsMaker": "Pomocnicy",
             "kindWeb": "Sieć",
             "showSteps": "Pokaż {count} krok | Pokaż {count} kroki | Pokaż {count} kroków",
             "showThinkingAndSteps": "Pokaż przemyślenia i {count} krok | Pokaż przemyślenia i {count} kroki | Pokaż przemyślenia i {count} kroków",
@@ -3740,6 +3741,27 @@
             "noMatches": "brak dopasowań",
             "noOutput": "brak wyniku",
             "truncated": "przycięto"
+        },
+        "toolWords": {
+            "ask": "Zadaje Ci pytanie",
+            "browser": "Korzysta z przeglądarki",
+            "checks": "Uruchamia sprawdzenia",
+            "command": "Wykonuje zadanie",
+            "connected": "Korzysta z podłączonego narzędzia",
+            "edit": "Edytuje plik",
+            "editNamed": "Edytuje {file}",
+            "helper": "Pracuje z pomocnikiem",
+            "helperName": "Pomocnik",
+            "install": "Instaluje coś",
+            "lookThrough": "Przegląda projekt",
+            "other": "Pracuje nad tym",
+            "page": "Pokazuje Ci stronę",
+            "plan": "Aktualizuje swoją listę zadań",
+            "read": "Czyta plik",
+            "readNamed": "Czyta {file}",
+            "search": "Przeszukuje projekt",
+            "webPage": "Czyta stronę internetową",
+            "webSearch": "Szuka w sieci"
         },
         "providerWords": {
             "claude": {
