@@ -178,7 +178,7 @@ const coolingTip = computed((): Tip | undefined =>
         <Button
             size="small"
             tier="quiet"
-            class="shrink-0"
+            class="-my-1.5 shrink-0"
             :aria-label="t(`agents.agentCard.stopCommand`)"
             v-tooltip.top="{ title: t(`agents.agentCard.stopCommand`), note: t(`agents.agentCard.stopCommandNote`) }"
             :disabled="busy"
@@ -199,11 +199,11 @@ const coolingTip = computed((): Tip | undefined =>
             >
             <span class="shrink-0 tabular-nums">{{ watch.countdown }}</span>
         </span>
-        <!-- The one visible way to disarm a watch; previously only a right-click menu or a drag, neither discoverable from the readout that announces it. -->
+        <!-- The one visible way to disarm a watch; its negative margin keeps the 26px button from making the summary row taller than a card without a watch. Previously the only way was a right-click menu or a drag, neither discoverable from the readout that announces it. -->
         <Button
             size="small"
             tier="quiet"
-            class="shrink-0"
+            class="-my-1.5 shrink-0"
             :aria-label="stopsCommand ? t(`agents.agentCard.stopCommand`) : t(`agents.words.stopWatching`)"
             v-tooltip.top="{ title: stopsCommand ? t(`agents.agentCard.stopCommand`) : t(`agents.words.stopWatching`), note: t(`agents.agentCard.chatWontWake`) }"
             :disabled="busy"
