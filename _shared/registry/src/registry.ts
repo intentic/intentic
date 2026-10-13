@@ -24,6 +24,12 @@ export const OFFICIAL_DETERMINISTIC_SCAN_POLICY = "intentic-extension-determinis
 export const OFFICIAL_DETERMINISTIC_SCANNER = "trivy";
 export const OFFICIAL_DETERMINISTIC_SCANNER_VERSION = "0.72.0";
 
+// First-party sources, repositories the intentic GitHub org owns, are admitted on the deterministic scan alone: their
+// record names this reviewer and policy instead of the agent gate's, and counts only for a source under that org.
+export const OFFICIAL_INTERNAL_OWNER = "github.com/intentic";
+export const OFFICIAL_INTERNAL_REVIEW_POLICY = "intentic-internal-deterministic-v1";
+export const OFFICIAL_INTERNAL_REVIEWER = "intentic-deterministic-only";
+
 export const RegistrySecurityReviewSchema = z.object({
     sha: z.string().regex(FULL_SHA, "must be a full lowercase commit sha"),
     url: z.string().min(1),
@@ -42,7 +48,8 @@ export const RegistrySecurityReviewSchema = z.object({
 export type RegistrySecurityReview = z.infer<typeof RegistrySecurityReviewSchema>;
 
 // What a listing claims:
-// - listed: no human review asserted; the official registry still requires both automated checks to pass.
+// - listed: no human review asserted; the official registry still requires both automated checks to pass (the
+//   deterministic scan alone for an internal source).
 // - verified: both automated checks passed and a human read the source at that sha.
 // - blocked: known-malicious or known-broken; stays in the file with a reason instead of being deleted.
 // Absent on a third-party registry reads as listed.
@@ -191,13 +198,29 @@ const normalizedRegistryUrl = (value: string): string | undefined => {
 
 export const isOfficialRegistryUrl = (value: string): boolean => normalizedRegistryUrl(value) === normalizedRegistryUrl(OFFICIAL_REGISTRY_URL);
 
+// Exactly `github.com/intentic/<repo>`: a lookalike owner or another host is never internal.
+export const isInternalSource = (url: string | undefined): boolean => {
+    const normalized = url === undefined ? undefined : normalizedRegistryUrl(url);
+    if (normalized === undefined || !normalized.startsWith(`${OFFICIAL_INTERNAL_OWNER}/`)) {
+        return false;
+    }
+    const repo = normalized.slice(OFFICIAL_INTERNAL_OWNER.length + 1);
+    return repo !== "" && !repo.includes("/");
+};
+
+const isAgentReviewed = (review: RegistrySecurityReview): boolean =>
+    review.policy === OFFICIAL_SECURITY_REVIEW_POLICY && review.reviewer === OFFICIAL_SECURITY_REVIEWER;
+
+const isInternalScanned = (review: RegistrySecurityReview, install: RegistryInstall): boolean =>
+    review.policy === OFFICIAL_INTERNAL_REVIEW_POLICY && review.reviewer === OFFICIAL_INTERNAL_REVIEWER && isInternalSource(install.url);
+
 export const isCurrentSecurityReview = (review: RegistrySecurityReview | undefined, install: RegistryInstall | undefined): boolean =>
     review !== undefined &&
-    review.sha === install?.ref &&
+    install !== undefined &&
+    review.sha === install.ref &&
     review.url === install.url &&
     review.path === install.path &&
-    review.policy === OFFICIAL_SECURITY_REVIEW_POLICY &&
-    review.reviewer === OFFICIAL_SECURITY_REVIEWER &&
+    (isAgentReviewed(review) || isInternalScanned(review, install)) &&
     review.deterministic.policy === OFFICIAL_DETERMINISTIC_SCAN_POLICY &&
     review.deterministic.scanner === OFFICIAL_DETERMINISTIC_SCANNER &&
     review.deterministic.version === OFFICIAL_DETERMINISTIC_SCANNER_VERSION;

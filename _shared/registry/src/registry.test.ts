@@ -1,6 +1,9 @@
 import {
     compareEntries,
+    isInternalSource,
     isOfficialRegistryUrl,
+    OFFICIAL_INTERNAL_REVIEW_POLICY,
+    OFFICIAL_INTERNAL_REVIEWER,
     OFFICIAL_DETERMINISTIC_SCANNER,
     OFFICIAL_DETERMINISTIC_SCANNER_VERSION,
     OFFICIAL_DETERMINISTIC_SCAN_POLICY,
@@ -92,6 +95,39 @@ describe(`resolveRegistry`, () => {
             });
             expect(resolveRegistry(registry, undefined, REGISTRY)[0]?.admitted).toBe(false);
         }
+    });
+
+    it(`admits an intentic-org source on the deterministic scan alone, and nothing else on that record`, () => {
+        const internal = (repo: string) => ({
+            ...REVIEW,
+            url: `https://github.com/${repo}.git`,
+            policy: OFFICIAL_INTERNAL_REVIEW_POLICY,
+            reviewer: OFFICIAL_INTERNAL_REVIEWER,
+            runId: `workflow-1`,
+        });
+        const registry = RegistryFileSchema.parse({
+            name: `intentic`,
+            plugins: [`intentic/extension-docs`, `acme/incidents`, `intentic-evil/docs`].map((repo) => ({
+                name: repo,
+                kind: `extension`,
+                securityReview: internal(repo),
+                source: { source: `github`, repo, sha: SHA },
+            })),
+        });
+        expect(resolveRegistry(registry, undefined, REGISTRY).map((entry) => [entry.name, entry.admitted])).toEqual([
+            [`intentic/extension-docs`, true],
+            [`acme/incidents`, false],
+            [`intentic-evil/docs`, false],
+        ]);
+    });
+
+    it(`treats only github.com/intentic/<repo> as internal`, () => {
+        expect(isInternalSource(`https://github.com/intentic/extension-docs.git`)).toBe(true);
+        expect(isInternalSource(`https://github.com/Intentic/intentic`)).toBe(true);
+        expect(isInternalSource(`https://gitlab.com/intentic/extension-docs.git`)).toBe(false);
+        expect(isInternalSource(`https://github.com/intentic-evil/x.git`)).toBe(false);
+        expect(isInternalSource(`https://github.com/intentic`)).toBe(false);
+        expect(isInternalSource(undefined)).toBe(false);
     });
 
     it(`leaves a third-party registry as its own trust boundary`, () => {

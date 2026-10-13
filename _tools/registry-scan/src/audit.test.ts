@@ -2,12 +2,14 @@ import {
     OFFICIAL_DETERMINISTIC_SCANNER,
     OFFICIAL_DETERMINISTIC_SCANNER_VERSION,
     OFFICIAL_DETERMINISTIC_SCAN_POLICY,
+    OFFICIAL_INTERNAL_REVIEW_POLICY,
+    OFFICIAL_INTERNAL_REVIEWER,
     OFFICIAL_SECURITY_REVIEW_POLICY,
     OFFICIAL_SECURITY_REVIEWER,
     type RegistryFile,
     RegistryFileSchema,
 } from "@intentic/registry";
-import { admissionProblems, attestSecurityAudit, securityAuditRequest, securityAuditTargets } from "./audit.js";
+import { admissionProblems, attestSecurityAudit, gateTargets, securityAuditRequest, securityAuditTargets } from "./audit.js";
 
 const sha = (char: string): string => char.repeat(40);
 const REVIEWED_AT = "2026-08-11T12:00:00.000Z";
@@ -117,6 +119,31 @@ describe("official admission", () => {
             ...review("one", sha("a"), "run-42"),
             deterministic: { ...review("one", sha("a")).deterministic, runId: "workflow-17" },
         });
+    });
+
+    test("an intentic-org source skips the agent gate and is attested on the deterministic scan alone", () => {
+        const candidate = file([extension("docs", sha("a"), { source: { source: "github", repo: "intentic/extension-docs", sha: sha("a") } })]);
+        const targets = securityAuditTargets(file([]), candidate);
+        expect(gateTargets(targets)).toEqual([]);
+
+        const attested = RegistryFileSchema.parse(attestSecurityAudit(candidate, targets, undefined, "workflow-17", REVIEWED_AT));
+        expect(admissionProblems(attested, [])).toEqual([]);
+        expect(attested.plugins[0]?.securityReview).toMatchObject({
+            url: "https://github.com/intentic/extension-docs.git",
+            policy: OFFICIAL_INTERNAL_REVIEW_POLICY,
+            reviewer: OFFICIAL_INTERNAL_REVIEWER,
+            runId: "workflow-17",
+            deterministic: { runId: "workflow-17" },
+        });
+        expect(securityAuditTargets(candidate, attested)).toHaveLength(1);
+        expect(securityAuditTargets(attested, attested)).toEqual([]);
+    });
+
+    test("an outside source still needs the gate's run id", () => {
+        const candidate = file([extension("one", sha("a"))]);
+        const targets = securityAuditTargets(file([]), candidate);
+        expect(gateTargets(targets)).toEqual(targets);
+        expect(() => attestSecurityAudit(candidate, targets, undefined, "workflow-17", REVIEWED_AT)).toThrow("gate run id");
     });
 
     test("stale deterministic policy or scanner versions require fresh checks when their row is touched", () => {

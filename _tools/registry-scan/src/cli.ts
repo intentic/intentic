@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { appendFile, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { REGISTRY_FILE, RegistryFileSchema } from "@intentic/registry";
-import { admissionProblems, attestSecurityAudit, needsSecurityAttestation, securityAuditRequest, securityAuditTargets } from "./audit.js";
+import { admissionProblems, attestSecurityAudit, gateTargets, needsSecurityAttestation, securityAuditRequest, securityAuditTargets } from "./audit.js";
 import { githubReader } from "./github.js";
 import { scanSummary, writeScanOutputs } from "./outputs.js";
 import { scanRegistry } from "./scan.js";
@@ -35,9 +35,15 @@ const option = (args: readonly string[], name: string): string => {
     return value;
 };
 
+const optionalOption = (args: readonly string[], name: string): string | undefined => {
+    const at = args.indexOf(name);
+    const value = at === -1 ? undefined : args[at + 1];
+    return value === undefined || value === "" ? undefined : value;
+};
+
 const readRegistry = async (path: string) => RegistryFileSchema.parse(JSON.parse(await readFile(path, "utf8")));
 
-const writeActionOutputs = async (targets: readonly unknown[], needsAttestation: boolean, request: string): Promise<void> => {
+const writeActionOutputs = async (targets: readonly unknown[], needsGate: boolean, needsAttestation: boolean, request: string): Promise<void> => {
     const path = process.env["GITHUB_OUTPUT"];
     if (path === undefined || path === "") {
         return;
@@ -45,7 +51,7 @@ const writeActionOutputs = async (targets: readonly unknown[], needsAttestation:
     const delimiter = `intentic_${randomUUID()}`;
     await appendFile(
         path,
-        `targets=${targets.length}\ntargets-json=${JSON.stringify(targets)}\nneeds-attestation=${needsAttestation}\nrequest<<${delimiter}\n${request}\n${delimiter}\n`,
+        `targets=${targets.length}\ntargets-json=${JSON.stringify(targets)}\nneeds-gate=${needsGate}\nneeds-attestation=${needsAttestation}\nrequest<<${delimiter}\n${request}\n${delimiter}\n`,
         "utf8",
     );
 };
@@ -58,9 +64,16 @@ const prepareAudit = async (args: readonly string[]): Promise<void> => {
     if (problems.length > 0) {
         throw new Error(`registry admission failed:\n${problems.map((problem) => `- ${problem}`).join("\n")}`);
     }
-    const request = targets.length === 0 ? "" : securityAuditRequest(targets);
-    await writeActionOutputs(targets, needsSecurityAttestation(candidate, targets), request);
-    process.stdout.write(targets.length === 0 ? "No executable source or review changed.\n" : `${request}\n`);
+    const gated = gateTargets(targets);
+    const request = gated.length === 0 ? "" : securityAuditRequest(gated);
+    await writeActionOutputs(targets, gated.length > 0, needsSecurityAttestation(candidate, targets), request);
+    process.stdout.write(
+        targets.length === 0
+            ? "No executable source or review changed.\n"
+            : gated.length === 0
+              ? `Internal source only; admitted on the deterministic scan:\n${JSON.stringify(targets, null, 2)}\n`
+              : `${request}\n`,
+    );
 };
 
 const attestAudit = async (args: readonly string[]): Promise<void> => {
@@ -73,7 +86,7 @@ const attestAudit = async (args: readonly string[]): Promise<void> => {
     }
     const reviewedAt = process.env["REVIEWED_AT"] ?? new Date().toISOString();
     const attested = RegistryFileSchema.parse(
-        attestSecurityAudit(candidate, targets, option(args, "--run-id"), option(args, "--scan-run-id"), reviewedAt),
+        attestSecurityAudit(candidate, targets, optionalOption(args, "--run-id"), option(args, "--scan-run-id"), reviewedAt),
     );
     const problems = admissionProblems(attested, []);
     if (problems.length > 0) {
