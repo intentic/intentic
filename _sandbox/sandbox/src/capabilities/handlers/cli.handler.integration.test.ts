@@ -82,7 +82,7 @@ test("apply writes the connector's SKILL.md, and discord reads active: its voice
     const skill = await readWorkspaceFile(skillPath(root, "discord"));
     expect(skill).toContain("name: discord");
     expect(skill).toContain("$DISCORD_BOT_TOKEN");
-    expect(skill).toContain("https://discord.com/oauth2/authorize?client_id=<APP_ID>&scope=bot&permissions=3214400");
+    expect(skill).toContain("https://discord.com/oauth2/authorize?client_id=<APP_ID>&scope=bot&permissions=309240908864");
     expect(skill).toContain("discord-voice");
     expect(skill).not.toContain("FROM ghcr.io");
     // Voice transcribes through the daemon's own speech engine, which every image carries: a gateway's status changes

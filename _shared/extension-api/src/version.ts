@@ -183,4 +183,8 @@
 // Additive: `useQuery` with the same options still works, and an extension that never calls it is unchanged. A pack that
 // calls it declares `engines.intentic` ^2.28.0, since an older host has no `query` to call. The recorded surface grows
 // the member, and the typed spec and result (`SandboxQuerySpec`, `SandboxQueryResult`) are types, which no grain records.
-export const extensionApiVersion = "2.28.0";
+// 2.29.0 lets an automation template's listener trigger say `mentioned: true`: it answers only what is addressed to the
+// bot (a mention, a reply, a direct message), as the Discord team assistant does. An older host's parse drops the key,
+// so there the template answers every message on that event. No member or top-level key was added, so the manifest
+// digest is the only grain that records it.
+export const extensionApiVersion = "2.29.0";

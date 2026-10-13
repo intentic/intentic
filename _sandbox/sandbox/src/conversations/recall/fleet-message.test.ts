@@ -50,8 +50,10 @@ test("a family member whose own turn read outside content passes it on, saying w
     );
 });
 
+// No loop ships without permission rules today (Pi gained its own), so the test stands one in for `blind`'s runtime.
 test("a family member on a runtime with no permission rules of its own is never clean", () => {
-    expect(messageTaint(taintOf(), "blind", "root")).toBe("a message from `blind`, which runs on pi, a runtime with no permission rules of its own");
+    const ungated = { ...taintOf(), capabilities: (provider: string) => ({ rulebook: provider === "pi" ? "none" : "hooks" }) as const };
+    expect(messageTaint(ungated, "blind", "root")).toBe("a message from `blind`, which runs on pi, a runtime with no permission rules of its own");
 });
 
 // A message that opens a turn on the target continues the target's own session, on the routing it runs on now: the

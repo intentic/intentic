@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -286,13 +286,13 @@ describe.skipIf(!tier.runs)(tier.title, () => {
             expect(events.at(-1)?.kind).toBe("done");
         });
 
-        // Content-addressed by hash so concurrent turns' prompts can't overwrite each other; only observable as a file
-        // on this path.
-        test("a custom prompt is written into the turn's CODEX_HOME under a content-addressed name", async () => {
-            const OWN_PROMPT = "content addressed conformance prompt";
-            const { codexHome } = await runTurn(MODEL, [{ text: "ok" }], { spec: { systemPrompt: OWN_PROMPT } });
-            const digest = createHash("sha256").update(OWN_PROMPT).digest("hex");
-            expect(await readFile(join(codexHome, "instructions", `${digest}.md`), "utf8")).toBe(OWN_PROMPT);
+        // The prompt rides thread/start's own field (codex-instructions.ts) rather than a file Codex reads back, so
+        // concurrent turns sharing one CODEX_HOME have nothing on disk to overwrite.
+        test("a custom prompt reaches the model on the thread's own field, with no file written into the turn's CODEX_HOME", async () => {
+            const OWN_PROMPT = "thread field conformance prompt";
+            const { codexHome, requests } = await runTurn(MODEL, [{ text: "ok" }], { spec: { systemPrompt: OWN_PROMPT } });
+            expect(systemInstructions(requests[0]!)).toBe(OWN_PROMPT);
+            expect(existsSync(join(codexHome, "instructions"))).toBe(false);
         });
 
         // Proved from inside the process (the command prints the value) rather than trusting the adapter's env object.

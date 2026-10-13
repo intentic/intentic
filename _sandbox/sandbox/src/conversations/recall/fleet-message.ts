@@ -1,4 +1,4 @@
-import { capabilitiesOf, peerMessagePrompt } from "@intentic/sandbox-contract";
+import { type AgentCapabilities, type AgentHarness, type AgentProvider, capabilitiesOf, peerMessagePrompt } from "@intentic/sandbox-contract";
 import { parentOfActor } from "../../auth/principal.js";
 import { sessionFor } from "../../agent/providers/accounts/routing.js";
 import type { Services } from "../../composition.js";
@@ -61,6 +61,8 @@ export interface MessageTaintDeps {
     readonly entry: (id: string) => PersistedAgent | undefined;
     // What first brought outside content into a conversation's live turn, or undefined for a clean or idle one.
     readonly taintOf: (id: string) => string | undefined;
+    // What a sender's runtime is held to: the catalog's answer, unless a test stands in a runtime no loop ships today.
+    readonly capabilities?: (provider: AgentProvider, harness: AgentHarness) => Pick<AgentCapabilities, "rulebook">;
 }
 
 /**
@@ -82,7 +84,7 @@ export const messageTaint = (deps: MessageTaintDeps, from: string | undefined, t
         return `${PEER_SOURCE}${from}`;
     }
     const { provider, harness } = sender.profile;
-    if (capabilitiesOf(provider, harness).rulebook === "none") {
+    if ((deps.capabilities ?? capabilitiesOf)(provider, harness).rulebook === "none") {
         return `a message from \`${from}\`, which runs on ${provider}, a runtime with no permission rules of its own`;
     }
     const carried = deps.taintOf(from);

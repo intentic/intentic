@@ -8,6 +8,7 @@ import { loadChunk } from "@intentic/ui";
 // Where each registration's view chunk stands, so the wait below knows a view still arriving from one that failed
 // (the boundary's card says that) or has landed. Absent until the view is first asked for, which also reads as waiting.
 type ViewState = `loading` | `ready` | `failed`;
+// allow(module-state): keyed by registration, like the view cache below: a switch disposes those and their entries go with them
 const states = shallowReactive(new WeakMap<ViewRegistration, ViewState>());
 
 // One async component per registration, created on first render and cached by registration identity: a view

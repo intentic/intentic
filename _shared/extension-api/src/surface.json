@@ -3101,5 +3101,177 @@
             "onDidChangeRefs",
             "onDidChangeRepos"
         ]
+    },
+    "2.29.0": {
+        "manifest": [
+            "$schema",
+            "art",
+            "category",
+            "contributes",
+            "engines",
+            "entry",
+            "icon",
+            "logo",
+            "name",
+            "permissions",
+            "publisher",
+            "server",
+            "version"
+        ],
+        "contributes": [
+            "agent",
+            "automationTemplates",
+            "bin",
+            "capabilities",
+            "commands",
+            "documents",
+            "environment",
+            "files",
+            "listener",
+            "processes",
+            "settings",
+            "sideViews",
+            "tools",
+            "viewers",
+            "views"
+        ],
+        "api": [
+            "apiVersion",
+            "audience",
+            "backend",
+            "chat",
+            "commands",
+            "documents",
+            "href",
+            "models",
+            "navigate",
+            "processes",
+            "route",
+            "sandbox",
+            "settings",
+            "sideViews",
+            "terminal",
+            "theme",
+            "viewers",
+            "views",
+            "workspace"
+        ],
+        "listener": [
+            "automation",
+            "events",
+            "provider"
+        ],
+        "sandboxApi": [
+            "fetch",
+            "json",
+            "key",
+            "origin",
+            "previewAddress",
+            "query",
+            "reachable",
+            "readKey",
+            "request",
+            "role",
+            "rpc"
+        ],
+        "workspaceApi": [
+            "capabilities",
+            "file",
+            "fillDiff",
+            "inProject",
+            "onDidChange",
+            "onDidChangeFiles",
+            "onDidChangeProject",
+            "onDidChangeRefs",
+            "onDidChangeRepos",
+            "openDiff",
+            "project",
+            "readJson",
+            "repos",
+            "setProject",
+            "write"
+        ],
+        "chatApi": [
+            "composeLoop",
+            "composeWorkflow",
+            "openAgent",
+            "openSession"
+        ],
+        "daemonApi": [
+            "json",
+            "request",
+            "rpc"
+        ],
+        "serverApi": [
+            "apiVersion",
+            "cacheDir",
+            "daemon",
+            "document",
+            "extensionDir",
+            "log",
+            "routes",
+            "settings",
+            "stateDir",
+            "tools",
+            "workspace",
+            "workspaceRoot"
+        ],
+        "toolDefinition": [
+            "call",
+            "description",
+            "effect",
+            "inputSchema",
+            "name"
+        ],
+        "sideViewsApi": [
+            "open",
+            "register"
+        ],
+        "sideViewRegistration": [
+            "claim",
+            "describe",
+            "home",
+            "id",
+            "view"
+        ],
+        "viewRegistration": [
+            "asks",
+            "auxiliary",
+            "badge",
+            "detect",
+            "fallback",
+            "id",
+            "label",
+            "surface",
+            "view",
+            "warm"
+        ],
+        "manifestSchema": "f1308cb2ab9ea200f93eb0bb3569c1e0f9111e684c184ccf0a0fc14df8422d69",
+        "moduleExports": [
+            "conversions",
+            "extensionApiVersion",
+            "flattenQuery",
+            "hostSlot",
+            "mergeQuery",
+            "readDaemonStream",
+            "resetSandboxScope",
+            "sandboxDocument",
+            "sandboxLedger",
+            "sandboxPoll",
+            "sandboxRef",
+            "sandboxScopeGuard",
+            "sandboxShallowRef",
+            "sandboxValue",
+            "satisfiesEngines"
+        ],
+        "serverSettingsApi": [
+            "get",
+            "onDidChange"
+        ],
+        "serverWorkspaceApi": [
+            "onDidChangeFiles",
+            "onDidChangeRefs",
+            "onDidChangeRepos"
+        ]
     }
 }

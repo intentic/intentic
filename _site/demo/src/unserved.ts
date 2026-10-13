@@ -103,6 +103,7 @@ export const UNSERVED = {
     "POST /listeners/{provider}/dispatch": NOT_THE_EDITORS,
     "POST /listeners/{provider}/failure": NOT_THE_EDITORS,
     "POST /listeners/{provider}/status": NOT_THE_EDITORS,
+    "POST /listeners/{provider}/stop": NOT_THE_EDITORS,
     "POST /ci/webhook/{host}": NOT_THE_EDITORS,
     "POST /system/hosts/pair": NOT_THE_EDITORS,
     "POST /system/hosts/enroll": NOT_THE_EDITORS,

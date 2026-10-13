@@ -80,7 +80,7 @@ const HOOK_TOOLS = new Map<string, readonly string[]>([
     ["ListMcpResources", ["ListMcpResourcesTool"]],
 ]);
 
-// Cursor's synthetic server for the SDK's custom tools (@cursor/sdk custom-tools.d.ts).
+// Cursor's synthetic server for the SDK's custom tools (the custom-tools typings @cursor/sdk ships).
 export const CUSTOM_TOOLS_SERVER = "custom-user-tools";
 
 // The daemon's custom tools by the names the Claude Code loop mounts the same tools under, so one list means the same

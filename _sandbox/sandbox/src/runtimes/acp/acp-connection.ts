@@ -79,7 +79,7 @@ export const createAcpConnections = (logger: Services["logger"], terminalRun: Te
         let dead = false;
         let idleTimer: ReturnType<typeof setTimeout> | undefined;
         // Set once initialize has answered; a process that dies or is killed before then was never pooled.
-        let published: AcpConnection | undefined;
+        let published: AcpConnection | undefined = undefined;
 
         const kill = (): void => {
             dead = true;

@@ -248,7 +248,7 @@ describe("a turn the privacy shield reads", () => {
         test("a project without one loads its settings as always", async () => {
             create.mockResolvedValue({ agentId: `agent-no-mcp`, send: async () => ({ wait: async () => ({ status: `success` }), cancel }), close: () => {} });
             await collect(createCursorAgent(hooked(true))(await shielded({ prompt: `hi` })));
-            expect((create.mock.calls.at(-1)?.[0] as AgentOptions).local?.settingSources).toEqual([`mdm`, `project`]);
+            expect((create.mock.calls.at(-1)?.[0] as AgentOptions | undefined)?.local?.settingSources).toEqual([`mdm`, `project`]);
         });
     });
 
@@ -341,7 +341,7 @@ describe("a turn the privacy shield reads", () => {
         create.mockResolvedValue({ agentId: `agent-steered-shielded`, send: async () => new Run(), close: () => {} });
         const steering = new SteeringQueue();
         const turn = collect(createCursorAgent(hooked(true))(await shielded({ prompt: `export the customers`, steering })));
-        await waitFor(() => expect(create).toHaveBeenCalled());
+        await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
         steering.push(`only the one with PESEL ${NUMBER}`);
         await waitFor(() => expect(steered).toHaveLength(1));
         settle({ status: `success` });

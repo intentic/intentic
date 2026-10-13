@@ -8,8 +8,8 @@ import type { AgentTool } from "../../agent/tools/agent-tools.js";
 // ACP agent must take, so the turn's door mounts (its remote servers and the daemon's own) are offered as stdio servers
 // the agent spawns: each is this script, which forwards every JSON-RPC line to the door's HTTP endpoint with the turn's
 // bearer and writes back what the door answers, a single JSON body or each event of an SSE stream, one line apiece.
-// Mirrors t3code's acp-mcp-bridge (refs/t3code/apps/server/src/mcp/AcpMcpStdioBridge.ts), which found agents that take
-// stdio and drop http (codex-acp 1.2.0, pi-acp).
+// Mirrors t3code's acp-mcp-bridge (its server's AcpMcpStdioBridge module, in another repository), which found agents
+// that take stdio and drop http (codex-acp 1.2.0, pi-acp).
 //
 // The URL and bearer ride the server's environment, never its argv, so they stay out of the process list. The agent
 // keeps a session's MCP config across turns (a warm session), so the proxy it spawned keeps the conversation's bearer as
