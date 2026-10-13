@@ -6022,8 +6022,6 @@
             "requirePasskey": "Wymagaj klucza dostępu",
             "requirePasskeyToOpen": "Wymagaj klucza dostępu do otwarcia tego sandboxa",
             "required": "wymagany",
-            "requiredOff": "Wyłączone. Logowanie Google otwiera sandbox; klucz dostępu to obok niego szybsza droga do środka.",
-            "requiredOn": "Włączone. Samo Google nie otwiera już tego sandboxa nikomu; członek bez klucza dostępu doda go przy następnym logowaniu.",
             "saveNowTheyShown": "Zapisz je teraz. Pokazujemy je raz; sandbox trzyma tylko ich odciski.",
             "stopRequiring": "Przestań wymagać",
             "synced": "zsynchronizowany",
@@ -7879,8 +7877,7 @@
             "none": "Brak potwierdzeń."
         },
         "analytics": {
-            "title": "Analityka produktu Intentic w tym sandboxie",
-            "description": "Wyłączone: żadna wizyta w tym sandboxie nie wysyła do Intentic zdarzeń użycia ani nagrań ekranu, niezależnie od zgody poszczególnych osób."
+            "title": "Analityka produktu Intentic w tym sandboxie"
         },
         "dataProtection": {
             "intro": "Zanim ten sandbox zacznie przetwarzać czyjekolwiek dane osobowe, przejdź trzy kroki: włącz zalecane zabezpieczenia, sprawdź, dokąd trafiają dane, i przekaż dokumenty inspektorowi ochrony danych. Nic się nie zmieni, dopóki nie naciśniesz „Zastosuj” w kroku 1.",

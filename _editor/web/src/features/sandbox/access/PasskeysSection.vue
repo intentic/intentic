@@ -46,10 +46,6 @@ const submit = async (): Promise<void> => {
     label.value = ``;
 };
 
-const requiredDescription = computed(() =>
-    list.value.required ? t(`sandbox.passkeysSection.requiredOn`) : t(`sandbox.passkeysSection.requiredOff`),
-);
-
 // Switching on needs a passkey of the owner's own to open the door with; the button says so rather than 409ing.
 const canRequire = computed(() => list.value.required || ownCount.value > 0);
 
@@ -98,7 +94,7 @@ const codesText = computed(() => (codes.value ?? []).join(`\n`));
 
         <!-- Unread, the rule could be on or off: drawn from the empty list it would read "Off" about a sandbox that may require it. -->
         <template v-if="isOwner && unread === undefined">
-            <Row icon="shield" :title="t(`sandbox.passkeysSection.requirePasskeyToOpen`)" :description="requiredDescription">
+            <Row icon="shield" :title="t(`sandbox.passkeysSection.requirePasskeyToOpen`)">
                 <template #meta>
                     <StatusBadge :variant="list.required ? `success` : `neutral`" :label="list.required ? t(`sandbox.passkeysSection.required`) : t(`sandbox.passkeysSection.optional`)" size="xs" />
                 </template>

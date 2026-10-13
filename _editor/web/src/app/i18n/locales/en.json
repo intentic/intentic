@@ -6403,8 +6403,6 @@
             "requirePasskey": "Require a passkey",
             "requirePasskeyToOpen": "Require a passkey to open this sandbox",
             "required": "required",
-            "requiredOff": "Off. A Google sign-in opens the sandbox; a passkey is a faster way in beside it.",
-            "requiredOn": "On. Google alone no longer opens this sandbox for anyone; a member without a passkey adds one on their next sign-in.",
             "saveNowTheyShown": "Save these now. They are shown once; the sandbox keeps only their fingerprints.",
             "stopRequiring": "Stop requiring",
             "synced": "synced",
@@ -8282,8 +8280,7 @@
             "none": "No confirmations yet."
         },
         "analytics": {
-            "title": "Intentic product analytics in this sandbox",
-            "description": "Off: nobody's visit to this sandbox sends usage events or screen recordings to Intentic, whatever each person agreed to."
+            "title": "Intentic product analytics in this sandbox"
         },
         "dataProtection": {
             "intro": "Before this sandbox handles anyone's personal data, take three steps: switch on the protections recommended for it, check where its data goes, then hand your data protection officer the documents. Nothing changes until you press Apply in step 1.",

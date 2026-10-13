@@ -157,7 +157,6 @@ it(`the owner's require switch needs a passkey of their own, then hands out the 
     // cea5b261a ("fix: redundant texts") deleted the sentence that spelled this out, so the disabled switch — still
     // labelled as the affordance to turn requiring ON, beside an `optional` state — is the whole refusal now.
     expect(buttonLabelled(`Require a passkey`)?.disabled).toBe(true);
-    expect(shown()).toContain(`Off. A Google sign-in opens the sandbox`);
     app?.unmount();
     document.body.innerHTML = ``;
 
@@ -201,7 +200,6 @@ it(`says the list could not be read, and draws no rule, rather than showing a sa
     await mount();
     expect(shown()).toContain(`Couldn't read this sandbox's passkeys.`);
     expect(shown()).toContain(`The passkey store is unreadable.`);
-    expect(shown()).not.toContain(`Off. A Google sign-in opens the sandbox`);
     expect(buttonLabelled(`Require a passkey`)).toBeUndefined();
 });
 
@@ -210,5 +208,4 @@ it(`says a 404 on the list could not be read, like any other failure`, async () 
     state.listFails = new SandboxHttpError(404, `Not found.`);
     await mount();
     expect(shown()).toContain(`Couldn't read this sandbox's passkeys.`);
-    expect(shown()).not.toContain(`Off. A Google sign-in opens the sandbox`);
 });

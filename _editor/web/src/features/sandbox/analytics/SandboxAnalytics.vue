@@ -12,7 +12,7 @@ const { settings, patch, refusal } = useSandboxSettings();
 </script>
 
 <template>
-    <Row icon="eye" :title="t(`sandbox.analytics.title`)" :description="t(`sandbox.analytics.description`)">
+    <Row icon="eye" :title="t(`sandbox.analytics.title`)">
         <template #control>
             <ToggleSwitch
                 :model-value="settings?.productAnalytics ?? true"
