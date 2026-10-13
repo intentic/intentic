@@ -29,6 +29,8 @@ export const AutomationTemplateContributionSchema = z.object({
             cron: z.string().min(1).optional(),
             provider: z.string().min(1).optional(),
             eventType: z.string().min(1).optional(),
+            // A listener that answers only what is addressed to it (a mention, a reply, a direct message).
+            mentioned: z.boolean().optional(),
             event: z.string().min(1).optional(),
         })
         .describe(

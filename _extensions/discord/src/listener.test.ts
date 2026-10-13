@@ -1,6 +1,7 @@
 import { GatewayRefusal } from "@intentic/connector-runtime";
 import { type Client, DiscordAPIError, type Message, type REST } from "discord.js";
-import { authorOf, type ChannelLookup, clientLookup, deliverToChannel, restLookup, toHistory } from "./listener.js";
+import type { Route } from "./inbound.js";
+import { authorOf, type ChannelLookup, clientLookup, deliverToChannel, type DispatchedMessage, payloadOf, presserOf, restLookup, toHistory } from "./listener.js";
 
 // A fetched discord message, only the fields toHistory reads.
 const msg = (id: string, authorId: string, name: string, content: string): Message =>
@@ -105,4 +106,43 @@ test("Discord's own refusal of the post reaches the owner in its words, after ev
     await expect(deliverToChannel([refusing], "c1", "hi")).rejects.toThrow(
         new GatewayRefusal("Discord refused the message (HTTP 403): Missing Permissions"),
     );
+});
+
+/* WHAT THE DAEMON IS TOLD about a message: where it belongs (the route's channel and thread) and that it is addressed to
+ * us, which a mention-only automation's filter reads. */
+const routed = (over: Partial<Route>): Route => ({ addressed: false, channelId: "c1", room: "c1", ...over });
+
+const discordMessage = (attachments: ReadonlyArray<{ name: string; url: string }> = []): DispatchedMessage => ({
+    id: "m1",
+    guildId: "g1",
+    content: "<@111> can you look at the build?",
+    createdAt: new Date("2026-10-13T03:00:00.000Z"),
+    author: { id: "u1", username: "alice" },
+    member: null,
+    attachments: { size: attachments.length, map: (each) => attachments.map(each) },
+});
+
+test("a mention names the thread it opens and is marked addressed; the channel filter still reads the channel", () => {
+    const payload = payloadOf(discordMessage(), routed({ addressed: true, thread: "m1" }), [{ author: { id: "u2", name: "bob" }, content: "earlier", timestamp: "t" }]);
+    expect(payload).toMatchObject({ provider: "discord", type: "message", id: "m1", channelId: "c1", thread: "m1", mentioned: true, extra: { guildId: "g1" } });
+    expect(payload.history).toHaveLength(1);
+    expect(payload.timestamp).toBe("2026-10-13T03:00:00.000Z");
+});
+
+test("a message not for us carries no thread or mention, and its attachments ride along by name and link", () => {
+    const payload = payloadOf(discordMessage([{ name: "trace.txt", url: "https://cdn.discordapp.com/a/trace.txt" }]), routed({}), undefined);
+    expect(payload).not.toHaveProperty("thread");
+    expect(payload).not.toHaveProperty("mentioned");
+    expect(payload).not.toHaveProperty("history");
+    expect(payload.extra).toEqual({ guildId: "g1", attachments: [{ name: "trace.txt", url: "https://cdn.discordapp.com/a/trace.txt" }] });
+});
+
+test("whoever presses Stop is named by id, with their roles and the server's own as groups, from either member form", () => {
+    const user = { id: "u1", username: "mark" };
+    // An interaction's raw member lists role ids; a cached one keeps them in its role cache.
+    const raw = { roles: ["r-dev"] };
+    const cached = { roles: { cache: { keys: () => ["g1", "r-dev"] } } };
+    expect(presserOf({ user, member: raw, guildId: "g1" })).toEqual({ id: "u1", name: "mark", groups: ["g1", "r-dev"] });
+    expect(presserOf({ user, member: cached, guildId: "g1" })).toEqual({ id: "u1", name: "mark", groups: ["g1", "r-dev"] });
+    expect(presserOf({ user, member: null, guildId: null })).toEqual({ id: "u1", name: "mark" });
 });

@@ -24,6 +24,12 @@ flowchart LR
   `GatewayHooks`.
 - Painters turn a reply into chat messages: `createStreamingPainter` grows one message by edits and spills into the
   next at a size limit; `createBufferedPainter` sends once at the end, for providers that flag rapid edits.
+- Long text is cut by `chunkMessage`: at a paragraph, line or space when one is near, and a code block cut in two is
+  closed in one message and reopened, language included, in the next. `tablesToCode` redraws Markdown tables as
+  aligned code, since chat clients show them as raw pipes. Every delivery and the buffered painter cut this way.
+- `trackTurnProgress` folds the dispatch stream's progress frames (the turn it opened, each step of its work, its
+  checklist, a hold or a queue) into what a status shows, and `stepPhrase` words a step ("Ran `pnpm test`"); how a
+  status is drawn stays in each gateway (Discord's card is the first).
 - `paintReply` dispatches a message that addressed us and paints each automation's answer back with one of those
   painters, posting a failed turn's notice and retiring the typing indicator; `deliverChunked` is the `/deliver` door's
   chunk loop, trying the next bot only while nothing has posted. Each platform's one-message ceiling is the contract's
@@ -36,11 +42,16 @@ flowchart LR
 - One process holds every connection, so once it is serving, a stray rejection in one connector is logged instead of
   taking the rest down. A gateway that cannot start still exits non-zero, and its reports to the daemon never reject.
 
+- The daemon client also carries a person's Stop (`stop`), which the daemon answers by the automation's own sender
+  rules, and `/deliver` takes the conversation's thread beside its channel, so what is said between turns lands in it.
+
 ## Key files
 
 - [src/gateway.ts](src/gateway.ts) — `runConnectorGateway`, `GatewaySpec` and the hooks a connector implements.
 - [src/daemon.ts](src/daemon.ts) — the client for the daemon's listener routes.
 - [src/painter.ts](src/painter.ts) — streaming, buffered and per-automation painters.
+- [src/progress.ts](src/progress.ts) — a turn's progress as a status shows it, and how a step is worded.
+- [src/chunks.ts](src/chunks.ts) — code-aware message cuts and tables redrawn as code.
 - [src/reply.ts](src/reply.ts) — `paintReply`, `deliverChunked` and the shared listener constants.
 - [src/listener-memory.ts](src/listener-memory.ts) — dedupe keys, chat rings and typing heartbeats.
 

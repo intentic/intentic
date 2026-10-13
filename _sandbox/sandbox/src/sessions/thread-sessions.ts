@@ -34,6 +34,10 @@ export const WEBCHAT_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 // Shorter than the Visitor chat's TTL: a channel carries many unrelated topics, not one visitor's thread.
 export const CHANNEL_SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 
+// A provider's own thread (a Discord or Slack thread) is one topic, picked back up days later where it left off: its
+// conversation, worktree and session stay its own for a week of quiet.
+export const THREAD_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
 // Bound the file. Threads are evicted oldest-touched-first, so an active conversation is never the one dropped.
 const MAX_SESSIONS = 500;
 

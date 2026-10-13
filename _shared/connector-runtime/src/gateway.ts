@@ -6,6 +6,7 @@ import { errorMessage } from "@intentic/base/errors";
 import { connectExtensionProcess, type ExtensionRuntime } from "@intentic/extension-api/runtime";
 import type { ListenerGatewayPhase, ListenerStatus } from "@intentic/sandbox-contract";
 // The subpath, not the package root: the root loads every schema in the contract, tens of megabytes a gateway never uses.
+import { type ListenerDeliver, ListenerDeliverSchema } from "@intentic/sandbox-contract/listener-protocol";
 import { extensionGatewayUrlFile } from "@intentic/sandbox-contract/workspace-state";
 import { type DaemonClient, createDaemonClient } from "./daemon.js";
 import type { GatewayCtx } from "./context.js";
@@ -78,8 +79,9 @@ export interface GatewayHooks<TConfig, THandle> {
     readonly phase?: (connector: ConnectorEntry<TConfig>, view: SlotView<THandle>) => ListenerGatewayPhase;
     // Per-gateway extras riding the status snapshot (discord: the live voice session; whatsapp: pairing codes).
     readonly statusExtras?: () => Omit<ListenerStatus, "connections">;
-    // Delivers a message into a channel between turns; channelId is the provider's own listener-reported id.
-    readonly deliver?: (channelId: string, text: string) => Promise<Delivered | void>;
+    // Delivers a message into a channel between turns; channelId is the provider's own listener-reported id, and
+    // `thread` the thread inside it the conversation lives in, when it lives in one.
+    readonly deliver?: (channelId: string, text: string, thread?: string) => Promise<Delivered | void>;
     // The connector's loopback control surface; undefined means unmatched, throwing sends a 500 with the message.
     readonly routes?: (req: IncomingMessage, body: () => Promise<string>) => Promise<{ status?: number; body: string } | undefined>;
     // Overrides the default shutdown (close every held connection); use for a connector with its own teardown.
@@ -110,6 +112,17 @@ const requireEnv = (name: string, onMissing: () => void): string => {
         process.exit(1);
     }
     return value;
+};
+
+// A /deliver body as the contract shapes it, or undefined for one that is not: not JSON at all, or missing what it needs.
+const deliverBodyOf = (raw: string): ListenerDeliver | undefined => {
+    try {
+        const parsed = ListenerDeliverSchema.safeParse(JSON.parse(raw || "{}"));
+        return parsed.success ? parsed.data : undefined;
+    } catch {
+        // allow(silent-catch): a body that is not JSON is answered 400 like any other body missing its fields
+        return undefined;
+    }
 };
 
 const readBody = async (req: IncomingMessage): Promise<string> => {
@@ -256,13 +269,13 @@ export const runConnectorGateway = async <TConfig extends { readonly provider: s
         if (hooks.deliver === undefined) {
             return plain(501, `the ${spec.provider} connector cannot post into a channel on its own`);
         }
-        // SAFETY: an untrusted body; both fields are checked as non-empty strings before either is used.
-        const { channelId, text } = JSON.parse(raw || "{}") as { channelId?: unknown; text?: unknown };
-        if (typeof channelId !== "string" || channelId === "" || typeof text !== "string" || text === "") {
+        const body = deliverBodyOf(raw);
+        if (body === undefined) {
             return plain(400, "channelId and text required");
         }
+        const { channelId, text, thread } = body;
         try {
-            const delivered: Delivered | void = await hooks.deliver(channelId, text);
+            const delivered: Delivered | void = await hooks.deliver(channelId, text, thread);
             return { status: 200, body: JSON.stringify(delivered ?? {}), type: "application/json" };
         } catch (error) {
             if (!(error instanceof GatewayRefusal)) {

@@ -20,6 +20,8 @@ flowchart LR
   process shell.
 - On a mention it adds `:eyes:`, then paints the agent's reply into the thread live by editing one message, and
   spills a long reply into follow-ups. Posts from its own apps never wake it.
+- A message names its thread to the daemon (the thread it was posted in, or the one a mention's reply opens), so
+  each Slack thread is one conversation of its own, and what is said between turns goes back into it.
 - Socket Mode is an outbound WebSocket, so no public URL is needed. A revoked token is fatal and pauses reconnecting
   for a backoff period.
 - The manifest is baked into every sandbox image, so the card always exists. The runnable gateway ships only in the

@@ -31,8 +31,9 @@ void runConnectorGateway<SlackConnectorConfig, string>({
             close: async (id, appToken) => closeSlackConnection(appToken),
             alive: (id, appToken) => slackConnection(appToken) !== undefined,
             fatal: (error) => (error instanceof FatalSlackError ? error.message : undefined),
-            // Outbound door: a channel message posted through whichever connected app accepts that channel.
-            deliver: (channelId, text) => deliverToChannel(slackConnections(), channelId, text),
+            // Outbound door: a channel message posted through whichever connected app accepts that channel, into the
+            // conversation's thread when it lives in one.
+            deliver: (channelId, text, thread) => deliverToChannel(slackConnections(), channelId, text, thread),
         };
     },
 });

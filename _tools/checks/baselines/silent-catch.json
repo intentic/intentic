@@ -128,7 +128,6 @@
     "_editor/web/src/workbench/push/nativePush.ts": 1,
     "_editor/web/src/workbench/push/usePushNotifications.ts": 1,
     "_editor/web/src/workbench/window/floating.ts": 2,
-    "_extensions/discord/src/listener.ts": 1,
     "_extensions/discord/src/voice.ts": 2,
     "_extensions/git-history/src/GitHistoryTab.vue": 1,
     "_extensions/google-workspace/src/google/request.ts": 1,

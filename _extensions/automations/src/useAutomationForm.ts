@@ -572,6 +572,7 @@ export function useAutomationForm(
         if (template.trigger.kind === `listener`) {
             form.provider = template.trigger.provider;
             form.eventType = template.trigger.eventType;
+            form.mentioned = template.trigger.mentioned === true;
         }
         if (template.trigger.kind === `workspace`) {
             form.workspaceEvent = template.trigger.event;

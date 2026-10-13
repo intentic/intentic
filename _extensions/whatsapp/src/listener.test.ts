@@ -33,6 +33,7 @@ const fakeCtx = (): { ctx: GatewayCtx; dispatched: Record<string, unknown>[]; st
                     onFrame({ automationId: "a1", end: true });
                 },
                 failure: async () => {},
+                stop: async () => ({ stopped: false }),
                 status: async () => {},
                 transcribe: async () => "",
                 speak: async () => undefined,

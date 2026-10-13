@@ -15,12 +15,22 @@ Discord only lets a server admin add a bot via an OAuth consent link: generate t
 2. Get the application id (needed for the invite URL):
    `curl -s -H "Authorization: Bot $DISCORD_BOT_TOKEN" "$DISCORD_API_URL/v10/oauth2/applications/@me" | jq '{id, name}'`
 3. Give the user this invite link (they open it, pick their server, approve):
-   `https://discord.com/oauth2/authorize?client_id=<APP_ID>&scope=bot&permissions=3214400`
-   Permissions 3214400 = View Channels + Send Messages + Read Message History + Add Reactions + Connect + Speak
-   (read/list/react/send + join voice channels to transcribe and answer aloud).
+   `https://discord.com/oauth2/authorize?client_id=<APP_ID>&scope=bot&permissions=309240908864`
+   Permissions 309240908864 = View Channels + Send Messages + Read Message History + Add Reactions + Embed Links +
+   Attach Files + Create Public Threads + Send Messages in Threads + Connect + Speak (answer in a thread of its own with a
+   status card, react, and join voice channels to transcribe and answer aloud).
 4. Tell them: in the Developer Portal → your app → Bot, enable the **Message Content** privileged intent
    (required to read message text; it can't be toggled via the API). Reading needs it; posting does not.
 Then confirm it landed: `curl -s -H "Authorization: Bot $DISCORD_BOT_TOKEN" "$DISCORD_API_URL/v10/users/@me/guilds" | jq '.[] | {id, name}'`
+5. For the team to hand the bot work by mentioning it, the owner switches on the **Team assistant on Discord**
+   automation (Automations, under the suggestions): a mention opens a thread where the agent works and answers.
+
+## Threads
+When an automation answers a message addressed to the bot (a mention, a reply, a DM, or anything in a thread it works
+in), the gateway posts your reply into that message's thread for you: write your answer, never post it with curl as
+well. The event's `thread` field is the thread's id, and a Discord thread is a channel, so anything else you post there
+(a file, a reaction, a second message for later) goes to `/channels/<THREAD_ID>/...` like any channel. Messages in that
+thread continue the same conversation: there is no need to ask people to mention you again.
 
 ## Common commands
 - List the bot's servers:

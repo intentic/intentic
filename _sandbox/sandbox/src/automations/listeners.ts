@@ -1,9 +1,13 @@
-import type { AgentOrigin, ListenerMessage, Trigger } from "@intentic/sandbox-contract";
+import type { AgentOrigin, ListenerMessage, ListenerStop, ListenerStopAnswer, Trigger } from "@intentic/sandbox-contract";
 import { Delayer } from "@intentic/base/async";
+import { wrapOutsideContent } from "@intentic/base/outside-text";
 import type { Services } from "../composition.js";
-import { CHANNEL_SESSION_TTL_MS } from "../sessions/thread-sessions.js";
+import { opt } from "../opt.js";
+import { CHANNEL_SESSION_TTL_MS, THREAD_SESSION_TTL_MS } from "../sessions/thread-sessions.js";
 import { threadKey } from "../seams/thread-key.js";
 import { FIRE_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
+import { sessionStart, wakeSourceOf } from "../guard/actions.js";
+import { guard } from "../guard/guard.js";
 import { doorAdmission } from "./door-admission.js";
 import { fireOnThread, mintConversationId, PAYLOAD_MAX, type TurnStream } from "./scheduler.js";
 import { TITLE_MAX } from "../seams/conversation-title.js";
@@ -13,10 +17,13 @@ import { type SenderLane, senderLane } from "./senders.js";
 // fire through the same guard/wake/run-history path as schedule and event automations.
 // The daemon holds a provider connection only while an enabled listener automation and its capability both exist; the
 // reconciler connects/disconnects on a poll tick.
-// A channel is a thread (sessions/thread-sessions.ts): messages resume the same conversation and session until quiet
-// past CHANNEL_SESSION_TTL_MS, then start fresh. Who sent the message picks its lane (senders.ts): the persona the
-// wake wears and whether a person releases it. Batches and threads are keyed by lane as well as channel, so a burst
-// from two people the automation answers as different agents becomes two wakes, never one.
+// A conversation is a thread (sessions/thread-sessions.ts): the provider's own thread when the message names one (a
+// Discord thread, a Slack thread), else the channel. Messages resume the same conversation and session until quiet past
+// THREAD_SESSION_TTL_MS for a thread, CHANNEL_SESSION_TTL_MS for a channel, then start fresh. Who sent the message picks
+// its lane (senders.ts): the persona the wake wears and whether a person releases it. Batches and threads are keyed by
+// lane as well as thread, so a burst from two people the automation answers as different agents becomes two wakes,
+// never one. A message for a thread whose turn is running goes into that turn, between its tool calls, when the runtime
+// takes words mid-turn and the sender needs nobody's release; otherwise it waits and fires once the turn ends.
 
 // Quiet gap that ends a burst; the timer restarts on every message so a burst keeps coalescing into one wake.
 export const DEBOUNCE_MS = 750;
@@ -26,9 +33,12 @@ export const DEBOUNCE_MS = 750;
 export interface MessageContext {
     readonly origin: AgentOrigin;
     readonly title: string;
-    // Thread-sessions key for this message's channel and lane, computed at push time; a batch's key is its newest
-    // message's, which is the same key since the batcher itself is keyed by lane.
+    // Thread-sessions key for this message's thread (or channel) and lane, computed at push time; a batch's key is its
+    // newest message's, which is the same key since the batcher itself is keyed by it.
     readonly thread: string;
+    // How long the thread keeps its conversation once quiet: longer for a provider's thread, which is one topic, than
+    // for a channel, which carries many.
+    readonly ttlMs: number;
     // What the sender's rule decided; every message in a batch shares one, by construction of the batcher key.
     readonly lane: SenderLane;
     readonly stream?: TurnStream;
@@ -38,21 +48,36 @@ export interface MessageBatcher {
     readonly push: (line: string, context: MessageContext) => void;
 }
 
-// Batches lines into one wake per debounce window; lines arriving mid-run accumulate and fire once more, immediately,
-// when it finishes.
+// What a batcher may do beyond batching: hand a message to the turn its own fire is running (answering whether that
+// turn took it), and say when it holds nothing, so whoever keeps batchers per thread can let it go.
+export interface BatcherOptions {
+    readonly steer?: (conversationId: string, line: string, context: MessageContext) => Promise<boolean>;
+    readonly onIdle?: () => void;
+}
+
+// Batches lines into one wake per debounce window; lines arriving mid-run go into the running turn when `steer` takes
+// them, else accumulate and fire once more, immediately, when it finishes.
 // A fire already running elsewhere is queued rather than dropped, by the fire itself.
 export const createMessageBatcher = (
-    fire: (payload: string, context: MessageContext) => Promise<void>,
+    fire: (payload: string, context: MessageContext, opened: (conversationId: string) => void) => Promise<void>,
     onError: (error: unknown) => void,
     debounceMs = DEBOUNCE_MS,
+    options: BatcherOptions = {},
 ): MessageBatcher => {
     let pending: string[] = [];
     // Context for the next fire; the newest message in the batch wins. Undefined means nothing is batched.
     let pendingContext: MessageContext | undefined;
     let running = false;
+    // The conversation the running fire opened, once it has: where a mid-run message can go.
+    let live: string | undefined;
+    // Mid-run messages go into the turn one at a time, so they land in the order they were sent.
+    let steering: Promise<void> = Promise.resolve();
     const quiet = new Delayer<void>(debounceMs);
     const flush = async (): Promise<void> => {
         if (running || pending.length === 0 || pendingContext === undefined) {
+            if (!running && pending.length === 0) {
+                options.onIdle?.();
+            }
             return;
         }
         running = true;
@@ -61,26 +86,54 @@ export const createMessageBatcher = (
         pending = [];
         pendingContext = undefined;
         try {
-            await fire(joinNewestWithin(batch, PAYLOAD_MAX), context);
+            await fire(joinNewestWithin(batch, PAYLOAD_MAX), context, (conversationId) => {
+                live = conversationId;
+            });
         } catch (error) {
             onError(error);
         } finally {
             running = false;
+            live = undefined;
             void flush();
         }
     };
+    const enqueue = (line: string, context: MessageContext): void => {
+        pending.push(line);
+        const carried = pendingContext?.stream;
+        if (context.stream !== undefined) {
+            // Ends the superseded sink so its held-open response isn't left hanging on a stream that won't fire.
+            carried?.end();
+        }
+        // Reply sink carries from the newest message with one; a follow-up can't drop an earlier held-open response.
+        pendingContext = context.stream === undefined && carried !== undefined ? { ...context, stream: carried } : context;
+        void quiet.trigger(flush);
+    };
+    // Into the running turn, when its runtime takes words and the sender needs nobody's release; a message the turn did
+    // not take waits for the next fire like any other.
+    const steerOrEnqueue = async (steer: NonNullable<BatcherOptions["steer"]>, conversationId: string, line: string, context: MessageContext): Promise<void> => {
+        let taken = false;
+        try {
+            taken = await steer(conversationId, line, context);
+        } catch (error) {
+            onError(error);
+        }
+        if (!taken) {
+            enqueue(line, context);
+            return;
+        }
+        // The running turn answers it through its own sink; this message's sink only hears that it was taken.
+        context.stream?.steered?.();
+        context.stream?.end();
+    };
     return {
         push: (line, context) => {
-            pending.push(line);
-            const carried = pendingContext?.stream;
-            if (context.stream !== undefined) {
-                // Ends the superseded sink so its held-open response isn't left hanging on a stream that won't fire.
-                carried?.end();
+            const { steer } = options;
+            if (running && live !== undefined && steer !== undefined && !context.lane.requireApproval) {
+                const conversationId = live;
+                steering = steering.then(() => steerOrEnqueue(steer, conversationId, line, context));
+                return;
             }
-            // Reply sink carries from the newest message with one; a follow-up can't drop an earlier held-open
-            // response.
-            pendingContext = context.stream === undefined && carried !== undefined ? { ...context, stream: carried } : context;
-            void quiet.trigger(flush);
+            enqueue(line, context);
         },
     };
 };
@@ -96,7 +149,8 @@ const joinNewestWithin = (lines: string[], max: number): string => {
     return kept.length > 0 ? kept.join("\n") : (lines.at(-1) as string).slice(0, max);
 };
 
-// Per-automation, per-lane queues, a module singleton so every dispatch path shares the same serialization.
+// Per-thread queues (a thread key names the automation and the lane too), a module singleton so every dispatch path
+// shares the same serialization. A batcher with nothing pending and nothing running lets itself go.
 const batchers = new Map<string, MessageBatcher>();
 
 // A channel is a door strangers knock on too, so it holds the same two ceilings as the webhook and the public doors
@@ -108,8 +162,13 @@ export const LISTENER_RATE_MAX = 30;
 // Wakes per UTC day per automation; a listener trigger names no ceiling of its own, so the webhook's default holds.
 export const LISTENER_DAILY_MAX = FIRE_DAILY_MAX_DEFAULT;
 
-// One batcher per (automation, persona): a message for one persona must never ride a wake wearing another.
-const batcherKey = (automationId: string, lane: SenderLane): string => (lane.actsAs === undefined ? automationId : `${automationId}:${lane.actsAs}`);
+// Where a message's conversation lives: its thread inside the channel when it names one, else the channel itself.
+const roomOf = (message: ListenerMessage): string => (message.thread === undefined ? message.channelId : `${message.channelId}/${message.thread}`);
+
+// The words a mid-run message reaches the running turn in: what it is, then the event itself, sealed as outside content
+// exactly as a wake's payload is.
+const steerText = (line: string, provider: string): string =>
+    `Another message arrived in this conversation while you work. It is one JSON event, shaped like the ones you woke on; take it into account in this same turn, and answer it in your reply.\n\n${wrapOutsideContent(line, { source: provider })}`;
 
 // Board/tab title for the conversation this message opens: the message's first line, since every fire of an automation
 // shares the same configured prompt.
@@ -131,11 +190,11 @@ const triggerAdmits = (trigger: Extract<Trigger, { kind: "listener" }>, message:
     (trigger.mentioned !== true || message.mentioned === true) &&
     (trigger.branch === undefined || trigger.branch === message.branch);
 
-// One automation-and-lane's batcher: each wake it lets through re-reads the automation, spends from the day, then fires
-// on the channel's thread.
-const listenerBatcher = (services: Services, id: string, provider: ListenerMessage["provider"], debounceMs: number): MessageBatcher =>
+// One thread's batcher: each wake it lets through re-reads the automation, spends from the day, then fires on the
+// thread; a message arriving while that turn runs goes into it.
+const listenerBatcher = (services: Services, id: string, provider: ListenerMessage["provider"], debounceMs: number, key: string): MessageBatcher =>
     createMessageBatcher(
-        (payload, context) => fireBatch(services, id, payload, context),
+        (payload, context, opened) => fireBatch(services, id, payload, context, opened),
         (error) => {
             services.logger.error({ err: error, automation: id }, "automation run failed");
             void services.activity
@@ -150,9 +209,33 @@ const listenerBatcher = (services: Services, id: string, provider: ListenerMessa
                 .catch((appendError: unknown) => services.logger.warn({ err: appendError }, "activity append failed"));
         },
         debounceMs,
+        {
+            steer: async (conversationId, line, context) =>
+                (await admittedUnheld(services, id, context.lane)) &&
+                (await services.turns.steer(conversationId, { text: steerText(line, provider), voice: "sandbox", outside: provider })) === true,
+            onIdle: () => batchers.delete(key),
+        },
     );
 
-const fireBatch = async (services: Services, id: string, payload: string, context: MessageContext): Promise<void> => {
+// Whether a message from this lane would start a turn with nobody's release: the session-start rule every fire is held
+// to (the sandbox's admission floor, the automation's own approval and countdown, the lane's hold). Only such a message
+// may go into a turn already running; anything a person would have had to release waits for its own fire, and its hold.
+export const admittedUnheld = async (services: Pick<Services, "automations" | "sandboxSettings">, automationId: string, lane: SenderLane): Promise<boolean> => {
+    const automation = await services.automations.get(automationId);
+    if (automation === undefined || !automation.enabled) {
+        return false;
+    }
+    const { admission } = await services.sandboxSettings.get();
+    const verdict = guard(sessionStart, {
+        source: wakeSourceOf(automation.trigger),
+        admission,
+        ...opt("requireApproval", automation.requireApproval === true || lane.requireApproval ? true : undefined),
+        ...opt("holdForSeconds", automation.holdForSeconds),
+    });
+    return verdict.effect === "allow";
+};
+
+const fireBatch = async (services: Services, id: string, payload: string, context: MessageContext, opened: (conversationId: string) => void): Promise<void> => {
     const fresh = await services.automations.get(id);
     if (fresh === undefined || !fresh.enabled || fresh.trigger.kind !== "listener") {
         // Disabled or deleted since dispatch: end the sink so a streamed caller isn't left awaiting a dead turn.
@@ -175,7 +258,7 @@ const fireBatch = async (services: Services, id: string, payload: string, contex
     await fireOnThread(
         services,
         fresh,
-        { key: context.thread, ttlMs: CHANNEL_SESSION_TTL_MS, mint: () => mintConversationId(id, openedAt) },
+        { key: context.thread, ttlMs: context.ttlMs, mint: () => mintConversationId(id, openedAt) },
         {
             payload,
             // Queues rather than drops: the blocking run may be an approved wake or a restart's re-fire, not the batcher's.
@@ -185,8 +268,25 @@ const fireBatch = async (services: Services, id: string, payload: string, contex
             title: context.title,
             ...(context.stream !== undefined ? { stream: context.stream } : {}),
         },
+        async (conversationId) => opened(conversationId),
     );
 };
+
+// What one message brings to the thread it fires on, for one automation and the lane its sender resolved to.
+const messageContext = (message: ListenerMessage, automationId: string, thread: string, lane: SenderLane, stream: TurnStream | undefined): MessageContext => ({
+    origin: {
+        automationId,
+        provider: message.provider,
+        channelId: message.channelId,
+        ...opt("threadId", message.thread),
+        author: message.author.name,
+    },
+    title: titleOf(message),
+    thread,
+    ttlMs: message.thread === undefined ? CHANNEL_SESSION_TTL_MS : THREAD_SESSION_TTL_MS,
+    lane,
+    ...opt("stream", stream),
+});
 
 // Routes one event to every matching enabled listener automation's batcher. Matching re-reads automations so an edit,
 // disable or delete is honored immediately; the fire re-reads once more at wake time.
@@ -225,25 +325,13 @@ export const dispatchListenerMessage = async (
             services.logger.warn({ automation: automation.id, provider: message.provider, author: message.author.id }, "listener: sender over the minute's limit, message dropped");
             continue;
         }
-        const key = batcherKey(automation.id, lane);
+        const key = threadKey(message.provider, automation.id, roomOf(message), lane.actsAs);
         let batcher = batchers.get(key);
         if (batcher === undefined) {
-            batcher = listenerBatcher(services, automation.id, message.provider, debounceMs);
+            batcher = listenerBatcher(services, automation.id, message.provider, debounceMs, key);
             batchers.set(key, batcher);
         }
-        const stream = makeStream?.(automation.id);
-        batcher.push(line, {
-            origin: {
-                automationId: automation.id,
-                provider: message.provider,
-                channelId: message.channelId,
-                author: message.author.name,
-            },
-            title: titleOf(message),
-            thread: threadKey(message.provider, automation.id, message.channelId, lane.actsAs),
-            lane,
-            ...(stream !== undefined ? { stream } : {}),
-        });
+        batcher.push(line, messageContext(message, automation.id, key, lane, makeStream?.(automation.id)));
         matched.push(automation.id);
     }
     if (reached) {
@@ -281,4 +369,46 @@ export const reportListenerFailure = async (services: Services, provider: Listen
         }
         await services.automations.recordRun(automation.id, { at: Date.now(), outcome: "error", detail });
     }
+};
+
+// A person in a channel stopping the turn that channel started (a Discord thread's Stop button). The gateway vouches for
+// who pressed it; this decides whether they may, by the one rule that already says who the automation answers: its
+// sender rules. Whoever it answers without the owner's release may stop it; anyone it holds or ignores may not, nor may
+// a channel stop a conversation that did not come from it.
+
+const NOT_FROM_HERE = "That conversation did not start in this channel, so it cannot be stopped from here.";
+const NOT_ALLOWED = "Only someone the assistant answers without the owner's approval can stop it.";
+const NOTHING_RUNNING = "Nothing is running in that conversation any more.";
+
+export const stopChannelTurn = async (
+    services: Pick<Services, "agents" | "automations" | "turns" | "activity" | "logger">,
+    provider: string,
+    stop: ListenerStop,
+): Promise<ListenerStopAnswer> => {
+    const origin = services.agents.entry(stop.conversationId)?.identity.origin;
+    if (origin === undefined || origin.provider !== provider) {
+        return { stopped: false, reason: NOT_FROM_HERE };
+    }
+    const automation = await services.automations.get(origin.automationId);
+    const lane = automation === undefined ? undefined : senderLane(automation, stop.author);
+    if (lane === undefined || lane.requireApproval) {
+        return { stopped: false, reason: NOT_ALLOWED };
+    }
+    // A wake has no run to name (it was never attached to), so whatever runs in the conversation now is the one meant.
+    const result = await services.turns.stop({ conversationId: stop.conversationId, live: true });
+    if (!result.stopped) {
+        return { stopped: false, reason: NOTHING_RUNNING };
+    }
+    void services.activity
+        .append({
+            provider,
+            direction: "in",
+            type: "turn.stopped",
+            ...opt("channelId", origin.channelId),
+            author: stop.author.name,
+            conversationId: stop.conversationId,
+            automationIds: [origin.automationId],
+        })
+        .catch((error: Error) => services.logger.warn({ err: error }, "activity append failed"));
+    return { stopped: true };
 };

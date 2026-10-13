@@ -6,38 +6,39 @@ import {
     HISTORY_LIMIT,
     type ListenerHistoryEntry,
     type ListenerMessage,
+    type ListenerStop,
     MESSAGE_LIMITS,
-    paintReply,
     recentKeys,
-    typingHeartbeat,
 } from "@intentic/connector-runtime";
-import { type Client, DiscordAPIError, type Message, type REST, Routes } from "discord.js";
+import { type ButtonInteraction, type Client, DiscordAPIError, type Guild, type Interaction, type Message, MessageFlags, type REST, Routes } from "discord.js";
+import { progressDetailOf, stopTarget } from "./card.js";
 import { visibleChannel } from "./client.js";
+import { postMessage } from "./discord-rest.js";
+import { inboundOf, type Route, routeOf } from "./inbound.js";
+import { createMessageReply, type ReplyDeps, type ReplyRegistry, type ReplyTiming, type RunControl } from "./reply.js";
 
 // Text side of the gateway: builds a normalized listener message from every human-authored message a subscribed bot
-// sees, and POSTs it to the daemon's dispatch route. On a mention, holds the stream and paints the reply back live, one
-// painter per matched automation.
-
-// Slice of the discord.js channel API the painter uses, kept structural so this file stays decoupled from discord.js's
-// own classes.
-export interface EditableMessage {
-    readonly edit: (content: string) => Promise<unknown>;
-}
-export interface StreamChannel {
-    readonly send: (content: string) => Promise<EditableMessage>;
-}
+// sees, and POSTs it to the daemon's dispatch route. A message addressed to us (inbound.ts) gets its answer back live,
+// in its own thread, with a status card and reactions (reply.ts); the card's Stop button comes back here.
 
 // Discord's per-message content limit; a longer reply spills into follow-up messages.
 const DISCORD_MAX = MESSAGE_LIMITS.discord;
-// Min gap between edits; Discord rate-limits them (~5/5s), and typing covers the gap until first paint.
-const EDIT_INTERVAL_MS = 1_200;
-// Re-sent since Discord's typing indicator expires after ~10s.
-const TYPING_INTERVAL_MS = 8_000;
+
+// The parts of a discord.js message the dispatch reads, structural so a test can hand one in without a client.
+export interface DispatchedMessage {
+    readonly id: string;
+    readonly guildId: string | null;
+    readonly content: string;
+    readonly createdAt: Date;
+    readonly author: { readonly id: string; readonly username: string };
+    readonly member: { readonly roles: { readonly cache: { values: () => Iterable<{ readonly id: string }> } } } | null;
+    readonly attachments: { readonly size: number; map: <T>(each: (attachment: { readonly name: string; readonly url: string }) => T) => T[] };
+}
 
 // Who wrote it, as Discord vouches for them: the user id (what a sender rule names), the username for display, and in a
 // guild the member's role ids as `groups`, @everyone included, so a rule can name a role or the whole server. A DM has
 // no member and so no groups.
-export const authorOf = (message: Pick<Message, "author" | "member">): ListenerMessage["author"] => {
+export const authorOf = (message: Pick<DispatchedMessage, "author" | "member">): ListenerMessage["author"] => {
     const groups = message.member === null ? [] : [...message.member.roles.cache.values()].map((role) => role.id);
     return { id: message.author.id, name: message.author.username, ...(groups.length > 0 ? { groups } : {}) };
 };
@@ -152,96 +153,219 @@ export const deliverToChannel = async (bots: Iterable<ChannelLookup>, channelId:
 
 export interface DiscordListener {
     readonly onMessage: (message: Message) => void;
-    readonly stopAll: () => void;
+    readonly onInteraction: (interaction: Interaction) => void;
+    readonly onGuildJoin: (guild: Guild) => void;
 }
 
-export const createDiscordListener = (ctx: GatewayCtx, subscribed: Map<string, Client>): DiscordListener => {
+// What the listener reads of a bot's connector: how much of the agent's work its threads show.
+export interface ListenerOptions {
+    readonly progressOf: (client: Client) => string | undefined;
+    readonly timing?: ReplyTiming;
+}
+
+// Threads this process answered in, so a follow-up there is heard without a mention; bounded, and forgotten on restart
+// (a thread the bot opened is its own and needs no memory).
+const JOINED_MAX = 2_000;
+
+interface JoinedThreads {
+    readonly has: (id: string) => boolean;
+    readonly add: (id: string) => void;
+}
+
+const joinedThreads = (): JoinedThreads => {
+    const ids = new Set<string>();
+    return {
+        has: (id) => ids.has(id),
+        add: (id) => {
+            ids.delete(id);
+            ids.add(id);
+            const oldest = ids.size > JOINED_MAX ? ids.values().next().value : undefined;
+            if (oldest !== undefined) {
+                ids.delete(oldest);
+            }
+        },
+    };
+};
+
+// The turns running now, by conversation (for the Stop button) and by room (for a message steered into one).
+const runRegistry = (): ReplyRegistry & { readonly byConversation: (id: string) => RunControl | undefined } => {
+    const byConversation = new Map<string, RunControl>();
+    const byRoom = new Map<string, RunControl>();
+    return {
+        opened: (conversationId, room, run) => {
+            byConversation.set(conversationId, run);
+            byRoom.set(room, run);
+        },
+        closed: (conversationId, room) => {
+            const run = byConversation.get(conversationId);
+            byConversation.delete(conversationId);
+            if (run !== undefined && byRoom.get(room) === run) {
+                byRoom.delete(room);
+            }
+        },
+        running: (room) => byRoom.get(room),
+        byConversation: (id) => byConversation.get(id),
+    };
+};
+
+// The parts of a button press the Stop rule reads: who pressed it, and their roles in the server, which an interaction
+// carries as a list of ids or, for a cached member, in its role cache.
+export interface Presser {
+    readonly user: { readonly id: string; readonly username: string };
+    readonly member: { readonly roles: readonly string[] | { readonly cache: { keys: () => Iterable<string> } } } | null;
+    readonly guildId: string | null;
+}
+
+// Who pressed a button, as the sender rules read people: their id, their name, and in a server their role ids with the
+// server's own (the role everyone in it has).
+export const presserOf = (interaction: Presser): ListenerStop["author"] => {
+    const member = interaction.member;
+    const roles = member === null ? [] : "cache" in member.roles ? [...member.roles.cache.keys()] : member.roles;
+    const groups = [...new Set([...(interaction.guildId === null ? [] : [interaction.guildId]), ...roles])];
+    return { id: interaction.user.id, name: interaction.user.username, ...(groups.length > 0 ? { groups } : {}) };
+};
+
+// The thread's opening message and what was said in it before this one, oldest first: in a thread, its own messages
+// and the message it was opened from (which lives in the channel); anywhere else, the channel's last few.
+const historyOf = async (message: Message, selfIds: ReadonlySet<string>): Promise<ListenerHistoryEntry[]> => {
+    const fetched = await message.channel.messages.fetch({ limit: HISTORY_LIMIT, before: message.id });
+    const history = toHistory([...fetched.values()], selfIds);
+    const channel = message.channel;
+    if (!channel.isThread() || history.length >= HISTORY_LIMIT) {
+        return history;
+    }
+    // allow(silent-catch): a thread opened without a message, or whose opening message was deleted, has none to add
+    const starter = await channel.fetchStarterMessage().catch(() => null);
+    return starter === null || starter.id === message.id ? history : [...toHistory([starter], selfIds), ...history];
+};
+
+// What a Discord message carries beyond the common fields: its server, and the files attached to it.
+type DiscordExtra = { guildId?: string; attachments?: Array<{ readonly name: string; readonly url: string }> };
+
+// The normalized message the daemon dispatches on: where it belongs (the route's channel and thread), who wrote it, and
+// for one addressed to us, that it was, with what was said before it.
+export const payloadOf = (message: DispatchedMessage, route: Route, history: readonly ListenerHistoryEntry[] | undefined): ListenerMessage => {
+    const extra: DiscordExtra = {};
+    if (message.guildId !== null) {
+        extra.guildId = message.guildId;
+    }
+    if (message.attachments.size > 0) {
+        extra.attachments = message.attachments.map(({ name, url }) => ({ name, url }));
+    }
+    let payload: ListenerMessage = {
+        provider: "discord",
+        type: "message",
+        id: message.id,
+        channelId: route.channelId,
+        author: authorOf(message),
+        content: message.content,
+        timestamp: message.createdAt.toISOString(),
+        extra,
+    };
+    if (route.thread !== undefined) {
+        payload = { ...payload, thread: route.thread };
+    }
+    if (route.addressed) {
+        payload = { ...payload, mentioned: true };
+    }
+    if (history !== undefined && history.length > 0) {
+        payload = { ...payload, history: [...history] };
+    }
+    return payload;
+};
+
+const welcomeText = (botId: string): string =>
+    [
+        `👋 Hi! I'm the agent from this team's Intentic sandbox.`,
+        `Mention <@${botId}> with a question or a task: I answer in a thread of its own, show what I'm doing while I work, and anyone in the thread can steer me by replying, no mention needed.`,
+    ].join("\n");
+
+export const createDiscordListener = (ctx: GatewayCtx, subscribed: Map<string, Client>, options: ListenerOptions): DiscordListener => {
     const recent = recentKeys();
-    // Live "typing…" indicators keyed by channelId, started on a mention, cleared when our own reply lands.
-    const typing = typingHeartbeat({ intervalMs: TYPING_INTERVAL_MS });
-    const startTyping = (channel: Message["channel"]): void => {
-        if (!("sendTyping" in channel)) {
+    const joined = joinedThreads();
+    const runs = runRegistry();
+    const botIds = (): Set<string> => new Set([...subscribed.values()].flatMap((client) => (client.user !== null ? [client.user.id] : [])));
+
+    const dispatch = async (message: Message, route: Route, ours: ReadonlySet<string>): Promise<void> => {
+        const history = route.addressed
+            ? await historyOf(message, ours).catch((error: Error) => {
+                  // A history-fetch failure (missing perm, rate limit) must not drop the wake; degrades to no context.
+                  ctx.log.warn({ err: error }, "discord history fetch failed");
+                  return undefined;
+              })
+            : undefined;
+        const payload = payloadOf(message, route, history);
+        if (!route.addressed) {
+            await ctx.daemon.dispatch(payload);
             return;
         }
-        typing.start(channel.id, () => void channel.sendTyping().catch(() => undefined));
-    };
-
-    const fetchHistory = async (message: Message): Promise<ListenerHistoryEntry[]> => {
-        const fetched = await message.channel.messages.fetch({ limit: HISTORY_LIMIT, before: message.id });
-        const selfIds = new Set([...subscribed.values()].flatMap((c) => (c.user !== null ? [c.user.id] : [])));
-        return toHistory([...fetched.values()], selfIds);
+        const replyDeps: ReplyDeps = {
+            rest: message.client.rest,
+            log: ctx.log,
+            detail: progressDetailOf(options.progressOf(message.client)),
+            registry: runs,
+            joined: joined.add,
+        };
+        const reply = createMessageReply(options.timing === undefined ? replyDeps : { ...replyDeps, timing: options.timing }, {
+            messageId: message.id,
+            channelId: message.channelId,
+            authorId: message.author.id,
+            route,
+        });
+        try {
+            await ctx.daemon.dispatchStreaming(payload, reply.frame);
+        } finally {
+            await reply.settle();
+        }
     };
 
     const onMessage = (message: Message): void => {
+        const ours = botIds();
         // Never wakes on our own bots, so a reply can't re-trigger itself or another; third-party bots still dispatch.
-        for (const client of subscribed.values()) {
-            if (client.user?.id === message.author.id) {
-                // Our own reply landed in this channel, stop the "typing…" heartbeat.
-                typing.stop(message.channelId);
-                return;
-            }
-        }
-        if (recent.duplicate(message.id)) {
+        if (ours.has(message.author.id) || recent.duplicate(message.id)) {
             return;
         }
-        // Tagged: an @mention or reply to any of our bots, checked against all since dedup may pick a different one.
-        const mentioned = [...subscribed.values()].some(
-            (client) => client.user !== null && message.mentions.has(client.user, { ignoreEveryone: true, ignoreRoles: true }),
-        );
-        if (mentioned) {
-            // Immediate feedback: show "typing…" the moment we're tagged, before the (debounced) turn spins up.
-            startTyping(message.channel);
-        }
-        const channel = message.channel;
-        // Live-paints the reply only when we can post here; otherwise the agent replies via the Discord skill instead.
-        const paintable = mentioned && "send" in channel;
-        void (async () => {
-            const history = mentioned
-                ? await fetchHistory(message).catch((error: unknown) => {
-                      // A history-fetch failure (missing perm, rate limit) must not drop the wake; degrades to no
-                      // context.
-                      ctx.log.warn({ err: error }, "discord history fetch failed");
-                      return undefined;
-                  })
-                : undefined;
-            const payload: ListenerMessage = {
-                provider: "discord",
-                type: "message",
-                id: message.id,
-                channelId: message.channelId,
-                author: authorOf(message),
-                content: message.content,
-                ...(mentioned ? { mentioned: true } : {}),
-                ...(history !== undefined && history.length > 0 ? { history } : {}),
-                timestamp: message.createdAt.toISOString(),
-                extra: {
-                    ...(message.guildId !== null ? { guildId: message.guildId } : {}),
-                    ...(message.attachments.size > 0 ? { attachments: message.attachments.map(({ name, url }) => ({ name, url })) } : {}),
-                },
-            };
-            if (!paintable) {
-                await ctx.daemon.dispatch(payload);
-                return;
-            }
-            await paintReply(ctx.daemon, payload, {
-                surface: {
-                    stream: {
-                        // SAFETY: `paintable` holds only where `send` is on the channel.
-                        post: (content: string) => (channel as StreamChannel).send(content),
-                        update: (handle: EditableMessage, content: string) => handle.edit(content),
-                    },
-                    editIntervalMs: EDIT_INTERVAL_MS,
-                },
-                maxChars: DISCORD_MAX,
-                onError: (error) => ctx.log.warn({ err: error }, "discord stream paint failed"),
-                // Turn ended or the stream broke either way; drop typing if our own reply didn't already clear it.
-                settle: () => typing.stop(message.channelId),
-            });
-        })().catch((error: unknown) => ctx.log.error({ err: error }, "discord message dispatch failed"));
+        const route = routeOf(inboundOf(message, ours), { botIds: ours, joined: joined.has });
+        dispatch(message, route, ours).catch((error: Error) => ctx.log.error({ err: error }, "discord message dispatch failed"));
     };
 
-    return {
-        onMessage,
-        stopAll: typing.stopAll,
+    // The Stop button under a status card: the daemon decides whether the presser may, by the automation's own rules.
+    const onStop = async (interaction: ButtonInteraction, conversationId: string): Promise<void> => {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        const presser = presserOf(interaction);
+        const answer = await ctx.daemon.stop({ conversationId, author: presser }).catch((error: Error) => {
+            ctx.log.warn({ err: error }, "discord stop: the daemon did not answer");
+            return { stopped: false, reason: "I couldn't reach the sandbox to stop it; try again in a moment." };
+        });
+        if (answer.stopped) {
+            runs.byConversation(conversationId)?.stopping(interaction.user.globalName ?? interaction.user.username);
+        }
+        await interaction.editReply(answer.stopped ? "Stopping it now." : (answer.reason ?? "That one can't be stopped from here."));
     };
+
+    const onInteraction = (interaction: Interaction): void => {
+        if (!interaction.isButton()) {
+            return;
+        }
+        const conversationId = stopTarget(interaction.customId);
+        if (conversationId === undefined) {
+            return;
+        }
+        onStop(interaction, conversationId).catch((error: Error) => ctx.log.warn({ err: error }, "discord stop failed"));
+    };
+
+    // Joining a server while the assistant is on: say hello where the server greets newcomers, so people know how to
+    // reach it. A server with no such channel, or one the bot cannot post in, is left quiet.
+    const onGuildJoin = (guild: Guild): void => {
+        const channelId = guild.systemChannelId;
+        const botId = guild.client.user?.id;
+        if (channelId === null || botId === undefined) {
+            return;
+        }
+        postMessage(guild.client.rest, channelId, { content: welcomeText(botId) }).catch((error: Error) =>
+            ctx.log.warn({ err: error, guild: guild.id }, "discord: could not say hello in a new server"),
+        );
+    };
+
+    return { onMessage, onInteraction, onGuildJoin };
 };

@@ -1,3 +1,4 @@
+export { chunkMessage, openFenceAfter, tablesToCode } from "./chunks.js";
 export type { GatewayCtx } from "./context.js";
 export { createDaemonClient, type DaemonClient, type DaemonState, type SpeakOptions, type Speech } from "./daemon.js";
 export {
@@ -20,6 +21,19 @@ export { findWorkspaceRoot, readGatewayUrl } from "./workspace.js";
 // the contract than that).
 export { MESSAGE_LIMITS } from "@intentic/sandbox-contract/message-limits";
 export {
+    currentStep,
+    elapsedOf,
+    formatElapsed,
+    OBJECT_MAX,
+    STEPS_KEPT,
+    type StepPhrase,
+    stepPhrase,
+    toolWords,
+    trackTurnProgress,
+    type TurnProgress,
+    type TurnProgressTracker,
+} from "./progress.js";
+export {
     createBufferedPainter,
     createStreamingPainter,
     failureNotice,
@@ -36,5 +50,10 @@ export type {
     ListenerHistoryEntry,
     ListenerMessage,
     ListenerPairing,
+    ListenerPlanItem,
     ListenerStatus,
+    ListenerStep,
+    ListenerStop,
+    ListenerStopAnswer,
+    ListenerTurnOpened,
 } from "@intentic/sandbox-contract";

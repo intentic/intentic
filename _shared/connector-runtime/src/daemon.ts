@@ -1,12 +1,12 @@
 import type { ExtensionProcessApi } from "@intentic/extension-api/runtime";
-import type { ListenerDispatchFrame, ListenerMessage, ListenerStatus } from "@intentic/sandbox-contract";
+import type { ListenerDispatchFrame, ListenerMessage, ListenerStatus, ListenerStop, ListenerStopAnswer } from "@intentic/sandbox-contract";
 import { type ListenerState, listenerRouteUrl, ListenerStateSchema } from "@intentic/sandbox-contract/listener-protocol";
 import { parsedJsonLines } from "@intentic/base/json-lines";
 import { chunksOf } from "@intentic/base/web-stream";
 import type { Logger } from "./log.js";
 
 // The gateway's client for the daemon's provider-scoped listener routes (app.ts / listener.routes.ts): the daemon holds
-// no provider connection itself, so every automation interaction rides these four routes, through the process's own
+// no provider connection itself, so every automation interaction rides these five routes, through the process's own
 // `api.daemon` (@intentic/extension-api/runtime), which presents the extension's token: the daemon answers them only for
 // the extension whose manifest declares this provider as its listener. Paths, shapes and the state feed's schema come
 // from the contract's listener-protocol, the same declaration the daemon serves from (the subpath, so a gateway loads no
@@ -40,6 +40,8 @@ export interface DaemonClient<TConfig> {
     readonly state: () => Promise<DaemonState<TConfig>>;
     readonly dispatch: (message: ListenerMessage) => Promise<void>;
     readonly dispatchStreaming: (message: ListenerMessage, onFrame: (frame: ListenerDispatchFrame) => void) => Promise<void>;
+    // A person in the channel asking to stop the turn a conversation is running; the daemon decides whether they may.
+    readonly stop: (stop: ListenerStop) => Promise<ListenerStopAnswer>;
     // Reports never reject: a connector fires them and moves on, so a report the daemon did not take is logged here.
     readonly failure: (detail: string) => Promise<void>;
     readonly status: (snapshot: ListenerStatus) => Promise<void>;
@@ -104,6 +106,18 @@ export const createDaemonClient = <TConfig>(provider: string, daemon: DaemonDoor
                 // that did not parse never reaches here.
                 onFrame(frame as ListenerDispatchFrame);
             }
+        },
+        stop: async (stop) => {
+            const res = await daemon.request(url("stop"), { method: "POST", headers: jsonHeaders, body: JSON.stringify(stop) });
+            if (!res.ok) {
+                const detail = await res.text().catch((error: Error) => {
+                    log.warn({ err: error }, `${listenerRouteUrl("stop", provider)} returned ${res.status} and its body could not be read`);
+                    return "";
+                });
+                throw new Error(`${listenerRouteUrl("stop", provider)} returned ${res.status}${detail === "" ? "" : `: ${detail.slice(0, 200)}`}`);
+            }
+            // SAFETY: only the daemon answers this route, with the contract's ListenerStopAnswer.
+            return (await res.json()) as ListenerStopAnswer;
         },
         failure: (detail) => report("failure", { detail }, { detail }),
         transcribe: async (wav, language) => {

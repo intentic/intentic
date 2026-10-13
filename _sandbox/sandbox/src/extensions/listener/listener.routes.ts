@@ -5,10 +5,12 @@ import {
     type ListenerState,
     type ListenerStatus,
     ListenerStatusSchema,
+    type ListenerStopAnswer,
+    ListenerStopSchema,
 } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
 import { stream } from "hono/streaming";
-import { DEBOUNCE_MS, dispatchListenerMessage, reportListenerFailure } from "../../automations/listeners.js";
+import { DEBOUNCE_MS, dispatchListenerMessage, reportListenerFailure, stopChannelTurn } from "../../automations/listeners.js";
 import { PAYLOAD_MAX, type TurnStream } from "../../automations/scheduler.js";
 import type { Services } from "../../composition.js";
 import type { AppEnv } from "../../app-env.js";
@@ -18,12 +20,16 @@ import { listenerOwnership, listenerStateOf } from "./listener-state.js";
 import { setListenerStatus } from "./listener-status.js";
 
 // Control surface for an extension's listener gateway; the gateway holds the provider connection, not the daemon.
-// Four routes: /state (reconcile), /dispatch (inbound events, optional ndjson stream), and failure/status reports.
+// Five routes: /state (reconcile), /dispatch (inbound events, optional ndjson stream), failure/status reports, and /stop
+// (a person in the channel stopping a turn the channel started).
 // Each answers only the extension token of the extension that owns this provider's listener (listener-state.ts): /state
 // hands back connector credentials, and the others would let a stranger fake inbound messages that wake turns, or mark
 // that provider's automations. Declaring the provider is not enough, since a second extension can declare it too; the
 // owner is resolved at request time by the one rule. The grant table admits nothing else (panel: false, control:
 // "never"); the handler checks again, for a loopback daemon.
+
+// A stop names a conversation and a person: a few hundred bytes, never more than this.
+const STOP_BODY_MAX = 4_096;
 
 // The calling extension when it owns this provider's listener; a Response refusing it otherwise.
 const listenerCaller = async (services: Services, c: Context<AppEnv, "/listeners/:provider">): Promise<ExtensionGrant | Response> => {
@@ -95,6 +101,12 @@ export const createListenerRoutes = (services: Services) => ({
                     },
                     // Forwarded verbatim, unlike the Visitor chat's: it lands in the owner's channel, sentence intact.
                     failed: (reason) => write({ automationId, failed: reason }),
+                    opened: (turn) => write({ automationId, opened: turn }),
+                    step: (step) => write({ automationId, step }),
+                    plan: (plan) => write({ automationId, plan }),
+                    held: (reason) => write({ automationId, held: reason }),
+                    queued: (reason) => write({ automationId, queued: reason }),
+                    steered: () => write({ automationId, steered: true }),
                     end: () => {
                         write({ automationId, end: true });
                         void tail.finally(gate.resolve);
@@ -116,6 +128,22 @@ export const createListenerRoutes = (services: Services) => ({
         const body = (await c.req.json().catch(() => undefined)) as { detail?: unknown } | undefined;
         await reportListenerFailure(services, provider, typeof body?.detail === "string" ? body.detail : "listener failure");
         return c.json({ ok: true });
+    },
+
+    // A person in the channel pressing Stop: the turn stops only for someone the automation's sender rules let talk to
+    // it unreleased, and only on a conversation this provider's channel started.
+    stop: async (c: Context<AppEnv, "/listeners/:provider">): Promise<Response> => {
+        const caller = await listenerCaller(services, c);
+        if (caller instanceof Response) {
+            return caller;
+        }
+        const read = await readBoundedJson(c.req.raw, STOP_BODY_MAX);
+        const body = read.kind === "ok" ? ListenerStopSchema.safeParse(read.value) : undefined;
+        if (body === undefined || !body.success) {
+            return c.json({ error: "invalid stop body" }, 400);
+        }
+        const answer: ListenerStopAnswer = await stopChannelTurn(services, c.req.param("provider"), body.data);
+        return c.json(answer);
     },
 
     // Gateway's periodic live status, into the map /activity/status reads; the daemon can't probe it directly.

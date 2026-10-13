@@ -1,7 +1,14 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type ActivityEvent, type AgentEvent, type Automation, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import {
+    type ActivityEvent,
+    type AgentEvent,
+    type AgentOrigin,
+    type Automation,
+    type ListenerDispatchFrame,
+    SandboxSettingsSchema,
+} from "@intentic/sandbox-contract";
 import { Hono } from "hono";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import { sqliteTurnJournal } from "../../agent/run/turn/turn-journal.js";
@@ -14,7 +21,7 @@ import { automationConfig } from "../../harness/route-stores.testing.js";
 import type { Services } from "../../composition.js";
 import { fileThreadSessionsStore } from "../../sessions/thread-sessions.js";
 import { unstubbed } from "@intentic/testing";
-import { PAYLOAD_MAX } from "../../automations/scheduler.js";
+import { HELD_NOTICE, PAYLOAD_MAX } from "../../automations/scheduler.js";
 import { listenerStateOf } from "./listener-state.js";
 import { listenerStatus } from "./listener-status.js";
 import { createListenerRoutes } from "./listener.routes.js";
@@ -43,6 +50,7 @@ const fakeServices = (root: string, appends: ActivityEvent[] = []): Services =>
         automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         heldWakes: fileHeldWakesStore(join(root, "history")),
+        pushSender: unstubbed<Services["pushSender"]>("pushSender", { notifyIfAway: async () => ({ delivered: 0, failed: 0 }) }),
         capabilities: fileCapabilitiesStore(join(root, "capabilities.json")),
         threadSessions: fileThreadSessionsStore(join(root, "thread-sessions.json"), () => false),
         senders: fileSendersStore(join(root, "senders.json")),
@@ -224,4 +232,104 @@ test("state hands an extension only the connectors of cards it contributes", asy
     expect(((await own.json()) as { connectors: unknown[] }).connectors).toEqual([
         { id: "discord", config: { provider: "discord", botToken: "SECRET" } },
     ]);
+});
+
+// A streamed dispatch's frames, one per ndjson line.
+const framesOf = async (res: Response): Promise<ListenerDispatchFrame[]> => {
+    const lines = (await res.text()).trim().split("\n").filter(Boolean);
+    // SAFETY: the dispatch route writes exactly one ListenerDispatchFrame per line (listener.routes.ts).
+    return lines.map((line) => JSON.parse(line) as ListenerDispatchFrame);
+};
+
+// What a channel shows while its turn works: the conversation it opened, each step, the checklist, and the turn's own
+// words only, a subagent's narration staying in the conversation.
+test("dispatch?stream=1 frames the turn's progress and only the turn's own words", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-route-")));
+    await services.automations.upsert(listenerAutomation("p-live"));
+    const events: AgentEvent[] = [
+        { kind: "tool_call", id: "t1", name: "Read", category: "read", status: "in_progress", target: "src/a.ts" },
+        { kind: "tool_call_update", id: "t1", status: "completed" },
+        { kind: "tool_call", id: "t2", name: "TodoWrite", category: "think", status: "completed" },
+        { kind: "todos", items: [{ content: "Fix the guard", status: "in_progress" }] },
+        { kind: "tool_call", id: "t3", name: "Grep", category: "search", status: "in_progress", target: "x", parentToolUseId: "sub" },
+        { kind: "delta", text: "subagent narration", parentToolUseId: "sub" },
+        { kind: "delta", text: "Fixed." },
+        { kind: "done" },
+    ];
+    const frames = await framesOf(await postJson(appFor(services, fakeWake([], events)), "/listeners/discord/dispatch?stream=1", message({ id: "p1", mentioned: true })));
+    expect(frames.find((frame) => frame.opened !== undefined)?.opened?.conversationId).toEqual(expect.any(String));
+    expect(frames).toContainEqual({ automationId: "p-live", step: { id: "t1", tool: "Read", kind: "read", status: "running", target: "src/a.ts" } });
+    expect(frames).toContainEqual({ automationId: "p-live", step: { id: "t1", tool: "Read", kind: "read", status: "done", target: "src/a.ts" } });
+    expect(frames).toContainEqual({ automationId: "p-live", plan: [{ text: "Fix the guard", status: "in_progress" }] });
+    expect(frames).toContainEqual({ automationId: "p-live", delta: "Fixed." });
+    // Neither the checklist's own tool nor anything inside a subagent reaches the channel.
+    expect(JSON.stringify(frames)).not.toContain("TodoWrite");
+    expect(JSON.stringify(frames)).not.toContain("subagent narration");
+    expect(JSON.stringify(frames)).not.toContain('"t3"');
+    expect(frames.at(-1)).toEqual({ automationId: "p-live", end: true });
+});
+
+test("a wake held for a person's approval tells the channel so, rather than going quiet", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-route-")));
+    await services.automations.upsert(listenerAutomation("h-live", { requireApproval: true }));
+    const prompts: string[] = [];
+    const frames = await framesOf(await postJson(appFor(services, fakeWake(prompts)), "/listeners/discord/dispatch?stream=1", message({ id: "h1", mentioned: true })));
+    expect(frames).toContainEqual({ automationId: "h-live", held: HELD_NOTICE });
+    expect(frames.at(-1)).toEqual({ automationId: "h-live", end: true });
+    expect(prompts).toEqual([]);
+});
+
+// Stop: who may stop a channel's turn is who the automation answers without the owner's release, on a conversation that
+// came from that provider.
+type Entry = NonNullable<ReturnType<Services["agents"]["entry"]>>;
+
+const stopApp = (services: Services, origin: AgentOrigin | undefined, stopped: string[]): Hono => {
+    const routes = createListenerRoutes(
+        unstubbed<Services>("services", {
+            ...services,
+            agents: unstubbed<Services["agents"]>("agents", {
+                // The stop route reads only the entry's identity.origin; anything else it touched would throw.
+                entry: (id) =>
+                    id === "conv-1" && origin !== undefined
+                        ? unstubbed<Entry>("entry", { id, identity: unstubbed<Entry["identity"]>("identity", { origin }) })
+                        : undefined,
+            }),
+            turns: unstubbed<Services["turns"]>("turns", {
+                stop: async (target) => {
+                    stopped.push(target.conversationId);
+                    return { stopped: true };
+                },
+            }),
+        }),
+    );
+    return new Hono().post("/listeners/:provider/stop", routes.stop);
+};
+
+test("stop lets a person the automation answers stop its turn, and refuses anyone it holds or ignores", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-route-")));
+    await services.automations.upsert(
+        listenerAutomation("stop-live", { senders: { rules: [{ ids: ["u-mark"] }, { ids: ["u-guest"], requireApproval: true }], others: "ignore" } }),
+    );
+    const stopped: string[] = [];
+    const app = stopApp(services, { automationId: "stop-live", provider: "discord", channelId: "c1", threadId: "t1" }, stopped);
+    const asking = async (id: string) => (await postJson(app, "/listeners/discord/stop", { conversationId: "conv-1", author: { id, name: id } })).json();
+    expect(await asking("u-guest")).toMatchObject({ stopped: false });
+    expect(await asking("u-stranger")).toMatchObject({ stopped: false });
+    expect(stopped).toEqual([]);
+    expect(await asking("u-mark")).toEqual({ stopped: true });
+    expect(stopped).toEqual(["conv-1"]);
+});
+
+test("stop refuses a conversation another provider's channel started, or none at all", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-route-")));
+    await services.automations.upsert(listenerAutomation("stop-elsewhere"));
+    const stopped: string[] = [];
+    const slackOrigin = { automationId: "stop-elsewhere", provider: "slack", channelId: "c1" };
+    const body = { conversationId: "conv-1", author: { id: "u1", name: "alice" } };
+    expect(await (await postJson(stopApp(services, slackOrigin, stopped), "/listeners/discord/stop", body)).json()).toMatchObject({ stopped: false });
+    expect(await (await postJson(stopApp(services, undefined, stopped), "/listeners/discord/stop", body)).json()).toMatchObject({ stopped: false });
+    expect((await postJson(stopApp(services, undefined, stopped), "/listeners/discord/stop", { author: {} })).status).toBe(400);
+    // Another provider's gateway cannot press Stop on discord's conversations at all.
+    expect((await postJson(stopApp(services, undefined, stopped), "/listeners/discord/stop", body, "slack-token")).status).toBe(403);
+    expect(stopped).toEqual([]);
 });

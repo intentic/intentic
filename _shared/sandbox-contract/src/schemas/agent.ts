@@ -59,6 +59,9 @@ export const AgentOriginSchema = z.object({
     provider: z.string(),
     // External thread it arrived on (Discord channel id, widget conversation id); absent for webhooks.
     channelId: z.string().optional(),
+    // The thread inside that channel (a Discord thread, a Slack thread's root ts), when the conversation is one; what is
+    // said back between turns goes into it rather than onto the channel.
+    threadId: z.string().optional(),
     // Who sent it, as the source names them.
     author: z.string().optional(),
 });

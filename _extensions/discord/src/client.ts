@@ -5,6 +5,8 @@ export interface DiscordConnectorConfig {
     readonly provider: string;
     readonly botToken: string;
     readonly voiceLanguage?: string;
+    // How much of the agent's work a thread's status card shows: "steps" (the default), "quiet" or "off".
+    readonly progress?: string;
 }
 
 // The gateway's discord.js clients, one connection per bot token, shared by the text listener and the voice

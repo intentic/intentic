@@ -1,4 +1,5 @@
 import type { ListenerMessage } from "@intentic/sandbox-contract";
+import { chunkMessage } from "./chunks.js";
 import type { DaemonClient } from "./daemon.js";
 import { createBufferedPainter, createStreamingPainter, failureNotice, framePainter, type StreamPoster } from "./painter.js";
 
@@ -13,10 +14,11 @@ export const HISTORY_LIMIT = 20;
 // How long a "typing…" indicator may be held for one turn, so a stalled turn can't leak it forever.
 export const TYPING_MAX_MS = 300_000;
 
-// Posts `text` through the first target that takes it, `max` characters per message. A target that fails before its
-// first chunk lands is passed over for the next; once a chunk landed, a failure is thrown instead, so a partial spill
-// is never posted twice. Returns what each chunk's send returned, in order. With no target, throws `none()`; when every
-// target failed, the last failure.
+// Posts `text` through the first target that takes it, at most `max` characters per message, cut where chunkMessage cuts
+// (a paragraph or line when one is near, a code block closed and reopened across the cut). A target that fails before
+// its first chunk lands is passed over for the next; once a chunk landed, a failure is thrown instead, so a partial
+// spill is never posted twice. Returns what each chunk's send returned, in order. With no target, throws `none()`; when
+// every target failed, the last failure.
 export const deliverChunked = async <TTarget, TSent>(
     targets: Iterable<TTarget>,
     send: (target: TTarget, chunk: string) => Promise<TSent>,
@@ -30,8 +32,8 @@ export const deliverChunked = async <TTarget, TSent>(
         tried = true;
         const sent: TSent[] = [];
         try {
-            for (let base = 0; base < text.length; base += max) {
-                sent.push(await send(target, text.slice(base, base + max)));
+            for (const chunk of chunkMessage(text, max)) {
+                sent.push(await send(target, chunk));
             }
             return sent;
         } catch (error) {

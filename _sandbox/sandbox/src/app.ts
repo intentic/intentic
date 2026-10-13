@@ -531,6 +531,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     serve("POST /listeners/{provider}/dispatch", listenerRoutes.dispatch);
     serve("POST /listeners/{provider}/failure", listenerRoutes.failure);
     serve("POST /listeners/{provider}/status", listenerRoutes.status);
+    serve("POST /listeners/{provider}/stop", listenerRoutes.stop);
 
     // What an extension's own code asks about itself: its settings with their secrets, and its event stream. Every
     // extension token reaches both undeclared; each answers only about the extension the token was minted for.

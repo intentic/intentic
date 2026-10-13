@@ -1,8 +1,9 @@
-import type { AgentOrigin } from "@intentic/sandbox-contract";
+import type { AgentOrigin, ListenerDeliver } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { cachedEnabledExtensions } from "../../capabilities/contributions.js";
 import type { Services } from "../../composition.js";
-import { outboxKeyOf } from "../../webchat/webchat-outbox.js";
+import { opt } from "../../opt.js";
+import { type OutboxSink, outboxKeyOf } from "../../webchat/webchat-outbox.js";
 import { extensionProcessKey } from "../extension-processes.js";
 import { listenerOwnership } from "./listener-state.js";
 
@@ -27,7 +28,7 @@ export const deliverToListenerChannel = async (services: Services, origin: Agent
         await services.webchatOutbox.append(outbox, text, Date.now());
         return "delivered";
     }
-    return (await deliverThroughGateway(services, origin.provider, origin.channelId, text)) === undefined ? "no-gateway" : "delivered";
+    return (await deliverThroughGateway(services, origin.provider, origin.channelId, text, origin.threadId)) === undefined ? "no-gateway" : "delivered";
 };
 
 // What a gateway said about the message it posted: a link to it, when the provider gives one (Discord does).
@@ -57,14 +58,14 @@ const bodyOf = (response: Response): Promise<string> =>
     // allow(silent-catch): an unreadable body has a fallback at both callers, and the status already said what happened
     response.text().catch(() => "");
 
-// One POST to a gateway's /deliver. Read by the owner when it fails (a failed approval row, a chat notice), so a
-// wedged gateway is named rather than the abort that ended the wait.
-const postToGateway = async (port: number, provider: string, channelId: string, text: string): Promise<Response> => {
+// One POST to a gateway's /deliver (the contract's ListenerDeliver). Read by the owner when it fails (a failed approval
+// row, a chat notice), so a wedged gateway is named rather than the abort that ended the wait.
+const postToGateway = async (port: number, provider: string, body: ListenerDeliver): Promise<Response> => {
     try {
         return await fetch(`http://127.0.0.1:${port}/deliver`, {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ channelId, text }),
+            body: JSON.stringify(body),
             signal: AbortSignal.timeout(DELIVER_TIMEOUT_MS),
         });
     } catch (error) {
@@ -76,10 +77,16 @@ const postToGateway = async (port: number, provider: string, channelId: string, 
 };
 
 // The extension half: the extension that owns this provider's listener (listener-state.ts), asked over its own loopback
-// port. Never another declarer's: the reply is the agent's words to the owner's channel. Undefined when no enabled
-// extension listens on this provider. Walks the same cached inventory the ownership is read from, not a fresh one per
-// message.
-export const deliverThroughGateway = async (services: Services, provider: string, channelId: string, text: string): Promise<GatewayDelivery | undefined> => {
+// port. Never another declarer's: the reply is the agent's words to the owner's channel. `thread` puts it into that
+// thread of the channel rather than onto the channel itself. Undefined when no enabled extension listens on this
+// provider. Walks the same cached inventory the ownership is read from, not a fresh one per message.
+export const deliverThroughGateway = async (
+    services: Services,
+    provider: string,
+    channelId: string,
+    text: string,
+    thread?: string,
+): Promise<GatewayDelivery | undefined> => {
     const owner = (await listenerOwnership(services)).owners.get(provider);
     for (const extension of await cachedEnabledExtensions(services)) {
         if (extension.manifest.contributes?.listener?.provider !== provider || (owner !== undefined && extension.id !== owner)) {
@@ -91,7 +98,7 @@ export const deliverThroughGateway = async (services: Services, provider: string
             if (port === undefined) {
                 continue;
             }
-            const response = await postToGateway(port, provider, channelId, text);
+            const response = await postToGateway(port, provider, { channelId, text, ...opt("thread", thread) });
             if (!response.ok) {
                 // Body is the provider's own thrown message, put there by the shell; the most actionable text there is.
                 const detail = (await bodyOf(response)).trim();
@@ -102,4 +109,37 @@ export const deliverThroughGateway = async (services: Services, provider: string
         throw new Error(`the ${provider} gateway is not running, so the message cannot reach the channel`);
     }
     return undefined;
+};
+
+// The sink an approved wake from a gateway's channel answers into: the stream that carried the request closed when it
+// was held, so the answer is gathered whole and posted through the channel's gateway once the turn ends, into the thread
+// it came from. Attaching it earns the run its STREAM_NOTE, so the agent does not also post the reply itself. A turn
+// that failed says so, as a live one would. Undefined for an origin with no channel (a webhook, a schedule).
+export const channelAnswerSink = (services: Services, origin: AgentOrigin | undefined): OutboxSink | undefined => {
+    if (origin?.channelId === undefined) {
+        return undefined;
+    }
+    let text = "";
+    let failure: string | undefined;
+    let posted: Promise<void> = Promise.resolve();
+    return {
+        stream: {
+            delta: (chunk) => {
+                text += chunk;
+            },
+            failed: (reason) => {
+                failure = reason;
+            },
+            end: () => {
+                const answer = failure === undefined ? text.trim() : `⚠️ ${failure}`;
+                if (answer === "") {
+                    return;
+                }
+                posted = deliverToListenerChannel(services, origin, answer)
+                    .then(() => undefined)
+                    .catch((error: Error) => services.logger.warn({ err: error, provider: origin.provider }, "held wake: the channel did not take the answer"));
+            },
+        },
+        settled: () => posted,
+    };
 };

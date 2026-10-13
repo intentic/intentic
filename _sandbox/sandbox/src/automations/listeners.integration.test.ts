@@ -7,16 +7,17 @@ import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
 import { sqliteTurnJournal } from "../agent/run/turn/turn-journal.js";
 import { conversationsDbPath, openConversationsDb } from "../store/conversations-db.js";
 import type { Services } from "../composition.js";
-import { CHANNEL_SESSION_TTL_MS, fileThreadSessionsStore } from "../sessions/thread-sessions.js";
+import { CHANNEL_SESSION_TTL_MS, fileThreadSessionsStore, THREAD_SESSION_TTL_MS } from "../sessions/thread-sessions.js";
 import { threadKey } from "../seams/thread-key.js";
 import { unstubbed } from "@intentic/testing";
 import { fileAutomationsStore } from "./automations-store.js";
 import { fileHeldWakesStore } from "./held-wakes-store.js";
-import { createMessageBatcher, dispatchListenerMessage, LISTENER_RATE_MAX, type MessageContext, reportListenerFailure } from "./listeners.js";
+import { admittedUnheld, createMessageBatcher, dispatchListenerMessage, LISTENER_RATE_MAX, type MessageContext, reportListenerFailure } from "./listeners.js";
 import { PAYLOAD_MAX, type TurnStream } from "./scheduler.js";
 import { fileSendersStore } from "./senders-store.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
 import { drivenBy } from "../testing.js";
+import { opt } from "../opt.js";
 
 // The listener paths touch automations/capabilities/activity/workspace/logger, the senders roster, and on a hold the
 // held-wakes queue and push; `unstubbed` keeps the fake small.
@@ -76,6 +77,7 @@ const context = (stream?: TurnStream): MessageContext => ({
     origin: { automationId: "a", provider: "discord", channelId: "c1", author: "alice" },
     title: "alice: hi",
     thread: threadKey("discord", "a", "c1"),
+    ttlMs: CHANNEL_SESSION_TTL_MS,
     lane: { actsAs: undefined, requireApproval: false },
     ...(stream !== undefined ? { stream } : {}),
 });
@@ -421,4 +423,171 @@ test("a sender over the minute's limit is dropped, and another sender in the cha
     expect(prompts.join("")).not.toContain(`<${LISTENER_RATE_MAX}>`);
     await dispatchListenerMessage(drivenBy(services, fakeWake(prompts)), message({ id: "other", author: { id: "u-other", name: "other" }, content: "<other>" }), 5);
     await eventually(() => expect(prompts.join("")).toContain("<other>"));
+});
+
+// Provider threads: a Discord or Slack thread is one topic, so it is one conversation of its own, kept for days.
+
+test("a message in a provider thread opens its own conversation, apart from the channel's and from other threads", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-")));
+    await services.automations.upsert(listenerAutomation("threads-apart"));
+    const turns: AgentTurn[] = [];
+    await dispatchListenerMessage(drivenBy(services, captureWithSession(turns, "sess-t1")), message({ thread: "t1", mentioned: true }), 5);
+    await eventually(() => expect(turns).toHaveLength(1));
+    await dispatchListenerMessage(drivenBy(services, captureWithSession(turns, "sess-t2")), message({ id: "m2", thread: "t2", mentioned: true }), 5);
+    await eventually(() => expect(turns).toHaveLength(2));
+    await dispatchListenerMessage(drivenBy(services, captureWithSession(turns, "sess-c1")), message({ id: "m3" }), 5);
+    await eventually(() => expect(turns).toHaveLength(3));
+    expect(new Set(turns.map((turn) => turn.conversationId)).size).toBe(3);
+    // What is said back between turns goes into the thread: the origin names it beside its channel.
+    expect(turns[0]?.origin).toEqual({ automationId: "threads-apart", provider: "discord", channelId: "c1", threadId: "t1", author: "alice" });
+    expect(turns[2]?.origin).toEqual({ automationId: "threads-apart", provider: "discord", channelId: "c1", author: "alice" });
+});
+
+test("a thread keeps its conversation past a channel's quiet limit, and resumes its session", async () => {
+    const root = mkdtempSync(join(tmpdir(), "listen-"));
+    const services = fakeServices(root);
+    await services.automations.upsert(listenerAutomation("thread-week"));
+    const turns: AgentTurn[] = [];
+    await dispatchListenerMessage(drivenBy(services, captureWithSession(turns, "sess-1")), message({ thread: "t1" }), 5);
+    await eventually(() => expect(turns).toHaveLength(1));
+    const key = threadKey("discord", "thread-week", "c1/t1");
+    await eventually(async () => expect((await services.threadSessions.get(key, THREAD_SESSION_TTL_MS, Date.now()))?.sessionId).toBe("sess-1"));
+    // Quiet for longer than a channel keeps its conversation, well inside a thread's week.
+    const path = join(root, "thread-sessions.json");
+    // SAFETY: the thread-sessions document is a record of thread records, each with its lastAt, as the store wrote it.
+    const aged = JSON.parse(readFileSync(path, "utf8")) as Record<string, { lastAt: number }>;
+    writeFileSync(path, JSON.stringify({ ...aged, [key]: { ...aged[key], lastAt: Date.now() - CHANNEL_SESSION_TTL_MS - 60_000 } }));
+    await dispatchListenerMessage(drivenBy(services, captureWithSession(turns, "sess-1")), message({ id: "m2", thread: "t1", content: "picking this back up" }), 5);
+    await eventually(() => expect(turns).toHaveLength(2));
+    expect(turns[1]?.conversationId).toBe(turns[0]?.conversationId);
+    expect(turns[1]?.sessionId).toBe("sess-1");
+});
+
+// A wake that holds its turn open until released, so a test can speak to it while it runs.
+const heldOpen = (turns: AgentTurn[], release: Promise<void>): TurnStarter["stream"] =>
+    async function* (input) {
+        turns.push(input);
+        yield { kind: "session", sessionId: `sess-${turns.length}` };
+        await release;
+        yield { kind: "done" };
+    };
+
+// The services with the live turn's door for mid-run words replaced: what was steered, and whether the turn takes it.
+const steeringInto = (services: Services, steers: Array<{ conversationId: string; text: string; outside?: string }>, takes: boolean): Services =>
+    unstubbed<Services>("services", {
+        ...services,
+        turns: {
+            ...services.turns,
+            steer: async (conversationId, steer) => {
+                steers.push({ conversationId, text: steer.text, ...opt("outside", steer.outside) });
+                return takes;
+            },
+        },
+    });
+
+// A reply sink that records what it heard, in order.
+const recordingSink = (heard: string[]): TurnStream => ({
+    delta: (text) => void heard.push(`delta:${text}`),
+    failed: (reason) => void heard.push(`failed:${reason}`),
+    steered: () => void heard.push("steered"),
+    queued: () => void heard.push("queued"),
+    end: () => void heard.push("end"),
+});
+
+test("a message for a thread whose turn is running goes into that turn, sealed as outside words, and starts nothing new", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-")));
+    await services.automations.upsert(listenerAutomation("steer-live"));
+    const turns: AgentTurn[] = [];
+    const release = Promise.withResolvers<void>();
+    const steers: Array<{ conversationId: string; text: string; outside?: string }> = [];
+    const driven = steeringInto(drivenBy(services, heldOpen(turns, release.promise)), steers, true);
+    await dispatchListenerMessage(driven, message({ thread: "t1", mentioned: true }), 5);
+    await eventually(() => expect(turns).toHaveLength(1));
+    const heard: string[] = [];
+    await dispatchListenerMessage(driven, message({ id: "m2", thread: "t1", mentioned: true, content: "also check the docs" }), 5, () => recordingSink(heard));
+    await eventually(() => expect(heard).toEqual(["steered", "end"]));
+    expect(steers).toHaveLength(1);
+    expect(steers[0]?.conversationId).toBe(turns[0]?.conversationId);
+    expect(steers[0]?.outside).toBe("discord");
+    expect(steers[0]?.text).toContain('<untrusted-content source="discord"');
+    expect(steers[0]?.text).toContain("also check the docs");
+    release.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    // The running turn answered it; no second wake follows for the steered message.
+    expect(turns).toHaveLength(1);
+});
+
+test("a message the running turn does not take waits, and fires on the same conversation once the turn ends", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-")));
+    await services.automations.upsert(listenerAutomation("steer-refused"));
+    const turns: AgentTurn[] = [];
+    const release = Promise.withResolvers<void>();
+    const steers: Array<{ conversationId: string; text: string }> = [];
+    const driven = steeringInto(drivenBy(services, heldOpen(turns, release.promise)), steers, false);
+    await dispatchListenerMessage(driven, message({ thread: "t1" }), 5);
+    await eventually(() => expect(turns).toHaveLength(1));
+    await dispatchListenerMessage(driven, message({ id: "m2", thread: "t1", content: "one more" }), 5);
+    await eventually(() => expect(steers).toHaveLength(1));
+    expect(turns).toHaveLength(1);
+    release.resolve();
+    await eventually(() => expect(turns).toHaveLength(2));
+    expect(turns[1]?.conversationId).toBe(turns[0]?.conversationId);
+    expect(turns[1]?.prompt).toContain("one more");
+});
+
+test("a sender whose rule needs a person's release is never steered into a running turn; their message is held instead", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-")));
+    await services.automations.upsert(
+        listenerAutomation("steer-held-lane", { senders: { rules: [{ ids: [martha.id], requireApproval: true }], others: "allow" } }),
+    );
+    const turns: AgentTurn[] = [];
+    const release = Promise.withResolvers<void>();
+    const steers: Array<{ conversationId: string; text: string }> = [];
+    const driven = steeringInto(drivenBy(services, heldOpen(turns, release.promise)), steers, true);
+    await dispatchListenerMessage(driven, message({ thread: "t1", author: mark }), 5);
+    await eventually(() => expect(turns).toHaveLength(1));
+    await dispatchListenerMessage(driven, message({ id: "m2", thread: "t1", author: martha, content: "run the migration" }), 5);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(steers).toEqual([]);
+    release.resolve();
+    await eventually(async () => expect(await services.heldWakes.list()).toHaveLength(1));
+    expect(turns).toHaveLength(1);
+});
+
+test("a thread waiting behind another thread's turn of the same automation is told it is queued", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-")));
+    await services.automations.upsert(listenerAutomation("queued-threads"));
+    const turns: AgentTurn[] = [];
+    const release = Promise.withResolvers<void>();
+    const driven = drivenBy(services, heldOpen(turns, release.promise));
+    await dispatchListenerMessage(driven, message({ thread: "t1", mentioned: true }), 5);
+    await eventually(() => expect(turns).toHaveLength(1));
+    const heard: string[] = [];
+    await dispatchListenerMessage(driven, message({ id: "m2", thread: "t2", mentioned: true }), 5, () => recordingSink(heard));
+    await eventually(() => expect(heard).toContain("queued"));
+    release.resolve();
+    await eventually(() => expect(turns).toHaveLength(2));
+    expect(turns[1]?.conversationId).not.toBe(turns[0]?.conversationId);
+});
+
+test("only a message that would start a turn unreleased may go into a running one: the automation's hold, a countdown, the sandbox's floor, the lane's hold each keep it out", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-")));
+    const free = { actsAs: undefined, requireApproval: false };
+    await services.automations.upsert(listenerAutomation("admit-open"));
+    await services.automations.upsert(listenerAutomation("admit-held", { requireApproval: true }));
+    await services.automations.upsert(listenerAutomation("admit-countdown", { holdForSeconds: 60 }));
+    await services.automations.upsert(listenerAutomation("admit-off", { enabled: false }));
+    expect(await admittedUnheld(services, "admit-open", free)).toBe(true);
+    expect(await admittedUnheld(services, "admit-open", { actsAs: undefined, requireApproval: true })).toBe(false);
+    expect(await admittedUnheld(services, "admit-held", free)).toBe(false);
+    expect(await admittedUnheld(services, "admit-countdown", free)).toBe(false);
+    expect(await admittedUnheld(services, "admit-off", free)).toBe(false);
+    expect(await admittedUnheld(services, "admit-gone", free)).toBe(false);
+    const holdingListeners = unstubbed<Services>("services", {
+        ...services,
+        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
+            get: async () => SandboxSettingsSchema.parse({ admission: { listener: "hold" } }),
+        }),
+    });
+    expect(await admittedUnheld(holdingListeners, "admit-open", free)).toBe(false);
 });

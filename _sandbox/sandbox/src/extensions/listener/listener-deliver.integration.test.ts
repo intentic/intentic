@@ -4,14 +4,17 @@ import { join } from "node:path";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
 import { fileWebchatOutbox } from "../../webchat/webchat-outbox.js";
-import { deliverToListenerChannel, gatewayDeliveryOf } from "./listener-deliver.js";
+import { channelAnswerSink, deliverToListenerChannel, gatewayDeliveryOf } from "./listener-deliver.js";
 
 // The core-door half of "speak as the agent". A Visitor chat has no gateway extension and never will, so without this
 // leg `place` on a visitor's conversation reported "nothing is listening" and the words reached only the transcript.
 
 const harness = () => {
     const outbox = fileWebchatOutbox(join(mkdtempSync(join(tmpdir(), "listener-deliver-")), "outbox.json"));
-    return { outbox, services: unstubbed<Services>("services", { webchatOutbox: outbox }) };
+    return {
+        outbox,
+        services: unstubbed<Services>("services", { webchatOutbox: outbox, logger: unstubbed<Services["logger"]>("logger", { warn: () => {} }) }),
+    };
 };
 
 test("a Visitor chat origin queues the reply for its own visitor and reports it delivered", async () => {
@@ -40,4 +43,42 @@ test("a delivered message's link is passed on when the gateway names one, and it
     expect(gatewayDeliveryOf("{}")).toEqual({});
     expect(gatewayDeliveryOf("ok")).toEqual({});
     expect(gatewayDeliveryOf(`{"url":42}`)).toEqual({});
+});
+
+// An approved hold answers where the request came from: the stream that carried it closed when it was held, so the sink
+// gathers the turn's words and posts them whole through the channel's own delivery once the turn ends. A Visitor chat
+// origin stands in for a gateway here: both go through deliverToListenerChannel, and only the outbox needs no gateway.
+
+const heldOrigin = { automationId: "guest", provider: "webchat", channelId: "visitor-1", threadId: "t1" };
+
+test("the approved turn's words are posted once, whole, when it ends", async () => {
+    const { outbox, services } = harness();
+    const sink = channelAnswerSink(services, heldOrigin);
+    sink?.stream.delta("Here is ");
+    sink?.stream.delta("the answer.");
+    expect((await outbox.since("webchat:guest:visitor-1", 0, Date.now())).replies).toEqual([]);
+    sink?.stream.end();
+    await sink?.settled();
+    expect((await outbox.since("webchat:guest:visitor-1", 0, Date.now())).replies).toMatchObject([{ text: "Here is the answer." }]);
+});
+
+test("a turn that failed says so instead of posting half an answer", async () => {
+    const { outbox, services } = harness();
+    const sink = channelAnswerSink(services, heldOrigin);
+    sink?.stream.delta("Starting");
+    sink?.stream.failed("the model provider refused the request");
+    sink?.stream.end();
+    await sink?.settled();
+    expect((await outbox.since("webchat:guest:visitor-1", 0, Date.now())).replies).toMatchObject([{ text: "⚠️ the model provider refused the request" }]);
+});
+
+test("a turn with nothing to say posts nothing, and an origin with no channel gets no sink", async () => {
+    const { outbox, services } = harness();
+    const sink = channelAnswerSink(services, heldOrigin);
+    sink?.stream.delta("   ");
+    sink?.stream.end();
+    await sink?.settled();
+    expect((await outbox.since("webchat:guest:visitor-1", 0, Date.now())).replies).toEqual([]);
+    expect(channelAnswerSink(services, { automationId: "hook", provider: "webhook" })).toBeUndefined();
+    expect(channelAnswerSink(services, undefined)).toBeUndefined();
 });

@@ -81,18 +81,26 @@ export const toHistory = (
         return entry;
     });
 
-// Posts into a channel outside any live turn (the daemon's speak-as-the-agent path), top-level since only the channel
-// was recorded. Tries the next app only if nothing posted yet, so a partial spill is never duplicated.
-export const deliverToChannel = async (connections: ReadonlyMap<string, SlackConnection>, channel: string, text: string): Promise<void> => {
+// Posts into a channel outside any live turn (the daemon's speak-as-the-agent path): into the conversation's thread when
+// it lives in one, else top-level. Tries the next app only if nothing posted yet, so a partial spill is never duplicated.
+export const deliverToChannel = async (connections: ReadonlyMap<string, SlackConnection>, channel: string, text: string, thread?: string): Promise<void> => {
     await deliverChunked(
         connections.values(),
         // oxlint-disable-next-line unicorn/require-post-message-target-origin -- Slack postMessage has no targetOrigin.
-        (connection, chunk) => connection.web.chat.postMessage({ channel, text: chunk }),
+        (connection, chunk) => connection.web.chat.postMessage(thread === undefined ? { channel, text: chunk } : { channel, thread_ts: thread, text: chunk }),
         text,
         SLACK_MAX,
         () => new GatewayRefusal("no Slack app is connected"),
     );
 };
+
+// The message as dispatched, naming its thread when it has one.
+const inThread = (thread: string | undefined, payload: ListenerMessage): ListenerMessage => (thread === undefined ? payload : { ...payload, thread });
+
+// The thread a message's conversation lives in: the one it was posted in, or, for a message addressed to us at the top
+// level, the thread our reply opens under it. A top-level message not for us belongs to the channel.
+export const threadOf = (message: Pick<SlackMessage, "ts" | "thread_ts">, mentioned: boolean): string | undefined =>
+    message.thread_ts ?? (mentioned ? message.ts : undefined);
 
 export interface SlackListener {
     readonly onEvent: (connection: SlackConnection, envelope: SlackEnvelope) => void;
@@ -181,7 +189,7 @@ export const createSlackListener = (ctx: GatewayCtx, connections: () => Readonly
         }
 
         const author = message.user !== undefined ? { id: message.user, name: await resolveName(connection, message.user) } : undefined;
-        const payload: ListenerMessage = {
+        const payload: ListenerMessage = inThread(threadOf(message, mentioned), {
             provider: "slack",
             type: "message",
             id: message.ts,
@@ -199,7 +207,7 @@ export const createSlackListener = (ctx: GatewayCtx, connections: () => Readonly
                     ? { attachments: message.files.map(({ name, url_private }) => ({ name, url: url_private })) }
                     : {}),
             },
-        };
+        });
 
         if (!mentioned) {
             await ctx.daemon.dispatch(payload);

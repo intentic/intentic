@@ -29,9 +29,11 @@ void runConnectorGateway<DiscordConnectorConfig, Client>({
     create: (ctx) => {
         // Listener's live view of connected bots, keyed by token; two capabilities sharing a token share one client.
         const subscribed = new Map<string, Client>();
-        const listener = createDiscordListener(ctx, subscribed);
         // The voice control surface reads the first connector's config; multi-bot voice is a ponytail.
         let connectors: ReadonlyArray<{ id: string; config: DiscordConnectorConfig }> = [];
+        // How much of the agent's work a bot's threads show, from the connector whose token that bot logged in with.
+        const progressOf = (client: Client): string | undefined => connectors.find(({ config }) => subscribed.get(config.botToken) === client)?.config.progress;
+        const listener = createDiscordListener(ctx, subscribed, { progressOf });
         // One REST handle per bot token, for a delivery while no client is connected (no automation holds one), made
         // on first use and kept: each carries its own rate-limit buckets.
         const rests = new Map<string, REST>();
@@ -62,6 +64,8 @@ void runConnectorGateway<DiscordConnectorConfig, Client>({
                     const client = await ensureDiscordClient(token, "listener");
                     subscribed.set(token, client);
                     client.on("messageCreate", listener.onMessage);
+                    client.on("interactionCreate", listener.onInteraction);
+                    client.on("guildCreate", listener.onGuildJoin);
                     return client;
                 } catch (error) {
                     releaseDiscordClient(token, "listener");
@@ -70,6 +74,8 @@ void runConnectorGateway<DiscordConnectorConfig, Client>({
             },
             close: (token, client) => {
                 client.off("messageCreate", listener.onMessage);
+                client.off("interactionCreate", listener.onInteraction);
+                client.off("guildCreate", listener.onGuildJoin);
                 subscribed.delete(token);
                 releaseDiscordClient(token, "listener");
             },
@@ -81,8 +87,9 @@ void runConnectorGateway<DiscordConnectorConfig, Client>({
                 return voice !== undefined ? { voice } : {};
             },
             // Daemon's outbound door (a conversation's reply between turns, an approved post): posts through whichever
-            // bot can see the channel.
-            deliver: (channelId, text) => deliverToChannel(deliveringBots(), channelId, text),
+            // bot can see the channel, into the conversation's thread when it lives in one (a Discord thread is a channel
+            // of its own, so posting there is posting to its id).
+            deliver: (channelId, text, thread) => deliverToChannel(deliveringBots(), thread ?? channelId, text),
             // Loopback control surface for the discord-voice CLI; same-container only, so no extra auth beyond that.
             routes: async (req, body) => {
                 const path = new URL(req.url ?? "/", "http://127.0.0.1").pathname;

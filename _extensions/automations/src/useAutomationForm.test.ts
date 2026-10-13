@@ -125,6 +125,22 @@ describe(`the prompt follows the trigger`, () => {
 });
 
 describe(`a template's own text`, () => {
+    it(`carries a mention-only listener, so a team assistant answers only what is addressed to it`, async () => {
+        const assistant: AutomationTemplate = {
+            id: `discord-team-assistant`,
+            title: `Team assistant on Discord`,
+            requires: [`discord`],
+            trigger: { kind: `listener`, provider: `discord`, eventType: `message`, mentioned: true },
+            prompt: `You are this workspace's teammate on Discord.`,
+        };
+        const { form, loadTemplate, build } = formState();
+        loadTemplate(assistant);
+        await nextTick();
+        expect(form.mentioned).toBe(true);
+        form.models = [...LADDER];
+        expect(build().trigger).toEqual({ kind: `listener`, provider: `discord`, eventType: `message`, mentioned: true });
+    });
+
     it(`survives the trigger it set itself`, async () => {
         const fixCi = FIX_CI;
         const { form, loadTemplate } = formState();

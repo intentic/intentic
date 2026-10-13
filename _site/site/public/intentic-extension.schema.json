@@ -2022,6 +2022,9 @@
                                         "type": "string",
                                         "minLength": 1
                                     },
+                                    "mentioned": {
+                                        "type": "boolean"
+                                    },
                                     "event": {
                                         "type": "string",
                                         "minLength": 1

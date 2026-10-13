@@ -42,6 +42,7 @@ const fakeCtx = (): { ctx: GatewayCtx; dispatched: object[]; streamed: object[] 
                     onFrame({ automationId: "a1", end: true });
                 },
                 failure: async () => {},
+                stop: async () => ({ stopped: false }),
                 status: async () => {},
                 transcribe: async () => "",
                 speak: async () => undefined,
@@ -93,6 +94,8 @@ test("a plain channel message dispatches without a mention and without holding a
         extra: { threadTs: "1755102030.001900", teamId: "T1" },
     });
     expect(dispatched[0]).not.toHaveProperty("mentioned");
+    // A top-level message not for us belongs to the channel's conversation, not a thread's.
+    expect(dispatched[0]).not.toHaveProperty("thread");
 });
 
 test("an @mention holds the streaming dispatch and paints the reply into a thread", async () => {
@@ -109,7 +112,8 @@ test("an @mention holds the streaming dispatch and paints the reply into a threa
     });
     createSlackListener(ctx, () => new Map([["app", connection]])).onEvent(connection, envelope(messageEvent({ text: `<@${SELF}> help` })));
     await waitFor(() => expect(streamed).toHaveLength(1));
-    expect(streamed[0]).toMatchObject({ mentioned: true });
+    // The thread the reply opens under the mention is the conversation's own.
+    expect(streamed[0]).toMatchObject({ mentioned: true, thread: "1755102030.001900" });
     // The reply threads under the message that asked for it rather than landing in the channel.
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(posted[0]).toMatchObject({ channel: "C1", thread_ts: "1755102030.001900", text: "hi" });
@@ -140,7 +144,7 @@ test("a follow-up in a thread the bot already replied in needs no re-tag", async
         envelope(messageEvent({ thread_ts: "1.0", text: "and the other one?" })),
     );
     await waitFor(() => expect(streamed).toHaveLength(1));
-    expect(streamed[0]).toMatchObject({ mentioned: true, extra: { threadTs: "1.0" } });
+    expect(streamed[0]).toMatchObject({ mentioned: true, thread: "1.0", extra: { threadTs: "1.0" } });
 });
 
 test("our own posts never wake us, and neither does the same message delivered twice", async () => {

@@ -1,4 +1,5 @@
 import type { Context } from "hono";
+import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { allowedOriginsOf } from "../../auth/browser-origins.js";
 import type { Config } from "../../env.config.js";
 
@@ -23,4 +24,25 @@ export const openInAppTarget = (config: OpenInAppConfig, accept: string | undefi
 export const openInApp = (config: OpenInAppConfig, c: Context): Response => {
     const target = openInAppTarget(config, c.req.header("accept"));
     return target === undefined ? c.json({ error: "unauthorized" }, 401) : c.redirect(target, 302);
+};
+
+// What a link to one conversation reads: the app's origin, and this sandbox's platform id when it has one.
+export type ConversationLinkConfig = Pick<Config, "webOrigin" | "connectToken">;
+
+// A link that opens one conversation in the app, for a channel the conversation answers into (a Discord thread's
+// status card): the app's first origin, on this sandbox when the platform knows it (`?sandbox=`, which the app takes only
+// for a sandbox the reader's account lists), on that conversation (`?conversation=`, the route a push opens). Undefined
+// when no origin is configured, since a link that leads nowhere is worse than none.
+export const conversationLink = (config: ConversationLinkConfig, conversationId: string): string | undefined => {
+    const origin = allowedOriginsOf(config.webOrigin)[0];
+    if (origin === undefined) {
+        return undefined;
+    }
+    const query = new URLSearchParams();
+    const sandboxId = sandboxIdFromToken(config.connectToken);
+    if (sandboxId !== undefined) {
+        query.set("sandbox", sandboxId);
+    }
+    query.set("conversation", conversationId);
+    return `${origin.replace(/\/+$/, "")}/?${query.toString()}`;
 };

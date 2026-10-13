@@ -142,3 +142,31 @@ test("speak reads 204 as nothing to say, and a refusal as an error carrying the 
     expect(await client.speak("```ts```")).toBeUndefined();
     await expect(client.speak("hello")).rejects.toThrow('/speech/say returned 501: {"error":"no speech runtime for linux-riscv64"}');
 });
+
+// Stop is a person's press relayed: the daemon's answer comes back as it said it, and a refusal of the route itself is an
+// error carrying what the daemon said, never a silent "not stopped".
+test("stop posts who pressed it and for which conversation, and hands back the daemon's answer", async () => {
+    const sent: Array<{ url: string; body: unknown }> = [];
+    stubGlobal(
+        "fetch",
+        jest.fn(async (url: string, init?: RequestInit) => {
+            sent.push({ url, body: JSON.parse(String(init?.body)) });
+            return new Response(JSON.stringify({ stopped: false, reason: "Only someone the assistant answers can stop it." }), { status: 200 });
+        }),
+    );
+    const { log } = recordingLog();
+    const stop = { conversationId: "conv-1", author: { id: "u1", name: "mark", groups: ["g1"] } };
+    expect(await createDaemonClient("discord", door, log).stop(stop)).toEqual({ stopped: false, reason: "Only someone the assistant answers can stop it." });
+    expect(sent).toEqual([{ url: "http://127.0.0.1:1/listeners/discord/stop", body: stop }]);
+});
+
+test("a stop the route refuses is an error naming the status and the daemon's words", async () => {
+    stubGlobal(
+        "fetch",
+        jest.fn(async () => new Response("invalid stop body", { status: 400 })),
+    );
+    const { log } = recordingLog();
+    await expect(createDaemonClient("discord", door, log).stop({ conversationId: "c", author: { id: "u", name: "u" } })).rejects.toThrow(
+        "/listeners/discord/stop returned 400: invalid stop body",
+    );
+});

@@ -153,6 +153,9 @@ export const RAW_ROUTES = {
     "POST /listeners/{provider}/dispatch": { panel: false, control: "never" },
     "POST /listeners/{provider}/failure": { panel: false, control: "never" },
     "POST /listeners/{provider}/status": { panel: false, control: "never" },
+    // A person in the channel pressing Stop on a turn that channel started; the handler asks the automation's own
+    // sender rules whether that person may.
+    "POST /listeners/{provider}/stop": { panel: false, control: "never" },
     // What an extension's own code asks about itself (extension-protocol.ts): its settings with their secrets, and its
     // event stream. Every extension token reaches both undeclared, and each answers only about the extension asking, so
     // no other credential reaches them; the handler resolves the caller from its token again.

@@ -328,6 +328,16 @@ flowchart LR
   caps its body while reading it (`http/bounded-body.ts`), so a chunked body with no length is still refused at the
   limit. Rejecting a held wake withdraws its approval push, records a skipped run and tells the channel or visitor it
   came from (`automations/held-wake-answers.ts`).
+- A channel's thread is a conversation (2026-10-13). A listener message that names a thread (a Discord thread, a Slack
+  thread) is keyed by it, kept a week of quiet rather than a channel's two hours, and its origin carries the thread so
+  what is said between turns goes back into it (`automations/listeners.ts`). A message for a thread whose turn is
+  running goes into that turn between tool calls when the runtime takes words and the sender needs nobody's release;
+  otherwise it fires once the turn ends. A streamed dispatch tells the channel which conversation answers (with its
+  link), each step and the checklist (`extensions/listener/listener-progress.ts`), and why nothing runs yet (held for the owner,
+  queued behind another turn of the automation); a subagent's narration no longer reaches the channel. A person in the
+  channel may stop the turn through `POST /listeners/<provider>/stop` when the automation's sender rules answer them
+  unreleased (`stopChannelTurn` in `automations/listeners.ts`), and an approved hold's answer is posted where it was asked.
+  Threads of one automation still run one turn at a time: the fire journal is keyed by automation.
 - A persona's folder fence and its `sandbox` power are judged by path segment, by the contract's `fenceAllows` and
   `isSandboxPath`, and see every editing tool `rules/edit-tools.ts` lists, the hashline tools included
   (`personas/persona-scope.ts`, 2026-10-12). The hashline tools check where a path really lands, through symlinks,

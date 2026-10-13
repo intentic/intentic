@@ -1,4 +1,5 @@
 import type { ListenerDispatchFrame } from "@intentic/sandbox-contract";
+import { chunkMessage } from "./chunks.js";
 
 // A sink the daemon's ndjson turn-stream drives: delta(text) as the model types, end() when the turn finishes.
 export interface Painter {
@@ -97,7 +98,8 @@ export const createStreamingPainter = <THandle>(poster: StreamPoster<THandle>, o
 };
 
 // Buffers the whole reply and sends it once on end(), instead of streaming edits (WhatsApp flags rapid edits as
-// automation). maxChars is a safety net, not pagination; a failed send kills the painter via onError.
+// automation). maxChars is a safety net, not pagination, cut where chunkMessage cuts; a failed send kills the painter
+// via onError.
 export const createBufferedPainter = (send: (text: string) => Promise<void>, onError: (error: unknown) => void, maxChars: number): Painter => {
     let buffer = "";
     let ended = false;
@@ -119,8 +121,8 @@ export const createBufferedPainter = (send: (text: string) => Promise<void>, onE
                 return;
             }
             void (async () => {
-                for (let base = 0; base < complete.length; base += maxChars) {
-                    await send(complete.slice(base, base + maxChars));
+                for (const chunk of chunkMessage(complete, maxChars)) {
+                    await send(chunk);
                 }
             })().catch(onError);
         },

@@ -1,5 +1,17 @@
 import { Cron } from "croner";
-import type { AgentOrigin, AgentTurn, Automation, AutomationApproval, ModelPin, Trigger, Zone } from "@intentic/sandbox-contract";
+import type {
+    AgentEvent,
+    AgentOrigin,
+    AgentTurn,
+    Automation,
+    AutomationApproval,
+    ListenerPlanItem,
+    ListenerStep,
+    ListenerTurnOpened,
+    ModelPin,
+    Trigger,
+    Zone,
+} from "@intentic/sandbox-contract";
 import { capabilitiesOf, cronOptions, wallClockIn } from "@intentic/sandbox-contract";
 import { TranscriptFold } from "@intentic/sandbox-contract/transcript-fold";
 import { openingRows, openTurnTranscript, recordTurnTranscript } from "../sessions/turn-transcript.js";
@@ -23,18 +35,34 @@ import { TITLE_MAX } from "../seams/conversation-title.js";
 import { continueConversation, expireAutomation, notifyOwner, type TargetOutcome } from "./watch/fire-targets.js";
 import { checkCondition, conditionOutside } from "./watch/watch-condition.js";
 import { withdrawApprovalPush } from "./held-wake-answers.js";
+import { channelAnswerSink } from "../extensions/listener/listener-deliver.js";
 import type { ReleasedWake } from "./held-wakes-store.js";
+import { type TurnProgressReader, turnProgressReader } from "../extensions/listener/listener-progress.js";
+import { conversationLink } from "../system/boot/open-in-app.js";
 
 // How much of an event's webhook body reaches the guard's env and the wake prompt.
 export const PAYLOAD_MAX = 64_000;
 
 // Live sink for a turn's assistant text; undefined means the agent sends its own reply. `failed` distinguishes no
-// output from an error, carrying the raw reason for each sink to redact; always followed by `end`.
+// output from an error, carrying the raw reason for each sink to redact; always followed by `end`. The rest is what a
+// channel can show while it waits, each optional, so a sink that only takes the reply's text (the Visitor chat) still
+// fits: the turn it opened, each step of its work and its checklist (extensions/listener/listener-progress.ts), and why it has not started.
 export interface TurnStream {
     readonly delta: (text: string) => void;
     readonly failed: (reason: string) => void;
     readonly end: () => void;
+    readonly opened?: (turn: ListenerTurnOpened) => void;
+    readonly step?: (step: ListenerStep) => void;
+    readonly plan?: (items: readonly ListenerPlanItem[]) => void;
+    readonly held?: (reason: string) => void;
+    readonly queued?: (reason: string) => void;
+    // The message went into a turn already running in its thread; that turn's own sink carries the answer.
+    readonly steered?: () => void;
 }
+
+// What the channel hears while its wake waits for a person, and while it waits behind another turn of its automation.
+export const HELD_NOTICE = "This needs the owner's approval before I start on it; the answer comes here once they approve it.";
+export const QUEUED_NOTICE = "Another task of mine is still running; I start on this one as soon as it finishes.";
 
 // What the block under the prompt IS, per trigger, since a schedule's payload is its own sessions listing rather than
 // anything a sender wrote. A record, not a ternary, so a new trigger has to say what it hands the turn.
@@ -221,6 +249,10 @@ export const fireAutomation = async (services: Services, automation: AutomationR
         options.stream?.end();
         return {};
     }
+    // Waiting behind a turn already running is said where the message came from, so a quiet thread reads as queued.
+    if (running !== undefined) {
+        options.stream?.queued?.(QUEUED_NOTICE);
+    }
     // The chain is the lock: each fire runs after the last; failure still lets the next start (`.then(job, job)`).
     const turn = (running ?? Promise.resolve()).then(
         () => runFire(services, automation, options),
@@ -382,6 +414,37 @@ const recordTargetRun = async (services: Services, automation: AutomationRecord,
         .catch((error: unknown) => services.logger.warn({ err: error }, "activity append failed"));
 };
 
+// Whoever wrote is told the wake waits for a person, rather than left reading silence as a dead bot.
+const announceHeld = (stream: TurnStream | undefined): void => {
+    stream?.held?.(HELD_NOTICE);
+};
+
+// The channel learns which conversation answers it, and where a person opens that, before any of the work.
+const announceOpened = (services: Pick<Services, "config">, stream: TurnStream | undefined, conversationId: string): void => {
+    stream?.opened?.({ conversationId, ...opt("link", conversationLink(services.config, conversationId)) });
+};
+
+// What a live sink hears of one of the turn's frames: the turn's own words (a subagent's narration stays in the
+// conversation, not in the reply), and the steps and checklist a channel shows while it waits.
+const tellStream = (stream: TurnStream | undefined, progress: TurnProgressReader, event: AgentEvent): void => {
+    if (stream === undefined) {
+        return;
+    }
+    if (event.kind === "delta" && event.parentToolUseId === undefined) {
+        stream.delta(event.text);
+        return;
+    }
+    const update = progress.read(event);
+    if (update === undefined) {
+        return;
+    }
+    if ("step" in update) {
+        stream.step?.(update.step);
+    } else {
+        stream.plan?.(update.plan);
+    }
+};
+
 // Guard, then wake, then record the run; reached only through fireAutomation, which guarantees no two runs of one
 // automation overlap here.
 const runFire = async (
@@ -507,6 +570,7 @@ const runFire = async (
                         ...(automation.trigger.kind === "listener" ? { provider: automation.trigger.provider } : {}),
                     })
                     .catch((error: unknown) => services.logger.warn({ err: error }, "activity append failed"));
+                announceHeld(stream);
                 // A held wake needs the owner to act; notifyIfAway pings them only if they're away.
                 void services.pushSender.notifyIfAway(automationPending(automation.id, automation.prompt));
                 return {};
@@ -596,6 +660,8 @@ const runFire = async (
         const fold = new TranscriptFold(openingRows(turn, services.workspace.root, Date.now()), Date.now);
         // Opened before the provider runs, like every other conversation turn (a fork's copy; nothing else opens).
         await openTurnTranscript(services, turn);
+        announceOpened(services, stream, conversationId);
+        const progress = turnProgressReader();
         try {
             for await (const event of services.turns.stream(turn, undefined)) {
                 fold.apply(event);
@@ -605,9 +671,7 @@ const runFire = async (
                 if (event.kind === "error") {
                     failure = event.message;
                 }
-                if (event.kind === "delta") {
-                    stream?.delta(event.text);
-                }
+                tellStream(stream, progress, event);
             }
         } catch (error) {
             failure = error instanceof Error ? error.message : "automation turn failed";
@@ -753,9 +817,9 @@ const heldWakeOptions = (held: AutomationApproval, sink: OutboxSink | undefined)
 // message resumes it. Shared by both releases, the approve route and the countdown scan; it takes only a hold one of them
 // let out of the queue after checking its proof (held-wakes-store.ts, ReleasedWake).
 export const runHeldWake = async (services: Services, automation: AutomationRecord, held: ReleasedWake): Promise<void> => {
-    // The visitor's own stream closed when the wake was held, so a Visitor chat answer has nowhere live to go; queue it
-    // where their next page load will collect it. Undefined for every other origin, which answers through its gateway.
-    const sink = services.outboxStreamFor(held.origin);
+    // The requester's own stream closed when the wake was held, so the answer has nowhere live to go: a Visitor chat's is
+    // queued where their next page load collects it, a gateway channel's is posted into its thread once the turn ends.
+    const sink = services.outboxStreamFor(held.origin) ?? channelAnswerSink(services, held.origin);
     // The snapshot carries the thread's own key: an origin cannot name it, since a thread is keyed by lane too.
     await fireOnThread(services, automation, { key: held.thread, conversationId: held.conversationId, sessionId: held.sessionId }, heldWakeOptions(held, sink));
     // Before the release is over: the approve route answers its caller here, and the visitor polling a moment later
