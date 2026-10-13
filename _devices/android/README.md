@@ -58,9 +58,15 @@ flowchart LR
 - **Android 13 and later** keep an app installed from outside a store from turning on its accessibility service or
   notification access. The person must first allow it under App info ▸ ⋮ ▸ Allow restricted settings; the app's
   "Access on this phone" rows say so and open the right screens.
-- **App Links** verify only once intentic.dev serves `/.well-known/assetlinks.json` for this package
-  ([assetlinks.template.json](assetlinks.template.json), with the release key's SHA-256 in place of the placeholder).
-  Until then the link opens the intentic.dev page, which hands the code to the app's own scheme.
+- **Release signing.** The release job signs the direct flavor with one key, held in the repository's Actions secrets
+  `INTENTIC_DEVICE_KEYSTORE_BASE64`, `INTENTIC_DEVICE_KEYSTORE_PASSWORD`, `INTENTIC_DEVICE_KEY_ALIAS`
+  (`intentic-device`) and `INTENTIC_DEVICE_KEY_PASSWORD` (the same password: a PKCS12 keystore has one). Android
+  accepts an update only under the key the installed app was signed with, so this key never changes. Its certificate's
+  SHA-256 is `EF:0C:A1:44:E2:A0:F0:99:49:75:0E:1D:5C:DB:8A:47:E5:1E:24:4E:D8:4D:85:0F:C8:32:A1:3A:4D:98:63:BF`.
+- **App Links** verify against
+  [`_site/site/public/.well-known/assetlinks.json`](../../_site/site/public/.well-known/assetlinks.json), which
+  intentic.dev serves and which names that fingerprint. Until a deploy serves it, the link opens the intentic.dev page,
+  which hands the code to the app's own scheme.
 - **Outside the pnpm workspace.** It is a Gradle project with no node toolchain; there is no Gradle wrapper jar in the
   repository. [scripts/gradle.sh](scripts/gradle.sh) downloads the pinned Gradle (9.6.0) once and checks its digest.
   AGP 9.4.1 (it compiles Kotlin itself), compileSdk 37, minSdk 26, targetSdk 36, JDK 17.

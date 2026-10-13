@@ -4,7 +4,9 @@
         "target": {
             "namespace": "android_app",
             "package_name": "dev.intentic.device",
-            "sha256_cert_fingerprints": ["REPLACE_WITH_RELEASE_SIGNING_SHA256"]
+            "sha256_cert_fingerprints": [
+                "EF:0C:A1:44:E2:A0:F0:99:49:75:0E:1D:5C:DB:8A:47:E5:1E:24:4E:D8:4D:85:0F:C8:32:A1:3A:4D:98:63:BF"
+            ]
         }
     }
 ]
