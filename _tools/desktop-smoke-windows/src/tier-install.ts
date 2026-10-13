@@ -33,6 +33,10 @@ const WINDOW_SETTLE_SECONDS = 60;
 const LINK_SECONDS = 45;
 // A cold first launch also initializes WebView2's user-data directory, which is slower than a warm one.
 const SCREEN_SECONDS = 60;
+// From the setup screen to the CLI stand-in the app starts powershell.exe and has it load connect.ps1, which on a
+// loaded runner is its own wait: run 38459232153's setup screen took 28 s to appear and the stand-in had not run 10 s
+// later, where every run before it found it already run (the release smoke passed the same build an hour earlier).
+const SETUP_START_SECONDS = 45;
 
 // Single-instance plugin's own hidden window (15×15 at the origin), named so window counts by owning program can
 // exclude it.
@@ -216,7 +220,7 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
             if (!(await harness.untilTrue(SCREEN_SECONDS, `answering it landed on the setup screen`, () => appWindowTitled(app, SETUP_TITLE)))) {
                 harness.detail(await describeWindows());
             }
-            await harness.untilTrue(10, `the setup ran only the local CLI stand-in`, () => hermetic.setupStarted());
+            await harness.untilTrue(SETUP_START_SECONDS, `the setup ran only the local CLI stand-in`, () => hermetic.setupStarted());
         } else {
             harness.detail(await describeWindows());
         }
