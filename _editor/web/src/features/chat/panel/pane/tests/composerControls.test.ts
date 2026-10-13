@@ -236,16 +236,17 @@ describe(`where the chat runs`, () => {
         expect(row.inRow.value.placement).toBe(true);
     });
 
-    it(`has no pick left once the board has seen the chat here, and keeps its chip when it is placed`, () => {
+    it(`stays in the overflow once the board has seen the chat, where the menu says why it cannot move`, () => {
         const { chat, row } = rowOf();
         runners.value = [RunnerSummarySchema.parse({ id: `r1`, online: true, parity: `unknown` })];
 
         chat.registered.value = true;
-        expect(keys(row)).not.toContain(`placement`);
+        expect(keys(row)).toContain(`placement`);
         expect(row.inRow.value.placement).toBe(false);
 
         chat.runner.value = `r1`;
         expect(row.inRow.value.placement).toBe(true);
+        expect(keys(row)).not.toContain(`placement`);
     });
 });
 

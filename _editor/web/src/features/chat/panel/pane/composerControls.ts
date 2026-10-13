@@ -129,8 +129,7 @@ export const useComposerControls = (host: ControlsHost) => {
     const controlSituation = computed(() => ({
         mode: host.mode.value,
         startingMode: startingMode(conversation().isolated.value),
-        // A chat the board has seen is placed for good, so at the default there is nothing left to pick.
-        placementOffered: placementShown.value && (!conversation().registered.value || placedElsewhere(conversation())),
+        placementOffered: placementShown.value,
         placed: placedElsewhere(conversation()),
         persona: conversation().selection.actsAs.value,
         runThrough: runThrough.state.value,

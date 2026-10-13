@@ -23,9 +23,8 @@ export interface ComposerControlSituation {
     /** This chat's own untouched posture (Auto for isolated, Plan for main-tree), not one hard-coded default. */
     readonly startingMode: PermissionMode;
     /**
-     * Whether there is anywhere else to run, and a pick still to make: a runner is paired, or another sandbox is
-     * reachable, and the board has not yet seen the chat (placement latches with its branch). A chat already placed
-     * elsewhere keeps its chip, which says where it went, so that is offered whatever else holds.
+     * Whether there is anywhere else to run: a runner is paired, another sandbox is reachable, or the chat is already
+     * placed. A chat the board has seen keeps the row too, since placement is fixed then and the menu says where it runs.
      */
     readonly placementOffered: boolean;
     /** Running somewhere other than this sandbox: on one of its runners, or in another box. */

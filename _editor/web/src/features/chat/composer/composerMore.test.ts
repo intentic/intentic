@@ -81,16 +81,14 @@ it(`keeps a running loop in the row`, () => {
 });
 
 // Where the chat runs rides the row only once it is somewhere else: a chat in another box or on a runner must never be
-// out of sight, while "this sandbox" is the default and waits in the overflow like the rest. An offered pick that is
-// still open sits in the overflow either way; a chat the board has seen has none left, which the host says by not
-// offering it (composerControls.ts).
+// out of sight, while "this sandbox" is the default and waits in the overflow like the rest.
 it(`keeps where the chat runs in the overflow while it is here, and on the row once it is placed elsewhere`, () => {
     expect(keys(PLAIN)).toContain(`placement`);
     expect(ridesRow(PLAIN).placement).toBe(false);
 
     expect(ridesRow(chat({ placed: true })).placement).toBe(true);
     expect(keys(chat({ placed: true }))).not.toContain(`placement`);
-    // Placed for good and at the default: nothing left to pick, so it is in neither place.
+    // With nowhere else to run and nothing placed, there is nothing to say.
     expect(keys(chat({ placementOffered: false }))).not.toContain(`placement`);
 });
 
