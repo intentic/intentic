@@ -17,7 +17,7 @@ import { useRole } from "../../../client/sandbox/useRole";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { foundToOffer } from "../../../lib/foundOnComputer";
 import { useOperation } from "../../../workbench/operations/operations";
-import { defaultModelFor, endpointProviders, trialStatus } from "../../chat/accounts/providerCatalog";
+import { defaultModelFor, endpointProviders } from "../../chat/accounts/providerCatalog";
 import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
 import { refreshConnections } from "../../chat/accounts/useChat-accounts";
 import { rememberPick } from "../../chat/run/turnDefaults";
@@ -395,14 +395,6 @@ const addKey = async (key: ProviderKey): Promise<void> => {
     }
 };
 
-// The platform's free trial is not something to connect, so it has no tile; while it is on offer it is worth one line,
-// since it is what a chat runs on until something here is connected.
-const trialLine = computed(() =>
-    trialStatus.value.available
-        ? t(`connect.modelSources.trialLeft`, { count: trialStatus.value.remaining }, trialStatus.value.remaining)
-        : undefined,
-);
-
 const otherLiveFor = (tile: TileKey): AgentProvider | undefined => {
     const other = live.value?.provider ?? starting.value;
     return other !== undefined && other !== tile ? other : undefined;
@@ -424,14 +416,11 @@ watch([accessKnown, () => route.query[`provider`]], settleArrival);
 <template>
     <!-- `@container`: the docked chat can leave this pane a third of the window, and the grid reflows against it. -->
     <div class="@container flex flex-col gap-6">
-        <div class="flex flex-col gap-1">
-            <p class="flex items-center gap-1.5 text-xs text-muted">
-                <span class="min-w-0">{{ t(`connect.providerGrid.intro`) }}</span>
-                <!-- Getting started's mark for connecting a model: this page is where that step is done. -->
-                <TourMark step="models" place="models" :priority="3" side="bottom" />
-            </p>
-            <p v-if="trialLine" class="flex items-center gap-1.5 text-2xs text-subtle"><Icon name="gift" class="text-2xs" />{{ trialLine }}</p>
-        </div>
+        <p class="flex items-center gap-1.5 text-xs text-muted">
+            <span class="min-w-0">{{ t(`connect.providerGrid.intro`) }}</span>
+            <!-- Getting started's mark for connecting a model: this page is where that step is done. -->
+            <TourMark step="models" place="models" :priority="3" side="bottom" />
+        </p>
 
         <Notice
             v-if="!accessKnown && !reachable"
