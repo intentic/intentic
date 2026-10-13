@@ -22,14 +22,19 @@ const blade = (n: number): string =>
     `%3Canimate attributeName='x2' values='0;2.1;2.1' keyTimes='0;.19;1' calcMode='spline' keySplines='.15 .4 .3 1;0 0 1 1' dur='8s' repeatCount='indefinite'/%3E` +
     `%3C/linearGradient%3E%3Crect width='1' height='1' fill='url(%23b)'/%3E%3C/svg%3E")`;
 
-/** The style a session card binds on its root: a fresh blade each time `selected` turns true, none while it is not. */
-export const useSelectionBlade = (selected: () => boolean | undefined): ShallowRef<Record<string, string> | undefined> => {
+/** The style a session card binds on its root: a fresh blade each time `selected` turns true, none while it is not.
+ *  A string names WHICH thing is selected (one style shared by a row of chips, worn by the lit one): a new name is a new
+ *  selection, so moving from one to another starts the sweep again. */
+export const useSelectionBlade = (selected: () => boolean | string | undefined): ShallowRef<Record<string, string> | undefined> => {
     const style = shallowRef<Record<string, string> | undefined>();
     watch(
-        () => selected() === true,
+        () => {
+            const value = selected();
+            return value === false || value === undefined ? undefined : value;
+        },
         (on) => {
-            minted += on ? 1 : 0;
-            style.value = on ? { "--session-card-blade": blade(minted) } : undefined;
+            minted += on === undefined ? 0 : 1;
+            style.value = on === undefined ? undefined : { "--session-card-blade": blade(minted) };
         },
         { immediate: true },
     );

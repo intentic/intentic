@@ -54,6 +54,7 @@ import {
     YOURS,
 } from "./changeOrigins";
 import { currentAction, unfinishedMark } from "../../agents/fleet/agentStatus";
+import { useSelectionBlade } from "../../agents/board/cards/selectionBlade";
 import { diffRawUrls } from "./diffRaw";
 import { repoOfPath, turnWrites } from "../files/liveWrites";
 import { ahead, behind, syncable, unpublished } from "../push/outgoingWork";
@@ -129,6 +130,8 @@ const legend = computed(() => summarizeOrigins(scannable.value));
 // Seeded from the standing ask (namedAfter), so reopening the panel restores the filter; "you" never travels,
 // since it names no ask.
 const originFilter = ref<string | undefined>(namedAfter.value);
+// The lit FROM chip sweeps the session card's blade, fresh on each click (selectionBlade.ts).
+const originBlade = useSelectionBlade(() => originFilter.value);
 // Retires the filter (and its ask) once the named session has no work left in the tree; immediate, since a
 // restored filter has to be checked the moment this panel opens. An empty (still-loading) review retires nothing.
 watch(
@@ -1324,9 +1327,10 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                 type="button"
                 class="ui-chip min-w-0 max-w-full gap-1"
                 :class="[
-                    originFilter === entry.id ? ['shrink', originHue(entry.id).chip] : 'shrink-0',
+                    originFilter === entry.id ? ['shrink chip-blade', originHue(entry.id).chip] : 'shrink-0',
                     originFilter !== undefined && originFilter !== entry.id ? 'opacity-40' : '',
                 ]"
+                :style="originFilter === entry.id ? originBlade : undefined"
                 :disabled="changes.actionBusy.value"
                 @click="toggleOrigin(entry.id)"
                 @mouseenter="showOrigins($event, [entry.id])"
@@ -1364,7 +1368,8 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                 v-if="legend.yours > 0"
                 type="button"
                 class="shrink-0 gap-1"
-                :class="[ui.chip({ on: originFilter === YOURS }), originFilter !== undefined && originFilter !== YOURS ? 'opacity-40' : '']"
+                :class="[ui.chip({ on: originFilter === YOURS }), originFilter === YOURS ? 'chip-blade' : '', originFilter !== undefined && originFilter !== YOURS ? 'opacity-40' : '']"
+                :style="originFilter === YOURS ? originBlade : undefined"
                 :disabled="changes.actionBusy.value"
                 :aria-pressed="originFilter === YOURS"
                 @click="toggleOrigin(YOURS)"
