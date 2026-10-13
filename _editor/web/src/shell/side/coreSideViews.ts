@@ -67,7 +67,8 @@ export const registerCoreSideViews = (): readonly Disposable[] => {
             const agent = parsed?.agent;
             return {
                 title: name,
-                icon: isLockedWorkspacePath(path) ? `lock` : iconForEntry(name, `file`),
+                // A reference nothing matched has no file to wear the glyph of.
+                icon: parsed?.missing === true ? `link-broken` : isLockedWorkspacePath(path) ? `lock` : iconForEntry(name, `file`),
                 iconClass: explorerColorClass(explorerStyle.value, name, `file`, false),
                 tip: {
                     title: path,
@@ -77,7 +78,8 @@ export const registerCoreSideViews = (): readonly Disposable[] => {
         },
         home: (input) => {
             const parsed = FileSideInputSchema.safeParse(input).data;
-            return parsed === undefined
+            // Nothing to move there: a reference that matched no file has no home but this card.
+            return parsed === undefined || parsed.missing === true
                 ? undefined
                 : { label: words.value.workspace, open: () => void openInWorkspace(parsed.path, undefined, { agent: parsed.agent }) };
         },

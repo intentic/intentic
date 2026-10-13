@@ -239,6 +239,7 @@ const samplesOf = (
             tree: {},
             children: { path: `web` },
             file: { path: `web/src/lib/checkout.ts` },
+            resolve: { path: `lib/checkout.ts` },
             delete: { path: `web/smoke.txt` },
             restore: { trashed: `smoke` },
             repos: undefined,

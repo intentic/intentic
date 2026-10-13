@@ -6,10 +6,12 @@ import {
     isAttachmentPath,
     type WorkspaceChildren,
     type WorkspaceClassification,
+    type WorkspaceResolve,
     type WorkspaceTree,
     type WorkspaceTreeEntry,
 } from "@intentic/sandbox-contract";
 import { ORPCError } from "@orpc/server";
+import { opt } from "../../opt.js";
 
 // What a fenced person is shown of the workspace. Point reads refuse (areas/area-scope.ts); listings PRUNE, because
 // a folder that 403s on every click is a worse answer than a folder that isn't there — the fence is meant to be the
@@ -96,3 +98,19 @@ export const fencedTo =
     <T>(fence: Fence, pathOf: (row: T) => string) =>
     (row: T): boolean =>
         fenceAllows(fence, pathOf(row));
+
+// What a fenced person learns of what a reference means: every path in the answer goes through the fence, not only the
+// first, or a list of other matches would map the folders outside it. A match they may not see makes the next one the
+// answer; none left is "nothing in the workspace ends that way", as it is to them.
+export const fencedResolve = (fence: Fence, resolved: WorkspaceResolve): WorkspaceResolve => {
+    const opens = (path: string): boolean => fenceOpens(fence, path);
+    const [path, ...others] = [resolved.path, ...(resolved.others ?? [])].filter((candidate): candidate is string => candidate !== undefined && opens(candidate));
+    const nearby = (resolved.nearby ?? []).filter(opens);
+    return {
+        ...opt("path", path),
+        ...opt("others", others.length === 0 ? undefined : others),
+        // The rename belongs to the match it was found as; one promoted past a fenced match was not renamed from it.
+        ...opt("renamedFrom", path !== undefined && path === resolved.path ? resolved.renamedFrom : undefined),
+        ...opt("nearby", path === undefined && nearby.length > 0 ? nearby : undefined),
+    };
+};

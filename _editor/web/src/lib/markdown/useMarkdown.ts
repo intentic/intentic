@@ -18,7 +18,8 @@ const parses = new Map<string, { readonly tree: unknown; readonly parsed: Parsed
 
 export const cachedParse = (source: string, agent: string | undefined): ParsedMarkdown => {
     const key = `${agent ?? ``}\u0000${source}`;
-    const tree = fileRefTree();
+    // The tree of the copy these words are about, which is the one their file links resolved against.
+    const tree = fileRefTree({ agent });
     const hit = parses.get(key);
     if (hit !== undefined && hit.tree === tree) {
         // Least recently used goes first: a hit moves to the back.

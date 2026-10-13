@@ -53,14 +53,17 @@ export const resolveIn = (dir: string | undefined, path: string): string => {
 };
 
 // The workspace-relative file a reference names, or undefined outside the workspace; matched against the tree since
-// a model's path is often only the tail. An unmatched reference keeps its literal form, resolved daemon-side on click.
-const linkTarget = (rawPath: string, dir: string | undefined): string | undefined => {
-    const target = toWorkspacePath(rawPath);
+// a model's path is often only the tail. Matched in the copy the words are about (`agent`), never the one on screen: a
+// conversation's new file is in its checkout alone, and another copy's same-named file is a different file. An
+// unmatched reference keeps its literal form, resolved daemon-side on click.
+const linkTarget = (rawPath: string, dir: string | undefined, agent: string | undefined): string | undefined => {
+    const scope = { agent };
+    const target = toWorkspacePath(rawPath, scope);
     if (target === undefined || rawPath.startsWith(`/`)) {
         return target;
     }
     const named = resolveIn(dir, target);
-    return resolveInTree(named) ?? named;
+    return resolveInTree(named, scope) ?? named;
 };
 
 // What a scanned reference reads as once linked: `name.ext:line`, since the path identifies by tail, not full text.
@@ -101,7 +104,7 @@ const linkifyAnchor = (anchor: HTMLAnchorElement, dir: string | undefined, agent
         return;
     }
     const { path, line } = parseRef(own ?? href);
-    const target = linkTarget(path, dir);
+    const target = linkTarget(path, dir, agent);
     if (target === undefined) {
         return;
     }
@@ -118,7 +121,7 @@ const linkifyText = (node: Text, dir: string | undefined, agent: string | undefi
     let taken = 0;
     for (let match = FILE_REF_ALL.exec(text); match !== null; match = FILE_REF_ALL.exec(text)) {
         const { path, line } = parseRef(match[0]);
-        const target = linkTarget(path, dir);
+        const target = linkTarget(path, dir, agent);
         if (target === undefined) {
             // A path outside the workspace stays plain text.
             continue;

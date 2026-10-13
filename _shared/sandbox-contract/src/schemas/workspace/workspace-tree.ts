@@ -295,9 +295,34 @@ export const WorkspaceResolveQuerySchema = WorkspaceScopeSchema.extend({
             "The reference as somebody wrote it. Often only the tail of the real path, which is why this is matched against the tree rather than read as-is.",
         ),
 });
+// Three answers, told apart by which fields are present: one file (`path` alone), several equally plausible ones (`path`
+// with `others`), or none (no `path`, perhaps `nearby`). "None" is an answer, not a path to try: opening the reference as
+// written then fails as if the file had been deleted, when it never existed under that name.
 export const WorkspaceResolveSchema = z.object({
-    path: z.string().optional().describe("The real path it means. Absent when nothing in the workspace ends that way."),
+    path: z
+        .string()
+        .optional()
+        .describe(
+            "The real path it means: the only match, or the most likely of several. Absent when nothing in that copy of the workspace ends that way.",
+        ),
+    others: z
+        .array(z.string())
+        .optional()
+        .describe("The other files it could just as well mean, most likely first, when more than one ends that way. Absent when it names exactly one."),
+    renamedFrom: z
+        .string()
+        .optional()
+        .describe(
+            "The path the reference named, when the conversation has since renamed or moved that file to `path`. Absent for a file still under the name it was given.",
+        ),
+    nearby: z
+        .array(z.string())
+        .optional()
+        .describe(
+            "Only when nothing matched: files it may have meant instead, most likely first. A file in the folder it named whose name contains the one asked for (renamed in place), then files with that same name elsewhere (moved).",
+        ),
 });
+export type WorkspaceResolve = z.infer<typeof WorkspaceResolveSchema>;
 // Direct file management (delete, new folder, rename/move, copy). Byte writes and editor saves go through POST
 // /workspace/upload instead, since oRPC can't carry a body.
 export const WorkspaceDirSchema = z.object({ path: z.string().min(1).describe("The folder to create. Missing folders above it are created too.") });

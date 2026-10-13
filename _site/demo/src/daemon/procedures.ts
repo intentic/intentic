@@ -59,6 +59,7 @@ import {
     gitChanges,
     PUBLISH_REFUSAL,
     readFile,
+    resolveReference,
     REMOTE_REPOS,
     REPOS,
     restoreEntry,
@@ -241,6 +242,7 @@ export const procedures = {
         // A missing path answers "nothing there" in a 200 body, not a 404; several surfaces read a file just to
         // check existence.
         file: ({ path }) => readFile(path),
+        resolve: ({ path }) => resolveReference(path),
         delete: ({ path }) => deleteEntry(path),
         restore: ({ trashed }) => restoreEntry(trashed) ?? refuse(`That is no longer in the trash.`, 404),
         repos: () => ({ repos: [...REPOS] }),

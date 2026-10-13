@@ -260,7 +260,6 @@ export const UNSERVED = {
     "workspace.modules": UNFILLED_VIEW,
     "workspace.packageGraph": UNFILLED_VIEW,
     "workspace.packageModules": UNFILLED_VIEW,
-    "workspace.resolve": UNFILLED_VIEW,
     "workspace.templates": UNFILLED_VIEW,
     "GET /workspace/media": UNFILLED_VIEW,
     "GET /workspace/download": UNSIMULATED_WRITE,

@@ -17,11 +17,14 @@ import { readPackageModules } from "./deps/package-modules.js";
 import { readUsedPackageGraph } from "./deps/package-usage.js";
 import { discoverRepos, isValidRepoId, isValidRepoName } from "./layout/repo-discovery.js";
 import { resolveReference } from "./files/resolve-reference.js";
+import { createCheckoutOverlays, NO_OVERLAY, overlaidView } from "./files/checkout-overlay.js";
+import { type IsolatedAgent, isIsolated, type RepoRecord } from "../conversations/registry/agents-store.js";
+import { agentRepoChanges } from "../conversations/land/agent-changes.js";
 import { behindCount } from "./layout/workspace-setup.js";
 import { syncWorkspaceRepos } from "./layout/sync-repos.js";
 import { testCommandOf } from "./layout/test-runner.js";
 import { listTemplates, loadManifest, readTemplatesConfig } from "./layout/templates-config.js";
-import { isControlPlanePath, resolveWithin } from "./files/workspace-files-paths.js";
+import { resolveWithin } from "./files/workspace-files-paths.js";
 import { UnknownArchiveError } from "./files/archive/workspace-extract.js";
 import {
     DOWNLOAD_TICKET_TTL_MS,
@@ -37,16 +40,16 @@ import {
     fencedChildren,
     fencedClassification,
     fencedRepos,
+    fencedResolve,
     fencedTo,
     fencedTree,
-    fenceOpens,
     refuseFenced,
     refuseUnlistable,
     searchPaths,
 } from "./layout/workspace-fence.js";
 import { provenanceOf, refuseUnlessVisible } from "../auth/fleet-scope.js";
 import { callerEditFence, callerFence } from "../areas/area-scope.js";
-import type { Fence } from "@intentic/sandbox-contract";
+import type { Fence, GitChange } from "@intentic/sandbox-contract";
 import { publicAddressOf } from "../env.config.js";
 
 // Row cap for one /workspace/search page, sized to the virtualized list's visible rows.
@@ -75,6 +78,30 @@ const searchEcho = (
         ...scope.notGlobs.map((glob) => `--not-glob '${glob}'`),
     ].join(" ");
 
+// Every shared-tree file a glob matches, from the resident index's in-memory sweep: what a reference is searched with.
+const sharedGlob =
+    (services: Services, signal: AbortSignal | undefined) =>
+    async (glob: string): Promise<readonly string[]> => {
+        const outcome = await services.iq.run(
+            {
+                verb: "files",
+                query: glob,
+                scope: {},
+                render: { budget: 400, limit: MAX_REF_CANDIDATES },
+                options: { globExact: true },
+                echo: `files "${glob}" --exact`,
+            },
+            signal,
+        );
+        return outcome.result.groups.map((group) => group.path);
+    };
+
+// A conversation's whole change list per repo, since it branched: what its checkout holds that the index cannot see.
+const cumulativeChanges =
+    (services: Services) =>
+    (entry: IsolatedAgent, composed: RepoRecord): Promise<GitChange[]> =>
+        agentRepoChanges(services.agentWorktrees, entry, composed, "cumulative");
+
 // Routes for the full /work view and extra-repo cloning. The binary /workspace/raw preview is a plain Hono route in
 // app.ts; a streamed body doesn't fit oRPC.
 export const createWorkspaceRoutes = (services: Services) => {
@@ -96,6 +123,8 @@ export const createWorkspaceRoutes = (services: Services) => {
         relative(services.workspace.root, await containedIn(services.workspace.root, relPath));
     // Read scope shared with the byte routes in app.ts; two resolvers here would disagree on a file's contents.
     const scope = services.workspaceScope;
+    // Each conversation's change list, held briefly so a hover's peek and the click after it ask git once.
+    const overlays = createCheckoutOverlays({ changesOf: cumulativeChanges(services), logger: services.logger });
     // The caller's own fence, read per request so an area edit lands on the very next one rather than at next sign-in.
     const fenceFor = async (context: OrpcContext): Promise<Fence> => callerFence(await services.areas.list(), context.identity);
     // A conversation's checkout is its own. A caller who may not see the conversation may not read out of it either,
@@ -201,40 +230,25 @@ export const createWorkspaceRoutes = (services: Services) => {
             return { ...services.mediaTickets.mint(downloadBinding(plan), DOWNLOAD_TICKET_TTL_MS, context.identity?.email), filename };
         }),
         // Resolves which workspace file a named reference means (chat prose, terminal output, a tool chip); wires
-        // resolveReference to the workspace's guards and to iq's in-memory glob.
+        // resolveReference to the workspace's guards, to iq's in-memory glob, and to the conversation's own changes.
         resolve: i.resolve.handler(async ({ input, signal, context }) => {
             refuseUnseenAgent(context, input.agent);
             // The fence applies to the ANSWER, not the question: the input is a fragment somebody wrote, and matching
             // it against the tree is exactly how a fenced caller would learn a path outside their folders exists.
             const fence = await fenceFor(context);
-            // Checks the conversation's checkout for existence first; a file just written there exists nowhere else.
-            const roots = [...new Set([await workspaceRootFor(scope, input.agent), services.workspace.root])];
+            const checkout = await workspaceRootFor(scope, input.agent);
+            // The index knows the shared tree alone: what the conversation created, renamed or deleted comes from its own
+            // change list, or its new files would never resolve and its renamed ones would answer by their old names.
+            const entry = input.agent === undefined ? undefined : services.agents.entry(input.agent);
+            const overlay = checkout === services.workspace.root || entry === undefined || !isIsolated(entry) ? NO_OVERLAY : await overlays.of(entry);
             const resolved = await resolveReference(
                 input.path,
                 services.workspace.root,
-                (relPath) =>
-                    roots.some((dir) => {
-                        const abs = resolveWithin(dir, relPath);
-                        return abs !== undefined && !isControlPlanePath(dir, abs) && existsSync(abs);
-                    }),
-                async (glob) => {
-                    const outcome = await services.iq.run(
-                        {
-                            verb: "files",
-                            query: glob,
-                            scope: {},
-                            render: { budget: 400, limit: MAX_REF_CANDIDATES },
-                            options: { globExact: true },
-                            echo: `files "${glob}" --exact`,
-                        },
-                        signal,
-                    );
-                    return outcome.result.groups.map((group) => group.path);
-                },
+                overlaidView({ checkout, shared: services.workspace.root, overlay, matching: sharedGlob(services, signal) }),
             );
             // Unresolvable, not refused: to a fenced reader a file outside their folders simply is not in the
             // workspace, and a refusal here would confirm that it is.
-            return resolved.path !== undefined && !fenceOpens(fence, resolved.path) ? {} : resolved;
+            return fencedResolve(fence, resolved);
         }),
         // Runs the resident iq engine in-process, minus the per-query spawn and sweep. A GUI caller asks for a `list`
         // page (rows), skipping the capsule, symbol lookup and continuation spool.

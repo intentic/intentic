@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { type JumpScope, jumpScopes, scopedQuery } from "../../workbench/commands/jumpSearch";
 import { type PaletteRow, useFileJumpRows, useJumpRows } from "./useJumpRows";
 import { useQuickOpen } from "../../workbench/commands/useQuickOpen";
@@ -17,7 +17,13 @@ const t = useT();
 const { openFile } = defineProps<{ openFile?: (path: string) => void }>();
 const filesOnly = openFile !== undefined;
 
-const { isOpen, mode } = useQuickOpen();
+const { isOpen, mode, seed, mounted } = useQuickOpen();
+onMounted(() => {
+    mounted.value = true;
+});
+onBeforeUnmount(() => {
+    mounted.value = false;
+});
 const query = ref(``);
 const {
     parsed,
@@ -72,11 +78,14 @@ const narrow = async (scope: JumpScope): Promise<void> => {
 // Focuses the field and resets to the top row each time the palette opens. Seeds the query from the shortcut that
 // opened it: `> ` for the Command Palette, empty for the unscoped jump.
 const onShow = async (): Promise<void> => {
-    query.value = mode.value === `commands` && !filesOnly ? `> ` : ``;
+    // Words handed over by whatever opened it (searchInQuickOpen) are the search already under way, kept like a prefix.
+    const seeded = seed.value;
+    seed.value = undefined;
+    query.value = seeded ?? (mode.value === `commands` && !filesOnly ? `> ` : ``);
     await nextTick();
     input.value?.focus();
     // Caret at the end, not selected, so the next keystroke can't wipe the `> ` prefix.
-    if (mode.value === `commands` && !filesOnly) {
+    if (seeded !== undefined || (mode.value === `commands` && !filesOnly)) {
         const end = input.value?.value.length ?? 0;
         input.value?.setSelectionRange(end, end);
     } else {

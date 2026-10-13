@@ -8,13 +8,14 @@ import type {
     RepoChanges,
     SessionSummary,
     WorkspaceChildren,
+    WorkspaceResolve,
     WorkspaceSearchGroup,
     WorkspaceSearchResult,
     WorkspaceSearchSpan,
     WorkspaceTree,
 } from "@intentic/sandbox-contract";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { includeMatcher, RUN_TARGETS_FILE } from "@intentic/sandbox-contract";
+import { includeMatcher, MAX_REF_CANDIDATES, rankRefCandidates, referenceTails, RUN_TARGETS_FILE } from "@intentic/sandbox-contract";
 import { demoQuiet, deskEdition, freshEdition } from "../mode";
 import { acceptanceFiles } from "./acceptance";
 import { SUPPORT_SWEEP_PATH, SUPPORT_SWEEP_SHOT } from "./browserShots";
@@ -743,6 +744,29 @@ const archiveMember = (path: string): string | number | undefined => {
 export const fileBody = (path: string): string | undefined => {
     const entry = FILES.get(path) ?? archiveMember(path);
     return entry === undefined ? undefined : typeof entry === `number` ? unrecordedBody(path) : entry;
+};
+
+// GET /workspace/resolve: what a file mention means here, by the daemon's own rule (as written, then shorter tails,
+// shallowest first, the rest named as others). A mention nothing matches offers its namesakes elsewhere; the daemon also
+// offers a renamed sibling, which a recording that never renames anything has no use for.
+export const resolveReference = (reference: string): WorkspaceResolve => {
+    const tails = referenceTails(reference, WORKSPACE_ROOT);
+    const literal = tails[0];
+    if (literal === undefined) {
+        return {};
+    }
+    if (FILES.has(literal)) {
+        return { path: literal };
+    }
+    const paths = [...FILES.keys()];
+    for (const tail of tails) {
+        const [path, ...others] = rankRefCandidates(tail, paths);
+        if (path !== undefined) {
+            return others.length === 0 ? { path } : { path, others };
+        }
+    }
+    const nearby = rankRefCandidates(nameOf(literal), paths).slice(0, MAX_REF_CANDIDATES);
+    return nearby.length === 0 ? {} : { nearby: [...nearby] };
 };
 
 // GET /workspace/file: the whole file as one window. A path not carried answers `present: false`, same as the daemon,

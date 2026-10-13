@@ -3,11 +3,14 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 // Needs jsdom: the linkifier and DOMPurify require a real document. Asserted end-to-end through renderMarkdown since
 // the order (parse, sanitize, then linkify) is what's pinned.
 
-// The container-root lookup reads the workspace-tree query; `queryData` is that seam.
-let queryData: { root?: string; tree?: unknown[] }[] = [];
-jest.mock("../queryPersistence", () => ({
-    queryClient: { getQueriesData: () => queryData.map((data) => [[], data] as const) },
-}));
+import { treeCache, treeCacheModule } from "../../testing/treeCache";
+
+// The container-root lookup reads the workspace-tree query: a real cache, seeded under the explorer's own key.
+jest.mock("../queryPersistence", treeCacheModule);
+const { workspaceTreeKeyFor } = await import("../files/workspaceTreeCache");
+const seed = (tree: { root: string; tree: unknown[] }, agent?: string): void => {
+    treeCache.setQueryData(workspaceTreeKeyFor(agent), tree);
+};
 
 const { fileLinkDecorator, renderMarkdown } = await import("./renderMarkdown");
 const { renderMarkdown: renderEngine } = await import("@intentic/ui/markdown");
@@ -17,7 +20,7 @@ const { renderMarkdown: renderEngine } = await import("@intentic/ui/markdown");
 const renderIn = (dir: string, source: string): string => renderEngine(source, fileLinkDecorator({ dir }));
 
 beforeEach(() => {
-    queryData = [];
+    treeCache.clear();
 });
 
 // The rendered anchor for `path`, or undefined; parsed from the HTML so assertions read as DOM shape, not string
@@ -73,12 +76,12 @@ describe(`file mentions in agent prose`, () => {
     });
 
     it(`maps an absolute container path back to the workspace-relative one`, () => {
-        queryData = [{ root: WORKSPACE_ROOT, tree: [] }];
+        seed({ root: WORKSPACE_ROOT, tree: [] });
         expect(linkTo(renderMarkdown(`crashed at /work/src/foo.ts:7`), `src/foo.ts`)?.dataset[`line`]).toBe(`7`);
     });
 
     it(`leaves a path outside the workspace as plain text`, () => {
-        queryData = [{ root: WORKSPACE_ROOT, tree: [] }];
+        seed({ root: WORKSPACE_ROOT, tree: [] });
         const html = renderMarkdown(`thrown from /usr/lib/node.js:120`);
         expect(html).toContain(`/usr/lib/node.js:120`);
         expect(html).not.toContain(`md-file-link`);
@@ -88,8 +91,7 @@ describe(`file mentions in agent prose`, () => {
     // where a plain click does. An unmatched reference keeps its literal href and resolves daemon-side on click
     // instead.
     it(`points an abbreviated mention at the file it names`, () => {
-        queryData = [
-            {
+        seed({
                 root: WORKSPACE_ROOT,
                 tree: [
                     {
@@ -106,8 +108,7 @@ describe(`file mentions in agent prose`, () => {
                         ],
                     },
                 ],
-            },
-        ];
+            });
         const link = linkTo(renderMarkdown(`gone from pages/Foo.vue:3`), `_apps/pages/Foo.vue`);
         expect(link?.getAttribute(`href`)).toBe(`/workspace/_apps/pages/Foo.vue`);
         expect(link?.dataset[`line`]).toBe(`3`);
@@ -153,7 +154,7 @@ describe(`references inside a previewed document`, () => {
     });
 
     it(`does not re-root an absolute container path against the document`, () => {
-        queryData = [{ root: WORKSPACE_ROOT, tree: [] }];
+        seed({ root: WORKSPACE_ROOT, tree: [] });
         expect(linkTo(renderIn(`docs/`, `/work/src/foo.ts`), `src/foo.ts`)).toEqual(expect.any(Object));
     });
 });
@@ -167,6 +168,19 @@ describe(`links into a conversation's own copy of the workspace`, () => {
         // The click handler reads the dataset; the href covers browser-native gestures instead.
         expect(link?.dataset[`agent`]).toBe(`c-1`);
         expect(link?.dataset[`line`]).toBe(`42`);
+    });
+
+    it(`resolves a conversation's mention in its own copy, not in the one on screen`, () => {
+        const file = (path: string) => ({ name: path.slice(path.lastIndexOf(`/`) + 1), path, type: `file` });
+        const nested = (...paths: string[]) => {
+            // Flat is enough here: the resolver indexes files wherever they sit in the tree.
+            return { root: WORKSPACE_ROOT, tree: paths.map(file) };
+        };
+        // A file only the conversation's checkout has, and a same-tailed one only the shared tree has.
+        seed(nested(`intentic/_os/installer/bib-config.toml`), `c-1`);
+        seed(nested(`elsewhere/installer/bib-config.toml`));
+        expect(linkTo(renderAs(`c-1`, "Now `installer/bib-config.toml`."), `intentic/_os/installer/bib-config.toml`)).toEqual(expect.any(Object));
+        expect(linkTo(renderMarkdown("Now `installer/bib-config.toml`."), `elsewhere/installer/bib-config.toml`)).toEqual(expect.any(Object));
     });
 
     it(`leaves a shared conversation's links unscoped, so nothing changes for them`, () => {

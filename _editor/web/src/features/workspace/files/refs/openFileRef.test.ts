@@ -2,8 +2,10 @@
 import "@intentic/testing/dom";
 import { waitFor, stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { effectScope } from "vue";
+import type { WorkspaceResolve } from "@intentic/sandbox-contract";
 import type { ProcedureInput } from "../../../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../../../testing/sandboxRpcFake";
+import { treeCacheModule } from "../../../../testing/treeCache";
 
 const openFile = jest.fn();
 const openAtLine = jest.fn();
@@ -11,11 +13,11 @@ const push = jest.fn();
 // Where the reader stands: the Workspace route opens a file in place, anywhere else it peeks beside.
 const currentRoute = { value: { name: `agents` } };
 const sectionReachable = jest.fn((_to: string) => true);
-// Daemon's reference resolver; unmatched by default so a click opens the path as written.
-const unmatched = async (_input: ProcedureInput<`workspace.resolve`>): Promise<{ path?: string }> => ({});
-const resolve = jest.fn(unmatched);
+// Daemon's reference resolver; by default every reference names a real file as written, so a click opens it as is.
+const asWritten = async (input: ProcedureInput<`workspace.resolve`>): Promise<WorkspaceResolve> => ({ path: input.path });
+const resolve = jest.fn(asWritten);
 
-jest.mock("../../../../lib/queryPersistence", () => ({ queryClient: { getQueriesData: () => [] } }));
+jest.mock("../../../../lib/queryPersistence", treeCacheModule);
 jest.mock("../../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ workspace: { resolve } }) }));
 jest.mock("../../tabs/useWorkspaceTabs", () => ({ useWorkspaceTabs: () => ({ openFile, openAtLine }) }));
 jest.mock("../../../../router", () => ({ router: { push, currentRoute } }));
@@ -27,6 +29,7 @@ const { openFileRefFromEvent, openInWorkspace } = await import("./openFileRef");
 const { workspaceAgent } = await import("../../../../app/workspaceScope");
 const { claimFloating } = await import("../../../../workbench/window/floating");
 const { sideDocked, sideTabId, useSidePanel, closeAllTabs } = await import("../../../../workbench/side/sideTabs");
+const { arrivalOf } = await import("../../../../workbench/side/sideFileInput");
 
 // Binds a click listener the way ChatMessageView and MarkdownViewer do, then renders markdown into it.
 const surface = (markdown: string): HTMLDivElement => {
@@ -49,7 +52,7 @@ beforeEach(() => {
     openAtLine.mockClear();
     push.mockClear();
     resolve.mockClear();
-    resolve.mockImplementation(unmatched);
+    resolve.mockImplementation(asWritten);
     workspaceAgent.value = undefined;
     sideDocked.value = false;
     currentRoute.value = { name: `agents` };
@@ -232,5 +235,62 @@ describe(`clicking a file with the side panel in the window`, () => {
         clickFileLink(surface(`Fixed in src/foo.ts:42.`));
         await waitFor(() => expect(push).toHaveBeenCalledWith({ name: `workspace`, params: { path: [`src`, `foo.ts`] }, query: {} }));
         expect(panel.tabs.value).toEqual([]);
+    });
+});
+
+// What the daemon answers is said where the reader looks: nothing matched is a card of its own, several matches are a
+// way through them, and a renamed file says so, rather than a guessed path opening and reading as deleted.
+describe(`a reference that is not simply one file`, () => {
+    const panel = useSidePanel();
+    const inputs = () => panel.tabs.value.map((tab) => tab.input);
+
+    beforeEach(() => {
+        sideDocked.value = true;
+    });
+
+    it(`opens a card saying nothing matched, with what it may have meant, instead of a file that never existed`, async () => {
+        resolve.mockResolvedValue({ nearby: [`intentic/_os/installer/bib-config.toml`] });
+        clickFileLink(surface("The installer config `installer/config.toml` is ready."));
+        await waitFor(() => expect(inputs()).toEqual([{ path: `installer/config.toml`, missing: true }]));
+        expect(arrivalOf({ path: `installer/config.toml`, missing: true })).toEqual({
+            asked: `installer/config.toml`,
+            nearby: [`intentic/_os/installer/bib-config.toml`],
+        });
+    });
+
+    it(`opens the likeliest of several matches and keeps the rest to step through`, async () => {
+        resolve.mockResolvedValue({ path: `a/pages/index.md`, others: [`b/c/pages/index.md`] });
+        clickFileLink(surface("See `pages/index.md`."));
+        await waitFor(() => expect(inputs()).toEqual([{ path: `a/pages/index.md` }]));
+        expect(arrivalOf({ path: `a/pages/index.md` })?.matches).toEqual([`a/pages/index.md`, `b/c/pages/index.md`]);
+    });
+
+    it(`opens a renamed file where it went and remembers the name it was asked by`, async () => {
+        resolve.mockResolvedValue({ path: `_os/installer/bib-config.toml`, renamedFrom: `_os/installer/config.toml` });
+        clickFileLink(surface("See `installer/config.toml`."));
+        await waitFor(() => expect(inputs()).toEqual([{ path: `_os/installer/bib-config.toml` }]));
+        expect(arrivalOf({ path: `_os/installer/bib-config.toml` })?.renamedFrom).toBe(`_os/installer/config.toml`);
+    });
+
+    it(`says nothing extra about a reference that named exactly one file`, async () => {
+        clickFileLink(surface(`Fixed in src/foo.ts.`));
+        await waitFor(() => expect(inputs()).toEqual([{ path: `src/foo.ts` }]));
+        expect(arrivalOf({ path: `src/foo.ts` })).toBeUndefined();
+    });
+
+    it(`opens the reference as written when the daemon cannot be asked, and lets the file say what it finds`, async () => {
+        resolve.mockRejectedValue(new Error(`offline`));
+        clickFileLink(surface(`Fixed in src/foo.ts.`));
+        await waitFor(() => expect(inputs()).toEqual([{ path: `src/foo.ts` }]));
+    });
+
+    it(`standing in the Workspace, opens no editor tab for a reference that matched nothing, and leaves its copy alone`, async () => {
+        currentRoute.value = { name: `workspace` };
+        resolve.mockResolvedValue({});
+        clickFileLink(surface(`Fixed in src/nowhere.ts.`));
+        await waitFor(() => expect(inputs()).toEqual([{ path: `src/nowhere.ts`, missing: true }]));
+        expect(openFile).not.toHaveBeenCalled();
+        expect(push).not.toHaveBeenCalled();
+        expect(workspaceAgent.value).toBeUndefined();
     });
 });

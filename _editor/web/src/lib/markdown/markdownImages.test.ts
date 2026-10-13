@@ -1,9 +1,10 @@
 // Needs jsdom: the decorator works on the sanitized DOM, and DOMPurify needs a real document to build it.
 import "@intentic/testing/dom";
 import { computed, shallowRef } from "vue";
+import { treeCacheModule } from "../../testing/treeCache";
 
 // The link half of the decorator reads the workspace tree's query for its container root; nothing is in it here.
-jest.mock("../queryPersistence", () => ({ queryClient: { getQueriesData: () => [] } }));
+jest.mock("../queryPersistence", treeCacheModule);
 
 const { PENDING_PICTURE, picturePathIn } = await import("./markdownImages");
 const { fileLinkDecorator } = await import("./renderMarkdown");
