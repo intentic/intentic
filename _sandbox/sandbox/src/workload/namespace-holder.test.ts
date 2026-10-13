@@ -1,6 +1,7 @@
 import { EventEmitter } from "node:events";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { PassThrough } from "node:stream";
-import { namespaceHolderLifetime, namespaceHolderReady } from "./namespace-holder.js";
+import { NamespaceSetupError, namespaceHolderLifetime, namespaceHolderReady, withSetupRetry } from "./namespace-holder.js";
 import { forgetNamespaceEntry, nsenterArgv, registerMountEntry, registerSandboxEntry } from "./namespace-entry.js";
 
 let nextPid = 61_000;
@@ -191,4 +192,98 @@ test("a complete fenced PID report survives later noise in the same info chunk",
     child.stdout.write("ready\n");
     info.write(`{"child-pid":61234}\n${"x".repeat(8192)}`);
     await expect(readiness).resolves.toBe(61_234);
+});
+
+// The setup failure a readiness promise ends in; anything else fails the test.
+const setupFailure = async (readiness: Promise<number>): Promise<NamespaceSetupError> => {
+    const failure = await readiness.then(() => undefined, (error: unknown) => error);
+    if (!(failure instanceof NamespaceSetupError)) { throw new Error(`expected a setup failure, got ${String(failure)}`); }
+    return failure;
+};
+
+// A clock the test moves: real time plus whatever freeze it stands in for.
+const frozenClock = () => {
+    let offset = 0;
+    return { now: () => Date.now() + offset, freeze: (ms: number) => { offset += ms; } };
+};
+
+test("a freeze of the daemon itself is not counted against the holder: a ready line waiting in the pipe still admits", async () => {
+    const child = holder();
+    const clock = frozenClock();
+    const readiness = namespaceHolderReady(child, "ready", undefined, { quietMs: 200, tickMs: 5, now: clock.now, describe: () => undefined });
+    // 2026-10-13: the daemon froze 12 s while a holder started; its deadline passed inside the freeze.
+    clock.freeze(12_000);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    child.stdout.write("ready\n");
+    await expect(readiness).resolves.toBe(child.pid);
+});
+
+test("a holder that says nothing stalls, and the failure names how far it got and what it was doing", async () => {
+    const child = holder();
+    const readiness = namespaceHolderReady(child, "ready", undefined, { quietMs: 60, tickMs: 5, describe: () => "was running mount -a (state D, waiting in ovl_fill_super)" });
+    child.stdout.write(`${WORKSPACE_ROOT}/node_modules: successfully mounted\n`);
+    const setup = await setupFailure(readiness);
+    expect(setup.failure).toBe("stalled");
+    expect(setup.transient).toBe(true);
+    expect(setup.facts.steps).toBe(1);
+    expect(setup.message).toMatch(/^namespace setup stalled: no progress for /u);
+    expect(setup.message).toContain(`1 mount done, the last ${WORKSPACE_ROOT}/node_modules: successfully mounted`);
+    expect(setup.message).toContain("waiting in ovl_fill_super");
+    expect(child.stdout.listenerCount("data")).toBe(0);
+});
+
+test("steady progress keeps a slow setup alive past the quiet bound, up to the cap", async () => {
+    const child = holder();
+    const readiness = namespaceHolderReady(child, "ready", undefined, { quietMs: 40, capMs: 5_000, tickMs: 5, describe: () => undefined });
+    for (let mount = 0; mount < 6; mount += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        child.stdout.write(`${WORKSPACE_ROOT}/m${String(mount)}: successfully mounted\n`);
+    }
+    child.stdout.write("ready\n");
+    await expect(readiness).resolves.toBe(child.pid);
+});
+
+test("a holder that keeps reporting but never finishes is stopped at the cap", async () => {
+    const child = holder();
+    const readiness = namespaceHolderReady(child, "ready", undefined, { quietMs: 1_000, capMs: 60, tickMs: 5, describe: () => undefined });
+    const chatter = setInterval(() => { child.stdout.write(`${WORKSPACE_ROOT}/x: successfully mounted\n`); }, 5);
+    try {
+        await expect(readiness).rejects.toThrow("namespace setup did not finish within");
+    } finally { clearInterval(chatter); }
+});
+
+test("an exit with nothing on stderr says so without a dangling colon", async () => {
+    const child = holder();
+    const readiness = namespaceHolderReady(child, "ready", undefined, { describe: () => undefined });
+    child.exitCode = 32;
+    child.emit("exit", 32, null);
+    const failure = await setupFailure(readiness);
+    expect(failure.message).toBe("namespace setup exited 32 (no mount reported done)");
+    expect(failure.transient).toBe(false);
+});
+
+test("setup is tried once more only when the holder did not answer in time", async () => {
+    const stalled = new NamespaceSetupError("stalled", "namespace setup stalled", { steps: 0, awakeMs: 10_000, frozenMs: 0 });
+    let starts = 0;
+    const retried: NamespaceSetupError[] = [];
+    await expect(withSetupRetry(async () => {
+        starts += 1;
+        if (starts === 1) { throw stalled; }
+        return "anchor";
+    }, { delayMs: 1, onRetry: (error) => { retried.push(error); } })).resolves.toBe("anchor");
+    expect(starts).toBe(2);
+    expect(retried).toEqual([stalled]);
+
+    // A holder that answered with a failure would answer the same again.
+    let exits = 0;
+    await expect(withSetupRetry(async () => {
+        exits += 1;
+        throw new NamespaceSetupError("exited", "namespace setup exited 32", { steps: 0, awakeMs: 5, frozenMs: 0 });
+    }, { delayMs: 1 })).rejects.toThrow("exited 32");
+    expect(exits).toBe(1);
+
+    // A second stall is the caller's to report: no third attempt.
+    let stalls = 0;
+    await expect(withSetupRetry(async () => { stalls += 1; throw stalled; }, { delayMs: 1 })).rejects.toBe(stalled);
+    expect(stalls).toBe(2);
 });

@@ -9,6 +9,8 @@ export type RoomSize = "targeted";
 export const TEST_PROCESS_BYTES: Readonly<{ fanOutWorker: number; standaloneWorker: number; typecheck: number; ceiling: number }>;
 export const STALL_PERCENT: number;
 export const STALL_SUSTAINED_PERCENT: number;
+export const IO_STALL_PERCENT: number;
+export const IO_STALL_SUSTAINED_PERCENT: number;
 export const SWAP_FULL_SHARE: number;
 export const RESERVATION_MS: number;
 export const ROOM_SOCKET: string;
@@ -30,6 +32,9 @@ export interface MemoryReading {
     readonly stallPercent: number;
     // Memory PSI `full avg60`, in percent, from the same file; 0 when healthy or unreported.
     readonly stallSustainedPercent?: number | undefined;
+    // IO PSI `full avg10` and `avg60`, in percent: the cgroup's, else the machine's; 0 when healthy or unreported.
+    readonly ioStallPercent?: number | undefined;
+    readonly ioStallSustainedPercent?: number | undefined;
     // memory.events `oom_kill`, cumulative; undefined without a cgroup.
     readonly oomKills: number | undefined;
 }

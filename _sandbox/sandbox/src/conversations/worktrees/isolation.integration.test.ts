@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
@@ -18,8 +18,14 @@ import {
     hiddenIn,
     inWorktree,
     type IsolationPlan,
+    fstabOf,
     isolationScript,
     MAIN_MOUNT,
+    type MountEntry,
+    type MountFacts,
+    mountPointsOf,
+    mountTable,
+    prepareMountView,
     mirroredDirs,
     nsenterArgv,
     nsenterPrefix,
@@ -53,49 +59,53 @@ const isolation = createTurnIsolation({
     logger: unstubbed<Logger>("logger", { warn: () => {} }),
 });
 
-test("the namespace is made private before anything is mounted", () => {
-    const lines = isolationScript(plan).split("\n");
+const FACTS: MountFacts = { shelf: false, store: false, volatile: true };
+const FSTAB = `${HISTORY_ROOT}/overlays/abc/.mounts/t.fstab`;
+const targetsOf = (table: readonly MountEntry[]): string[] => table.map((entry) => entry.target);
+
+test("the namespace is made private before anything is mounted, and then mounted by one mount -a", () => {
+    const lines = isolationScript(FSTAB).split("\n");
     expect(lines[0]).toBe("set -e");
-    expect(lines[1]).toBe("mount --make-rprivate /");
     // Otherwise an 'isolated' turn would rewrite the daemon's own /work.
-    expect(lines.findIndex((line) => line.startsWith("mount --bind"))).toBeGreaterThan(1);
+    expect(lines[1]).toBe("mount --make-rprivate /");
+    // One process for every mount, reporting each as it goes: the progress the holder's readiness reads.
+    expect(lines[2]).toBe(`mount -a --fstab ${shellQuote(FSTAB)} -v`);
+    expect(lines.filter((line) => line.startsWith("mount ") || line.startsWith("mkdir "))).toHaveLength(2);
 });
 
 test("the main root is bound aside before the worktree shadows it", () => {
-    const script = isolationScript(plan);
-    const aside = script.indexOf(`mount --bind ${shellQuote(WORKSPACE_ROOT)} ${shellQuote(MAIN_MOUNT)}`);
-    const shadow = script.indexOf(`mount --bind ${shellQuote(`${HISTORY_ROOT}/worktrees/abc`)} ${shellQuote(WORKSPACE_ROOT)}`);
-    expect(aside).toBeGreaterThan(-1);
-    expect(shadow).toBeGreaterThan(aside);
+    const table = mountTable(plan, FACTS);
+    expect(table[0]).toEqual({ source: WORKSPACE_ROOT, target: MAIN_MOUNT, type: "none", options: "bind" });
+    expect(table[1]).toEqual({ source: `${HISTORY_ROOT}/worktrees/abc`, target: WORKSPACE_ROOT, type: "none", options: "bind" });
 });
 
 test("the main tree's package store is bound back in, only where one exists, so installs share one cache", () => {
-    const script = isolationScript(plan);
-    expect(script).toContain(
-        `if [ -d ${shellQuote(`${MAIN_MOUNT}/.pnpm-store`)} ]; then mkdir -p ${shellQuote(`${WORKSPACE_ROOT}/.pnpm-store`)}; mount --bind ${shellQuote(`${MAIN_MOUNT}/.pnpm-store`)} ${shellQuote(`${WORKSPACE_ROOT}/.pnpm-store`)}; fi`,
-    );
+    const store = { source: `${MAIN_MOUNT}/.pnpm-store`, target: `${WORKSPACE_ROOT}/.pnpm-store`, type: "none", options: "bind" } satisfies MountEntry;
+    expect(mountTable(plan, FACTS)).not.toContainEqual(store);
+    const table = mountTable(plan, { ...FACTS, store: true });
+    expect(table).toContainEqual(store);
     // Bound before the overlays, which read from the same aside mount.
-    expect(script.indexOf(".pnpm-store")).toBeLessThan(script.indexOf("mount -t overlay"));
+    expect(targetsOf(table).indexOf(store.target)).toBeLessThan(table.findIndex((entry) => entry.type === "overlay"));
+    expect(mountPointsOf(plan, { shelf: false, store: true })).toContain(`${HISTORY_ROOT}/worktrees/abc/.pnpm-store`);
+    expect(mountPointsOf(plan, { shelf: false, store: false })).not.toContain(`${HISTORY_ROOT}/worktrees/abc/.pnpm-store`);
 });
 
 test("shared state is re-bound from the aside mount, not from the shadowed path", () => {
-    const script = isolationScript(plan);
+    const table = mountTable(plan, FACTS);
     // From /work this would silently mount the worktree's empty copy; a bind, not overlay, reaches the daemon.
     const shared = SHARED_STATE_PATHS.map((path) => path.replace(/\/$/, ""));
     expect(shared).toContain(".intentic/records");
     expect(shared).toContain(".intentic/config/docs");
+    const points = mountPointsOf(plan, FACTS);
     for (const rel of shared) {
-        expect(script).toContain(`mount --bind ${shellQuote(`${MAIN_MOUNT}/${rel}`)} ${shellQuote(`/work/${rel}`)}`);
-        // Both sides may not exist yet; `set -e` needs them created first, not just mounted.
-        expect(script).toContain(`mkdir -p ${shellQuote(`${MAIN_MOUNT}/${rel}`)} ${shellQuote(`/work/${rel}`)}`);
+        expect(table).toContainEqual({ source: `${MAIN_MOUNT}/${rel}`, target: `${WORKSPACE_ROOT}/${rel}`, type: "none", options: "bind" });
+        // Both sides may not exist yet: the daemon makes them, the main tree's and the worktree's, before the holder starts.
+        expect(points).toContain(`${WORKSPACE_ROOT}/${rel}`);
+        expect(points).toContain(`${HISTORY_ROOT}/worktrees/abc/${rel}`);
     }
     // The tracked slice is the worktree's own; binding over it would put the owner's config outside `land`.
-    const targets = script
-        .split("\n")
-        .filter((line) => line.startsWith("mount --bind "))
-        .map((line) => line.split(" ").at(-1));
-    expect(targets).not.toContain(shellQuote("/work/.intentic"));
-    expect(targets).not.toContain(shellQuote("/work/.intentic/config"));
+    expect(targetsOf(table)).not.toContain(`${WORKSPACE_ROOT}/.intentic`);
+    expect(targetsOf(table)).not.toContain(`${WORKSPACE_ROOT}/.intentic/config`);
 });
 
 // A fenced turn runs in a sandbox (turn-sandbox.ts) rather than this script, so the script itself has no fenced
@@ -164,49 +174,60 @@ test("a fenced checkout gets build output only inside its fence, and dependencie
 });
 
 test("the reference shelf comes back into the worktree, read-only, and only when the workspace has one", () => {
-    const script = isolationScript(plan);
-    // Without this, a turn comparing against a ref finds no /work/refs at all.
-    expect(script).toContain(`if [ -d ${shellQuote(`${MAIN_MOUNT}/refs`)} ]; then`);
-    expect(script).toContain(`mount --bind ${shellQuote(`${MAIN_MOUNT}/refs`)} ${shellQuote("/work/refs")}`);
-    // `ro` is ignored on the bind itself; it only takes on the remount.
-    expect(script).toContain(`mount -o remount,bind,ro ${shellQuote("/work/refs")}`);
-    // Guarded: most workspaces have no shelf, and `set -e` would kill the namespace over its absence.
-    expect(script).toContain(`fi`);
+    const shelf = { source: `${MAIN_MOUNT}/refs`, target: `${WORKSPACE_ROOT}/refs`, type: "none", options: "bind,ro" } satisfies MountEntry;
+    // Without this, a turn comparing against a ref finds no /work/refs at all; libmount turns `bind,ro` into the bind
+    // and the read-only remount the bind alone ignores.
+    expect(mountTable(plan, { ...FACTS, shelf: true })).toContainEqual(shelf);
+    // Most workspaces have no shelf, and mounting one that is not there would fail the whole setup.
+    expect(mountTable(plan, FACTS)).not.toContainEqual(shelf);
+    // A mirror on the shelf is mounted over the main checkout's copy, which exists: nothing is made in the worktree.
+    const withShelfMirror = { ...plan, mirrors: [...plan.mirrors, "refs/sdk/node_modules"] };
+    expect(mountPointsOf(withShelfMirror, { shelf: true, store: false })).not.toContain(`${HISTORY_ROOT}/worktrees/abc/refs/sdk/node_modules`);
+    expect(mountPointsOf(withShelfMirror, { shelf: true, store: false })).toContain(`${HISTORY_ROOT}/worktrees/abc/_apps/web/node_modules`);
 });
 
-test("a mirrored tree is an overlay over the main checkout, never a writable bind onto it", () => {
-    const script = isolationScript(plan);
+test("a mirrored tree is a volatile overlay over the main checkout, never a writable bind onto it", () => {
+    const table = mountTable(plan, FACTS);
     // pnpm hardlinks sources into node_modules; a writable bind would let a write rewrite the main checkout.
-    expect(script).toContain(
-        `mount -t overlay intentic-modules -o ${shellQuote(`lowerdir=${MAIN_MOUNT}/node_modules,upperdir=/history/overlays/abc/node_modules/upper,workdir=/history/overlays/abc/node_modules/work`)} ${shellQuote("/work/node_modules")}`,
-    );
+    expect(table).toContainEqual({
+        source: "intentic-modules",
+        target: `${WORKSPACE_ROOT}/node_modules`,
+        type: "overlay",
+        options: `lowerdir=${MAIN_MOUNT}/node_modules,upperdir=/history/overlays/abc/node_modules/upper,workdir=/history/overlays/abc/node_modules/work,volatile`,
+    });
     // One overlay layer per package path; a nested tree must not share or nest inside the root's layer.
-    expect(script).toContain(
-        `mount -t overlay intentic-modules -o ${shellQuote(`lowerdir=${MAIN_MOUNT}/_apps/web/node_modules,upperdir=/history/overlays/abc/_apps%2Fweb%2Fnode_modules/upper,workdir=/history/overlays/abc/_apps%2Fweb%2Fnode_modules/work`)} ${shellQuote("/work/_apps/web/node_modules")}`,
-    );
-    // Both layer dirs must exist before the mount that names them.
-    expect(script).toContain(
-        `mkdir -p ${shellQuote("/work/node_modules")} ${shellQuote("/history/overlays/abc/node_modules/upper")} ${shellQuote("/history/overlays/abc/node_modules/work")}`,
-    );
+    expect(table).toContainEqual({
+        source: "intentic-modules",
+        target: `${WORKSPACE_ROOT}/_apps/web/node_modules`,
+        type: "overlay",
+        options: `lowerdir=${MAIN_MOUNT}/_apps/web/node_modules,upperdir=/history/overlays/abc/_apps%2Fweb%2Fnode_modules/upper,workdir=/history/overlays/abc/_apps%2Fweb%2Fnode_modules/work,volatile`,
+    });
     // No leftover bind: a single one would reopen the whole hole.
-    expect(script).not.toContain(`mount --bind ${shellQuote(`${MAIN_MOUNT}/node_modules`)}`);
+    expect(table.filter((entry) => entry.source === `${MAIN_MOUNT}/node_modules`)).toEqual([]);
     // Build output uses the same mechanism, or cross-package imports fail to resolve at collection.
-    expect(script).toContain(
-        `mount -t overlay intentic-modules -o ${shellQuote(`lowerdir=${MAIN_MOUNT}/_apps/web/dist,upperdir=/history/overlays/abc/_apps%2Fweb%2Fdist/upper,workdir=/history/overlays/abc/_apps%2Fweb%2Fdist/work`)} ${shellQuote("/work/_apps/web/dist")}`,
-    );
+    expect(targetsOf(table)).toContain(`${WORKSPACE_ROOT}/_apps/web/dist`);
+    // A kernel without volatile overlays mounts them as before.
+    expect(mountTable(plan, { ...FACTS, volatile: false }).filter((entry) => entry.options.endsWith(",volatile"))).toEqual([]);
+    // The mount points are the worktree's own dirs, made before the holder starts.
+    expect(mountPointsOf(plan, FACTS)).toContain(`${HISTORY_ROOT}/worktrees/abc/node_modules`);
 });
 
 test("a path that would corrupt the overlay option string is refused rather than mounted wrong", () => {
     // The kernel splits overlay options on `,`/`:`; either character in a path would mount the wrong thing silently.
-    expect(() => isolationScript({ ...plan, overlays: "/history/overlays/a,b" })).toThrow(/cannot contain/);
+    expect(() => mountTable({ ...plan, overlays: "/history/overlays/a,b" }, FACTS)).toThrow(/cannot contain/);
+});
+
+test("the mount table spells whitespace and backslashes the way fstab reads them back", () => {
+    const fstab = fstabOf([{ source: "/a b", target: "/c\td\\e", type: "none", options: "bind" }]);
+    expect(fstab).toBe("/a\\040b /c\\011d\\134e none bind 0 0\n");
 });
 
 test("the anchor announces readiness only after the mounts, then becomes the namespace's inhabitant", () => {
-    const lines = isolationScript(plan).split("\n");
-    // Readiness comes after the last mount, so a caller starting on it never finds a half-built namespace.
+    const lines = isolationScript(FSTAB).split("\n");
+    // Readiness comes after the mount, so a caller starting on it never finds a half-built namespace.
     expect(lines.at(-2)).toBe(`echo ${ANCHOR_READY}`);
     expect(lines.at(-1)).toBe("exec sleep infinity");
-    expect(lines.findLastIndex((line) => line.startsWith("mount -t overlay"))).toBeLessThan(lines.length - 2);
+    expect(lines.findIndex((line) => line.startsWith("mount -a"))).toBeLessThan(lines.length - 2);
     // `exec`, so the sleep is the pid nsenter targets, not a shell waiting on it under a different one.
     expect(lines.at(-1)?.startsWith("exec ")).toBe(true);
 });
@@ -444,3 +465,59 @@ test.skipIf(!overlay.runs)(overlay.title("emptying a mirror root keeps the turn'
     // A readdir failure, not data loss: the file still opens by name, which is why TS6307 was the symptom.
     expect(result.stdout).toContain("stat: turn");
 });
+
+test.skipIf(!overlay.runs)(
+    overlay.title("a prepared view mounts in one pass: reads come from main, writes land in the layer, a volatile layer mounts again within its boot"),
+    async () => {
+        const scratch = mkdtempSync(join(HISTORY_ROOT, ".mount-view-"));
+        tempDirs.push(scratch);
+        const main = join(scratch, "main");
+        const worktree = join(scratch, "wt");
+        const overlays = join(scratch, "overlays");
+        mkdirSync(join(main, "node_modules", "pkg"), { recursive: true });
+        writeFileSync(join(main, "node_modules", "pkg", "index.js"), "from-main");
+        mkdirSync(join(main, "refs", "sdk"), { recursive: true });
+        mkdirSync(worktree, { recursive: true });
+        const scratchPlan: IsolationPlan = { worktree, root: main, mirrors: ["node_modules"], overlays, fence: undefined };
+        const mounted = async () => {
+            const view = await prepareMountView(scratchPlan);
+            const trailer = [
+                `echo ${ANCHOR_READY}`,
+                `echo "read: $(cat ${shellQuote(`${main}/node_modules/pkg/index.js`)})"`,
+                `echo "seen: $(ls ${shellQuote(`${main}/node_modules`)} | tr '\\n' ' ')"`,
+                `printf turn > ${shellQuote(`${main}/node_modules/turn.js`)}`,
+                `touch ${shellQuote(`${main}/refs/sdk/x`)} 2>/dev/null && echo "shelf: writable" || echo "shelf: read-only"`,
+            ].join("\n");
+            try {
+                return spawnSync("unshare", ["--mount", "--propagation", "private", "sh", "-c", isolationScript(view.fstab, trailer)], { encoding: "utf8", timeout: 30_000 });
+            } finally {
+                await view.release();
+            }
+        };
+        const first = await mounted();
+        expect(first.stderr).toBe("");
+        expect(first.status).toBe(0);
+        const lines = first.stdout.split("\n");
+        // `mount -v` reports each mount before readiness: the progress the holder's deadline counts.
+        const ready = lines.indexOf(ANCHOR_READY);
+        expect(lines.slice(0, ready).filter((line) => line.endsWith("successfully mounted")).length).toBeGreaterThan(3);
+        expect(first.stdout).toContain("read: from-main");
+        expect(first.stdout).toContain("shelf: read-only");
+        // The turn's write is the layer's, never the main checkout's.
+        expect(existsSync(join(main, "node_modules", "turn.js"))).toBe(false);
+        expect(existsSync(join(overlays, "node_modules", "upper", "turn.js"))).toBe(true);
+        // The table is gone once the holder has read it.
+        expect(existsSync(join(overlays, ".mounts")) ? readdirSync(join(overlays, ".mounts")) : []).toEqual([]);
+
+        // Mounted again in the same boot: the kernel's volatile marker is cleared and the layer kept.
+        const again = await mounted();
+        expect(again.status).toBe(0);
+        expect(again.stdout).toContain("turn.js");
+
+        // A layer an earlier boot last mounted volatile may hold writes that never reached the disk: it starts empty.
+        writeFileSync(join(overlays, "node_modules", "volatile-boot"), "an-earlier-boot\n");
+        const rebooted = await mounted();
+        expect(rebooted.status).toBe(0);
+        expect(listing(rebooted.stdout, "seen")).toEqual(["pkg"]);
+    },
+);

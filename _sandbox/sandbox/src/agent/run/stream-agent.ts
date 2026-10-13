@@ -24,6 +24,8 @@ import type { Services } from "../../composition.js";
 import { REPO_SYNC_NOTE_TITLE, type RepoSync, syncAdvisory, syncWorkspaceRepos } from "../../workspace/layout/sync-repos.js";
 import { resolveExistingWithin, resolveWithin } from "../../workspace/files/workspace-files-paths.js";
 import { startAnchor, type TurnPlacement } from "../../conversations/worktrees/isolation.js";
+import { NamespaceSetupError, withSetupRetry } from "../../workload/namespace-holder.js";
+import { retryNote, type SetupRefusal, setupRefusalOf } from "./placement/setup-refusal.js";
 import { startDomainAnchor } from "../../conversations/worktrees/domain-anchor.js";
 import { authRootOf } from "../../state-paths.js";
 import { type PersistedAgent, worktreeOf } from "../../conversations/registry/agents-store.js";
@@ -474,14 +476,18 @@ const domainIsolationOf = async (
         };
     }
     const plan = await services.turnIsolation.planFor(localCwd, undefined);
-    const anchor = await startDomainAnchor({
-        plan,
-        historyRoot: services.config.historyRoot,
-        authRoot: authRootOf(services.config),
-        conversationId: input.conversationId,
-        sshSocket,
-        logger: services.logger,
-    });
+    const anchor = await withSetupRetry(
+        () =>
+            startDomainAnchor({
+                plan,
+                historyRoot: services.config.historyRoot,
+                authRoot: authRootOf(services.config),
+                conversationId: input.conversationId,
+                sshSocket,
+                logger: services.logger,
+            }),
+        { onRetry: retryNote(services, input) },
+    );
     return { plan, anchor };
 };
 
@@ -503,7 +509,7 @@ const isolationOf = async (
             return { refused };
         }
         const plan = await services.turnIsolation.planFor(localCwd, worktree.fence);
-        return { plan, anchor: await startAnchor(plan) };
+        return { plan, anchor: await startAnchor(plan, { onRetry: retryNote(services, input) }) };
     }
     if (worktree === undefined || !entersNamespace(input)) {
         return undefined;
@@ -512,7 +518,7 @@ const isolationOf = async (
     if (!(await services.turnIsolation.available())) {
         return { plan };
     }
-    return { plan, anchor: await startAnchor(plan) };
+    return { plan, anchor: await startAnchor(plan, { onRetry: retryNote(services, input) }) };
 };
 
 // What a conversation turn's gates ask of its actor as they go: whether a person has steered it, and whether a card
@@ -603,6 +609,19 @@ interface Preflight {
 const carriedOffOf = (input: RoutedTurn, held: HeldTurn | undefined): boolean =>
     held !== undefined && (input.resume === "carried" || input.resume === "trimmed") && held.input.account !== input.account;
 
+// A holder that did not come up in time even on its second try is the sandbox too loaded to set the turn up: refused
+// at the door, nothing having run (setup-refusal.ts). Any other placement failure fails the turn as before.
+const placementOrRefusal = async (...args: Parameters<typeof isolationOf>): Promise<Awaited<ReturnType<typeof isolationOf>> | SetupRefusal> => {
+    try {
+        return await isolationOf(...args);
+    } catch (error) {
+        if (!(error instanceof NamespaceSetupError) || !error.transient) {
+            throw error;
+        }
+        return setupRefusalOf(args[0], args[1], error);
+    }
+};
+
 const preflight = async (
     services: Services,
     input: RoutedTurn,
@@ -611,7 +630,7 @@ const preflight = async (
     worktree: WorktreeRun | undefined,
     steering: SteeringQueue | undefined,
     clock: ReturnType<typeof preflightClock>,
-): Promise<Preflight | { readonly refused: string }> => {
+): Promise<Preflight | { readonly refused: string } | SetupRefusal> => {
     const held = supersedeHeld(services, input.conversationId);
     // Shared with the boot-time condition-watch restore, so a drifted second copy can't quietly stop working.
     const cliEnv = await turnCliEnv(services, input.conversationId);
@@ -622,7 +641,7 @@ const preflight = async (
     }
     // Two paths: `localCwd` is the daemon's tree; `effectiveCwd` is the root as the agent sees it.
     const localCwd = worktree?.cwd ?? services.workspace.root;
-    const placed = await isolationOf(services, input, executionScope.mode, worktree, localCwd, cliEnv);
+    const placed = await placementOrRefusal(services, input, executionScope.mode, worktree, localCwd, cliEnv);
     if (placed !== undefined && "refused" in placed) {
         return placed;
     }
@@ -798,7 +817,7 @@ async function* prepareTurn(
         yield { kind: "agent_status", key: HANDOFF_STATUS, text: null };
     }
     if ("refused" in ready) {
-        yield { kind: "error", message: ready.refused };
+        yield "code" in ready ? refusalFrame({ code: ready.code, message: ready.refused }, input.unattended === true) : { kind: "error", message: ready.refused };
         yield { kind: "done" };
         return undefined;
     }

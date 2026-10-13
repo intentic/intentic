@@ -20,6 +20,8 @@ const TURNED_AWAY: ReadonlySet<string> = new Set([
     // The privacy shield found personal data in instructions a runtime loads itself, where it could not mask them.
     "privacy-instructions",
     "sandbox-memory-low",
+    // The conversation's own view of the workspace could not be set up in time: nothing was started in it.
+    "workspace-setup",
     "trial-unavailable",
     "trial-model-unavailable",
     "trial-exhausted",

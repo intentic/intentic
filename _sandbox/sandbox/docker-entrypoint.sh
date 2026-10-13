@@ -191,18 +191,30 @@ cgroup_root=/sys/fs/cgroup
 if [ -w "$cgroup_root/cgroup.subtree_control" ] && grep -qw memory "$cgroup_root/cgroup.controllers" 2>/dev/null; then
     mkdir -p "$cgroup_root/daemon" "$cgroup_root/workload" 2>/dev/null || true
     # A cgroup whose children get controllers may hold no process itself, so every process here moves to a leaf first.
-    while read -r pid; do
-        cgroup_set "$cgroup_root/workload/cgroup.procs" "$pid"
-    done < "$cgroup_root/cgroup.procs"
-    for controller in cpu io memory; do
-        if grep -qw "$controller" "$cgroup_root/cgroup.controllers"; then
-            cgroup_set "$cgroup_root/cgroup.subtree_control" "+$controller"
-        fi
+    # Tried a few times: a process forked between the read and the write (sshd answering a local-sync connection as the
+    # container starts) is left in the root, and the kernel refuses every controller with EBUSY while one remains. A
+    # sandbox ran a day with its daemon's leaf at the defaults that way (2026-10-13), swapping the daemon's heap.
+    for attempt in 1 2 3; do
+        while read -r pid; do
+            cgroup_set "$cgroup_root/workload/cgroup.procs" "$pid"
+        done < "$cgroup_root/cgroup.procs"
+        for controller in cpu io memory; do
+            if grep -qw "$controller" "$cgroup_root/cgroup.controllers"; then
+                cgroup_set "$cgroup_root/cgroup.subtree_control" "+$controller"
+            fi
+        done
+        grep -qw memory "$cgroup_root/cgroup.subtree_control" 2>/dev/null && break
+        sleep 0.2
     done
     cgroup_set "$cgroup_root/daemon/cgroup.procs" $$
     cgroup_set "$cgroup_root/daemon/memory.swap.max" 0
     cgroup_set "$cgroup_root/daemon/cpu.weight" 1000
     cgroup_set "$cgroup_root/daemon/io.weight" "default 1000"
+    # The one knob worth a word when it did not take, unlike the tuning above: without it a short box pages the daemon's
+    # heap out, and its event loop freezes while it comes back. The daemon checks again once it is up (daemon-cgroup.ts).
+    if [ "$(cat "$cgroup_root/daemon/memory.swap.max" 2>/dev/null)" != "0" ]; then
+        echo "intentic: the daemon's cgroup is not yet kept out of swap; the daemon tries again once it starts" >&2
+    fi
 fi
 
 # UV_THREADPOOL_SIZE: every fs, dns and zlib call the daemon makes shares libuv's pool, four threads by default, so a

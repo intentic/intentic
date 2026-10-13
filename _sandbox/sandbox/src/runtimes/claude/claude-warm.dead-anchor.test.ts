@@ -34,7 +34,7 @@ const fakeHolder = (pid: number) => {
 test("root mode: an anchor that died mid-turn leaves nothing to keep, rather than a refusal thrown where the turn is settled", async () => {
     expect(capabilitiesOf("claude", "claude-code").warm).toBe(true);
     const holder = fakeHolder(63_901);
-    const anchor = await startMountAnchor(plan, holder.start);
+    const anchor = await startMountAnchor(plan, { start: holder.start, prepare: async () => ({ fstab: "/overlays/.mounts/test.fstab", release: async () => {} }) });
     const service = createAgentExecutionService(async () => ({ agentDomain: "root" }));
     const admission = await service.admit();
     const lease = service.acquire(admission, { localCwd: plan.worktree, isolation: { plan, anchor } });

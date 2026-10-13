@@ -88,3 +88,22 @@ describe(`entrypoint daemon cgroup`, () => {
         expect(read(join(root, "cgroup.subtree_control"))).toBe("");
     });
 });
+
+/* A root that keeps refusing the memory controller (a process the move missed holds it, EBUSY): tried again, and said. */
+describe(`entrypoint daemon cgroup, refused`, () => {
+    const helper = entrypoint.match(/^cgroup_set\(\) .*$/m)?.[0] ?? "";
+    const setup = `${helper}\n${entrypoint.slice(entrypoint.indexOf("cgroup_root=/sys/fs/cgroup"), entrypoint.indexOf("# UV_THREADPOOL_SIZE"))}`;
+
+    it(`tries the controllers again, then says the daemon is not yet kept out of swap`, () => {
+        const root = mkdtempSync(join(tmpdir(), "entrypoint-cgroup-"));
+        writeFileSync(join(root, "cgroup.controllers"), "cpu io memory\n");
+        writeFileSync(join(root, "cgroup.procs"), "1\n");
+        // A directory where the control file should be: every write to it fails, as EBUSY would.
+        mkdirSync(join(root, "cgroup.subtree_control"));
+        const script = setup.replaceAll("/sys/fs/cgroup", root).replaceAll(`[ -w "${root}/cgroup.subtree_control" ]`, "true");
+        mkdirSync(join(root, "daemon", "memory.swap.max"), { recursive: true });
+        const run = spawnSync("sh", ["-ec", script], { encoding: "utf8", env: { PATH: process.env["PATH"] ?? "" } });
+        expect(run.status).toBe(0);
+        expect(run.stderr).toBe("intentic: the daemon's cgroup is not yet kept out of swap; the daemon tries again once it starts\n");
+    });
+});

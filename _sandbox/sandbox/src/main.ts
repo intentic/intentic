@@ -44,6 +44,7 @@ import { checks as containerChecks, owner as containerOwner } from "./system/inv
 import { readCgroup } from "./system/resources/cgroup.js";
 import { startBootProfile } from "./system/resources/loop/boot-profile.js";
 import { startLoopWatchdog } from "./system/resources/loop/loop-watchdog.js";
+import { startDaemonCgroupKeeper } from "./system/resources/daemon-cgroup.js";
 import { answers } from "./ports/port-probe.js";
 import { type RunnerModeEnv, runnerModeRequested, startRunnerMode } from "./runners/runner-mode.js";
 import { appPanelKey } from "./workspace/layout/app-previews.js";
@@ -127,6 +128,9 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
     // Stall detector: logs the lag and the machine's pressure numbers when the event loop freezes.
     const loopWatchdog = startLoopWatchdog(logger);
     shutdown.push(() => loopWatchdog.stop());
+    // What most of those stalls were: the daemon's heap paged back in from swap, which its own cgroup leaf is meant to
+    // forbid. Kept as the entrypoint meant it, and said when it was not (daemon-cgroup.ts).
+    shutdown.push(startDaemonCgroupKeeper(logger).stop);
     // Names the function behind a boot stall, which the watchdog can only time: kept under logs/ when one happened.
     // Started ahead of the state convergence below, so an update's first boot is profiled too.
     const bootProfile = startBootProfile(logger, logsRoot(config.historyRoot));

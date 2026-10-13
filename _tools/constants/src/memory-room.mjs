@@ -23,6 +23,12 @@
 //   stall  memory PSI `full`: avg10, the share of the last ten seconds in which everything waited on memory, and avg60,
 //          the last minute's. A sandbox paging hard flickers around any avg10 threshold (19, 11, 15, 4, 18% in five
 //          minutes of the reading above, never 20), so a lower bar on the minute catches what the spikes miss.
+//   disk   io PSI `full` the same way, for work nobody is waiting on only: swap paged in from disk and a build's writes
+//          stall everything on the disk, the daemon's own event loop included, before memory PSI says much. Measured
+//          2026-10-10..13: of 29 daemon freezes of 5 s or more, 20 had disk `full` avg10 at 30% or past it, 18 had
+//          memory's at 20%, and the one that failed a turn's setup on 2026-10-13 had disk 42% and memory 7%. Disk
+//          reached 30% in 1.5% of the minute samples of those days, so holding background work then costs little. A
+//          person's turn is never refused for it: a busy disk slows a turn, it does not kill one.
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { request } from "node:http";
@@ -74,6 +80,9 @@ export const PERSON_RESERVE_BYTES = COST_BYTES.agentRuntime;
 export const STALL_PERCENT = 20;
 // Percent of full avg60 at which it does: lower than STALL_PERCENT, since a minute's average has smoothed the spikes.
 export const STALL_SUSTAINED_PERCENT = 10;
+// Percent of io `full` avg10, and of avg60, at which work nobody is waiting on waits for the disk (the `disk` clause).
+export const IO_STALL_PERCENT = 30;
+export const IO_STALL_SUSTAINED_PERCENT = 20;
 // The share of its swap limit past which swap counts as full, and the swapped pages count as used.
 export const SWAP_FULL_SHARE = 0.9;
 export const RESERVATION_MS = 90_000;
@@ -91,8 +100,10 @@ export const READING_FILES = Object.freeze([
     `${CGROUP}/memory.swap.max`,
     `${CGROUP}/memory.pressure`,
     `${CGROUP}/memory.events`,
+    `${CGROUP}/io.pressure`,
     "/proc/meminfo",
     "/proc/pressure/memory",
+    "/proc/pressure/io",
 ]);
 
 const numeric = (text) => {
@@ -119,6 +130,13 @@ const fullAvg = (text, window) => {
 
 const kib = (fields, key) => (fields[key] === undefined ? undefined : fields[key] * 1024);
 
+// One resource's PSI `full` averages: the cgroup's where it keeps one, else the machine's, avg60 from the same file avg10
+// came from; 0 where nothing reports it.
+const stallOf = (read, resource) => {
+    const text = [read(`${CGROUP}/${resource}.pressure`), read(`/proc/pressure/${resource}`)].find((file) => fullAvg(file, "avg10") !== undefined);
+    return { recent: fullAvg(text, "avg10") ?? 0, sustained: fullAvg(text, "avg60") ?? 0 };
+};
+
 /** The reading, from a reader that answers each of READING_FILES with its text or undefined. */
 export const readingFrom = (read) => {
     const meminfo = keyed(read("/proc/meminfo"));
@@ -144,15 +162,18 @@ export const readingFrom = (read) => {
         swapLimit = kib(meminfo, "SwapTotal") ?? Number.POSITIVE_INFINITY;
     }
     // The cgroup's pressure where it keeps one, else the machine's; avg60 from the same file avg10 came from.
-    const pressure = [read(`${CGROUP}/memory.pressure`), read("/proc/pressure/memory")].find((text) => fullAvg(text, "avg10") !== undefined);
+    const memory = stallOf(read, "memory");
+    const disk = stallOf(read, "io");
     return {
         limitBytes: Number.isFinite(bound) ? bound : undefined,
         usedBytes,
         swapBytes,
         swapLimitBytes: Number.isFinite(swapLimit) ? swapLimit : undefined,
         availableBytes: kib(meminfo, "MemAvailable"),
-        stallPercent: fullAvg(pressure, "avg10") ?? 0,
-        stallSustainedPercent: fullAvg(pressure, "avg60") ?? 0,
+        stallPercent: memory.recent,
+        stallSustainedPercent: memory.sustained,
+        ioStallPercent: disk.recent,
+        ioStallSustainedPercent: disk.sustained,
         oomKills: keyed(read(`${CGROUP}/memory.events`)).oom_kill,
     };
 };
@@ -215,6 +236,10 @@ export const judge = (reading, { workload, attended, reservedBytes = 0, size }) 
     if (stallSustainedPercent >= STALL_SUSTAINED_PERCENT) {
         return shortOf(`The sandbox is short of memory: for ${Math.round(stallSustainedPercent)}% of the last minute, everything in it was waiting on memory`);
     }
+    const disk = attended ? undefined : diskStalled(reading);
+    if (disk !== undefined) {
+        return shortOf(disk);
+    }
     if (freeBytes >= need) {
         return { verdict: "run", needBytes: need, freeBytes, reservedBytes };
     }
@@ -233,6 +258,18 @@ export const judge = (reading, { workload, attended, reservedBytes = 0, size }) 
     // Named, or a sandbox reading 3 GiB free would seem to refuse work that needs 2.
     const held = reservedBytes > 0 ? `, and ${gib(reservedBytes)} held for work that just started` : "";
     return shortOf(`Sandbox memory is low: ${used}${held}`, { limitBytes, residentBytes: usedBytes - swapBytes, swapBytes });
+};
+
+// Why work nobody is waiting on should wait for the disk, or undefined while it need not (the `disk` clause).
+const diskStalled = (reading) => {
+    const recent = reading.ioStallPercent ?? 0;
+    const sustained = reading.ioStallSustainedPercent ?? 0;
+    if (recent >= IO_STALL_PERCENT) {
+        return `The sandbox's disk is saturated: for ${Math.round(recent)}% of the last ten seconds, everything in it was waiting on the disk`;
+    }
+    return sustained >= IO_STALL_SUSTAINED_PERCENT
+        ? `The sandbox's disk is saturated: for ${Math.round(sustained)}% of the last minute, everything in it was waiting on the disk`
+        : undefined;
 };
 
 /**

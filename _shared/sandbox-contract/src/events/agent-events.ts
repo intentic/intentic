@@ -320,6 +320,10 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
                 // The sandbox is short of memory, held before anything spawned: a person once per spell, after which
                 // their sends run; background work on every short reading. Transient, no clock.
                 "sandbox-memory-low",
+                // The conversation's own view of the workspace (its mount namespace) did not come up in time, twice,
+                // before anything ran: the sandbox too loaded to set it up. Held like a memory hold, and sent again by
+                // itself once the sandbox has had room for a while (the memory wall's answer).
+                "workspace-setup",
                 // The runtime hit its own iteration ceiling and stopped; the work may be half done, so the user
                 // decides.
                 "turn-cap",

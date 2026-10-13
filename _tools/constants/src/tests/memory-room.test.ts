@@ -48,6 +48,8 @@ test("used is the working set plus swap: current less the inactive file cache, p
         availableBytes: 60 * GIB,
         stallPercent: 0,
         stallSustainedPercent: 0,
+        ioStallPercent: 0,
+        ioStallSustainedPercent: 0,
         oomKills: 2,
     });
     // Free is counted against the resident part: swap leaves the limit's room free.
@@ -70,6 +72,8 @@ test("at a root cgroup the machine's used memory and swap stand in for the cgrou
         availableBytes: 3 * GIB,
         stallPercent: 25.5,
         stallSustainedPercent: 1,
+        ioStallPercent: 0,
+        ioStallSustainedPercent: 0,
         oomKills: undefined,
     });
 });
@@ -81,6 +85,32 @@ test("the stall is PSI `full`, the cgroup's where it keeps one, and 0 where noth
     };
     expect(readingFrom(files(cgroupFull))).toMatchObject({ stallPercent: 12.25, stallSustainedPercent: 7.5 });
     expect(readingFrom(files({}))).toMatchObject({ stallPercent: 0, stallSustainedPercent: 0 });
+});
+
+test("disk stall is io PSI `full`, read like memory's: the cgroup's first, then the machine's", () => {
+    const cgroupDisk = {
+        [`${CG}/io.pressure`]: "some avg10=50.00 avg60=30.00\nfull avg10=41.86 avg60=22.50 avg300=1\n",
+        "/proc/pressure/io": "full avg10=90.00 avg60=90.00\n",
+    };
+    expect(readingFrom(files(cgroupDisk))).toMatchObject({ ioStallPercent: 41.86, ioStallSustainedPercent: 22.5 });
+    expect(readingFrom(files({ "/proc/pressure/io": "full avg10=3.00 avg60=1.00\n" }))).toMatchObject({ ioStallPercent: 3, ioStallSustainedPercent: 1 });
+    expect(readingFrom(files({}))).toMatchObject({ ioStallPercent: 0, ioStallSustainedPercent: 0 });
+});
+
+// The reading of 2026-10-13 11:00, when a turn's setup failed: memory stalled 7%, the disk 42%, and plenty of bytes free.
+test("a saturated disk holds work nobody waits on, and never refuses a person's turn", () => {
+    const reading = { limitBytes: 18 * GIB, usedBytes: 9 * GIB, swapBytes: 0, stallPercent: 7.36, ioStallPercent: 41.86, ioStallSustainedPercent: 12, oomKills: undefined };
+    expect(judge(reading, { workload: "toolchain", attended: false })).toMatchObject({
+        verdict: "wait",
+        diagnosis: "The sandbox's disk is saturated: for 42% of the last ten seconds, everything in it was waiting on the disk",
+    });
+    expect(judge(reading, { workload: "agentRuntime", attended: true })).toMatchObject({ verdict: "run" });
+    // A minute's average catches a disk that flickers under the ten-second bar.
+    expect(judge({ ...reading, ioStallPercent: 25, ioStallSustainedPercent: 21 }, { workload: "toolchain", attended: false })).toMatchObject({
+        verdict: "wait",
+        diagnosis: "The sandbox's disk is saturated: for 21% of the last minute, everything in it was waiting on the disk",
+    });
+    expect(judge({ ...reading, ioStallPercent: 29, ioStallSustainedPercent: 19 }, { workload: "toolchain", attended: false })).toMatchObject({ verdict: "run" });
 });
 
 // The reading of 2026-10-05 22:14: avg10 flickered under 20% for minutes while everything paged.

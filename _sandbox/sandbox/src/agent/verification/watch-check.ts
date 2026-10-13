@@ -1,6 +1,6 @@
 import { access } from "node:fs/promises";
 import { shellQuote } from "@intentic/sandbox-run/quote";
-import { type IsolationPlan, isolationScript, startAnchor, type TurnIsolation } from "../../conversations/worktrees/isolation.js";
+import { type IsolationPlan, isolationScript, type MountView, prepareMountView, startAnchor, type TurnIsolation } from "../../conversations/worktrees/isolation.js";
 import { namespaceTargetOf, nsenterArgv } from "../../workload/namespace-entry.js";
 import { sandboxEnv } from "../../conversations/worktrees/turn-sandbox.js";
 import { redirectCommand } from "../../conversations/worktrees/worktree-redirect.js";
@@ -96,6 +96,21 @@ const namespacedCheck = async (command: string, options: CheckOptions, script: (
     return { exitCode: done.code, output: tailOf(done.stdout.slice(marker + CHECK_READY.length + 1), done.stderr) };
 };
 
+// The mounts the check's namespace needs are made ready on disk first, as a turn's are (prepareMountView).
+const mountedCheck = async (command: string, options: CheckOptions, plan: IsolationPlan): Promise<CheckResult> => {
+    let view: MountView;
+    try {
+        view = await prepareMountView(plan);
+    } catch (error) {
+        return { exitCode: undefined, output: "", broken: `its conversation's view of the workspace could not be prepared: ${error instanceof Error ? error.message : String(error)}` };
+    }
+    try {
+        return await namespacedCheck(command, options, (trailer) => isolationScript(view.fstab, trailer), plan.root);
+    } finally {
+        await view.release();
+    }
+};
+
 // A fenced conversation's check runs where its turns do: in a sandbox of its own (turn-sandbox.ts), built for the one
 // check and released after it. Never run open: a check that cannot have its sandbox is broken, not waiting.
 const sandboxedCheck = async (command: string, options: CheckOptions, plan: IsolationPlan): Promise<CheckResult> => {
@@ -137,7 +152,7 @@ export const watchCheck =
                 : { exitCode: undefined, output: "", broken: "its conversation is limited to some areas, and this sandbox cannot build the isolated environment that needs" };
         }
         if (await isolation.available()) {
-            return namespacedCheck(command, options, (trailer) => isolationScript(plan, trailer), plan.root);
+            return mountedCheck(command, options, plan);
         }
         // Without a namespace the turn's Bash had its paths rewritten, so the check's are too.
         return plainCheck(redirectCommand(command, plan), { ...options, cwd: placement.worktree });

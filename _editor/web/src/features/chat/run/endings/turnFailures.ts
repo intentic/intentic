@@ -39,6 +39,21 @@ export type FailureHost = Pick<Conversation, "session" | "error" | "pickUp"> & {
     readonly turn: Pick<TurnClient, "streaming" | "reattach">;
 };
 
+
+// Nothing ran, and the daemon holds the message in the queue: an unrecognized command until it is reworded, a turn too
+// big for the model (or a model that can only write one-shot jobs, or one the privacy shield cannot cover, or one whose
+// own rules hold personal data) until another is picked or it is let through, low memory until the person says go ahead,
+// a workspace the sandbox was too loaded to set up until it has room again. The privacy strip says why above the
+// composer; the transcript's own row says the rest, so no error line repeats it.
+const HELD_AT_THE_DOOR: ReadonlySet<string> = new Set([
+    `unknown-command`,
+    `context-window-too-small`,
+    `model-helper-only`,
+    `privacy-unshielded`,
+    `privacy-instructions`,
+    `sandbox-memory-low`,
+    `workspace-setup`,
+]);
 export class TurnFailures {
     // The outage this conversation is waiting out; cleared when the next turn starts (resume or user send).
     readonly outageResume = ref<OutageResume | undefined>();
@@ -75,6 +90,9 @@ export class TurnFailures {
         }
         this.promised = comingBack;
         this.failed = true;
+        if (code !== undefined && HELD_AT_THE_DOOR.has(code)) {
+            return;
+        }
         switch (code) {
             case `claude-reauth`:
                 // Credential dead, nothing ran: the daemon holds the message in the queue until the account is back.
@@ -88,17 +106,6 @@ export class TurnFailures {
                 return;
             case `claude-token-refused`:
                 this.applyAuthRefusedError(error);
-                return;
-            // Nothing ran, and the daemon holds the message in the queue: an unrecognized command until it is reworded, a
-            // turn too big for the model (or a model that can only write one-shot jobs, or one the privacy shield cannot
-            // cover, or one whose own rules hold personal data) until another is picked or it is let through, low memory
-            // until the person says go ahead. The privacy strip says why above the composer.
-            case `unknown-command`:
-            case `context-window-too-small`:
-            case `model-helper-only`:
-            case `privacy-unshielded`:
-            case `privacy-instructions`:
-            case `sandbox-memory-low`:
                 return;
             case `session-not-found`:
                 // Session vanished mid-turn: drop the dead id so the next send starts fresh. No error line.

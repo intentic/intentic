@@ -1,5 +1,6 @@
 import { execFile, spawn } from "node:child_process";
-import { lstat, mkdir, readdir, rm } from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
 import { statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { isMissing } from "@intentic/base/errors";
@@ -14,7 +15,15 @@ import { detachedStamp } from "../../seams/workload-stamp.js";
 import { MAIN_MOUNT, PACKAGE_STORE, SHARED_STATE } from "../../workload/worktree-paths.js";
 import { type SandboxLayout, sandboxAvailable, startSandboxAnchor } from "./turn-sandbox.js";
 import { type NamespaceEntryReference, registerMountEntry } from "../../workload/namespace-entry.js";
-import { type NamespaceHolder, namespaceHolderLifetime, namespaceHolderReady } from "../../workload/namespace-holder.js";
+import {
+    type NamespaceHolder,
+    namespaceHolderLifetime,
+    namespaceHolderReady,
+    type NamespaceSetupError,
+    type ReadinessOptions,
+    withSetupRetry,
+} from "../../workload/namespace-holder.js";
+import { opt } from "../../opt.js";
 import type { Readable } from "node:stream";
 import { signalGroup } from "../../workload/process-group.js";
 
@@ -27,7 +36,8 @@ const execFileAsync = promisify(execFile);
 export { MAIN_MOUNT, PACKAGE_STORE } from "../../workload/worktree-paths.js";
 
 // Reference repos cloned only to be read against; workspace content, not repo content, so a worktree needs it mounted
-// back in or hits ENOENT. Read-only by contract: a bind ignores `ro`, so the remount is a second step.
+// back in or hits ENOENT. Read-only by contract: a bind ignores `ro`, so the table's `bind,ro` is libmount's bind and then
+// its read-only remount (mountTable).
 const SHELF = "refs";
 
 // Deps and build output a checkout can't carry (MIRRORED_DIRS); caches excluded, a stale tsbuildinfo would falsely
@@ -91,49 +101,189 @@ const overlayOptions = (lower: string, upper: string, work: string): string => {
 // Wrapping the agent directly fails: its Bash tool forks tmux panes off the daemon's long-lived server, keeping the
 // daemon's mounts. One anchor builds the namespace once; the agent and every pane join it by pid.
 
-// Ordering is the whole argument: rprivate first, the root bound aside before the worktree shadows it, then shared
-// state and mirrors from MAIN_MOUNT. Every step is fatal (`set -e`); a half-built namespace is worse than none.
-export const isolationScript = (plan: IsolationPlan, trailer: string = ANCHOR_TRAILER): string => {
-    const lines = [
-        `set -e`,
-        `mount --make-rprivate /`,
-        `mkdir -p ${shellQuote(MAIN_MOUNT)}`,
-        `mount --bind ${shellQuote(plan.root)} ${shellQuote(MAIN_MOUNT)}`,
-        `mount --bind ${shellQuote(plan.worktree)} ${shellQuote(plan.root)}`,
-    ];
+// One line of the namespace's mount table, as fstab(5) spells it.
+export interface MountEntry {
+    readonly source: string;
+    readonly target: string;
+    readonly type: "none" | "overlay";
+    readonly options: string;
+}
+
+// What the plan alone does not say: whether the main checkout has a reference shelf and a package store to bring back,
+// and whether this kernel takes volatile overlays (overlayVolatileAvailable).
+export interface MountFacts {
+    readonly shelf: boolean;
+    readonly store: boolean;
+    readonly volatile: boolean;
+}
+
+// Where one mirror's overlay layer lives, outside the worktree; the fenced sandbox shares the convention (layerOf).
+const layerDirOf = (plan: Pick<IsolationPlan, "overlays">, rel: string): string => join(plan.overlays, encodeURIComponent(rel));
+
+// The namespace's mounts, in the order they are made. Ordering is the whole argument: the root bound aside before the
+// worktree shadows it, then shared state, the shelf and the package store from MAIN_MOUNT, then the mirrors over the
+// main checkout's copies. Mounted by one `mount -a` (isolationScript); an entry it cannot mount fails the whole setup.
+export const mountTable = (plan: IsolationPlan, facts: MountFacts): MountEntry[] => {
+    const bind = (source: string, target: string, options = "bind"): MountEntry => ({ source, target, type: "none", options });
+    const entries = [bind(plan.root, MAIN_MOUNT), bind(plan.worktree, plan.root)];
     for (const rel of SHARED_STATE) {
-        const source = join(MAIN_MOUNT, rel);
-        const target = join(plan.root, rel);
-        lines.push(`mkdir -p ${shellQuote(source)} ${shellQuote(target)}`, `mount --bind ${shellQuote(source)} ${shellQuote(target)}`);
+        entries.push(bind(join(MAIN_MOUNT, rel), join(plan.root, rel)));
     }
-    // Conditional, not plan-driven: most workspaces have no shelf, and `set -e` must not die over its absence.
-    const shelf = join(plan.root, SHELF);
-    lines.push(
-        `if [ -d ${shellQuote(join(MAIN_MOUNT, SHELF))} ]; then mkdir -p ${shellQuote(shelf)}; mount --bind ${shellQuote(join(MAIN_MOUNT, SHELF))} ${shellQuote(shelf)}; mount -o remount,bind,ro ${shellQuote(shelf)}; fi`,
-    );
-    const packageStore = join(plan.root, PACKAGE_STORE);
-    lines.push(
-        `if [ -d ${shellQuote(join(MAIN_MOUNT, PACKAGE_STORE))} ]; then mkdir -p ${shellQuote(packageStore)}; mount --bind ${shellQuote(join(MAIN_MOUNT, PACKAGE_STORE))} ${shellQuote(packageStore)}; fi`,
-    );
+    // Most workspaces have neither; the table carries them only where the main checkout has them (MountFacts).
+    if (facts.shelf) {
+        // Read-only by contract: libmount makes `bind,ro` the bind and then the read-only remount a bind alone ignores.
+        entries.push(bind(join(MAIN_MOUNT, SHELF), join(plan.root, SHELF), "bind,ro"));
+    }
+    if (facts.store) {
+        entries.push(bind(join(MAIN_MOUNT, PACKAGE_STORE), join(plan.root, PACKAGE_STORE)));
+    }
     for (const rel of plan.mirrors) {
-        const target = join(plan.root, rel);
-        // Upper/work must be siblings on one filesystem; the mirror's path is encoded so nested dirs can't collide.
-        const layer = join(plan.overlays, encodeURIComponent(rel));
-        const upper = join(layer, "upper");
-        const work = join(layer, "work");
-        lines.push(
-            `mkdir -p ${shellQuote(target)} ${shellQuote(upper)} ${shellQuote(work)}`,
-            `mount -t overlay ${OVERLAY_FS_NAME} -o ${shellQuote(overlayOptions(join(MAIN_MOUNT, rel), upper, work))} ${shellQuote(target)}`,
-        );
+        const layer = layerDirOf(plan, rel);
+        const options = overlayOptions(join(MAIN_MOUNT, rel), join(layer, "upper"), join(layer, "work"));
+        entries.push({ source: OVERLAY_FS_NAME, target: join(plan.root, rel), type: "overlay", options: facts.volatile ? `${options},volatile` : options });
     }
-    lines.push(trailer);
-    return lines.join("\n");
+    return entries;
+};
+
+// fstab(5) separates fields by whitespace and reads octal escapes in each, so a path holding a space, tab, newline or
+// backslash is spelled with them.
+const fstabField = (value: string): string => value.replace(/[\\ \t\n]/gu, (char) => `\\${char.charCodeAt(0).toString(8).padStart(3, "0")}`);
+
+export const fstabOf = (entries: readonly MountEntry[]): string =>
+    `${entries.map((entry) => [fstabField(entry.source), fstabField(entry.target), entry.type, fstabField(entry.options), "0", "0"].join(" ")).join("\n")}\n`;
+
+// The directories every mount in the table needs, named where the daemon sees them, so they exist before the holder
+// starts and the holder spends its time mounting rather than spawning a mkdir per mount (the 157 mirrors of 2026-10-13
+// were 314 spawns, each a fork and exec on a box already paging). Inside the namespace, `/work/<rel>` is the worktree's
+// `<rel>` unless a bind from the main checkout lies over it: there the main checkout's copy is the mount point, and it
+// already exists, since the walk found the mirror there.
+export const mountPointsOf = (plan: IsolationPlan, facts: Pick<MountFacts, "shelf" | "store">): string[] => {
+    const fromMain = [...SHARED_STATE, ...(facts.shelf ? [SHELF] : []), ...(facts.store ? [PACKAGE_STORE] : [])];
+    const underMain = (rel: string): boolean => fromMain.some((prefix) => rel === prefix || rel.startsWith(`${prefix}/`));
+    return [
+        MAIN_MOUNT,
+        ...SHARED_STATE.flatMap((rel) => [join(plan.root, rel), join(plan.worktree, rel)]),
+        ...(facts.shelf ? [join(plan.worktree, SHELF)] : []),
+        ...(facts.store ? [join(plan.worktree, PACKAGE_STORE)] : []),
+        ...plan.mirrors.filter((rel) => !underMain(rel)).map((rel) => join(plan.worktree, rel)),
+    ];
 };
 
 // One stdout line to signal readiness, then a no-op process to keep the namespace inhabited; `exec`, so the sleep is
 // the anchor's own pid.
 export const ANCHOR_READY = "isolation-ready";
 const ANCHOR_TRAILER = `echo ${ANCHOR_READY}\nexec sleep infinity`;
+
+// The holder's whole script: the namespace made private before anything is mounted (or an isolated turn would rewrite
+// the daemon's own /work), then the table, which `-v` reports one line per mount as it goes: the progress its readiness
+// reads (namespace-holder.ts). A file, not lines of the script: the script is one argument, which Linux caps at 128 KiB,
+// and a mkdir and a mount per mirror had reached 86 KiB.
+export const isolationScript = (fstab: string, trailer: string = ANCHOR_TRAILER): string =>
+    ["set -e", "mount --make-rprivate /", `mount -a --fstab ${shellQuote(fstab)} -v`, trailer].join("\n");
+
+// The kernel's id for this boot. A layer mounted volatile is trusted again only within the boot that wrote it.
+const BOOT_ID = "/proc/sys/kernel/random/boot_id";
+// Beside a layer's upper and work: the boot it was last mounted volatile in.
+const LAYER_BOOT = "volatile-boot";
+
+const readTrimmed = (path: string): Promise<string | undefined> =>
+    readFile(path, "utf8").then(
+        (text) => text.trim(),
+        // allow(silent-catch): an absent file is the answer here (no boot recorded, or a kernel that names none).
+        () => undefined,
+    );
+
+// Volatile overlays skip every sync to the upper filesystem, the one on unmount included, which otherwise costs a full
+// syncfs of /history per overlay: a turn's 157 of them took 21 s to tear down on a busy disk (2026-10-13, measured),
+// against 30 to 50 ms volatile. The price is that writes still in memory when the machine goes down are lost, so the
+// kernel leaves a marker in the work dir and refuses the layer until it is cleared. Cleared here within the boot that
+// wrote it, which nothing interrupted; a layer last mounted volatile in an earlier boot is thrown away and starts
+// empty, since what it holds (installs and build output over the main checkout's) is rebuilt, and half-written it would
+// be wrong without saying so.
+export const prepareLayer = async (layer: string, boot: string | undefined): Promise<"kept" | "discarded"> => {
+    const recorded = await readTrimmed(join(layer, LAYER_BOOT));
+    const stale = recorded !== undefined && recorded !== boot;
+    if (stale) {
+        await rm(join(layer, "upper"), { recursive: true, force: true });
+        await rm(join(layer, "work"), { recursive: true, force: true });
+        await rm(join(layer, LAYER_BOOT), { force: true });
+    } else {
+        await rm(join(layer, "work", "work", "incompat"), { recursive: true, force: true });
+    }
+    await mkdir(join(layer, "upper"), { recursive: true });
+    await mkdir(join(layer, "work"), { recursive: true });
+    if (boot !== undefined && (stale || recorded !== boot)) {
+        await writeFile(join(layer, LAYER_BOOT), `${boot}\n`);
+    }
+    return stale ? "discarded" : "kept";
+};
+
+// Whether this kernel mounts an overlay `volatile` (Linux 5.10+), asked once a daemon life in a throwaway namespace.
+let volatileProbe: Promise<boolean> | undefined;
+export const overlayVolatileAvailable = (scratchRoot: string): Promise<boolean> => {
+    volatileProbe ??= (async () => {
+        const dir = join(scratchRoot, ".volatile-probe");
+        try {
+            await rm(dir, { recursive: true, force: true });
+            for (const part of ["lower", "upper", "work", "merged"]) {
+                await mkdir(join(dir, part), { recursive: true });
+            }
+            const options = `${overlayOptions(join(dir, "lower"), join(dir, "upper"), join(dir, "work"))},volatile`;
+            await execFileAsync("unshare", ["--mount", "--propagation", "private", "mount", "-t", "overlay", OVERLAY_FS_NAME, "-o", options, join(dir, "merged")], {
+                timeout: 5_000,
+            });
+            return true;
+        } catch {
+            // allow(silent-catch): a kernel without it mounts the layers as before, synced on unmount.
+            return false;
+        } finally {
+            // allow(silent-catch): the probe's scratch is removed again by the next daemon's first probe.
+            await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+        }
+    })();
+    return volatileProbe;
+};
+
+const isDirectory = (path: string): Promise<boolean> =>
+    stat(path).then(
+        (entry) => entry.isDirectory(),
+        // allow(silent-catch): absent is the answer: the main checkout has no shelf or store to bring back.
+        () => false,
+    );
+
+// What a mount-only holder needs on disk before it starts: every mount point, every layer ready to mount, and the table
+// written where the holder reads it. `release` removes the table once the holder has read it, or failed to.
+export interface MountView {
+    readonly fstab: string;
+    readonly mounts: number;
+    // Layers thrown away because an earlier boot last mounted them volatile (prepareLayer).
+    readonly discarded: number;
+    readonly release: () => Promise<void>;
+}
+
+export const prepareMountView = async (plan: IsolationPlan, options: { readonly volatile?: boolean } = {}): Promise<MountView> => {
+    const [shelf, store, volatile, boot] = await Promise.all([
+        isDirectory(join(plan.root, SHELF)),
+        isDirectory(join(plan.root, PACKAGE_STORE)),
+        options.volatile ?? overlayVolatileAvailable(dirname(plan.overlays)),
+        readTrimmed(BOOT_ID),
+    ]);
+    const facts = { shelf, store, volatile };
+    const table = mountTable(plan, facts);
+    await Promise.all(mountPointsOf(plan, facts).map((dir) => mkdir(dir, { recursive: true })));
+    const layers = await Promise.all(plan.mirrors.map((rel) => prepareLayer(layerDirOf(plan, rel), volatile ? boot : undefined)));
+    const dir = join(plan.overlays, ".mounts");
+    await mkdir(dir, { recursive: true });
+    const fstab = join(dir, `${String(process.pid)}-${randomBytes(4).toString("hex")}.fstab`);
+    await writeFile(fstab, fstabOf(table), { mode: 0o600 });
+    return {
+        fstab,
+        mounts: table.length,
+        discarded: layers.filter((layer) => layer === "discarded").length,
+        // allow(silent-catch): a table left behind is a small file no later holder reads.
+        release: () => rm(fstab, { force: true }).catch(() => undefined),
+    };
+};
 
 // How a process enters an anchor's namespace lives with the rest of process launching, so a runtime can start one
 // there without importing this module (workload/namespace-entry.ts); named here too, where its callers look.
@@ -254,9 +404,18 @@ export const handoffDirOf = (anchor: IsolationAnchor | undefined): string | unde
 // than degrading: the capability was already probed, so a failure here is a real fault.
 // A fenced plan gets a sandbox instead (turn-sandbox.ts): a mount namespace its own root process could rearrange is no
 // fence for a conversation whose person holds only some of the workspace.
-export const startAnchor = async (plan: IsolationPlan): Promise<IsolationAnchor> => {
+export interface AnchorOptions {
+    // Told when the first attempt did not answer in time and a second is about to start (withSetupRetry).
+    readonly onRetry?: (error: NamespaceSetupError) => void;
+    readonly retryDelayMs?: number;
+}
+
+export const startAnchor = async (plan: IsolationPlan, options: AnchorOptions = {}): Promise<IsolationAnchor> => {
     const fence = plan.fence;
-    return fence === undefined ? startMountAnchor(plan) : startSandboxAnchor({ ...plan, fence });
+    return withSetupRetry(() => (fence === undefined ? startMountAnchor(plan) : startSandboxAnchor({ ...plan, fence })), {
+        ...opt("onRetry", options.onRetry),
+        ...opt("delayMs", options.retryDelayMs),
+    });
 };
 
 type MountAnchorProcess = NamespaceHolder & {
@@ -267,8 +426,8 @@ type MountAnchorProcess = NamespaceHolder & {
     // Injected with the process so fake PIDs never reach a real signal. Only failed setup uses the whole owned group.
     readonly stopSetup: () => void;
 };
-const spawnMountAnchor = (plan: IsolationPlan): MountAnchorProcess => {
-    const child = spawn("unshare", ["--mount", "--propagation", "private", "sh", "-c", isolationScript(plan)], {
+const spawnMountAnchor = (_plan: IsolationPlan, view: Pick<MountView, "fstab">): MountAnchorProcess => {
+    const child = spawn("unshare", ["--mount", "--propagation", "private", "sh", "-c", isolationScript(view.fstab)], {
         // Stamped, since its own group puts it out of netd's reach when the daemon dies: the next boot ends it
         // (system/boot/generation-sweep.ts), which no turn needs once the daemon that ran it is gone.
         env: { ...process.env, ...detachedStamp("isolation-anchor") },
@@ -281,14 +440,34 @@ const spawnMountAnchor = (plan: IsolationPlan): MountAnchorProcess => {
     } });
 };
 
-// The real mount-only factory with a process seam for fake-data lifecycle tests. A fenced plan cannot take this door.
-export const startMountAnchor = async (
-    plan: IsolationPlan,
-    start: (plan: IsolationPlan) => MountAnchorProcess = spawnMountAnchor,
-    warn: (error: unknown) => void = (error) => { process.emitWarning(`turn isolation cleanup failed: ${String(error)}`); },
-): Promise<IsolationAnchor> => {
+// The seams of the mount-only factory: the holder process, the disk it needs first, its cleanup warnings and its
+// readiness clock, each replaced by a fake-data lifecycle test.
+export interface MountAnchorSeams {
+    readonly start?: (plan: IsolationPlan, view: Pick<MountView, "fstab">) => MountAnchorProcess;
+    readonly prepare?: (plan: IsolationPlan) => Promise<Pick<MountView, "fstab" | "release">>;
+    readonly warn?: (error: Error) => void;
+    readonly readiness?: ReadinessOptions;
+}
+
+// The real mount-only factory. A fenced plan cannot take this door.
+export const startMountAnchor = async (plan: IsolationPlan, seams: MountAnchorSeams = {}): Promise<IsolationAnchor> => {
     if (plan.fence !== undefined) { throw new Error("a fenced turn requires its sandbox, not a mount-only anchor"); }
-    const child = start(plan);
+    const warn = seams.warn ?? ((error: Error) => { process.emitWarning(`turn isolation cleanup failed: ${error.message}`); });
+    const view = await (seams.prepare ?? prepareMountView)(plan);
+    try {
+        return await holdMountAnchor(plan, (seams.start ?? spawnMountAnchor)(plan, view), warn, seams.readiness);
+    } finally {
+        // Read by `mount -a` before the holder said anything; the namespace never reads it again.
+        await view.release();
+    }
+};
+
+const holdMountAnchor = async (
+    plan: IsolationPlan,
+    child: MountAnchorProcess,
+    warn: (error: Error) => void,
+    readiness: ReadinessOptions | undefined,
+): Promise<IsolationAnchor> => {
     let admitted = false;
     const lifetime = namespaceHolderLifetime(child, () => {
         try {
@@ -296,14 +475,14 @@ export const startMountAnchor = async (
         } catch (error) {
             // An owned-group signal refusal is reported, not thrown out of an exit/error EventEmitter listener.
             // The independent readiness listener must still settle the setup refusal.
-            warn(error);
+            warn(error instanceof Error ? error : new Error(String(error)));
         } finally {
             if (!admitted) { child.stdout.destroy(); child.stderr.destroy(); }
         }
     });
     try {
         if (child.pid === undefined) { throw new Error("turn isolation: could not spawn the namespace anchor"); }
-        const pid = await namespaceHolderReady(child, ANCHOR_READY);
+        const pid = await namespaceHolderReady(child, ANCHOR_READY, undefined, readiness);
         const namespace = lifetime.register(() => registerMountEntry(pid));
         // The turn's own streams must not keep the daemon's event loop alive after it ends.
         child.unref();

@@ -813,6 +813,20 @@ describe("a message held because the sandbox was short of memory", () => {
         await waitFor(async () => expect(await queueOf(client, "conv-room")).toMatchObject({ items: [] }), SETTLES);
     });
 
+    // 2026-10-13: a turn whose own view of the workspace could not be set up in time, twice, was refused at the door
+    // (setup-refusal.ts); it waits for the same room as a memory hold, rather than for the person to press Continue.
+    it("goes by itself when the turn's workspace could not be set up in time, once the sandbox has had room", async () => {
+        const prompts: string[] = [];
+        const daemon = refusedOnce(prompts, "workspace-setup");
+        const client = clientFor(createApp(daemon));
+        await runAgentTurn(client, { prompt: "fix the pipeline", conversationId: "conv-setup", isolated: true, messageId: "m-setup" });
+        await waitFor(async () => expect(await queueOf(client, "conv-setup")).toMatchObject({ items: [{ id: "m-setup" }], paused: "refused" }), SETTLES);
+
+        await createTurnResumeScheduler(daemon).tick(settled());
+        await waitFor(() => expect(prompts).toHaveLength(2), SETTLES);
+        expect(prompts[1]).toContain("fix the pipeline");
+    });
+
     it("waits for a press where the conversation's answer is to wait", async () => {
         const prompts: string[] = [];
         const daemon = refusedOnce(prompts);

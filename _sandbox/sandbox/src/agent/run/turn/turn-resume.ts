@@ -664,11 +664,15 @@ type RoomHold =
     | { readonly conversationId: string; readonly since: number; readonly kind: "queue" }
     | { readonly conversationId: string; readonly since: number; readonly kind: "door"; readonly held: HeldRecord };
 
-// Whether the turn a conversation last tried was turned away because the sandbox was short of memory: the one refusal at
-// the door that a moment's wait clears by itself. The card reads the same ending (agentStatus.ts, memoryHeld).
-const memoryRefused = (services: Pick<Services, "agents">, conversationId: string): boolean => {
+// The refusals at the door that a moment's wait clears by itself: the sandbox short of memory, and the sandbox too loaded
+// to set up the turn's own view of the workspace in time (setup-refusal.ts). Both wait for the same room, and go on the
+// conversation's answer to the memory wall. The card reads the first (agentStatus.ts, memoryHeld).
+const ROOM_REFUSALS: ReadonlySet<string> = new Set(["sandbox-memory-low", "workspace-setup"]);
+
+// Whether the turn a conversation last tried was turned away for room.
+const roomRefused = (services: Pick<Services, "agents">, conversationId: string): boolean => {
     const ending = services.agents.entry(conversationId)?.ending;
-    return ending?.kind === "failed" && ending.code === "sandbox-memory-low";
+    return ending?.kind === "failed" && ending.code !== undefined && ROOM_REFUSALS.has(ending.code);
 };
 
 // Every low-memory hold, longest waiting first, one per conversation.
@@ -679,7 +683,7 @@ const roomHolds = (services: Pick<Services, "agents" | "conversations">): readon
         .flatMap(({ conversationId, record }): RoomHold[] =>
             record.reason === "door" && !record.fired ? [{ conversationId, since: record.recordedAt, kind: "door", held: record }] : [],
         );
-    const held = [...queues, ...doors].filter((hold) => memoryRefused(services, hold.conversationId)).sort((a, b) => a.since - b.since);
+    const held = [...queues, ...doors].filter((hold) => roomRefused(services, hold.conversationId)).sort((a, b) => a.since - b.since);
     return held.filter((hold, index) => held.findIndex((other) => other.conversationId === hold.conversationId) === index);
 };
 
