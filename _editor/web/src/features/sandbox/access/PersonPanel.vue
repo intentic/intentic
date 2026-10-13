@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import type { AgentAccess } from "@intentic/sandbox-contract";
-import { Avatar, Button, Notice, type NoticeModel, SegmentedControl, ui } from "@intentic/ui";
+import { Button, Notice, type NoticeModel, SegmentedControl, ui } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, onBeforeUnmount, ref, useId, watch } from "vue";
-import { identityHue } from "../../../lib/identityHue";
 import { type AccessDraft, draftGrant, draftProblem, drivesAgents } from "./accessGrant";
 import AreaPicker from "./AreaPicker.vue";
 import EditPicker from "./EditPicker.vue";
+import PersonCard from "./PersonCard.vue";
 import ReachPicker from "./ReachPicker.vue";
 import { usePersonaReach } from "./usePersonaReach";
 import { useT } from "@intentic/ui/i18n";
@@ -143,34 +143,37 @@ const signInId = useId();
 
 <template>
     <section class="flex flex-col gap-5 rounded-xl bg-card p-4 shadow-sm md:p-5" :aria-label="email">
-        <div class="flex flex-wrap items-center gap-3">
-            <Avatar :size="36" :name="email" :hue="identityHue(email)" />
-            <div class="flex min-w-0 flex-1 flex-col">
-                <span class="truncate text-base font-semibold text-content">{{ email }}</span>
-                <span class="flex items-center gap-1.5 text-xs text-muted">
-                    <template v-if="pending">
-                        {{ t(`sandbox.sandboxAccess.invitePending`) }}
-                        <button type="button" :class="ui.textButton({ tone: `quiet`, size: `xs` })" :disabled="busy" @click="emit(`resend`, email)">
-                            {{ t(`sandbox.sandboxAccess.resend`) }}
-                        </button>
-                    </template>
-                    <template v-else>{{ t(`sandbox.sandboxAccess.member`) }}</template>
+        <!-- The person as their card draws them, so a long address gives way the same way here; the presses about them
+             (send the invite again, take access away) sit after it and drop under it when the panel is narrow. -->
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <PersonCard
+                :email="email"
+                :line="pending ? t(`sandbox.sandboxAccess.invitePending`) : t(`sandbox.sandboxAccess.member`)"
+                :avatar="36"
+                flush
+                class="min-w-48 flex-1"
+            />
+            <div class="ml-auto flex shrink-0 items-center gap-1">
+                <span
+                    class="mr-1 flex items-center gap-1 text-xs"
+                    :class="{ 'text-success': status.tone === `success`, 'text-warning': status.tone === `warning`, 'text-muted': status.tone === `muted` }"
+                    role="status"
+                >
+                    <Icon v-if="status.tone === `success`" name="check" class="text-2xs" />{{ status.text }}
                 </span>
+                <template v-if="confirmingRemove">
+                    <Button :label="t(`ui.action.cancel`)" size="small" tier="quiet" @click="confirmingRemove = false" />
+                    <Button :label="t(`sandbox.sandboxAccess.removeAccess`)" size="small" tone="danger" :loading="busy" @click="emit(`remove`, email)" />
+                </template>
+                <template v-else>
+                    <Button v-if="pending" :label="t(`sandbox.sandboxAccess.resend`)" size="small" tier="quiet" :disabled="busy" @click="emit(`resend`, email)">
+                        <template #icon><Icon name="send" /></template>
+                    </Button>
+                    <Button :label="t(`ui.action.remove`)" size="small" tier="quiet" tone="danger" :disabled="busy" @click="confirmingRemove = true">
+                        <template #icon><Icon name="trash" /></template>
+                    </Button>
+                </template>
             </div>
-            <span
-                class="flex items-center gap-1 text-xs"
-                :class="{ 'text-success': status.tone === `success`, 'text-warning': status.tone === `warning`, 'text-muted': status.tone === `muted` }"
-                role="status"
-            >
-                <Icon v-if="status.tone === `success`" name="check" class="text-2xs" />{{ status.text }}
-            </span>
-            <template v-if="confirmingRemove">
-                <Button :label="t(`ui.action.cancel`)" size="small" tier="quiet" @click="confirmingRemove = false" />
-                <Button :label="t(`sandbox.sandboxAccess.removeAccess`)" size="small" tone="danger" :loading="busy" @click="emit(`remove`, email)" />
-            </template>
-            <Button v-else :label="t(`ui.action.remove`)" size="small" tier="quiet" tone="danger" :disabled="busy" @click="confirmingRemove = true">
-                <template #icon><Icon name="trash" /></template>
-            </Button>
         </div>
 
         <Notice v-if="notice" :of="notice" />

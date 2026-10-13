@@ -6189,8 +6189,6 @@
             "reachSecrets": "Zapisane sekrety",
             "reachAlwaysShared": "Zawsze dostępne, nie ma czego zatrzymać: {names}.",
             "changingAccessOf": "Zmieniam dostęp dla {email}",
-            "onlyYouSoFar": "Na razie tylko Ty.",
-            "addPersonNote": "Na start tylko podgląd. Zaproszenie wychodzi od razu.",
             "alreadyHasAccess": "Ta osoba ma już dostęp.",
             "wordManages": "Zarządza",
             "wordChats": "Rozmawia",
@@ -6222,7 +6220,10 @@
             "managesAll": "Widzi i edytuje wszystko, uruchamia agentów, używa każdego połączenia.",
             "manageSandbox": "Zarządza sandboxem",
             "manageSandboxNote": "Wdraża pracę, publikuje, zmienia ustawienia i połączenia.",
-            "wordOwner": "Właściciel"
+            "wordOwner": "Właściciel",
+            "addPersonSub": "Na start tylko podgląd",
+            "addPersonKeys": "Enter zaprasza, Esc anuluje",
+            "inviteExpired": "Zaproszenie wygasło"
         },
         "sandboxAgent": {
             "agentSettingsCategory": "Kategoria ustawień agenta",

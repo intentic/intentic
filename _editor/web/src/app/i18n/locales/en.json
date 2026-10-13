@@ -6586,8 +6586,6 @@
             "reachSecrets": "Stored secrets",
             "reachAlwaysShared": "Always available, nothing to withhold: {names}.",
             "changingAccessOf": "Changing access for {email}",
-            "onlyYouSoFar": "Only you so far.",
-            "addPersonNote": "Starts read-only. The invite goes out now.",
             "alreadyHasAccess": "They already have access.",
             "wordManages": "Manages",
             "wordChats": "Chats",
@@ -6619,7 +6617,10 @@
             "managesAll": "Sees and edits everything, runs agents, uses every connection.",
             "manageSandbox": "Manage the sandbox",
             "manageSandboxNote": "Land work, publish, change settings and connections.",
-            "wordOwner": "Owner"
+            "wordOwner": "Owner",
+            "addPersonSub": "Starts read-only",
+            "addPersonKeys": "Enter to invite, Esc to cancel",
+            "inviteExpired": "Invite expired"
         },
         "sandboxAgent": {
             "agentSettingsCategory": "Agent settings category",

@@ -145,7 +145,8 @@ const buttonLabelled = (label: string): HTMLButtonElement | undefined =>
 
 // The People group's own add row: an address, and the Add press that sends it.
 const addPerson = async (address: string): Promise<void> => {
-    buttonLabelled(`Add person`)?.click();
+    // The last card of the group: pressed, it becomes the address field in place.
+    [...document.body.querySelectorAll(`button`)].find((button) => button.textContent?.trim().startsWith(`Add person`))?.click();
     await settle();
     const field = document.body.querySelector<HTMLInputElement>(`input[type=email]`);
     if (field === null) {
@@ -404,7 +405,6 @@ it(`adds a person read-only with nothing to spend, and opens them`, async () => 
     });
     mount();
     await settle();
-    expect(shown()).toContain(`Only you so far.`);
     await addPerson(`dee@corp.example`);
 
     expect(grantsSent()).toEqual([

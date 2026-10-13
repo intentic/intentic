@@ -5,7 +5,6 @@ import {
     Avatar,
     Button,
     clipboardOf,
-    FACE_SIZES,
     Notice,
     type IconName,
     type NoticeModel,
@@ -19,7 +18,6 @@ import {
     ui,
     vSkeletonSource,
 } from "@intentic/ui";
-import PersonaTile from "../../../components/PersonaTile.vue";
 import { noticeFrom } from "@intentic/ui/async";
 import { formatDate } from "@intentic/ui/format";
 import { computed, onMounted, ref, useId, watch } from "vue";
@@ -39,6 +37,7 @@ import ControlTokensSection from "./ControlTokensSection.vue";
 import PasskeysSection from "./PasskeysSection.vue";
 import { type AccessDraft, accessWord, draftGrant, draftOf, draftProblem, newPerson } from "./accessGrant";
 import { usePersonaReach } from "./usePersonaReach";
+import PersonCard from "./PersonCard.vue";
 import PersonPanel from "./PersonPanel.vue";
 import StandingGrants from "./StandingGrants.vue";
 import { useOperation } from "../../../workbench/operations/operations";
@@ -141,31 +140,52 @@ watch(selected, (email) => {
     }
 });
 
-// ADDING: an address and nothing else, as a persona's name is. The person starts able to see and nothing more (no
-// agents, nothing to spend), so the invite going out at once hands over nothing the owner has not yet decided.
+// ADDING: an address and nothing else, as a persona's name is, typed into the card where the person will appear. The
+// person starts able to see and nothing more (no agents, nothing to spend), so the invite going out at once hands over
+// nothing the owner has not yet decided.
 const adding = ref(false);
 const newEmail = ref(``);
-const newEmailTouched = ref(false);
 const validEmail = (value: string): boolean => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value);
 const newAddress = computed(() => newEmail.value.trim().toLowerCase());
-const newTaken = computed(() => members.value.some((member) => member.email === newAddress.value));
+const newTaken = computed(() => members.value.some((member) => member.email === newAddress.value) || newAddress.value === user.value?.email?.toLowerCase());
+// Said only once there is something to say it about: an address already here at once, one that is not an address only
+// after Enter was pressed on it, since a half-typed one is the next keystroke rather than a mistake.
+const addTried = ref(false);
+const addError = computed((): string | undefined => {
+    if (newTaken.value) {
+        return t(`sandbox.sandboxAccess.alreadyHasAccess`);
+    }
+    return addTried.value && !validEmail(newAddress.value) ? t(`sandbox.sandboxAccess.enterValidEmailAddress`) : undefined;
+});
 const startAdd = (): void => {
     clearNotice();
     selected.value = undefined;
     newEmail.value = ``;
-    newEmailTouched.value = false;
+    addTried.value = false;
     adding.value = true;
 };
+const cancelAdd = (): void => {
+    adding.value = false;
+    newEmail.value = ``;
+};
 const addPerson = async (): Promise<void> => {
-    newEmailTouched.value = true;
+    addTried.value = true;
     if (!validEmail(newAddress.value) || newTaken.value) {
         return;
     }
     const address = newAddress.value;
     if (await invite(address, newPerson(address))) {
-        adding.value = false;
+        cancelAdd();
         selected.value = address;
     }
+};
+
+// The line under a person's address: what they can do, and where their invite stands while it is not yet taken.
+const lineOf = (member: InviteRecord): string => {
+    if (member.status === `accepted`) {
+        return wordOf(member);
+    }
+    return `${wordOf(member)} · ${member.status === `expired` ? t(`sandbox.sandboxAccess.inviteExpired`) : t(`sandbox.sandboxAccess.invitePending`)}`;
 };
 
 // THE ROSTER WRITES ARE THE SANDBOX'S, NOT THIS TAB'S. An invite, a resend, a re-grade and a revoke are each two writes
@@ -553,73 +573,81 @@ const revoke = async (target: string): Promise<void> => {
                 <span v-if="handover" class="mt-1 block break-all font-medium">{{ handover }}</span>
             </Notice>
             <RowGroup :label="t(`sandbox.sandboxAccess.people`)" flat undivided>
-                <template v-if="isOwner && !adding" #actions>
-                    <Button :label="t(`sandbox.sandboxAccess.addPerson`)" size="small" tier="boring" :disabled="busy" @click="startAdd">
-                        <template #icon><Icon name="plus" /></template>
-                    </Button>
-                </template>
-
-                <form v-if="isOwner && adding" class="mb-3 flex flex-col gap-1.5" @submit.prevent="addPerson">
-                    <div class="flex flex-wrap items-center gap-2">
-                        <input
-                            v-model="newEmail"
-                            type="email"
-                            autocomplete="off"
-                            autofocus
-                            placeholder="teammate@example.com"
-                            :aria-label="t(`sandbox.sandboxAccess.emailLabel`)"
-                            :class="[ui.input('min-w-0 max-w-xs flex-1'), newEmailTouched && newEmail.trim() !== `` && !validEmail(newAddress) ? 'ui-field-error-box' : '']"
-                            @blur="newEmailTouched = true"
-                        />
-                        <Button type="submit" :label="t(`ui.action.add`)" size="small" :loading="busy" :disabled="busy || !validEmail(newAddress) || newTaken" />
-                        <button type="button" :class="ui.textButton({ tone: `quiet` })" @click="adding = false">{{ t(`ui.action.cancel`) }}</button>
-                    </div>
-                    <span v-if="newTaken" class="ui-field-error">{{ t(`sandbox.sandboxAccess.alreadyHasAccess`) }}</span>
-                    <span v-else-if="newEmailTouched && newEmail.trim() !== `` && !validEmail(newAddress)" class="ui-field-error">{{
-                        t(`sandbox.sandboxAccess.enterValidEmailAddress`)
-                    }}</span>
-                    <span v-else class="text-xs text-muted">{{ t(`sandbox.sandboxAccess.addPersonNote`) }}</span>
-                </form>
-
-                <div role="group" :aria-label="t(`sandbox.sandboxAccess.people`)" class="flex flex-wrap gap-1">
-                    <!-- The signed-in person first: the owner, or a member reading their own tier. Nothing to open. -->
-                    <PersonaTile :label="user?.email ?? ``" :selected="false" class="size-28 cursor-default" tabindex="-1">
-                        <template #face>
-                            <Avatar :size="FACE_SIZES.card" :name="user?.name ?? user?.email ?? ``" :src="user?.image ?? undefined" :hue="identityHue(user?.email ?? ``)" />
-                        </template>
-                        <span class="text-2xs text-subtle">{{ isOwner ? t(`sandbox.sandboxAccess.wordOwner`) : ownRole }}</span>
-                    </PersonaTile>
+                <!-- One card per person, the signed-in one first, and the next card is where a new one is added: pressed, it
+                     becomes the address field in place, so adding someone grows the group by one card and moves nothing. -->
+                <div role="group" :aria-label="t(`sandbox.sandboxAccess.people`)" class="grid grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] gap-1">
+                    <PersonCard
+                        :email="user?.email ?? ``"
+                        :image="user?.image ?? undefined"
+                        :line="isOwner ? t(`sandbox.sandboxAccess.wordOwner`) : ownRole"
+                    />
                     <template v-if="isOwner">
-                        <PersonaTile
+                        <PersonCard
                             v-for="member in members"
                             :key="member.email"
-                            :label="member.email"
+                            :email="member.email"
+                            :line="lineOf(member)"
+                            :dot="member.status === `accepted` ? undefined : member.status === `expired` ? `danger` : `info`"
                             :selected="selected === member.email"
-                            :aria-pressed="selected === member.email"
                             :aria-controls="panelId"
                             :disabled="fencesUnknown"
-                            class="size-28"
-                            @click="toggle(member)"
-                        >
-                            <template #face>
-                                <Avatar :size="FACE_SIZES.card" :name="member.email" :hue="identityHue(member.email)" />
-                            </template>
-                            <template v-if="member.status !== `accepted`" #badges>
-                                <span
-                                    class="absolute bottom-1 right-0 size-2.5 rounded-full ring-2 ring-canvas"
-                                    :class="member.status === `expired` ? `bg-danger` : `bg-info`"
-                                    :aria-label="statusOf(member.status).label"
-                                />
-                            </template>
-                            <span class="text-2xs text-subtle">{{ wordOf(member) }}</span>
-                        </PersonaTile>
-                        <div v-if="listing" role="status" aria-busy="true" class="flex items-center">
+                            pressable
+                            @press="toggle(member)"
+                        />
+                        <div v-if="listing" role="status" aria-busy="true" class="flex items-center px-3">
                             <span class="sr-only">{{ t(`sandbox.sandboxAccess.readingWhoAccess`) }}</span>
+                            <SkeletonRows :rows="1" />
                         </div>
+                        <form
+                            v-if="adding"
+                            class="ui-field-shell flex min-w-0 items-center gap-3 rounded-xl px-3 py-2"
+                            :class="{ 'ui-field-error-box': addError !== undefined }"
+                            @submit.prevent="addPerson"
+                        >
+                            <Avatar :size="32" :name="newAddress === `` ? `?` : newAddress" :hue="identityHue(newAddress)" class="shrink-0" />
+                            <span class="flex min-w-0 flex-1 flex-col">
+                                <input
+                                    v-model="newEmail"
+                                    type="email"
+                                    autocomplete="off"
+                                    autofocus
+                                    placeholder="name@example.com"
+                                    :aria-label="t(`sandbox.sandboxAccess.emailLabel`)"
+                                    class="field-bare w-full min-w-0"
+                                    @keydown.esc.prevent="cancelAdd"
+                                    @blur="newEmail.trim() === `` && cancelAdd()"
+                                />
+                                <span class="truncate text-xs" :class="addError === undefined ? `text-subtle` : `text-danger`">{{
+                                    addError ?? t(`sandbox.sandboxAccess.addPersonKeys`)
+                                }}</span>
+                            </span>
+                            <Button
+                                type="submit"
+                                size="small"
+                                :loading="busy"
+                                :disabled="busy || newTaken || newAddress === ``"
+                                :aria-label="t(`ui.action.add`)"
+                                @mousedown.prevent
+                            >
+                                <template #icon><Icon name="check" /></template>
+                            </Button>
+                        </form>
+                        <button
+                            v-else
+                            type="button"
+                            class="ui-row-select flex min-w-0 items-center gap-3 rounded-xl border border-dashed border-line px-3 py-2.5 text-left"
+                            :disabled="busy"
+                            @click="startAdd"
+                        >
+                            <span class="flex size-8 shrink-0 items-center justify-center rounded-full text-muted"><Icon name="plus" /></span>
+                            <span class="flex min-w-0 flex-col">
+                                <span class="text-sm font-medium text-content">{{ t(`sandbox.sandboxAccess.addPerson`) }}</span>
+                                <span class="truncate text-xs text-subtle">{{ t(`sandbox.sandboxAccess.addPersonSub`) }}</span>
+                            </span>
+                        </button>
                     </template>
                 </div>
-                <p v-if="isOwner && !listing && members.length === 0 && !adding" class="mt-2 text-xs text-muted">{{ t(`sandbox.sandboxAccess.onlyYouSoFar`) }}</p>
-                <p v-if="!isOwner" class="mt-2 text-xs text-muted">{{ t(`sandbox.sandboxAccess.onlySandboxOwnerInvite`) }}</p>
+                <RowNote v-if="!isOwner">{{ t(`sandbox.sandboxAccess.onlySandboxOwnerInvite`) }}</RowNote>
 
                 <div :id="panelId" class="mt-4">
                     <PersonPanel
