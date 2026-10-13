@@ -59,9 +59,12 @@ flowchart LR
   Activity (the Activity extension's view, filed here by a slot kept for `intentic.activity` in `sandboxNav.ts`, so no
   other extension's view can sit beside the audit trail under its name), the audit log and data protection.
 - **Data protection.** `/sandbox/data-protection` (`features/sandbox/data-protection/`, maintainer and up) draws the
-  daemon's compliance report: every outbound data path with its personal-data and shield badges, the measures with a
-  link to where each is changed, downloads of the three documents in Polish or English, and the public-office preset
-  as a ticked list of current → proposed that only the owner can apply, after a confirmation.
+  daemon's compliance report as three steps (`?step=`), each a tile that says how it stands before it is opened.
+  Protections: every measure, the public-office preset's changes filed under the measure each switches (current →
+  proposed, ticked, applied together by the owner after a confirmation), then the optional ones with a link to where
+  each is set, then those in place, folded. Where data goes: what only the office can answer, then every outbound path
+  in use with its personal-data, shield and location facts, then the ones one switch would open. Documents: the three
+  drafts in Polish or English, as Word or Markdown, with a note while recommended changes are unapplied.
 - **Audit log.** `/sandbox/audit`, for the owner and maintainers (`features/sandbox/audit/`), in two parts. Records,
   the default: whether the daemon's hash-chained trail is intact (`/audit/verify`), a period downloaded as the JSON
   Lines the daemon stored, and the records, filtered by who and by what was touched and paged backwards on asking.

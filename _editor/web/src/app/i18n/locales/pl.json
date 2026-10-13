@@ -7883,15 +7883,47 @@
             "description": "Wyłączone: żadna wizyta w tym sandboxie nie wysyła do Intentic zdarzeń użycia ani nagrań ekranu, niezależnie od zgody poszczególnych osób."
         },
         "dataProtection": {
-            "intro": "To, czego inspektor ochrony danych potrzebuje, zanim ten sandbox zacznie przetwarzać czyjekolwiek dane osobowe: dokumenty wypełnione na podstawie bieżącej konfiguracji, wszystkie drogi, którymi dane mogą wyjść na zewnątrz, oraz zabezpieczenia. Nic na tej stronie nie zmienia ustawień, dopóki nie zatwierdzisz panelu na dole.",
+            "intro": "Zanim ten sandbox zacznie przetwarzać czyjekolwiek dane osobowe, przejdź trzy kroki: włącz zalecane zabezpieczenia, sprawdź, dokąd trafiają dane, i przekaż dokumenty inspektorowi ochrony danych. Nic się nie zmieni, dopóki nie naciśniesz „Zastosuj” w kroku 1.",
+            "steps": "Kroki",
+            "step": {
+                "protections": "Zabezpieczenia",
+                "places": "Dokąd trafiają dane",
+                "documents": "Dokumenty"
+            },
+            "tile": {
+                "protectionsOn": "Włączone: {on} z {total}",
+                "recommended": "{count} zalecana zmiana do zastosowania | {count} zalecane zmiany do zastosowania | {count} zalecanych zmian do zastosowania",
+                "allApplied": "Wszystkie zalecane ustawienia zastosowane",
+                "places": "{count} używane miejsce | {count} używane miejsca | {count} używanych miejsc",
+                "outsideEea": "{count} poza EOG",
+                "questions": "{count} pytanie do urzędu | {count} pytania do urzędu | {count} pytań do urzędu",
+                "documents": "3 projekty do pobrania",
+                "bestAfter": "Najlepiej pobrać po kroku 1"
+            },
+            "protectionsIntro": "Każde zabezpieczenie to ustawienie tego sandboxa. Zalecane to te, które powinien włączyć urząd działający zgodnie z RODO i aktem w sprawie AI. Są od razu zaznaczone: odznacz to, czego nie chcesz, i naciśnij „Zastosuj”. Pozostałe włącza się tam, gdzie każde z nich jest ustawiane.",
+            "recommended": "Zalecane",
+            "applyNote": "Zanim cokolwiek się zmieni, zobaczysz listę.",
+            "more": "Co jeszcze można włączyć",
+            "moreCaption": "Opcjonalne, zależnie od tego, jak pracuje urząd. Każde włącza się tam, gdzie jest ustawiane.",
+            "inPlace": "Już działa",
+            "showInPlace": "Pokaż {count} działające zabezpieczenie | Pokaż {count} działające zabezpieczenia | Pokaż {count} działających zabezpieczeń",
+            "hideInPlace": "Ukryj to, co już działa",
+            "placesIntro": "Wszystkie miejsca, do których ten sandbox wysyła dane, przy obecnych ustawieniach. Inspektor ochrony danych wpisuje je jako odbiorców. Miejsce poza EOG (Europejskim Obszarem Gospodarczym) oznacza przekazanie do państwa trzeciego, które wymaga własnej podstawy prawnej (RODO, rozdział V).",
+            "questionsTitle": "{count} pytanie, na które odpowie tylko urząd | {count} pytania, na które odpowie tylko urząd | {count} pytań, na które odpowie tylko urząd",
+            "inUse": "Używane",
+            "idleCaption": "Teraz nieużywane. Są na liście, bo jeden przełącznik by je otworzył.",
+            "outsideEeaIn": "poza EOG ({region})",
+            "documentsIntro": "Trzy dokumenty, które inspektor ochrony danych prowadzi dla tego sandboxa. Każdy powstaje z ustawień sandboxa w chwili pobrania.",
+            "pendingBeforeDocuments": "{count} zalecana zmiana z kroku 1 nie jest jeszcze zastosowana, więc pobrany teraz dokument opisze sandbox bez niej. | {count} zalecane zmiany z kroku 1 nie są jeszcze zastosowane, więc pobrany teraz dokument opisze sandbox bez nich. | {count} zalecanych zmian z kroku 1 nie jest jeszcze zastosowanych, więc pobrany teraz dokument opisze sandbox bez nich.",
+            "goToProtections": "Wróć do kroku 1",
+            "format": "Format",
+            "download": "Pobierz",
             "couldntRead": "Nie udało się odczytać raportu ochrony danych tego sandboxa",
             "couldntDownload": "Nie udało się przygotować dokumentu",
             "couldntApply": "Nie udało się zastosować ustawień",
             "couldntReadPreset": "Nie udało się odczytać ustawień dla urzędu",
-            "documents": "Dokumenty dla inspektora ochrony danych",
             "documentsCaption": "Projekty wypełnione na podstawie bieżącej konfiguracji. Pola, które może uzupełnić tylko urząd, są oznaczone ✎.",
             "language": "Język",
-            "languageNote": "Język, w którym zostaną przygotowane dokumenty.",
             "document": {
                 "ropa": "Rejestr czynności przetwarzania",
                 "ropaNote": "Wpis dla tego systemu w rejestrze (art. 30 RODO): odbiorcy, przekazania poza EOG, terminy usunięcia danych.",
@@ -7900,21 +7932,9 @@
                 "toms": "Środki techniczne i organizacyjne",
                 "tomsNote": "Wszystkie zabezpieczenia systemu, informacja, czy są włączone, i gdzie się je zmienia (art. 32 RODO)."
             },
-            "flows": "Dokąd mogą trafić dane",
-            "flowsNote": "Wszystkie miejsca, do których ten sandbox wysyła dane przy obecnej konfiguracji. Wyszarzone wiersze nie są używane, ale jeden przełącznik może je włączyć.",
             "notInUse": "nieużywane",
             "outsideEea": "poza EOG",
             "officeAnswers": "Urząd powinien ustalić:",
-            "group": {
-                "models": "Modele AI",
-                "messaging": "Wiadomości i poczta",
-                "connectors": "Połączone usługi",
-                "speech": "Mowa",
-                "web": "Internet",
-                "platform": "Intentic i dostęp",
-                "maintenance": "Aktualizacje i pobieranie",
-                "analytics": "Analityka"
-            },
             "kind": {
                 "modelProvider": "Dostawca modelu AI",
                 "modelEndpoint": "Zewnętrzny model AI",
@@ -7975,18 +7995,7 @@
                 "ingressProxy": "czy użytkownicy łączą się z tym sandboxem przez własny serwer urzędu, czy przez punkt dostępu Intentic.",
                 "platformRegion": "gdzie Intentic przechowuje dane kont."
             },
-            "measures": "Zabezpieczenia",
-            "measuresNote": "Środki techniczne i organizacyjne, każdy w obecnym stanie.",
             "change": "Zmień",
-            "inPreset": "w panelu poniżej",
-            "category": {
-                "confidentiality": "Poufność",
-                "minimisation": "Mniej danych, krócej przechowywanych",
-                "integrity": "Kontrola nad działaniami agenta",
-                "accountability": "Rozliczalność",
-                "transparency": "Przejrzystość",
-                "availability": "Dostępność"
-            },
             "status": {
                 "on": "włączone",
                 "partial": "częściowo",
@@ -8096,11 +8105,7 @@
                     "what": "Kopie zapasowe tego sandboxa powstają poza nim, więc wykonuje je i chroni urząd."
                 }
             },
-            "preset": "Ustawienia dla urzędu",
-            "presetNote": "Bardziej rygorystyczne ustawienia dla urzędu działającego zgodnie z RODO i aktem w sprawie AI. Przy każdym widać obecną wartość i proponowaną. Odznacz to, czego nie chcesz; nic się nie zmieni, dopóki nie zatwierdzisz.",
             "ownerApplies": "Te ustawienia może zastosować tylko właściciel sandboxa.",
-            "toChange": "Do zmiany",
-            "alreadySet": "Już ustawione",
             "apply": "Zastosuj {count} ustawienie | Zastosuj {count} ustawienia | Zastosuj {count} ustawień",
             "nothingToChange": "Wszystkie ustawienia są już takie, jak proponowane.",
             "applied": "Zastosowano {count} ustawienie | Zastosowano {count} ustawienia | Zastosowano {count} ustawień",

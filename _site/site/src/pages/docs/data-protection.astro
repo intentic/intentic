@@ -4,55 +4,35 @@ import DocsLayout from "../../components/docs/DocsLayout.astro";
 
 <DocsLayout
     pageId="data-protection"
-    heading="Data protection · data flows, GDPR documents and stricter settings"
+    heading="Data protection · protections, data flows and GDPR documents"
     lead="Before a sandbox handles anyone's personal data, a data protection officer needs to know where that data can go and what protects it. The Data protection page answers both from the sandbox's live setup, and drafts the documents they file."
 >
     <h2>Where it is</h2>
     <p>
-        Open <strong>Sandbox ▸ Data protection</strong>. Owners and maintainers see it; everyone else does not. Reading the page changes
-        nothing. Only the panel at the bottom changes settings, and only the owner can apply it.
+        Open <strong>Sandbox ▸ Data protection</strong>. Owners and maintainers see it; everyone else does not. The page is three steps, in
+        the order they are done: <strong>Protections</strong>, <strong>Where data goes</strong> and <strong>Documents</strong>. Each
+        step's tile says how it stands before you open it: how many protections are on and how many recommended changes are left, how many
+        places data goes and how many are outside the European Economic Area, and whether the documents would be better downloaded later.
+        Reading the page changes nothing. Only the Apply button in the first step changes settings, and only the owner can press it.
     </p>
 
-    <h2>Where data can leave</h2>
+    <h2>1. Protections</h2>
     <p>
-        The page lists every place the sandbox sends data to as it is set up right now: the AI model providers and endpoints you connected,
-        mail, team-chat bots, the visitor chat, connected services, cloud voices, web search and the agent's browser, your Intentic account,
-        the access point people reach the sandbox through, update checks, model downloads and the editor's product analytics. For each one
-        it says where the data goes, whether it can carry personal data, whether the privacy shield covers it, and whether it leaves the
-        European Economic Area. A path that is not in use is still listed, greyed out, because one switch would open it.
+        Every technical and organisational measure the sandbox offers: the privacy shield, local models, roles and areas, guest isolation,
+        sign-in, approvals before the agent sends anything, approval of work started from outside, the command judge, credential gates,
+        deletion periods, the audit trail, encryption at rest and in transit, product analytics, the AI notice for staff and the visitor
+        chat's AI disclosure. They are sorted by what you can do about each one.
     </p>
-    <p>
-        Some things the sandbox cannot see, such as which data centre region Intentic's access point runs in, or whether your office reaches
-        the sandbox through its own reverse proxy. Those rows say what your office should find out.
-    </p>
-
-    <h2>What protects it</h2>
-    <p>
-        The technical and organisational measures, grouped the way GDPR Article 32 groups them: the privacy shield, local models, roles and
-        areas, guest isolation, sign-in, approvals before the agent sends anything, approval of work started from outside, the command
-        judge, credential gates, deletion periods, the audit trail, encryption at rest and in transit, product analytics, the AI notice for
-        staff and the visitor chat's AI disclosure. Each shows whether it is on, with a link to where it is changed. Backups happen outside
-        the sandbox, so the page leaves them for your office to describe.
-    </p>
-
-    <h2>The documents</h2>
-    <p>Three drafts, in Polish or English, as Markdown or a Word document:</p>
     <ul>
-        <li><strong>Record of processing activities</strong> (GDPR Art. 30): the entry for this system, with its recipients, transfers outside the EEA and deletion periods.</li>
-        <li><strong>Data protection impact assessment</strong> (Art. 35): the system and its data flows, prompts for necessity and proportionality, and the main risks of using AI with the protections actually switched on. It ends with a note on the AI Act: helping to draft letters is not high-risk in itself, while deciding who gets public benefits would be (Annex III, point 5(a)).</li>
-        <li><strong>Technical and organisational measures</strong> (Art. 32): every measure, whether it is on, and where it is changed.</li>
+        <li>
+            <strong>Recommended</strong>: what an office working under GDPR, Poland's KRI rules and the AI Act usually wants, where this
+            sandbox is not set that way yet. Each change is listed under the protection it switches, with its value now beside the value
+            proposed, and starts ticked.
+        </li>
+        <li><strong>More you can switch on</strong>: optional protections, each with a link to where it is set.</li>
+        <li><strong>Already in place</strong>: folded away, and opened on asking.</li>
     </ul>
-    <p>
-        Everything the sandbox knows is filled in. What only your office knows, such as who the controller is, the purpose and legal basis,
-        whose data is processed and the officer's contact details, is left as a marked blank (✎). The drafts are a starting point for your
-        officer, not legal advice.
-    </p>
-
-    <h2>Settings for a public office</h2>
-    <p>
-        Intentic's defaults suit developers and individuals. An office working under GDPR, Poland's KRI rules and the AI Act usually wants
-        stricter ones, so the bottom of the page proposes them, each with its value now beside the value proposed:
-    </p>
+    <p>Intentic's defaults suit developers and individuals. The recommended settings are:</p>
     <ul>
         <li>the privacy shield on, with images masked and names found by the local model where it is installed;</li>
         <li>conversations deleted after 90 days, restore points, converted documents and full command output after 30, and the shield's memory after 90;</li>
@@ -63,7 +43,36 @@ import DocsLayout from "../../components/docs/DocsLayout.astro";
         <li>the command judge on.</li>
     </ul>
     <p>
-        Every item starts ticked; untick what you do not want, then apply. Nothing is applied without that, and the preset never loosens a
-        setting that is already stricter. Each item can be changed back later where it is set.
+        Untick what you do not want, then press Apply; you see the list once more before anything changes. The recommendations never loosen
+        a setting that is already stricter, and each one can be changed back later where it is set. Backups happen outside the sandbox, so
+        the page leaves them for your office to describe.
+    </p>
+
+    <h2>2. Where data goes</h2>
+    <p>
+        Every place the sandbox sends data to as it is set up right now: the AI model providers and endpoints you connected, mail, team-chat
+        bots, the visitor chat, connected services, cloud voices, web search and the agent's browser, your Intentic account, the access point
+        people reach the sandbox through, update checks, model downloads and the editor's product analytics. For each one it says what the
+        place receives, whether that can be personal data, what the privacy shield does on the way, and where the data is processed, marking
+        a place outside the European Economic Area, since a transfer to a third country needs a legal basis of its own. A place not in use is
+        listed apart, because one switch would open it.
+    </p>
+    <p>
+        Some things the sandbox cannot see, such as which data centre region Intentic's access point runs in, or whether your office reaches
+        the sandbox through its own reverse proxy. Those come first in the step, as the questions only your office can answer.
+    </p>
+
+    <h2>3. Documents</h2>
+    <p>Three drafts, in Polish or English, as a Word document or Markdown:</p>
+    <ul>
+        <li><strong>Record of processing activities</strong> (GDPR Art. 30): the entry for this system, with its recipients, transfers outside the EEA and deletion periods.</li>
+        <li><strong>Data protection impact assessment</strong> (Art. 35): the system and its data flows, prompts for necessity and proportionality, and the main risks of using AI with the protections actually switched on. It ends with a note on the AI Act: helping to draft letters is not high-risk in itself, while deciding who gets public benefits would be (Annex III, point 5(a)).</li>
+        <li><strong>Technical and organisational measures</strong> (Art. 32): every measure, whether it is on, and where it is changed.</li>
+    </ul>
+    <p>
+        Each is written from the sandbox's settings at the moment you download it, which is why it is the last step: while recommended
+        changes are left unapplied, the step says so, with the way back to the first. Everything the sandbox knows is filled in. What only
+        your office knows, such as who the controller is, the purpose and legal basis, whose data is processed and the officer's contact
+        details, is left as a marked blank (✎). The drafts are a starting point for your officer, not legal advice.
     </p>
 </DocsLayout>

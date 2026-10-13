@@ -4026,15 +4026,47 @@
             "description": "Aus: Kein Besuch dieser Sandbox sendet Nutzungsereignisse oder Bildschirmaufzeichnungen an Intentic, unabhängig davon, was die einzelnen Personen erlaubt haben."
         },
         "dataProtection": {
-            "intro": "Was ein Datenschutzbeauftragter braucht, bevor diese Sandbox personenbezogene Daten verarbeitet: die Dokumente, ausgefüllt nach der aktuellen Einrichtung; jeder Weg, auf dem Daten sie verlassen können; und was sie schützt. Nichts auf dieser Seite ändert eine Einstellung, bis du das Feld unten anwendest.",
+            "intro": "Bevor diese Sandbox personenbezogene Daten verarbeitet, geh drei Schritte durch: Schalte die empfohlenen Schutzmaßnahmen ein, prüfe, wohin Daten gehen, und gib deinem Datenschutzbeauftragten die Dokumente. Nichts ändert sich, bis du in Schritt 1 auf „Anwenden“ drückst.",
+            "steps": "Schritte",
+            "step": {
+                "protections": "Schutzmaßnahmen",
+                "places": "Wohin Daten gehen",
+                "documents": "Dokumente"
+            },
+            "tile": {
+                "protectionsOn": "{on} von {total} eingeschaltet",
+                "recommended": "{count} empfohlene Änderung anzuwenden | {count} empfohlene Änderungen anzuwenden",
+                "allApplied": "Alle empfohlenen Einstellungen angewendet",
+                "places": "{count} Ziel in Gebrauch | {count} Ziele in Gebrauch",
+                "outsideEea": "{count} außerhalb des EWR",
+                "questions": "{count} Frage an deine Behörde | {count} Fragen an deine Behörde",
+                "documents": "3 Entwürfe zum Herunterladen",
+                "bestAfter": "Am besten nach Schritt 1 herunterladen"
+            },
+            "protectionsIntro": "Jede Schutzmaßnahme ist eine Einstellung dieser Sandbox. Die empfohlenen sollte eine Behörde einschalten, die nach DSGVO und KI-Verordnung arbeitet. Sie sind schon angehakt: Entferne den Haken bei allem, was du nicht willst, und drücke „Anwenden“. Die übrigen schaltest du dort ein, wo sie jeweils eingestellt werden.",
+            "recommended": "Empfohlen",
+            "applyNote": "Bevor sich etwas ändert, siehst du die Liste.",
+            "more": "Was du noch einschalten kannst",
+            "moreCaption": "Optional, je nachdem, wie deine Behörde arbeitet. Jede wird dort eingeschaltet, wo sie eingestellt wird.",
+            "inPlace": "Bereits aktiv",
+            "showInPlace": "{count} aktive Schutzmaßnahme anzeigen | {count} aktive Schutzmaßnahmen anzeigen",
+            "hideInPlace": "Aktive ausblenden",
+            "placesIntro": "Jeder Ort, an den diese Sandbox Daten sendet, so wie sie jetzt eingerichtet ist. Dein Datenschutzbeauftragter führt sie als Empfänger. Ein Ort außerhalb des EWR (Europäischer Wirtschaftsraum) ist eine Übermittlung in ein Drittland, die eine eigene Rechtsgrundlage braucht (DSGVO, Kapitel V).",
+            "questionsTitle": "{count} Frage, die nur deine Behörde beantworten kann | {count} Fragen, die nur deine Behörde beantworten kann",
+            "inUse": "In Gebrauch",
+            "idleCaption": "Gerade nicht in Gebrauch. Aufgeführt, weil ein Schalter sie öffnen würde.",
+            "outsideEeaIn": "außerhalb des EWR ({region})",
+            "documentsIntro": "Die drei Dokumente, die dein Datenschutzbeauftragter über diese Sandbox führt. Jedes wird beim Herunterladen aus den aktuellen Einstellungen der Sandbox erstellt.",
+            "pendingBeforeDocuments": "{count} empfohlene Änderung aus Schritt 1 ist noch nicht angewendet, ein jetzt heruntergeladenes Dokument beschreibt die Sandbox also ohne sie. | {count} empfohlene Änderungen aus Schritt 1 sind noch nicht angewendet, ein jetzt heruntergeladenes Dokument beschreibt die Sandbox also ohne sie.",
+            "goToProtections": "Zurück zu Schritt 1",
+            "format": "Format",
+            "download": "Herunterladen",
             "couldntRead": "Der Datenschutzbericht dieser Sandbox konnte nicht gelesen werden",
             "couldntDownload": "Das Dokument konnte nicht erstellt werden",
             "couldntApply": "Die Einstellungen konnten nicht angewendet werden",
             "couldntReadPreset": "Die Einstellungen für Behörden konnten nicht gelesen werden",
-            "documents": "Dokumente für den Datenschutzbeauftragten",
             "documentsCaption": "Entwürfe nach der aktuellen Einrichtung. Felder, die nur deine Behörde beantworten kann, sind mit ✎ markiert.",
             "language": "Sprache",
-            "languageNote": "Die Sprache, in der die Dokumente geschrieben werden.",
             "document": {
                 "ropa": "Verzeichnis von Verarbeitungstätigkeiten",
                 "ropaNote": "Der Eintrag für dieses System in deinem Verzeichnis (Art. 30 DSGVO): Empfänger, Übermittlungen außerhalb des EWR, Löschfristen.",
@@ -4043,21 +4075,9 @@
                 "toms": "Technische und organisatorische Maßnahmen",
                 "tomsNote": "Jede Schutzmaßnahme des Systems, ob sie eingeschaltet ist und wo sie geändert wird (Art. 32 DSGVO)."
             },
-            "flows": "Wohin Daten gelangen können",
-            "flowsNote": "Jeder Ort, an den diese Sandbox nach aktueller Einrichtung Daten sendet. Ausgegraute Zeilen werden nicht genutzt, ein Schalter würde sie aber öffnen.",
             "notInUse": "nicht genutzt",
             "outsideEea": "außerhalb des EWR",
             "officeAnswers": "Deine Behörde sollte klären:",
-            "group": {
-                "models": "KI-Modelle",
-                "messaging": "Nachrichten und E-Mail",
-                "connectors": "Verbundene Dienste",
-                "speech": "Sprache",
-                "web": "Das Web",
-                "platform": "Intentic und Zugang",
-                "maintenance": "Updates und Downloads",
-                "analytics": "Analyse"
-            },
             "kind": {
                 "modelProvider": "Anbieter eines KI-Modells",
                 "modelEndpoint": "Externes KI-Modell",
@@ -4118,18 +4138,7 @@
                 "ingressProxy": "ob die Sandbox über einen eigenen Server der Behörde oder über den Zugangspunkt von Intentic erreicht wird.",
                 "platformRegion": "wo Intentic Kontodaten speichert."
             },
-            "measures": "Was sie schützt",
-            "measuresNote": "Die technischen und organisatorischen Maßnahmen, jeweils im aktuellen Stand.",
             "change": "Ändern",
-            "inPreset": "im Feld unten",
-            "category": {
-                "confidentiality": "Vertraulichkeit",
-                "minimisation": "Weniger Daten, kürzer gespeichert",
-                "integrity": "Kontrolle über das Handeln des Agenten",
-                "accountability": "Rechenschaftspflicht",
-                "transparency": "Transparenz",
-                "availability": "Verfügbarkeit"
-            },
             "status": {
                 "on": "an",
                 "partial": "teilweise an",
@@ -4239,11 +4248,7 @@
                     "what": "Sicherungen dieser Sandbox entstehen außerhalb von ihr, deshalb erstellt und schützt sie deine Behörde."
                 }
             },
-            "preset": "Einstellungen für Behörden",
-            "presetNote": "Strengere Einstellungen für eine Behörde, die unter DSGVO und KI-Verordnung arbeitet. Jede steht mit ihrem jetzigen und dem vorgeschlagenen Wert da. Entferne das Häkchen bei allem, was du nicht willst; nichts ändert sich, bevor du anwendest.",
             "ownerApplies": "Nur der Eigentümer der Sandbox kann diese Einstellungen anwenden.",
-            "toChange": "Würde sich ändern",
-            "alreadySet": "Bereits eingestellt",
             "apply": "{count} Einstellung anwenden | {count} Einstellungen anwenden",
             "nothingToChange": "Alle Einstellungen entsprechen bereits dem Vorschlag.",
             "applied": "{count} Einstellung angewendet | {count} Einstellungen angewendet",
