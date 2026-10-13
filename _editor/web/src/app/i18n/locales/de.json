@@ -1412,17 +1412,6 @@
             "noPersonasYetChat": "Noch keine Personas, deshalb spricht dieser Chat durch jedes Konto, das Sie verbunden haben. Richten Sie eine ein, um eine Nachricht als eine Person zu senden — mit nur deren Konten in Reichweite.",
             "notSignedInYet": ", noch nicht angemeldet"
         },
-        "chatPersonaRail": {
-            "archiveFinishedOf": "Fertige Agenten von {label} archivieren",
-            "chats": "{count} Chat | {count} Chats",
-            "closeAllOf": "Alle Chats von {label} schließen",
-            "closeFinishedOf": "Fertige Chats von {label} schließen",
-            "editPersona": "Persona bearbeiten…",
-            "needsYou": "{count} braucht dich | {count} brauchen dich",
-            "newChatAs": "Neuer Chat als {label}",
-            "outdatedMissing": "Bis zum Update können Chats nicht der Persona zugeordnet werden, als die sie sprechen, daher stehen alle unter „Jeder“.",
-            "working": "{count} arbeitet | {count} arbeiten"
-        },
         "chatPlacementMenu": {
             "conversationAlreadyRunsStart": "Diese Unterhaltung läuft bereits {placedAt}. Starten Sie einen neuen Agenten, um woanders zu arbeiten.",
             "noRunnersYetAdd": "Noch keine Runner. Fügen Sie unter Sandbox ▸ Geräte einen auf einem verbundenen Computer hinzu, um dort Agenten laufen zu lassen.",

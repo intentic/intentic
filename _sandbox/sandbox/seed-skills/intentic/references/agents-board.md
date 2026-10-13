@@ -47,8 +47,8 @@ Agents have no tags, labels, colors or stars, and personas have no icon or color
   your messages or id…**, which matches a title or either side's messages, archived agents included. There is no
   filter by status, provider, model, persona or reaction; the lanes are fixed: **Attention**, **Active**,
   **Finished**.
-- The chat list switches between **Agents** and **Personas**; the second groups chats under the persona they act
-  as, which is the way to see agents by persona.
+- The chat list is one list of every open chat in those same lanes. It is not grouped or filtered by persona: a
+  persona is a posture a chat wears, shown and changed on its composer's **Acts as** pill.
 - **Reactions**, as above.
 
 ## Where finished agents go

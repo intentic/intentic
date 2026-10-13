@@ -1414,17 +1414,6 @@
             "noPersonasYetChat": "Pas encore de persona : ce chat parle donc à travers tous les comptes que vous avez connectés. Créez-en un pour envoyer un message en tant qu'une seule personne, avec seulement ses comptes à portée.",
             "notSignedInYet": ", pas encore connecté"
         },
-        "chatPersonaRail": {
-            "archiveFinishedOf": "Archiver les agents terminés de {label}",
-            "chats": "{count} chat | {count} chats",
-            "closeAllOf": "Fermer tous les chats de {label}",
-            "closeFinishedOf": "Fermer les chats terminés de {label}",
-            "editPersona": "Modifier la persona…",
-            "needsYou": "{count} a besoin de vous | {count} ont besoin de vous",
-            "newChatAs": "Nouveau chat en tant que {label}",
-            "outdatedMissing": "Tant qu'elle n'est pas à jour, les chats ne peuvent pas être rangés sous la persona au nom de laquelle ils parlent : ils sont tous sous « N'importe qui ».",
-            "working": "{count} en cours | {count} en cours"
-        },
         "chatPlacementMenu": {
             "conversationAlreadyRunsStart": "Cette conversation tourne déjà {placedAt}. Lancez un nouvel agent pour travailler ailleurs.",
             "noRunnersYetAdd": "Pas encore de runner. Ajoutez-en un sur un ordinateur connecté sous Sandbox ▸ Appareils pour y faire tourner des agents.",

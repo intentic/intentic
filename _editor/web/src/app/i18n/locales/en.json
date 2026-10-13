@@ -2875,17 +2875,6 @@
             "noPersonasYetChat": "No personas yet, so this chat speaks through every account you've connected. Set one up to send a message as one person: with only that person's accounts in reach.",
             "notSignedInYet": ", not signed in yet"
         },
-        "chatPersonaRail": {
-            "archiveFinishedOf": "Archive {label}'s finished agents",
-            "chats": "{count} chat | {count} chats",
-            "closeAllOf": "Close all of {label}'s chats",
-            "closeFinishedOf": "Close {label}'s finished chats",
-            "editPersona": "Edit persona…",
-            "needsYou": "{count} needs you | {count} need you",
-            "newChatAs": "New chat as {label}",
-            "outdatedMissing": "Until it updates, chats can't be sorted under the persona they speak as, so they all sit under Anyone.",
-            "working": "{count} working | {count} working"
-        },
         "chatPlacementMenu": {
             "anotherSandbox": "another sandbox",
             "boxAsleep": "Not answering — it may be asleep",

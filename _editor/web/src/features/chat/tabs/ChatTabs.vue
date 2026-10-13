@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AnchoredOverlay, Button, ContextMenu, FACE_SIZES, isOverlayTarget, PersonaFace, SearchBar, type Tip, toneWash } from "@intentic/ui";
+import { AnchoredOverlay, Button, ContextMenu, isOverlayTarget, SearchBar, type Tip, toneWash } from "@intentic/ui";
 import { useSettled } from "@intentic/ui/async";
 import { createInlineRename } from "@intentic/ui/inline-rename";
 import type { Disposable } from "@intentic/extension-api";
@@ -23,7 +23,6 @@ import { commandShortcut, type CommandRegistration, registerCommand, withShortcu
 import { viewersOfSession } from "../../../workbench/presence/usePresence";
 import PresenceAvatars from "../../../workbench/presence/PresenceAvatars.vue";
 import ChatTabList from "./ChatTabList.vue";
-import { railPersona } from "../personas/railPersona";
 import PastChatList from "../panel/PastChatList.vue";
 import { useT } from "@intentic/ui/i18n";
 
@@ -570,29 +569,13 @@ const openHistory = (event: Event): void => {
         <!-- Foot of the rail: New agent (the fleet board's own wording), and nothing else. The rail is one form whether it stands
              in /chat or in a popped-out window, so neither grows an action the other lacks; history is the docked header's. -->
         <div v-else class="flex shrink-0 flex-wrap items-center justify-center gap-2 pb-2.5 pt-3">
-            <!-- The kit's compact secondary tier; the face names who a scoped chat speaks as. -->
-            <Button
-                size="small"
-                tier="boring"
-                :aria-label="railPersona === undefined ? undefined : t(`chat.chatPersonaRail.newChatAs`, { label: railPersona.label })"
-                @click="railPersona === undefined ? startAgent() : startAgent(undefined, railPersona.id)"
-            >
+            <!-- The kit's compact secondary tier. It starts as no one in particular: the new chat's posture is picked in its
+                 composer, or matched from its first message. -->
+            <Button size="small" tier="boring" @click="startAgent()">
                 <span class="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-500/15 text-link">
-                    <PersonaFace v-if="railPersona !== undefined" :persona="railPersona" :size="FACE_SIZES.pill" class="block" />
-                    <Icon v-else name="plus" class="text-2xs" />
+                    <Icon name="plus" class="text-2xs" />
                 </span>
-                <!-- Both labels share one grid cell, the idle one hidden, so the pill keeps the wider one's width either way. -->
-                <span class="grid leading-none">
-                    <span class="col-start-1 row-start-1 text-center" :class="{ invisible: railPersona !== undefined }">{{
-                        t(`chat.words.newAgent`)
-                    }}</span>
-                    <span
-                        class="col-start-1 row-start-1 text-center"
-                        :class="{ invisible: railPersona === undefined }"
-                        :aria-hidden="railPersona === undefined"
-                        >{{ t(`chat.words.newChat`) }}</span
-                    >
-                </span>
+                <span class="leading-none">{{ t(`chat.words.newAgent`) }}</span>
             </Button>
         </div>
 

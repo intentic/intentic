@@ -2875,17 +2875,6 @@
             "noPersonasYetChat": "Nie ma jeszcze person, więc ten czat mówi przez każde konto, które podłączyłeś. Utwórz jedną, żeby wysłać wiadomość jako jedna osoba — z tylko jej kontami w zasięgu.",
             "notSignedInYet": ", jeszcze niezalogowana"
         },
-        "chatPersonaRail": {
-            "archiveFinishedOf": "Zarchiwizuj skończonych agentów: {label}",
-            "chats": "{count} czat | {count} czaty | {count} czatów",
-            "closeAllOf": "Zamknij wszystkie czaty: {label}",
-            "closeFinishedOf": "Zamknij skończone czaty: {label}",
-            "editPersona": "Edytuj personę…",
-            "needsYou": "{count} czeka na ciebie | {count} czekają na ciebie | {count} czeka na ciebie",
-            "newChatAs": "Nowy czat jako {label}",
-            "outdatedMissing": "Do czasu aktualizacji czaty nie mogą być pogrupowane według persony, w której imieniu mówią, więc wszystkie trafiają do „Ktokolwiek”.",
-            "working": "{count} pracuje | {count} pracują | {count} pracuje"
-        },
         "chatPlacementMenu": {
             "anotherSandbox": "inny sandbox",
             "boxAsleep": "Nie odpowiada — może śpi",

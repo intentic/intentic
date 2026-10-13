@@ -48,9 +48,10 @@ account, the wrong folder), not against a determined agent with a shell.
 
 ## How a persona gets onto a conversation
 
-- **By hand**: the composer's **Persona** pill (it reads **Acts as: <name>**). **Anyone** is the row for no
-  persona: every connected account and the full toolbox. The pick travels with each message. The chat list's
-  **Personas** view has **New chat as <name>**.
+- **By hand**: the composer's **Persona** pill (it reads **Acts as: <name>**), or `@persona:` typed in the
+  composer. **Anyone** is the row for no persona: every connected account and the full toolbox. The pick travels
+  with each message. The chat list does not offer personas: **New agent** starts as no one in particular, and the
+  posture is picked in the chat or by routing.
 - **By routing**: with **Match new chats to a persona** on (Sandbox ▸ Personas; `personaRouting` in settings,
   on by default) AND a model set for **New chat routing** (Sandbox ▸ Agent ▸ Jobs), a new chat's first message
   is read against each card's one line when it is sent, and the chat says in its transcript which persona it

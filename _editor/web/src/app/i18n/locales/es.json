@@ -1421,17 +1421,6 @@
             "noPersonasYetChat": "Todavía no hay personas, así que este chat habla a través de todas las cuentas que has conectado. Crea una para enviar un mensaje como una sola persona: solo con sus cuentas a mano.",
             "notSignedInYet": ", sin sesión iniciada todavía"
         },
-        "chatPersonaRail": {
-            "archiveFinishedOf": "Archivar los agentes terminados de {label}",
-            "chats": "{count} chat | {count} chats",
-            "closeAllOf": "Cerrar todos los chats de {label}",
-            "closeFinishedOf": "Cerrar los chats terminados de {label}",
-            "editPersona": "Editar persona…",
-            "needsYou": "{count} te necesita | {count} te necesitan",
-            "newChatAs": "Chat nuevo como {label}",
-            "outdatedMissing": "Hasta que se actualice, los chats no se pueden agrupar bajo la persona con la que hablan, así que todos quedan en «Cualquiera».",
-            "working": "{count} en curso | {count} en curso"
-        },
         "chatPlacementMenu": {
             "conversationAlreadyRunsStart": "Esta conversación ya se ejecuta {placedAt}. Inicia un agente nuevo para trabajar en otro sitio.",
             "noRunnersYetAdd": "Todavía no hay runners. Añade uno en un ordenador conectado desde Sandbox ▸ Dispositivos para ejecutar agentes allí.",

@@ -3,7 +3,7 @@ import { t } from "@intentic/ui/i18n";
 import { computed, type ComputedRef } from "vue";
 import { useAgents } from "../../agents/fleet/useAgents";
 import type { FleetAgent } from "../../agents/fleet/useAgents-fleet";
-import { type FleetLane, laneOf, NO_ATTENTION, unregistered } from "../../agents/fleet/agentStatus";
+import { type FleetLane, laneOf, NO_ATTENTION } from "../../agents/fleet/agentStatus";
 import { rosterHeard } from "../../agents/fleet/useAgents-registry";
 import type { Conversation } from "../session/conversation";
 import { draftPreview } from "../drafts/draftPreview";
@@ -88,32 +88,6 @@ export const tabsInLane = (lane: FleetLane): ReadonlySet<string> => {
     return idsOf(
         sweepable().filter(
             (conversation) => !untouchedDraft(conversation) && laneOfTab(conversation, agentById(conversation.conversationId)) === lane,
-        ),
-    );
-};
-
-// Who a conversation speaks as, by the daemon's one field: the persona its last turn ran as (each turn runs as its own).
-// A sandbox too old to send it groups nothing under a persona, and the rail says it needs an update (ChatPersonaRail).
-export const personaOfAgent = (agent: Pick<FleetAgent, "lastActsAs">): string | undefined => agent.lastActsAs;
-
-// The persona a chat sits under in the Personas cut: the daemon's word for a conversation it holds, and only for a draft
-// it has never seen, the pick its first turn will run as. A persona naming no card on file sits with Anyone, so the cut
-// always holds every open chat exactly once.
-export const personaOfTab = (conversation: Conversation, known: ReadonlySet<string>): string | undefined => {
-    const agent = useAgents().agentById(conversation.conversationId);
-    const persona = agent !== undefined && !unregistered(agent.status) ? personaOfAgent(agent) : conversation.selection.actsAs.value;
-    return persona !== undefined && known.has(persona) ? persona : undefined;
-};
-
-// One persona's sweepable chats, optionally one lane of them: the persona header's own Close verbs.
-export const tabsOfPersona = (persona: string | undefined, known: ReadonlySet<string>, lane?: FleetLane): ReadonlySet<string> => {
-    const { agentById } = useAgents();
-    return idsOf(
-        sweepable().filter(
-            (conversation) =>
-                !untouchedDraft(conversation) &&
-                personaOfTab(conversation, known) === persona &&
-                (lane === undefined || laneOfTab(conversation, agentById(conversation.conversationId)) === lane),
         ),
     );
 };

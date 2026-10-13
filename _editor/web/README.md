@@ -54,10 +54,12 @@ flowchart LR
   rail tile, the page or the control itself, the closest one on screen leading (`features/tour/`). The list is never
   offered on a sandbox where work has already landed, so nobody who is past their first run meets it. `?mode=fresh`
   in `_site/demo` shows it.
-- **Personas.** `/sandbox/personas` shows square selectors with the selected persona's editor below. Settings and
-  the popped-out chat share `components/PersonaTile.vue` for the face, label and selected appearance; each view owns
-  its selection and actions. Settings wraps the shared tile in `PersonaSelector.vue` for renaming and removal directly
-  on the selector. It saves a queued edit against its original persona when the selection changes.
+- **Personas.** `/sandbox/personas` shows square selectors with the selected persona's editor below.
+  `PersonaSelector.vue` wraps `components/PersonaTile.vue` (face, label, selected appearance) for renaming and removal
+  directly on the selector. It saves a queued edit against its original persona when the selection changes. A persona
+  is a posture a chat wears, not someone to talk to: a chat picks it on its composer's **Acts as** pill or with
+  `@persona:`, or routing matches one from its first message. The chat list neither groups nor scopes chats by
+  persona.
 - **Live state.** Server state lives in vue-query, mirrored per user to IndexedDB so a reload paints the last-known
   workspace. What the cache cannot paint yet is outlined as it last looked. Each loading placeholder is drawn from an
   imprint `@intentic/ui` took of its content, stored in IndexedDB as one record per sandbox and view
@@ -102,10 +104,9 @@ flowchart LR
 - **Older sandboxes.** A view drawn from fields an older daemon does not send never rebuilds them from what it did
   send. It shows what was served as served, and `SandboxOutdatedNotice.vue` says the sandbox needs an update, what the
   view lacks until then, and how to update: the sandbox page's Update card, or `ic sandbox update <slug>` for a sandbox
-  installed by hand. The persona rail and the chat's accounts read "older" off the routes the daemon advertises
-  (`supportsRoute`, `accountsOutdated`): `agent.switchAccount` arrived in v1.313, the same release as the `lastActsAs`
-  the rail groups chats by. Such a sandbox's account rows carry no verdict (`state`) and read as unknown, no held turn
-  is offered another account, and the model picker, the continue card and Sandbox ▸ Models say it needs an
+  installed by hand. The chat's accounts read "older" off the routes the daemon advertises (`supportsRoute`,
+  `accountsOutdated`): `agent.switchAccount` arrived in v1.313. Such a sandbox's account rows carry no verdict
+  (`state`) and read as unknown, no held turn is offered another account, and the model picker, the continue card and Sandbox ▸ Models say it needs an
   update. The editor sends a session id only for a conversation the daemon has no record of (a past session opened
   from the history menu), and reads the account a failed turn ran on only off its error frame. Nothing else is guessed
   either: a card without `awaitingWake` is not waiting on a wake, a reading without `memoryRoom` warns of nothing, and a
