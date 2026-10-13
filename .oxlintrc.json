@@ -44,6 +44,7 @@
                     "_sum",
                     "_zod",
                     "__API_URL__",
+                    "__POSTHOG_HOST__",
                     "__POSTHOG_KEY__",
                     "__intentic",
                     "__INTENTIC_DESKTOP__",

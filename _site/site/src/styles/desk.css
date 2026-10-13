@@ -29,8 +29,8 @@ html[data-variant="desk"] {
     --desk-brand-950: oklch(33% 0.085 45);
 
     --desk-green-700: oklch(48% 0.12 150);
-    --desk-amber-800: oklch(46% 0.11 88);
-    --desk-red-700: oklch(50% 0.20 27);
+    --desk-amber-800: oklch(49% 0.108 74);
+    --desk-red-700: oklch(51% 0.17 27);
 
     /* A warm room throws no neutral shadow — the app's light shadow tint, and its three depths. */
     --desk-shadow-tint: 61 40 22;
@@ -47,8 +47,8 @@ html[data-variant="desk"] {
        dark skin it is three values below the canvas, so here it is the same hair's breadth the other way. */
     --color-ground: color-mix(in oklab, var(--color-canvas) 88%, var(--color-line));
 
-    --color-line: color-mix(in oklab, var(--desk-neutral-200) 92%, var(--desk-brand-300));
-    --color-line-strong: color-mix(in oklab, var(--desk-neutral-300) 89%, var(--desk-brand-300));
+    --color-line: color-mix(in oklab, var(--color-content) 13%, var(--color-card));
+    --color-line-strong: color-mix(in oklab, var(--color-content) 23%, var(--color-card));
     /* The site's third rule weight, which the app does not have: what a frame wears under the pointer. */
     --color-line-bright: color-mix(in oklab, var(--desk-brand-700) 38%, var(--color-line-strong));
 

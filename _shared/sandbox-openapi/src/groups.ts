@@ -420,6 +420,22 @@ export const SPEC_GROUPS: readonly SpecGroup[] = [
             "Read-only by design. Entries are written by the sandbox alone and never by a caller, which is the whole reason the record can be trusted.",
     },
     {
+        name: "audit",
+        shelf: "daemon",
+        label: "Audit trail",
+        summary: "The tamper-evident record of who did what, its check, its export and its outside copy",
+        description:
+            "Reading the trail, checking that no entry was changed or removed since it was written, downloading a period of it, and whether the copy kept outside this sandbox is keeping up.",
+    },
+    {
+        name: "compliance",
+        shelf: "daemon",
+        label: "Data protection",
+        summary: "Where data can leave this sandbox, what protects it, and the documents that say so",
+        description:
+            "Every outbound path as configured right now, with its destination, whether personal data can travel on it and whether the privacy shield covers it; the technical and organisational measures and whether each is in place; a data protection document filled in from this sandbox; and what the public-office preset would change, with a way to apply it.",
+    },
+    {
         name: "logs",
         shelf: "daemon",
         label: "Logs",

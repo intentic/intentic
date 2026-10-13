@@ -74,7 +74,12 @@ const toGuestNames = (value) =>
         .replace(/var\(--color-success-(\d+)\)/gu, "var(--desk-green-$1)")
         .replace(/var\(--color-warning-(\d+)\)/gu, "var(--desk-amber-$1)")
         .replace(/var\(--color-white\)/gu, "#fff")
-        .replace(/var\(--ui-shadow-tint\)/gu, "var(--desk-shadow-tint)");
+        .replace(/var\(--ui-shadow-tint\)/gu, "var(--desk-shadow-tint)")
+        // A recipe built from another role (the rules are mixed from the ink and the card) names desk's counterpart.
+        .replace(/var\((--role-[\w-]+)\)/gu, (whole, role) => {
+            const counterpart = ROLES.find(([appName]) => appName === role)?.[1];
+            return counterpart === undefined ? whole : `var(${counterpart})`;
+        });
 
 // Left: the app's light role. Right: what desk.css calls the same thing. The names differ because the site's token
 // vocabulary is its own — it has gold and a bronze button where the app has a link and a filled control.

@@ -33,7 +33,11 @@ describe(`the boot profile`, () => {
     it(`keeps a stall's profile, with the function that held the loop in it`, async () => {
         const dir = mkdtempSync(join(tmpdir(), "boot-profile-"));
         const { logger, warned } = recorder();
-        startBootProfile(logger, dir, { windowMs: 600, stallMs: 150 });
+        // A window wide enough that a slow profiler start on a loaded runner still leaves the stall inside it.
+        const boot = startBootProfile(logger, dir, { windowMs: 2_000, stallMs: 150 });
+        // Sampling starts over three inspector round-trips; a stall before them is measured but never profiled.
+        await boot.ready;
+        // And one tick of the delay monitor (20 ms resolution), which measures a stall only once its timer runs.
         await new Promise((resolve) => setTimeout(resolve, 50));
         stallTheLoop(300);
         await until(() => warned.length > 0);

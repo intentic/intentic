@@ -21,6 +21,8 @@ const SUFFIX = ".cpuprofile";
 
 export interface BootProfile {
     readonly stop: () => void;
+    /** Resolves once the profiler is sampling, so what came before it is in no profile; rejects if it could not start. */
+    readonly ready: Promise<void>;
 }
 
 export interface BootProfileOptions {
@@ -79,6 +81,7 @@ export const startBootProfile = (logger: Logger, dir: string, options: BootProfi
     // The profile must never be what keeps the daemon alive.
     timer.unref();
     return {
+        ready: started,
         stop: () => {
             clearTimeout(timer);
             settle(false);
