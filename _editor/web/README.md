@@ -176,8 +176,9 @@ flowchart LR
   every section. With extensions installed that strip was seventeen chips over every page of the sandbox hub._
 - **The rail and the status bar.** The rail holds places a reader goes. What the sandbox is running sits in the
   status bar at the foot of the window instead (`shell/status-bar/`): the terminal's toggle, always there for a
-  developer, then a chip for each live thing (the live app while something answers, the agents' open browsers, the
-  sandbox's desktop while a window is open on it, a port open to the internet, a connected tunnel), each there only
+  developer, then a chip for each live thing (Browsers, counting the live apps that answer, the agents' open browsers and the
+  windows on the sandbox's desktop, since all three are tabs of one view; a port open to the internet; a connected
+  tunnel), each there only
   while it is live or its page is in front, so a chip arriving is news and the rail never moves for it. Geek metrics
   (Settings ▸ Appearance) add CPU, memory and disk at the bar's far end, whose panel and the docked terminal take turns
   above the bar. Resource sizes use binary units (MiB/GiB). The panel separates the sandbox's counted working set
@@ -186,7 +187,8 @@ flowchart LR
   file cache excluded from the total; scope explanations stay in tooltips, including for older daemons without invented readings.
   _2026-10-08: the terminal, Browsers and the live app left the rail. As tiles they were always on (a
   closed browser still listed, a repo with a panel counted as running), and tightening them would have made the rail
-  move with every agent turn._
+  move with every agent turn 2026-10-13: the live app, Browsers and Desktop chips became one Browsers chip, as all three
+  opened the same view; its hover card says what is behind the count._
 - **The side panel.** The rail owns the main area; the side panel (`shell/side/`, its tabs and views registered in
   `workbench/side/`) is where the reader looks at another section's
   things without leaving the one they picked. A reference (a file a chat names, a server a turn left running, an

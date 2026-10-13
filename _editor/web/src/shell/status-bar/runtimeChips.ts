@@ -3,14 +3,14 @@ import type { Tip } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 
 // THE STATUS BAR'S RUNTIME CHIPS: the machinery agents work with, said at the foot of the window rather than tiled on the
-// rail, which is kept for places a reader goes. Each chip is there only while its thing is live (a browser open, an app
-// answering, a window on the desktop, a port open to the internet, a tunnel up) or while its page is the one in front,
+// rail, which is kept for places a reader goes. Each chip is there only while its thing is live (a browser, an app or a
+// desktop window open, a port open to the internet, a tunnel up) or while its page is the one in front,
 // so a chip arriving is news and the rail never moves for it. The terminal is the one exception: nothing else opens a
 // developer's first shell, so its chip stays.
 //
 // Pure: the facts come in, the chips go out (useRuntimeChips.ts reads the facts).
 
-export type RuntimeChipId = `terminal` | `preview` | `browsers` | `desktop` | `ports` | `vpn`;
+export type RuntimeChipId = `terminal` | `browsers` | `ports` | `vpn`;
 
 export interface RuntimeChip {
     readonly id: RuntimeChipId;
@@ -62,68 +62,79 @@ export const terminalChip = (facts: {
 };
 
 /**
- * The live app, while something answers. A repo that merely has an operator panel, or files in the outbox, is somewhere
- * to start one from (the palette, the Project page, the chat that started it), not something running. A press opens
- * Browsers on the app most worth seeing (`?preview`, BrowsersArea.vue), since the live app is a tab there.
+ * Everything live the Browsers view shows, as one chip: the live apps while something answers, the agents' web windows
+ * while one is open, the sandbox's desktop while a window is open on it. They are all tabs of one view, so three chips
+ * for one place only split the reader's attention; the hover card says what is behind the count.
+ *
+ * A repo that merely has an operator panel is somewhere to start an app from, not something running; a closed browser
+ * the daemon still lists is the Browsers page's record, not news. Warning while an agent waits on the reader in one,
+ * which the chat's card and Needs you say as well.
  */
-export const previewChip = (facts: { readonly healthy: number; readonly here: boolean; readonly label: string }): RuntimeChip | undefined => {
-    if (facts.healthy === 0 && !facts.here) {
-        return undefined;
+interface BrowsersFacts {
+    readonly sessions: readonly BrowserSession[];
+    /** Live apps answering. */
+    readonly apps: number;
+    /** Windows open on the desktop; undefined for a reader who may not drive it. */
+    readonly desktopWindows: number | undefined;
+    /** What this reader calls a live app (the vocabulary's word). */
+    readonly appsLabel: string;
+    readonly here: boolean;
+}
+
+// The hover card's rows: one per kind that is live.
+const browsersRows = (facts: BrowsersFacts, live: number, desktop: number): { label: string; value: string }[] => {
+    const rows: { label: string; value: string }[] = [];
+    if (facts.apps > 0) {
+        rows.push({ label: facts.appsLabel, value: t(`shell.shellDesktop.running`, { healthy: facts.apps }) });
     }
-    const running = facts.healthy > 0 ? t(`shell.shellDesktop.running`, { healthy: facts.healthy }) : undefined;
-    return {
-        id: `preview`,
-        label: facts.label,
-        to: `/browsers?preview`,
-        ...(facts.healthy > 0 ? { count: facts.healthy } : {}),
-        active: facts.here,
-        aria: spoken(facts.label, running),
-    };
+    if (live > 0) {
+        rows.push({ label: t(`shared.browsers`), value: t(`shell.shellDesktop.open`, { live }) });
+    }
+    if (desktop > 0) {
+        rows.push({ label: t(`shared.desktop`), value: t(`shell.shellDesktop.windowsOpen`, { count: desktop }, desktop) });
+    }
+    return rows;
 };
 
-/**
- * The agents' browsers, while one is open. The daemon keeps a closed one listed for a while as the record of where the
- * agent went; that record is the Browsers page's to show, not news. Warning while one waits on the reader, which the
- * chat's card and Needs you say as well.
- */
-export const browsersChip = (facts: { readonly sessions: readonly BrowserSession[]; readonly here: boolean }): RuntimeChip | undefined => {
+// Where a press goes: the window asking for help; else the one kind that is live, by name, since a bare /browsers
+// reopens whatever tab was in front; with several kinds live (or none), that tab in front is as good a guess as any.
+const browsersTarget = (facts: BrowsersFacts, desktop: number): string => {
+    const asking = facts.sessions.find((session) => session.help !== undefined);
+    if (asking !== undefined) {
+        return `/browsers/${asking.name}`;
+    }
+    const window = facts.sessions.find((session) => session.running);
+    const kinds = [facts.apps > 0, window !== undefined, desktop > 0].filter(Boolean).length;
+    if (kinds !== 1) {
+        return `/browsers`;
+    }
+    if (facts.apps > 0) {
+        return `/browsers?preview`;
+    }
+    return window === undefined ? `/browsers/desktop` : `/browsers/${window.name}`;
+};
+
+export const browsersChip = (facts: BrowsersFacts): RuntimeChip | undefined => {
     const live = facts.sessions.filter((session) => session.running).length;
     const helping = facts.sessions.filter((session) => session.help !== undefined).length;
-    if (live === 0 && helping === 0 && !facts.here) {
+    const desktop = facts.desktopWindows ?? 0;
+    const total = facts.apps + live + desktop;
+    if (total === 0 && helping === 0 && !facts.here) {
         return undefined;
     }
     const label = t(`shared.browsers`);
-    // To a web window by name, since a bare /browsers reopens whatever tab was in front, a live app as like as not: the
-    // one asking for help, else the one that moved last.
-    const window = facts.sessions.find((session) => session.help !== undefined) ?? facts.sessions.find((session) => session.running);
-    const base = { id: `browsers`, label, to: window === undefined ? `/browsers` : `/browsers/${window.name}`, active: facts.here } as const;
+    const rows = browsersRows(facts, live, desktop);
+    const base = { id: `browsers`, label, to: browsersTarget(facts, desktop), active: facts.here } as const;
     if (helping > 0) {
         const note = t(`shell.shellDesktop.agentNeedsHelp`);
-        return { ...base, count: helping, tone: `warning`, aria: spoken(label, note) };
+        return { ...base, count: helping, tone: `warning`, aria: spoken(label, note), tip: { title: note, tone: `warning`, rows } };
     }
-    const open = live > 0 ? t(`shell.shellDesktop.open`, { live }) : undefined;
-    return {
+    const chip: RuntimeChip = {
         ...base,
-        ...(live > 0 ? { count: live } : {}),
-        aria: spoken(label, open),
+        ...(total > 0 ? { count: total } : {}),
+        aria: spoken(label, ...rows.map((row) => `${row.label} ${row.value}`)),
     };
-};
-
-/** The sandbox's own desktop, while a window is open on it: an empty screen has nothing to watch. Its tab in Browsers. */
-export const desktopChip = (facts: { readonly windows: number; readonly here: boolean }): RuntimeChip | undefined => {
-    if (facts.windows === 0 && !facts.here) {
-        return undefined;
-    }
-    const label = t(`shared.desktop`);
-    const open = facts.windows > 0 ? t(`shell.shellDesktop.windowsOpen`, { count: facts.windows }, facts.windows) : undefined;
-    return {
-        id: `desktop`,
-        label,
-        to: `/browsers/desktop`,
-        ...(facts.windows > 0 ? { count: facts.windows } : {}),
-        active: facts.here,
-        aria: spoken(label, open),
-    };
+    return rows.length === 0 ? chip : { ...chip, tip: { title: label, rows } };
 };
 
 /** Ports forwarded to the internet: the sandbox is answering strangers for as long as this chip is here. */
