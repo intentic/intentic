@@ -289,7 +289,8 @@ test("a handle several conversations answer to is refused with the candidates, n
     const { status, body } = await fleet(app, "/fleet/fair-sage");
     expect(status).toBe(409);
     expect(body.ok).toBe(false);
-    expect(body.candidates?.map((candidate) => candidate.id)).toEqual(["fair-sage-other", "fair-sage-ey2r"]);
+    // Both turns can start in the same millisecond, so recency cannot order them here: the claim is the whole set.
+    expect(body.candidates?.map((candidate) => candidate.id).toSorted()).toEqual(["fair-sage-ey2r", "fair-sage-other"]);
     // An unmatched handle is a 404 naming `agents find`.
     const missing = await fleet(app, "/fleet/nothing-like-this");
     expect(missing.status).toBe(404);

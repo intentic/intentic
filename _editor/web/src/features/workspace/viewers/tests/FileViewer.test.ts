@@ -20,7 +20,10 @@ jest.mock("../../files/fileWindow", () => ({
         });
     },
 }));
+// The rest of the client stays real: the viewer's imports reach sandboxJson too.
+const sandboxClient = { ...(await import("../../../../client/sandbox/sandboxClient")) };
 jest.mock("../../../../client/sandbox/sandboxClient", () => ({
+    ...sandboxClient,
     sandboxBlob: (path: string) => Promise.resolve(new Blob([`bytes of ${path}`])),
     // Imported on the way in (sandboxRaw, useDirectoryUi); no daemon answers here, so a read never settles.
     sandboxJson: () => new Promise(() => undefined),
