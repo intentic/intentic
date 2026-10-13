@@ -4682,9 +4682,7 @@
         },
         "analytics": {
             "title": "Produktanalyse",
-            "description": "Hilf uns, Intentic zu verbessern: Erlaube Nutzungsereignisse und Aufzeichnungen der Oberfläche während der Arbeit, verknüpft mit deinem Konto. Inhalte deines Arbeitsbereichs werden darin maskiert. „Nein danke“ sendet nichts, und du kannst das jederzeit in den Einstellungen ändern.",
-            "allow": "Erlauben",
-            "deny": "Nein, danke"
+            "description": "Nutzungsereignisse und Aufzeichnungen der Oberfläche während der Arbeit, verknüpft mit deinem Konto, damit wir sehen, wo es hakt. Inhalte deines Arbeitsbereichs werden darin maskiert. Ausgeschaltet sendet dieser Browser nichts."
         },
         "settingsVoice": {
             "group": "Weckwort",

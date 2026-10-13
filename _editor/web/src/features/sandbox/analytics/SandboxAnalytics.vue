@@ -4,7 +4,7 @@ import { useT } from "@intentic/ui/i18n";
 import ToggleSwitch from "primevue/toggleswitch";
 import { useSandboxSettings } from "../overview/useSandboxSettings";
 
-// The box's say over Intentic's product analytics, above each person's own consent (analyticsGate.ts reads it). A row,
+// The box's say over Intentic's product analytics, above each person's own setting (analyticsGate.ts reads it). A row,
 // not a group: Sandbox ▸ Access sets it beside the AI notice, both about the people using the box.
 
 const t = useT();

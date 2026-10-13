@@ -8639,9 +8639,7 @@
         },
         "analytics": {
             "title": "Analityka produktu",
-            "description": "Pomóż nam ulepszać Intentic: zezwól na zdarzenia użycia i nagrania interfejsu podczas pracy, powiązane z Twoim kontem. Treść Twojego obszaru roboczego jest w nich zamaskowana. „Nie, dziękuję” nie wysyła niczego, a decyzję możesz zmienić w każdej chwili w Ustawieniach.",
-            "allow": "Zezwól",
-            "deny": "Nie, dziękuję"
+            "description": "Zdarzenia użycia i nagrania interfejsu podczas pracy, powiązane z Twoim kontem, żebyśmy widzieli, gdzie ludzie się zacinają. Treść Twojego obszaru roboczego jest w nich zamaskowana. Wyłączone — ta przeglądarka nie wysyła niczego."
         },
         "settingsVoice": {
             "group": "Słowo wywołujące",

@@ -4702,9 +4702,7 @@
         },
         "analytics": {
             "title": "Análisis del producto",
-            "description": "Ayúdanos a mejorar Intentic: permite eventos de uso y grabaciones de la interfaz mientras trabajas, vinculados a tu cuenta. El contenido de tu espacio de trabajo queda enmascarado en ellos. «No, gracias» no envía nada, y puedes cambiarlo en cualquier momento en Ajustes.",
-            "allow": "Permitir",
-            "deny": "No, gracias"
+            "description": "Eventos de uso y grabaciones de la interfaz mientras trabajas, vinculados a tu cuenta, para ver dónde se atasca la gente. El contenido de tu espacio de trabajo queda enmascarado en ellos. Si lo desactivas, este navegador no envía nada."
         },
         "settingsVoice": {
             "group": "Palabra de activación",

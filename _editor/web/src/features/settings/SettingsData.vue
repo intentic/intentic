@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Button, Notice, Row, RowGroup } from "@intentic/ui";
+import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import { analyticsAvailable, analyticsChoice, chooseAnalytics } from "../../app/analyticsConsent";
@@ -88,10 +89,7 @@ const confirmDelete = async (): Promise<void> => {
         <RowGroup v-if="analyticsAvailable()" :label="t(`settings.analytics.title`)">
             <Row icon="shield" :title="t(`settings.analytics.title`)" :description="t(`settings.analytics.description`)">
                 <template #control>
-                    <div class="flex gap-2">
-                        <Button :label="t(`settings.analytics.allow`)" :tier="analyticsChoice === `allow` ? `boring` : `quiet`" size="small" @click="chooseAnalytics(`allow`)" />
-                        <Button :label="t(`settings.analytics.deny`)" :tier="analyticsChoice === `deny` ? `boring` : `quiet`" size="small" @click="chooseAnalytics(`deny`)" />
-                    </div>
+                    <ToggleSwitch :model-value="analyticsChoice === `allow`" @update:model-value="chooseAnalytics($event ? `allow` : `deny`)" />
                 </template>
             </Row>
         </RowGroup>

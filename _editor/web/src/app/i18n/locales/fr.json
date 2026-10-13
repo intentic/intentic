@@ -4660,9 +4660,7 @@
         },
         "analytics": {
             "title": "Analyse du produit",
-            "description": "Aidez-nous à améliorer Intentic : autorisez les événements d’utilisation et les enregistrements de l’interface pendant votre travail, liés à votre compte. Le contenu de votre espace de travail y est masqué. « Non merci » n’envoie rien, et vous pouvez changer d’avis à tout moment dans les Paramètres.",
-            "allow": "Autoriser",
-            "deny": "Non merci"
+            "description": "Événements d’utilisation et enregistrements de l’interface pendant votre travail, liés à votre compte, pour voir où les gens bloquent. Le contenu de votre espace de travail y est masqué. Désactivé, ce navigateur n’envoie rien."
         },
         "settingsVoice": {
             "group": "Mot d'éveil",

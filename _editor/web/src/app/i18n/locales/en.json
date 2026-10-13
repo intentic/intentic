@@ -9042,9 +9042,7 @@
         },
         "analytics": {
             "title": "Product analytics",
-            "description": "Help us improve Intentic: allow usage events and recordings of the interface as you use it, linked to your account. What your workspace contains is masked out of them. No thanks sends nothing, and you can change this at any time in Settings.",
-            "allow": "Allow",
-            "deny": "No thanks"
+            "description": "Usage events and recordings of the interface as you use it, linked to your account, so we can see where people get stuck. What your workspace contains is masked out of them. Switched off, this browser sends nothing."
         },
         "settingsVoice": {
             "group": "Wake word",

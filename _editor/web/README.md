@@ -249,8 +249,8 @@ flowchart LR
   in (`builtins.ts`); the rest arrive from the daemon as single-file ESM bundles imported from a Blob URL.
   `hostModules.ts` and `public/ext-shims/` hand every bundle the app's own `vue`, vue-query and
   [extension-ui](../../_shared/extension-ui) instances.
-- **Session replay and events.** A browser stores an Allow or No thanks choice locally; the SDK only loads after Allow. Settings → Data & privacy can change it. An active sandbox needs loaded settings with `productAnalytics: true` before any event or recording runs; leaving one with analytics off resumes capture only with consent. `POSTHOG_UI_HOST` chooses the dashboard host for replay links (default `https://us.posthog.com`), while `POSTHOG_API_HOST` and `POSTHOG_ASSETS_HOST` choose the proxy targets.
-  _2026-10-13: refusal sends no cookieless counts, since No thanks should make no analytics request._
+- **Session replay and events.** Analytics is on unless this browser was switched off: nobody is asked, Settings → Data & privacy holds the one switch, and only a `deny` is stored locally. An active sandbox needs loaded settings with `productAnalytics: true` before any event or recording runs. `POSTHOG_UI_HOST` chooses the dashboard host for replay links (default `https://us.posthog.com`), while `POSTHOG_API_HOST` and `POSTHOG_ASSETS_HOST` choose the proxy targets.
+  _2026-10-13: the consent popup is gone and the default is on; switching it off still sends no cookieless counts, since off should make no analytics request._
 - **Session replay and events.** `src/app/replayPrivacy.ts` decides what a PostHog recording may hold and
   `src/app/eventPrivacy.ts` does the same for every event, through `before_send`. `analytics.ts` hands both to
   `posthog.init`. In a replay every text node goes through `src/app/replayText.ts`, which keeps wording from an i18n

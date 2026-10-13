@@ -421,10 +421,19 @@ const POSTHOG_HOST: &str = match option_env!("POSTHOG_HOST") {
     None => "https://us.i.posthog.com",
 };
 
+/// On unless this install was switched off: the workspace window's Settings, Data is the one switch
+/// (web/src/app/analyticsConsent.ts), and it writes "deny" here through `intentic://analytics`. No file means
+/// nobody has switched it off.
+/// On unless this install was switched off. Settings, Data in the workspace window is the one switch
+/// (web/src/app/analyticsConsent.ts), and it writes the choice here through `intentic://analytics`; no file means
+/// nobody has switched it off. Without a config dir there is nowhere to keep a refusal, so nothing is sent.
 pub fn analytics_allowed() -> bool {
-    config_dir().is_some_and(|dir| {
-        std::fs::read_to_string(dir.join("analytics-consent")).is_ok_and(|choice| choice == "allow")
-    })
+    config_dir().is_some_and(
+        |dir| match std::fs::read_to_string(dir.join("analytics-consent")) {
+            Ok(choice) => choice != "deny",
+            Err(_) => true,
+        },
+    )
 }
 
 pub fn set_analytics_consent(choice: &str) {

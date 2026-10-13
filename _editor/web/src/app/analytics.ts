@@ -20,9 +20,12 @@ import { replayPrivacy } from "./replayPrivacy";
 // media, and eventPrivacy.ts gives the same treatment to the addresses and clicked text of the events. Widen either
 // there, not here, and only together with the policy.
 //
-// LOADED AFTER CONSENT AND THE PAGE'S FIRST IDLE MOMENT, not with the app: posthog-js is ~290 KB of JS that a phone downloaded and ran
-// before its first screen, and its recorder then started serialising a page still being built. Milestones after
-// consent but before it arrives wait in `early` and go out only while capture is allowed.
+// LOADED AT THE PAGE'S FIRST IDLE MOMENT, not with the app: posthog-js is ~290 KB of JS that a phone downloaded and ran
+// before its first screen, and its recorder then started serialising a page still being built. Milestones raised
+// before the SDK is there wait in `early` and go out only while capture is allowed.
+//
+// Nobody is asked: analytics is on unless this browser was switched off under Settings, Data
+// (analyticsConsent.ts), and a sandbox's own switch can withhold it for everyone in that sandbox (the gate below).
 let enabled = false;
 let allowed = false;
 let client: PostHog | undefined;
@@ -45,10 +48,11 @@ const firstIdle = (): Promise<void> =>
 // thread to open a chat.
 const touchScreen = (): boolean => `matchMedia` in globalThis && globalThis.matchMedia(`(hover: none) and (pointer: coarse)`).matches;
 
-// Whether the place the person is in now may be recorded at all, beyond their own consent, and a way to hear when that
-// may have changed. The sandbox's own switch (`productAnalytics`) is read by the gate beside that switch
+// Whether the place the person is in now may be recorded at all, beyond this browser's own setting, and a way to hear
+// when that may have changed. The sandbox's own switch (`productAnalytics`) is read by the gate beside that switch
 // (features/sandbox/analytics/analyticsGate.ts), handed in from main.ts, since the sandbox's client sits
-// above this module. `asking` says the person has agreed, so the gate may go and find out what it does not know yet.
+// above this module. `asking` says this browser is not switched off, so the gate may go and find out what it does not
+// know yet.
 export interface AnalyticsGate {
     readonly permitted: (asking: boolean) => boolean;
     readonly watch: (onChange: () => void) => void;
@@ -109,7 +113,7 @@ export const initAnalytics = async (routePatternOf: RoutePatternOf, user: Readon
         // POSTHOG_UI_HOST names an EU project's (https://eu.posthog.com); a literal `$…` is a container that had none.
         ui_host: posthogUiHost === undefined || posthogUiHost.startsWith(`$`) ? `https://us.posthog.com` : posthogUiHost,
         opt_out_capturing_by_default: true,
-        // No cookieless counts on refusal: the promise made by No thanks is that this client sends no events.
+        // No cookieless counts on refusal: the promise made by switching it off is that this client sends no events.
         defaults: `2026-06-25`,
         persistence: `sessionStorage`,
         ...replayPrivacy(redactAddress, { touch: touchScreen() }),

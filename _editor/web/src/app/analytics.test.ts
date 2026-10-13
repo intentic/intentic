@@ -221,25 +221,29 @@ describe(`the SDK loading after the first screen`, () => {
 });
 
 
-describe(`consent`, () => {
-    it(`keeps the SDK and milestones silent until Allow, including after No thanks`, async () => {
+describe(`the Settings switch`, () => {
+    it(`keeps the SDK and milestones silent while switched off, and loads it once switched back on`, async () => {
         environment.analytics.posthogKey = `phc_test`;
         stubGlobal(`window`, { env: environment });
         const { analyticsChoice } = await import(`./analyticsConsent`);
-        analyticsChoice.value = undefined;
+        analyticsChoice.value = `deny`;
         const { posthog } = await import(`posthog-js`);
         const analytics = await freshImport<typeof import("./analytics")>("./analytics", import.meta.url);
         const loading = analytics.initAnalytics(routePatternOf, user);
-        analytics.track(`early`);
-        expect(posthog.init).not.toHaveBeenCalled();
-        analyticsChoice.value = `deny`;
-        await nextTick();
         analytics.track(`denied`);
+        await nextTick();
         expect(posthog.init).not.toHaveBeenCalled();
         analyticsChoice.value = `allow`;
         await loading;
-        expect(posthog.capture).not.toHaveBeenCalledWith(`early`);
+        expect(posthog.init).toHaveBeenCalledTimes(1);
         expect(posthog.capture).not.toHaveBeenCalledWith(`denied`);
+    });
+
+    it(`starts on when nobody has switched it off`, async () => {
+        environment.analytics.posthogKey = `phc_test`;
+        stubGlobal(`window`, { env: environment });
+        const consent = await freshImport<typeof import("./analyticsConsent")>(`./analyticsConsent`, import.meta.url);
+        expect(consent.analyticsChoice.value).toBe(`allow`);
     });
 });
 
