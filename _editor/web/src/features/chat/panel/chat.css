@@ -815,12 +815,34 @@
     text-decoration-thickness: 1px;
     text-underline-offset: 2px;
 }
-/* The composer is stuck to the bottom of the transcript's own scroller (ChatPanel's footer), and most of the box it occupies is transparent. */
+/* The composer is stuck to the bottom of the transcript's own scroller (ChatPanel's footer); the box itself takes no pointer, only what stands in it and the ground under that (below). */
 .chat-footer {
     pointer-events: none;
 }
 .chat-footer > * {
     pointer-events: auto;
+}
+/* THE STACK OVER THE COMPOSER STANDS ON THE PANEL'S OWN GROUND. Each notice paints itself, but the gaps between them and
+   a bare hint line (ChatQueue's "Goes in once you answer…") did not, so the transcript scrolled through them: a card's
+   Submit and Dismiss read as the queue's own presses, and a click in a gap landed on a button nobody could see. The
+   ground starts below the footer's top padding (`pt-3`) and catches the pointer; that padding is a fade into it, which
+   still lets the pointer through, so the transcript ends in a fade above the stack rather than a hard edge. */
+.chat-footer:not(.chat-footer-strip)::before {
+    content: "";
+    position: absolute;
+    inset: 0.75rem 0 0;
+    z-index: -1;
+    background: var(--color-card);
+    pointer-events: auto;
+}
+.chat-footer:not(.chat-footer-strip)::after {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    height: 0.75rem;
+    z-index: -1;
+    background: linear-gradient(to bottom, transparent, var(--color-card));
+    pointer-events: none;
 }
 /* The scratch pad's composer is the whole box (ChatQuickBar): nothing around it, so no padding, and no page of ours
    below it to mask. */
