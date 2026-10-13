@@ -82,7 +82,7 @@ describe("tokens", () => {
 });
 
 describe("taught datasets", () => {
-    test("taught values are matched, counted per source, and forgetting stops matching but keeps resolving", async () => {
+    test("taught values are matched, counted per source, and forgetting deletes them from the vault and its file", async () => {
         const vault = filePrivacyVault(join(dir, "vault.json"), () => new Date("2026-10-01T10:00:00Z"));
         const taught = await vault.learn("clients.csv (name)", [
             { value: "Jan Kowalski", class: "person-name" },
@@ -99,7 +99,35 @@ describe("taught datasets", () => {
         ).toEqual(["⟦PERSON_2⟧"]);
         expect(await vault.forget("clients.csv (name)")).toBe(2);
         expect(vault.matcher().find("Klient: Anna Nowak")).toEqual([]);
-        expect(vault.resolve("PERSON", "2")).toBe("Anna Nowak");
+        expect(vault.resolve("PERSON", "2")).toBeUndefined();
+        const written = await readFile(join(dir, "vault.json"), "utf8");
+        expect(written).not.toContain("Anna Nowak");
+        expect(written).not.toContain("Jan Kowalski");
+        expect(JSON.parse(written)).toEqual({ next: { PERSON: 3 }, entries: [] });
+        // Seen again, it is a new value: its old number is never handed out again.
+        expect(vault.tokenFor("Anna Nowak", "person-name")).toBe("⟦PERSON_3⟧");
+    });
+
+    test("a value an older release forgot but kept in the file leaves it with the next commit", async () => {
+        const path = join(dir, "vault.json");
+        await writeFile(
+            path,
+            JSON.stringify({
+                next: { PERSON: 3 },
+                entries: [
+                    { value: "Jan Kowalski", class: "person-name", index: 1, source: "old.csv", retired: true },
+                    { value: "Anna Nowak", class: "person-name", index: 2 },
+                ],
+            }),
+        );
+        const vault = filePrivacyVault(path);
+        await vault.load();
+        expect(vault.resolve("PERSON", "1")).toBeUndefined();
+        await vault.commit();
+        expect(JSON.parse(await readFile(path, "utf8"))).toEqual({
+            next: { PERSON: 3 },
+            entries: [{ value: "Anna Nowak", class: "person-name", index: 2 }],
+        });
     });
 
     test("a value Python wrote with its non-ASCII letters escaped is matched as the same token", async () => {
@@ -285,5 +313,41 @@ describe("spellings", () => {
         expect(again.resolve("PERSON", "1")).toBe("Jan Kowalski");
         expect(again.resolve("PERSON", "2")).toBe("JAN KOWALSKI");
         expect((await again.counts()).tokens).toBe(3);
+    });
+});
+
+describe("retention", () => {
+    test("a found value not seen within the window is deleted; one seen since, and a taught one, stay", async () => {
+        let today = new Date("2026-09-01T10:00:00Z");
+        const path = join(dir, "vault.json");
+        const vault = filePrivacyVault(path, () => today);
+        await vault.load();
+        vault.tokenFor("Jan Kowalski", "person-name");
+        vault.tokenFor("Anna Nowak", "person-name");
+        await vault.learn("clients.csv (name)", [{ value: "Kowalskiego", class: "person-name" }]);
+        today = new Date("2026-10-01T10:00:00Z");
+        // Matched in a request a month later: still in use.
+        const [hit] = vault.matcher().find("Klient: Anna Nowak");
+        expect(hit?.payload.token).toBe("⟦PERSON_2⟧");
+        if (hit !== undefined) {
+            vault.saw(hit.payload);
+        }
+        expect(await vault.expire(new Date("2026-09-15T00:00:00Z"))).toBe(1);
+        expect(vault.resolve("PERSON", "1")).toBeUndefined();
+        expect(vault.resolve("PERSON", "2")).toBe("Anna Nowak");
+        expect(vault.resolve("PERSON", "3")).toBe("Kowalskiego");
+        expect(await readFile(path, "utf8")).not.toContain("Jan Kowalski");
+    });
+
+    test("a value written before it was tracked starts aging at the first sweep rather than going at once", async () => {
+        const path = join(dir, "vault.json");
+        await writeFile(path, JSON.stringify({ next: { PERSON: 2 }, entries: [{ value: "Jan Kowalski", class: "person-name", index: 1 }] }));
+        let today = new Date("2026-10-01T10:00:00Z");
+        const vault = filePrivacyVault(path, () => today);
+        expect(await vault.expire(new Date("2026-09-30T00:00:00Z"))).toBe(0);
+        expect(vault.resolve("PERSON", "1")).toBe("Jan Kowalski");
+        today = new Date("2026-11-01T10:00:00Z");
+        expect(await vault.expire(new Date("2026-10-15T00:00:00Z"))).toBe(1);
+        expect(vault.resolve("PERSON", "1")).toBeUndefined();
     });
 });

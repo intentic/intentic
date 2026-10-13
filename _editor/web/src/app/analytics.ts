@@ -1,6 +1,7 @@
 import type { PostHog } from "posthog-js";
 import type { User } from "@intentic/api-contract";
 import { type Ref, watch } from "vue";
+import { analyticsAvailable, analyticsChoice } from "./analyticsConsent";
 import { desktopApp } from "./environments/desktop";
 import { environment } from "./environments/environment";
 import { addressRedactor, eventPrivacy, type RoutePatternOf } from "./eventPrivacy";
@@ -19,10 +20,11 @@ import { replayPrivacy } from "./replayPrivacy";
 // media, and eventPrivacy.ts gives the same treatment to the addresses and clicked text of the events. Widen either
 // there, not here, and only together with the policy.
 //
-// LOADED WHEN THE PAGE IS FIRST IDLE, not with the app: posthog-js is ~290 KB of JS that a phone downloaded and ran
-// before its first screen, and its recorder then started serialising a page still being built. Milestones tracked before
-// it arrives wait in `early` and go out once it has.
+// LOADED AFTER CONSENT AND THE PAGE'S FIRST IDLE MOMENT, not with the app: posthog-js is ~290 KB of JS that a phone downloaded and ran
+// before its first screen, and its recorder then started serialising a page still being built. Milestones after
+// consent but before it arrives wait in `early` and go out only while capture is allowed.
 let enabled = false;
+let allowed = false;
 let client: PostHog | undefined;
 // What a milestone carries, in PostHog's own terms.
 type Milestone = Parameters<PostHog[`capture`]>[1];
@@ -43,28 +45,75 @@ const firstIdle = (): Promise<void> =>
 // thread to open a chat.
 const touchScreen = (): boolean => `matchMedia` in globalThis && globalThis.matchMedia(`(hover: none) and (pointer: coarse)`).matches;
 
+// Whether the place the person is in now may be recorded at all, beyond their own consent, and a way to hear when that
+// may have changed. The sandbox's own switch (`productAnalytics`) is read by the gate beside that switch
+// (features/sandbox/agent-settings/safety/analyticsGate.ts), handed in from main.ts, since the sandbox's client sits
+// above this module. `asking` says the person has agreed, so the gate may go and find out what it does not know yet.
+export interface AnalyticsGate {
+    readonly permitted: (asking: boolean) => boolean;
+    readonly watch: (onChange: () => void) => void;
+}
+
+// No sandbox to ask about: a test, or a page with no sandbox client. Only the person's own choice counts.
+const OPEN_GATE: AnalyticsGate = { permitted: () => true, watch: () => undefined };
+
 // `routePatternOf` is the router's table as a question, so an address is reported as its route (`/workspace/:path*`).
 // `user` is the signed-in account (useAuth's), handed in since the account's client sits above this module.
-export const initAnalytics = async (routePatternOf: RoutePatternOf, user: Readonly<Ref<User | null>>): Promise<void> => {
-    const { posthogKey, posthogHost } = environment.analytics;
+export const initAnalytics = async (routePatternOf: RoutePatternOf, user: Readonly<Ref<User | null>>, gate: AnalyticsGate = OPEN_GATE): Promise<void> => {
+    const { posthogKey, posthogHost, posthogUiHost } = environment.analytics;
     // Empty in dev; a literal `$POSTHOG_KEY` when the deploy container's envsubst had no key to substitute.
-    if (posthogKey === `` || posthogKey.startsWith(`$`)) {
+    if (!analyticsAvailable()) {
         return;
     }
     enabled = true;
+    const permittedHere = (): boolean => gate.permitted(analyticsChoice.value === `allow`);
+    const sync = (): void => {
+        const next = analyticsChoice.value === `allow` && permittedHere();
+        if (next === allowed) {return;}
+        allowed = next;
+        if (client === undefined) {return;}
+        if (next) {
+            client.opt_in_capturing();
+            client.startSessionRecording();
+            registerClient(client);
+            if (user.value) {
+                client.identify(user.value.id, { email: user.value.email, name: user.value.name });
+                linkInstall(client, user.value.id);
+            }
+        } else {
+            client.stopSessionRecording();
+            client.opt_out_capturing();
+            early.length = 0;
+        }
+    };
+    watch(analyticsChoice, sync, { immediate: true, flush: `sync` });
+    gate.watch(sync);
+    const waitForAllow = async (): Promise<void> => {
+        if (analyticsChoice.value === `allow`) {return;}
+        await new Promise<void>((resolve) => {
+            const stop = watch(analyticsChoice, (choice) => {
+                if (choice === `allow`) { stop(); resolve(); }
+            });
+        });
+    };
+    await waitForAllow();
     const redactAddress = addressRedactor(routePatternOf);
     await firstIdle();
+    await waitForAllow();
     const { posthog } = await import(`posthog-js`);
     posthog.init(posthogKey, {
         api_host: posthogHost,
         // Proxying makes `api_host` a host posthog-js can't map to a cloud region, so `ui_host` must be named outright
         // or
         // replay deep-links won't resolve.
-        ui_host: `https://us.posthog.com`,
+        // POSTHOG_UI_HOST names an EU project's (https://eu.posthog.com); a literal `$…` is a container that had none.
+        ui_host: posthogUiHost === undefined || posthogUiHost.startsWith(`$`) ? `https://us.posthog.com` : posthogUiHost,
+        opt_out_capturing_by_default: true,
+        // No cookieless counts on refusal: the promise made by No thanks is that this client sends no events.
         defaults: `2026-06-25`,
         persistence: `sessionStorage`,
         ...replayPrivacy(redactAddress, { touch: touchScreen() }),
-        before_send: eventPrivacy(redactAddress),
+        before_send: (event) => allowed ? eventPrivacy(redactAddress)(event) : null,
         // Serving the SDK from our own origin isn't enough: blocker lists also match a bare filename on any host
         // (posthog-recorder.js, dead-clicks-autocapture.js). Prefixing every SDK script, not just those two, breaks the
         // match; nginx.conf strips the prefix back off.
@@ -77,9 +126,16 @@ export const initAnalytics = async (routePatternOf: RoutePatternOf, user: Readon
     });
 
     client = posthog;
-    registerClient(posthog);
-    for (const [event, properties] of early.splice(0)) {
-        posthog.capture(event, properties);
+    if (allowed) {
+        posthog.opt_in_capturing();
+        posthog.startSessionRecording();
+        registerClient(posthog);
+        for (const [event, properties] of early.splice(0)) {
+            posthog.capture(event, properties);
+        }
+    } else {
+        posthog.opt_out_capturing();
+        early.length = 0;
     }
 
     // Session resolves (sign-in or reload) → stable identity; sign-out / account deletion → drop it. Immediate, since a
@@ -87,6 +143,7 @@ export const initAnalytics = async (routePatternOf: RoutePatternOf, user: Readon
     watch(
         user,
         (current, previous) => {
+            if (!allowed) {return;}
             if (current) {
                 posthog.identify(current.id, { email: current.email, name: current.name });
                 linkInstall(posthog, current.id);
@@ -94,6 +151,8 @@ export const initAnalytics = async (routePatternOf: RoutePatternOf, user: Readon
             }
             if (previous) {
                 posthog.reset();
+                posthog.opt_in_capturing();
+                posthog.startSessionRecording();
                 // `reset()` clears super properties too, so the client tag must be re-registered or later events report
                 // from nowhere in particular.
                 registerClient(posthog);
@@ -131,7 +190,7 @@ const linkInstall = (posthog: PostHog, userId: string): void => {
 // the SDK has loaded at the page's first idle moment. Never throws, since an error report asks it.
 export const replaySessionId = (): string | undefined => {
     try {
-        return client?.get_session_id();
+        return allowed ? client?.get_session_id() : undefined;
     } catch {
         // allow(silent-catch): an error report asks for this id; a throw here would lose the report it was meant to annotate.
         return undefined;
@@ -141,9 +200,10 @@ export const replaySessionId = (): string | undefined => {
 // Funnel milestone events from call sites. No-op until `initAnalytics` has run (no key in dev); otherwise
 // uninitialized `posthog.capture` logs a console error per call.
 export const track = (event: string, properties?: Milestone): void => {
-    if (!enabled) {
+    if (!enabled || analyticsChoice.value !== `allow`) {
         return;
     }
+    if (!allowed) {return;}
     if (client === undefined) {
         early.push([event, properties]);
         return;

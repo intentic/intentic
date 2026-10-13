@@ -11,6 +11,7 @@ import { SessionsPlacementSchema } from "./offload.js";
 import { LimitPolicySchema, RetryPolicySchema, RoomPolicySchema } from "./turn-break.js";
 import { ZoneSchema } from "../time/zone.js";
 import { VoiceSettingsSchema } from "./voice.js";
+import { AiNoticeSchema, AuditSettingsSchema, RetentionSettingsSchema } from "./data-protection.js";
 // Which prompt base the agent runs before this turn composes anything on top: Intentic's own (default), Claude Code's
 // preset, or the owner's text. Declared out here since both the daemon and the browser branch on it.
 // Kept in the daemon's auth root, never in SandboxSettings: an agent cannot edit its execution boundary.
@@ -565,6 +566,25 @@ export const SandboxSettingsSchema = z.object({
     // answered out loud. Read by the daemon's voice engine on every utterance, so a change is heard on the next one.
     voice: VoiceSettingsSchema.prefault({}).describe(
         "How the agent's replies are spoken aloud: whether a hands-free conversation is answered out loud, which voice speaks each language, and a speech provider of your own if you connected one.",
+    ),
+    // What a data protection officer asks about (schemas/data-protection.ts). Every default is the behaviour from before
+    // these existed; the public-office preset on the data protection page is what turns them on, never a default.
+    retention: RetentionSettingsSchema.prefault({}).describe(
+        "How long this sandbox keeps each kind of copy it makes of what people and agents wrote: transcripts, restore points, the privacy shield's memory, converted documents and raw command output. Each defaults to forever.",
+    ),
+    audit: AuditSettingsSchema.prefault({}).describe(
+        "The audit trail: who changed a policy, a member, a gate or a setting, and optionally who read what. How long it is kept, and where a copy is sent.",
+    ),
+    // Read by the editor, not the daemon: the product analytics run in the browser, so the switch is honoured there for
+    // as long as this sandbox is the one open.
+    productAnalytics: z
+        .boolean()
+        .default(true)
+        .describe(
+            "Let Intentic's product analytics (usage events and session recordings in the editor, for people who agreed to them) run while this sandbox is open. Off sends nothing about any visit to this sandbox, whatever each person agreed to.",
+        ),
+    aiNotice: AiNoticeSchema.prefault({}).describe(
+        "A notice members confirm once, telling them they are working with an AI and what to check before relying on it.",
     ),
     // Defaults all-allow, so a fresh sandbox behaves as it did before this floor existed.
     admission: AdmissionPolicySchema.prefault({}).describe(

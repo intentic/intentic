@@ -368,6 +368,9 @@ pub fn note_engine_restart(
 }
 
 fn keep_report(dir: &Path, report: Report) {
+    if !analytics_allowed() {
+        return;
+    }
     let path = reports_path(dir);
     let mut reports: Vec<Report> = crate::state::read_json(&path).unwrap_or_default();
     reports.push(report);
@@ -413,11 +416,33 @@ fn install_panic_hook() {
 
 /// The analytics key, baked in at build time like the windows' (vite.config.ts): released builds only.
 const POSTHOG_KEY: Option<&str> = option_env!("POSTHOG_KEY");
-const CAPTURE_URL: &str = "https://us.i.posthog.com/i/v0/e/";
+const POSTHOG_HOST: &str = match option_env!("POSTHOG_HOST") {
+    Some(host) => host,
+    None => "https://us.i.posthog.com",
+};
+
+pub fn analytics_allowed() -> bool {
+    config_dir().is_some_and(|dir| {
+        std::fs::read_to_string(dir.join("analytics-consent")).is_ok_and(|choice| choice == "allow")
+    })
+}
+
+pub fn set_analytics_consent(choice: &str) {
+    if let Some(dir) = config_dir() {
+        let _ = std::fs::create_dir_all(&dir);
+        let _ = std::fs::write(dir.join("analytics-consent"), choice);
+        if choice != "allow" {
+            let _ = std::fs::remove_file(reports_path(&dir));
+        }
+    }
+}
 
 /// Send what earlier launches left, off the launch's thread. A report is removed once PostHog took it; one that
 /// could not be sent stays for the next launch.
 pub fn send_reports(app: &AppHandle) {
+    if !analytics_allowed() {
+        return;
+    }
     let Some(dir) = config_dir() else {
         return;
     };
@@ -444,9 +469,12 @@ pub fn send_reports(app: &AppHandle) {
         };
         let mut unsent = Vec::new();
         for report in reports {
+            if !analytics_allowed() {
+                break;
+            }
             let body = event_body(key, &install_id, &report);
             let sent = client
-                .post(CAPTURE_URL)
+                .post(format!("{}/i/v0/e/", POSTHOG_HOST.trim_end_matches('/')))
                 .header(reqwest::header::CONTENT_TYPE, "application/json")
                 .body(body.to_string())
                 .send()

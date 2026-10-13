@@ -1,4 +1,5 @@
-import { agentContract, type ConversationQueue, DEFAULT_PROVIDER, noticeCode, speakerVoice } from "@intentic/sandbox-contract";
+import { type AgentReply,agentContract,type ConversationQueue,DEFAULT_PROVIDER,noticeCode,speakerVoice } from "@intentic/sandbox-contract";
+import { type AuditNote, noteAudit } from "../../audit/audit-http.js";
 import { implement, ORPCError } from "@orpc/server";
 import { routeChat } from "../prompt/chat-router.js";
 import type { Services } from "../../composition.js";
@@ -19,6 +20,12 @@ import { forgetRemoteRequest, remoteRequestOf } from "../../runners/runner-reque
 import { applyReply } from "../run/turn/turn-interactions.js";
 import { notePlanAnswer } from "../run/stream-agent.js";
 import { carryOnTurn } from "../run/turn/turn-resume.js";
+
+// What the audit trail keeps of an answer to a card: which card, what kind, and for a permission the decision itself.
+const replyNote = (input: AgentReply): AuditNote => ({
+    target: input.requestId,
+    details: input.kind === "permission" ? { kind: input.kind, decision: input.decision } : { kind: input.kind },
+});
 
 export const createAgentRoutes = (services: Services) => {
     const i = implement(agentContract).$context<OrpcContext>();
@@ -191,6 +198,7 @@ export const createAgentRoutes = (services: Services) => {
             if (input.kind === "question" && input.cancelled === true) {
                 run?.note({ role: "notice", text: "Question dismissed.", noticeCode: noticeCode({ code: "questionDismissed" }) });
             }
+            noteAudit(replyNote(input));
             // Who's answering, carried into settlement; the card itself decides who may answer.
             const applied = await applyReply(services, input, context.identity);
             if (typeof applied === "object") {

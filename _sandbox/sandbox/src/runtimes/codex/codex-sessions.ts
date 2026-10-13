@@ -1,4 +1,4 @@
-import { readdir } from "node:fs/promises";
+import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 
 // Codex persists each thread as a rollout under <CODEX_HOME>/sessions/YYYY/MM/DD/rollout-<ISO8601>-<threadId>.jsonl
@@ -25,6 +25,14 @@ const findRollout = async (home: string, threadId: string): Promise<string | und
         return undefined;
     };
     return walk(join(home, "sessions"));
+};
+
+// Deletes a thread's rollout, when a conversation that ran on it is deleted for good.
+export const removeCodexRollout = async (home: string, threadId: string): Promise<void> => {
+    const rollout = await findRollout(home, threadId);
+    if (rollout !== undefined) {
+        await rm(rollout, { force: true });
+    }
 };
 
 export const codexThreadExists = async (home: string, threadId: string): Promise<boolean> => (await findRollout(home, threadId)) !== undefined;

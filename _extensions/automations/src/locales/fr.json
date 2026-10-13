@@ -138,7 +138,10 @@
         "whoChat": "Qui peut discuter",
         "whoRunsWhatPays": "En tant que qui elle tourne, et ce qui paie pour cela.",
         "workLands": "Du travail est intégré",
-        "workspace": "Espace de travail"
+        "workspace": "Espace de travail",
+        "aiDisclosure": "Informer les visiteurs que l’IA répond",
+        "aiDisclosureText": "Mention personnalisée (facultative)",
+        "aiDisclosureDefault": "Les réponses sont rédigées par un assistant IA et peuvent contenir des erreurs."
     },
     "automationRow": {
         "alreadyFired": "Déjà déclenchée",

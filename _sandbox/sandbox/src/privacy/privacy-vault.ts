@@ -22,7 +22,11 @@ const VaultEntrySchema = z.object({
     // The dataset it was taught from; absent for a value the detectors found.
     source: z.string().optional(),
     at: z.string().optional(),
-    // Forgotten: its token still resolves (an earlier conversation still holds it), but it is no longer matched.
+    // The day (YYYY-MM-DD) it was last handed out or matched, what settings.retention.privacyVaultDays ages it by. Kept
+    // to the day, so a busy vault is written at most once a day per value for it. Absent in a vault written before it.
+    seen: z.string().optional(),
+    // Written by releases before 2026-10-13, whose forget kept the value and only stopped matching it. Such an entry is
+    // dropped as the vault loads, and never written again.
     retired: z.boolean().optional(),
 });
 type VaultEntry = z.infer<typeof VaultEntrySchema>;
@@ -42,6 +46,8 @@ export const privacyVaultDocument = defineDocument({
 export interface VaultHit {
     readonly class: PersonalDataClass;
     readonly token: string;
+    // The entry's key (tokenKey), for `saw`.
+    readonly key: string;
 }
 
 export interface PrivacyVault {
@@ -61,7 +67,15 @@ export interface PrivacyVault {
     // Bumps whenever a matched value is added or retired, so a cached masking knows to look again.
     readonly generation: () => number;
     readonly learn: (source: string, values: readonly PrivacyKnownValue[]) => Promise<{ added: number; known: number }>;
+    // Deletes every value taught from a source, raw value and all: its token resolves to nothing from then on, and the
+    // value is new if it comes back. Answers how many it deleted.
     readonly forget: (source: string) => Promise<number>;
+    // Notes that a matched value was seen today; written with the next commit.
+    readonly saw: (hit: VaultHit) => void;
+    // Deletes every value the detectors found that was last seen before `before` (settings.retention.privacyVaultDays),
+    // and answers how many. A value taught from a list stays until its list is forgotten: it is the owner's own
+    // instruction of what to protect, and dropping it would let the value through unmasked.
+    readonly expire: (before: Date) => Promise<number>;
     readonly sources: () => Promise<PrivacyKnownSource[]>;
     readonly counts: () => Promise<{ readonly tokens: number; readonly known: number }>;
 }
@@ -99,6 +113,46 @@ export class PrivacyVaultUnreadableError extends Error {
     }
 }
 
+// The key an entry is held by: its token's label and number.
+const keyOfEntry = (entry: VaultEntry): string => tokenKey(TOKEN_LABEL[entry.class], entry.index);
+
+// The UTC day a moment falls on, as an entry's `seen` writes it.
+const utcDayOf = (date: Date): string => date.toISOString().slice(0, 10);
+
+// The values taught from one source.
+const taughtFrom = (entries: Iterable<VaultEntry>, source: string): VaultEntry[] => {
+    const taught: VaultEntry[] = [];
+    for (const entry of entries) {
+        if (entry.source === source) {
+            taught.push(entry);
+        }
+    }
+    return taught;
+};
+
+// What an expiry at `cutoff` (a day) deletes, and what it finds never stamped and stamps instead: only values the
+// detectors found, never one taught from a list.
+interface AgedEntries {
+    readonly gone: VaultEntry[];
+    readonly unstamped: VaultEntry[];
+}
+
+const agedEntries = (entries: Iterable<VaultEntry>, cutoff: string): AgedEntries => {
+    const gone: VaultEntry[] = [];
+    const unstamped: VaultEntry[] = [];
+    for (const entry of entries) {
+        if (entry.source !== undefined) {
+            continue;
+        }
+        if (entry.seen === undefined) {
+            unstamped.push(entry);
+        } else if (entry.seen < cutoff) {
+            gone.push(entry);
+        }
+    }
+    return { gone, unstamped };
+};
+
 // The vault's whole value, as its document stores it.
 export type VaultValue = z.output<typeof privacyVaultDocument.schema>;
 
@@ -108,6 +162,7 @@ export const filePrivacyVault = (path: string, now: () => Date = () => new Date(
             fallback: (): VaultValue => ({ next: {}, entries: [] }),
             mode: 0o600,
             onUnreadable: "refuse",
+            atRestPurpose: privacyVaultDocument.path,
         }),
         path,
         now,
@@ -127,14 +182,11 @@ export const createPrivacyVault = (file: JsonFile<VaultValue>, where: string, no
     let generation = 0;
     let built: { readonly generation: number; readonly matcher: KnownMatcher<VaultHit> } | undefined;
 
-    const keyOfEntry = (entry: VaultEntry): string => tokenKey(TOKEN_LABEL[entry.class], entry.index);
-    // Every entry stays by its token, so every token ever given out resolves; by value, one entry stands for every
-    // spelling of it. Two that a vault written before spellings counted holds apart keep the first, unless it was
-    // forgotten and the other was not.
+    // Every entry stays by its token until it is deleted, so every token it gave out resolves; by value, one entry stands
+    // for every spelling of it. Two that a vault written before spellings counted holds apart keep the first.
     const index = (entry: VaultEntry): void => {
         byToken.set(keyOfEntry(entry), entry);
-        const stands = (standing: VaultEntry | undefined): boolean =>
-            standing === undefined || keyOfEntry(standing) === keyOfEntry(entry) || (standing.retired === true && entry.retired !== true);
+        const stands = (standing: VaultEntry | undefined): boolean => standing === undefined || keyOfEntry(standing) === keyOfEntry(entry);
         const key = valueKey(entry.value, entry.class);
         if (stands(byValue.get(key))) {
             byValue.set(key, entry);
@@ -148,11 +200,32 @@ export const createPrivacyVault = (file: JsonFile<VaultValue>, where: string, no
     const knownAs = (value: string, kind: PersonalDataClass): VaultEntry | undefined =>
         byValue.get(valueKey(value, kind)) ?? (kind === "email" ? undefined : byFolded.get(spellingKey(value, "folded")));
     const snapshot = () => ({ next: Object.fromEntries(next), entries: [...byToken.values()] });
+    // Deletes entries for good: the by-value maps are rebuilt from what remains, so another spelling an older vault held
+    // apart takes the place again. `next` is untouched, so a deleted index is never handed to another value.
+    const drop = (gone: readonly VaultEntry[]): void => {
+        for (const entry of gone) {
+            byToken.delete(keyOfEntry(entry));
+        }
+        byValue.clear();
+        byFolded.clear();
+        for (const entry of byToken.values()) {
+            index(entry);
+        }
+        dirty = true;
+        generation += 1;
+    };
+    const touch = (entry: VaultEntry): void => {
+        const day = utcDayOf(now());
+        if (entry.seen !== day) {
+            index({ ...entry, seen: day });
+            dirty = true;
+        }
+    };
     const allocate = (value: string, kind: PersonalDataClass, extra: Partial<VaultEntry> = {}): VaultEntry => {
         const label = TOKEN_LABEL[kind];
         const nextIndex = next.get(label) ?? 1;
         next.set(label, nextIndex + 1);
-        const entry: VaultEntry = { value, class: kind, index: nextIndex, ...extra };
+        const entry: VaultEntry = { value, class: kind, index: nextIndex, seen: utcDayOf(now()), ...extra };
         index(entry);
         dirty = true;
         generation += 1;
@@ -173,10 +246,15 @@ export const createPrivacyVault = (file: JsonFile<VaultValue>, where: string, no
                 next.set(label, value);
             }
             for (const entry of state.value.entries) {
-                index(entry);
                 // A file whose counters lag its entries (hand-edited, or older) must still never repeat an index.
                 const label = TOKEN_LABEL[entry.class];
                 next.set(label, Math.max(next.get(label) ?? 1, entry.index + 1));
+                if (entry.retired === true) {
+                    // Forgotten by an older release that kept the value: it leaves the file with the next commit.
+                    dirty = true;
+                    continue;
+                }
+                index(entry);
             }
         })().catch((error: unknown) => {
             // A failed read is tried again next time rather than remembered as loaded.
@@ -203,14 +281,7 @@ export const createPrivacyVault = (file: JsonFile<VaultValue>, where: string, no
             loaded();
             const existing = knownAs(value, kind);
             if (existing !== undefined) {
-                if (existing.retired === true) {
-                    // Found again by a detector after being forgotten: matched again, under the token it already had.
-                    const revived: VaultEntry = { ...existing, retired: false };
-                    index(revived);
-                    dirty = true;
-                    generation += 1;
-                    return tokenOf(TOKEN_LABEL[revived.class], revived.index);
-                }
+                touch(existing);
                 return tokenOf(TOKEN_LABEL[existing.class], existing.index);
             }
             const entry = allocate(value, kind);
@@ -228,10 +299,10 @@ export const createPrivacyVault = (file: JsonFile<VaultValue>, where: string, no
             // A value the owner taught is matched whatever it is; one the detectors found, only while it would still be
             // personal data standing alone (detect/standalone.ts).
             const values = [...byValue.values()]
-                .filter((entry) => entry.retired !== true && entry.value.length >= MIN_MATCHED)
+                .filter((entry) => entry.value.length >= MIN_MATCHED)
                 .filter((entry) => entry.source !== undefined || personalAlone(entry.value, entry.class))
                 .flatMap((entry) => {
-                    const hit: VaultHit = { class: entry.class, token: tokenOf(TOKEN_LABEL[entry.class], entry.index) };
+                    const hit: VaultHit = { class: entry.class, token: tokenOf(TOKEN_LABEL[entry.class], entry.index), key: keyOfEntry(entry) };
                     const spelling = spellingOf(entry.value, entry.class);
                     const escaped = escapedForm(entry.value);
                     return escaped === undefined
@@ -257,37 +328,53 @@ export const createPrivacyVault = (file: JsonFile<VaultValue>, where: string, no
                 if (existing === undefined) {
                     allocate(trimmed, kind, { source, at });
                     added += 1;
-                } else if (existing.source === undefined || existing.retired === true) {
-                    index({ ...existing, source, at, retired: false });
+                } else if (existing.source === undefined) {
+                    index({ ...existing, source, at, seen: utcDayOf(now()) });
                     dirty = true;
                     generation += 1;
                     added += 1;
                 }
             }
             await commit();
-            return { added, known: [...byToken.values()].filter((entry) => entry.source !== undefined && entry.retired !== true).length };
+            return { added, known: [...byToken.values()].filter((entry) => entry.source !== undefined).length };
         },
+        // Before 2026-10-13 forgetting only stopped the matching and kept the raw value in the file, which no erasure
+        // request is satisfied by. Nothing of the value is kept, not even a hash: a hash of a PESEL or a phone number
+        // beside nothing secret is the number again to anyone who tries them all. The cost is that its old token stops
+        // resolving, so a transcript that holds it shows the token.
         forget: async (source) => {
             await load();
-            let forgotten = 0;
-            for (const entry of byToken.values()) {
-                if (entry.source === source && entry.retired !== true) {
-                    index({ ...entry, retired: true });
-                    forgotten += 1;
-                }
+            const gone = taughtFrom(byToken.values(), source);
+            if (gone.length > 0) {
+                drop(gone);
             }
-            if (forgotten > 0) {
-                dirty = true;
-                generation += 1;
-                await commit();
+            await commit();
+            return gone.length;
+        },
+        saw: (hit) => {
+            const entry = byToken.get(hit.key);
+            if (entry !== undefined) {
+                touch(entry);
             }
-            return forgotten;
+        },
+        expire: async (before) => {
+            await load();
+            const { gone, unstamped } = agedEntries(byToken.values(), utcDayOf(before));
+            // Written before it was tracked: its age counts from the first sweep that finds it.
+            for (const entry of unstamped) {
+                touch(entry);
+            }
+            if (gone.length > 0) {
+                drop(gone);
+            }
+            await commit();
+            return gone.length;
         },
         sources: async () => {
             await load();
             const bySource = new Map<string, { count: number; at: string }>();
             for (const entry of byToken.values()) {
-                if (entry.source === undefined || entry.retired === true) {
+                if (entry.source === undefined) {
                     continue;
                 }
                 const current = bySource.get(entry.source) ?? { count: 0, at: entry.at ?? "" };
@@ -298,7 +385,7 @@ export const createPrivacyVault = (file: JsonFile<VaultValue>, where: string, no
         counts: async () => {
             await load();
             const entries = [...byToken.values()];
-            return { tokens: entries.length, known: entries.filter((entry) => entry.source !== undefined && entry.retired !== true).length };
+            return { tokens: entries.length, known: entries.filter((entry) => entry.source !== undefined).length };
         },
     };
 };

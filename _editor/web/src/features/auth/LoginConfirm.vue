@@ -186,6 +186,7 @@ const brokenNotice = noticeOf(t(`auth.loginConfirm.linkIncomplete`), { tone: `wa
 }
 .fine a {
     color: var(--gold-bright);
+    text-decoration: underline;
 }
 .fine a:hover {
     text-decoration: underline;

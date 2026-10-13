@@ -1,13 +1,18 @@
 import type { DesktopInfo } from "./desktop";
+import { captureUrl } from "./analyticsHost";
+import { listen } from "@tauri-apps/api/event";
 import { within } from "@intentic/base/async";
 
 // Reports desktop-only events (install, update, environment) via hand-rolled POST rather than the PostHog SDK.
 // Distinct id is the install id (state.rs), shared with the SPA's own window. The build-time key is unset in
 // dev/local builds, which disables this.
 declare const __POSTHOG_KEY__: string;
+declare const __POSTHOG_HOST__: string;
 
-const CAPTURE_URL = `https://us.i.posthog.com/i/v0/e/`;
+const CAPTURE_URL = captureUrl(__POSTHOG_HOST__);
 
+let consent = false;
+let listening = false;
 let context: { installId: string; shared: Record<string, unknown> } | undefined;
 
 // Which engine this PC's sandboxes run on (`ic engine status`, device/engine.ts), sent with every event as
@@ -21,10 +26,22 @@ export const setEngine = (id: string | undefined): void => {
 };
 
 export const initAnalytics = (info: DesktopInfo): void => {
-    if (__POSTHOG_KEY__ === ``) {
+    if (!listening) {
+        listening = true;
+        void listen<boolean>(`desktop://analytics-consent`, (event) => {
+            consent = event.payload;
+            if (!consent) {context = undefined;}
+            else if (__POSTHOG_KEY__ !== ``) {context = contextFor(info);}
+        });
+    }
+    consent = info.analyticsAllowed;
+    if (__POSTHOG_KEY__ === `` || !consent) {
         return;
     }
-    context = {
+    context = contextFor(info);
+};
+
+const contextFor = (info: DesktopInfo): NonNullable<typeof context> => ({
         installId: info.installId,
         shared: {
             client: `desktop`,
@@ -33,8 +50,7 @@ export const initAnalytics = (info: DesktopInfo): void => {
             desktop_os: info.os,
             desktop_install_id: info.installId,
         },
-    };
-};
+    });
 
 // Fire-and-forget event, silent on failure, no-op until initAnalytics has run. Only outcomes, durations and step
 // labels — never a sandbox name, setup code, path, token or line of script output, but for one: a failed install's
@@ -47,7 +63,7 @@ export const track = (event: string, properties?: Record<string, unknown>): void
 // Split from `track` so trackBeforeExit can await it. Returns undefined when analytics is off, distinguishing
 // "nothing sent" from "sent, in flight".
 const send = (event: string, properties?: Record<string, unknown>): Promise<void> | undefined => {
-    if (context === undefined) {
+    if (!consent || context === undefined) {
         return undefined;
     }
     const body = JSON.stringify({

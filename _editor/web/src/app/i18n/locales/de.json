@@ -1,4 +1,5 @@
 {
+    "a11yKit": { "toggleDetails": "Überschriftdetails ein- oder ausblenden", "selectRow": "Beispielzeile auswählen", "settingsButton": "Beispiel für eine Einstellungsschaltfläche", "codeField": "Beispiel für ein Codefeld" },
     "agents": {
         "accountChip": {
             "org": "Organisation"
@@ -2242,6 +2243,22 @@
             "trimNoisyShellOutput": "Lärmende Shell-Ausgabe kürzen, bevor sie den Assistenten erreicht.",
             "unCleanedAddHandler": "Ungesäubert (einen Handler hinzufügen)"
         },
+        "agentDataRetention": {
+            "caches": "Umgewandelte Dokumente",
+            "cachesNote": "Aus PDFs und Office-Dateien gelesener Text, aus Scans und Bildern Gelesenes sowie Vorschauen. Wird bei Bedarf neu aus dem Original erstellt.",
+            "days": "Tage",
+            "forever": "für immer",
+            "intro": "Wie viele Tage jede Art von Aufzeichnung aufbewahrt wird. 0 bewahrt sie für immer auf, so beginnt jede Sandbox. Eine Zahl über 0 löscht alles Ältere endgültig, es lässt sich nicht wiederherstellen. Das Archivieren oben löscht nichts.",
+            "privacyVault": "Gedächtnis des Datenschutzfilters",
+            "privacyVaultNote": "Personenbezogene Daten, die der Datenschutzfilter gefunden hat (Namen, PESEL-Nummern, Adressen), und die Bilder, die er abgedeckt hat, gezählt ab dem letzten Mal, dass er sie gesehen hat. Listen, die du ihm beigebracht hast, bleiben, bis du sie vergisst.",
+            "rawOutput": "Vollständige Befehlsausgabe",
+            "rawOutputNote": "Die ganze Ausgabe der Befehle, die Agenten ausgeführt haben, neben der gekürzten Fassung, die der Agent gelesen hat, und Terminalaufzeichnungen.",
+            "restorePoints": "Wiederherstellungspunkte",
+            "restorePointsNote": "Die Kopien des Arbeitsbereichs, die jede Minute entstehen, während Agenten arbeiten, und mit denen du geänderte oder gelöschte Dateien zurückholst.",
+            "title": "Aufbewahrung von Daten",
+            "transcripts": "Unterhaltungen",
+            "transcriptsNote": "Alles, was in einer Unterhaltung gesagt wurde, mit ihren Uploads, Seiten und Sicherungen, gezählt ab ihrer letzten Nachricht. Eine Unterhaltung, die noch arbeitet oder auf dich wartet, bleibt."
+        },
         "agentFinishedWork": {
             "applyCompletedWorkDirectly": "Fertige Arbeit direkt als nicht committete Änderungen in den Workspace übernehmen.",
             "archiveFinishedAgents": "Fertige Agenten archivieren",
@@ -3474,7 +3491,9 @@
             "overview": "Überblick",
             "reach": "Reichweite",
             "secrets": "Geheimnisse",
-            "usage": "Nutzung"
+            "usage": "Nutzung",
+            "dataProtection": "Datenschutz",
+            "audit": "Prüfprotokoll"
         },
         "sandboxOutdatedNotice": {
             "manual": "Selbst installiert? Installiere sie neu oder führe dies auf dem Gerät aus, auf dem sie läuft:",
@@ -3978,6 +3997,382 @@
         "agentOffload": {
             "intro": "Tests, Typprüfungen und volle Checks laufen auf einem Runner auf deinem Rechner statt hier; Ausgabe und geänderte Dateien synchronisieren zurück, oder laufen hier, wenn er offline oder ausgelastet ist.",
             "noRunners": " Noch kein Runner — einen unter {devices} → Rechner → Runner hinzufügen."
+        },
+        "aiLiteracy": {
+            "title": "Arbeiten mit KI",
+            "description": "Bitte lesen Sie diesen Hinweis, bevor Sie diesen Arbeitsbereich nutzen.",
+            "confirm": "Ich habe den Hinweis gelesen und verstanden",
+            "settingsTitle": "Hinweis zur KI-Nutzung",
+            "settingsDescription": "Mitgliedern einen KI-Hinweis zeigen und ihre Bestätigungen speichern.",
+            "customText": "Eigener Hinweis (optional)",
+            "customPlaceholder": "Leer lassen, um den vorgegebenen Hinweis zu verwenden.",
+            "save": "Hinweis speichern",
+            "preview": "Vorschau",
+            "confirmations": "Bestätigungen",
+            "localMember": "Lokales Mitglied",
+            "none": "Noch keine Bestätigungen."
+        },
+        "analytics": {
+            "title": "Intentic-Produktanalyse in dieser Sandbox",
+            "description": "Aus: Kein Besuch dieser Sandbox sendet Nutzungsereignisse oder Bildschirmaufzeichnungen an Intentic, unabhängig davon, was die einzelnen Personen erlaubt haben."
+        },
+        "dataProtection": {
+            "intro": "Was ein Datenschutzbeauftragter braucht, bevor diese Sandbox personenbezogene Daten verarbeitet: die Dokumente, ausgefüllt nach der aktuellen Einrichtung; jeder Weg, auf dem Daten sie verlassen können; und was sie schützt. Nichts auf dieser Seite ändert eine Einstellung, bis du das Feld unten anwendest.",
+            "couldntRead": "Der Datenschutzbericht dieser Sandbox konnte nicht gelesen werden",
+            "couldntDownload": "Das Dokument konnte nicht erstellt werden",
+            "couldntApply": "Die Einstellungen konnten nicht angewendet werden",
+            "couldntReadPreset": "Die Einstellungen für Behörden konnten nicht gelesen werden",
+            "documents": "Dokumente für den Datenschutzbeauftragten",
+            "documentsCaption": "Entwürfe nach der aktuellen Einrichtung. Felder, die nur deine Behörde beantworten kann, sind mit ✎ markiert.",
+            "language": "Sprache",
+            "languageNote": "Die Sprache, in der die Dokumente geschrieben werden.",
+            "document": {
+                "ropa": "Verzeichnis von Verarbeitungstätigkeiten",
+                "ropaNote": "Der Eintrag für dieses System in deinem Verzeichnis (Art. 30 DSGVO): Empfänger, Übermittlungen außerhalb des EWR, Löschfristen.",
+                "dpia": "Datenschutz-Folgenabschätzung",
+                "dpiaNote": "Ein Entwurf (Art. 35 DSGVO) mit den Risiken des KI-Einsatzes und den hier eingeschalteten Schutzmaßnahmen, dazu ein Hinweis zur KI-Verordnung.",
+                "toms": "Technische und organisatorische Maßnahmen",
+                "tomsNote": "Jede Schutzmaßnahme des Systems, ob sie eingeschaltet ist und wo sie geändert wird (Art. 32 DSGVO)."
+            },
+            "flows": "Wohin Daten gelangen können",
+            "flowsNote": "Jeder Ort, an den diese Sandbox nach aktueller Einrichtung Daten sendet. Ausgegraute Zeilen werden nicht genutzt, ein Schalter würde sie aber öffnen.",
+            "notInUse": "nicht genutzt",
+            "outsideEea": "außerhalb des EWR",
+            "officeAnswers": "Deine Behörde sollte klären:",
+            "group": {
+                "models": "KI-Modelle",
+                "messaging": "Nachrichten und E-Mail",
+                "connectors": "Verbundene Dienste",
+                "speech": "Sprache",
+                "web": "Das Web",
+                "platform": "Intentic und Zugang",
+                "maintenance": "Updates und Downloads",
+                "analytics": "Analyse"
+            },
+            "kind": {
+                "modelProvider": "Anbieter eines KI-Modells",
+                "modelEndpoint": "Externes KI-Modell",
+                "localModel": "KI-Modell auf diesem Server",
+                "emailImap": "Eingehende E-Mail",
+                "emailSmtp": "E-Mail-Versand",
+                "teamChat": "Bot in einem Messenger",
+                "webchat": "Chat auf deiner Website",
+                "connector": "Verbundener Dienst",
+                "speech": "Antworten vorlesen",
+                "webSearch": "Websuche",
+                "webFetch": "Webseiten öffnen",
+                "browser": "Browser des Agenten",
+                "platformLink": "Intentic-Konto und Anmeldung",
+                "ingress": "Zugriff aus dem Internet",
+                "updateCheck": "Update-Prüfung",
+                "modelDownload": "Modell-Downloads",
+                "productAnalytics": "Produktanalyse",
+                "pushNotifications": "Push-Benachrichtigungen"
+            },
+            "data": {
+                "modelProvider": "Unterhaltungen, Anweisungen und Teile der Dokumente, an denen der Agent arbeitet.",
+                "modelEndpoint": "Unterhaltungen, Anweisungen und Teile der Dokumente, an denen der Agent arbeitet.",
+                "localModel": "Unterhaltungen und Dokumente, die auf diesem Server bleiben.",
+                "emailImap": "Nachrichten, Absender, Empfänger und Anhänge.",
+                "emailSmtp": "Die gesendeten Nachrichten und ihre Empfänger.",
+                "teamChat": "Nachrichten, Namen der Beteiligten und Anhänge.",
+                "webchat": "Was Besucher schreiben, ihr Name, falls erfragt, und ihre IP-Adresse.",
+                "connector": "Alles, was der Agent aus diesem Dienst liest oder hineinschreibt.",
+                "speech": "Der Text vorgelesener Antworten.",
+                "webSearch": "Die Suchanfragen des Agenten. Sie laufen über den Anbieter des KI-Modells.",
+                "webFetch": "Die Adressen der Seiten, die der Agent öffnet.",
+                "browser": "Besuchte Seiten und was in Formulare eingegeben wird.",
+                "platformLink": "E-Mail-Adressen und Anmeldungen der Mitglieder. Nicht die Arbeit selbst.",
+                "ingress": "Alles zwischen den Browsern der Nutzer und dieser Sandbox.",
+                "updateCheck": "Nur die Softwareversion. Keine personenbezogenen Daten.",
+                "modelDownload": "Der Name des geladenen Modells. Keine personenbezogenen Daten.",
+                "productAnalytics": "Klicks und Bildschirmaufnahmen im Editor von Personen, die zugestimmt haben.",
+                "pushNotifications": "Der kurze Text einer Benachrichtigung."
+            },
+            "personal": {
+                "yes": "personenbezogene Daten",
+                "possible": "kann personenbezogene Daten enthalten",
+                "no": "keine personenbezogenen Daten"
+            },
+            "shield": {
+                "masked": "geschützt",
+                "trusted": "vertraut, nicht maskiert",
+                "watched": "Schutz beobachtet nur",
+                "local": "bleibt auf diesem Server",
+                "blocked": "ohne Maskierung abgelehnt",
+                "none": "nicht geschützt"
+            },
+            "question": {
+                "endpointOperator": "wer dieses Modell betreibt und wo es Daten verarbeitet.",
+                "mailOperator": "wer den Mailserver betreibt und wo er steht.",
+                "ingressRegion": "ob der Zugangspunkt von Intentic, an dem die Verschlüsselung endet, weiterhin nur in den USA (Ashburn) läuft, wie seine Seite zu Unterauftragsverarbeitern angibt.",
+                "ingressProxy": "ob die Sandbox über einen eigenen Server der Behörde oder über den Zugangspunkt von Intentic erreicht wird.",
+                "platformRegion": "wo Intentic Kontodaten speichert."
+            },
+            "measures": "Was sie schützt",
+            "measuresNote": "Die technischen und organisatorischen Maßnahmen, jeweils im aktuellen Stand.",
+            "change": "Ändern",
+            "inPreset": "im Feld unten",
+            "category": {
+                "confidentiality": "Vertraulichkeit",
+                "minimisation": "Weniger Daten, kürzer gespeichert",
+                "integrity": "Kontrolle über das Handeln des Agenten",
+                "accountability": "Rechenschaftspflicht",
+                "transparency": "Transparenz",
+                "availability": "Verfügbarkeit"
+            },
+            "status": {
+                "on": "an",
+                "partial": "teilweise an",
+                "off": "aus",
+                "unavailable": "nicht verfügbar",
+                "unknown": "entscheidet die Behörde"
+            },
+            "measure": {
+                "privacyShield": {
+                    "name": "Datenschutzfilter",
+                    "what": "Ersetzt Namen, Ausweis- und Kontonummern, Adressen und Kontaktdaten durch Platzhalter, bevor Text einen KI-Anbieter erreicht, dem du nicht vertraust."
+                },
+                "privacyImages": {
+                    "name": "Personenbezogene Daten in Bildern",
+                    "what": "Text in Bildern wird auf diesem Server gelesen, und personenbezogene Daten darin werden vor dem Senden übermalt."
+                },
+                "privacyNames": {
+                    "name": "Namen mit einem lokalen Modell finden",
+                    "what": "Ein Sprachmodell auf diesem Server findet Namen, die die Namenslisten übersehen."
+                },
+                "trustedProviders": {
+                    "name": "Vertrauenswürdige KI-Anbieter",
+                    "what": "Anbieter, die personenbezogene Daten unverändert lesen dürfen. Keiner bedeutet: Jeder Anbieter außerhalb dieses Servers liest nur Platzhalter."
+                },
+                "localModels": {
+                    "name": "KI-Modelle auf diesem Server",
+                    "what": "Ein Modell, das hier läuft, sodass nichts, was es liest, den Server verlässt."
+                },
+                "memberRoles": {
+                    "name": "Rollen",
+                    "what": "Jede Person hat eine Rolle, die begrenzt, was sie sehen und tun kann."
+                },
+                "areas": {
+                    "name": "Bereiche",
+                    "what": "Eine Person kann auf ausgewählte Ordner beschränkt werden; den Rest sieht sie nicht."
+                },
+                "guestJail": {
+                    "name": "Gäste getrennt",
+                    "what": "Unterhaltungen von Gästen laufen in einer abgeschlossenen Umgebung, die nur die ihnen gegebenen Ordner sieht."
+                },
+                "signIn": {
+                    "name": "Anmeldung",
+                    "what": "Anmeldung mit Google, einem Passkey oder einem per E-Mail gesendeten Code, wo du es erlaubst."
+                },
+                "actionRules": {
+                    "name": "Freigabe vor dem Senden",
+                    "what": "Das Senden von Nachrichten, Reaktionen oder E-Mails und das Starten weiterer Agenten wartet auf die Freigabe durch einen Menschen."
+                },
+                "admission": {
+                    "name": "Freigabe von Anfragen von außen",
+                    "what": "Arbeit, die eine Chatnachricht, ein Website-Besucher, ein Webhook oder ein Fehlerbericht startet, wartet auf eine Freigabe."
+                },
+                "commandJudge": {
+                    "name": "Befehle vor der Ausführung geprüft",
+                    "what": "Ein Modell prüft riskante Befehle des Agenten anhand deiner Sicherheitsregeln und hält sie für einen Menschen an."
+                },
+                "credentialGates": {
+                    "name": "Freigabe für Passwörter und Schlüssel",
+                    "what": "Ausgewählte Passwörter und Schlüssel dürfen nur mit Zustimmung einer benannten Person verwendet werden."
+                },
+                "hostGuards": {
+                    "name": "Passwörter und Schlüssel an Adressen gebunden",
+                    "what": "Ein Passwort oder Schlüssel darf nur an die dafür eingetragenen Adressen gehen."
+                },
+                "retention": {
+                    "name": "Alte Daten löschen",
+                    "what": "Unterhaltungen, Wiederherstellungspunkte, das Gedächtnis des Filters, umgewandelte Dokumente und vollständige Befehlsausgaben werden nach einer festen Anzahl Tage gelöscht."
+                },
+                "audit": {
+                    "name": "Prüfprotokoll",
+                    "what": "Änderungen an Regeln, Zugängen, Geheimnissen und Einstellungen werden in einem Protokoll erfasst, das zeigt, ob ein Eintrag verändert oder entfernt wurde."
+                },
+                "auditReads": {
+                    "name": "Erfassen, wer was geöffnet hat",
+                    "what": "Das Prüfprotokoll erfasst auch, wer welche Unterhaltung, Datei oder welches Protokoll geöffnet hat."
+                },
+                "auditForward": {
+                    "name": "Kopie des Prüfprotokolls an anderer Stelle",
+                    "what": "Jeder Eintrag wird auch an euer eigenes Protokollsystem gesendet, außer Reichweite aller, die in dieser Sandbox arbeiten."
+                },
+                "encryptionAtRest": {
+                    "name": "Verschlüsselung gespeicherter Geheimnisse",
+                    "what": "Geheimnisse, gespeicherte Anmeldungen und das Gedächtnis des Filters werden mit einem Schlüssel außerhalb der Sandbox verschlüsselt."
+                },
+                "encryptionInTransit": {
+                    "name": "Verschlüsselte Verbindungen",
+                    "what": "Verbindungen zu dieser Sandbox sind verschlüsselt."
+                },
+                "agentDomain": {
+                    "name": "Agent ohne Administratorrechte",
+                    "what": "Die Befehle des Agenten laufen unter einem Konto, das das System nicht verwalten kann."
+                },
+                "productAnalytics": {
+                    "name": "Keine Produktanalyse",
+                    "what": "Der Editor sendet Intentic keine Nutzungsdaten oder Bildschirmaufnahmen aus dieser Sandbox, unabhängig von den Zustimmungen Einzelner."
+                },
+                "aiNotice": {
+                    "name": "KI-Hinweis für Beschäftigte",
+                    "what": "Beim ersten Besuch bestätigen Beschäftigte, dass sie mit einer KI arbeiten, die Fehler macht, und was sie nicht hineinkopieren sollen."
+                },
+                "webchatAiDisclosure": {
+                    "name": "Besucher wissen, dass eine KI antwortet",
+                    "what": "Der Chat auf deiner Website sagt, dass eine KI antwortet."
+                },
+                "backups": {
+                    "name": "Sicherungen",
+                    "what": "Sicherungen dieser Sandbox entstehen außerhalb von ihr, deshalb erstellt und schützt sie deine Behörde."
+                }
+            },
+            "preset": "Einstellungen für Behörden",
+            "presetNote": "Strengere Einstellungen für eine Behörde, die unter DSGVO und KI-Verordnung arbeitet. Jede steht mit ihrem jetzigen und dem vorgeschlagenen Wert da. Entferne das Häkchen bei allem, was du nicht willst; nichts ändert sich, bevor du anwendest.",
+            "ownerApplies": "Nur der Eigentümer der Sandbox kann diese Einstellungen anwenden.",
+            "toChange": "Würde sich ändern",
+            "alreadySet": "Bereits eingestellt",
+            "apply": "{count} Einstellung anwenden | {count} Einstellungen anwenden",
+            "nothingToChange": "Alle Einstellungen entsprechen bereits dem Vorschlag.",
+            "applied": "{count} Einstellung angewendet | {count} Einstellungen angewendet",
+            "skipped": "{count} blieb unverändert. | {count} blieben unverändert.",
+            "confirmHeader": "Diese Einstellungen anwenden?",
+            "confirmDescription": "Sie wirken sofort. Jede lässt sich später dort zurückstellen, wo sie eingestellt wird.",
+            "presetItem": {
+                "privacyMode": "Datenschutzfilter",
+                "privacyImages": "Personenbezogene Daten in Bildern",
+                "privacyNames": "Namen finden",
+                "retentionTranscriptDays": "Unterhaltungen löschen nach",
+                "retentionRestorePointDays": "Wiederherstellungspunkte löschen nach",
+                "retentionPrivacyVaultDays": "Filter vergisst Werte nach",
+                "retentionCacheDays": "Umgewandelte Dokumente löschen nach",
+                "retentionRawOutputDays": "Vollständige Befehlsausgaben löschen nach",
+                "auditRetentionDays": "Prüfprotokoll aufbewahren für",
+                "auditRecordReads": "Erfassen, wer was geöffnet hat",
+                "productAnalytics": "Produktanalyse",
+                "aiNoticeShow": "KI-Hinweis für Beschäftigte",
+                "admissionEvent": "Arbeit, die ein Webhook startet",
+                "admissionListener": "Arbeit, die eine Chatnachricht startet",
+                "admissionWebchat": "Arbeit, die ein Website-Besucher startet",
+                "admissionIssues": "Arbeit, die ein Fehlerbericht startet",
+                "commandJudge": "Befehle vor der Ausführung geprüft",
+                "agentsSpawn": "Weitere Agenten starten",
+                "action": "{action} auf {service}"
+            },
+            "action": {
+                "messageSend": "Nachrichten senden",
+                "messageEdit": "Nachrichten bearbeiten",
+                "reactionAdd": "Reaktionen hinzufügen",
+                "reactionRemove": "Reaktionen entfernen"
+            },
+            "value": {
+                "allow": "erlaubt",
+                "hold": "fragt zuerst",
+                "deny": "verboten",
+                "on": "an",
+                "off": "aus",
+                "watch": "nur beobachten",
+                "mask": "übermalt",
+                "dictionary": "Namenslisten",
+                "model": "Namenslisten und lokales Modell",
+                "forever": "unbegrenzt",
+                "days": "{n} Tag | {n} Tage"
+            },
+            "unavailable": {
+                "privacyNames": "Braucht das lokale Namensmodell, das in dieser Sandbox nicht installiert ist."
+            },
+            "formatMarkdown": "Markdown",
+            "formatWord": "Word"
+        },
+        "sandboxAudit": {
+            "integrity": "Unversehrtheit",
+            "integrityTitle": "Ist das Protokoll unverändert?",
+            "integrityDescription": "Jeder Eintrag ist zusammen mit dem vorherigen versiegelt, sodass ein später geänderter oder entfernter Eintrag hier auffällt.",
+            "checkAgain": "Erneut prüfen",
+            "chainIntact": "Unverändert: {count} Eintrag geprüft, keiner wurde seit dem Schreiben geändert. | Unverändert: {count} Einträge geprüft, keiner wurde seit dem Schreiben geändert.",
+            "chainBroken": "Nach dem Schreiben geändert: Zeile {line} von {file}. {reason}",
+            "broken": {
+                "unreadable": "Diese Zeile ist kein Eintrag.",
+                "hash-mismatch": "Der Inhalt dieses Eintrags wurde bearbeitet.",
+                "chain-break": "Ein Eintrag davor wurde entfernt, eingefügt oder verschoben."
+            },
+            "tornNote": "Die neueste Datei endet mit einer halb geschriebenen Zeile, wie sie ein Absturz hinterlässt. Sie wurde übersprungen und zählt nicht als Änderung.",
+            "prunedNote": "Einträge bis {date} wurden gemäß der Aufbewahrungsdauer gelöscht; die Prüfung beginnt danach.",
+            "reachNote": "Diese Prüfung zeigt Manipulationen, verhindert sie aber nicht: Wer die Sandbox vollständig kontrolliert, könnte diese Dateien bearbeiten. Die Kopie, die an ein anderes System geht, kann niemand innerhalb der Sandbox ändern.",
+            "keeping": "Aufbewahrung",
+            "retentionTitle": "Einträge aufbewahren (Tage)",
+            "retentionDescription": "Ältere Monate werden vollständig gelöscht. Mindestens 30 Tage. Polnische Behörden bewahren Systemprotokolle 730 Tage (2 Jahre) auf.",
+            "readsTitle": "Auch festhalten, wer was geöffnet hat",
+            "readsDescription": "Legt jedes Mal einen Eintrag an, wenn jemand ein Gespräch, eine Datei oder dieses Protokoll öffnet. Ausgeschaltet werden nur Änderungen und Anmeldungen festgehalten.",
+            "forwardTitle": "Eine Kopie an ein anderes System senden",
+            "forwardDescription": "Jeder Eintrag wird beim Schreiben auch an den Protokollsammler Ihrer Organisation gesendet. Ist er nicht erreichbar, warten die Einträge und werden später gesendet.",
+            "forwardUrlLabel": "Adresse (HTTPS)",
+            "forwardUrlInvalid": "Verwenden Sie eine Adresse, die mit https:// beginnt, oder lassen Sie das Feld leer.",
+            "forwardSecretLabel": "Zugangsschlüssel",
+            "forwardSecretNone": "Keiner",
+            "forwardSecretHint": "Ein gespeichertes Geheimnis, das mit jedem Eintrag gesendet wird, damit der Sammler weiß, dass er von dieser Sandbox stammt. Fügen Sie eines unter Geheimnisse hinzu.",
+            "forwardFailing": "Die Adresse ist nicht erreichbar ({error}). Wartend: {count}.",
+            "forwardUpToDate": "Alle Einträge sind an der Adresse angekommen.",
+            "forwardPending": "{count} Eintrag wartet auf den Versand. | {count} Einträge warten auf den Versand.",
+            "download": "Herunterladen",
+            "downloadTitle": "Einen Zeitraum herunterladen",
+            "downloadDescription": "Die Einträge genau so, wie sie gespeichert sind, einer pro Zeile (JSON Lines), damit die Empfänger die Siegel selbst prüfen können.",
+            "downloadButton": "Herunterladen",
+            "exportBadPeriod": "Das Startdatum darf nicht nach dem Enddatum liegen.",
+            "exportEmpty": "In diesem Zeitraum wurde nichts festgehalten.",
+            "exportFailed": "Das Protokoll ließ sich nicht herunterladen.",
+            "filterPlaceholder": "Nach Person, Programm oder Gespräch filtern",
+            "filterAll": "Alle",
+            "filterSignIns": "Anmeldungen",
+            "records": "Einträge",
+            "reading": "Prüfprotokoll wird gelesen.",
+            "empty": "Noch nichts festgehalten.",
+            "refused": "Abgelehnt",
+            "failed": "Fehlgeschlagen",
+            "when": "Wann",
+            "action": "Aktion",
+            "details": "Details",
+            "hash": "Siegel",
+            "showOlder": "Ältere anzeigen",
+            "oldest": "Ältester aufbewahrter Eintrag: {date}",
+            "actorMember": "{email} ({role})",
+            "actorToken": "Programm mit dem Schlüssel „{label}“",
+            "actorAgent": "Agent im Gespräch {id}",
+            "actorSystem": "Die Sandbox selbst",
+            "actorSystemBecause": "Die Sandbox selbst ({reason})",
+            "subject": {
+                "settings": "Einstellungen",
+                "privacy": "Datenschutzschild",
+                "member": "Personen",
+                "area": "Bereiche",
+                "secret": "Geheimnisse",
+                "capability": "Verbindungen",
+                "approval": "Freigaben",
+                "grant": "Berechtigungen",
+                "safety": "Sicherheitsrichtlinie",
+                "persona": "Personas",
+                "automation": "Automatisierungen",
+                "extension": "Erweiterungen",
+                "environment": "Umgebung",
+                "card": "Antwort an einen Agenten",
+                "conversation": "Gespräche",
+                "workspace": "Arbeitsbereich",
+                "auth": "Anmeldungen",
+                "passkey": "Passkeys",
+                "token": "Programmschlüssel",
+                "export": "Exporte",
+                "definition": "Definition",
+                "share": "Geteilte Links",
+                "public": "Veröffentlichte Dateien",
+                "audit": "Prüfprotokoll",
+                "file": "Dateien",
+                "activity": "Aktivitätsprotokoll"
+            },
+            "from": "Von",
+            "to": "Bis"
         }
     },
     "settings": {
@@ -4228,6 +4623,12 @@
             "iconRailCompact": "Kompakt",
             "iconRailComfortable": "Bequem",
             "group": "Wie Sie arbeiten"
+        },
+        "analytics": {
+            "title": "Produktanalyse",
+            "description": "Hilf uns, Intentic zu verbessern: Erlaube Nutzungsereignisse und Aufzeichnungen der Oberfläche während der Arbeit, verknüpft mit deinem Konto. Inhalte deines Arbeitsbereichs werden darin maskiert. „Nein danke“ sendet nichts, und du kannst das jederzeit in den Einstellungen ändern.",
+            "allow": "Erlauben",
+            "deny": "Nein, danke"
         }
     },
     "setup": {

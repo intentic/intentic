@@ -1,6 +1,8 @@
+import { settingsContract } from "@intentic/sandbox-contract";
+import { settingsDiff } from "../audit/settings-diff.js";
+import { noteAudit } from "../audit/audit-http.js";
 import { join } from "node:path";
 import { bearerFrom } from "../auth/auth.js";
-import { settingsContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { forkablePrompt, intenticSystemPrompt } from "../agent/prompt/intentic-prompt.js";
 import { presetSystemPrompt } from "../agent/prompt/preset-prompt.js";
@@ -11,6 +13,7 @@ import { declaredRepoChecks, earlierDeclarations, readRepoDeclaration, summaries
 import { ManifestUnreadableError } from "../store/json-file.js";
 import { readTurnExperiments } from "../usage/turn-experiments.js";
 import { fieldNotesStatus } from "./field-notes-status.js";
+import { createAiLiteracyRoutes } from "./ai-literacy.routes.js";
 import { fileMemberAudiences, memberAudienceDocument, type MemberAudiences } from "./member-audience.js";
 import { fileMemberGettingStarted, memberGettingStartedDocument, type MemberGettingStarted } from "./member-getting-started.js";
 import { settingsDocument } from "./settings-store.js";
@@ -55,8 +58,10 @@ export const createSettingsRoutes = (services: Services) => {
             await services.agentDomainPolicy.set(input);
             return { ok: true } as const;
         }),
+        ...createAiLiteracyRoutes(services),
         get: i.get.handler(() => services.sandboxSettings.get()),
         set: i.set.handler(async ({ input }) => {
+            const before = await services.sandboxSettings.get();
             await versioned("agent settings", () => services.sandboxSettings.set(input)).catch((error: unknown) => {
                 // The owner's file to fix, not a server fault: the message names it and what this build could not read.
                 if (error instanceof ManifestUnreadableError) {
@@ -67,6 +72,10 @@ export const createSettingsRoutes = (services: Services) => {
             // Converges the baked tools with the new list for the next turn; a failed write only warns, the save still
             // succeeds.
             await reconcileBakedSkills(services, input.skills).catch((error: unknown) => services.logger.warn({ err: error }, "skill reconcile failed"));
+            // Which keys changed, never what text they now hold (settings-diff.ts); the audit block saved here is the one
+            // the trail's own check (audit-service.ts) need not report as changed behind its back.
+            noteAudit({ details: { changed: settingsDiff(before, input) } });
+            await services.audit.adoptSettings(input.audit);
             return { ok: true } as const;
         }),
         fieldNotes: i.fieldNotes.handler(() => fieldNotesStatus(services)),

@@ -950,7 +950,7 @@ html[data-variant="desk"] {
     }
     .docs-body a {
         color: var(--color-link);
-        text-decoration: none;
+        text-decoration: underline;
     }
     .docs-body a:hover {
         color: var(--color-primary-400);

@@ -72,7 +72,7 @@ export const privacyDoc: LegalDoc = {
         {
             heading: "What we do not collect",
             paragraphs: [
-                "We run no advertising and no ad or cross-site tracking, on the website or in the app, and we sell no data to anyone. The only cookie is the strictly necessary session cookie that keeps you signed in. We do run product analytics, in the workspace app and the desktop app: the next section says exactly what that captures.",
+                "We run no advertising and no ad or cross-site tracking, on the website or in the app, and we sell no data to anyone. The only cookie is the strictly necessary session cookie that keeps you signed in. We do run product analytics in the workspace app and the desktop app, but only if you agree to it: the next section says exactly what that captures.",
                 "The sandbox itself reports nothing to us. A sandbox you run on your own machine sends no usage pings, no active-day signals and no counts: nothing the platform sells is priced on anything a sandbox could report, which is why it can ask for nothing. Your code, your files and your prompts are never sent to us by a sandbox: what the analytics below sees is the workspace interface in your browser, and the next section is explicit about that.",
                 "We never receive your payment card details. Stripe collects them directly and we see only a customer reference, the subscription status and the billing period.",
             ],
@@ -81,17 +81,21 @@ export const privacyDoc: LegalDoc = {
             heading: "Product analytics",
             paragraphs: [
                 "The workspace app at app.intentic.dev and the desktop app carry product analytics, run for us by PostHog. We use it to see how the product is used and where people get stuck; it is not used for advertising, not shared, and not sold.",
-                "In the browser workspace it records the pages you open, clicks and other interactions with the interface, a handful of milestone events our own code sends (a sandbox connected, a hosted sandbox created, an installer downloaded, a message sent, a setup that failed), and a session replay: a reconstruction of the interface as you used it, with your workspace left out. Every piece of text on the screen is replaced with asterisks unless it is wording written into the app itself, such as a button label, a menu or a heading, or a number standing on its own, such as a count, a percentage, a size or a duration. Where the app's wording is a sentence around a value, the sentence is kept and the value is judged by the same rule, so “3 files changed” is kept whole and “Delete report.pdf?” keeps only “Delete”. One thing keeps more: when setting up a sandbox on your own machine fails, the error your machine reports is kept as written, in the replay and in the failed-setup event, with every email address, path, web address, host name and identifier in it replaced with asterisks. File names, code, diffs, conversation, terminal output, commands and the names and addresses the interface shows for your sandbox are therefore not in the replay. The code editor and its diff view, terminals, images and embedded pages are blanked out completely, everything you type into a field is masked, and the address of the page is reduced to the name of its route, so a file's path is not recorded there. The replay does not record network requests, console output or canvas drawing. What it keeps is the layout, where you click and scroll, the app's own wording and those numbers. Once you are signed in, these events carry your account identifier, email address and name, so what happened can be tied back to the account it happened in.",
+                "It runs only with your consent. The workspace app asks once, in each browser you use it in. Until you answer, and after you choose No thanks, the analytics code is not started and nothing is sent. Your answer is kept in that browser, and you can change it at any time under Settings, Data. The desktop app follows the answer you gave in its workspace window and sends nothing of its own until you have agreed there.",
+                "The owner of a sandbox can also switch product analytics off for that sandbox. While such a sandbox is open, nothing is recorded or sent about anyone's visit to it, whatever each person agreed to, and nothing is sent while the app is still finding out whether a sandbox has switched it off.",
+                "If you agree, in the browser workspace it records the pages you open, clicks and other interactions with the interface, a handful of milestone events our own code sends (a sandbox connected, a hosted sandbox created, an installer downloaded, a message sent, a setup that failed), and a session replay: a reconstruction of the interface as you used it, with your workspace left out. Every piece of text on the screen is replaced with asterisks unless it is wording written into the app itself, such as a button label, a menu or a heading, or a number standing on its own, such as a count, a percentage, a size or a duration. Where the app's wording is a sentence around a value, the sentence is kept and the value is judged by the same rule, so “3 files changed” is kept whole and “Delete report.pdf?” keeps only “Delete”. One thing keeps more: when setting up a sandbox on your own machine fails, the error your machine reports is kept as written, in the replay and in the failed-setup event, with every email address, path, web address, host name and identifier in it replaced with asterisks. File names, code, diffs, conversation, terminal output, commands and the names and addresses the interface shows for your sandbox are therefore not in the replay. The code editor and its diff view, terminals, images and embedded pages are blanked out completely, everything you type into a field is masked, and the address of the page is reduced to the name of its route, so a file's path is not recorded there. The replay does not record network requests, console output or canvas drawing. What it keeps is the layout, where you click and scroll, the app's own wording and those numbers. Once you are signed in, these events carry your account identifier, email address and name, so what happened can be tied back to the account it happened in.",
                 "The click and page events are filtered the same way. The address of a page is reduced to the name of its route, so a file view is recorded as /workspace/:path* and never with the path, and the same goes for the page you came from. Of an element you click, the text and labels are kept by the same rule as the replay's text, so a button label is kept and a file name is replaced with asterisks. Page titles are masked in the same way, and so is the message of an error report, which often quotes a path.",
                 "It keeps an identifier for the browser tab you are working in, in that tab's session storage rather than in a cookie: closing the tab ends it, and it does not identify you when you come back. Requests reach PostHog through app.intentic.dev's own address rather than PostHog's own, which is also why a content blocker does not stop them.",
                 "The desktop app reports far less, and by design: named events about installing, updating and setting up a sandbox, each carrying which step, the outcome, how long it took, the app version and the operating system, under an identifier that is random per installation. It sends no folder path, no sandbox name, no setup code, no credential and no line of the output on its screen.",
-                `Our legal basis is our legitimate interest in understanding and improving the product (Art. 6(1)(f)), and you can object to it: write to ${LEGAL_CONTACT_EMAIL} and we will exclude your account and delete what has been recorded about you.`,
+                `Our legal basis is your consent (Art. 6(1)(a)), which also covers keeping the identifiers described above in your browser and app. You can withdraw it at any time under Settings, Data, as easily as you gave it; withdrawing stops further recording but does not undo what was recorded before. To have that deleted too, write to ${LEGAL_CONTACT_EMAIL}.`,
             ],
         },
         {
             heading: "Sandboxes you run yourself",
             paragraphs: [
-                "When your sandbox runs on your own machine or your own server, your code, files, credentials and everything your agent produces stay there. The platform stores the address and the token needed to reach it, and nothing of what is inside. Traffic between your browser and your sandbox passes through our tunnel provider to reach you, encrypted end to end.",
+                "When your sandbox runs on your own machine or your own server, your code, files, credentials and everything your agent produces are stored there and nowhere else. The platform stores the address and the token needed to reach it, and nothing of what is inside.",
+                "Reaching it from a browser is a different matter, and we want to be precise about it. When you open a sandbox at its intentic address (sandbox-….sbx.intentic.dev), the traffic between your browser and the sandbox passes through our ingress: a relay we run at Fly.io, currently in the United States (Ashburn, Virginia). Each leg is encrypted, from your browser to the ingress and from the ingress down the tunnel your sandbox opened to it, but the ingress decrypts the traffic in order to route it. So what you view and type in the workspace, including files, prompts and the agent's replies, passes through a server we operate in readable form while it is in transit. The ingress stores none of it: it has no storage, and it logs only tunnel events (which sandbox, the network address of the machine it runs on, and when a tunnel opened or closed), never the address or content of a request. For this traffic we act as your processor, under the Data Processing Agreement.",
+                "You can avoid the relay entirely. A sandbox opened on the machine it runs on, through its local address, is reached directly. And the platform, ingress included, is open source and can be run on your own servers, in which case none of this traffic reaches us.",
             ],
         },
         {
@@ -145,7 +149,7 @@ export const privacyDoc: LegalDoc = {
             list: [
                 "Performance of our contract with you (Art. 6(1)(b)) for account data, sandbox records, hosted machines, hosted usage and the hosted plan.",
                 "Our legitimate interest (Art. 6(1)(f)) in keeping accounts and infrastructure secure, for session and sign-in security data, for acting on abuse reports, and for the hosted standing we keep after an account is deleted.",
-                "Our legitimate interest (Art. 6(1)(f)) in understanding and improving the product, for the analytics above. You can object to that one, and the section says how.",
+                "Your consent (Art. 6(1)(a)) for the product analytics above, which you can withdraw at any time under Settings, Data.",
                 "Compliance with a legal obligation (Art. 6(1)(c)) for tax and accounting records of payments.",
             ],
         },
@@ -153,7 +157,7 @@ export const privacyDoc: LegalDoc = {
             heading: "International transfers",
             paragraphs: [
                 "Some of our providers are established in the United States. Where personal data reaches them, transfers are covered by the EU–US Data Privacy Framework where the provider is certified, and otherwise by the European Commission's Standard Contractual Clauses under that provider's data processing agreement. The sub-processors page states which applies to each.",
-                "For hosted sandbox content specifically, the region rule above is what limits the transfer: European users' workspace content is not transferred out of the EU by us at all.",
+                "For hosted sandbox content stored on disk, the region rule above is what limits the transfer: European users' stored workspace content is not transferred out of the EU by us. Traffic between a browser and any sandbox, hosted or your own, does leave the EU while in transit: it passes through our ingress in the United States, as described under Sandboxes you run yourself. That transfer is covered by the Standard Contractual Clauses in our agreement with Fly.io.",
             ],
         },
         {
@@ -382,13 +386,14 @@ export const acceptableUseDoc: LegalDoc = {
 
 export const dpaDoc: LegalDoc = {
     title: "Data Processing Agreement",
-    intro: `Effective ${LEGAL_VERSION}. This agreement applies when we process personal data on your behalf, in practice, when you use a sandbox we host. It is concluded between you (the controller) and us (the processor) as part of the Terms of Service, and satisfies Article 28 of the GDPR. No signature is needed; accepting the Terms concludes it.`,
+    intro: `Effective ${LEGAL_VERSION}. This agreement applies when we process personal data on your behalf: when you use a sandbox we host, and when the traffic to any sandbox, including one you run yourself, passes through our ingress. It is concluded between you (the controller) and us (the processor) as part of the Terms of Service, and satisfies Article 28 of the GDPR. No signature is needed; accepting the Terms concludes it.`,
     sections: [
         {
             heading: "When this applies",
             paragraphs: [
                 "It applies to personal data that ends up inside a sandbox we host for you: in repositories, files, databases or logs in that workspace, where you decide what is there and why.",
-                "It does not apply to your account, hosted plan or sandbox records: for those we decide the purposes ourselves and act as controller, governed by the Privacy Policy. It also does not apply to a sandbox you run on your own infrastructure, because nothing of its contents reaches us.",
+                "It also applies to the traffic between a browser and any sandbox, hosted or one you run on your own infrastructure, that is opened through its intentic address. That traffic passes through our ingress, which decrypts it in memory to route it to the right sandbox and stores none of it. For a sandbox you run yourself, this transmission is the whole of our processing: its stored contents never reach us.",
+                "It does not apply to your account, hosted plan or sandbox records: for those we decide the purposes ourselves and act as controller, governed by the Privacy Policy. It does not apply to a sandbox you run yourself and reach without our ingress (on its own machine, or through a platform and ingress you run yourself), because then nothing of it reaches us.",
             ],
         },
         {
@@ -397,11 +402,17 @@ export const dpaDoc: LegalDoc = {
             table: {
                 columns: ["Item", "What it is here"],
                 rows: [
-                    ["Subject matter", "Hosting a development workspace on a virtual machine and disk we provide"],
-                    ["Duration", "For as long as the hosted sandbox exists; it ends when you delete the sandbox or your account"],
+                    [
+                        "Subject matter",
+                        "Hosting a development workspace on a virtual machine and disk we provide; relaying browser traffic to any sandbox through our ingress",
+                    ],
+                    [
+                        "Duration",
+                        "For as long as the hosted sandbox exists, or for as long as the sandbox is reachable through its intentic address; it ends when you delete the sandbox or your account",
+                    ],
                     [
                         "Nature and purpose",
-                        "Storage, and the operations needed to run a machine: creating, stopping, starting, restoring and destroying it",
+                        "Storage, and the operations needed to run a machine: creating, stopping, starting, restoring and destroying it. For traffic through the ingress: transmission only, decrypted in memory to route it, never stored or logged",
                     ],
                     ["Type of personal data", "Whatever you place in the workspace: we neither select nor inspect it, so you determine it entirely"],
                     ["Categories of data subjects", "Determined by you; typically your own users, customers, employees or test data"],
@@ -437,7 +448,7 @@ export const dpaDoc: LegalDoc = {
             list: [
                 "Each hosted sandbox is a separate machine, with its own disk, in its own private network at our infrastructure provider. Two users' sandboxes never share a machine, a disk or a network.",
                 "The machine is reachable only through a tunnel provisioned for that sandbox; nothing on it is exposed by us to the public internet by default.",
-                "Traffic between your browser and your sandbox is encrypted in transit.",
+                "Traffic between your browser and your sandbox is encrypted in transit on each leg: browser to ingress, and ingress down the tunnel the sandbox opened. The ingress decrypts it only in memory, to route it; it writes none of it to disk and logs no request's address or content. It currently runs in the United States (Ashburn).",
                 "Access to a sandbox is bound at first connection to the identity that created it: a Google account, or an email address we confirmed by mailing it a code. Connection tokens are stored encrypted in our database.",
                 "No standing access path exists from the platform into a running machine, which is a structural limit rather than a policy one.",
                 "Access to our own production systems is limited to the operator, over authenticated channels.",
@@ -448,8 +459,8 @@ export const dpaDoc: LegalDoc = {
         {
             heading: "Sub-processors and transfers",
             paragraphs: [
-                "The current list, with what each does and where, is on our sub-processors page. The one that matters here is Fly.io, which provides the machine and disk.",
-                "Where you provision a hosted sandbox from the EEA, the UK or Switzerland, the machine and disk are created in the European Union and its contents are not transferred out of the EU by us. Where a transfer to a provider outside the EEA does occur, it is covered by the EU–US Data Privacy Framework or by Standard Contractual Clauses under that provider's data processing agreement.",
+                "The current list, with what each does and where, is on our sub-processors page. The one that matters here is Fly.io, which provides the machine and disk of a hosted sandbox and runs our ingress.",
+                "Where you provision a hosted sandbox from the EEA, the UK or Switzerland, the machine and disk are created in the European Union and its stored contents are not transferred out of the EU by us. Traffic through the ingress is the exception: the ingress currently runs in the United States, so traffic to any sandbox opened through its intentic address leaves the EU in transit. Where a transfer to a provider outside the EEA occurs, it is covered by the EU–US Data Privacy Framework or by Standard Contractual Clauses under that provider's data processing agreement.",
             ],
         },
         {
@@ -474,13 +485,13 @@ export const subprocessorsDoc: LegalDoc = {
                 rows: [
                     [
                         "Fly.io, Inc. (US)",
-                        "Runs the virtual machine and disk of a sandbox we host, and only those",
-                        "European Union (Stockholm) for users in the EEA, UK and Switzerland; United States (Ashburn) for everyone else",
+                        "Runs the virtual machine and disk of a sandbox we host, and our ingress: the relay that carries browser traffic to every sandbox opened through its intentic address, hosted or self-run, and decrypts it in memory to route it",
+                        "Hosted sandboxes: European Union (Stockholm) for users in the EEA, UK and Switzerland, United States (Ashburn) for everyone else. Ingress: United States (Ashburn)",
                         "Standard Contractual Clauses",
                     ],
                     [
                         "Cloudflare, Inc. (US)",
-                        "Website delivery, DNS, and the tunnel that makes a sandbox reachable from your browser",
+                        "Website delivery and DNS, including the names sandboxes are reached at. Sandbox traffic goes through our own ingress instead, except for a sandbox still connected through an older Cloudflare tunnel",
                         "Global edge network",
                         "Data Privacy Framework and Standard Contractual Clauses",
                     ],

@@ -92,6 +92,8 @@ export interface SessionsDeps {
     readonly roster: () => readonly PersistedAgent[];
     // What else a purged conversation leaves behind that must go with it.
     readonly forget: (conversationId: string) => void;
+    // Deletes a Codex thread's rollout, which goes with a purged conversation that ran on Codex.
+    readonly removeCodexRollout?: (threadId: string) => Promise<void>;
 }
 
 // Each conversation's current session, named as the conversation is: its title as the daemon keeps it, renames included.
@@ -269,7 +271,7 @@ export const createSessionsSlice = (deps: SessionsDeps): { readonly slice: Sessi
             },
             // The index goes with the state; a purged conversation's rows would otherwise still be findable by phrase.
             purgeConversationState: async (removed, retained) => {
-                await purgeConversationState(deps.workspaceRoot, historyRoot, transcriptRecord.stored, removed, retained);
+                await purgeConversationState(deps.workspaceRoot, historyRoot, transcriptRecord.stored, removed, retained, deps.removeCodexRollout);
                 for (const entry of removed) {
                     await saidIndex.forget(entry.id);
                     deps.forget(entry.id);

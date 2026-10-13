@@ -18,7 +18,7 @@ const DEFAULT_POSITION = "top-right" as const;
 
 export const publicConfig = (automation: AutomationRecord): WebchatPublicConfig => {
     const config: WebchatConfig = automation.webchat ?? {};
-    return {
+    const result: WebchatPublicConfig = {
         automationId: automation.id,
         title: config.title ?? DEFAULT_TITLE,
         greeting: config.greeting ?? DEFAULT_GREETING,
@@ -27,11 +27,14 @@ export const publicConfig = (automation: AutomationRecord): WebchatPublicConfig 
         position: config.position ?? DEFAULT_POSITION,
         access: config.access ?? "public",
         requireName: config.requireName ?? false,
+        aiDisclosure: config.aiDisclosure ?? true,
         // A configured mechanism with a missing key degrades to off, not a gate the visitor can never pass.
         antiBot: usableAntiBot(config),
         ...(config.turnstileSiteKey !== undefined ? { turnstileSiteKey: config.turnstileSiteKey } : {}),
         ...(config.googleClientId !== undefined ? { googleClientId: config.googleClientId } : {}),
     };
+    if (config.aiDisclosureText) {result.aiDisclosureText = config.aiDisclosureText;}
+    return result;
 };
 
 // Which check the daemon actually enforces; read by both the config route and the message route, so the two can never

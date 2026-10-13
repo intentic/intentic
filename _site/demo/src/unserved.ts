@@ -246,6 +246,9 @@ export const UNSERVED = {
     "secrets.policy": UNFILLED_VIEW,
     "settings.audience": UNFILLED_VIEW,
     "settings.builtinPrompt": UNFILLED_VIEW,
+    // The AI notice is off in the demo's settings, so the card never asks for its status or confirmations.
+    "settings.aiLiteracy": UNFILLED_VIEW,
+    "settings.aiLiteracyConfirmations": UNFILLED_VIEW,
     "share.list": UNFILLED_VIEW,
     "skills.list": UNFILLED_VIEW,
     "skills.read": UNFILLED_VIEW,
@@ -357,6 +360,7 @@ export const UNSERVED = {
     "secrets.setHosts": UNSIMULATED_WRITE,
     "secrets.setPolicy": UNSIMULATED_WRITE,
     "settings.adoptTimezone": UNSIMULATED_WRITE,
+    "settings.confirmAiLiteracy": UNSIMULATED_WRITE,
     "settings.setAudience": UNSIMULATED_WRITE,
     "share.create": UNSIMULATED_WRITE,
     "share.remove": UNSIMULATED_WRITE,

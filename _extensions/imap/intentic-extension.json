@@ -89,14 +89,54 @@
                         "label": "Watched mailbox",
                         "default": "INBOX",
                         "advanced": true
+                    },
+                    {
+                        "key": "smtpHost",
+                        "label": "SMTP host",
+                        "optional": true,
+                        "placeholder": "smtp.example.com"
+                    },
+                    {
+                        "key": "smtpPort",
+                        "label": "SMTP port",
+                        "default": "587",
+                        "advanced": true
+                    },
+                    {
+                        "key": "smtpSecurity",
+                        "label": "SMTP security",
+                        "default": "starttls",
+                        "options": [
+                            { "value": "starttls", "label": "STARTTLS (587)" },
+                            { "value": "tls", "label": "Implicit TLS (465)" }
+                        ]
+                    },
+                    {
+                        "key": "smtpUsername",
+                        "label": "SMTP username (blank uses IMAP username)",
+                        "optional": true,
+                        "advanced": true
+                    },
+                    {
+                        "key": "smtpPassword",
+                        "label": "SMTP password (blank uses IMAP password)",
+                        "optional": true,
+                        "secret": true,
+                        "advanced": true
                     }
                 ],
                 "env": {
                     "IMAP_HOST": "${host}",
                     "IMAP_PORT": "${port}",
                     "IMAP_USERNAME": "${username}",
-                    "IMAP_PASSWORD": "${password}"
+                    "IMAP_PASSWORD": "${password}",
+                    "SMTP_HOST": "${smtpHost}",
+                    "SMTP_PORT": "${smtpPort}",
+                    "SMTP_SECURITY": "${smtpSecurity}",
+                    "SMTP_USERNAME": "${smtpUsername}",
+                    "SMTP_PASSWORD": "${smtpPassword}"
                 },
+                "hosts": ["${host}", "${smtpHost}"],
                 "skill": "skills/imap/SKILL.md"
             }
         ]

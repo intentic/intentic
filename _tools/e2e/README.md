@@ -40,6 +40,11 @@ flowchart LR
   targets and scrollers that do not move. `shots/capture.mts` photographs the same build into
   `_site/site/src/assets/product/` (and `product-light/`): the demo's quiet `showcase` recording, wearing the Mist
   wallpaper over Sanctum and over the light look. Both need only Chromium.
+- `specs/accessibility.spec.ts` uses axe-core on the seeded full stack: sign-in, sandbox home, a chat message,
+  composer and settings. It reports every WCAG 2.1 A/AA finding and fails for serious or critical rule/target pairs
+  absent from `accessibility/baseline.json`. Each accepted pair needs a note explaining why it remains. The baseline
+  starts empty. `accessibility/scan-demo.mts` scans the backend-free demo and public site on local dev servers;
+  findings from the development-only design kit are reported separately from user screens.
 - `local-face/` boots the desktop app's local face (`_editor/desktop-app`, `dist/files`, built by its global setup) the
   way a window on a folder boots it, without Tauri: the bundle behind a server that resolves paths as the app's asset
   protocol does, the real `intentic-files` sidecar from source granted a temp folder on its stdin, and
@@ -57,6 +62,7 @@ flowchart LR
 - [playwright.config.ts](playwright.config.ts) — the browser tier: serial, one retry, seeded session.
 - [smoke-signin.mjs](smoke-signin.mjs) — the post-deploy check against Google's real origin check.
 - [mobile/audit.mts](mobile/audit.mts) — the phone geometry gate.
+- [accessibility/audit.ts](accessibility/audit.ts) — shared WCAG 2.1 A/AA axe scan and per-rule summaries.
 
 ## Commands
 
@@ -65,6 +71,9 @@ pnpm e2e:signin                                   # builds the web first; needs 
 pnpm e2e:browser                                  # SANDBOX_E2E_IMAGE picks the daemon image
 pnpm e2e:mobile                                   # builds the demo first
 pnpm e2e:local                                    # builds the local face first
+pnpm -C _site/demo dev --port 47160                # separate terminal, backend-free editor
+pnpm -C _site/site dev --port 47149                # separate terminal, public site
+node --experimental-strip-types _tools/e2e/accessibility/scan-demo.mts
 node --experimental-strip-types _tools/e2e/shots/capture.mts [--light | --desk] [shot names]
 pnpm --filter @intentic/e2e smoke:signin https://app.intentic.dev
 cd _tools/e2e && pnpm exec playwright test -c window-sync/window-sync.playwright.config.ts

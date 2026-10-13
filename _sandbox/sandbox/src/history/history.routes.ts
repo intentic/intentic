@@ -1,3 +1,4 @@
+import { seesWholeFleet } from "../auth/scope/conversation-reader.js";
 import { historyContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
@@ -10,7 +11,12 @@ export type HistoryRoutesDeps = Pick<Services, "history">;
 export const createHistoryRoutes = (services: HistoryRoutesDeps) => {
     const i = implement(historyContract).$context<OrpcContext>();
     return {
-        list: i.list.handler(async () => ({ snapshots: await services.history.list() })),
+        // A turn's snapshot is labelled with its prompt, which names no conversation to check: someone fenced to areas, or a
+        // guest, gets the points without the words.
+        list: i.list.handler(async ({ context }) => {
+            const snapshots = await services.history.list();
+            return { snapshots: seesWholeFleet(context.identity) ? snapshots : snapshots.map(({ label: _label, ...point }) => point) };
+        }),
         diff: i.diff.handler(async ({ input }) => {
             const changes = await services.history.diff(input.id);
             if (changes === undefined) {

@@ -411,6 +411,7 @@ watch(
 }
 .fine a {
     color: var(--gold-bright);
+    text-decoration: underline;
 }
 .fine a:hover {
     text-decoration: underline;

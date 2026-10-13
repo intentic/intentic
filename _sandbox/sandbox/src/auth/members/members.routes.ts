@@ -1,3 +1,4 @@
+import { noteAudit } from "../../audit/audit-http.js";
 import {
     accessRefusal,
     type AgentAccess,
@@ -52,6 +53,14 @@ interface MemberGrantRequest {
     readonly emailSignIn?: boolean | undefined;
     readonly credentials?: CredentialReach | "all" | undefined;
 }
+
+// What the audit trail keeps of a grant: the tier it made and the one it replaced, and the shape of the fence (area ids
+// are the owner's own names, no personal data), never the credentials it lists.
+const grantDetails = (grant: MemberGrantRequest, previous: GrantedRole | undefined) => ({
+    role: grant.role,
+    previousRole: previous ?? "none",
+    areas: grant.areas ?? "all",
+});
 
 // The refusals an access makes on its face, in the order a reader fixes them: a writer named with nowhere to write (what
 // an editor that predates `edit` sends), an access no grant could make (chatting with no area, editing outside what they
@@ -150,7 +159,9 @@ export const createMembersRoutes = (services: MembersRoutesDeps) => ({
             return c.json({ error: refusal }, 400);
         }
         return unavailableIfUnreadable(c, async () => {
+            const before = (await services.members.list()).find((member) => member.email === grant.email.toLowerCase());
             await services.members.add(grant.email, grant);
+            noteAudit({ target: grant.email.toLowerCase(), details: grantDetails(grant, before?.role) });
             // A role is frozen into an open socket/ticket; closing both re-enters the authorizer with the new tier. A media
             // ticket names a file the new tier may no longer reach.
             revokeHeld(services, grant.email);
@@ -169,6 +180,7 @@ export const createMembersRoutes = (services: MembersRoutesDeps) => ({
         }
         return unavailableIfUnreadable(c, async () => {
             await services.members.remove(email);
+            noteAudit({ target: email.toLowerCase() });
             revokeHeld(services, email);
             return c.json({ members: await services.members.list() });
         });

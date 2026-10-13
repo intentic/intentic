@@ -1,3 +1,4 @@
+import { conversationReader, registryProvenance } from "../auth/scope/conversation-reader.js";
 import { loopCanConverge, loopsContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
@@ -8,7 +9,11 @@ import { loopRunning, runLoop, stopLoop } from "./loop-runner.js";
 export const createLoopsRoutes = (services: Services) => {
     const i = implement(loopsContract).$context<OrpcContext>();
     return {
-        list: i.list.handler(async () => ({ loops: await services.loops.list() })),
+        // A loop carries its goal and prompt: listed only to those who may read its conversation.
+        list: i.list.handler(async ({ context }) => {
+            const reads = conversationReader(context.identity, registryProvenance(services.agents));
+            return { loops: (await services.loops.list()).filter((loop) => reads(loop.conversationId)) };
+        }),
         start: i.start.handler(async ({ input }) => {
             // Refused, not queued: two pumps on one conversation would race the same worktree and turn mutex.
             if (loopRunning(services.conversations, input.conversationId)) {

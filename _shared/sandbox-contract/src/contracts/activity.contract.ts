@@ -10,7 +10,7 @@ export const activityContract = {
             path: "/activity",
             summary: "What the agent has done out in the world",
             description:
-                "The audit trail of actions taken on outside services. Read-only on purpose: entries are written by the sandbox alone, which is what makes it a record worth trusting.",
+                "The record of actions taken on outside services. Read-only on purpose: entries are written by the sandbox alone. Someone who does not manage the sandbox reads only the entries of conversations they may see, since an entry carries the prompt that woke a turn.",
         })
         .input(ActivityQuerySchema)
         .output(ActivityListSchema),

@@ -2,6 +2,7 @@ import type { Router } from "@orpc/server";
 import type { sandboxContract } from "@intentic/sandbox-contract";
 import type { OrpcContext } from "./app-env.js";
 import { createActivityRoutes } from "./activity/activity.routes.js";
+import { createAuditRoutes } from "./audit/audit.routes.js";
 import { createAgentRoutes } from "./agent/routes/agent.routes.js";
 import { createProvidersRoutes } from "./agent/routes/providers.routes.js";
 import { createAgentsRoutes } from "./conversations/agents.routes.js";
@@ -12,6 +13,7 @@ import { createCapabilitiesRoutes } from "./capabilities/capabilities.routes.js"
 import { createPersonasRoutes } from "./personas/personas.routes.js";
 import { createChoresRoutes } from "./chores/chores.routes.js";
 import { createCiRoutes } from "./ci/ci.routes.js";
+import { createComplianceRoutes } from "./compliance/compliance.routes.js";
 import { createDiffRoutes } from "./git/changes/diff-derived.js";
 import type { Services } from "./composition.js";
 import { createApprovalsRoutes } from "./approvals/approvals.routes.js";
@@ -65,12 +67,14 @@ export type SandboxRouter = Router<typeof sandboxContract, OrpcContext>;
 export const createRouter = (services: Services): SandboxRouter => ({
     accounts: createAccountsRoutes(services),
     activity: createActivityRoutes(services),
+    audit: createAuditRoutes(services),
     agent: createAgentRoutes(services),
     agents: createAgentsRoutes(services),
     automations: createAutomationsRoutes(services),
     capabilities: createCapabilitiesRoutes(services),
     chores: createChoresRoutes(services),
     ci: createCiRoutes(services),
+    compliance: createComplianceRoutes(services),
     diff: createDiffRoutes(services),
     approvals: createApprovalsRoutes(services),
     extensions: createExtensionsRoutes(services),

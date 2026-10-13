@@ -227,7 +227,12 @@ export const createMasker = ({ vault, policy, memo, recognizer }: MaskerDeps): M
             .find(text)
             .flatMap(({ start, end, payload }: { start: number; end: number; payload: VaultHit }) => {
                 const value = text.slice(start, end);
-                return admitted(payload.class, value) ? [{ start, end, class: payload.class, value, token: payload.token, rank: 0 }] : [];
+                if (!admitted(payload.class, value)) {
+                    return [];
+                }
+                // A value found again is a value still in use, which is what the vault's retention ages by.
+                vault.saw(payload);
+                return [{ start, end, class: payload.class, value, token: payload.token, rank: 0 }];
             });
 
     // Replaces the chosen spans; tallies what it replaced, and where each token landed in the whole string (`base` is

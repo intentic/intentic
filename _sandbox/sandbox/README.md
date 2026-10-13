@@ -17,8 +17,23 @@ flowchart LR
 
 - It runs as the child of `intentic-netd` ([../netd](../netd)), which owns every port, the TLS certificate and
   the platform tunnel, and relays HTTP over a Unix socket. The daemon decides, netd binds.
+- AI literacy confirmations live per member and notice version in `/history/member-ai-literacy.json`; member confirmation and maintainer listing use the settings routes. Visitor chat public config includes the AI disclosure flag and optional wording.
 - Two roots: `/work` is what agents edit; `/history` is the daemon's own (git dirs, worktrees, the conversation
   database, snapshots, logs) and sits outside `/work`.
+  It is not out of an agent's reach: an unfenced agent runs as root in the default agent domain and can write it.
+- The auth-root JSON stores for sandbox secrets, capability credentials, extension credentials, and privacy tokens can
+  be encrypted at rest by setting `INTENTIC_AT_REST_KEY_FILE` to a mounted key file. `/health.atRestEncryption`
+  reports whether this is active and names those four stores and provider account files. Existing plain files are encrypted at boot; every write
+  uses a fresh AES-256-GCM nonce. With no key configured, these files keep their original plain format.
+- The audit trail (`audit/`, `/history/audit/`): who changed a setting, a member, an area, a secret's gate or a policy,
+  who signed in, what was exported or deleted, and with `settings.audit.recordReads` who opened what. One middleware
+  records by contract route name (`audit/audit-http.ts`); another module calls `services.audit.record({ actor, action,
+  target?, details? })`, which never waits and never throws. Records are hash-chained in monthly files, pruned by
+  `settings.audit.retentionDays` behind a checkpoint, and forwarded to `settings.audit.forwardUrl` from a persisted
+  cursor. The chain shows tampering; only the forwarded copy is out of the agent's reach.
+- Routes that hand out a conversation's words by id (`/activity`, `/fleet`, `/loops`, `/share`, `/privacy/log`, held
+  wakes, `/sessions`, `/children`, `/needs/mine`) answer someone below maintainer only for conversations the roster
+  shows them (`auth/scope/conversation-reader.ts`). _(2026-10-13) They answered every member alike._
 - A history snapshot leaves out any file over 32 MiB (`history/large-files.ts`). A restore neither brings such a file
   back nor deletes it. _(2026-10-09) Snapshots had no size limit: a 30 GB folder of films dropped into `/work` was
   hashed and stored a second time on `/history`._
@@ -96,6 +111,14 @@ flowchart LR
   (`conversations/worktrees/isolation.ts`). Cursor's SDK agent, which ran inside the daemon, moves for such a turn into
   a runtime process born there (`runtimes/cursor/cursor-host.ts`, `cursor-agent-runtime.ts`); its custom tools, hook
   gate and frames stay in the daemon, reached over the process's IPC channel.
+- The data protection page's routes (`compliance/`, contract `compliance.contract.ts`, maintainer and up) read the live
+  configuration into plain facts (`facts.ts`) and map them, without I/O, to every outbound data path and the
+  technical and organisational measures (`report.ts`), and to the record of processing, the impact assessment draft and
+  the measures list in Polish or English (`drafts.ts`, `compliance-text.ts`; `.docx` built by `docx.ts` with
+  node:zlib, no library). The public-office preset (`preset.ts`) is a list of items applied only when named, owner
+  only; none ever loosens a setting already stricter, and no default changed for it. Applying it and downloading a
+  document go through `recordComplianceEvent` (`compliance.routes.ts`), which writes the daemon log until the audit
+  trail takes it.
 - The unprivileged agent domain (`agentDomain`, `workload/domain/agent-domain-policy.ts`) is a setting kept in the auth root,
   not in the workspace settings, and only the owner may change it. It defaults to `root`, and this build still refuses
   `unprivileged` everywhere it is read (`workload/domain/agent-domain-rollout.ts` lists what is missing). When it is on, each
@@ -371,6 +394,19 @@ flowchart LR
   (`conversations/land/parked-ref-retention.ts`), `/history/trash` past 14 days hourly, checkouts and overlays no
   conversation owns daily (`conversations/worktrees/orphan-checkouts.ts`), and the agents' dockerd's stopped
   containers and dangling images daily when it already runs (`capabilities/handlers/docker-prune.ts`).
+- Data retention (`retention/retention-sweep.ts`, 2026-10-13) makes `settings.retention` real, on the same clock:
+  each positive `*Days` DELETES that kind of copy once it is older (nothing is archived or set aside first), and every
+  value is 0 by default, which runs nothing. Transcripts (`conversations/registry/transcript-retention.ts`): a
+  conversation whose last message is past the window goes the way the archive's Empty takes it, its checkout, rows,
+  history unit, runtime session files, transcript backup, pages, uploads only it named and phrase-index rows, with no
+  tombstone left; one running, queued, held, asking, holding unlanded work, or the parent of a child that stays is
+  kept. Restore points (`history/restore-point-retention.ts`): cut with git's shallow boundary at the newest snapshot
+  before the window, which stays hidden as the state later points restore to, then `gc --prune=now`; a deleted
+  repo's scope with nothing newer goes whole. Privacy vault: found values not matched since (`seen`, kept to the day)
+  and the masked pictures beside them; taught lists stay until forgotten. Caches (fileq's `derived/`, `rendered/`,
+  `derived-blobs/`, thumbnails) and raw output (`logs/raw-output`, `output-cache`, `terminals`, and each overlay's) by
+  write time. Hourly, restore points daily, and everything within a tick of the settings changing; each run logs
+  what it deleted per kind (`RetentionPass`), the seam an audit trail connects to (`record`).
 - netd's two sockets (`INTENTIC_NETD_SOCKET`, `INTENTIC_NODE_SOCKET`) leave the daemon's environment once its
   netd door has dialled them, and the tmux server's, so no agent-spawned child inherits them (2026-10-05).
 
@@ -395,7 +431,9 @@ flowchart LR
   is painted over with its token (`privacy/image-mask.ts`); one that cannot be read is held back, and an animation goes
   as the one frame that was read. A PDF goes as its
   masked text, or is withheld. The vault (`privacy/privacy-vault.ts`) keeps one token per value for the whole workspace, beside the
-  credentials, so a resumed or handed-off transcript masks to the same bytes. Cursor, whose wire is its own, is read
+  credentials, so a resumed or handed-off transcript masks to the same bytes. Forgetting a taught list deletes its
+  values from the vault, raw value and all, and an older vault's forgotten entries leave with its next write
+  (2026-10-13; before, forget only stopped the matching): their tokens no longer resolve. Cursor, whose wire is its own, is read
   through the hooks the daemon owns instead (`runtimes/cursor/cursor-shield.ts`): its prompt and instructions masked,
   a file read holding personal data refused for the shell, each shell command's output masked through the hook
   script, the tools that read past both withheld, MCP behind the masking proxy `ALL /privacy/mcp/<session>`, and its
@@ -444,7 +482,7 @@ Main groups under `src/`:
 | --- | --- |
 | Turns and agents | `agent/` `conversations/` `runtimes/` `sessions/` `personas/` `loops/` `workflows/` `guard/` `rules/` |
 | Workspace | `workspace/` `git/` `history/` `derived/` `terminal/` `processes/` `ports/` `panels/` |
-| Owner controls | `auth/` `secrets/` `needs/` `areas/` `approvals/` `safety/` `privacy/` `usage/` `wallet/` `settings/` |
+| Owner controls | `auth/` `audit/` `secrets/` `needs/` `areas/` `approvals/` `safety/` `privacy/` `usage/` `wallet/` `settings/` |
 | Outside world | `capabilities/` `extensions/` `browser/` `desktop/` `hosts/` `peers/` `webext/` `phones/` `runners/` `sandboxes/` `ci/` `automations/` `speech/` |
 | Network | `netd/` `tunnel/` `vpn/` `exit/` `netdisk/` `public/` `share/` `webchat/` |
 | Plumbing | `bootstrap/` `store/` `seams/` `system/` `http/` `logs/` `invariants/` `workload/` |

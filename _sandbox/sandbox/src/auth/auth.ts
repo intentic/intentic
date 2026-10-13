@@ -39,6 +39,8 @@ export interface VerifiedIdentity {
 export interface Proof extends VerifiedIdentity {
     readonly methods: readonly ProofMethod[];
     readonly credentialId?: string;
+    // The bearer was a session this daemon minted, not a fresh sign-in: what the audit trail tells a renewal by.
+    readonly renewal?: true;
 }
 
 // Verifies a Google ID token and returns its identity; throws on any signature/issuer/audience/email failure.
@@ -533,7 +535,7 @@ export const createAuthorizer = (deps: {
         if (session.credentialId !== undefined && deps.passkeys !== undefined && !(await deps.passkeys.exists(session.credentialId))) {
             throw new Error("the passkey this session came from has been removed");
         }
-        return session;
+        return { ...session, renewal: true };
     };
     // Whether only the platform's word stands behind this proof: an assertion, or a session minted from one, with no
     // passkey or recovery code of this daemon's own added since. Those need the person's opt-in off a hosted machine.

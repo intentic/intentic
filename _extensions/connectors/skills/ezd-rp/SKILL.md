@@ -1,0 +1,14 @@
+---
+name: ezd-rp
+description: Read cases, correspondence and documents in the connected EZD RP office system; prepare outgoing records for approval.
+---
+
+# EZD RP
+
+Use the connected instance, never a hard-coded demo URL. `$EZDRP_API_URL` is the integrator API, `$EZDRP_SSO_URL` the OAuth authority and `$EZDRP_WEB_HOST` the EZD web hostname. The administrator supplies `$EZDRP_PID`, `$EZDRP_AKI` and `$EZDRP_API_KEY` for a technical user. The API key is shown only when generated. [NASK's authentication guide](https://podrecznik.ezdrp.gov.pl/uwierzytelnianie-systemow-zewnetrznych/) and [token guide](https://podrecznik.ezdrp.gov.pl/wykorzystania-klucza-api-w-komunikacji-z-ezd-rp/) describe this flow.
+
+To obtain a session token, POST form data to `$EZDRP_SSO_URL/connect/token`: `grant_type=api_credentials`, `scope=api.ezdrp.gov.pl`, `pid=$EZDRP_PID`, `aki=$EZDRP_AKI`, `rt=<current ISO-8601 time>`, `akh=Base64(SHA256(UTF8(rt + API key)))`, and `client_id=api_` followed by `Base64(SHA256(UTF8(web hostname)))`. Use the returned `access_token` as `Authorization: Bearer <token>` at `$EZDRP_API_URL`. Keep the key and token out of logs and command output. The [official API sandbox page](https://www.gov.pl/web/ezd-rp/piaskownica-api) links the current Swagger and integration examples; the demo Swagger cannot issue keys or execute API methods. The sandbox is available after registration and gives each integrator its own test instance.
+
+For a request to search or read **sprawy** (cases), documents, **rejestry** (registers), or incoming mail at the **punkt kancelaryjny**, use the instance's v2 Swagger. The public [v2 OpenAPI](https://integrator-api.demo.ezdrp.gov.pl/swagger/v2/swagger.json) lists `POST /ezdrp/integrator/v2/sprawy/_search`, `GET /ezdrp/integrator/v2/sprawy/{idSprawa}`, `GET /ezdrp/integrator/v2/sprawy/{idSprawa}/dokumenty`, `POST /ezdrp/integrator/v2/dokumenty/_search`, `GET /ezdrp/integrator/v2/dokumenty/{idDokumentPrzestrzeni}`, `GET /ezdrp/integrator/v2/rejestry`, and `GET /ezdrp/integrator/v2/rejestry/{idRejestr}/wpisy`. The `_search` POST operations are searches, not registration. Inspect each operation's request schema and permissions in the deployed instance before calling it. Incoming correspondence and outgoing **pisma** may use other operations; do not guess a path from a different release.
+
+For outgoing correspondence, prepare the exact addressee, case, document bytes or attachment paths, metadata, and intended registration/send operation in a `kind: "action"` item under `.intentic/config/approvals/` as described by the approvals skill. The item must give the fresh approved turn all identifiers and files. **Never register or send an outgoing pismo directly**: these operations are legal acts for the office. Read-only searches need no approval.

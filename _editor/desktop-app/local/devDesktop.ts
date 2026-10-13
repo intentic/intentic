@@ -449,6 +449,7 @@ const DESKTOP_INFO: DesktopInfo = {
     appUrl: `https://app.intentic.dev`,
     platformUrl: `https://api.intentic.dev`,
     installId: `dev`,
+    analyticsAllowed: false,
     engineLimitSeconds: 300,
     fixLimitSeconds: 600,
 };

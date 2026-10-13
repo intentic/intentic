@@ -12,6 +12,7 @@
         "smoke:signin": "node smoke-signin.mjs"
     },
     "devDependencies": {
+        "@axe-core/playwright": "catalog:",
         "@intentic/constants": "workspace:*",
         "@intentic/localhost-https": "workspace:*",
         "@intentic/prisma": "workspace:*",
@@ -21,6 +22,7 @@
         "@playwright/test": "catalog:",
         "@prisma/adapter-pg": "catalog:",
         "@types/node": "catalog:",
+        "playwright-core": "catalog:",
         "testcontainers": "catalog:",
         "typescript": "catalog:"
     }

@@ -1240,6 +1240,82 @@
                 "hosts": ["${host}"],
                 "skill": "skills/mysql/SKILL.md",
                 "fragment": "env/mysql.Dockerfile"
+            },
+            {
+                "id": "ezd-rp",
+                "kind": "cli",
+                "catalog": {
+                    "name": "EZD RP",
+                    "icon": "folder-open",
+                    "description": "Read office cases and documents through the EZD RP integration API.",
+                    "category": "business",
+                    "guide": {
+                        "url": "https://www.gov.pl/web/ezd-rp/piaskownica-api",
+                        "linkLabel": "EZD RP API sandbox",
+                        "steps": [
+                            "Request access to the API sandbox or use your office's own EZD RP instance.",
+                            "An administrator with Administracja.KluczeApi grants an API key to a technical user.",
+                            "Enter that instance's integration, SSO and web URLs, subject ID, key ID and key value."
+                        ]
+                    }
+                },
+                "fields": [
+                    { "key": "apiUrl", "label": "Integrator API URL", "placeholder": "https://integrator-api.example.gov.pl" },
+                    { "key": "ssoUrl", "label": "SSO URL", "placeholder": "https://sso-idp.example.gov.pl" },
+                    { "key": "webHost", "label": "EZD RP web hostname", "placeholder": "ezdrp-web.example.gov.pl" },
+                    { "key": "subjectId", "label": "Podmiot ID (pid)" },
+                    { "key": "keyId", "label": "API key ID (aki)" },
+                    { "key": "apiKey", "label": "API key value", "secret": true }
+                ],
+                "env": {
+                    "EZDRP_API_URL": "${apiUrl}",
+                    "EZDRP_SSO_URL": "${ssoUrl}",
+                    "EZDRP_WEB_HOST": "${webHost}",
+                    "EZDRP_PID": "${subjectId}",
+                    "EZDRP_AKI": "${keyId}",
+                    "EZDRP_API_KEY": "${apiKey}"
+                },
+                "hosts": ["${apiUrl}", "${ssoUrl}"],
+                "skill": "skills/ezd-rp/SKILL.md"
+            },
+            {
+                "id": "e-doreczenia",
+                "kind": "cli",
+                "catalog": {
+                    "name": "e-Doręczenia",
+                    "icon": "envelope",
+                    "description": "Search ADE addresses and read electronic deliveries through registered system APIs.",
+                    "category": "communication",
+                    "guide": {
+                        "url": "https://www.gov.pl/web/e-doreczenia/integracja-uslugi-e-doreczen",
+                        "linkLabel": "Official integration guidance",
+                        "steps": [
+                            "Register the office's external system and permissions in Moduł uprawnień.",
+                            "Obtain the system X.509 certificate and private key issued during registration.",
+                            "Use the INT URLs for testing; enter the office's assigned PROD URLs for production."
+                        ]
+                    }
+                },
+                "fields": [
+                    { "key": "uaUrl", "label": "UA API v3 URL", "placeholder": "https://uaapi-int-ow.poczta-polska.pl/api/v3" },
+                    { "key": "seUrl", "label": "SE API v4 URL", "placeholder": "https://int-ow.edoreczenia.gov.pl/api/se/v4" },
+                    { "key": "tokenUrl", "label": "IAM token URL" },
+                    { "key": "ade", "label": "Office ADE address" },
+                    { "key": "systemName", "label": "Registered system name" },
+                    { "key": "certificate", "label": "X.509 certificate (PEM)", "secret": true, "multiline": true },
+                    { "key": "privateKey", "label": "Certificate private key (PEM)", "secret": true, "multiline": true }
+                ],
+                "env": {
+                    "EDORECZENIA_UA_URL": "${uaUrl}",
+                    "EDORECZENIA_SE_URL": "${seUrl}",
+                    "EDORECZENIA_TOKEN_URL": "${tokenUrl}",
+                    "EDORECZENIA_ADE": "${ade}",
+                    "EDORECZENIA_SYSTEM_NAME": "${systemName}",
+                    "EDORECZENIA_CERTIFICATE": "${certificate}",
+                    "EDORECZENIA_PRIVATE_KEY": "${privateKey}"
+                },
+                "hosts": ["${uaUrl}", "${seUrl}", "${tokenUrl}"],
+                "skill": "skills/e-doreczenia/SKILL.md"
             }
         ],
         "automationTemplates": [

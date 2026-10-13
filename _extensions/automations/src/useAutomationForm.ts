@@ -174,6 +174,8 @@ export function useAutomationForm(
         turnstileSiteKey: ``,
         turnstileSecret: ``,
         greeting: ``,
+        aiDisclosure: true,
+        aiDisclosureText: ``,
         // Blank ⇒ daemon's WEBCHAT_DAILY_MAX_DEFAULT; held as a string so an empty box differs from a typed 0.
         dailyMessageMax: ``,
         // Round-tripped, not re-derived: a clock-based chore looks identical to an external poll trigger-wise.
@@ -512,6 +514,8 @@ export function useAutomationForm(
             turnstileSiteKey: ``,
             turnstileSecret: ``,
             greeting: ``,
+            aiDisclosure: true,
+            aiDisclosureText: ``,
             dailyMessageMax: ``,
             chore: false,
         });
@@ -639,6 +643,8 @@ export function useAutomationForm(
             // A stored secret never comes back readable, so an empty box here means unchanged, not cleared.
             form.turnstileSecret = webchat.turnstileSecret ?? ``;
             form.greeting = webchat.greeting ?? ``;
+            form.aiDisclosure = webchat.aiDisclosure !== false;
+            form.aiDisclosureText = webchat.aiDisclosureText ?? ``;
             form.dailyMessageMax = webchat.dailyMessageMax === undefined ? `` : String(webchat.dailyMessageMax);
         }
         // This prompt is the owner's, stored with this trigger, so opening the editor isn't a trigger change either.
@@ -671,6 +677,10 @@ export function useAutomationForm(
         } else {
             webchat.greeting = form.greeting.trim();
         }
+        if (form.aiDisclosure) {delete webchat.aiDisclosure;}
+        else {webchat.aiDisclosure = false;}
+        if (form.aiDisclosureText.trim() === ``) {delete webchat.aiDisclosureText;}
+        else {webchat.aiDisclosureText = form.aiDisclosureText.trim();}
         if (dailyMessageMax.value === undefined) {
             delete webchat.dailyMessageMax;
         } else {

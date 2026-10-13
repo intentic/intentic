@@ -1,3 +1,4 @@
+import { noteAudit } from "../audit/audit-http.js";
 import { personasContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
@@ -61,6 +62,7 @@ export const createPersonasRoutes = (services: Services) => {
             return { personas, connected };
         }),
         save: i.save.handler(async ({ input }) => {
+            noteAudit({ target: input.id });
             await versioned([personasDocument.path], `persona ${input.label ?? input.id}`, () => services.personas.upsert(input));
             return { ok: true as const };
         }),

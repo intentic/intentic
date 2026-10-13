@@ -9,7 +9,7 @@ import { type SessionsRoutesDeps, createSessionsRoutes } from "./sessions.routes
 // about.
 
 const sessionsClient = (sessions: Partial<SessionsRoutesDeps["sessions"]>) =>
-    routesClient(sessionsContract, createSessionsRoutes({ sessions: unstubbed("sessions", sessions), workspace: workspacePaths(WORKSPACE_ROOT) }));
+    routesClient(sessionsContract, createSessionsRoutes({ agents: unstubbed("agents", {}), sessions: unstubbed("sessions", sessions), workspace: workspacePaths(WORKSPACE_ROOT) }));
 
 test("sessions.list returns the full list, and routes to search when a query is given", async () => {
     const all = [{ id: "a", title: "Deploy pipeline", updatedAt: 2 }];

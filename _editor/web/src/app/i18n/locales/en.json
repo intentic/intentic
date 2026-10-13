@@ -1,4 +1,5 @@
 {
+    "a11yKit": { "toggleDetails": "Toggle headline details", "selectRow": "Select example row", "settingsButton": "Settings icon button example", "codeField": "Code field example" },
     "agents": {
         "accountChip": {
             "org": "Organization"
@@ -4766,6 +4767,22 @@
             "measuredAgainstHoldout": "{pct}% measured against the holdout",
             "lastCommand": "last command {ago}"
         },
+        "agentDataRetention": {
+            "caches": "Converted documents",
+            "cachesNote": "Text read out of PDFs and office files, what was read from scans and pictures, and previews. Made again from the original when needed.",
+            "days": "days",
+            "forever": "keep forever",
+            "intro": "How many days each kind of record is kept. 0 keeps it forever, which is how every sandbox starts. A number above 0 deletes everything older for good, and it cannot be brought back. Archiving, above, deletes nothing.",
+            "privacyVault": "Privacy shield memory",
+            "privacyVaultNote": "Personal data the privacy shield found (names, PESEL numbers, addresses) and the pictures it covered, counted from when it last saw them. Lists you taught it stay until you forget them.",
+            "rawOutput": "Full command output",
+            "rawOutputNote": "The whole output of commands agents ran, kept beside the shortened version the agent read, and terminal recordings.",
+            "restorePoints": "Restore points",
+            "restorePointsNote": "The copies of the workspace taken every minute while agents work, which let you bring back files that were changed or deleted.",
+            "title": "Data retention",
+            "transcripts": "Conversations",
+            "transcriptsNote": "Everything said in a conversation, with its uploads, pages and backups, counted from its last message. A conversation still working, or waiting for you, is kept."
+        },
         "agentFinishedWork": {
             "applyCompletedWorkDirectly": "Apply completed work directly to workspace as uncommitted changes.",
             "archiveFinishedAgents": "Archive finished agents",
@@ -6748,7 +6765,9 @@
             "overview": "Overview",
             "reach": "Reach",
             "secrets": "Secrets",
-            "usage": "Usage"
+            "usage": "Usage",
+            "dataProtection": "Data protection",
+            "audit": "Audit log"
         },
         "sandboxOutdatedNotice": {
             "manual": "Installed it yourself? Reinstall it, or run this on the device that runs it:",
@@ -8154,6 +8173,382 @@
             "keyFound": "Key found",
             "keyMissing": "No stored secret by that name",
             "sentTo": "What it speaks is sent to {provider}."
+        },
+        "aiLiteracy": {
+            "title": "Working with AI",
+            "description": "Please read this before using this sandbox.",
+            "confirm": "I have read and understood",
+            "settingsTitle": "AI literacy notice",
+            "settingsDescription": "Show members an AI use notice and record their confirmation.",
+            "customText": "Custom notice (optional)",
+            "customPlaceholder": "Leave empty to use the built-in notice.",
+            "save": "Save notice",
+            "preview": "Preview",
+            "confirmations": "Confirmations",
+            "localMember": "Local member",
+            "none": "No confirmations yet."
+        },
+        "analytics": {
+            "title": "Intentic product analytics in this sandbox",
+            "description": "Off: nobody's visit to this sandbox sends usage events or screen recordings to Intentic, whatever each person agreed to."
+        },
+        "dataProtection": {
+            "intro": "What a data protection officer needs before this sandbox handles anyone's personal data: the documents, filled in from how the sandbox is set up right now; every way data can leave it; and what protects it. Nothing on this page changes a setting until you apply the panel at the bottom.",
+            "couldntRead": "Couldn't read this sandbox's data protection report",
+            "couldntDownload": "Couldn't prepare the document",
+            "couldntApply": "Couldn't apply the settings",
+            "couldntReadPreset": "Couldn't read the settings for a public office",
+            "documents": "Documents for the data protection officer",
+            "documentsCaption": "Drafts filled in from the current setup. Fields only your office can answer are marked ✎.",
+            "language": "Language",
+            "languageNote": "The language the documents are written in.",
+            "document": {
+                "ropa": "Record of processing activities",
+                "ropaNote": "The entry for this system in your record (GDPR Art. 30): recipients, transfers outside the EEA, deletion periods.",
+                "dpia": "Data protection impact assessment",
+                "dpiaNote": "A draft (GDPR Art. 35) with the risks of using AI and the protections switched on here, plus a note on the AI Act.",
+                "toms": "Technical and organisational measures",
+                "tomsNote": "Every protection the system offers, whether it is on, and where it is changed (GDPR Art. 32)."
+            },
+            "flows": "Where data can leave",
+            "flowsNote": "Every place this sandbox sends data to, as it is set up now. Greyed rows are not in use, but one switch would open them.",
+            "notInUse": "not in use",
+            "outsideEea": "outside the EEA",
+            "officeAnswers": "Your office should establish:",
+            "group": {
+                "models": "AI models",
+                "messaging": "Messages and mail",
+                "connectors": "Connected services",
+                "speech": "Speech",
+                "web": "The web",
+                "platform": "Intentic and access",
+                "maintenance": "Updates and downloads",
+                "analytics": "Analytics"
+            },
+            "kind": {
+                "modelProvider": "AI model provider",
+                "modelEndpoint": "External AI model",
+                "localModel": "AI model on this server",
+                "emailImap": "Incoming mail",
+                "emailSmtp": "Sending mail",
+                "teamChat": "Messaging app bot",
+                "webchat": "Chat on your website",
+                "connector": "Connected service",
+                "speech": "Reading replies aloud",
+                "webSearch": "Web search",
+                "webFetch": "Opening web pages",
+                "browser": "The agent's browser",
+                "platformLink": "Intentic account and sign-in",
+                "ingress": "Access from the internet",
+                "updateCheck": "Update checks",
+                "modelDownload": "Model downloads",
+                "productAnalytics": "Product analytics",
+                "pushNotifications": "Push notifications"
+            },
+            "data": {
+                "modelProvider": "Conversations, instructions and parts of documents the agent works on.",
+                "modelEndpoint": "Conversations, instructions and parts of documents the agent works on.",
+                "localModel": "Conversations and documents, which stay on this server.",
+                "emailImap": "Messages, senders, recipients and attachments.",
+                "emailSmtp": "The messages sent and who they go to.",
+                "teamChat": "Messages, people's names and attachments.",
+                "webchat": "What visitors write, their name if asked for, and their IP address.",
+                "connector": "Whatever the agent reads from or writes to that service.",
+                "speech": "The text of replies read aloud.",
+                "webSearch": "The search queries the agent writes. They go through the AI model provider.",
+                "webFetch": "The addresses of pages the agent opens.",
+                "browser": "The pages visited and what is typed into forms.",
+                "platformLink": "Members' email addresses and sign-ins. Not the work itself.",
+                "ingress": "Everything between people's browsers and this sandbox.",
+                "updateCheck": "The software version only. No personal data.",
+                "modelDownload": "The name of the model downloaded. No personal data.",
+                "productAnalytics": "Clicks and screen recordings in the editor, from people who agreed to them.",
+                "pushNotifications": "The short text of a notification."
+            },
+            "personal": {
+                "yes": "personal data",
+                "possible": "may carry personal data",
+                "no": "no personal data"
+            },
+            "shield": {
+                "masked": "shielded",
+                "trusted": "trusted, not masked",
+                "watched": "shield only watching",
+                "local": "stays on this server",
+                "blocked": "refused unless masked",
+                "none": "not shielded"
+            },
+            "question": {
+                "endpointOperator": "who runs this model and where it processes data.",
+                "mailOperator": "who runs the mail server and where it is.",
+                "ingressRegion": "whether Intentic's access point, where encryption ends, still runs only in the US (Ashburn), as its sub-processors page says.",
+                "ingressProxy": "whether people reach this sandbox through your own server or through Intentic's access point.",
+                "platformRegion": "where Intentic keeps account data."
+            },
+            "measures": "What protects it",
+            "measuresNote": "The technical and organisational measures, each as it stands now.",
+            "change": "Change",
+            "inPreset": "in the panel below",
+            "category": {
+                "confidentiality": "Confidentiality",
+                "minimisation": "Keeping less, for less long",
+                "integrity": "Control over what the agent does",
+                "accountability": "Accountability",
+                "transparency": "Transparency",
+                "availability": "Availability"
+            },
+            "status": {
+                "on": "on",
+                "partial": "partly on",
+                "off": "off",
+                "unavailable": "not available",
+                "unknown": "your office decides"
+            },
+            "measure": {
+                "privacyShield": {
+                    "name": "Privacy shield",
+                    "what": "Replaces names, ID numbers, account numbers, addresses and contact details with stand-ins before text reaches an AI provider you don't trust."
+                },
+                "privacyImages": {
+                    "name": "Personal data in images",
+                    "what": "Text in pictures is read on this server, and personal data in it is painted over before the picture is sent."
+                },
+                "privacyNames": {
+                    "name": "Finding names with a local model",
+                    "what": "A language model on this server finds names the name lists miss."
+                },
+                "trustedProviders": {
+                    "name": "Trusted AI providers",
+                    "what": "Providers allowed to read personal data as it is. None trusted means every provider outside this server reads stand-ins only."
+                },
+                "localModels": {
+                    "name": "AI models on this server",
+                    "what": "A model that runs here, so what it reads never leaves."
+                },
+                "memberRoles": {
+                    "name": "Roles",
+                    "what": "Each person has a role that limits what they can see and do."
+                },
+                "areas": {
+                    "name": "Areas",
+                    "what": "A person can be limited to chosen folders; the rest is invisible to them."
+                },
+                "guestJail": {
+                    "name": "Guests kept apart",
+                    "what": "Guests' conversations run in a closed-off space that sees only the folders they were given."
+                },
+                "signIn": {
+                    "name": "Sign-in",
+                    "what": "People sign in with Google, a passkey, or a code sent by email where you allow it."
+                },
+                "actionRules": {
+                    "name": "Approval before sending",
+                    "what": "Sending messages, reactions or mail, and starting more agents, waits for a person to approve."
+                },
+                "admission": {
+                    "name": "Approval of outside requests",
+                    "what": "Work started by a chat message, a website visitor, a webhook or a bug report waits for a person to approve."
+                },
+                "commandJudge": {
+                    "name": "Commands checked before they run",
+                    "what": "A model checks the agent's risky commands against your safety rules and stops them for a person."
+                },
+                "credentialGates": {
+                    "name": "Approval to use passwords and keys",
+                    "what": "Chosen passwords and keys can only be used with a named person's approval."
+                },
+                "hostGuards": {
+                    "name": "Passwords and keys tied to addresses",
+                    "what": "A password or key may only be sent to the addresses listed for it."
+                },
+                "retention": {
+                    "name": "Deleting old data",
+                    "what": "Conversations, restore points, the shield's memory, converted documents and full command output are deleted after a set number of days."
+                },
+                "audit": {
+                    "name": "Audit trail",
+                    "what": "Changes to rules, people's access, secrets and settings are recorded in a log that shows if any entry is altered or removed."
+                },
+                "auditReads": {
+                    "name": "Recording who opened what",
+                    "what": "The audit trail also records who opened which conversation, file or log."
+                },
+                "auditForward": {
+                    "name": "Copy of the audit trail elsewhere",
+                    "what": "Each audit entry is also sent to your own log system, out of reach of anyone working in this sandbox."
+                },
+                "encryptionAtRest": {
+                    "name": "Encryption of stored secrets",
+                    "what": "Secrets, saved sign-ins and the shield's memory are encrypted with a key kept outside the sandbox."
+                },
+                "encryptionInTransit": {
+                    "name": "Encrypted connections",
+                    "what": "Connections to this sandbox are encrypted."
+                },
+                "agentDomain": {
+                    "name": "Agent without administrator rights",
+                    "what": "The agent's commands run under an account that cannot administer the system."
+                },
+                "productAnalytics": {
+                    "name": "No product analytics",
+                    "what": "The editor sends Intentic no usage data or screen recordings from this sandbox, whatever each person agreed to."
+                },
+                "aiNotice": {
+                    "name": "AI notice for staff",
+                    "what": "On their first visit, people confirm they are working with an AI that makes mistakes, and what not to paste into it."
+                },
+                "webchatAiDisclosure": {
+                    "name": "Visitors told they're talking to an AI",
+                    "what": "The chat on your website says that an AI answers."
+                },
+                "backups": {
+                    "name": "Backups",
+                    "what": "Backups of this sandbox are made outside it, so your office makes and protects them."
+                }
+            },
+            "preset": "Settings for a public office",
+            "presetNote": "Stricter settings for an office working under GDPR and the AI Act. Each one is listed with its value now and the value proposed. Untick anything you don't want; nothing changes until you apply.",
+            "ownerApplies": "Only the sandbox's owner can apply these settings.",
+            "toChange": "Would change",
+            "alreadySet": "Already set",
+            "apply": "Apply {count} setting | Apply {count} settings",
+            "nothingToChange": "Every setting is already as proposed.",
+            "applied": "Applied {count} setting | Applied {count} settings",
+            "skipped": "{count} was left as it was. | {count} were left as they were.",
+            "confirmHeader": "Apply these settings?",
+            "confirmDescription": "They take effect straight away. Each can be changed back later where it is set.",
+            "presetItem": {
+                "privacyMode": "Privacy shield",
+                "privacyImages": "Personal data in images",
+                "privacyNames": "Finding names",
+                "retentionTranscriptDays": "Delete conversations after",
+                "retentionRestorePointDays": "Delete restore points after",
+                "retentionPrivacyVaultDays": "Shield forgets values after",
+                "retentionCacheDays": "Delete converted documents after",
+                "retentionRawOutputDays": "Delete full command output after",
+                "auditRetentionDays": "Keep the audit trail for",
+                "auditRecordReads": "Record who opened what",
+                "productAnalytics": "Product analytics",
+                "aiNoticeShow": "AI notice for staff",
+                "admissionEvent": "Work started by a webhook",
+                "admissionListener": "Work started by a chat message",
+                "admissionWebchat": "Work started by a website visitor",
+                "admissionIssues": "Work started by a bug report",
+                "commandJudge": "Commands checked before they run",
+                "agentsSpawn": "Starting more agents",
+                "action": "{action} on {service}"
+            },
+            "action": {
+                "messageSend": "Sending messages",
+                "messageEdit": "Editing messages",
+                "reactionAdd": "Adding reactions",
+                "reactionRemove": "Removing reactions"
+            },
+            "value": {
+                "allow": "allowed",
+                "hold": "asks first",
+                "deny": "refused",
+                "on": "on",
+                "off": "off",
+                "watch": "watching only",
+                "mask": "painted over",
+                "dictionary": "name lists",
+                "model": "name lists and a local model",
+                "forever": "kept forever",
+                "days": "{n} day | {n} days"
+            },
+            "unavailable": {
+                "privacyNames": "Needs the local name model, which isn't installed in this sandbox."
+            },
+            "formatMarkdown": "Markdown",
+            "formatWord": "Word"
+        },
+        "sandboxAudit": {
+            "integrity": "Integrity",
+            "integrityTitle": "Is the log intact?",
+            "integrityDescription": "Each record is sealed together with the one before it, so a record changed or removed afterwards shows up here.",
+            "checkAgain": "Check again",
+            "chainIntact": "Intact: {count} record checked, none changed since it was written. | Intact: {count} records checked, none changed since they were written.",
+            "chainBroken": "Changed after it was written: line {line} of {file}. {reason}",
+            "broken": {
+                "unreadable": "That line is not a record.",
+                "hash-mismatch": "The content of that record was edited.",
+                "chain-break": "A record before it was removed, added or moved."
+            },
+            "tornNote": "The newest file ends in a half-written line, which a crash leaves behind. It was skipped and does not count as a change.",
+            "prunedNote": "Records up to {date} were deleted under the retention setting; the check starts after them.",
+            "reachNote": "This check shows tampering but cannot prevent it: anyone with full control of the sandbox could edit these files. The copy sent to another system is the one nobody inside the sandbox can change.",
+            "keeping": "How it is kept",
+            "retentionTitle": "Keep records for (days)",
+            "retentionDescription": "Older months are deleted whole. At least 30 days. Public offices in Poland keep system logs for 730 days (2 years).",
+            "readsTitle": "Also record who opened what",
+            "readsDescription": "Adds a record every time someone opens a conversation, a file or this log. When off, only changes and sign-ins are recorded.",
+            "forwardTitle": "Send a copy to another system",
+            "forwardDescription": "Each record is also sent to your organisation's log collector the moment it is written. If it cannot be reached, records wait and are sent later.",
+            "forwardUrlLabel": "Address (HTTPS)",
+            "forwardUrlInvalid": "Use an address that starts with https://, or leave it empty.",
+            "forwardSecretLabel": "Access key",
+            "forwardSecretNone": "None",
+            "forwardSecretHint": "A stored secret sent with each record, so the collector knows it comes from this sandbox. Add one under Secrets.",
+            "forwardFailing": "Not reaching the address ({error}). Waiting: {count}.",
+            "forwardUpToDate": "Every record has reached the address.",
+            "forwardPending": "{count} record is waiting to be sent. | {count} records are waiting to be sent.",
+            "download": "Download",
+            "downloadTitle": "Download a period",
+            "downloadDescription": "The records exactly as stored, one per line (JSON Lines), so whoever receives them can check the seals themselves.",
+            "downloadButton": "Download",
+            "exportBadPeriod": "The start date cannot be after the end date.",
+            "exportEmpty": "Nothing was recorded in that period.",
+            "exportFailed": "Couldn't download the log.",
+            "filterPlaceholder": "Filter by person, program or conversation",
+            "filterAll": "All",
+            "filterSignIns": "Sign-ins",
+            "records": "Records",
+            "reading": "Reading the audit log.",
+            "empty": "Nothing recorded yet.",
+            "refused": "Refused",
+            "failed": "Failed",
+            "when": "When",
+            "action": "Action",
+            "details": "Details",
+            "hash": "Seal",
+            "showOlder": "Show older",
+            "oldest": "Oldest record kept: {date}",
+            "actorMember": "{email} ({role})",
+            "actorToken": "Program with the key “{label}”",
+            "actorAgent": "Agent in conversation {id}",
+            "actorSystem": "The sandbox itself",
+            "actorSystemBecause": "The sandbox itself ({reason})",
+            "subject": {
+                "settings": "Settings",
+                "privacy": "Privacy shield",
+                "member": "People",
+                "area": "Areas",
+                "secret": "Secrets",
+                "capability": "Connections",
+                "approval": "Approvals",
+                "grant": "Permissions",
+                "safety": "Safety policy",
+                "persona": "Personas",
+                "automation": "Automations",
+                "extension": "Extensions",
+                "environment": "Environment",
+                "card": "Answer to an agent",
+                "conversation": "Conversations",
+                "workspace": "Workspace",
+                "auth": "Sign-ins",
+                "passkey": "Passkeys",
+                "token": "Program keys",
+                "export": "Exports",
+                "definition": "Definition",
+                "share": "Shared links",
+                "public": "Published files",
+                "audit": "Audit log",
+                "file": "Files",
+                "activity": "Activity log"
+            },
+            "from": "From",
+            "to": "To"
         }
     },
     "settings": {
@@ -8472,6 +8867,12 @@
             "iconRailCompact": "Compact",
             "iconRailComfortable": "Comfortable",
             "group": "How you work"
+        },
+        "analytics": {
+            "title": "Product analytics",
+            "description": "Help us improve Intentic: allow usage events and recordings of the interface as you use it, linked to your account. What your workspace contains is masked out of them. No thanks sends nothing, and you can change this at any time in Settings.",
+            "allow": "Allow",
+            "deny": "No thanks"
         }
     },
     "setup": {

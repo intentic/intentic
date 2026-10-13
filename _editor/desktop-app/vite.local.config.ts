@@ -43,7 +43,7 @@ const LOOPBACK = `http://127.0.0.1:*`;
 // The app's own commands (the shell's places, This device): Tauri's IPC, which a platform serves at one of these two
 // origins, and the analytics endpoint This device reports the app's own work to (src/analytics.ts).
 const IPC = [`ipc:`, `http://ipc.localhost`];
-const ANALYTICS = `https://us.i.posthog.com`;
+const ANALYTICS = process.env.POSTHOG_HOST ?? `https://us.i.posthog.com`;
 const POLICY: Readonly<Record<string, readonly string[]>> = {
     "default-src": [`'self'`],
     "connect-src": [`'self'`, LOOPBACK, ...IPC, ANALYTICS],
@@ -82,7 +82,7 @@ const contentPolicy = (): Plugin => ({
 export default defineConfig({
     ...shared,
     // The analytics key This device reports the app's own work under (src/analytics.ts), baked in as the launcher's was.
-    define: { ...shared.define, __POSTHOG_KEY__: JSON.stringify(process.env[`POSTHOG_KEY`] ?? ``) },
+    define: { ...shared.define, __POSTHOG_KEY__: JSON.stringify(process.env[`POSTHOG_KEY`] ?? ``), __POSTHOG_HOST__: JSON.stringify(ANALYTICS) },
     plugins: [...shared.plugins, platformOrigin(), onePage(), contentPolicy()],
     resolve: {
         // The shared resolve, its source-first conditions with it; only the aliases below are added.

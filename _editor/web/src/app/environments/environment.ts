@@ -9,7 +9,7 @@ export type WebEnvironment = {
     auth: { googleClientId: string };
     // PostHog product analytics (public project key). Empty key = analytics disabled (dev default); the deploy
     // container's envsubst fills $POSTHOG_KEY. See composables/analytics.ts.
-    analytics: { posthogKey: string; posthogHost: string };
+    analytics: { posthogKey: string; posthogHost: string; posthogUiHost?: string };
     // Where signing out leaves the browser. Ordinarily the app's own /login; the interactive demo is served
     // under /demo/ on the marketing site, where /login doesn't exist, its sign-out lands on the site homepage.
     afterSignOut: string;

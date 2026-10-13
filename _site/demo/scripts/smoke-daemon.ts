@@ -294,6 +294,12 @@ const samplesOf = (
         safety: {
             policy: undefined,
         },
+        compliance: {
+            report: undefined,
+            preset: undefined,
+            document: { kind: `ropa`, language: `pl`, format: `md` },
+            applyPreset: { items: [`retention.transcriptDays`] },
+        },
         privacy: {
             status: undefined,
             setPolicy: { mode: `on`, trusted: [], classes: [`person-name`], images: `mask`, names: `dictionary`, allow: [] },
@@ -361,6 +367,12 @@ const samplesOf = (
         personas: {
             list: undefined,
             save: { id: `smoke-persona`, capabilities: [] },
+        },
+        audit: {
+            list: { limit: 100 },
+            verify: undefined,
+            status: undefined,
+            export: { from: 0, to: Date.now() },
         },
         areas: {
             list: undefined,

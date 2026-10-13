@@ -1,3 +1,4 @@
+import { noteAudit } from "../audit/audit-http.js";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
@@ -121,6 +122,7 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
         // With DevOps, into desired-state/.env, which deploys and the CI copy read; without it, into the sandbox's own
         // store (sandbox-secrets.ts), so keeping a key for the agent never needs a deploy pipeline scaffolded first.
         set: i.set.handler(async ({ input }) => {
+            noteAudit({ target: input.key });
             if (devopsActive()) {
                 await writeEnv((current) => upsertEnv(current, input.key, input.value));
                 pushToCi();
@@ -132,6 +134,7 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
         // A secret nobody has to find: made here, kept where `set` keeps one, and only its name and length answered. A
         // name any store already holds is refused, since a new value would break whatever reads the old one.
         generate: i.generate.handler(async ({ input }) => {
+            noteAudit({ target: input.key });
             if ((await services.secretRegistry()).some((secret) => secret.name === input.key)) {
                 throw new ORPCError("CONFLICT", {
                     message: `"${input.key}" is already stored: use it as it is, or pick a name nothing here holds. A new value would break whatever reads the old one.`,
@@ -251,6 +254,7 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
             return { entries: [...repoEntries, ...keptEntries, ...capabilityEntries, ...providerEntries].map(withUse) };
         }),
         reveal: i.reveal.handler(async ({ input, context }) => {
+            noteAudit({ target: input.key });
             await ensureMaintainer(services, context.headers);
             // Capability credentials first (key = capability id): they exist whether or not DevOps is active.
             const capability = await services.capabilities.get(input.key);

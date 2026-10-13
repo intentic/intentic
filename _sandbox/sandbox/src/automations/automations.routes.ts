@@ -1,3 +1,4 @@
+import { conversationReader, registryProvenance } from "../auth/scope/conversation-reader.js";
 import { type AutomationSummary, automationsContract, type Zone } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { rm } from "node:fs/promises";
@@ -124,9 +125,11 @@ export const createAutomationsRoutes = (services: Services) => {
             return { ok: true } as const;
         }),
         // The readable holds, and the names of any file in the queue this build cannot read: reported, never dropped.
-        pendingList: i.pendingList.handler(async () => {
+        // A held wake carries the message that woke it: listed only to those who may read the conversation it continues.
+        pendingList: i.pendingList.handler(async ({ context }) => {
             const { wakes, unreadable } = await services.heldWakes.read();
-            return { approvals: wakes, unreadable };
+            const reads = conversationReader(context.identity, registryProvenance(services.agents));
+            return { approvals: wakes.filter((wake) => reads(wake.conversationId)), unreadable };
         }),
         // Approve a held wake: run it now with its snapshotted payload (the guard already ran when it was held); then
         // drop the queue entry. The owner's yes is recorded against the hold before it leaves and checked as it does

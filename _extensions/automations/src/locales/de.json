@@ -138,7 +138,10 @@
         "when": "Wann",
         "whoChat": "Wer chatten darf",
         "whoRunsWhatPays": "Als wer sie läuft, und was dafür zahlt.",
-        "workLands": "Arbeit landet"
+        "workLands": "Arbeit landet",
+        "aiDisclosure": "Besucher über KI-Antworten informieren",
+        "aiDisclosureText": "Eigener Hinweis (optional)",
+        "aiDisclosureDefault": "Die Antworten stammen von einem KI-Assistenten und können Fehler enthalten."
     },
     "automationRow": {
         "alreadyFired": "Bereits ausgelöst",

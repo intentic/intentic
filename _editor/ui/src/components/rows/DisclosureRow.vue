@@ -33,6 +33,8 @@ const {
     // Forwarded to <Row> verbatim (the four props a disclosure row actually uses); `class` lands on the wrapper.
     icon?: IconName;
     title?: string;
+    /** Accessible name for the chevron when the title is a separate link. */
+    toggleLabel?: string;
     description?: string;
     wideControl?: boolean;
     /** Tints <Row>'s `icon`. */
@@ -153,6 +155,7 @@ const wrapperSelect = computed(() => (disabled ? `` : `ui-row-select`));
                     :type="hit !== `header` && !disabled ? `button` : undefined"
                     :aria-expanded="hit !== `header` && !disabled ? open : undefined"
                     :aria-controls="hit !== `header` && !disabled ? bodyId : undefined"
+                    :aria-label="hit !== `header` && !disabled ? toggleLabel : undefined"
                     :class="
                         hit !== `header` && !disabled
                             ? `cursor-pointer rounded-sm text-subtle hover:text-content focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary-500`

@@ -24,6 +24,7 @@ export const fileSandboxSecrets = (path: string): SandboxSecrets => {
         mode: 0o600,
         // A fresh store over an unreadable one would drop every secret in it.
         onUnreadable: "refuse",
+        atRestPurpose: sandboxSecretsDocument.path,
     });
     return {
         all: () => file.read(),

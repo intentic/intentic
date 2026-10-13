@@ -10,6 +10,9 @@ import { pausedChildrenDocument } from "../agent/subagents/paused-children.js";
 import { approvalDecisionsDocument } from "../approvals/approval-decisions.js";
 import { approvalsDocument } from "../approvals/approvals-store.js";
 import { areasDocument } from "../areas/areas-store.js";
+import { auditForwardDocument } from "../audit/audit-forward.js";
+import { auditSettingsSeenDocument } from "../audit/audit-service.js";
+import { auditCheckpointDocument } from "../audit/audit-store.js";
 import { membersDocument, ownerDocument } from "../auth/auth.js";
 import { identityOffWorkspaceStep, passkeysOffWorkspaceStep } from "../auth/members/identity-off-workspace.js";
 import { passkeysDocument } from "../auth/passkeys/passkey-store.js";
@@ -68,6 +71,7 @@ import { secretHostGuardsDocument } from "../secrets/host-guards.js";
 import { sandboxSecretsDocument } from "../secrets/sandbox-secrets.js";
 import { secretUsesDocument } from "../secrets/secret-uses.js";
 import { threadSessionsDocument } from "../sessions/thread-sessions.js";
+import { memberAiLiteracyDocument } from "../settings/member-ai-literacy.js";
 import { memberAudienceDocument } from "../settings/member-audience.js";
 import { memberGettingStartedDocument } from "../settings/member-getting-started.js";
 import { settingsDocument } from "../settings/settings-store.js";
@@ -108,6 +112,9 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     approvalDecisionsDocument,
     approvalsDocument,
     areasDocument,
+    auditForwardDocument,
+    auditSettingsSeenDocument,
+    auditCheckpointDocument,
     membersDocument,
     ownerDocument,
     passkeysDocument,
@@ -179,6 +186,7 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     sandboxSecretsDocument,
     secretUsesDocument,
     threadSessionsDocument,
+    memberAiLiteracyDocument,
     memberAudienceDocument,
     memberGettingStartedDocument,
     settingsDocument,

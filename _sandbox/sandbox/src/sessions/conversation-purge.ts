@@ -8,6 +8,7 @@ import type { FileTranscriptRecord } from "./transcript-record.js";
 import { statePath } from "../state-paths.js";
 import { conversationsRoot } from "../store/conversation-units.js";
 import { purgePages } from "../agent/pages/page-store.js";
+import { backupFile } from "./record/record-convert.js";
 
 // What a conversation leaves OUTSIDE its unit and its rows, in layouts other owners dictate: its session files in the
 // Claude Code store every unfenced conversation shares, and uploads only its transcript names. Runs before the unit goes,
@@ -28,14 +29,17 @@ const attachmentDirs = (lines: readonly string[]): Set<string> =>
         ),
     );
 
+// The session's transcript in every project folder, and what Claude Code keeps beside it under the session's id: its
+// todo lists, its environment and its task lists, which quote what the conversation was about.
 const purgeClaudeSession = async (store: string, sessionId: string): Promise<void> => {
     if (!isConversationId(sessionId)) {
         return;
     }
     const projects = join(store, "projects");
     const entries = await readdir(projects, { withFileTypes: true }).catch(() => []);
-    await Promise.all(
-        entries.flatMap((entry) =>
+    const todos = (await readdir(join(store, "todos")).catch(undefinedIfMissing)) ?? [];
+    await Promise.all([
+        ...entries.flatMap((entry) =>
             entry.isDirectory()
                 ? [
                       rm(join(projects, entry.name, `${sessionId}.jsonl`), { force: true }),
@@ -43,7 +47,10 @@ const purgeClaudeSession = async (store: string, sessionId: string): Promise<voi
                   ]
                 : [],
         ),
-    );
+        ...todos.filter((name) => name.startsWith(`${sessionId}-`)).map((name) => rm(join(store, "todos", name), { force: true })),
+        rm(join(store, "session-env", sessionId), { recursive: true, force: true }),
+        rm(join(store, "tasks", sessionId), { recursive: true, force: true }),
+    ]);
 };
 
 // Uploads the removed conversations' transcripts name and no other conversation's does.
@@ -67,6 +74,9 @@ export const purgeConversationState = async (
     stored: Stored,
     removed: readonly PurgeConversation[],
     retained: readonly PurgeConversation[],
+    // Deletes a Codex thread's rollout, a Codex conversation's transcript; absent leaves them. Handed in, since sessions/
+    // sits below the runtimes.
+    removeCodexRollout?: (threadId: string) => Promise<void>,
 ): Promise<void> => {
     const orphaned = await orphanedAttachments(historyRoot, stored, removed);
     const retainedSessions = new Set(retained.flatMap((entry) => (entry.sessionId === undefined ? [] : [entry.sessionId])));
@@ -80,7 +90,15 @@ export const purgeConversationState = async (
             ? [entry.sessionId]
             : [],
     );
+    const codexThreads = removed.flatMap((entry) =>
+        entry.sessionId !== undefined && capabilitiesOf(entry.profile.provider, entry.profile.harness).runtime === "codex" && !retainedSessions.has(entry.sessionId)
+            ? [entry.sessionId]
+            : [],
+    );
     await Promise.all([
+        // The copy the record-format migration kept of the transcript it converted (record-convert.ts).
+        ...removed.map((entry) => rm(backupFile(historyRoot, entry.id), { force: true })),
+        ...(removeCodexRollout === undefined ? [] : codexThreads.map((threadId) => removeCodexRollout(threadId))),
         ...[...orphaned].map((id) =>
             rm(statePath(workspaceRoot, ".intentic/records/artifacts/", "attachments", id), { recursive: true, force: true }),
         ),

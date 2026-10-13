@@ -45,6 +45,9 @@ export const sandboxSectionGroups = (): readonly SandboxSectionGroup[] => [
             { slug: `agent`, label: t(`shared.agent`), icon: `robot`, maintainer: true },
             { slug: `environment`, label: t(`sandbox.words.environment`), icon: `box` },
             { slug: `secrets`, label: t(`sandbox.sandboxNav.secrets`), icon: `key`, maintainer: true },
+            // What a data protection officer files before the box handles anyone's data, read off everything above it;
+            // beside Secrets, the other page about what may leave. Maintainer, as the daemon refuses its reads below.
+            { slug: `data-protection`, label: t(`sandbox.sandboxNav.dataProtection`), icon: `lock`, maintainer: true },
             // Finding, installing, managing and disabling as one.
             { slug: `extensions`, label: t(`sandbox.sandboxNav.extensions`), icon: `sliders-h` },
         ],
@@ -62,6 +65,9 @@ export const sandboxSectionGroups = (): readonly SandboxSectionGroup[] => [
             // Who this box acts as outward; not beside `agent` in Configuration, easy to conflate, opposite in stakes.
             // Devices was the last row here until 2026-10-01; it is a rail view of its own now (/devices).
             { slug: `personas`, label: t(`shared.personas`), icon: `user`, maintainer: true },
+            // Who changed what of all the above, and who signed in: the audit trail and how it is kept. Maintainer, as the
+            // daemon refuses it below (it names every member and what they did). Last in Reach because it records Reach.
+            { slug: `audit`, label: t(`sandbox.sandboxNav.audit`), icon: `list-check`, maintainer: true },
         ],
     },
     // Recently deleted was a last `account` group here until 2026-10-07; it is the foot of the Devices board now

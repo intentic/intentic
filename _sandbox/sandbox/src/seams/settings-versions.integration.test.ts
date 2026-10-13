@@ -120,6 +120,8 @@ test("an Agent tab save is committed on its own, as a settings page's write", as
         sandboxSettings: fileSandboxSettingsStore(join(root, settingsDocument.path)),
         // The baked skills it converges afterwards only warn when they cannot be written.
         logger: unstubbed<Services["logger"]>("logger", { debug: () => undefined, warn: () => undefined }),
+        // A save tells the audit trail which audit settings are now in force; nothing here reads the trail.
+        audit: unstubbed<Services["audit"]>("audit", { adoptSettings: async () => undefined, record: () => undefined }),
     });
     const context: OrpcContext = { headers: new Headers(), method: "POST", url: "/settings/set" };
 

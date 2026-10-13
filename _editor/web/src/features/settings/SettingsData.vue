@@ -2,6 +2,7 @@
 import { Button, Notice, Row, RowGroup } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
+import { analyticsAvailable, analyticsChoice, chooseAnalytics } from "../../app/analyticsConsent";
 import { localHost } from "../../app/environments/localHost";
 import { apiClient } from "../../lib/useApi";
 import { useAccount } from "../../client/auth/useAccount";
@@ -84,6 +85,16 @@ const confirmDelete = async (): Promise<void> => {
 
 <template>
     <div class="flex flex-col gap-6">
+        <RowGroup v-if="analyticsAvailable()" :label="t(`settings.analytics.title`)">
+            <Row icon="shield" :title="t(`settings.analytics.title`)" :description="t(`settings.analytics.description`)">
+                <template #control>
+                    <div class="flex gap-2">
+                        <Button :label="t(`settings.analytics.allow`)" :tier="analyticsChoice === `allow` ? `boring` : `quiet`" size="small" @click="chooseAnalytics(`allow`)" />
+                        <Button :label="t(`settings.analytics.deny`)" :tier="analyticsChoice === `deny` ? `boring` : `quiet`" size="small" @click="chooseAnalytics(`deny`)" />
+                    </div>
+                </template>
+            </Row>
+        </RowGroup>
         <RowGroup :label="t(`settings.settingsData.dataPrivacy`)" :equal-rows="!confirmingDelete && !deleting && !deleteError && !exportError">
             <Row icon="download" :title="t(`settings.settingsData.exportMyData`)">
                 <template #control>

@@ -1,8 +1,9 @@
 import { readdir, readFile, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import type { z } from "zod";
 import { writeJsonFile } from "../../../store/json-file.js";
+import { decryptAtRest } from "../../../store/encryption/at-rest.js";
 
 // A provider's own accounts as one `<id>.json` per account in its auth directory, each read through the provider's schema.
 export interface AccountFiles<T> {
@@ -26,12 +27,13 @@ const jsonOf = (text: string): unknown => {
 
 export const accountFiles = <T extends { readonly id: string; readonly connectedAt: number }>(dir: string, schema: z.ZodType<T>): AccountFiles<T> => {
     const path = (id: string): string => join(dir, `${id}.json`);
+    const purpose = (id: string): string => `provider-account:${basename(dir)}/${id}`;
     const read = async (id: string): Promise<T | undefined> => {
         const text = await readFile(path(id), "utf8").catch(undefinedIfMissing);
         if (text === undefined) {
             return undefined;
         }
-        const parsed = schema.safeParse(jsonOf(text));
+        const parsed = schema.safeParse(jsonOf(await decryptAtRest(text, purpose(id))));
         return parsed.success ? parsed.data : undefined;
     };
     return {
@@ -41,7 +43,7 @@ export const accountFiles = <T extends { readonly id: string; readonly connected
             const stored = await Promise.all(names.filter((name) => name.endsWith(".json")).map((name) => read(name.slice(0, -".json".length))));
             return stored.filter((account): account is Awaited<T> => account !== undefined).toSorted((a, b) => a.connectedAt - b.connectedAt);
         },
-        write: (account) => writeJsonFile(path(account.id), account, 0o600),
+        write: (account) => writeJsonFile(path(account.id), account, 0o600, true, purpose(account.id)),
         remove: async (id) => {
             await rm(path(id), { force: true });
         },

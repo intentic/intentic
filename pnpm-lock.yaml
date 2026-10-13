@@ -192,6 +192,9 @@ catalogs:
     '@astrojs/sitemap':
       specifier: 3.7.4
       version: 3.7.4
+    '@axe-core/playwright':
+      specifier: 4.13.0
+      version: 4.13.0
     '@commitlint/cli':
       specifier: 21.2.3
       version: 21.2.3
@@ -502,6 +505,9 @@ catalogs:
       specifier: 13.2.0
       version: 13.2.0
     playwright:
+      specifier: 1.63.0
+      version: 1.63.0
+    playwright-core:
       specifier: 1.63.0
       version: 1.63.0
     posthog-js:
@@ -1850,6 +1856,9 @@ importers:
       '@intentic/connector-runtime':
         specifier: workspace:*
         version: link:../../_shared/connector-runtime
+      '@intentic/sandbox-contract':
+        specifier: workspace:*
+        version: link:../../_shared/sandbox-contract
       imapflow:
         specifier: 'catalog:'
         version: 2.2.5
@@ -3798,6 +3807,9 @@ importers:
 
   _tools/e2e:
     devDependencies:
+      '@axe-core/playwright':
+        specifier: 'catalog:'
+        version: 4.13.0(playwright-core@1.63.0)
       '@intentic/constants':
         specifier: workspace:*
         version: link:../constants
@@ -3825,6 +3837,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.19.1
+      playwright-core:
+        specifier: 'catalog:'
+        version: 1.63.0
       testcontainers:
         specifier: 'catalog:'
         version: 12.2.0(supports-color@10.2.2)
@@ -4302,6 +4317,11 @@ packages:
 
   '@astrojs/yaml2ts@0.2.4':
     resolution: {integrity: sha512-8oddpOae35pJsXPQXhTkM0ypfKPskVsh2bCxRtbf7e+/Epw2nReakFYpLKjZMEr75CsoF203PMnCocpfz0s69A==}
+
+  '@axe-core/playwright@4.13.0':
+    resolution: {integrity: sha512-6YLx+kxXu5GJceG4ozFg+33a2EMTdjYwWGloJ3sb9Kta5pp+ZNS53uxGVog5JetIY8s++P5UrtX+cri+u0VAVg==}
+    peerDependencies:
+      playwright-core: '>= 1.0.0'
 
   '@babel/code-frame@7.29.7':
     resolution: {integrity: sha512-Aup7aUOfpbAUg2ROOJN6Iw5f9DMBlzu0mIkm/malLQFN/YQgO48wCj0Kxa3sEHJvPVFg7siR+qRInwXd2qhQKw==}
@@ -8126,6 +8146,10 @@ packages:
   aws-ssl-profiles@1.1.2:
     resolution: {integrity: sha512-NZKeq9AfyQvEeNlN0zSYAaWrmBffJh3IELMZfRpJVWgrpEbtEpnjvzqBPf+mxoI287JohRDoa+/nsfqqiZmF6g==}
     engines: {node: '>= 6.0.0'}
+
+  axe-core@4.13.0:
+    resolution: {integrity: sha512-UzGt8zg7Ny8djbYMhxl2zuEevVa7r2gJjYY5Lwr1xM7+XU2nd6CkIWFTVcCIbAP63vSz71NaVyyuSk9lHKcy0A==}
+    engines: {node: '>=4'}
 
   axobject-query@4.1.0:
     resolution: {integrity: sha512-qIj0G9wZbMGNLjLmg1PT6v2mE9AH2zlnADJD/2tC6E00hgmhUOfEB6greHPAfLRSufHqROIUTkw6E+M3lH0PTQ==}
@@ -13285,6 +13309,11 @@ snapshots:
     dependencies:
       yaml: 2.9.1
 
+  '@axe-core/playwright@4.13.0(playwright-core@1.63.0)':
+    dependencies:
+      axe-core: 4.13.0
+      playwright-core: 1.63.0
+
   '@babel/code-frame@7.29.7':
     dependencies:
       '@babel/helper-validator-identifier': 7.29.7
@@ -16978,6 +17007,8 @@ snapshots:
   atomic-sleep@1.0.0: {}
 
   aws-ssl-profiles@1.1.2: {}
+
+  axe-core@4.13.0: {}
 
   axobject-query@4.1.0: {}
 

@@ -3,6 +3,8 @@ import { panelKeyOf } from "@intentic/sandbox-contract/session-names";
 import { dockerPruneChore } from "../capabilities/handlers/docker-prune.js";
 import { parkedRefRetentionChore } from "../conversations/land/parked-ref-retention.js";
 import { sweepAgedAgents } from "../conversations/registry/archive.js";
+import { deleteAgedConversations } from "../conversations/registry/transcript-retention.js";
+import { cacheDirsOf, rawOutputDirsOf, type RetentionDeps, type RetentionKind, type RetentionPass, runRetentionSweep } from "../retention/retention-sweep.js";
 import { orphanCheckoutsChore } from "../conversations/worktrees/orphan-checkouts.js";
 import { gitGcChore } from "../git/ops/git-gc.js";
 import { gitMaintenanceChore } from "../git/ops/maintenance.js";
@@ -25,6 +27,9 @@ import type { BootPhase } from "./boot-phase.js";
 //   captures and the file view's trash, the log files over their keeping, and finished terminal sessions. None must also
 //   run at every boot (each ages things out by the hour), so the clock needs no run-at-boot option for them; the scratch
 //   emptied at boot is a boot step, not a chore (boot-sweeps.ts).
+// - data retention (2026-10-13), settings.retention: everything but restore points hourly, restore points daily (each
+//   cut repacks the history repos), and all of it within a tick of the settings changing; nothing while every value is
+//   0, the default (retention/retention-sweep.ts).
 // `keep`: a job still queued has only dead panes but isn't finished. agent-* sessions belong to the reaper.
 const reapPolicyOf = ({ services }: BootPhase): ReapPolicy => ({
     keep: (session: string): boolean => services.terminalRun.running(session),
@@ -34,9 +39,72 @@ const reapPolicyOf = ({ services }: BootPhase): ReapPolicy => ({
     },
 });
 
+// The tick interval: how soon a changed retention setting takes effect.
+const RETENTION_SETTINGS_EVERY_MS = 5 * 60_000;
+
+const retentionDepsOf = ({ config, logger, services }: BootPhase): RetentionDeps => ({
+    settings: async () => (await services.sandboxSettings.get()).retention,
+    now: Date.now,
+    logger,
+    transcripts: (now, maxAgeMs) => deleteAgedConversations(services, now, maxAgeMs),
+    history: services.history,
+    vault: services.privacyShield.vault,
+    images: services.privacyShield.images,
+    cacheDirs: async () => cacheDirsOf(services.workspace.root),
+    rawOutputDirs: () => rawOutputDirsOf(config.historyRoot),
+    // Every pass that ran goes on the audit trail: what kind, how far back, how many went, and the deleted
+    // conversations' ids (never anything they said), so an office can show what retention erased and when.
+    record: (pass) =>
+        services.audit.record({
+            actor: { kind: "system", reason: "retention sweep" },
+            action: "retention.delete",
+            target: pass.kind,
+            details: retentionAuditDetails(pass),
+        }),
+});
+
+// What a retention pass leaves on the audit trail: the window, the count, and the ids of deleted conversations. A type
+// alias rather than an interface, since the record's details take any plain object.
+type RetentionAuditDetails = { days: number; before: number; deleted: number; failed?: number; ids?: string[] };
+
+const retentionAuditDetails = (pass: RetentionPass): RetentionAuditDetails => {
+    const details: RetentionAuditDetails = { days: pass.days, before: pass.before, deleted: pass.deleted };
+    if (pass.failed !== undefined) {
+        details.failed = pass.failed;
+    }
+    if (pass.ids !== undefined && pass.ids.length > 0) {
+        details.ids = [...pass.ids];
+    }
+    return details;
+};
+
+const dataRetentionChores = (phase: BootPhase): Chore[] => {
+    const deps = retentionDepsOf(phase);
+    const hourly: RetentionKind[] = ["transcripts", "privacyVault", "caches", "rawOutput"];
+    // What the settings read last time; the first look only notes them, since the hourly and daily runs cover a boot.
+    let seen: string | undefined;
+    return [
+        { name: "data-retention", everyMs: HOUR_MS, run: async () => void (await runRetentionSweep(deps, hourly)) },
+        { name: "data-retention-restore-points", everyMs: DAY_MS, run: async () => void (await runRetentionSweep(deps, ["restorePoints"])) },
+        {
+            name: "data-retention-settings",
+            everyMs: RETENTION_SETTINGS_EVERY_MS,
+            run: async () => {
+                const now = JSON.stringify(await deps.settings());
+                const changed = seen !== undefined && seen !== now;
+                seen = now;
+                if (changed) {
+                    await runRetentionSweep(deps);
+                }
+            },
+        },
+    ];
+};
+
 export const retentionChores = (phase: BootPhase): Chore[] => {
     const { config, logger, role, services } = phase;
     return [
+        ...(role.roots ? dataRetentionChores(phase) : []),
         ...(role.roots
             ? [
                   {

@@ -66,6 +66,22 @@ fn connect(
     let preview_port = env_or("PREVIEW_PORT", "5173");
     let mut sandbox_dns = env_or("SANDBOX_DNS", "1.1.1.1 1.0.0.1");
     let agent_auth_volume = env("INTENTIC_AGENT_AUTH_VOLUME");
+    let at_rest_key_host_file = env("INTENTIC_AT_REST_KEY_HOST_FILE");
+    let at_rest_previous_key_host_file = env("INTENTIC_AT_REST_PREVIOUS_KEY_HOST_FILE");
+    let drop_previous_key = env("INTENTIC_AT_REST_DROP_PREVIOUS_KEY").as_deref() == Some("1");
+    for (name, path) in [
+        ("INTENTIC_AT_REST_KEY_HOST_FILE", &at_rest_key_host_file),
+        (
+            "INTENTIC_AT_REST_PREVIOUS_KEY_HOST_FILE",
+            &at_rest_previous_key_host_file,
+        ),
+    ] {
+        let Some(path) = path else { continue };
+        let key = std::path::Path::new(path);
+        if !key.is_absolute() || !key.is_file() {
+            bail!("{name} must name an existing absolute host file");
+        }
+    }
     let sync_dir = env("SYNC_DIR");
     // A project sandbox's folder (a sandbox made for one folder), refused before anything starts when it is not a shape
     // the sync agent accepts: a wrong one would sync the owner's folder somewhere they were not told. SYNC_PROJECTS_HOST
@@ -525,20 +541,50 @@ fn connect(
                 ""
             },
         ),
+        (
+            "INTENTIC_AT_REST_KEY_FILE",
+            if at_rest_key_host_file.is_some() {
+                "/run/secrets/intentic-at-rest-key"
+            } else {
+                ""
+            },
+        ),
+        (
+            "INTENTIC_AT_REST_PREVIOUS_KEY_FILE",
+            if at_rest_previous_key_host_file.is_some() {
+                "/run/secrets/intentic-at-rest-previous-key"
+            } else {
+                ""
+            },
+        ),
     ];
     // A replace hands the image this run's pairs AND the old container's whole env: what it carries over wins over
     // this run's defaults, the claim wins over what it carried, and the contract keeps only the names it replays.
     let explicit: Vec<&str> = [
         env("WEB_ORIGIN").map(|_| "WEB_ORIGIN"),
         agent_auth_volume.as_ref().map(|_| "AGENT_AUTH_DIR"),
+        at_rest_key_host_file
+            .as_ref()
+            .map(|_| "INTENTIC_AT_REST_KEY_FILE"),
+        (at_rest_previous_key_host_file.is_some() || drop_previous_key)
+            .then_some("INTENTIC_AT_REST_PREVIOUS_KEY_FILE"),
     ]
     .into_iter()
     .flatten()
     .collect();
-    let env_pairs = match &replacing {
+    let mut env_pairs = match &replacing {
         None => crate::util::nul_frame(fresh),
         Some(replacing) => replace_env(fresh, &replacing.env, &explicit),
     };
+    if drop_previous_key {
+        let text = String::from_utf8_lossy(&env_pairs);
+        let kept: Vec<(&str, &str)> = text
+            .split('\0')
+            .filter_map(|pair| pair.split_once('='))
+            .filter(|(name, _)| *name != "INTENTIC_AT_REST_PREVIOUS_KEY_FILE")
+            .collect();
+        env_pairs = crate::util::nul_frame(&kept);
+    }
     let mut mounts: Vec<String> = agent_auth_volume
         .as_ref()
         .or(replacing
@@ -547,6 +593,25 @@ fn connect(
         .map(|volume| format!("{volume}:/agent-auth"))
         .into_iter()
         .collect();
+    if let Some(path) = at_rest_key_host_file
+        .as_ref()
+        .or_else(|| replacing.as_ref().and_then(|old| old.at_rest_key.as_ref()))
+    {
+        mounts.push(format!("{path}:/run/secrets/intentic-at-rest-key:ro"));
+    }
+    if let Some(path) = at_rest_previous_key_host_file.as_ref().or_else(|| {
+        if drop_previous_key {
+            None
+        } else {
+            replacing
+                .as_ref()
+                .and_then(|old| old.at_rest_previous_key.as_ref())
+        }
+    }) {
+        mounts.push(format!(
+            "{path}:/run/secrets/intentic-at-rest-previous-key:ro"
+        ));
+    }
     if let Some(replacing) = &replacing {
         mounts.extend(replacing.dev_mounts.iter().cloned());
     }
@@ -785,11 +850,13 @@ fn refusal(slug: &str) -> String {
 
 /// The names a replace keeps from the container it replaces over this run's own defaults: what to call this machine and
 /// which side made it, the browser origin it answers, the logins volume, and the dev checkout it was launched from.
-const CARRIED: [&str; 5] = [
+const CARRIED: [&str; 7] = [
     "HOST_LABEL",
     "HOST_PLATFORM",
     "WEB_ORIGIN",
     "AGENT_AUTH_DIR",
+    "INTENTIC_AT_REST_KEY_FILE",
+    "INTENTIC_AT_REST_PREVIOUS_KEY_FILE",
     "SANDBOX_DEV_ROOT",
 ];
 
@@ -861,6 +928,8 @@ struct Replacing {
     record: ChannelRecord,
     env: Vec<u8>,
     agent_auth: Option<String>,
+    at_rest_key: Option<String>,
+    at_rest_previous_key: Option<String>,
     image: Option<String>,
     base_image: Option<String>,
     environment_hash: Option<String>,
@@ -909,6 +978,11 @@ impl Replacing {
             _held: held,
             record,
             agent_auth: docker::mount_source(container, "/agent-auth"),
+            at_rest_key: docker::mount_source(container, "/run/secrets/intentic-at-rest-key"),
+            at_rest_previous_key: docker::mount_source(
+                container,
+                "/run/secrets/intentic-at-rest-previous-key",
+            ),
             image: value("SANDBOX_IMAGE")
                 .or_else(|| docker::inspect(container, "{{.Config.Image}}")),
             base_image: value("SANDBOX_BASE_IMAGE"),

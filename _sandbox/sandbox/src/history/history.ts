@@ -15,6 +15,7 @@ import { AGENT_GIT_AUTHOR } from "../git-identity.js";
 import { discoverRepos, hasGitEntry, isValidRepoId } from "../workspace/layout/repo-discovery.js";
 import { COMMON_EXCLUDES, EMPTY_TREE, repoGitDir, syncRootExcludes } from "../workspace/layout/git-layout.js";
 import { largeFilesConfig, leaveOutLargeFiles } from "./large-files.js";
+import { type BareRun, pruneScopes, retentionBases } from "./restore-point-retention.js";
 import type { WorkspacePaths } from "../workspace/workspace.js";
 
 // Daemon-owned workspace history: each scope (/work root or a discovered repo) gets a bare git dir under
@@ -59,6 +60,9 @@ export interface WorkspaceHistory {
     // Bare repo dir + rev-spec for a diff side's raw bytes (images fileDiff can't ship); undefined if unknown.
     readonly fileBlob: (id: string, scope: string, path: string, side: "before" | "after") => Promise<{ dir: string; spec: string } | undefined>;
     readonly restore: (id: string) => Promise<boolean>;
+    // Deletes every restore point taken before `before` (epoch ms) so its content leaves the disk; returns how many
+    // snapshot commits it removed. Restores of the points it keeps work as before (see pruneScope).
+    readonly prune: (before: number) => Promise<number>;
 }
 
 interface Scope {
@@ -111,6 +115,21 @@ interface CheckpointSide {
 const overCap = (side: CheckpointSide | undefined): boolean =>
     side !== undefined && side.bytes !== undefined && side.content === undefined && side.binary !== true;
 
+// Git dir name is the URI-encoded scope name; a nested repo id's slashes become %2F so each scope stays one filesystem
+// entry.
+const scopeNamer =
+    (scopesRoot: string, workspace: WorkspacePaths) =>
+    (name: string): Scope => ({
+        name,
+        gitDir: join(scopesRoot, `${encodeURIComponent(name)}.git`),
+        worktree: name === "root" ? workspace.root : join(workspace.root, name),
+    });
+
+// Tree-to-tree ops (log/diff-tree/cat-file) need no worktree, they must work after a repo is deleted.
+const bareIn =
+    (historyRoot: string) =>
+    (scope: Scope): BareRun => ({ cwd: historyRoot, env: { GIT_DIR: scope.gitDir } });
+
 export const createWorkspaceHistory = (
     options: { readonly workspace: WorkspacePaths; readonly historyRoot: string; readonly logger: Logger },
     git: HistoryGitRunner = defaultRunner,
@@ -118,16 +137,8 @@ export const createWorkspaceHistory = (
     const { workspace, historyRoot, logger } = options;
     const scopesRoot = join(historyRoot, "scopes");
 
-    // Git dir name is the URI-encoded scope name; a nested repo id's slashes become %2F so each scope stays one
-    // filesystem entry.
-    const scopeOf = (name: string): Scope => ({
-        name,
-        gitDir: join(scopesRoot, `${encodeURIComponent(name)}.git`),
-        worktree: name === "root" ? workspace.root : join(workspace.root, name),
-    });
-
-    // Tree-to-tree ops (log/diff-tree/cat-file) need no worktree, they must work after a repo is deleted.
-    const bare = (scope: Scope): { cwd: string; env: Record<string, string> } => ({ cwd: historyRoot, env: { GIT_DIR: scope.gitDir } });
+    const scopeOf = scopeNamer(scopesRoot, workspace);
+    const bare = bareIn(historyRoot);
 
     const ensureScope = async (scope: Scope): Promise<void> => {
         if (await pathExists(scope.gitDir)) {
@@ -288,6 +299,7 @@ export const createWorkspaceHistory = (
     };
 
     const scopeLog = async (scope: Scope): Promise<ScopeCommit[]> => {
+        const bases = await retentionBases(scope.gitDir);
         let stdout: string;
         try {
             // -z separates records with NUL; the label (%b) can contain newlines that would break a plain split.
@@ -301,6 +313,11 @@ export const createWorkspaceHistory = (
             const [word, id, trigger] = (subject ?? "").split(" ");
             const parsed = SnapshotTriggerSchema.safeParse(trigger);
             if (sha === undefined || sha === "" || seconds === undefined || word !== "snapshot" || id === undefined || !parsed.success) {
+                continue;
+            }
+            // A retention base carries the state from before the cut for the points after it, and is no checkpoint itself.
+            if (bases.has(sha)) {
+                commits.push({ sha, at: Number(seconds) * 1000, id, trigger: "interval" });
                 continue;
             }
             const label = body?.trim();
@@ -629,5 +646,14 @@ export const createWorkspaceHistory = (
             await serialize(() => restoreAll(group));
             return true;
         },
+        prune: (before) =>
+            serialize(async () => {
+                const removed = await pruneScopes({ git, logger, scopes: await knownScopes(), bareOf: bare }, before);
+                if (removed > 0) {
+                    indexCache = undefined;
+                    indexRead.changed();
+                }
+                return removed;
+            }),
     };
 };

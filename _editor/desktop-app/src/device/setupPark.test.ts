@@ -123,7 +123,7 @@ beforeEach(() => {
         calls.push({ command, args: (args ?? {}) as Record<string, unknown> });
         switch (command) {
             case `desktop_info`:
-                return { os, version: `1.0.0`, appUrl: ``, platformUrl: ``, installId: `install`, engineLimitSeconds: 300, fixLimitSeconds: 600 };
+                return { os, version: `1.0.0`, appUrl: ``, platformUrl: ``, installId: `install`, analyticsAllowed: false, engineLimitSeconds: 300, fixLimitSeconds: 600 };
             case `take_pending_setup`:
                 return handedOver;
             case `docker_ready`:

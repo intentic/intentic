@@ -1,0 +1,69 @@
+---
+import DocsLayout from "../../components/docs/DocsLayout.astro";
+---
+
+<DocsLayout
+    pageId="data-protection"
+    heading="Data protection · data flows, GDPR documents and stricter settings"
+    lead="Before a sandbox handles anyone's personal data, a data protection officer needs to know where that data can go and what protects it. The Data protection page answers both from the sandbox's live setup, and drafts the documents they file."
+>
+    <h2>Where it is</h2>
+    <p>
+        Open <strong>Sandbox ▸ Data protection</strong>. Owners and maintainers see it; everyone else does not. Reading the page changes
+        nothing. Only the panel at the bottom changes settings, and only the owner can apply it.
+    </p>
+
+    <h2>Where data can leave</h2>
+    <p>
+        The page lists every place the sandbox sends data to as it is set up right now: the AI model providers and endpoints you connected,
+        mail, team-chat bots, the visitor chat, connected services, cloud voices, web search and the agent's browser, your Intentic account,
+        the access point people reach the sandbox through, update checks, model downloads and the editor's product analytics. For each one
+        it says where the data goes, whether it can carry personal data, whether the privacy shield covers it, and whether it leaves the
+        European Economic Area. A path that is not in use is still listed, greyed out, because one switch would open it.
+    </p>
+    <p>
+        Some things the sandbox cannot see, such as which data centre region Intentic's access point runs in, or whether your office reaches
+        the sandbox through its own reverse proxy. Those rows say what your office should find out.
+    </p>
+
+    <h2>What protects it</h2>
+    <p>
+        The technical and organisational measures, grouped the way GDPR Article 32 groups them: the privacy shield, local models, roles and
+        areas, guest isolation, sign-in, approvals before the agent sends anything, approval of work started from outside, the command
+        judge, credential gates, deletion periods, the audit trail, encryption at rest and in transit, product analytics, the AI notice for
+        staff and the visitor chat's AI disclosure. Each shows whether it is on, with a link to where it is changed. Backups happen outside
+        the sandbox, so the page leaves them for your office to describe.
+    </p>
+
+    <h2>The documents</h2>
+    <p>Three drafts, in Polish or English, as Markdown or a Word document:</p>
+    <ul>
+        <li><strong>Record of processing activities</strong> (GDPR Art. 30): the entry for this system, with its recipients, transfers outside the EEA and deletion periods.</li>
+        <li><strong>Data protection impact assessment</strong> (Art. 35): the system and its data flows, prompts for necessity and proportionality, and the main risks of using AI with the protections actually switched on. It ends with a note on the AI Act: helping to draft letters is not high-risk in itself, while deciding who gets public benefits would be (Annex III, point 5(a)).</li>
+        <li><strong>Technical and organisational measures</strong> (Art. 32): every measure, whether it is on, and where it is changed.</li>
+    </ul>
+    <p>
+        Everything the sandbox knows is filled in. What only your office knows, such as who the controller is, the purpose and legal basis,
+        whose data is processed and the officer's contact details, is left as a marked blank (✎). The drafts are a starting point for your
+        officer, not legal advice.
+    </p>
+
+    <h2>Settings for a public office</h2>
+    <p>
+        Intentic's defaults suit developers and individuals. An office working under GDPR, Poland's KRI rules and the AI Act usually wants
+        stricter ones, so the bottom of the page proposes them, each with its value now beside the value proposed:
+    </p>
+    <ul>
+        <li>the privacy shield on, with images masked and names found by the local model where it is installed;</li>
+        <li>conversations deleted after 90 days, restore points, converted documents and full command output after 30, and the shield's memory after 90;</li>
+        <li>the audit trail kept for two years, and recording who opened what;</li>
+        <li>product analytics off, and the AI notice shown to staff;</li>
+        <li>every message, reaction and mail the agent sends, and every further agent it starts, waiting for a person's approval;</li>
+        <li>work started by a webhook, a chat message, a website visitor or a bug report waiting for approval;</li>
+        <li>the command judge on.</li>
+    </ul>
+    <p>
+        Every item starts ticked; untick what you do not want, then apply. Nothing is applied without that, and the preset never loosens a
+        setting that is already stricter. Each item can be changed back later where it is set.
+    </p>
+</DocsLayout>

@@ -8,11 +8,13 @@ import { activityContract } from "./contracts/activity.contract.js";
 import { agentContract } from "./contracts/agent.contract.js";
 import { agentsContract } from "./contracts/agents.contract.js";
 import { approvalsContract } from "./contracts/approvals.contract.js";
+import { auditContract } from "./contracts/audit.contract.js";
 import { areasContract } from "./contracts/areas.contract.js";
 import { automationsContract } from "./contracts/automations.contract.js";
 import { capabilitiesContract } from "./contracts/capabilities.contract.js";
 import { choresContract } from "./contracts/chores.contract.js";
 import { ciContract } from "./contracts/ci.contract.js";
+import { complianceContract } from "./contracts/compliance.contract.js";
 import { diffContract } from "./contracts/diff.contract.js";
 import { endpointsContract } from "./contracts/endpoints.contract.js";
 import { exitContract } from "./contracts/exit.contract.js";
@@ -51,6 +53,7 @@ import { workspaceContract } from "./contracts/workspace.contract.js";
 
 export { accountsContract } from "./contracts/accounts.contract.js";
 export { activityContract } from "./contracts/activity.contract.js";
+export { auditContract } from "./contracts/audit.contract.js";
 export { agentContract } from "./contracts/agent.contract.js";
 export { agentsContract } from "./contracts/agents.contract.js";
 export { approvalsContract } from "./contracts/approvals.contract.js";
@@ -59,6 +62,7 @@ export { automationsContract } from "./contracts/automations.contract.js";
 export { capabilitiesContract } from "./contracts/capabilities.contract.js";
 export { choresContract } from "./contracts/chores.contract.js";
 export { ciContract } from "./contracts/ci.contract.js";
+export { complianceContract } from "./contracts/compliance.contract.js";
 export {
     endpointsContract,
     type HostModelServer,
@@ -200,6 +204,7 @@ export * from "./policy/message-limits.js";
 // Wire shapes, one module per subject area, mirroring `contracts/`; a `{param}` in the route path merges into the same
 // flat object, split back into path/body/query. `schemas/internal.ts` is absent: it's vocabulary, not a wire shape.
 export * from "./schemas/activity.js";
+export * from "./schemas/audit.js";
 export * from "./schemas/agent.js";
 export * from "./schemas/areas.js";
 export * from "./policy/fence-paths.js";
@@ -263,6 +268,9 @@ export * from "./schemas/secrets.js";
 export * from "./schemas/netdisk.js";
 export * from "./schemas/sessions.js";
 export * from "./schemas/settings.js";
+export * from "./schemas/data-protection.js";
+export * from "./schemas/ai-literacy.js";
+export * from "./schemas/compliance.js";
 export * from "./schemas/settings-history.js";
 export * from "./schemas/share.js";
 export * from "./schemas/shared.js";
@@ -308,11 +316,13 @@ export const sandboxContract = {
     agent: agentContract,
     agents: agentsContract,
     approvals: approvalsContract,
+    audit: auditContract,
     areas: areasContract,
     automations: automationsContract,
     capabilities: capabilitiesContract,
     chores: choresContract,
     ci: ciContract,
+    compliance: complianceContract,
     diff: diffContract,
     endpoints: endpointsContract,
     extensions: extensionsContract,

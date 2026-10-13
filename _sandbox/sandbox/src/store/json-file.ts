@@ -9,6 +9,7 @@ import { type ManifestProblem, recordManifestProblems } from "./manifest/manifes
 import { type ManifestEdit, registerManifestEditor } from "./manifest/manifest-repair.js";
 import { newerBuildRan } from "./newest-run.js";
 import type { IdKeys } from "./evolution/passthrough.js";
+import { AtRestKeyError, decryptAtRest, encryptAtRest } from "./encryption/at-rest.js";
 
 // One JSON file, read through a schema and written whole; every `*-store.ts` in the daemon sits on this.
 // - atomicity: writes go to a sibling temp file and rename over the target, so a reader never sees a half-written file
@@ -57,6 +58,7 @@ export interface JsonFileOptions<T> {
     readonly onUnreadable?: "setAside" | "refuse";
     // The document this file holds, whose conversions run over the raw JSON before `parse`.
     readonly document?: DocumentSpec;
+    readonly atRestPurpose?: string;
 }
 
 // What `jsonEntries` needs instead of a whole-file parse: how to read one entry, undefined for one this build cannot.
@@ -78,8 +80,8 @@ export const asideOf = async (path: string): Promise<string> =>
 // Writes one JSON file atomically (temp file, then rename); used by jsonFile and by stores that must own their own read
 // path. `durable` flushes it to the disk first, for the files nothing may replace (the owner's, `onUnreadable:
 // "refuse"`) and the conversion journal: a power cut must not leave any of them an empty name.
-export const writeJsonFile = (path: string, value: unknown, mode?: number, durable = false): Promise<void> =>
-    writeFileAtomic(path, `${JSON.stringify(value, undefined, 2)}\n`, mode, { durable });
+export const writeJsonFile = async (path: string, value: unknown, mode?: number, durable = false, atRestPurpose?: string): Promise<void> =>
+    writeFileAtomic(path, atRestPurpose === undefined ? `${JSON.stringify(value, undefined, 2)}\n` : await encryptAtRest(`${JSON.stringify(value, undefined, 2)}\n`, atRestPurpose), mode, { durable });
 
 interface Read<T> {
     readonly state: JsonFileState<T>;
@@ -95,13 +97,14 @@ interface Store<T> {
     readonly onUnreadable: "setAside" | "refuse";
     readonly document: DocumentSpec | undefined;
     readonly strict: boolean;
+    readonly atRestPurpose: string | undefined;
 }
 
 // A file with no document has no conversions to run.
 const NO_HISTORY = { history: [], granularity: "object" } as const;
 
 const openJsonFile = <T>(path: string, store: Store<T>): JsonFile<T> => {
-    const { how, fallback, mode, onUnreadable, document, strict } = store;
+    const { how, fallback, mode, onUnreadable, document, strict, atRestPurpose } = store;
     // Value plus whether it stands in for content that exists but couldn't be read; a plain read answers the same
     // either way.
     const readState = async (): Promise<Read<T>> => {
@@ -125,6 +128,14 @@ const openJsonFile = <T>(path: string, store: Store<T>): JsonFile<T> => {
             }
             return unreadable(`the file could not be read (${errnoCode(error) ?? String(error)})`);
         }
+        if (atRestPurpose !== undefined) {
+            try {
+                text = await decryptAtRest(text, atRestPurpose);
+            } catch (error) {
+                if (error instanceof AtRestKeyError) {throw error;}
+                throw new AtRestKeyError(`could not decrypt ${path}: ${String(error)}; refusing to replace it`);
+            }
+        }
         const read = readDocument(text, document ?? NO_HISTORY, how, CHECK_SETTLES);
         problems.push(...read.problems);
         if (read.value === undefined) {
@@ -144,8 +155,10 @@ const openJsonFile = <T>(path: string, store: Store<T>): JsonFile<T> => {
         queueOnFile(path, async () => {
             let raw: unknown;
             try {
-                raw = JSON.parse(await readFile(path, "utf8"));
-            } catch {
+                const text = await readFile(path, "utf8");
+                raw = JSON.parse(atRestPurpose === undefined ? text : await decryptAtRest(text, atRestPurpose));
+            } catch (error) {
+                if (error instanceof AtRestKeyError) {throw error;}
                 // Absent or not JSON: nothing to remove, and overwriting unreadable content would be the downgrade this
                 // avoids.
                 return false;
@@ -158,7 +171,7 @@ const openJsonFile = <T>(path: string, store: Store<T>): JsonFile<T> => {
                 return false;
             }
             // As durable as `update` writes the same file: a repair is no reason to risk an owner's file.
-            await writeJsonFile(path, updated, mode, onUnreadable === "refuse");
+            await writeJsonFile(path, updated, mode, onUnreadable === "refuse", atRestPurpose);
             return true;
         });
 
@@ -176,7 +189,7 @@ const openJsonFile = <T>(path: string, store: Store<T>): JsonFile<T> => {
                     return updated;
                 }
                 if (carry !== undefined) {
-                    await writeJsonFile(path, carry(updated), mode, onUnreadable === "refuse");
+                    await writeJsonFile(path, carry(updated), mode, onUnreadable === "refuse", atRestPurpose);
                     return updated;
                 }
                 // Content this build could not read is never overwritten: refused, or set aside where a later
@@ -188,13 +201,13 @@ const openJsonFile = <T>(path: string, store: Store<T>): JsonFile<T> => {
                     }
                     await rename(path, await asideOf(path)).catch(undefinedIfMissing);
                 }
-                await writeJsonFile(path, updated, mode, onUnreadable === "refuse");
+                await writeJsonFile(path, updated, mode, onUnreadable === "refuse", atRestPurpose);
                 return updated;
             }),
     };
 };
 
-export const jsonFile = <T>(path: string, { parse, fallback, mode, onUnreadable = "setAside", document }: JsonFileOptions<T>): JsonFile<T> =>
+export const jsonFile = <T>(path: string, { parse, fallback, mode, onUnreadable = "setAside", document, atRestPurpose }: JsonFileOptions<T>): JsonFile<T> =>
     openJsonFile(path, {
         how: { kind: "whole", parse },
         fallback,
@@ -202,12 +215,13 @@ export const jsonFile = <T>(path: string, { parse, fallback, mode, onUnreadable 
         onUnreadable,
         document,
         strict: false,
+        atRestPurpose,
     });
 
 // A top-level array read one entry at a time: an entry this build cannot read, or whose conversion fails, is reported
 // and skipped instead of sinking the whole file to its fallback, and kept in the file on the next write where a later
 // build can read it.
-export const jsonEntries = <E>(path: string, { entry, mode, onUnreadable = "setAside", document, idKeys = ["id"], strict }: JsonEntriesOptions<E>): JsonFile<E[]> =>
+export const jsonEntries = <E>(path: string, { entry, mode, onUnreadable = "setAside", document, idKeys = ["id"], strict, atRestPurpose }: JsonEntriesOptions<E>): JsonFile<E[]> =>
     openJsonFile<E[]>(path, {
         how: { kind: "entries", entry, idKeys },
         fallback: () => [],
@@ -215,6 +229,7 @@ export const jsonEntries = <E>(path: string, { entry, mode, onUnreadable = "setA
         onUnreadable,
         document,
         strict: strict === true,
+        atRestPurpose,
     });
 
 // A newest-last log kept to its `cap` newest entries, over its store's own file, whose shape, mode and refusal stay the store's.

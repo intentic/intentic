@@ -1,3 +1,4 @@
+import { noteAudit } from "../audit/audit-http.js";
 import type { ApprovalSummary } from "@intentic/sandbox-contract";
 import { APPROVAL_HOLD_MS, approvalsContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
@@ -35,6 +36,7 @@ export const createApprovalsRoutes = (services: Services) => {
         list: i.list.handler(() => services.approvals.list()),
         upsert: i.upsert.handler(async ({ input, context }) => {
             const item = withApprovalHold(input, Date.now());
+            noteAudit({ target: item.id, details: { status: item.status } });
             if (item.status === "approved") {
                 await requireMaintainer(
                     services,

@@ -38,7 +38,8 @@
                 "trial",
                 "system",
                 "intentic",
-                "activity"
+                "activity",
+                "audit"
             ]
         },
         {
@@ -74,6 +75,7 @@
             "about": "what starts and steers turns on its own: automations, loops, workflows, CI repair, chores, needs, settings",
             "units": [
                 "automations",
+                "compliance",
                 "loops",
                 "workflows",
                 "ci",
@@ -84,7 +86,8 @@
                 "inventory",
                 "portability",
                 "migrations",
-                "history"
+                "history",
+                "retention"
             ]
         },
         {

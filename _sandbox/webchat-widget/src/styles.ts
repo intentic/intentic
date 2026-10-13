@@ -203,6 +203,8 @@ button {
 .icon-button:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 1px; }
 .icon-button svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
+.ai-disclosure { margin: 0; padding: 0.5rem 1rem; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 0.75rem; line-height: 1.4; }
+
 .log {
     flex: 1;
     display: flex;

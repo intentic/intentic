@@ -1,3 +1,4 @@
+import { noteAudit } from "../../audit/audit-http.js";
 import {
     PasskeyAssertRequestSchema,
     PasskeyPolicySchema,
@@ -166,8 +167,11 @@ export const createPasskeyRoutes = (services: PasskeyRoutesDeps) => {
                 methods: ["passkey"],
                 credentialId: credential.id,
             };
+            // Named before the roster is asked, so a passkey refused for its holder is recorded against them too.
+            noteAudit({ actor: { kind: "member", email: credential.email.toLowerCase(), role: "unverified" }, details: { method: "passkey" } });
             try {
                 const caller = await services.auth.authorizeProven(proof);
+                noteAudit({ actor: { kind: "member", email: caller.email.toLowerCase(), role: caller.role } });
                 return c.json(sessionOf(await services.auth.mintSession(caller), caller.email));
             } catch (error) {
                 return denied(c, error);
@@ -184,6 +188,7 @@ export const createPasskeyRoutes = (services: PasskeyRoutesDeps) => {
             }
             try {
                 const caller = await services.auth.authorizeRecovery(bearerFrom(c.req.header("authorization")));
+                noteAudit({ actor: { kind: "member", email: caller.email.toLowerCase(), role: caller.role }, details: { method: "recovery" } });
                 if (!(await services.passkeyCeremonies.spendRecoveryCode(request.code))) {
                     return c.json({ error: "that recovery code is not one of yours, or was already used" }, 403);
                 }

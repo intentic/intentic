@@ -19,7 +19,7 @@ flowchart LR
   and the owner's `SANDBOX_RUNTIME`. An `OPTIONAL_DIRECTIVES` entry such as `--gpus=all` is probed on the host and
   dropped when the host cannot honour it.
 - `REPLAY_ENV` is what a recreate carries over. `parseNulEnv` reads it NUL-framed because a value can be a multi-line
-  private key.
+  private key. It includes the paths of optional mounted at-rest keys, never their contents.
 - `localDaemonPort` derives a sandbox's host loopback port from its id, so a recreate lands on the same port and the
   editor and machine agent compute it without being told.
 - `DATA_MOUNTS` names where a sandbox's stored data lives in its container and the state planner's flag for each; the

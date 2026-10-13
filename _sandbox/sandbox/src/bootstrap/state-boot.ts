@@ -9,6 +9,7 @@ import { commitState, convergeState, type StateRoots } from "../store/evolution/
 import type { StructuralStep } from "../store/evolution/state-steps.js";
 import { version } from "../version.js";
 import type { BootPhase } from "./boot-phase.js";
+import { atRestActive, migrateAtRestStores } from "../store/encryption/at-rest.js";
 
 // The two moments of boot the state engine owns (store/evolution/state-convergence.ts): converging stored files to this build's
 // shapes before any store opens, and committing that episode once the boot chain has converged, the point past which
@@ -39,6 +40,8 @@ interface StateBoot {
 // puts the previous version back on the failed journal alone, so a failed boot would tell it nothing more; and where
 // nothing is watching, or no earlier image is kept to go back to, a daemon that cannot start leaves the owner nothing.
 export const convergeStateAtBoot = async ({ config, logger, traits, role, documents, steps, fault }: StateBoot): Promise<void> => {
+    // Credential stores must be authenticated before a daemon can issue a token or write over one.
+    if (atRestActive() && mayConverge(traits, role)) {await migrateAtRestStores(authRootOf(config));}
     try {
         await convergeState({
             roots: stateRootsOf(config),

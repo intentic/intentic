@@ -1,8 +1,8 @@
 // Activity audit log schemas (historyRoot/activity.jsonl).
 import { z } from "zod";
 import { AgentOriginSchema } from "./agent.js";
-// One provider-agnostic event per agent↔provider interaction, appended only by the daemon; the log lives outside /work,
-// so an agent can't read or rewrite its own trail.
+// One provider-agnostic event per agent↔provider interaction, appended only by the daemon; the log lives outside /work.
+// It is not tamper-evident (an unfenced agent can reach /history); the hash-chained audit trail (audit.ts) is.
 
 export const ActivityEventSchema = z.object({
     id: z.string().describe("The entry's own id."),

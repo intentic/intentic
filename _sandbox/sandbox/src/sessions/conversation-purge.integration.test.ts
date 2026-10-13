@@ -5,6 +5,8 @@ import { STATE_DIR } from "@intentic/constants";
 import type { TranscriptRow } from "@intentic/sandbox-contract";
 import { conversationEntry } from "../testing.js";
 import { purgeConversationState, type PurgeConversation } from "./conversation-purge.js";
+import { removeCodexRollout } from "../runtimes/codex/codex-sessions.js";
+import { backupFile } from "./record/record-convert.js";
 import { claudeStoreOf } from "./session-store.js";
 import { fileTranscriptRecord, transcriptFile } from "./transcript-record.js";
 
@@ -96,4 +98,47 @@ test("a retained transcript that cannot be read stops the purge before any uploa
     );
 
     expect(await readFile(join(attachments, "shared", "b.png"), "utf8")).toBe("kept");
+});
+
+test("purge also takes the transcript backup, Claude's per-session todos and environment, and a Codex thread's rollout", async () => {
+    const root = await mkdtemp(join(tmpdir(), "conversation-purge-"));
+    roots.push(root);
+    const workspace = join(root, "work");
+    const history = join(root, "history");
+    const store = claudeStoreOf(workspace, history, undefined);
+    const codexHome = join(root, "codex");
+    const rollouts = join(codexHome, "sessions", "2026", "01", "02");
+    await Promise.all([
+        mkdir(join(store, "todos"), { recursive: true }),
+        mkdir(join(store, "session-env", "removed-session"), { recursive: true }),
+        mkdir(rollouts, { recursive: true }),
+        mkdir(join(history, "backups", "transcripts"), { recursive: true }),
+    ]);
+    await Promise.all([
+        writeFile(join(store, "todos", "removed-session-agent-removed-session.json"), "[]"),
+        writeFile(join(store, "todos", "kept-session-agent-kept-session.json"), "[]"),
+        writeFile(join(store, "session-env", "removed-session", "env"), "x"),
+        writeFile(join(rollouts, "rollout-2026-01-02T10-00-00-thread-1.jsonl"), "said"),
+        writeFile(join(rollouts, "rollout-2026-01-02T11-00-00-thread-2.jsonl"), "kept"),
+        writeFile(backupFile(history, "removed"), "backup"),
+        writeFile(backupFile(history, "codexed"), "backup"),
+    ]);
+    const codexed = conversationEntry({ id: "codexed", sessionId: "thread-1", profile: { provider: "codex", harness: "native" } });
+
+    await purgeConversationState(
+        workspace,
+        history,
+        fileTranscriptRecord(history).stored,
+        [conversation("removed", "removed-session"), codexed],
+        [conversation("kept", "kept-session")],
+        (threadId) => removeCodexRollout(codexHome, threadId),
+    );
+
+    await expect(readFile(backupFile(history, "removed"), "utf8")).rejects.toThrow();
+    await expect(readFile(backupFile(history, "codexed"), "utf8")).rejects.toThrow();
+    await expect(readFile(join(store, "todos", "removed-session-agent-removed-session.json"), "utf8")).rejects.toThrow();
+    expect(await readFile(join(store, "todos", "kept-session-agent-kept-session.json"), "utf8")).toBe("[]");
+    await expect(readFile(join(store, "session-env", "removed-session", "env"), "utf8")).rejects.toThrow();
+    await expect(readFile(join(rollouts, "rollout-2026-01-02T10-00-00-thread-1.jsonl"), "utf8")).rejects.toThrow();
+    expect(await readFile(join(rollouts, "rollout-2026-01-02T11-00-00-thread-2.jsonl"), "utf8")).toBe("kept");
 });

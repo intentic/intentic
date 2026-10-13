@@ -53,7 +53,14 @@ export const createNeedsRoutes = ({ needs, grants, visible }: NeedsRoutesDeps) =
         ask: i.ask.handler(({ input, context, signal }) =>
             needs.ask({ raise: input, conversationId: conversationOf(context), signal: signal ?? new AbortController().signal }),
         ),
-        mine: i.mine.handler(async ({ context }) => ({ needs: [...(await needs.mine(conversationOf(context)))] })),
+        // The header is the caller's to write: a member reads only the needs of a conversation they may see.
+        mine: i.mine.handler(async ({ context }) => {
+            const conversationId = conversationOf(context);
+            if (context.identity !== undefined && (conversationId === undefined || !visible(context.identity, conversationId))) {
+                return { needs: [] };
+            }
+            return { needs: [...(await needs.mine(conversationId))] };
+        }),
         withdraw: i.withdraw.handler(({ input, context }) => answered(needs.withdraw(input.id, conversationOf(context)))),
         list: i.list.handler(async ({ input, context }) => ({
             needs: (await needs.list(input)).filter((need) => visible(context.identity, need.conversationId)),

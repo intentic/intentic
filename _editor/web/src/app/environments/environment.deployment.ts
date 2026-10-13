@@ -13,5 +13,5 @@ window.env = {
     // blockers can't strip session replay, nginx.conf proxies /wire to the real hosts, and that prefix is
     // deliberately not one of the names those blockers already pattern-match (see nginx.conf). Read off
     // location.origin rather than $API_URL so the proxy follows whatever domain the SPA is served from.
-    analytics: { posthogKey: `$POSTHOG_KEY`, posthogHost: `${window.location.origin}/wire` },
+    analytics: { posthogKey: `$POSTHOG_KEY`, posthogHost: `${window.location.origin}/wire`, posthogUiHost: `$POSTHOG_UI_HOST` },
 };

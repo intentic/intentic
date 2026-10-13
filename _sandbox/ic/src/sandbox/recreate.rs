@@ -745,6 +745,16 @@ fn recreate(
     if let Some(auth) = docker::mount_source(&container, "/agent-auth") {
         mounts.push(format!("{auth}:/agent-auth"));
     }
+    if let Some(key) = docker::mount_source(&container, "/run/secrets/intentic-at-rest-key") {
+        mounts.push(format!("{key}:/run/secrets/intentic-at-rest-key:ro"));
+    }
+    if let Some(key) =
+        docker::mount_source(&container, "/run/secrets/intentic-at-rest-previous-key")
+    {
+        mounts.push(format!(
+            "{key}:/run/secrets/intentic-at-rest-previous-key:ro"
+        ));
+    }
     mounts.extend(dev_mounts());
 
     let runtime_lines = runtime_lines(&overlay);

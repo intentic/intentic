@@ -1,3 +1,4 @@
+import { noteAudit } from "../audit/audit-http.js";
 import { foldPath, areasContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../app-env.js";
@@ -27,6 +28,7 @@ export const createAreasRoutes = (services: AreasRoutesDeps) => {
             // it three times would read as three grants of the same thing.
             const folders = [...new Set(input.folders.map((folder) => foldPath(folder) ?? folder))];
             const before = (await services.areas.get(input.id))?.folders ?? [];
+            noteAudit({ target: input.id, details: { folders: folders.length, previousFolders: before.length } });
             await services.areas.upsert({ ...input, folders });
             // A holder's open streams filter against the folders read when they opened; closing them makes their
             // reconnect read these. Their media and download tickets name files the old folders reached, so they go too.

@@ -198,6 +198,9 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
     // addresses (broker/broker-server.ts).
     const credentialGateway = await startCredentialGateway(services, logger);
     shutdown.push(() => credentialGateway.stop());
+    // The audit trail's minute: retention, a changed audit setting nobody saved through a route, and the forwarder.
+    services.audit.start();
+    shutdown.push(services.audit.stop);
     // The ssh agent, its SSH half: the owner's socket, and every conversation socket a background job may still hold from
     // before a restart (broker/ssh-agent-sockets.ts). A socket that cannot bind is logged, and ssh then signs nothing.
     await services.sshAgent

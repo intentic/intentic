@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm, stat } from "node:fs/promises";
+import { mkdtemp, readdir, rm, stat, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { filePrivacyImages } from "../privacy-images.js";
@@ -43,4 +43,15 @@ test("an id that is not one is neither kept nor read", async () => {
     await archive.keep("../escape-the-archive", before, after);
     expect(await readdir(dir)).toEqual([]);
     expect(await archive.read("../../etc/passwd")).toBeUndefined();
+});
+
+test("expiring drops the pairs kept before the cut and leaves the newer ones", async () => {
+    const archive = filePrivacyImages(dir);
+    await archive.keep(id(1), before, after);
+    await archive.keep(id(2), before, after);
+    const old = new Date("2026-01-01T00:00:00Z");
+    await utimes(join(dir, `${id(1)}.json`), old, old);
+    expect(await archive.expire(new Date("2026-06-01T00:00:00Z"))).toBe(1);
+    expect(await readdir(dir)).toEqual([`${id(2)}.json`]);
+    expect(await archive.read(id(1))).toBeUndefined();
 });

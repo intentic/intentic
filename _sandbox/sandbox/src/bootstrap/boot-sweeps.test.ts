@@ -63,7 +63,11 @@ const cadenceOf = (phase: BootPhase): readonly (readonly [string, number])[] => 
 
 test("the retention passes are hourly chores, scoped by role", () => {
     const hourly = (name: string): readonly [string, number] => [name, HOUR_MS];
+    // settings.retention's sweeps (retention/retention-sweep.ts): hourly, restore points daily, and a five-minute look
+    // for a changed setting. Root-scoped like the rest: they delete what the root's history holds.
+    const dataRetention = [hourly("data-retention"), ["data-retention-restore-points", 24 * HOUR_MS] as const, ["data-retention-settings", 5 * 60_000] as const];
     expect(cadenceOf(phaseOf({ roots: true, container: true }))).toEqual([
+        ...dataRetention,
         hourly("agents-aged-archive"),
         hourly("state-aged"),
         hourly("log-retention"),
@@ -71,7 +75,12 @@ test("the retention passes are hourly chores, scoped by role", () => {
     ]);
     // A guest sharing the history root prunes nothing of the root's.
     expect(cadenceOf(phaseOf({ roots: false, container: true }))).toEqual([hourly("finished-terminal-sessions")]);
-    expect(cadenceOf(phaseOf({ roots: true, container: false }))).toEqual([hourly("agents-aged-archive"), hourly("state-aged"), hourly("log-retention")]);
+    expect(cadenceOf(phaseOf({ roots: true, container: false }))).toEqual([
+        ...dataRetention,
+        hourly("agents-aged-archive"),
+        hourly("state-aged"),
+        hourly("log-retention"),
+    ]);
     expect(cadenceOf(phaseOf({ roots: false, container: false }))).toEqual([]);
 });
 

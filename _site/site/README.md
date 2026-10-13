@@ -13,6 +13,9 @@ flowchart LR
 ```
 
 - Pages are `.astro` files under `src/pages/`; their words, navigation and metadata come from `@intentic/site-content`. `/docs`, `/developers` and `/api` share one layout, sidebar and search index (`src/components/docs/`), and `/api` is generated from `@intentic/sandbox-openapi`.
+- `/accessibility/` and `/pl/deklaracja-dostepnosci/` share `src/components/legal/AccessibilityStatement.astro` and are linked
+  in the footer. The Polish page sets `lang="pl"`; the statement records the scoped axe review and tells public offices
+  to assess and publish a statement for their own deployment. Update its date and findings after each new review.
 - Every build also writes a Markdown mirror of each page, `llms.txt`, `search.json`, a sitemap dated from git (all via `@intentic/astro-integrations`) and OpenGraph cards. The cards are skipped when the Inter fonts under `scripts/fonts/` are missing.
 - Comparison detail routes share `src/pages/compare/[slug].astro`; their copy comes from `site-content/compare`. `ComparisonFaq.astro` renders the same FAQ entries passed to the layout's structured data. Source-review dates are page-specific, while git modification dates account for the shared copy and route template.
 - `worker.ts` runs before static assets (`run_worker_first`). It redirects http and moved paths, serves the install scripts at vanity paths (`INSTALL_SCRIPTS` in `@intentic/constants`) from `public/scripts/`, serves the same scripts with their arguments injected at the one-liner routes (`/<verb>/<arg>`, below), resolves `/desktop/*` to the latest GitHub release asset, falls back to the demo's shell under `/demo/`, and applies [content/live.json](content/live.json) to every HTML page outside `/demo/`.

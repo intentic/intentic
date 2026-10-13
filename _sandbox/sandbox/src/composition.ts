@@ -15,6 +15,7 @@ import { createAcpConnections } from "./runtimes/acp/acp-connection.js";
 import { createPiAgent } from "./runtimes/pi/pi-agent.js";
 import { piSpawner } from "./runtimes/pi/pi-rpc.js";
 import { activityLogDocument, type ActivityStore, fileActivityStore } from "./activity/activity-store.js";
+import { type AuditService, auditServiceOf } from "./audit/audit-service.js";
 import { cliProxyAuthDir, cliProxyConfigPath, cliProxyManagementUrl, createCliProxyClient } from "./agent/providers/translator.js";
 import { fileWorkflowRunsStore, fileWorkflowsStore, workflowRunsDocument, workflowsDocument } from "./workflows/workflows-store.js";
 import { type ChoresStore, fileChoresStore, LEDGER_FILE, PROBES_FILE } from "./chores/chores-store.js";
@@ -68,6 +69,7 @@ import { createKimiSlice, type KimiSlice } from "./runtimes/kimi/kimi-provider.j
 import { GROK_BUILD } from "./runtimes/grok-build/grok-build-cli.js";
 import { createCliParts } from "./runtimes/vendor-cli/vendor-cli-slice.js";
 import { createWorkspaceHistory, type WorkspaceHistory } from "./history/history.js";
+import { removeCodexRollout } from "./runtimes/codex/codex-sessions.js";
 import { type IntenticRun, runIntentic } from "./intentic/intentic-runner.js";
 import { createPanelUpstreamResolver, type PanelUpstreamResolver } from "./panels/panel-upstream.js";
 import { discoverRepos } from "./workspace/layout/repo-discovery.js";
@@ -247,8 +249,11 @@ export interface Services
     readonly probeRunner: ProbeRunner;
     // Things the agent prepared and may not do unasked; /approvals is the owner's approve/reject side.
     readonly approvals: ApprovalsStore;
-    // Activity audit log, outside the agent's reach: inbound wakes, sniffed calls, voice sessions, failures.
+    // Activity log, outside /work: inbound wakes, sniffed calls, voice sessions, failures.
     readonly activity: ActivityStore;
+    // The audit trail (historyRoot/audit/): hash-chained, segmented by month, pruned by `settings.audit`, forwarded to the
+    // owner's collector. `audit.record(event)` is the door every module records through (audit/audit-service.ts).
+    readonly audit: AuditService;
     // Per-sandbox agent settings; streamAgent reads it to gate per-turn behavior and the owner's rule table.
     readonly sandboxSettings: SandboxSettingsStore;
     // Off the agent-writable workspace; unreadable policies refuse execution rather than reverting to root.
@@ -566,6 +571,12 @@ const voiceOf = (whole: () => Services, workspaceRoot: string, logger: Services[
 const turnHold = (heldCards: HeldCards, conversations: Parameters<typeof turnRunOf>[0]) =>
     holdDepsOf(heldCards, (conversationId) => turnRunOf(conversations, conversationId));
 
+// What deletes a purged Codex conversation's rollout, from the sandbox-wide CODEX_HOME beside the credentials.
+const codexRolloutRemover =
+    (authRoot: string) =>
+    (threadId: string): Promise<void> =>
+        removeCodexRollout(join(authRoot, "codex"), threadId);
+
 export const createServices = (config: Config, logger: Logger): Services => {
     // The one late binding left. A few services do work that reaches back into most of the daemon (a turn, a land's
     // breakage route, the provider catalogs, the safety judge, filing a browser account, a host's reach); they read the
@@ -673,6 +684,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
     // Hoisted: the CI fixer files into the same log and reads the same settings the routes do.
     const activity = fileActivityStore(join(config.historyRoot, activityLogDocument.path));
     const sandboxSettings = fileSandboxSettingsStore(join(workspace.root, settingsDocument.path));
+    const audit = auditServiceOf(config.historyRoot, sandboxSettings, whole, logger);
     // Transcripts, session files and phrase search, and what a conversation's purge takes with it.
     const sessionsSlice = createSessionsSlice({
         historyRoot: config.historyRoot,
@@ -680,6 +692,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         logger,
         turnCheckpoints: conversationsParts.slice.turnCheckpoints,
         roster: () => [...agents.list(), ...agents.listArchived()].flatMap((summary) => agents.entry(summary.id) ?? []),
+        removeCodexRollout: codexRolloutRemover(authRoot),
         forget: (conversationId) => {
             secretsSlice.credentialGrants.forget(conversationId);
             brokerSlice.rulePrompts.forget(conversationId);
@@ -788,6 +801,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         chores,
         invariants,
         activity,
+        audit,
         sandboxSettings,
         agentDomainPolicy,
         agentExecution: createAgentExecutionService(() => agentDomainPolicy.get()),

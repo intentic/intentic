@@ -291,8 +291,8 @@ describe("createAuthorizer (daemon-minted sessions)", () => {
             owner: memOwner("a@x.com"),
             members: memMembers(granted("m@x.com")),
         });
-        await expect(authz.authorize("sess-a", undefined)).resolves.toEqual({ email: "a@x.com", role: "owner", methods: ["google"] });
-        await expect(authz.authorize("sess-m", undefined)).resolves.toEqual({ email: "m@x.com", role: "collaborator", agents: "run", edits: "none", methods: ["google"] });
+        await expect(authz.authorize("sess-a", undefined)).resolves.toEqual({ email: "a@x.com", role: "owner", methods: ["google"], renewal: true });
+        await expect(authz.authorize("sess-m", undefined)).resolves.toEqual({ email: "m@x.com", role: "collaborator", agents: "run", edits: "none", methods: ["google"], renewal: true });
         // A verified session is still subject to per-request membership: revoking a member kills live sessions.
         await expect(authz.authorize("sess-x", undefined)).rejects.toBeInstanceOf(ForbiddenError);
         await expect(authz.authorizeOwner("sess-a")).resolves.toBeUndefined();
@@ -470,7 +470,7 @@ describe("identity assertion", () => {
             members: memMembers([{ email: "cy@example.org", role: "viewer" }]),
             identityAssertion: verifier(),
         });
-        await expect(authz.authorize("sess-cy", undefined)).resolves.toEqual({ email: "cy@example.org", role: "viewer", agents: "off", edits: "none", methods: ["email", "passkey"] });
+        await expect(authz.authorize("sess-cy", undefined)).resolves.toEqual({ email: "cy@example.org", role: "viewer", agents: "off", edits: "none", methods: ["email", "passkey"], renewal: true });
     });
 
     test("on a hosted machine opens it for anyone on the roster and binds without the connect token, as the owner ticket does", async () => {
@@ -577,9 +577,9 @@ describe("require-passkey policy", () => {
 
     test("on: a session proven by a passkey or a recovery code passes; the hosted owner ticket alone does not", async () => {
         const passkey = withPolicy(policy(true, ["a@x.com"]), { "sess-a": "a@x.com" }, ["passkey"]);
-        await expect(passkey.authorize("sess-a", undefined)).resolves.toEqual({ email: "a@x.com", role: "owner", methods: ["passkey"] });
+        await expect(passkey.authorize("sess-a", undefined)).resolves.toEqual({ email: "a@x.com", role: "owner", methods: ["passkey"], renewal: true });
         const recovered = withPolicy(policy(true, ["a@x.com"]), { "sess-a": "a@x.com" }, ["google", "recovery"]);
-        await expect(recovered.authorize("sess-a", undefined)).resolves.toEqual({ email: "a@x.com", role: "owner", methods: ["google", "recovery"] });
+        await expect(recovered.authorize("sess-a", undefined)).resolves.toEqual({ email: "a@x.com", role: "owner", methods: ["google", "recovery"], renewal: true });
 
         const pair = generateKeyPairSync("ed25519");
         const ticketed = createAuthorizer({

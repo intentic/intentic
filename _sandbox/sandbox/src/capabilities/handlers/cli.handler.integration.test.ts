@@ -252,6 +252,12 @@ test("cliEnvOf expands each connector's env template; two instances of one provi
         IMAP_PORT_IMAP: "993",
         IMAP_USERNAME_IMAP: "u@e.com",
         IMAP_PASSWORD_IMAP: "p#ss@word: &$100%!",
+        // The card's sending fields, left blank here: they expand to nothing, and the sender then reuses the IMAP login.
+        SMTP_HOST_IMAP: "",
+        SMTP_PORT_IMAP: "",
+        SMTP_SECURITY_IMAP: "",
+        SMTP_USERNAME_IMAP: "",
+        SMTP_PASSWORD_IMAP: "",
     });
     // Postgres URL template percent-encodes user/password/database via ${field:uri}.
     expect(await cliEnvOf(hostFor([primary, secondary]), raw)).toEqual({

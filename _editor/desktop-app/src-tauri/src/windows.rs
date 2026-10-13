@@ -2100,6 +2100,10 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
         // (update.rs), so this either installs and comes back, or opens the download page for a copy that
         // cannot install anything.
         Some(Link::Update) => crate::update::act(app),
+        Some(Link::AnalyticsConsent(allow)) => {
+            crate::launch::set_analytics_consent(if allow { "allow" } else { "deny" });
+            let _ = tauri::Emitter::emit(app, "desktop://analytics-consent", allow);
+        }
         // The workspace's way back to this computer: This device (a setup page's way back to the run it handed over,
         // a sandbox's "restart in the app"), or the folder itself (the sandbox switcher's "This computer").
         Some(Link::Launcher { files: true }) => {

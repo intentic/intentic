@@ -10,6 +10,7 @@ const answer: DaemonHealth = {
     reach: { state: "reachable", at: 3 },
     reachedBy: "tunnel",
     build: { version: "1.2.3" },
+    atRestEncryption: { active: false, stores: [] },
 };
 
 test("the daemon's answer parses whole as the contract's health", () => {
@@ -23,6 +24,7 @@ test("a reader takes any daemon's answer, a field of the wrong shape reading as 
         boot: undefined,
         state: { journal: undefined },
         reachedBy: "tunnel",
+        atRestEncryption: undefined,
     });
     expect(DaemonHealthReadingSchema.parse(answer)).toMatchObject({ sandboxId: "0123456789ab", boot: { ready: true }, announce: { state: "registered" } });
 });

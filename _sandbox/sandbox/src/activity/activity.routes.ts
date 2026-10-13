@@ -1,4 +1,7 @@
-import { activityContract, type ActivityStatus } from "@intentic/sandbox-contract";
+import { activityContract, type ActivityEvent, type ActivityStatus } from "@intentic/sandbox-contract";
+import type { Caller } from "../auth/auth.js";
+import { conversationReader, readsEverything, registryProvenance } from "../auth/scope/conversation-reader.js";
+import type { Provenance } from "../auth/fleet-scope.js";
 import { implement } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
@@ -31,14 +34,31 @@ const providerStatus = async (services: ActivityRoutesDeps, provider: string): P
     return { connections: resolveConnections(status.connections, idle, lastError), ...(status.voice !== undefined ? { voice: status.voice } : {}) };
 };
 
-export type ActivityRoutesDeps = Pick<Services, "activity" | "automations" | "capabilities" | "config" | "files" | "workspace">;
+export type ActivityRoutesDeps = Pick<Services, "activity" | "agents" | "automations" | "capabilities" | "config" | "files" | "workspace">;
+
+// What of the log one caller may read: an entry carries the prompt that woke a turn and the message it sent, so it is
+// read as its conversation is (conversation-reader.ts). Undefined reads everything.
+// (2026-10-13) Every member with a viewer floor read every colleague's prompts here.
+export const activityScope = (
+    caller: Caller | undefined,
+    agentOf: (conversationId: string) => Provenance | undefined,
+): ((event: ActivityEvent) => boolean) | undefined => {
+    if (readsEverything(caller)) {
+        return undefined;
+    }
+    const reads = conversationReader(caller, agentOf);
+    return (event) => reads(event.conversationId);
+};
 
 // `list` reads the daemon-written log; `status` aggregates connection/voice health that provider gateways push to
 // /listeners/<provider>/status. Providers come from enabled extensions, not a hardcoded list.
 export const createActivityRoutes = (services: ActivityRoutesDeps) => {
     const i = implement(activityContract).$context<OrpcContext>();
     return {
-        list: i.list.handler(async ({ input }) => ({ events: await services.activity.list(input) })),
+        list: i.list.handler(async ({ input, context }) => {
+            const shows = activityScope(context.identity, registryProvenance(services.agents));
+            return { events: await services.activity.list({ ...input, shows }) };
+        }),
         status: i.status.handler(async () => {
             const providers = [...(await listenerProvidersOf(services)).keys()];
             const reported = (await Promise.all(providers.map((provider) => providerStatus(services, provider)))).filter(

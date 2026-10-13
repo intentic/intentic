@@ -72,10 +72,12 @@ import {
     vSkeletonSource,
 } from "@intentic/ui";
 import Checkbox from "primevue/checkbox";
+import { useT } from "@intentic/ui/i18n";
 import { ref } from "vue";
 import DesignKitAssistants from "./DesignKitAssistants.vue";
 
 const { scheme, set: setScheme } = useTheme();
+const t = useT();
 const { textSize, setTextSize } = useTextSize();
 
 // Each band is a [name, sample] pair: the name is what a call site types, the sample is what it gets.
@@ -593,7 +595,7 @@ const pickedTier = ref(`collaborator`);
                     </RowGroup>
 
                     <RowGroup label="hit=pair · body=drawer" caption="a place of its own; the headline's link keeps its own press">
-                        <DisclosureRow v-model:open="kitDrawer" body="drawer" hit="pair">
+                        <DisclosureRow v-model:open="kitDrawer" body="drawer" hit="pair" :toggle-label="t(`a11yKit.toggleDetails`)">
                             <template #lead><Icon name="wrench" class="text-sm text-subtle" /></template>
                             <!-- The link underline follows its text, not the full row. -->
                             <template #title>
@@ -607,7 +609,7 @@ const pickedTier = ref(`collaborator`);
                         </DisclosureRow>
                         <DisclosureRow v-model:open="kitBefore" body="drawer">
                             <!-- Selection stays beside, not inside, the row toggle. -->
-                            <template #before><Checkbox :model-value="true" binary size="small" class="ml-4" /></template>
+                            <template #before><Checkbox :model-value="true" binary size="small" class="ml-4" :aria-label="t(`a11yKit.selectRow`)" /></template>
                             <template #title>With a #before selection column</template>
                             <template #meta><StatusBadge variant="success" label="pass" size="xs" /></template>
                             <template #below><p class="text-xs text-muted">The tick narrows the next run; the row opens the story.</p></template>
@@ -788,7 +790,7 @@ const pickedTier = ref(`collaborator`);
 
                 <!-- Shown beside the button since a hand-styled `<button>` usually means the alternative wasn't visible. -->
                 <div class="flex flex-wrap items-center gap-4">
-                    <button type="button" :class="ui.iconButton()"><Icon name="cog" class="text-xs" /></button>
+                    <button type="button" :class="ui.iconButton()" :aria-label="t(`a11yKit.settingsButton`)"><Icon name="cog" class="text-xs" /></button>
                     <button type="button" :class="ui.textButton()">ui.textButton() — will navigate</button>
                     <button type="button" :class="ui.textButton({ tone: `quiet` })"><Icon name="eye" />{ tone: "quiet" } — acts in place</button>
                     <button type="button" :class="ui.textButton({ tone: `danger` })">{ tone: "danger" } — removes</button>
@@ -927,7 +929,7 @@ const pickedTier = ref(`collaborator`);
                     </div>
                     <div class="flex flex-col gap-1">
                         <span class="ui-field-label">CodeField</span>
-                        <CodeField v-model="source" lang="typescript" />
+                        <CodeField v-model="source" lang="typescript" :aria-label="t(`a11yKit.codeField`)" />
                     </div>
                 </div>
                 <div class="max-w-read-lg">

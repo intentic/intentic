@@ -14,6 +14,7 @@ flowchart LR
 - Runs in a visitor's browser on the customer's site. The build is a single IIFE file (`vite.config.ts`) that finds
   its own `<script data-automation>` tag, fetches the chat's config and mounts `<intentic-visitor-chat>`. A sleeping
   sandbox or a disallowed origin renders nothing.
+- By default, the panel shows a short AI disclosure in the visitor’s browser language (English, Polish, German, French or Spanish; English fallback). A Visitor chat can set its own line or explicitly switch it off with `aiDisclosure: false`. The line remains visible beside the conversation.
 - The launcher and panel live in a shadow root so the host's CSS and the widget's never mix. Google sign-in and
   Cloudflare Turnstile are the exception: third-party iframes need the light DOM, projected through a `<slot>`. A
   script of theirs that fails to load is fetched again the next time the panel opens.

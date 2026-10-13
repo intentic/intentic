@@ -814,3 +814,7 @@ for Docker Desktop (`ic engine prefer`). A sandbox handed the GPU keeps the PC o
 Repair is an agent that runs in this app on the reader's PC, outside every sandbox. It can run read-only checks (`ic sandbox doctor`, `ic engine status`, `ic docker prepare --dry-run`, sandbox list/logs, setup transcript) and, after the reader taps **Allow**, mutating fixes (`ic sandbox fix`, `ic engine start`, `ic engine move` between Docker Desktop and Intentic's engine, sandbox restart/rollback). It has no shell and cannot edit project files. A move it starts runs through the engine card's own run (`engine.rs` `run_move`), so the card shows its steps.
 
 Open it from the tray (**Repair Intentic…**), the workspace recovery panel (**Repair**), or `intentic://repair?slug=…&from=…&reason=…`. The web route is `/repair` in the local shell; Rust lives in `src-tauri/src/repair/`, TypeScript in `src/repair.ts`.
+
+## Product analytics
+
+`POSTHOG_KEY` enables reporting in a release build. `POSTHOG_HOST` selects the capture origin for both the webview and Rust launch reporter; it defaults to `https://us.i.posthog.com` and can be set to `https://eu.i.posthog.com`. The app records events only after the editor's Data & privacy consent is allowed.

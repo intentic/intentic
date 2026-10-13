@@ -13,7 +13,8 @@
 # in tauri.conf.json. Without the variable the installers still build; the .sig files and latest.json are
 # skipped, which means no auto-update for that release.
 #
-# Analytics: POSTHOG_KEY is baked into the app's own pages here (desktop-app/vite.config.ts, and vite.local.config.ts
+# Analytics: POSTHOG_HOST selects the capture origin for both TypeScript and Rust (default US; set EU
+# to https://eu.i.posthog.com). POSTHOG_KEY is baked into the app's own pages here (desktop-app/vite.config.ts, and vite.local.config.ts
 # for This device, which reports the app's setups and Docker starts), because a compiled
 # app has no container entrypoint to substitute one at start the way the web image does. Unset — which is
 # every local build and every CI/nightly build — leaves the app's own analytics off, so only installers a user

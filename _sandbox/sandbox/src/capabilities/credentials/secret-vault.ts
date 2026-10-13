@@ -35,6 +35,7 @@ export const fileSecretVault = (document: VaultDocument, path: string): SecretVa
         mode: 0o600,
         // Credentials are not state the daemon can regrow: a fresh vault over an unreadable one would drop every one.
         onUnreadable: "refuse",
+        atRestPurpose: document.path,
     });
     return {
         get: async (id) => (await file.read())[id] ?? {},

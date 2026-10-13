@@ -16,6 +16,7 @@ import {
 import { type FixtureRouter, refuse } from "@intentic/contract-serve";
 import { BROWSER_SESSIONS, closeOwnBrowser, closeOwnTab, OWN_SESSION, openOwnBrowser, ownSession } from "../browser";
 import { demoSecretInventory } from "../fixture/access";
+import { demoAuditExport, demoAuditList, demoAuditStatus, demoAuditVerify } from "../fixture/audit";
 import { demoApprovals, removeDemoApproval, upsertDemoApproval } from "../fixture/approvals";
 import {
     automationApprovals,
@@ -27,6 +28,7 @@ import {
     saveAutomation,
 } from "../fixture/automations";
 import { choresReport, writeLedger } from "../fixture/chores";
+import { demoComplianceReport, demoPresetItems } from "../fixture/data-protection/compliance";
 import { ciJobs, ciRunsResponse } from "../fixture/ci";
 import { DESK_SANDBOX_NAME } from "../fixture/desk";
 import { demoDevices, switchDemoPairings } from "../fixture/devices";
@@ -392,6 +394,14 @@ export const procedures = {
         sources: () => [],
         forget: () => refuse(`This is the demo workspace: nothing has been taught to its privacy shield.`),
     },
+    // The data protection page over a fresh sandbox; the documents and the preset's apply refuse, since they read and
+    // write a real sandbox's configuration.
+    compliance: {
+        report: () => demoComplianceReport(),
+        preset: () => ({ items: demoPresetItems() }),
+        document: () => refuse(`This is the demo workspace: its documents are drafted from a real sandbox's configuration, and this one has none.`),
+        applyPreset: () => refuse(`This is the demo workspace: the preset changes a real sandbox's settings, and this one has none to change.`),
+    },
     vpn: {
         list: () => ({ links: [] }),
     },
@@ -494,6 +504,13 @@ export const procedures = {
     },
     // The named parts of the workspace a grant can be fenced to; a save is real, like a persona's, so the Areas
     // page edits what the Access tab's picker then offers.
+    // A short sample trail, so the Audit log page draws its list, its intact verdict and an export.
+    audit: {
+        list: (query) => demoAuditList(query),
+        verify: () => demoAuditVerify(),
+        status: () => demoAuditStatus(),
+        export: ({ from, to }) => demoAuditExport(from, to),
+    },
     areas: {
         list: () => ({ areas: demoAreas }),
         save: (area) => okAfter(() => saveArea(area)),

@@ -28,9 +28,11 @@ import SandboxExtensions from "./extensions/SandboxExtensions.vue";
 import { toListing, updateCount } from "./extensions/discoverListing";
 import SandboxPersonas from "./personas/SandboxPersonas.vue";
 import SandboxAreas from "./areas/SandboxAreas.vue";
+import SandboxAudit from "./audit/SandboxAudit.vue";
 import SandboxOverview from "./overview/SandboxOverview.vue";
 import SandboxSecrets from "./secrets/SandboxSecrets.vue";
 import SandboxUsage from "./usage/SandboxUsage.vue";
+import SandboxDataProtection from "./data-protection/SandboxDataProtection.vue";
 import { useT } from "@intentic/ui/i18n";
 
 // One home for the active sandbox, reached from the rail's chip; the selected section lives in the URL, and only it
@@ -153,10 +155,12 @@ const groups = computed<readonly NavGroup<HubTab>[]>(() => [
             <SandboxOverview v-if="slug === `overview`" />
             <SandboxUsage v-else-if="slug === `usage`" />
             <SandboxSecrets v-else-if="slug === `secrets`" />
+            <SandboxDataProtection v-else-if="slug === `data-protection`" />
             <SandboxEnvironment v-else-if="slug === `environment`" />
             <SandboxAccess v-else-if="slug === `access`" :open="openPersona" />
             <SandboxPersonas v-else-if="slug === `personas`" :open="openPersona" />
             <SandboxAreas v-else-if="slug === `areas`" />
+            <SandboxAudit v-else-if="slug === `audit`" />
             <SandboxModels v-else-if="slug === `models`" />
             <SandboxAgent v-else-if="slug === `agent`" />
             <SandboxExtensions v-else-if="slug === `extensions`" />

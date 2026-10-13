@@ -35,7 +35,14 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     // address (settings/member-getting-started.ts). Carried for the same reason: a checklist someone put away should not
     // come back after a move.
     { path: "member-getting-started.json", portability: "carry" },
+    // Who confirmed the AI notice, and which wording (settings/member-ai-literacy.ts). Carried: it is the record an office
+    // shows for the AI Act's literacy duty, and a move must not make everyone confirm again or lose who already did.
+    { path: "member-ai-literacy.json", portability: "carry" },
     { path: "activity.jsonl", portability: "carry" },
+    // The audit trail (one hash-chained file per month, the checkpoint retention leaves, the forwarder's cursor and the
+    // audit settings last seen). Carried: an office's trail has to survive the sandbox moving, and a fresh chain on the
+    // target would read as the old one having been deleted.
+    { path: "audit/", portability: "carry" },
     { path: "usage.jsonl", portability: "carry" },
     { path: "account-usage.json", portability: "carry" },
     // Per-account stay-away for a provider's usage endpoint. Carried, not re-earned: earning one costs the very read it

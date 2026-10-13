@@ -18,6 +18,8 @@ flowchart LR
 ```
 
 - Runs on the host: a laptop, a server or a hosted machine, never inside a sandbox, which cannot see its siblings.
+  When `INTENTIC_AT_REST_KEY_HOST_FILE` names an existing absolute file, connect mounts it read-only outside the
+  sandbox volumes and sets `INTENTIC_AT_REST_KEY_FILE`. Recreate keeps that mount through updates and rollbacks.
   The bootstrap shims download a fresh static binary on every run, except one pinned to the release already installed
   (`IC_VERSION` beside `IC_URL`, which the desktop app sets to its own); the desktop app and the machine agent call the
   installed one. An agent reaches it through a connected device's sandbox tools.

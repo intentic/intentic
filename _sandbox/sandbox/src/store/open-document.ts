@@ -59,6 +59,7 @@ export interface OpenOptions<V, T> {
     readonly mode?: number;
     // Refuse rather than set aside a write over content this build could not read: a file nothing can regrow.
     readonly onUnreadable?: "setAside" | "refuse";
+    readonly atRestPurpose?: string;
 }
 
 // A record of the document's unit, keyed by id: one value this build cannot read makes the record unreadable, as a

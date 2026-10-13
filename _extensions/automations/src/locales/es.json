@@ -141,7 +141,10 @@
         "whoChat": "Quién puede chatear",
         "whoRunsWhatPays": "Como quién se ejecuta, y qué lo paga.",
         "workLands": "El trabajo se integra",
-        "workspace": "Espacio de trabajo"
+        "workspace": "Espacio de trabajo",
+        "aiDisclosure": "Informar a los visitantes de que responde una IA",
+        "aiDisclosureText": "Aviso personalizado (opcional)",
+        "aiDisclosureDefault": "Las respuestas las escribe un asistente de IA y pueden contener errores."
     },
     "automationRow": {
         "alreadyFired": "Ya se disparó",

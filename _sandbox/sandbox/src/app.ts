@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { AT_REST_ACCOUNT_STORE, AT_REST_STORES, atRestActive } from "./store/encryption/at-rest.js";
 import type { HttpBindings } from "@hono/node-server";
 import { CONNECT_TOKEN_HEADER, type DaemonHealth, REQUEST_ID_HEADER, type RouteMeta, sandboxRouteFor } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
@@ -25,6 +26,7 @@ import { createAutomationFireRoute } from "./automations/fire.routes.js";
 import { createCapabilityAskRoutes } from "./capabilities/offers/ask.routes.js";
 import type { Services } from "./composition.js";
 import { type AppEnv, buildOrpcContext } from "./app-env.js";
+import { auditRequests } from "./audit/audit-http.js";
 import { createDiffRawRoute } from "./git/changes/diff-raw.js";
 import { createSpeechRoute, createSpeechStreamRoute } from "./speech/speech.routes.js";
 import { createVoiceRoute, createVoiceStreamRoute } from "./speech/voice/voice.routes.js";
@@ -198,6 +200,10 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         return next();
     });
 
+    // The audit trail's request side (audit/audit-http.ts): above authentication, so a refused change is recorded beside
+    // an accepted one, and inside the boot gate, so nothing is recorded against half-built state.
+    app.use("*", auditRequests(services.audit));
+
     // CORS is emitted in every auth mode, from the same allowlist the authorizer would use.
     // The local profile needs it too: its host serves the app from its own origin, so the browser preflights loopback
     // like any cross-origin call.
@@ -322,6 +328,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             }).by,
             // Which build answers (version, source commit, build time), so "is the fix live?" is one read.
             build: buildInfo(),
+            atRestEncryption: { active: atRestActive(), stores: atRestActive() ? [...AT_REST_STORES, AT_REST_ACCOUNT_STORE] : [] },
         };
         // Which proofs open a session here, so an editor knows before signing in whether this daemon takes the platform's
         // identity assertion. Absent on a loopback daemon, which asks for no proof at all.

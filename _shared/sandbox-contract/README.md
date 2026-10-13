@@ -13,8 +13,11 @@ flowchart LR
 ```
 
 - Each subject pairs a route group in `src/contracts/*.contract.ts` with its wire shapes in `src/schemas/`.
+  `/health.atRestEncryption` reports whether auth-root store encryption is active and names its covered stores;
+  older daemon responses leave it absent in `DaemonHealthReadingSchema`.
   `src/index.ts` assembles them into `sandboxContract`, which the daemon implements per domain and the browser calls
   through one typed client.
+- The AI literacy routes return the effective notice and its text hash, accept each member’s own confirmation, and let maintainers list confirmations. The notice stays off until opted in. Visitor chat disclosure is on unless explicitly disabled.
 - Policy sits beside each route: `procedure()` declares how a request authenticates, which member tier it needs and how
   far a control token reaches. Routes outside oRPC (streams, WebSocket upgrades, `/health`) are listed in
   `RAW_ROUTES`. One that answers plain JSON (`/members`, `/environment`, `/engines`, `/definition`) has its input and

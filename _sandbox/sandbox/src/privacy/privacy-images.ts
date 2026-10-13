@@ -13,6 +13,9 @@ export interface PrivacyImageArchive {
     readonly keep: (id: string, before: PrivacyImagePair["before"], after: PrivacyImagePair["after"]) => Promise<void>;
     // The pair under an id, or undefined: never kept, or since dropped for newer ones.
     readonly read: (id: string) => Promise<PrivacyImagePair | undefined>;
+    // Deletes every pair kept before `before`, with the vault's own retention (settings.retention.privacyVaultDays):
+    // the picture before masking holds the very values the vault ages out. Answers how many it deleted.
+    readonly expire: (before: Date) => Promise<number>;
 }
 
 // A busy afternoon's screenshots; each pair is two whole pictures.
@@ -51,6 +54,19 @@ export const filePrivacyImages = (dir: string, now: () => Date = () => new Date(
             await writeFile(fileOf(id), JSON.stringify(pair), { mode: 0o600 });
             await prune();
         },
+        expire: async (before) => {
+            const names = ((await readdir(dir).catch(undefinedIfMissing)) ?? []).filter((name) => name.endsWith(".json"));
+            let removed = 0;
+            for (const name of names) {
+                const at = (await stat(join(dir, name)).catch(undefinedIfMissing))?.mtimeMs;
+                if (at !== undefined && at < before.getTime()) {
+                    written.delete(name.slice(0, -".json".length));
+                    await rm(join(dir, name), { force: true });
+                    removed += 1;
+                }
+            }
+            return removed;
+        },
         read: async (id) => {
             if (!PRIVACY_IMAGE_ID.test(id)) {
                 return undefined;
@@ -84,5 +100,12 @@ export const memoryPrivacyImages = (kept = PRIVACY_IMAGES_KEPT): PrivacyImageArc
             }
         },
         read: async (id) => pairs.get(id),
+        expire: async (before) => {
+            const old = [...pairs].filter(([, pair]) => pair.at < before.toISOString());
+            for (const [id] of old) {
+                pairs.delete(id);
+            }
+            return old.length;
+        },
     };
 };

@@ -721,6 +721,14 @@ const setProvider = (provider: string): void => {
                             <span class="ui-field-label">{{ t(`automationFields.greetingOptional`) }}</span>
                             <input v-model="form.greeting" :placeholder="t(`automationFields.hiAskMeAnything`)" :class="ui.input()" />
                         </label>
+                        <label class="flex items-center gap-2 text-sm">
+                            <input v-model="form.aiDisclosure" type="checkbox" />
+                            {{ t(`automationFields.aiDisclosure`) }}
+                        </label>
+                        <label v-if="form.aiDisclosure" class="ui-field">
+                            <span class="ui-field-label">{{ t(`automationFields.aiDisclosureText`) }}</span>
+                            <input v-model="form.aiDisclosureText" maxlength="300" :placeholder="t(`automationFields.aiDisclosureDefault`)" :class="ui.input()" />
+                        </label>
                         <label class="ui-field">
                             <span class="ui-field-label">{{ t(`automationFields.dailyMessageLimit`) }}</span>
                             <input

@@ -23,6 +23,7 @@ pub struct DesktopInfo {
     /// This installation's own id, which This device's analytics send their events under — the same value the
     /// workspace window is marked with, so both faces report as one app (state.rs).
     pub install_id: String,
+    pub analytics_allowed: bool,
     /// Seconds a Docker start waits for its engine before it answers `tookTooLong`.
     pub engine_limit_seconds: u64,
     /// Seconds an `ic sandbox fix` may run before it is stopped (fix.rs).
@@ -107,6 +108,7 @@ pub fn desktop_info(state: State<'_, AppState>) -> DesktopInfo {
         app_url: state.app_url(),
         platform_url: state.platform_url(),
         install_id: state.install_id(),
+        analytics_allowed: crate::launch::analytics_allowed(),
         engine_limit_seconds: scripts::ENGINE_LIMIT.as_secs(),
         fix_limit_seconds: crate::fix::LIMIT.as_secs(),
     }

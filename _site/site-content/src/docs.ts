@@ -150,6 +150,18 @@ export const docsBook: Book = {
                             },
                         },
                         {
+                            // After Access: who may reach the box, then where its data may go and what an officer files.
+                            id: "data-protection",
+                            title: "Data protection",
+                            blurb: "Where data goes, and the documents a data protection officer files",
+                            meta: {
+                                title: "Data protection: data flows, GDPR documents and the public-office preset · intentic docs",
+                                description:
+                                    "See every way data can leave a sandbox, check its protections, download a record of processing, an impact assessment and the measures list filled in from its setup, and switch on stricter settings for a public office.",
+                                datePublished: "2026-10-13",
+                            },
+                        },
+                        {
                             // Includes agent-side symptoms too: a reader here often cannot tell which half broke.
                             id: "troubleshooting",
                             title: "Troubleshooting",

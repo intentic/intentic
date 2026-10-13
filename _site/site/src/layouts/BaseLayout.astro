@@ -13,6 +13,7 @@ import PageBackdrop from "../components/PageBackdrop.astro";
 import { platePreloadScript, THEME_COLOR, variantScript } from "../lib/variant";
 
 interface Props {
+    lang?: string;
     title?: string;
     description?: string;
     ogImage?: string;
@@ -76,7 +77,7 @@ const cfBeaconToken = import.meta.env.CF_BEACON_TOKEN;
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang={Astro.props.lang ?? "en"}>
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />

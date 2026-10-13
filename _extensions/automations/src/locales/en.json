@@ -229,7 +229,10 @@
         "whatNotificationSays": "What the notification says.",
         "notifyPlaceholder": "The page you were watching changed.",
         "guardPlaceholder": "test -n \"$(git status --porcelain)\"",
-        "tagPlaceholder": "latest"
+        "tagPlaceholder": "latest",
+        "aiDisclosure": "Tell visitors replies come from AI",
+        "aiDisclosureText": "Custom disclosure (optional)",
+        "aiDisclosureDefault": "Replies are written by an AI assistant and may contain mistakes."
     },
     "automationRow": {
         "alreadyFired": "Already fired",

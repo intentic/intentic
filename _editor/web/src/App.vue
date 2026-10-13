@@ -1,5 +1,7 @@
 <!-- Root shell: router outlet, the session runtime, and app-global overlays not owned by any route (sign-in gate, model picker). -->
 <script setup lang="ts">
+import AiLiteracyNotice from "./features/sandbox/ai-literacy/AiLiteracyNotice.vue";
+import AnalyticsConsent from "./app/AnalyticsConsent.vue";
 import HostModelPicker from "./features/chat/models/host/HostModelPicker.vue";
 import { computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -45,8 +47,10 @@ watch(user, (current, previous) => {
     <LocalRuntime v-if="user && activeSandboxId && local" />
     <SignInWall />
     <HostModelPicker />
+    <AiLiteracyNotice v-if="user && activeSandboxId && !local && workspaceTab" />
 <!-- THE ONE LANE. -->
     <NotificationHost />
+    <AnalyticsConsent />
 <!-- THE WINDOW'S OWN THREE BUTTONS, in the app's top row, inside the desktop app and nowhere else (workbench/window/WindowControls.vue). -->
     <WindowControls />
 </template>

@@ -1,3 +1,4 @@
+import { conversationReader, registryProvenance } from "../auth/scope/conversation-reader.js";
 import { randomBytes } from "node:crypto";
 import { type SharedConversation, shareContract, type ShareDetail } from "@intentic/sandbox-contract";
 import { SHARE_DIR, SHARE_ID, shareId } from "@intentic/sandbox-contract/share-paths";
@@ -78,7 +79,11 @@ export const createShareRoutes = (services: ShareRoutesDeps) => {
     };
 
     return {
-        list: i.list.handler(async () => ({ shares: (await services.shares.all()).map(withUrl) })),
+        // A link opens the frozen transcript to anyone, so it is listed only to those who may read the conversation.
+        list: i.list.handler(async ({ context }) => {
+            const reads = conversationReader(context.identity, registryProvenance(services.agents));
+            return { shares: (await services.shares.all()).filter((share) => reads(share.conversationId)).map(withUrl) };
+        }),
 
         create: i.create.handler(async ({ input }) => {
             const title = input.title.trim();

@@ -11,6 +11,7 @@ set -eu
 
 # PostHog upstreams for the /wire reverse proxy (nginx.conf). Defaulted rather than required: an unset
 # POSTHOG_KEY already leaves analytics off in the SPA, and these only matter for a project in another region.
+export POSTHOG_UI_HOST="${POSTHOG_UI_HOST:-https://us.posthog.com}"
 export POSTHOG_API_HOST="${POSTHOG_API_HOST:-us.i.posthog.com}"
 export POSTHOG_ASSETS_HOST="${POSTHOG_ASSETS_HOST:-us-assets.i.posthog.com}"
 
@@ -32,7 +33,7 @@ envsubst '$NGINX_RESOLVER $POSTHOG_API_HOST $POSTHOG_ASSETS_HOST $WEB_BUILD' \
 # Staged through /tmp and written back with cat so the target keeps the COPY layer's 0644 (a fresh redirect
 # target would too, but never perms that 403 under the unprivileged nginx worker). An unset POSTHOG_KEY
 # becomes "" here, which is what switches the SPA's analytics off.
-envsubst '$API_URL $POSTHOG_KEY' < /usr/share/nginx/html/assets/js/env.js > /tmp/env.js
+envsubst '$API_URL $POSTHOG_KEY $POSTHOG_UI_HOST' < /usr/share/nginx/html/assets/js/env.js > /tmp/env.js
 cat /tmp/env.js > /usr/share/nginx/html/assets/js/env.js
 
 # The same config inlined into index.html, in place of the tag that loads it: that tag is a render-blocking script

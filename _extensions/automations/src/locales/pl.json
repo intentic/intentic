@@ -229,7 +229,10 @@
         "whatNotificationSays": "Co mówi powiadomienie.",
         "notifyPlaceholder": "Obserwowana strona się zmieniła.",
         "guardPlaceholder": "test -n \"$(git status --porcelain)\"",
-        "tagPlaceholder": "latest"
+        "tagPlaceholder": "latest",
+        "aiDisclosure": "Informuj odwiedzających, że odpowiada AI",
+        "aiDisclosureText": "Własna informacja (opcjonalnie)",
+        "aiDisclosureDefault": "Odpowiedzi pisze asystent AI. Mogą zawierać błędy."
     },
     "automationRow": {
         "alreadyFired": "Już uruchomiona",

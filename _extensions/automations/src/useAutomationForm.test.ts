@@ -368,6 +368,8 @@ describe(`editing preserves fields outside the changed control`, () => {
                 googleClientId: `client-id`,
                 title: `Support`,
                 greeting: `Hello`,
+                aiDisclosure: false,
+                aiDisclosureText: `You are talking to AI.`,
                 accent: `#123456`,
                 position: `bottom-left`,
                 dailyMessageMax: 40,

@@ -530,6 +530,7 @@ pub enum WindowVerb {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Link {
+    AnalyticsConsent(bool),
     Setup(Box<SetupArgs>),
     Recreate(RecreateArgs),
     Fix(FixArgs),
@@ -678,6 +679,11 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
         "signin" => Some(Link::SignIn {
             switch_account: get("switch").is_some(),
         }),
+        "analytics" if source.is_app() => match get("choice")?.as_str() {
+            "allow" => Some(Link::AnalyticsConsent(true)),
+            "deny" => Some(Link::AnalyticsConsent(false)),
+            _ => None,
+        },
         "update" => source.is_app().then_some(Link::Update),
         "launcher" => source.is_app().then(|| Link::Launcher {
             files: get("to").as_deref() == Some("files"),

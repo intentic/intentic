@@ -10,7 +10,7 @@ const root = repoRoot(import.meta.url);
 // build is plain static files bundled into the app (frontendDist: ../dist).
 export default defineConfig({
     /* The analytics key, baked in at build time, this app is a compiled binary. */
-    define: { __POSTHOG_KEY__: JSON.stringify(process.env.POSTHOG_KEY ?? ``) },
+    define: { __POSTHOG_KEY__: JSON.stringify(process.env.POSTHOG_KEY ?? ``), __POSTHOG_HOST__: JSON.stringify(process.env.POSTHOG_HOST ?? `https://us.i.posthog.com`) },
     plugins: [vue(), tailwindcss()],
     resolve: {
         alias: {

@@ -1,3 +1,4 @@
+import type { AuditEvent } from "@intentic/sandbox-contract";
 import { DEFAULT_SAFETY_POLICY, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { portSlotsFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { unstubbed } from "@intentic/testing";
@@ -61,6 +62,34 @@ export type WideSeamOverrides = AuthFakeOverrides &
     WorkspaceFakeOverrides & { readonly sandboxSettings?: Partial<Services["sandboxSettings"]> | undefined };
 export type ServiceOverrides = Partial<Omit<Services, keyof WideSeamOverrides>> & WideSeamOverrides;
 
+// An audit trail that keeps what is recorded in memory and lists nothing back.
+export const inertAudit = (): Services["audit"] & { readonly recorded: AuditEvent[] } => {
+    const recorded: AuditEvent[] = [];
+    return {
+        recorded,
+        record: (event) => void recorded.push(event),
+        adoptSettings: async () => {},
+        recordsReads: () => false,
+        status: async () => ({ segments: [] }),
+        start: () => {},
+        stop: () => {},
+        tick: async () => {},
+        log: {
+            record: (event) => void recorded.push(event),
+            flush: async () => {},
+            list: async () => ({ records: [] }),
+            verify: async () => ({ ok: true, checked: 0, segments: 0, torn: false }),
+            exportRange: async () => ({ filename: "audit.jsonl", jsonl: "", count: 0 }),
+            after: async () => [],
+            newestAt: async () => undefined,
+            oldestAt: async () => undefined,
+            segments: async () => [],
+            prune: async () => [],
+            onAppend: () => {},
+        },
+    };
+};
+
 // The members Services declares itself that no route suite drives, each empty or inert: nothing installed, tunnelled,
 // presented, logged or left to reap. A factory, so each suite's services hold their own.
 const inertOwnMembers = () =>
@@ -85,6 +114,9 @@ const inertOwnMembers = () =>
         presentation: async () => undefined,
         // Nothing on record, and an append is dropped.
         activity: { append: async () => {}, list: async () => [] },
+        // The audit trail, in memory: what a request recorded is kept on `recorded`, reads are not recorded, and the trail
+        // itself reads as empty. A suite asserting on records reads them there.
+        audit: inertAudit(),
         // No conversation widened past its persona until a suite answers a grant need; in memory, since every planned
         // turn reads it.
         conversationGrants: memoryConversationGrants(),

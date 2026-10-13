@@ -13,6 +13,7 @@ const config = (overrides: Partial<WebchatPublicConfig> = {}): WebchatPublicConf
     access: `public`,
     requireName: false,
     antiBot: `off`,
+    aiDisclosure: true,
     ...overrides,
 });
 

@@ -6,7 +6,7 @@ import { nextTick, ref } from "vue";
 // re-imported analytics modules (one evaluation per test) watch the same instance.
 const user = ref<User | null>(null);
 jest.mock("posthog-js", () => ({
-    posthog: { init: jest.fn(), identify: jest.fn(), reset: jest.fn(), capture: jest.fn(), register: jest.fn(), alias: jest.fn() },
+    posthog: { init: jest.fn(), identify: jest.fn(), reset: jest.fn(), capture: jest.fn(), opt_in_capturing: jest.fn(), opt_out_capturing: jest.fn(), startSessionRecording: jest.fn(), stopSessionRecording: jest.fn(), register: jest.fn(), alias: jest.fn() },
 }));
 
 // environment.ts reads `window.env` once, at import; this is the same object under the same name, mutated per case,
@@ -15,7 +15,7 @@ const environment = {
     production: false,
     api: { url: `` },
     auth: { googleClientId: `` },
-    analytics: { posthogKey: ``, posthogHost: `https://app.intentic.dev/wire` },
+    analytics: { posthogKey: ``, posthogHost: `https://app.intentic.dev/wire`, posthogUiHost: `https://eu.posthog.com` },
     afterSignOut: ``,
 };
 jest.mock("./environments/environment", () => ({ environment }));
@@ -32,6 +32,8 @@ const bootAnalytics = async (posthogKey: string, desktop?: { version: string; in
         ...(desktop !== undefined ? { __INTENTIC_DESKTOP__: desktop } : {}),
     });
     const { posthog } = await import(`posthog-js`);
+    const { analyticsChoice } = await import("./analyticsConsent");
+    analyticsChoice.value = `allow`;
     const analytics = await freshImport<typeof import("./analytics")>("./analytics", import.meta.url);
     await analytics.initAnalytics(routePatternOf, user);
     return { posthog, analytics };
@@ -188,6 +190,8 @@ describe(`the SDK loading after the first screen`, () => {
         environment.analytics.posthogKey = `phc_test`;
         stubGlobal(`window`, { env: environment });
         const { posthog } = await import(`posthog-js`);
+        const { analyticsChoice } = await import("./analyticsConsent");
+        analyticsChoice.value = `allow`;
         const analytics = await freshImport<typeof import("./analytics")>("./analytics", import.meta.url);
         const loading = analytics.initAnalytics(routePatternOf, user);
         analytics.track(`sandbox_connected`, { first: true });
@@ -205,11 +209,92 @@ describe(`the SDK loading after the first screen`, () => {
         stubGlobal(`window`, { env: environment });
         stubGlobal(`matchMedia`, touch);
         const { posthog } = await import(`posthog-js`);
+        const { analyticsChoice } = await import("./analyticsConsent");
+        analyticsChoice.value = `allow`;
         await (await freshImport<typeof import("./analytics")>("./analytics", import.meta.url)).initAnalytics(routePatternOf, user);
         expect(mocked(posthog.init).mock.calls.at(-1)![1]!.session_recording!.blockSelector).toContain(`.chat-turns`);
 
         unstubAllGlobals();
         const { posthog: desk } = await bootAnalytics(`phc_test`);
         expect(mocked(desk.init).mock.calls.at(-1)![1]!.session_recording!.blockSelector).not.toContain(`.chat-turns`);
+    });
+});
+
+
+describe(`consent`, () => {
+    it(`keeps the SDK and milestones silent until Allow, including after No thanks`, async () => {
+        environment.analytics.posthogKey = `phc_test`;
+        stubGlobal(`window`, { env: environment });
+        const { analyticsChoice } = await import(`./analyticsConsent`);
+        analyticsChoice.value = undefined;
+        const { posthog } = await import(`posthog-js`);
+        const analytics = await freshImport<typeof import("./analytics")>("./analytics", import.meta.url);
+        const loading = analytics.initAnalytics(routePatternOf, user);
+        analytics.track(`early`);
+        expect(posthog.init).not.toHaveBeenCalled();
+        analyticsChoice.value = `deny`;
+        await nextTick();
+        analytics.track(`denied`);
+        expect(posthog.init).not.toHaveBeenCalled();
+        analyticsChoice.value = `allow`;
+        await loading;
+        expect(posthog.capture).not.toHaveBeenCalledWith(`early`);
+        expect(posthog.capture).not.toHaveBeenCalledWith(`denied`);
+    });
+});
+
+
+describe(`sandbox switch`, () => {
+    it(`stops capture while settings are unknown or off and resumes outside that sandbox`, async () => {
+        environment.analytics.posthogKey = `phc_test`;
+        stubGlobal(`window`, { env: environment });
+        const { analyticsChoice } = await import(`./analyticsConsent`);
+        const { activeSandboxId } = await import(`../lib/activeSandbox`);
+        const { queryClient } = await import(`../lib/queryPersistence`);
+        const { rpcKey } = await import(`../lib/queryKeys`);
+        analyticsChoice.value = `allow`;
+        activeSandboxId.value = `analytics-test`;
+        const route = ref(`chat`);
+        const { posthog } = await import(`posthog-js`);
+        const analytics = await freshImport<typeof import("./analytics")>("./analytics", import.meta.url);
+        const { sandboxAnalyticsGate } = await import(`../features/sandbox/agent-settings/safety/analyticsGate`);
+        await analytics.initAnalytics(routePatternOf, user, sandboxAnalyticsGate(route));
+        analytics.track(`unknown`);
+        expect(posthog.capture).not.toHaveBeenCalled();
+        queryClient.setQueryData(rpcKey(`settings.get`), { productAnalytics: false });
+        analytics.track(`off`);
+        expect(posthog.capture).not.toHaveBeenCalled();
+        route.value = `settings`;
+        await nextTick();
+        analytics.track(`outside`);
+        expect(posthog.capture).toHaveBeenCalledWith(`outside`, undefined);
+        route.value = `chat`;
+        await nextTick();
+        analytics.track(`back-inside`);
+        expect(posthog.capture).not.toHaveBeenCalledWith(`back-inside`, undefined);
+        queryClient.removeQueries({ queryKey: rpcKey(`settings.get`) });
+        activeSandboxId.value = undefined;
+    });
+
+    it(`allows a sandbox whose daemon predates the switch, and records nothing about a sandbox until it answered`, async () => {
+        environment.analytics.posthogKey = `phc_test`;
+        stubGlobal(`window`, { env: environment });
+        const { analyticsChoice } = await import(`./analyticsConsent`);
+        const { activeSandboxId } = await import(`../lib/activeSandbox`);
+        const { queryClient } = await import(`../lib/queryPersistence`);
+        const { rpcKey } = await import(`../lib/queryKeys`);
+        analyticsChoice.value = `allow`;
+        activeSandboxId.value = `older-daemon`;
+        const { posthog } = await import(`posthog-js`);
+        const analytics = await freshImport<typeof import("./analytics")>("./analytics", import.meta.url);
+        const { sandboxAnalyticsGate } = await import(`../features/sandbox/agent-settings/safety/analyticsGate`);
+        await analytics.initAnalytics(routePatternOf, user, sandboxAnalyticsGate(ref(`chat`)));
+        analytics.track(`before-answer`);
+        expect(posthog.capture).not.toHaveBeenCalledWith(`before-answer`, undefined);
+        queryClient.setQueryData(rpcKey(`settings.get`), { timezone: `` });
+        analytics.track(`after-answer`);
+        expect(posthog.capture).toHaveBeenCalledWith(`after-answer`, undefined);
+        queryClient.removeQueries({ queryKey: rpcKey(`settings.get`) });
+        activeSandboxId.value = undefined;
     });
 });

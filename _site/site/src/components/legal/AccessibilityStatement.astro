@@ -1,0 +1,64 @@
+---
+import { LEGAL_ENTITY_NAME } from "@intentic/constants";
+import { LEGAL_CONTACT_EMAIL } from "@intentic/site-content/legal";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import Footer from "../Footer.astro";
+import Nav from "../Nav.astro";
+
+interface Props { language: "en" | "pl" }
+const pl = Astro.props.language === "pl";
+const mail = `mailto:${LEGAL_CONTACT_EMAIL}?subject=${encodeURIComponent(pl ? `Dostępność cyfrowa intentic` : `intentic accessibility`)}`;
+---
+
+<BaseLayout
+    lang={pl ? "pl" : "en"}
+    title={pl ? "Deklaracja dostępności · intentic" : "Accessibility statement · intentic"}
+    description={pl ? "Stan dostępności cyfrowej strony intentic i aplikacji oraz sposób zgłaszania problemów." : "Accessibility status of the intentic website and app, and how to report a problem."}
+>
+    <Nav />
+    <main class="flex-1">
+        <article class="below-bar mx-auto max-w-2xl px-6 pb-24 text-sm leading-7 text-muted">
+            <p class="eyebrow">{pl ? "Dostępność" : "Accessibility"}</p>
+            <h1 class="display mt-3 text-3xl font-semibold text-content sm:text-4xl">{pl ? "Deklaracja dostępności" : "Accessibility statement"}</h1>
+            <p class="mt-5">
+                {pl ? `${LEGAL_ENTITY_NAME} zobowiązuje się zapewnić dostępność cyfrową swoich usług. Ta deklaracja dotyczy strony internetowej ` : `${LEGAL_ENTITY_NAME} is committed to making its digital services accessible. This statement covers the `}
+                <a class="link underline" href="https://intentic.dev/">intentic.dev</a>
+                {pl ? ` oraz aplikacji internetowej ` : ` website and the `}
+                <a class="link underline" href="https://app.intentic.dev/">app.intentic.dev</a>
+                {pl ? `. Została przygotowana według struktury polskiego wzoru deklaracji dostępności. Operator intentic nie jest podmiotem publicznym; urząd korzystający z intentic publikuje własną deklarację.` : ` web application. It follows the structure of the Polish public-sector accessibility statement template. The intentic operator is not a public body; an office using intentic publishes its own statement.`}
+            </p>
+            <p class="mt-3"><a class="link underline" href={pl ? "/accessibility/" : "/pl/deklaracja-dostepnosci/"}>{pl ? "Read this statement in English" : "Przeczytaj deklarację po polsku"}</a></p>
+
+            <h2 class="mt-10 text-lg font-semibold text-content">{pl ? "Daty i stan zgodności" : "Dates and compliance status"}</h2>
+            <p class="mt-3">{pl ? "Data pierwszej publikacji strony: 6 lipca 2026 r. Data ostatniej istotnej aktualizacji: 13 października 2026 r." : "Website first published: 6 July 2026. Last substantial update: 13 October 2026."}</p>
+            <p class="mt-3">{pl ? "Strona internetowa i aplikacja są częściowo zgodne z wymaganiami WCAG 2.1 na poziomie AA. Ocena obejmuje tylko niżej wymienione ekrany i automatyczne reguły; nie potwierdza pełnej zgodności wszystkich treści i funkcji." : "The website and web app are partially compliant with WCAG 2.1 AA. The assessment covers only the screens and automated rules listed below; it does not establish full compliance across all content and features."}</p>
+
+            <h2 class="mt-10 text-lg font-semibold text-content">{pl ? "Niedostępne treści i ograniczenia" : "Non-accessible content and limits"}</h2>
+            <p class="mt-3">{pl ? "Na zbadanych ekranach użytkownika po poprawkach axe-core nie wykrył naruszeń WCAG 2.1 A/AA. W deweloperskim zestawie komponentów pozostają przykłady o zbyt słabym kontraście tekstu oraz obszar przewijany niedostępny z klawiatury. Te same style lub wzorce mogą pojawić się w innych ekranach. Nie powołujemy się na wyjątki ustawowe ani nadmierne obciążenie." : "After the fixes, axe-core found no WCAG 2.1 A/AA violations on the sampled user screens. The developer component kit still has examples with insufficient text contrast and a scrollable region without keyboard access. The same styles or patterns may occur elsewhere. We do not invoke statutory exemptions or disproportionate burden."}</p>
+            <p class="mt-3">{pl ? "Część zgodności pozostaje niepotwierdzona: nie przeprowadzono pełnego badania z czytnikami ekranu, wyłącznie klawiaturą i przy powiększeniu, ani badania wszystkich ekranów, stanów błędów, rozszerzeń i treści tworzonych przez użytkowników. Funkcje te mogą zawierać bariery, których automatyczny test nie wykrywa. Pełny audyt oraz zgłoszenia użytkowników posłużą do uzupełnienia tej listy." : "Some conformance remains unverified: we have not completed a full screen-reader, keyboard-only or zoom review, or reviewed every screen, error state, extension and user-created item. These areas may contain barriers that automated checks cannot detect. A full audit and user reports will inform updates to this list."}</p>
+
+            <h2 class="mt-10 text-lg font-semibold text-content">{pl ? "Przygotowanie deklaracji i skróty klawiszowe" : "How we prepared this statement and keyboard shortcuts"}</h2>
+            <p class="mt-3">{pl ? "Deklarację sporządzono 13 października 2026 r. na podstawie samooceny: automatycznego badania axe-core z regułami WCAG 2.1 A/AA w przeglądarce Chromium. Zbadano ekran logowania, listę agentów, czat z kompozytorem, ustawienia, obszar roboczy i zestaw komponentów w wersji demonstracyjnej oraz stronę główną, politykę prywatności, dokumentację i cennik serwisu publicznego. Automatyczna samoocena nie zastępuje audytu eksperckiego." : "Prepared on 13 October 2026 through self-assessment using axe-core's WCAG 2.1 A/AA rules in Chromium. We sampled sign-in, agents, chat and composer, settings, workspace and the component kit in the demo, plus the public home, privacy, docs and pricing pages. Automated self-assessment does not replace an expert audit."}</p>
+            <p class="mt-3">{pl ? "Działają standardowe skróty przeglądarki i systemu. Aplikacja oferuje także skróty opisane w jej ustawieniach klawiatury." : "Standard browser and operating-system shortcuts work. The app also lists its own shortcuts in keyboard settings."}</p>
+
+            <h2 class="mt-10 text-lg font-semibold text-content">{pl ? "Informacje zwrotne i dane kontaktowe" : "Feedback and contact"}</h2>
+            <p class="mt-3">{pl ? "Problemy z dostępnością, prośby o udostępnienie treści w alternatywnej formie i uwagi wyślij na" : "Send accessibility problems, requests for content in another format, and feedback to"} <a class="link underline" href={mail}>{LEGAL_CONTACT_EMAIL}</a>. {pl ? "Podaj imię i nazwisko, sposób kontaktu, adres strony lub nazwę funkcji, opis problemu oraz preferowany sposób jego rozwiązania. Nie przesyłaj wrażliwych danych z pracy urzędu." : "Include your name, contact method, page address or feature name, the problem and your preferred solution. Do not send sensitive office work data."}</p>
+            <p class="mt-3">{pl ? "Odpowiemy bez zbędnej zwłoki, zwykle w ciągu 7 dni. Jeśli rozwiązanie potrwa dłużej, podamy nowy termin, nie dłuższy niż 2 miesiące, lub zaproponujemy alternatywny dostęp. Są to nasze dobrowolne zobowiązania dotyczące usług intentic." : "We aim to respond without undue delay, normally within 7 days. If resolution takes longer, we will give a new date, no later than 2 months, or offer another way to access the content. These are our voluntary commitments for intentic services."}</p>
+
+            <h2 class="mt-10 text-lg font-semibold text-content">{pl ? "Wniosek i skarga" : "Requests and complaints"}</h2>
+            <p class="mt-3">{pl ? "Jeżeli korzystasz z wdrożenia prowadzonego przez urząd, możesz złożyć do tego urzędu wniosek o zapewnienie dostępności cyfrowej lub o alternatywny dostęp. Gdy jego odpowiedź jest niewystarczająca, możesz wnieść skargę zgodnie z procedurą wskazaną w deklaracji tego urzędu. Informacje o dalszych możliwościach uzyskasz u" : "If you use a deployment run by a public office, request digital accessibility or alternative access from that office. If its response is insufficient, use the complaint procedure in that office's statement. For further help, contact the"} <a class="link underline" href="https://bip.brpo.gov.pl/">{pl ? "Rzecznika Praw Obywatelskich" : "Polish Commissioner for Human Rights"}</a>. {pl ? "Uwagi dotyczące samego intentic możesz także skierować na powyższy adres e-mail." : "You can also send feedback about intentic itself to the email above."}</p>
+
+            <h2 class="mt-10 text-lg font-semibold text-content">{pl ? "Pozostałe informacje" : "Other information"}</h2>
+            <h3 class="mt-4 font-semibold text-content">{pl ? "Aplikacje mobilne" : "Mobile apps"}</h3>
+            <p class="mt-2">{pl ? "Ta deklaracja dotyczy strony i aplikacji internetowej. Nie obejmuje natywnej aplikacji mobilnej." : "This statement covers the website and web app. It does not cover a native mobile application."}</p>
+            <h3 class="mt-4 font-semibold text-content">{pl ? "Dostępność architektoniczna" : "Architectural accessibility"}</h3>
+            <p class="mt-2">{pl ? "Nie dotyczy usługi świadczonej online. Urząd udostępniający intentic opisuje dostępność swojej siedziby we własnej deklaracji." : "Not applicable to this online service. An office offering intentic describes its premises in its own statement."}</p>
+            <h3 class="mt-4 font-semibold text-content">{pl ? "Dostępność komunikacyjno-informacyjna" : "Communication accessibility"}</h3>
+            <p class="mt-2">{pl ? "Kontakt z operatorem usługi odbywa się przez powyższy adres e-mail. Informacje o tłumaczu języka migowego i innych formach kontaktu z urzędem podaje dany urząd." : "Contact the service operator through the email above. Each office provides information about sign-language interpretation and its other contact methods."}</p>
+
+            <h2 class="mt-10 text-lg font-semibold text-content">{pl ? "Informacja dla urzędów" : "For public offices"}</h2>
+            <p class="mt-3">{pl ? "Urząd wdrażający intentic dla pracowników lub obywateli musi opublikować własną deklarację dotyczącą konkretnego wdrożenia. Może wykorzystać opis wspólnych ekranów i metody badania z tej strony jako punkt wyjścia. Musi sam ocenić konfigurację, rozszerzenia, treści, integracje, własne dane kontaktowe, procedurę skargową i dostępność swojej siedziby." : "An office deploying intentic for staff or citizens must publish its own statement for that deployment. It may use this page's shared-screen findings and test method as a starting point. It must assess its configuration, extensions, content, integrations, contact details, complaint procedure and premises."}</p>
+        </article>
+    </main>
+    <Footer />
+</BaseLayout>

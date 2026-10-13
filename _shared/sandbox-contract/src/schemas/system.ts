@@ -390,6 +390,7 @@ export const DaemonHealthSchema = z.object({
     // How the world reaches here: a dialed tunnel, or loopback only.
     reachedBy: z.enum(["tunnel", "loopback"]),
     build: BuildStampSchema,
+    atRestEncryption: z.object({ active: z.boolean(), stores: z.array(z.string()) }),
     // Which proofs this daemon takes to open a session, read before any sign-in since the route list arrives only after
     // one. Absent on a daemon from before email sign-in: Google, and the owner ticket on a hosted machine.
     signIn: z.object({ proofs: z.array(ProofMethodSchema) }).optional(),
@@ -410,6 +411,7 @@ export const DaemonHealthReadingSchema = z.object({
     reach: ReachStateSchema.optional().catch(undefined),
     reachedBy: z.string().optional().catch(undefined),
     build: BuildStampSchema.optional().catch(undefined),
+    atRestEncryption: z.object({ active: z.boolean(), stores: z.array(z.string()) }).optional().catch(undefined),
     // Proof names this build may not know are kept as text, so a newer daemon's list still reads.
     signIn: z
         .object({ proofs: z.array(z.string()).catch([]) })

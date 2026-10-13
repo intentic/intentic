@@ -253,6 +253,17 @@ export const WebchatConfigSchema = z.object({
     // How long a visitor thread resumes the same conversation before a new message starts a fresh one; absent uses the
     // daemon's own default.
     sessionTtlMinutes: z.number().int().positive().optional(),
+    // The AI Act (Art. 50(1)) has a person told they are talking to an AI unless it is obvious. Absent means shown, since
+    // a one-line label costs nothing and leaving it out is the decision that needs making on purpose.
+    aiDisclosure: z
+        .boolean()
+        .optional()
+        .describe("Tell visitors, in the panel, that the replies come from an AI. Absent means on."),
+    aiDisclosureText: z
+        .string()
+        .max(300)
+        .optional()
+        .describe("Your own wording for that line. Absent uses the built-in one in the visitor's language."),
 });
 export type WebchatConfig = z.infer<typeof WebchatConfigSchema>;
 // Default daily agent-turn ceiling for an unconfigured Visitor chat; high enough for real traffic, low enough to blunt a
@@ -276,6 +287,8 @@ export const WebchatPublicConfigSchema = z.object({
     antiBot: z.enum(["turnstile", "pow", "off"]),
     turnstileSiteKey: z.string().optional(),
     googleClientId: z.string().optional(),
+    aiDisclosure: z.boolean(),
+    aiDisclosureText: z.string().optional(),
 });
 export type WebchatPublicConfig = z.infer<typeof WebchatPublicConfigSchema>;
 // A proof-of-work challenge: find a nonce whose SHA-256 of `${salt}:${nonce}` starts with `difficulty` zero bits. One

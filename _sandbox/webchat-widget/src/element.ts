@@ -39,6 +39,17 @@ const POLL_BACKOFF_MAX = 5;
 // Target of the "powered by" link; often the only Intentic surface a visitor sees.
 const INTENTIC_URL = "https://intentic.dev";
 
+const DISCLOSURE = {
+    en: "Replies are written by an AI assistant and may contain mistakes.",
+    pl: "Odpowiedzi pisze asystent AI. Mogą zawierać błędy.",
+    de: "Die Antworten stammen von einem KI-Assistenten und können Fehler enthalten.",
+    fr: "Les réponses sont rédigées par un assistant IA et peuvent contenir des erreurs.",
+    es: "Las respuestas las escribe un asistente de IA y pueden contener errores.",
+} satisfies Record<string, string>;
+
+export const disclosureText = (config: Pick<WebchatPublicConfig, "aiDisclosureText">, language: string): string =>
+    config.aiDisclosureText?.trim() || Object.entries(DISCLOSURE).find(([key]) => key === language.toLowerCase().split("-")[0])?.[1] || DISCLOSURE.en;
+
 interface Turn {
     readonly author: "visitor" | "agent";
     text: string;
@@ -104,12 +115,13 @@ export class VisitorChatElement extends HTMLElement {
     ${LAUNCHER_ICON}
     <span class="unread" part="unread" hidden></span>
 </button>
-<div class="panel" role="dialog" aria-modal="false" aria-label="${escapeHtml(this.config.title)}" hidden>
+<div class="panel" role="dialog" aria-modal="false" aria-label="${escapeHtml(this.config.title)}" ${this.config.aiDisclosure === false ? "" : 'aria-describedby="ai-disclosure"'} hidden>
     <div class="header">
         <span class="title">${escapeHtml(this.config.title)}</span>
         <button class="icon-button reset" aria-label="Start a new chat" title="Start a new chat">${RESET_ICON}</button>
         <button class="icon-button close" aria-label="Close chat">${CLOSE_ICON}</button>
     </div>
+    ${this.config.aiDisclosure === false ? "" : `<p id="ai-disclosure" class="ai-disclosure">${escapeHtml(disclosureText(this.config, navigator.language))}</p>`}
     <div class="log" role="log" aria-live="polite"></div>
     <div class="gate" hidden>
         <p class="gate-note"></p>

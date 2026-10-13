@@ -1,3 +1,4 @@
+import { noteAudit } from "../audit/audit-http.js";
 import {
     type Fence,
     type SystemEvent,
@@ -362,6 +363,8 @@ export const createSystemRoutes = (services: Services) => {
             if (services.auth === undefined || context.identity === undefined) {
                 throw new ORPCError("UNAUTHORIZED", { message: "no verified identity to mint a session for" });
             }
+            // A renewal is the same sign-in carrying on; only a fresh proof is a sign-in the audit trail records.
+            noteAudit(context.identity.renewal === true ? { skip: true } : { details: { methods: [...context.identity.methods] } });
             const { token, expiresAt } = await services.auth.mintSession(context.identity);
             return { token, expiresAt, email: context.identity.email };
         }),

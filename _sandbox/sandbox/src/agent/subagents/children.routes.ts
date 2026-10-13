@@ -1,3 +1,4 @@
+import { conversationReader, registryProvenance } from "../../auth/scope/conversation-reader.js";
 import type { Context } from "hono";
 import { AgentHarnessSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
@@ -259,8 +260,10 @@ export const createChildrenRoutes = (services: Services) => ({
     /** GET /children — this conversation's children, every kind, live first. */
     list: async (c: Context<AppEnv>): Promise<Response> => {
         const conversationId = conversationOf(services, c);
+        // The header is the caller's to write: a member reads only the children of a conversation they may read.
+        const reads = conversationReader(c.get("identity"), registryProvenance(services.agents));
         const sessions =
-            conversationId === undefined
+            conversationId === undefined || !reads(conversationId)
                 ? []
                 : listSubagentSessions(services.conversations).filter((session) => session.conversationId === conversationId);
         return c.json({ sessions });

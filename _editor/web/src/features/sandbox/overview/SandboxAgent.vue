@@ -11,6 +11,7 @@ import AgentChecks from "../agent-settings/behaviour/AgentChecks.vue";
 import AgentClock from "../agent-settings/behaviour/AgentClock.vue";
 import AgentCodeSearch from "../agent-settings/behaviour/AgentCodeSearch.vue";
 import AgentCommandOutput from "../agent-settings/behaviour/AgentCommandOutput.vue";
+import AgentDataRetention from "../agent-settings/behaviour/AgentDataRetention.vue";
 import AgentFinishedWork from "../agent-settings/behaviour/AgentFinishedWork.vue";
 import AgentInstructions from "../agent-settings/skills/AgentInstructions.vue";
 import AgentMemory from "../agent-settings/skills/AgentMemory.vue";
@@ -18,6 +19,8 @@ import AgentMemoryImport from "../agent-settings/skills/AgentMemoryImport.vue";
 import AgentModels from "../agent-settings/models/AgentModels.vue";
 import AgentRecovery from "../agent-settings/behaviour/AgentRecovery.vue";
 import AgentRepoChecks from "../agent-settings/behaviour/AgentRepoChecks.vue";
+import AiLiteracySettings from "../ai-literacy/AiLiteracySettings.vue";
+import SandboxAnalytics from "../agent-settings/safety/SandboxAnalytics.vue";
 import AgentPrivacyShield from "../agent-settings/safety/AgentPrivacyShield.vue";
 import AgentProjectInstalls from "../agent-settings/safety/AgentProjectInstalls.vue";
 import AgentSafetyJudge from "../agent-settings/safety/AgentSafetyJudge.vue";
@@ -149,6 +152,8 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
             <AgentSafetyPolicy />
             <!-- After the command gate, before its log: the other thing kept from leaving, personal data bound for a model provider, and the log still sits last. -->
             <AgentPrivacyShield />
+            <AiLiteracySettings />
+            <SandboxAnalytics />
             <AgentSafetyLog />
         </template>
 
@@ -156,6 +161,8 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
         <template v-else>
             <AgentChecks />
             <AgentFinishedWork />
+            <!-- Under the archive row: archiving puts a card away, this is what deletes, and the two read as a pair. -->
+            <AgentDataRetention />
             <AgentChangelog />
             <AgentRecovery />
             <!-- Beside the automation failure limit above, which is the other setting that only matters once

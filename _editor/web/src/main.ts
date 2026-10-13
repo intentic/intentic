@@ -5,10 +5,11 @@ import { installChunkRecovery, installUi, isStaleChunkError, recoverStaleChunk }
 import { setDeveloperBuild } from "@intentic/ui/motion";
 import { highlightInWorker } from "@intentic/ui/markdown";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { createApp } from "vue";
+import { computed, createApp } from "vue";
 import App from "./App.vue";
 import { startAppI18n } from "./app/i18n";
 import { initAnalytics } from "./app/analytics";
+import { sandboxAnalyticsGate } from "./features/sandbox/agent-settings/safety/analyticsGate";
 import { useAuth } from "./client/auth/useAuth";
 import { startAudienceSync } from "./client/sandbox/audienceSync";
 import { dropOutdatedMirrors } from "./app/buildEpoch";
@@ -67,8 +68,12 @@ installDesktopLinks();
 // Also the app's alone: a loaded workspace is taken to a sandbox picked in a local window without a reload.
 installDesktopOpener(openInPage);
 
-// Loads the SDK itself at the page's first idle moment (analytics.ts), so it never stands in front of the first screen.
-void initAnalytics((path) => routePatternOf(router, path), useAuth().user);
+// Loads the SDK only after consent and the page's first idle moment (analytics.ts).
+void initAnalytics(
+    (path) => routePatternOf(router, path),
+    useAuth().user,
+    sandboxAnalyticsGate(computed(() => String(router.currentRoute.value.name ?? ``))),
+);
 
 // Before mount, so a slow first paint's spans land in the ring buffer too (`__intenticPerf` in the console).
 installPerfConsole();

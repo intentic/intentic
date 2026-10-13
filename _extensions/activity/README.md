@@ -12,7 +12,7 @@ flowchart LR
     view --> timeline["Episode timeline"]
 ```
 
-- Runs in the browser, compiled into the web bundle as a first-party extension. It has no backend: the daemon writes the log in [activity-store.ts](../../_sandbox/sandbox/src/activity/activity-store.ts), outside `/work`, so the agent can neither read nor rewrite its own trail.
+- Runs in the browser, compiled into the web bundle as a first-party extension. It has no backend: the daemon writes the log in [activity-store.ts](../../_sandbox/sandbox/src/activity/activity-store.ts), outside `/work`. That keeps it out of the workspace, not out of reach: an unfenced agent runs as root and can write `/history` (the audit trail's forwarded copy is what nobody inside the sandbox can change, see [sandbox.md](../../docs/architecture/sandbox.md#audit-trail)). Someone below maintainer sees only the entries of conversations they may see.
 - `episodes.ts` folds the event-per-append log into episodes (one turn, message or event) and sources (who set it off: a connection or the owner typing). Pure functions, tested without Vue.
 - A connection is named by its listener manifest's automation label (`useSourceNames.ts`, from `GET /extensions`), so a newly installed gateway is named without a release here; only the sources no extension owns (you, a schedule, web chat) carry this extension's own translated words.
 - Pages back through the log as far as the chosen time window needs, up to the daemon's prune ceiling. It never polls: the daemon's `activity` push refreshes the feed, and writes to `automations.json` or extension enablement refresh the status.

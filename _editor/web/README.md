@@ -44,6 +44,7 @@ flowchart LR
   directly, the workspace running unchanged on that remembered list; a list that offers nothing to open while this
   device remembers sandboxes of the account's own goes to `/recover` rather than onboarding; and a sandbox's own
   address opens it through `/open?url=`. [recovery/README.md](src/features/sandbox/recovery/README.md) has the rules.
+- **AI literacy notice.** When enabled in Sandbox ▸ Agent ▸ Safety, every member, including guests, confirms the current notice before continuing. A new text opens it again. Maintainers can read the confirmation list. The default is off.
 - **A first run.** The agents board is always its three lanes, even empty: a first run draws the first agent's
   dashed slot in Active, where its card will arrive, and says in each empty lane what will land there
   (`features/agents/board/view/firstScreen.ts`). A maintainer's first run also carries a getting-started checklist,
@@ -54,6 +55,14 @@ flowchart LR
   rail tile, the page or the control itself, the closest one on screen leading (`features/tour/`). The list is never
   offered on a sandbox where work has already landed, so nobody who is past their first run meets it. `?mode=fresh`
   in `_site/demo` shows it.
+- **Data protection.** `/sandbox/data-protection` (`features/sandbox/data-protection/`, maintainer and up) draws the
+  daemon's compliance report: every outbound data path with its personal-data and shield badges, the measures with a
+  link to where each is changed, downloads of the three documents in Polish or English, and the public-office preset
+  as a ticked list of current → proposed that only the owner can apply, after a confirmation.
+- **Audit log.** `/sandbox/audit`, for the owner and maintainers (`features/sandbox/audit/`): whether the daemon's
+  hash-chained trail is intact (`/audit/verify`), how it is kept (`settings.audit`: days kept, whether reads are
+  recorded, a forward address and the stored secret sent with it), a period downloaded as the JSON Lines the daemon
+  stored, and the records, filtered by who and by what was touched and paged backwards on asking.
 - **Personas.** `/sandbox/personas` shows square selectors with the selected persona's editor below.
   `PersonaSelector.vue` wraps `components/PersonaTile.vue` (face, label, selected appearance) for renaming and removal
   directly on the selector. It saves a queued edit against its original persona when the selection changes. A persona
@@ -231,6 +240,8 @@ flowchart LR
   in (`builtins.ts`); the rest arrive from the daemon as single-file ESM bundles imported from a Blob URL.
   `hostModules.ts` and `public/ext-shims/` hand every bundle the app's own `vue`, vue-query and
   [extension-ui](../../_shared/extension-ui) instances.
+- **Session replay and events.** A browser stores an Allow or No thanks choice locally; the SDK only loads after Allow. Settings → Data & privacy can change it. An active sandbox needs loaded settings with `productAnalytics: true` before any event or recording runs; leaving one with analytics off resumes capture only with consent. `POSTHOG_UI_HOST` chooses the dashboard host for replay links (default `https://us.posthog.com`), while `POSTHOG_API_HOST` and `POSTHOG_ASSETS_HOST` choose the proxy targets.
+  _2026-10-13: refusal sends no cookieless counts, since No thanks should make no analytics request._
 - **Session replay and events.** `src/app/replayPrivacy.ts` decides what a PostHog recording may hold and
   `src/app/eventPrivacy.ts` does the same for every event, through `before_send`. `analytics.ts` hands both to
   `posthog.init`. In a replay every text node goes through `src/app/replayText.ts`, which keeps wording from an i18n

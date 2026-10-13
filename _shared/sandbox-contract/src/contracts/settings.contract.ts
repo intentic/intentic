@@ -1,3 +1,4 @@
+import { AiLiteracyConfirmSchema, AiLiteracyListSchema, AiLiteracyQuerySchema, AiLiteracyStatusSchema } from "../schemas/ai-literacy.js";
 import { FIELD_NOTES_FILE } from "@intentic/constants";
 import { procedure } from "../protocol/route-meta.js";
 import {
@@ -35,6 +36,12 @@ export const settingsContract = {
         .meta({ floor: "owner", panel: false, control: "never" })
         .input(AgentDomainPolicySchema)
         .output(OkSchema),
+    aiLiteracy: procedure.route({ method: "GET", path: "/settings/ai-literacy/{locale}", summary: "Read the AI literacy notice and your confirmation" })
+        .meta({ guest: true }).input(AiLiteracyQuerySchema).output(AiLiteracyStatusSchema),
+    confirmAiLiteracy: procedure.route({ method: "POST", path: "/settings/ai-literacy/confirm", summary: "Confirm your own AI literacy notice" })
+        .meta({ guest: true, floor: "viewer" }).input(AiLiteracyConfirmSchema).output(AiLiteracyStatusSchema),
+    aiLiteracyConfirmations: procedure.route({ method: "GET", path: "/settings/ai-literacy/confirmations", summary: "List AI literacy confirmations" })
+        .meta({ floor: "maintainer" }).output(AiLiteracyListSchema),
     get: procedure
         .route({
             method: "GET",

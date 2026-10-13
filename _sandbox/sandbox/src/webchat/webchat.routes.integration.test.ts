@@ -453,12 +453,20 @@ test("config resolves every default and never emits a secret", async () => {
         position: "top-right",
         access: "public",
         antiBot: "turnstile",
+        aiDisclosure: true,
         turnstileSiteKey: "site-key",
     });
     expect(body).not.toContain("SECRET-VALUE");
     expect(body).not.toContain("turnstileSecret");
     // A greeting nobody set still resolves to something; the widget carries no fallback of its own.
     expect(JSON.parse(body).greeting).not.toBe("");
+});
+
+test("config sends an explicit disclosure choice and custom wording", async () => {
+    const { services } = await setup(webchat("wc-disclosure", { webchat: { aiDisclosure: false, aiDisclosureText: "Custom notice" } }));
+    const app = appFor(services, fakeWake([]));
+    const res = await app.request("/webchat/wc-disclosure/config", { headers: { origin: ORIGIN } });
+    expect(await res.json()).toMatchObject({ aiDisclosure: false, aiDisclosureText: "Custom notice" });
 });
 
 test("a bot check configured without its keys reports off rather than becoming a gate nobody can pass", async () => {

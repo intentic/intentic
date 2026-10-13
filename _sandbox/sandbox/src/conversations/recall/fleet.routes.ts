@@ -1,3 +1,5 @@
+import { type HandleResolution,candidateOf,fleetRecall,fleetRoster,fleetSearch,present,type RosterOptions } from "./fleet-recall.js";
+import { type ConversationReader, conversationReader, registryProvenance } from "../../auth/scope/conversation-reader.js";
 import type { Context } from "hono";
 import { z } from "zod";
 import type { Services } from "../../composition.js";
@@ -5,7 +7,6 @@ import type { AppEnv } from "../../app-env.js";
 import { soleLiveConversation } from "../actor/conversation-holdings.js";
 import { messageConversation } from "./fleet-message.js";
 import { resolveFleetHandle } from "./fleet-handles.js";
-import { candidateOf, fleetRecall, fleetRoster, fleetSearch, present, type RosterOptions } from "./fleet-recall.js";
 import { fleetMessageDetail, fleetMessages, fleetRows } from "./fleet-transcript.js";
 
 // The shell door onto the daemon's fleet knowledge (registry, record, worktree composition, phrase index), joined into
@@ -75,13 +76,26 @@ const storedState = async (services: Pick<Services, "conversationsDb" | "convers
     unit: { dir: services.conversationUnits.dir(id), ...(await services.conversationUnits.files(id, STORED_FILES)) },
 });
 
+// A handle as this caller may follow it: a conversation it may not read answers as no conversation at all, and an
+// ambiguous handle names only the candidates it may read, so neither says what lies behind the fence.
+const readableHandle = (resolved: HandleResolution, reads: ConversationReader): HandleResolution => {
+    if (resolved.kind === "ambiguous") {
+        const candidates = resolved.candidates.filter((candidate) => reads(candidate.id));
+        return candidates.length === 0 ? { kind: "unknown" } : { ...resolved, candidates };
+    }
+    return resolved.kind === "unknown" || reads(resolved.entry.id) ? resolved : { kind: "unknown" };
+};
+
 // Full Services, not a Pick: `message` starts turns, and a turn is the whole daemon.
 export const createFleetRoutes = (services: Services) => ({
     /** GET /fleet: paginated roster, newest first; `?q=` switches it to a phrase search, `?owner=` narrows to one member's. */
     list: async (c: Context<AppEnv>): Promise<Response> => {
         const query = c.req.query("q")?.trim();
         const options = rosterOptionsOf(c);
-        const agents = query === undefined || query === "" ? fleetRoster(services, options) : await fleetSearch(services, query, options);
+        const found = query === undefined || query === "" ? fleetRoster(services, options) : await fleetSearch(services, query, options);
+        // Only the conversations this caller may read: a row is a title, and a search hit a line of the transcript.
+        const reads = conversationReader(c.get("identity"), registryProvenance(services.agents));
+        const agents = found.filter((row) => reads(row.id));
         // `indexing` marks a backfill still running, so an empty result may still grow rather than mean nothing exists;
         // `coverage` says how far through the conversations that pass has got.
         if (query === undefined || query === "") {
@@ -95,7 +109,8 @@ export const createFleetRoutes = (services: Services) => ({
      *  `?stored=1` adds what the daemon keeps for it, raw: its row in every table and the files in its directory. */
     show: async (c: Context<AppEnv>): Promise<Response> => {
         const handle = c.req.param("handle") ?? "";
-        const resolved = await resolveFleetHandle(services, handle);
+        const reads = conversationReader(c.get("identity"), registryProvenance(services.agents));
+        const resolved = readableHandle(await resolveFleetHandle(services, handle), reads);
         if (resolved.kind === "ambiguous") {
             // Named, never picked: 409 because the request is answerable, just not unique.
             return c.json(

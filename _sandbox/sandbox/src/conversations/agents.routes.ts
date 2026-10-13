@@ -1,3 +1,4 @@
+import { conversationReader, registryProvenance } from "../auth/scope/conversation-reader.js";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
@@ -107,7 +108,8 @@ export const createAgentsRoutes = (services: Services) => {
             // own conversations and no held wake: a wake is somebody else's automation.
             const caller = context.identity;
             const agents = services.agents.list().filter((agent) => visibleTo(caller, agent));
-            const held = caller?.role === "guest" ? [] : await services.heldWakes.list();
+            const reads = conversationReader(caller, registryProvenance(services.agents));
+            const held = caller?.role === "guest" ? [] : (await services.heldWakes.list()).filter((wake) => reads(wake.conversationId));
             return { agents, rev: services.agents.revision(), held };
         }),
         // Off `list` by construction, pulled on demand since /events never carries it; newest-archived first
