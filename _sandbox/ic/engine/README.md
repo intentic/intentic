@@ -114,7 +114,10 @@ checkout, and the local platform's database is a `docker compose` service). Code
   `/home/<user>` in the engine's distro to it, so `docker run -v ~/project:/x` resolves by the same path. Paths under
   `/mnt/<drive>` are the same everywhere already; other paths of the distro are not shared.
 - The static `docker` from the pinned bundle and pinned `compose` and `buildx` go to `/usr/local/lib/intentic/docker`,
-  linked onto PATH and into `/usr/local/lib/docker/cli-plugins` unless the distro's own packages installed them.
+  linked onto PATH and into `/usr/local/lib/docker/cli-plugins` unless the distro's own packages installed them. The
+  two plugins are also linked into the default user's `~/.docker/cli-plugins`, which the CLI searches first. Docker
+  Desktop's integration rewrites the system links each time it starts, and they point at nothing once it stops. Without
+  the user's own links, the CLI lost buildx and every build failed until the next restart.
 - A systemd unit (`intentic-engine-integration.service`) redoes the distro's part at its every start, and
   `ic engine start` once the engine is up; a distro without systemd gets it from the next start of the engine.
   `ic engine start --quiet` (the sign-in start, the desktop app's keeper) keeps the engine up while any distro uses

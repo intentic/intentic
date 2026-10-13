@@ -13,7 +13,8 @@
 //!   `/home/<user>` in the engine's distro to it, so a bind mount resolves there by the very path it was named with;
 //! - the static `docker` from the engine's pinned bundle, and pinned `compose` and `buildx`, are installed to
 //!   `/usr/local/lib/intentic/docker` and linked onto PATH and into `/usr/local/lib/docker/cli-plugins`, except where
-//!   the distro's own packages provide them.
+//!   the distro's own packages provide them; the plugins are linked into the default user's `~/.docker/cli-plugins`
+//!   too, which Docker Desktop never touches (`user_plugins_script` says why that matters).
 //!
 //! The distro's part (engine/rootfs/integrate) runs at every start of the distro from a systemd unit, and again from
 //! `ic engine start` once the engine is up, so either may start first.
@@ -148,6 +149,61 @@ exit 0
     )
 }
 
+/// The CLI's plugin directories after the user's own, in the order it searches them.
+const SYSTEM_PLUGIN_DIRS: &str = "/usr/local/lib/docker/cli-plugins /usr/local/libexec/docker/cli-plugins /usr/lib/docker/cli-plugins /usr/libexec/docker/cli-plugins";
+
+/// Compose and buildx linked into the user's own plugin directory as well, run as the distro's default user. Pure.
+///
+/// DOCKER DESKTOP TAKES THE SYSTEM LINKS BACK EVERY TIME IT STARTS AND LEAVES THEM DANGLING WHEN IT STOPS. Its
+/// integration points `/usr/local/lib/docker/cli-plugins/docker-{compose,buildx}` into
+/// `/mnt/wsl/docker-desktop/cli-tools`, which is gone once it quits, and until the distro or the engine restarts the CLI
+/// has no buildx. Measured on rog, 2026-10-13: Docker Desktop ran for 40 minutes, and hours later a dev rebuild died on
+/// `docker buildx build --file …` with "unknown flag: --file" (125). The CLI searches `~/.docker/cli-plugins` first and
+/// Docker Desktop never writes there, so with these links this user keeps our compose and buildx whichever engine is
+/// up. A plugin the distro's packages installed in a system directory still wins: our link is not made, or is removed,
+/// so it cannot shadow theirs. A file the user put there themselves is left alone.
+pub(super) fn user_plugins_script() -> String {
+    format!(
+        r#"set -eu
+DIR={TOOLS_DIR}
+PLUGINS="${{DOCKER_CONFIG:-$HOME/.docker}}/cli-plugins"
+managed() {{
+  [ ! -e "$1" ] && [ ! -L "$1" ] && return 0
+  case "$(readlink "$1" 2>/dev/null)" in /mnt/wsl/* | "$DIR"/*) return 0 ;; esac
+  return 1
+}}
+packaged() {{
+  for dir in {SYSTEM_PLUGIN_DIRS}; do
+    managed "$dir/$1" || return 0
+  done
+  return 1
+}}
+mkdir -p "$PLUGINS"
+for plugin in docker-compose docker-buildx; do
+  link="$PLUGINS/$plugin"
+  if packaged "$plugin"; then
+    case "$(readlink "$link" 2>/dev/null)" in "$DIR"/*) rm -f "$link" ;; esac
+  elif managed "$link"; then
+    ln -sfn "$DIR/$plugin" "$link"
+  fi
+done
+"#
+    )
+}
+
+/// The user's links to our plugins gone again; anything else in that directory is left alone. Pure.
+pub(super) fn user_unplugins_script() -> String {
+    format!(
+        r#"set +e
+PLUGINS="${{DOCKER_CONFIG:-$HOME/.docker}}/cli-plugins"
+for plugin in docker-compose docker-buildx; do
+  case "$(readlink "$PLUGINS/$plugin" 2>/dev/null)" in {TOOLS_DIR}/*) rm -f "$PLUGINS/$plugin" ;; esac
+done
+exit 0
+"#
+    )
+}
+
 /// The distro's default user (whom `wsl -d <distro>` runs as), when it is not root.
 fn default_user(distro: &str) -> Option<String> {
     wsl::run_wsl(
@@ -235,6 +291,9 @@ pub fn enable(distro: &str) -> Result<(), String> {
             &format!("usermod -aG docker '{user}' 2>/dev/null || addgroup '{user}' docker 2>/dev/null || true"),
             Duration::from_secs(30),
         );
+        as_user(distro, user, &user_plugins_script()).map_err(|problem| {
+            format!("could not link compose and buildx for {user}: {problem}")
+        })?;
     }
     let foreign = applied.lines().any(|line| line.starts_with("foreign "));
     if foreign {
@@ -332,6 +391,7 @@ exit 0
     if wsl::distro_installed(distro) {
         if let Some(user) = default_user(distro) {
             let _ = as_user(distro, &user, &uncontext_script());
+            let _ = as_user(distro, &user, &user_unplugins_script());
         }
         as_root(distro, &script, Duration::from_secs(60))?;
     }
@@ -398,6 +458,21 @@ mod tests {
         // Only links into /mnt/wsl (an integration's) or ours are repointed, and Windows' PATH is never consulted.
         assert!(script.contains("/mnt/wsl/* | \"$DIR\"/*) return 0"));
         assert!(!script.contains("command -v docker"));
+    }
+
+    #[test]
+    fn the_users_plugins_are_ours_unless_the_distros_packages_installed_them() {
+        let link = user_plugins_script();
+        assert!(link.contains(r#"PLUGINS="${DOCKER_CONFIG:-$HOME/.docker}/cli-plugins""#));
+        assert!(link.contains(r#"ln -sfn "$DIR/$plugin" "$link""#));
+        // Every system directory the CLI searches is asked, /usr/lib's and /usr/libexec's (where packages put them) too.
+        for dir in SYSTEM_PLUGIN_DIRS.split(' ') {
+            assert!(link.contains(dir), "{dir}");
+        }
+        assert!(link.contains("/mnt/wsl/* | \"$DIR\"/*) return 0"));
+        let unlink = user_unplugins_script();
+        assert!(unlink.contains("/usr/local/lib/intentic/docker/*) rm -f"));
+        assert!(!unlink.contains("rm -rf"));
     }
 
     #[test]
