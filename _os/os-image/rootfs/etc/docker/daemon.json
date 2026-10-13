@@ -1,0 +1,8 @@
+{
+    "features": { "containerd-snapshotter": true },
+    "runtimes": {
+        "kata": { "runtimeType": "io.containerd.kata.v2" }
+    },
+    "log-driver": "journald",
+    "live-restore": false
+}

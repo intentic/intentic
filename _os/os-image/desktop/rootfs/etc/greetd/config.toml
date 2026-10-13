@@ -1,0 +1,12 @@
+# The intentic user is logged in once at boot (initial_session); if that session ever ends, greetd shows its plain
+# text login on the same terminal rather than an empty screen.
+[terminal]
+vt = 1
+
+[initial_session]
+command = "/usr/libexec/intentic-os/session"
+user = "intentic"
+
+[default_session]
+command = "agreety --cmd /usr/libexec/intentic-os/session"
+user = "greetd"

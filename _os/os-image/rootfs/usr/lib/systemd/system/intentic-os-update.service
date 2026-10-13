@@ -1,0 +1,10 @@
+# Downloads a newer OS image and stages it for the next boot; never reboots. Rebooting into it is the owner's call
+# (`ic os update --apply`, from the agent's card or the desktop app). `updates: off` in /etc/intentic/os.json skips it.
+[Unit]
+Description=Stage an Intentic OS update
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/ic os update --scheduled

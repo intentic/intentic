@@ -1,0 +1,7 @@
+#!/bin/sh
+# The kiosk session: sway with Intentic OS's own config and nothing else.
+export XDG_SESSION_TYPE=wayland
+export XDG_CURRENT_DESKTOP=sway
+export MOZ_ENABLE_WAYLAND=1
+export INTENTIC_KIOSK=1
+exec sway --config /usr/share/intentic-os/sway/config

@@ -1,0 +1,13 @@
+#!/bin/sh
+# Keeps the Intentic app on the screen: started again whenever it exits, a little later each time it fails fast.
+delay=1
+while :; do
+    started=$(date +%s)
+    /usr/bin/intentic-desktop || true
+    if [ $(( $(date +%s) - started )) -lt 10 ]; then
+        delay=$(( delay < 30 ? delay * 2 : 30 ))
+    else
+        delay=1
+    fi
+    sleep "$delay"
+done

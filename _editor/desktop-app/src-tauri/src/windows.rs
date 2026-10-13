@@ -245,7 +245,14 @@ enum Keyboard {
 /// The face coming up takes the frame of the face going, when that one is on screen: its place, its size, and
 /// whether it is maximised. The two faces are one window to the reader, who moved and sized it once. A face with
 /// nothing on screen to take over keeps the frame it has (the platform remembers a hidden window's).
+///
+/// In kiosk mode (os.rs `kiosk`, the desktop edition of Intentic OS) every face fills the screen instead, a cold start's
+/// included: the session has nothing else to show (2026-10-13).
 fn take_frame(window: &WebviewWindow, from: Option<&WebviewWindow>) {
+    if crate::os::kiosk() {
+        let _ = window.set_fullscreen(true);
+        return;
+    }
     let Some(from) = from else {
         return;
     };
@@ -1378,6 +1385,10 @@ pub fn run_said(run: &str) -> String {
             "moving your sandboxes to another engine".to_string()
         }
         "sync-setup" | "project-sync" => "setting up folder sync".to_string(),
+        // A change to Intentic OS from This device (os.rs): a download, a rollback queued, a restart on its way.
+        "os-update" | "os-rollback" | "os-channel" | "os-reboot" => {
+            "updating this computer's system".to_string()
+        }
         "project" => "bringing changes back to a folder".to_string(),
         _ => "a task on this computer".to_string(),
     }
@@ -1693,6 +1704,9 @@ fn work_the_window(app: &AppHandle, label: &str, verb: WindowVerb) {
     };
     match verb {
         WindowVerb::Ready => chrome_is_up(&window),
+        // A face in kiosk mode stays full screen: the page's own bar still draws the two buttons.
+        WindowVerb::Minimize | WindowVerb::Maximize
+            if crate::os::kiosk() && (label == WORKSPACE || label == HOME) => {}
         WindowVerb::Minimize => {
             let _ = window.minimize();
         }
@@ -1753,6 +1767,11 @@ fn fit_width(window: &WebviewWindow, width: f64) {
 
 /* THE × IS A QUESTION, ASKED BEFORE ANYTHING HAPPENS — and asked in this app's own voice. */
 fn request_close(app: &AppHandle) {
+    // In kiosk mode this app is the screen (os.rs `kiosk`): hiding a face to a tray leaves it empty, and a Quit only has
+    // the session start the app again. The × is refused, and the face stays where it is (2026-10-13).
+    if crate::os::kiosk() {
+        return;
+    }
     match app.state::<crate::state::AppState>().close_action() {
         Some(action) => apply_close(app, action),
         None => ask_before_closing(app),
@@ -2331,6 +2350,15 @@ mod unsaved_tests {
             run_said("repair-engine-move"),
             "moving your sandboxes to another engine"
         );
+        // Every change to Intentic OS from This device, whichever verb it is.
+        for verb in [
+            crate::os::Verb::Update { apply: false },
+            crate::os::Verb::Rollback { apply: true },
+            crate::os::Verb::Channel(crate::os::Channel::Beta),
+            crate::os::Verb::Reboot,
+        ] {
+            assert_eq!(run_said(verb.run()), "updating this computer's system");
+        }
     }
 
     /// A close is held only while the page says it has changes and has not itself asked about them, and it is the

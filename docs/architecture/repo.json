@@ -108,6 +108,15 @@
             ]
         },
         {
+            "accent": "neutral",
+            "id": "os",
+            "name": "Intentic OS",
+            "oneLiner": "A machine that boots straight into Intentic, with the first sandbox managing it.",
+            "packages": [
+                "_os/os-image"
+            ]
+        },
+        {
             "accent": "4",
             "id": "search",
             "name": "Code search",

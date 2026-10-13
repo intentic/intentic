@@ -43,6 +43,7 @@ mod image_cache;
 mod logfile;
 #[cfg(unix)]
 mod machine;
+mod os;
 mod platform;
 mod prepare;
 mod record;
@@ -100,6 +101,83 @@ enum Command {
     Engine {
         #[command(subcommand)]
         command: Option<EngineCommand>,
+    },
+    /// Intentic OS, the Linux that boots straight into Intentic: its image, updates, boot health and first-boot
+    /// pairing. Exit 3 on any machine that is not Intentic OS
+    #[command(subcommand)]
+    Os(OsCommand),
+}
+
+#[derive(Subcommand)]
+enum OsCommand {
+    /// Where this machine stands: edition, version, channel, the booted, staged and rollback images, whether a reboot
+    /// is needed, this boot's health verdict and the isolation policy
+    Status {
+        /// One line of JSON (what the machine agent and the desktop app read); every human line goes to stderr
+        #[arg(long)]
+        json: bool,
+    },
+    /// Download the newest OS image of this machine's channel and stage it for the next boot; nothing restarts
+    Update {
+        /// Only ask whether a newer image is out, and download nothing
+        #[arg(long, conflicts_with_all = ["apply", "scheduled"])]
+        check: bool,
+        /// With --check: one line of JSON, {"available","version","digest"}
+        #[arg(long, requires = "check")]
+        json: bool,
+        /// Stage it, then reboot into it the orderly way (each running sandbox asked to resume what the reboot cuts)
+        #[arg(long, conflicts_with = "scheduled")]
+        apply: bool,
+        /// The daily timer's run: stage as without it, but with `updates: off` in the policy say so and check nothing
+        #[arg(long)]
+        scheduled: bool,
+        /// Leave the agents' turns the reboot cuts for you instead of having each sandbox pick them up again once it is
+        /// back (and withdraw an earlier restart's ask that is still standing)
+        #[arg(long = "no-resume", requires = "apply")]
+        no_resume: bool,
+    },
+    /// Queue the previous OS deployment for the next boot
+    Rollback {
+        /// Reboot into it now, the orderly way
+        #[arg(long)]
+        apply: bool,
+        /// Leave the agents' turns the reboot cuts for you (with --apply)
+        #[arg(long = "no-resume", requires = "apply")]
+        no_resume: bool,
+    },
+    /// Follow another channel of the same edition (stable, beta), staged for the next boot
+    Channel {
+        /// The channel: the image tag to follow, e.g. stable or beta
+        name: String,
+    },
+    /// Reboot the orderly way: each running sandbox asked to resume what the reboot cuts, which sandboxes run recorded
+    /// for the next boot's health check, then systemd's reboot
+    Reboot {
+        /// Leave the agents' turns the reboot cuts for you instead of having each sandbox pick them up again
+        #[arg(long = "no-resume")]
+        no_resume: bool,
+    },
+    /// Record which sandboxes run now, for the next boot's health check (the shutdown unit runs this)
+    Record,
+    /// This boot's health verdict: docker answers and every sandbox recorded as running answers again. Exit 0 healthy,
+    /// 1 not (greenboot's required check)
+    Health {
+        /// How long to wait for everything to answer, in seconds
+        #[arg(long, value_name = "SECONDS", default_value_t = 600)]
+        wait: u64,
+    },
+    /// First boot: wait for a setup code typed on the console or pasted on a page on the local network, then connect
+    /// this machine's first sandbox
+    Pair {
+        /// The port the local page is served on (when 80 cannot be had, 8080 is tried)
+        #[arg(long, default_value_t = 80)]
+        port: u16,
+        /// Serve no page on the local network; take the code on the console only
+        #[arg(long = "no-lan")]
+        no_lan: bool,
+        /// Read no code from the console; take it on the local page only (the desktop edition, whose screen is the app's)
+        #[arg(long = "no-console")]
+        no_console: bool,
     },
 }
 
@@ -1089,6 +1167,7 @@ fn main() {
             }),
             Some(EngineCommand::Wsl { action, distro }) => engine::run_wsl(action, distro),
         },
+        Command::Os(command) => run_os(command),
     };
     if let Err(util::Fail(message)) = result {
         ui::error(&message);
@@ -1134,6 +1213,52 @@ fn run_machine(command: DeviceCommand) -> util::Result<()> {
             machine::remove::run(machine::remove::Args { yes, keep_user })
         }
     }
+}
+
+/// `ic os`: refused with exit 3 off Intentic OS, before anything else (os/mod.rs).
+#[cfg(unix)]
+fn run_os(command: OsCommand) -> util::Result<()> {
+    os::gate();
+    match command {
+        OsCommand::Status { json } => os::status::run(json),
+        OsCommand::Update {
+            check,
+            json,
+            apply,
+            scheduled,
+            no_resume,
+        } => resumed(no_resume, || {
+            os::update::run(os::update::Args {
+                check,
+                json,
+                apply,
+                scheduled,
+            })
+        }),
+        OsCommand::Rollback { apply, no_resume } => {
+            resumed(no_resume, || os::update::rollback(apply))
+        }
+        OsCommand::Channel { name } => os::update::channel(&name),
+        OsCommand::Reboot { no_resume } => resumed(no_resume, os::reboot::orderly),
+        OsCommand::Record => os::reboot::record(),
+        OsCommand::Health { wait } => os::health::run(wait),
+        OsCommand::Pair {
+            port,
+            no_lan,
+            no_console,
+        } => os::pair::run(os::pair::Args {
+            port,
+            no_lan,
+            no_console,
+        }),
+    }
+}
+
+/// Intentic OS is a Linux: on Windows the group has nothing to manage, and says so with the same exit code.
+#[cfg(windows)]
+fn run_os(_command: OsCommand) -> util::Result<()> {
+    ui::error("ic os manages Intentic OS, which is a Linux; there is nothing for it to manage on Windows.");
+    std::process::exit(os::NOT_INTENTIC_OS);
 }
 
 /// Windows can't be a native SSH+Docker deploy target — its stand-in is the Docker-in-Docker container
@@ -1558,6 +1683,112 @@ mod tests {
         );
         assert!(!keep_user);
         assert!(parse(&["machine", "remove", "-y", "--keep-user"]).is_ok());
+    }
+
+    /* `ic os` is spelled by the contract's argv builders (_shared/sandbox-contract/src/schemas/intentic-os.ts), the
+    desktop app (src-tauri/src/os.rs) and the image's systemd units; each spelling they use parses, and nothing that
+    would reboot a machine is implied by a flag that only reads. */
+    #[test]
+    fn os_verbs_parse_as_their_callers_spell_them() {
+        let os = |args: &[&str]| -> OsCommand {
+            let mut full = vec!["os"];
+            full.extend_from_slice(args);
+            match parse(&full) {
+                Ok(Cli {
+                    command: Command::Os(command),
+                }) => command,
+                Ok(_) => panic!("{args:?} parsed as another group"),
+                Err(err) => panic!("{args:?} did not parse: {err}"),
+            }
+        };
+        assert!(matches!(
+            os(&["status", "--json"]),
+            OsCommand::Status { json: true }
+        ));
+        assert!(matches!(os(&["status"]), OsCommand::Status { json: false }));
+        assert!(matches!(
+            os(&["update", "--check", "--json"]),
+            OsCommand::Update {
+                check: true,
+                json: true,
+                apply: false,
+                scheduled: false,
+                no_resume: false
+            }
+        ));
+        assert!(matches!(
+            os(&["update"]),
+            OsCommand::Update {
+                check: false,
+                apply: false,
+                scheduled: false,
+                ..
+            }
+        ));
+        assert!(matches!(
+            os(&["update", "--apply", "--no-resume"]),
+            OsCommand::Update {
+                apply: true,
+                no_resume: true,
+                ..
+            }
+        ));
+        assert!(matches!(
+            os(&["update", "--scheduled"]),
+            OsCommand::Update {
+                scheduled: true,
+                apply: false,
+                ..
+            }
+        ));
+        assert!(matches!(
+            os(&["rollback"]),
+            OsCommand::Rollback { apply: false, .. }
+        ));
+        assert!(matches!(
+            os(&["rollback", "--apply"]),
+            OsCommand::Rollback { apply: true, .. }
+        ));
+        assert!(matches!(os(&["channel", "beta"]), OsCommand::Channel { name } if name == "beta"));
+        assert!(matches!(
+            os(&["reboot"]),
+            OsCommand::Reboot { no_resume: false }
+        ));
+        assert!(matches!(os(&["record"]), OsCommand::Record));
+        assert!(matches!(os(&["health"]), OsCommand::Health { wait: 600 }));
+        assert!(matches!(
+            os(&["health", "--wait", "30"]),
+            OsCommand::Health { wait: 30 }
+        ));
+        assert!(matches!(
+            os(&["pair"]),
+            OsCommand::Pair {
+                port: 80,
+                no_lan: false,
+                no_console: false
+            }
+        ));
+        assert!(matches!(
+            os(&["pair", "--port", "8080", "--no-lan", "--no-console"]),
+            OsCommand::Pair {
+                port: 8080,
+                no_lan: true,
+                no_console: true
+            }
+        ));
+        for refused in [
+            &["os", "update", "--json"][..],
+            &["os", "update", "--check", "--apply"],
+            &["os", "update", "--check", "--scheduled"],
+            &["os", "update", "--apply", "--scheduled"],
+            &["os", "update", "--no-resume"],
+            &["os", "rollback", "--no-resume"],
+            &["os", "channel"],
+            &["os", "health", "--wait", "soon"],
+            &["os", "upgrade"],
+        ] {
+            assert!(parse(refused).is_err(), "{refused:?} must be refused");
+        }
     }
 
     /* `docker prepare` is on the shims' critical path — connect.ps1 and connect-host.ps1 both stop dead if it will not parse. */

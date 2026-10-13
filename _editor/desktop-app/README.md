@@ -502,6 +502,18 @@ flowchart LR
   entries, unexpanded, under the value's own type. _(2026-10-12) The failure was only a line in the install's details,
   under an install that said it completed, and the command stayed missing._ Linux gets no
   launcher: the deb and rpm put `intentic-desktop` itself on PATH, and it reads the same path arguments.
+- **Intentic OS** ([src-tauri/src/os.rs](src-tauri/src/os.rs), 2026-10-13), the immutable Linux whose desktop edition
+  boots into this app ([_os](../../_os/README.md)). Where `/usr/lib/intentic-os/release.json` exists, This device draws
+  a This system card (`src/device/intenticOs/`): edition, version and channel from `ic os status --json`, the boot's
+  health with each failed check, how sandboxes are isolated, and, with an update staged or a rollback queued, "Restart
+  to update" or "Restart into the previous version", confirmed first: every sandbox restarts with the computer and its
+  running turns resume after. Below that: Check for updates (and Download), Roll back, and the stable/beta channel. Every
+  call runs the OS's own `/usr/bin/ic`, never the `ic` beside the app (only the OS's is sure to know `ic os`), and never
+  bootc or systemctl. Changes run one at a time and stream like an engine move, each line to every window on
+  `desktop://os-run`; a restart is refused while any other run of the app's is going. The sway session starts the app
+  with `INTENTIC_KIOSK=1`: both faces open full screen, the × is refused instead of hiding the only thing on screen,
+  minimise and maximise do nothing, and the app never updates itself, since the OS image carries it (nor anywhere
+  release.json is present).
 - **Deletes go to the Recycle Bin.** A delete in a local window reaches the sidecar, which asks the app (`ask`,
   `verb: trash`); the app moves the entry to the OS's Recycle Bin or Trash (the `trash` crate) when it lies strictly
   inside the folder of an open folder window, and answers.
@@ -566,8 +578,9 @@ Nothing is returned over a link. The app answers with DOM events it dispatches i
 
 A local window also hears the app's Tauri events, which This device listens on: `desktop://run` (a script run's
 `started`, `line` and `exit`), `desktop://pending-setup`, `desktop://setup-stop` (a sandbox id),
-`desktop://pending-recreate`, `desktop://pending-sync`, `desktop://update`, and `desktop://machine-sandbox` (this
-computer's own sandbox, its whole record on every change).
+`desktop://pending-recreate`, `desktop://pending-sync`, `desktop://update`, `desktop://machine-sandbox` (this
+computer's own sandbox, its whole record on every change), and on Intentic OS `desktop://os-run` (a change to the
+system's `started`, each `line` and its `exit`).
 
 ## A big drop, copied by the app (2026-10-09)
 
@@ -676,6 +689,7 @@ reloaded onto their new address and token.
 - [src/device/useDevice.ts](src/device/useDevice.ts) — This device's store: the machine's sandboxes, agent and engine, and the setups, recreates and syncs the app runs here.
 - [src-tauri/src/engine.rs](src-tauri/src/engine.rs) and [src/components/EngineCard.vue](src/components/EngineCard.vue) — which engine this PC's sandboxes run on (Docker Desktop or Intentic's own), and the move between them (`ic engine move`), step by step on the card.
 - [src-tauri/src/engine_keeper.rs](src-tauri/src/engine_keeper.rs) — Intentic's engine started again when it stops while this app runs.
+- [src-tauri/src/os.rs](src-tauri/src/os.rs) and [src/device/intenticOs/SystemCard.vue](src/device/intenticOs/SystemCard.vue) — Intentic OS: the system as `ic os` reports it, the changes This device makes to it, and kiosk mode.
 
 ## Building
 

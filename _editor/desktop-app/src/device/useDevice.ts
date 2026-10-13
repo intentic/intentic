@@ -6,6 +6,7 @@ import {
     deviceAgentRestart,
     dockerReady as dockerReadyProbe,
     onEngineMove,
+    onOsRun,
     onPendingFix,
     onPendingRecreate,
     onPendingSetup,
@@ -24,6 +25,7 @@ import {
 import * as docker from "./docker";
 import * as engine from "./engine";
 import * as fixing from "./fix";
+import * as system from "./intenticOs/system";
 import * as machine from "./machine";
 import * as runs from "./runs";
 import * as sandboxes from "./sandboxes";
@@ -37,7 +39,8 @@ import { titleTheSetup } from "./title";
 // tile reads its badge from (host.ts), so a setup keeps its progress while the reader is looking at their files. Its
 // parts are modules of their own: the machine's reading (machine.ts), the app's runs on it (runs.ts), the engine
 // (docker.ts), which engine the sandboxes run on and the move to the other (engine.ts), a setup (setup.ts), the
-// sandboxes' verbs (sandboxes.ts), a sync enrollment (sync.ts) and the recovery panel's fix (fix.ts). This one starts them.
+// sandboxes' verbs (sandboxes.ts), a sync enrollment (sync.ts), the recovery panel's fix (fix.ts) and, on Intentic OS,
+// the system itself and the changes made to it (intenticOs/system.ts). This one starts them.
 //
 // Only the app's main window TAKES WORK (`takesWork`): a setup, a recreate, a sync or a fix the app parked for its own
 // face, and the Docker start a launch asked for. Every other local window draws the same view of the machine and runs
@@ -145,12 +148,15 @@ const startOnce = async (options: DeviceOptions): Promise<void> => {
     void machine.loadFacts();
     // Early, and in every window: every event this window sends says which engine the sandboxes run on (analytics.ts).
     void engine.loadEngine();
+    // Whether this computer runs Intentic OS, and what waits for its next boot: nothing at all anywhere else.
+    void system.loadOs();
     // Registered before a parked setup can start a run, or its first seconds would show an empty log. A move between
-    // engines is heard by every window, whichever started it.
+    // engines, and a change to Intentic OS, is heard by every window, whichever started it.
     const listening = [
         onRun(onRunEvent),
         onUpdate((stage) => (update.value = stage)),
         onEngineMove(engine.hearEngineMove),
+        onOsRun(system.hearOsRun),
         onQuitting(() => void onQuit()),
     ];
     const parked = options.takesWork
@@ -187,6 +193,7 @@ const device = {
     ...machine,
     ...docker,
     ...engine,
+    ...system,
     running: runs.running,
     activeRun: runs.activeRun,
     eventsOf: runs.eventsOf,

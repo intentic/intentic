@@ -106,3 +106,8 @@ Thumbs.db
 /app
 /.demo
 .image-out
+# Intentic OS build staging (_os/os-image/build.sh): the ic binary and desktop app .rpm baked into an image, and the
+# disks and logs disk.sh and smoke.sh write.
+/_os/os-image/bin/
+/_os/os-image/desktop/rpm/
+/_os/os-image/out/

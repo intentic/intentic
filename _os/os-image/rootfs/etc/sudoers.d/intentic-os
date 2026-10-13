@@ -1,0 +1,9 @@
+# The intentic user changes the OS only through these: reading and staging deployments, rolling back, switching
+# channel within Intentic's own images, and rebooting. Everything else stays root's. (The docker group it is in is
+# root-equivalent already; this keeps the OS verbs explicit and logged rather than reached through a container.)
+Cmnd_Alias INTENTIC_OS = /usr/bin/bootc status, /usr/bin/bootc status *, \
+    /usr/bin/bootc upgrade, /usr/bin/bootc upgrade --check, \
+    /usr/bin/bootc rollback, \
+    /usr/bin/bootc switch ghcr.io/intentic/os\:*, /usr/bin/bootc switch ghcr.io/intentic/os-desktop\:*, \
+    /usr/bin/systemctl reboot
+intentic ALL=(root) NOPASSWD: INTENTIC_OS

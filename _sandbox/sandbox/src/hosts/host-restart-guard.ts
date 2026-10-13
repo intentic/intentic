@@ -27,7 +27,8 @@ import type { HostGuardDeps } from "./host-guard-deps.js";
 // turn left out: an agent restarting the ground under itself has chosen to. The same ask guards the same restart spelled
 // as a shell command (`ic sandbox restart <slug>`, `docker stop <container>`) in run_command and the other doors that
 // carry a program (restartInProgram). Matched by slug alone, so the same slug on another of the owner's devices is asked
-// about too, which is the safe way to be wrong.
+// about too, which is the safe way to be wrong. So is a reboot of an Intentic OS machine (os_update apply, os_rollback
+// apply, os_reboot, or `ic os reboot` typed), which names no sandbox and stops every one on it.
 
 // How long one call waits here before answering: under the minute an agent's MCP client gives a call before reporting
 // a timeout of its own. The card stays up until it is answered, and the same call again collects its answer
@@ -42,7 +43,13 @@ export const DeviceToolCallSchema = z.object({
     method: z.literal("tools/call"),
     params: z.object({
         name: z.string(),
-        arguments: ProgramArgumentsSchema.extend({ slug: z.string().optional(), op: z.string().optional(), when: z.string().optional() }).optional(),
+        arguments: ProgramArgumentsSchema.extend({
+            slug: z.string().optional(),
+            op: z.string().optional(),
+            when: z.string().optional(),
+            // os_rollback's: whether it reboots into the previous deployment now.
+            apply: z.boolean().optional(),
+        }).optional(),
     }),
 });
 export type DeviceToolCall = z.infer<typeof DeviceToolCallSchema>;
@@ -77,9 +84,28 @@ const restartOf = (tool: string, args: ToolArguments): Omit<RestartCall, "tool">
     return undefined;
 };
 
-/** The restart a device tool call would make of the sandbox named `ownSlug`; undefined for anything else. */
+// (2026-10-13) On Intentic OS, the device's own OS: these reboot the whole machine and every sandbox on it, so none names
+// a slug. Staging an update, queueing a rollback and switching channel restart nothing.
+const machineReboot = (tool: string, args: ToolArguments): "os-update" | "os-rollback" | "os-reboot" | undefined => {
+    if (tool === "os_reboot") {
+        return "os-reboot";
+    }
+    if (tool === "os_update" && args.op === "apply") {
+        return "os-update";
+    }
+    return tool === "os_rollback" && args.apply === true ? "os-rollback" : undefined;
+};
+
+/**
+ * The restart a device tool call would make of the sandbox named `ownSlug`; undefined for anything else. A reboot of
+ * the machine is read generously, as a command naming no sandbox is: this sandbox may be one of those it stops.
+ */
 export const restartInCall = (call: DeviceToolCall, ownSlug: string | undefined): RestartCall | undefined => {
     const args = call.params.arguments ?? {};
+    const reboot = machineReboot(call.params.name, args);
+    if (reboot !== undefined) {
+        return ownSlug === undefined ? undefined : { tool: call.params.name, op: reboot, doing: SANDBOX_POWER_DOING[reboot] };
+    }
     const restart = restartOf(call.params.name, args);
     return restart === undefined || ownSlug === undefined || args.slug !== ownSlug ? undefined : { tool: call.params.name, ...restart };
 };

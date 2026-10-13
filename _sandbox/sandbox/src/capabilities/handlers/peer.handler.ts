@@ -1,7 +1,7 @@
 import type { PeerKind } from "../../peers/peer.js";
 import type { PeerHub } from "../../peers/peer-hub.js";
 import type { PeerStore } from "../../peers/peer-store.js";
-import { loadedSkillFile, removeLoadedSkill, writeLoadedSkill } from "../../store/loaded-skills.js";
+import { loadedSkillFile, removeLoadedSkill, stampSkill, writeLoadedSkill } from "../../store/loaded-skills.js";
 import type { CapabilityCtx, CapabilityHandler } from "../capability.js";
 import { contributedSkill, contributionKey, contributionRegistry, hostOf } from "../contributions.js";
 
@@ -16,6 +16,9 @@ export interface PeerHandlerSpec<Scopes extends { readonly platform: string }> {
     readonly where: string;
     // The `${tools}` note the pack renders with: the tool surface and the rules for working there.
     readonly note: string;
+    // The note for one peer, when it depends on what that peer said of itself (a device's facts), read whenever its
+    // skill is written; `note` otherwise.
+    readonly noteFor?: (ctx: CapabilityCtx, id: string) => string;
     // What the owner is told to do at the far end while the peer has never connected.
     readonly pairHint: string;
     // What the entry says of an enrolled peer not holding a socket right now.
@@ -39,6 +42,44 @@ export interface PeerHandlerSpec<Scopes extends { readonly platform: string }> {
     readonly alsoRevoke?: (ctx: CapabilityCtx, card: string) => Promise<() => Promise<void>>;
 }
 
+// The peer's skill as its platform's pack renders it with the note; undefined when no installed extension declares the
+// platform or its pack cannot be read, which apply refuses and a refresh leaves alone.
+const renderPeerSkill = async <Scopes extends { readonly platform: string }>(
+    spec: PeerHandlerSpec<Scopes>,
+    ctx: CapabilityCtx,
+    id: string,
+    scopes: Scopes,
+): Promise<{ readonly skill: string | undefined; readonly declared: boolean }> => {
+    const contribution = (await contributionRegistry(hostOf(ctx))).get(contributionKey(spec.kind, scopes.platform));
+    if (contribution === undefined) {
+        return { skill: undefined, declared: false };
+    }
+    return { skill: await contributedSkill(contribution, id, spec.noteFor?.(ctx, id) ?? spec.note), declared: true };
+};
+
+/**
+ * Writes the peer's skill again when what its note says has changed since it was written (a device that said at connect
+ * that it boots Intentic OS). A peer whose skill was never written (never applied), or whose pack is gone, is left
+ * alone; answers whether it wrote.
+ */
+export const refreshPeerSkill = async <Scopes extends { readonly platform: string }>(
+    spec: PeerHandlerSpec<Scopes>,
+    ctx: CapabilityCtx,
+    id: string,
+    scopes: Scopes,
+): Promise<boolean> => {
+    const written = await ctx.files.read(loadedSkillFile(ctx.workspace.root, id));
+    if (written === undefined) {
+        return false;
+    }
+    const { skill } = await renderPeerSkill(spec, ctx, id, scopes);
+    if (skill === undefined || stampSkill(skill, "peer") === written) {
+        return false;
+    }
+    await writeLoadedSkill(ctx.files, ctx.workspace.root, id, skill, "peer");
+    return true;
+};
+
 export const peerHandler = <Scopes extends { readonly platform: string }>(spec: PeerHandlerSpec<Scopes>): CapabilityHandler => ({
     echo: (config) => spec.echo(config as Scopes),
     // THE NAME IS A LABEL. Enrollment travels with it, no re-pairing needed: every enrollment the card holds (each OS
@@ -56,11 +97,10 @@ export const peerHandler = <Scopes extends { readonly platform: string }>(spec: 
     },
     async *apply(ctx, id, config) {
         const scopes = config as Scopes;
-        const contribution = (await contributionRegistry(hostOf(ctx))).get(contributionKey(spec.kind, scopes.platform));
-        if (contribution === undefined) {
+        const { skill, declared } = await renderPeerSkill(spec, ctx, id, scopes);
+        if (!declared) {
             throw new Error(`no ${spec.kind} platform "${scopes.platform}": install the extension that declares it`);
         }
-        const skill = await contributedSkill(contribution, id, spec.note);
         if (skill === undefined) {
             throw new Error(`the extension declaring "${scopes.platform}" has no readable skill pack: reinstall it`);
         }

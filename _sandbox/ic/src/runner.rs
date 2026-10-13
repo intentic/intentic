@@ -215,10 +215,11 @@ pub fn up(args: Up) -> Result<()> {
     // no_local_publish unconditionally: the loopback shortcut exists for a browser on this machine, and
     // nobody browses to a runner — claiming a port here could only collide with the sandbox someone uses.
     // ic's labels on the runner too (labels.rs): what made it, for which parent, from which side of this computer.
-    let argv = sandbox::labels::into_run(
+    // A runner is a sandbox container too: on Intentic OS the host policy may put it in a microVM (os/policy.rs).
+    let argv = crate::os::policy::sandbox_run(sandbox::labels::into_run(
         &contract::run_command(&request, &env_pairs, true, &unsupported, &[], &log)?,
         &sandbox::labels::here(&slug, sandbox::labels::Kind::Runner),
-    );
+    ));
     // Nothing else creates it on this machine: a runner's slug never goes through the connect flow.
     sandbox::ensure_network(&slug)?;
     // Its volumes too, labelled like a sandbox's; a launch that never starts leaves none of the ones it made.

@@ -862,6 +862,8 @@ fn recreate(
     if reach == Reach::Checked {
         return Ok(());
     }
+    // On Intentic OS the host policy may run the sandbox in a microVM (os/policy.rs); elsewhere the line stays as is.
+    let argv = crate::os::policy::sandbox_run(argv);
     // The run line comes from the image being moved onto; it must put the sandbox back on the storage it has (storage.rs).
     storage::check(&container, &argv)?;
 
@@ -998,7 +1000,9 @@ fn recreate(
         let all_optional: Vec<String> = probes.iter().map(|probe| probe.token.clone()).collect();
         let retry_argv =
             match contract::run_command(&request, &env_nul, true, &all_optional, &seeds, &log)
-                .map(|retry_argv| labels::into_run(&retry_argv, &stamped_run))
+                .map(|retry_argv| {
+                    crate::os::policy::sandbox_run(labels::into_run(&retry_argv, &stamped_run))
+                })
                 .and_then(|retry_argv| storage::check(&parked, &retry_argv).map(|()| retry_argv))
             {
                 Ok(retry_argv) => retry_argv,

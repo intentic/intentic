@@ -6,6 +6,7 @@ import {
     type CommandClass,
     type DeviceScopes,
     hardRuleClasses,
+    isOsPower,
     managesSandbox,
     matchCommand,
     type SandboxPowerCommand,
@@ -150,9 +151,14 @@ export const sandboxPowerIn = (commandLine: string): SandboxPowerCommand[] =>
 // What the refusal says the command asks for, in `ic sandbox`'s own verbs.
 const doingOf = (hits: readonly SandboxPowerCommand[]): string => [...new Set(hits.map((hit) => hit.op))].join(", ");
 
+// What it would manage: a sandbox, or (on Intentic OS, through `ic os` or bootc) the OS every sandbox here runs on.
+const subjectOf = (hits: readonly SandboxPowerCommand[]): string =>
+    hits.some((hit) => !isOsPower(hit)) ? "a sandbox on this device" : "this device's OS, and with it every sandbox on it,";
+
 /**
  * Throws the refusal unless "Manage sandboxes on this device" is on, for a command that restarts, stops, updates,
- * removes or otherwise manages a sandbox on this device. `how` is how the command reached here, for the sentence.
+ * removes or otherwise manages a sandbox on this device, or changes what its OS boots (Intentic OS: `ic os`, bootc).
+ * `how` is how the command reached here, for the sentence.
  */
 export const assertNoSandboxPower = (commandLine: string, scopes: DeviceScopes, how: "command" | "typed" = "command"): void => {
     const hits = sandboxPowerIn(commandLine);
@@ -160,8 +166,8 @@ export const assertNoSandboxPower = (commandLine: string, scopes: DeviceScopes, 
         return;
     }
     throw new ScopeError(
-        `Refused: ${how === "typed" ? "typed into a terminal, this" : "this command"} would manage a sandbox on this device (${doingOf(hits)}), and "Manage sandboxes on this device" is switched off for it. ` +
-            `That switch decides whether anything may stop, restart, update or remove a sandbox here, however it is spelled: the device's own tools, \`ic sandbox …\`, or \`docker\`. ` +
+        `Refused: ${how === "typed" ? "typed into a terminal, this" : "this command"} would manage ${subjectOf(hits)} (${doingOf(hits)}), and "Manage sandboxes on this device" is switched off for it. ` +
+            `That switch decides whether anything may stop, restart, update or remove a sandbox here, or update, roll back or reboot this device's OS, however it is spelled: the device's own tools, \`ic sandbox …\`, \`ic os …\`, \`bootc\`, or \`docker\`. ` +
             `Turn it on in its capability card to allow this.`,
     );
 };

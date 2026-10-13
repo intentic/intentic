@@ -1,0 +1,15 @@
+# At every orderly shutdown, before Docker stops its containers: which sandboxes run, so the next boot's health
+# check (`ic os health`, greenboot's required check) knows what has to come back.
+[Unit]
+Description=Record running Intentic sandboxes for the next boot's health check
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/true
+ExecStop=/usr/bin/ic os record
+
+[Install]
+WantedBy=multi-user.target

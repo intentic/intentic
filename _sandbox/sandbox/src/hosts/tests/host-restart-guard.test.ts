@@ -147,7 +147,7 @@ afterEach(async () => {
 
 describe("which calls restart this sandbox", () => {
     // As the bridge hands it over: a JSON-RPC message, parsed by the gate's own schema.
-    const call = (name: string, args: Record<string, string | number>) =>
+    const call = (name: string, args: Record<string, string | number | boolean>) =>
         DeviceToolCallSchema.parse({ jsonrpc: "2.0", id: 7, method: "tools/call", params: { name, arguments: args } });
 
     it("names the swaps, a restart or stop, and new resources applied now, on this sandbox's own slug", () => {
@@ -169,6 +169,29 @@ describe("which calls restart this sandbox", () => {
             op: "now",
             doing: "Restart with new resources",
         });
+    });
+
+    // On Intentic OS a reboot of the machine stops every sandbox on it, and names none: read as possibly this one.
+    it("names a reboot of an Intentic OS machine, whichever tool asks for it, and nothing that only stages", () => {
+        expect(restartInCall(call("os_reboot", {}), "work")).toEqual({ tool: "os_reboot", op: "os-reboot", doing: "Reboot the machine running" });
+        expect(restartInCall(call("os_update", { op: "apply" }), "work")).toEqual({ tool: "os_update", op: "os-update", doing: "Update and reboot the machine running" });
+        expect(restartInCall(call("os_rollback", { apply: true }), "work")).toEqual({
+            tool: "os_rollback",
+            op: "os-rollback",
+            doing: "Roll back and reboot the machine running",
+        });
+        for (const [name, args] of [
+            ["os_update", { op: "stage" }],
+            ["os_update", { op: "check" }],
+            ["os_rollback", {}],
+            ["os_rollback", { apply: false }],
+            ["os_channel", { channel: "beta" }],
+            ["os_status", {}],
+        ] as const) {
+            expect(restartInCall(call(name, args), "work"), `${name} ${JSON.stringify(args)}`).toBeUndefined();
+        }
+        // A bare dev run has no container name, so no slug of its own to protect.
+        expect(restartInCall(call("os_reboot", {}), undefined)).toBeUndefined();
     });
 
     it("reads no call it cannot parse: a notification carries no id to answer", () => {
@@ -324,7 +347,17 @@ describe("the same restart spelled as a shell command", () => {
     });
 
     it("reads generously: a command that names no sandbox, or works the name out as it runs, may be this one", () => {
-        for (const command of ["ic sandbox update", "ic sandbox restart", "docker stop $(docker ps -q)", "docker ps -q | xargs docker stop", "ic sandbox remove --all -y"]) {
+        for (const command of [
+            "ic sandbox update",
+            "ic sandbox restart",
+            "docker stop $(docker ps -q)",
+            "docker ps -q | xargs docker stop",
+            "ic sandbox remove --all -y",
+            // An Intentic OS machine rebooting stops every sandbox on it.
+            "ic os reboot",
+            "ic os update --apply",
+            "sudo bootc upgrade --apply",
+        ]) {
             expect(restartInProgram(read("run_command", { command }), OWN), command).toMatchObject({ tool: "run_command" });
         }
     });
@@ -339,6 +372,9 @@ describe("the same restart spelled as a shell command", () => {
             "ic sandbox list --json",
             "docker logs intentic-sandbox-work",
             "docker start intentic-sandbox-work",
+            "ic os update",
+            "ic os channel beta",
+            "ic os status --json",
         ]) {
             expect(restartInProgram(read("run_command", { command }), OWN), command).toBeUndefined();
         }

@@ -1,0 +1,19 @@
+# An install with an encrypted root (the installer's kickstart) leaves a one-time passphrase in
+# /etc/intentic/luks-initial-key. On the first boot this binds the disk to this machine's TPM2, prints a recovery key
+# once on the console, and removes the one-time passphrase: from then on the disk unlocks itself on this machine and
+# nowhere else. Without that file (an unencrypted install, a VM image) it does nothing.
+[Unit]
+Description=Bind the encrypted root to this machine's TPM2
+ConditionPathExists=/etc/intentic/luks-initial-key
+After=local-fs.target
+Before=intentic-pair.service getty@tty1.service greetd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/intentic-os/tpm-enroll
+StandardOutput=tty
+StandardError=journal
+TTYPath=/dev/tty1
+
+[Install]
+WantedBy=multi-user.target

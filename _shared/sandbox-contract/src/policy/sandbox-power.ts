@@ -8,8 +8,12 @@ import type { CommandSpan } from "./command-classes.js";
 // working (hosts/host-restart-guard.ts), and the device agent, whose "Manage sandboxes" switch decides whether anything
 // may do this at all (the machine's tools/shell.ts). The same verbs and the same wording, so a command and the tool
 // that does the same job cannot drift apart.
+//
+// (2026-10-13) On Intentic OS the machine itself is managed the same way: `ic os update|rollback|reboot|channel`, and the
+// `bootc upgrade|switch|rollback` under it, change what the whole box boots, and the ones that reboot it stop every
+// sandbox on it at once. They are read here as the os_* device tools' twins, under the same switch.
 
-/** The sandbox operations a command can name, in the words `ic sandbox` spells them. */
+/** The sandbox operations a command can name, in the words `ic sandbox` spells them, and the OS ones in `ic os`'s. */
 export type SandboxPowerOp =
     | "start"
     | "stop"
@@ -23,7 +27,12 @@ export type SandboxPowerOp =
     | "dev"
     | "resize"
     | "restore"
-    | "connect";
+    | "connect"
+    // The machine's OS (Intentic OS), in `ic os`'s verbs; a bootc spelling reads as the same op.
+    | "os-update"
+    | "os-rollback"
+    | "os-reboot"
+    | "os-channel";
 
 /** The owner's own word for an operation, as a card or a refusal says it ("<doing> this sandbox now?"). */
 export const SANDBOX_POWER_DOING = {
@@ -40,17 +49,23 @@ export const SANDBOX_POWER_DOING = {
     resize: "Restart with new resources",
     restore: "Restore a backup over",
     connect: "Reinstall",
+    // The OS ops stop a sandbox only when they reboot, which takes every sandbox on the machine with it.
+    "os-update": "Update and reboot the machine running",
+    "os-rollback": "Roll back and reboot the machine running",
+    "os-reboot": "Reboot the machine running",
+    "os-channel": "Switch images and reboot the machine running",
 } as const satisfies Record<SandboxPowerOp, string>;
 
 /** One command that manages a sandbox container, and what it aims at. */
 export interface SandboxPowerCommand {
-    readonly via: "ic" | "docker";
+    /** `ic` for `ic sandbox` and `ic os`, `bootc` for the OS's own tool under `ic os`. */
+    readonly via: "ic" | "docker" | "bootc";
     readonly op: SandboxPowerOp;
     /** Whether it ends the turns of a sandbox that is running; false for a start, a download, a resource ask saved for later. */
     readonly stops: boolean;
     /** The slugs (`ic`) or container names (`docker`) it names, as written; an expansion (`$x`, `$(…)`, `*`) stays as typed. */
     readonly targets: readonly string[];
-    /** Names none: `ic sandbox restart` alone (the only sandbox the device runs), `remove --all`, `docker stop` fed from a pipe. */
+    /** Names none: `ic sandbox restart` alone (the only sandbox the device runs), `remove --all`, `docker stop` fed from a pipe, and every OS op, which is the whole machine's. */
     readonly unnamed: boolean;
     /** The fragment, so a card can point at it. */
     readonly span: CommandSpan;
@@ -63,6 +78,10 @@ const IC_INVOCATION = /(?<![\w.$-])ic(?:\.exe)?["']?\s+sandbox\s+([a-z][a-z-]*)(
 // `docker stop`, `docker container rm`, podman alike. A global option between the program and the verb
 // (`docker -H host stop x`) is not read: the verb then follows an option, and the command is left unrecognised.
 const DOCKER_INVOCATION = /(?<![\w.$-])(?:docker|podman)(?:\.exe)?["']?\s+(?:container\s+)?(stop|restart|rm|remove|kill)(?![\w-])/gi;
+// `ic os <verb>` and `bootc <verb>`, the machine's OS. Only the verbs that change what it boots; `status`, `health`,
+// `record` and `pair` read or set up and are left alone, as is a `--check` that only asks the registry.
+const IC_OS_INVOCATION = /(?<![\w.$-])ic(?:\.exe)?["']?\s+os\s+([a-z][a-z-]*)(?![\w-])/gi;
+const BOOTC_INVOCATION = /(?<![\w.$-])bootc["']?\s+([a-z][a-z-]*)(?![\w-])/gi;
 
 const IC_VERBS = new Map<string, SandboxPowerOp>([
     ["start", "start"],
@@ -90,6 +109,21 @@ const DOCKER_VERBS = new Map<string, SandboxPowerOp>([
     ["remove", "remove"],
 ]);
 
+const IC_OS_VERBS = new Map<string, SandboxPowerOp>([
+    ["update", "os-update"],
+    ["rollback", "os-rollback"],
+    ["reboot", "os-reboot"],
+    ["channel", "os-channel"],
+]);
+
+// `bootc switch` is what `ic os channel` runs, to any image; `update` is read as `upgrade`'s other spelling.
+const BOOTC_VERBS = new Map<string, SandboxPowerOp>([
+    ["upgrade", "os-update"],
+    ["update", "os-update"],
+    ["switch", "os-channel"],
+    ["rollback", "os-rollback"],
+]);
+
 // The flags of each program that take their value as the next word, so the value is not read as a slug.
 const IC_VALUE_FLAGS: ReadonlySet<string> = new Set([
     "--channel",
@@ -110,6 +144,7 @@ const IC_VALUE_FLAGS: ReadonlySet<string> = new Set([
     "--tail",
 ]);
 const DOCKER_VALUE_FLAGS: ReadonlySet<string> = new Set(["-t", "--time", "-s", "--signal"]);
+const OS_VALUE_FLAGS: ReadonlySet<string> = new Set(["--wait", "--transport", "--target-imgref"]);
 
 // The simple command that starts the text: up to the first `|`, `;`, `&` or newline outside quotes. A `&` right after
 // `>` or `<` is a redirection (`2>&1`), which ends nothing.
@@ -194,8 +229,27 @@ const icAim = (op: SandboxPowerOp, { positionals, flags }: Operands): Aim => {
     return { stops: true, targets: positionals, all };
 };
 
+// Whether an OS op reboots the machine now, which stops every sandbox on it; undefined for a check that only asks the
+// registry, which manages nothing. A reboot always does; the rest stage for the next boot unless told `--apply`.
+const osStops = (op: SandboxPowerOp, { flags }: Operands): boolean | undefined => {
+    if (op === "os-update" && flags.has("--check")) {
+        return undefined;
+    }
+    return op === "os-reboot" || flags.has("--apply");
+};
+
+// The OS ops in `command`, through `ic os` or bootc. Each names the whole machine, so none names a target.
+const osPowerCommands = (command: string, via: "ic" | "bootc", regions: readonly CommandSpan[]): SandboxPowerCommand[] =>
+    [...command.matchAll(via === "ic" ? IC_OS_INVOCATION : BOOTC_INVOCATION)].flatMap((invocation) => {
+        const op = (via === "ic" ? IC_OS_VERBS : BOOTC_VERBS).get((invocation[1] ?? "").toLowerCase());
+        const span = { start: invocation.index, end: invocation.index + invocation[0].length };
+        const stops = op === undefined ? undefined : osStops(op, operandsOf(wordsOf(command.slice(span.end)), OS_VALUE_FLAGS));
+        return op === undefined || stops === undefined ? [] : [{ via, op, stops, targets: [], unnamed: true, span, live: isLive(span, regions) }];
+    });
+
 /**
- * Every command in `command` that starts, stops or replaces a sandbox container, through `ic sandbox` or `docker`.
+ * Every command in `command` that starts, stops or replaces a sandbox container, through `ic sandbox` or `docker`, or
+ * changes what an Intentic OS machine boots, through `ic os` or `bootc`.
  * A scan for the programs by name, not a shell parse: it is meant to over-include, since a caller that mistakes
  * a mention for a command asks the owner once, and one that misses a command cuts a fleet's turns unasked.
  */
@@ -210,6 +264,7 @@ export const sandboxPowerCommands = (command: string): SandboxPowerCommand[] => 
             found.push({ via: "ic", op, stops: aim.stops, targets: aim.targets, unnamed: aim.targets.length === 0 || aim.all, span, live: isLive(span, regions) });
         }
     }
+    found.push(...osPowerCommands(command, "ic", regions), ...osPowerCommands(command, "bootc", regions));
     for (const invocation of command.matchAll(DOCKER_INVOCATION)) {
         const op = DOCKER_VERBS.get((invocation[1] ?? "").toLowerCase());
         if (op !== undefined) {
@@ -240,8 +295,12 @@ export const mayReachSandbox = (hit: SandboxPowerCommand, own: OwnSandbox): bool
 
 /**
  * Whether `hit` manages a sandbox that a device's "Manage sandboxes" switch covers, whichever sandbox it is: any
- * `ic sandbox` verb here, and a `docker` verb aimed at a container whose name starts with `containerPrefix` (a sandbox's
- * own, or its tunnel's). A docker target worked out at run time is not read: the device cannot know what it will be.
+ * `ic sandbox` or `ic os` verb here and any bootc one (the OS is every sandbox's ground), and a `docker` verb aimed at a
+ * container whose name starts with `containerPrefix` (a sandbox's own, or its tunnel's). A docker target worked out at
+ * run time is not read: the device cannot know what it will be.
  */
 export const managesSandbox = (hit: SandboxPowerCommand, containerPrefix: string): boolean =>
-    hit.via === "ic" || hit.targets.some((target) => target.startsWith(containerPrefix));
+    hit.via !== "docker" || hit.targets.some((target) => target.startsWith(containerPrefix));
+
+/** Whether `hit` acts on the machine's OS (`ic os`, `bootc`) rather than on one sandbox. */
+export const isOsPower = (hit: Pick<SandboxPowerCommand, "op">): boolean => hit.op.startsWith("os-");

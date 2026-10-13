@@ -605,10 +605,11 @@ fn connect(
             &recreate::restamp(replacing.side.as_ref(), &side::here()),
         ),
     };
-    let argv = crate::sandbox::labels::into_run(
+    // On Intentic OS the host policy may run the sandbox in a microVM (os/policy.rs); elsewhere the line stays as is.
+    let argv = crate::os::policy::sandbox_run(crate::sandbox::labels::into_run(
         &contract::run_command(&request, &env_pairs, false, &unsupported, &[], &log)?,
         &stamped_run,
-    );
+    ));
     // The old container is set aside only now, with the new run line in hand: it comes back if the new one fails.
     if let Some(replacing) = &replacing {
         replacing.park()?;
@@ -630,7 +631,10 @@ fn connect(
         let all_optional: Vec<String> = probes.iter().map(|probe| probe.token.clone()).collect();
         let retry =
             match contract::run_command(&request, &env_pairs, true, &all_optional, &[], &log) {
-                Ok(retry) => crate::sandbox::labels::into_run(&retry, &stamped_run),
+                Ok(retry) => crate::os::policy::sandbox_run(crate::sandbox::labels::into_run(
+                    &retry,
+                    &stamped_run,
+                )),
                 Err(err) => match &replacing {
                     Some(replacing) => bail!("{}{}", err.0, replacing.put_back(&err.0, &log)),
                     None => return Err(err),

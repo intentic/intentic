@@ -1,9 +1,10 @@
-import { RUN_TARGETS_FILE } from "@intentic/sandbox-contract";
+import { type DeviceFacts, isIntenticOs, RUN_TARGETS_FILE } from "@intentic/sandbox-contract";
 
 // Substituted for `${tools}` in a host pack's SKILL.md: the core, cross-platform tool surface and rules; `${id}` is the
 // instance name. The OS-specific half is a separate pack per platform; one capability per machine namespaces tool names
 // so examples are copy-pasteable. Tools are deferred behind tool search, so the note opens by saying how to load them.
-export const HOST_TOOLS_NOTE = `# Connected device "\${id}"
+// Two halves, so a section that only some machines get (Intentic OS, below) sits beside the rules it builds on.
+const HOST_TOOLS_CORE = `# Connected device "\${id}"
 
 This is a real device belonging to the person you are working for. It is not the sandbox: the sandbox is where
 you live and where the repository is; this is their own machine, reached over a socket it opened to us.
@@ -100,7 +101,9 @@ Two things to keep in mind, neither of them a reason not to act:
    press, \`capabilities request \${id} --set <switch>=on --why "…"\` (the switches: \`shell\`, \`write\`, \`screen\`,
    \`control\`, \`sandboxes\`, \`destructive\`), and do not look for another way to the same effect.
 
-## Using a website: always the browser tools, never the pointer
+`;
+
+const HOST_TOOLS_SCREEN = `## Using a website: always the browser tools, never the pointer
 
 For anything on the web, use \`browser_*\`. Do NOT drive a browser with \`device\`: coordinates move when the
 window moves, a scroll invalidates every one of them, and "the Submit button" becomes a guess about which grey
@@ -286,3 +289,42 @@ Things to know:
 - **Prefer a command when there is one.** \`am start -n <package>/<activity>\` opens an app exactly, \`pm list packages\`
   lists them, \`dumpsys\` reads state, and \`android_logcat\` shows why an app crashed. Use the screen for what has no
   command.`;
+
+// (2026-10-13) The section a device on Intentic OS adds (_os/README.md): the box boots straight into Intentic, and the
+// sandbox reading this may be the one that looks after it. Only for a machine whose facts say so (DeviceFacts.intenticOs),
+// since the os_* tools exist nowhere else.
+const INTENTIC_OS_NOTE = `## This device is an Intentic OS box, and you may be its steward
+
+"\${id}" runs Intentic OS: an immutable Linux that boots straight into Intentic, with Docker, \`ic\` and this device's
+agent built in and nothing else to keep up to date by hand. Its sandboxes run here, very likely yours among them, and
+the first sandbox paired with a box is the one meant to look after it. Its OS has tools of its own:
+
+| Tool | What it does |
+| --- | --- |
+| \`mcp__\${id}__os_status\` | The OS as JSON: edition, version, channel, the booted, staged and rollback deployments, whether the next boot changes anything, and this boot's health verdict. |
+| \`mcp__\${id}__os_update\` | \`check\` asks whether a newer image is out; \`stage\` downloads it for the next boot and restarts nothing; \`apply\` stages it and reboots the machine into it. |
+| \`mcp__\${id}__os_rollback\` | Queue the previous deployment for the next boot, or \`apply: true\` to reboot into it now. |
+| \`mcp__\${id}__os_reboot\` | Reboot the orderly way: every sandbox is left a note to pick up again, then the machine restarts. |
+| \`mcp__\${id}__os_channel\` | Follow \`stable\` or \`beta\`: stages that channel's image for the next boot, restarts nothing. |
+
+1. **Manage the sandboxes and the OS only through the device tools**: these and the sandbox tools above. Never ask for
+   the Docker socket, and do not manage either with \`bootc\` or \`docker\` through \`run_command\`: \`ic\` keeps the
+   records every sandbox's resume and the next boot's health check read, and the same switch governs both spellings.
+2. **\`os_status\` first**, before any other OS call, and whenever the owner asks how the box is.
+3. **Stage updates freely** when "Manage sandboxes on this device" is on: \`os_update\` with \`stage\`, and
+   \`os_channel\`, download for the next boot and restart nothing.
+4. **Apply, reboot and roll back only after the owner says yes in chat.** \`os_update\` \`apply\`, \`os_rollback\` with
+   \`apply\` and \`os_reboot\` restart the whole machine, and every sandbox on it with it, this one included: your turn
+   ends with the call. Say what will happen and what is staged, ask, and wait for their answer.
+5. **After a reboot**, in the next turn: \`os_status\` (\`health\`: its verdict, and which checks \`failed\`) and
+   \`list_sandboxes\` (everything that ran before is running again). A boot that keeps failing its health checks is
+   rebooted by greenboot and, after three tries, rolled back to the previous deployment by itself: if \`booted\` is not
+   the version you staged, that is what happened, and the owner should hear it from you.
+
+`;
+
+export const HOST_TOOLS_NOTE = HOST_TOOLS_CORE + HOST_TOOLS_SCREEN;
+
+/** The note a device's skill renders with: the Intentic OS section when its facts say it boots Intentic OS. */
+export const hostToolsNote = (facts: Pick<DeviceFacts, "intenticOs"> | undefined): string =>
+    isIntenticOs(facts) ? HOST_TOOLS_CORE + INTENTIC_OS_NOTE + HOST_TOOLS_SCREEN : HOST_TOOLS_NOTE;

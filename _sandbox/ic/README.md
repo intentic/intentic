@@ -9,10 +9,12 @@ flowchart LR
     desktop["Desktop app"] --> ic
     machine["Machine agent<br/>sandbox tools"] --> ic
     hosted["Platform<br/>hosted overlay builds"] --> ic
+    osunits["Intentic OS<br/>greenboot · systemd units"] --> ic
     ic --> docker["Docker<br/>sandbox containers"]
     ic --> image["Sandbox image<br/>run contract"]
     ic --> claim["Platform<br/>setup-code claim"]
     ic --> report["Platform<br/>host report"]
+    ic --> bootc["bootc<br/>Intentic OS image"]
 ```
 
 - Runs on the host: a laptop, a server or a hosted machine, never inside a sandbox, which cannot see its siblings.
@@ -210,6 +212,33 @@ flowchart LR
   `ic sandbox doctor` is the same engine, read-only.
 - The image owns its `docker run` flags. `ic` asks the image for its run command (`contract.rs`) instead of
   writing one, so a flag change ships with the image.
+- **Intentic OS (2026-10-13).** On a machine whose image carries `/usr/lib/intentic-os/release.json`
+  ([_os/README.md](../../_os/README.md)), `ic os` is the one door through which the OS changes, and its callers read
+  its JSON rather than bootc's. Anywhere else every verb stops with exit 3 and one sentence. `status --json` maps
+  `bootc status --json`, release.json, the boot's health verdict and the policy into the contract's
+  `IntenticOsStatusSchema` (a test rebuilds each of `golden/intentic-os.json`'s examples field for field); a bootc
+  that does not answer leaves the three deployments null and says why on stderr. `update`
+  stages the newest image of the channel for the next boot: `--check --json` only asks (`{available, version,
+  digest}`), and `--scheduled`, the daily timer's run, checks nothing under `updates: off`. `rollback` queues the
+  other deployment, and `channel <name>` switches to `<repository>:<name>`. bootc and `systemctl reboot` go through
+  `sudo -n` when ic is not root. `update --apply`, `rollback --apply` and `reboot` reboot the orderly way: each
+  running sandbox gets the resume ask and the restart intent (`--no-resume` as elsewhere), `ic os record` writes
+  which sandboxes run to `/var/lib/intentic-os/expected-running.json`, then systemd reboots. `health [--wait 600]`,
+  greenboot's required check, waits for docker and every recorded sandbox's daemon, writes
+  `/run/intentic-os/health.json`, and exits 0 green or 1 red with each failed check named. `pair` is first boot:
+  while the machine has no sandbox it takes a setup code typed on the console or pasted on a page it serves on the
+  network (port 80, else 8080; it answers only to the machine's own names and refuses a form posted from another
+  site), reads the code out of a whole setup command, runs `ic sandbox connect <code> -y` as its own process with
+  the output on both, and leaves `/var/lib/intentic-os/paired` once that succeeds. `INTENTIC_OS_ROOT` puts every
+  one of these paths under another folder, for tests.
+- **Isolation on Intentic OS.** The policy is `/usr/lib/intentic-os/os.json` with `/etc/intentic/os.json` over it,
+  key by key: `isolation` (`auto`, `vm`, `container`; a word nobody knows is `auto`, said), `pairOnLan`, `updates`
+  (`stage`, `off`). Connect, every recreate and `runner up` pass the sandbox's run line through `os/policy.rs`. Off
+  Intentic OS it is unchanged. On it, `--runtime=kata` goes in right after `run` when the policy asks for a microVM
+  (`auto`: a sandbox started `--privileged`; `vm`: every one) and dockerd has the `kata` runtime. The line stays on
+  runc, with one line saying why, when dockerd has no `kata` or the line asks for what a microVM cannot give: the
+  host's network, PID, IPC or UTS namespace, the Docker socket, a GPU, another runtime. The tunnel sidecar is never
+  changed, and a policy change reaches a sandbox at its next recreate.
 - `ic docker prepare` checks and, with consent, installs what Docker needs; `ic machine enroll` makes the host a deploy
   target; `ic runner up` starts a runner container for a parent sandbox.
 - On Windows, `ic docker prepare` ends every piped run with one `intentic-prepare-summary: {json}` line (ready,
@@ -295,6 +324,8 @@ flowchart LR
 - [src/sandbox/side.rs](src/sandbox/side.rs) — which side of the computer keeps a sandbox, and the keeper's lease;
   [src/sandbox/inside.rs](src/sandbox/inside.rs) reads and writes the files every side shares under `/history/.ic/`.
 - [src/contract.rs](src/contract.rs) — asks the image for its `docker run` command.
+- [src/os/](src/os/) — `ic os`: Intentic OS's status, updates, orderly reboots, boot health and first-boot pairing;
+  [src/os/policy.rs](src/os/policy.rs) is the isolation policy every sandbox run line passes through.
 - [src/sandbox/host_files.rs](src/sandbox/host_files.rs) — holds every file ic and the daemon share inside the
   container (the restart ask, the update markers, the boot failure, the boot marker, the work signal) to the daemon's
   own path and shape: its `golden/host-files.json` and the contract's `golden/update-*.json`.

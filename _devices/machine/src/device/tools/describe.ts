@@ -11,6 +11,7 @@ import { deviceFeatures, icOutOfDate, icOverrides, type InstalledIc, installedIc
 import { previousExit, thisRun } from "../../resident/last-exit.js";
 import { MACHINE_VERSION } from "../../version.js";
 import { readUpkeepSummary } from "../../upkeep/reconcile.js";
+import { readIntenticOs } from "./os/os.js";
 
 // What this device IS: without it an agent guesses (apt-get on Fedora, bash on Windows, paths outside its own
 // boundary) and reports the refusal as a bug. Sent unprompted in the hello frame and on the sandbox's
@@ -70,7 +71,7 @@ export const linkFacts = (stamped: Readonly<Record<string, LinkReading>> | undef
 };
 
 export const hostFacts = async (scopes: DeviceScopes): Promise<DeviceFacts> => {
-    const [os, engine, wsl, distros, stamped, features, upkeep, ic] = await Promise.all([
+    const [os, engine, wsl, distros, stamped, features, upkeep, ic, intenticOs] = await Promise.all([
         osName(),
         engineFacts(),
         wslEnvironment(),
@@ -79,6 +80,7 @@ export const hostFacts = async (scopes: DeviceScopes): Promise<DeviceFacts> => {
         deviceFeatures(),
         readUpkeepSummary(),
         installedIc(),
+        readIntenticOs(),
     ]);
     const links = linkFacts(stamped);
     // Read after deviceFeatures, which fetched (or failed to fetch) the current ic first.
@@ -120,8 +122,21 @@ export const hostFacts = async (scopes: DeviceScopes): Promise<DeviceFacts> => {
     if (overrides.length > 0) {
         facts.icOverrides = overrides;
     }
+    // On Intentic OS, which edition, version and channel it boots (release.json): what tells the sandbox this box's OS is
+    // its to manage, through the os_* tools.
+    if (intenticOs !== undefined) {
+        facts.intenticOs = intenticOs;
+    }
     return facts;
 };
+
+// The line describe adds on Intentic OS, so the os_* tools are found before a model reaches for bootc. Pure.
+export const intenticOsLine = (facts: Pick<DeviceFacts, "intenticOs">): string[] =>
+    facts.intenticOs === undefined
+        ? []
+        : [
+              `Intentic OS: the ${facts.intenticOs.edition} edition, ${facts.intenticOs.version}, on the ${facts.intenticOs.channel} channel. os_status says what is staged and how this boot's health checks went; os_update, os_rollback, os_reboot and os_channel manage it through ic. Never bootc directly.`,
+          ];
 
 // The other environments of this same computer, and how a command crosses into them: the one fact about a Windows
 // PC an agent cannot see from the tool list.
@@ -168,6 +183,7 @@ export const describeText = async (scopes: DeviceScopes): Promise<string> => {
             `Home: ${facts.home}`,
             `Folders you may read and write: ${rootsText(facts.roots)}`,
             ...environmentLines(facts),
+            ...intenticOsLine(facts),
             `Permissions: run commands ${scopes.shell}, run destructive commands ${scopes.destructive}, write files ${scopes.write}, see the screen ${scopes.screen}, use the mouse and keyboard ${scopes.control}, manage sandboxes ${scopes.sandboxes}, run programs this sandbox sends ${scopes.programs}`,
             ...agentLines(ic, icOverrides(process.env), { version: MACHINE_VERSION, startedAt: thisRun()?.startedAt, previous: previousExit() }),
             ...(facts.icOutOfDate === undefined ? [] : [facts.icOutOfDate]),

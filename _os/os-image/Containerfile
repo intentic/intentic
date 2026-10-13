@@ -1,0 +1,64 @@
+# INTENTIC OS, SERVER EDITION: a bootc image. The machine boots this image's /usr read-only, keeps /etc and /var,
+# and updates by pulling a newer image into a second deployment it boots next (`ic os update`), with the previous one
+# kept for `ic os rollback` and for greenboot's automatic rollback of a boot that fails its health checks.
+#
+# Build it with build.sh, which stages `ic` into bin/ first:
+#   bash _os/os-image/build.sh                     # ic from _sandbox/ic/dist-bin, else built from source
+#   bash _os/os-image/build.sh --edition desktop   # the desktop edition on top (Containerfile.desktop)
+#
+# Everything installed comes from Fedora's own signed repositories: moby-engine is Fedora's Docker build (29.8.2 on
+# 2026-10-13, a patch behind the 29.9.0 the sandbox image pins for its nested engine; the two need not match, and
+# Fedora's updates move this one), kata-containers runs a sandbox as a microVM, greenboot judges each boot.
+# greenboot-default-health-checks is left out on purpose: its DNS and repository checks would roll back a box that
+# booted fine but is offline.
+ARG BASE=quay.io/fedora/fedora-bootc:44
+FROM ${BASE}
+
+ARG VERSION=0.0.0
+ARG CHANNEL=stable
+ARG REPOSITORY=ghcr.io/intentic/os
+
+# kata-containers' own %post builds the microVM's initrd from the RUNNING kernel, which during an image build is the
+# build host's: it is installed without scripts, and its kata-osbuilder-generate.service builds that initrd on the
+# box at boot, from the kernel this image boots. Its dracut config asks for the `dbus` module, which needs
+# dbus-daemon even though the system bus here is dbus-broker; without it the initrd build fails at boot.
+RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked \
+    dnf -y --setopt=keepcache=1 install \
+        moby-engine \
+        docker-buildx \
+        docker-compose \
+        greenboot \
+        nss-mdns \
+        dbus-daemon \
+    && dnf -y --setopt=keepcache=1 --setopt=tsflags=noscripts install kata-containers \
+    && dnf clean all \
+    && rm -rf /var/log/dnf5.log* /var/lib/dnf /run/dnf
+
+# The host CLI every door goes through (build.sh puts the binary for this architecture here).
+COPY --chmod=0755 bin/ic /usr/bin/ic
+
+# Units, policy defaults, the intentic user, sudo rules, Docker's config and the health check.
+COPY rootfs/ /
+RUN chmod 0440 /etc/sudoers.d/intentic-os \
+    && chmod 0755 /usr/lib/greenboot/check/required.d/50-intentic-sandboxes.sh /usr/libexec/intentic-os/* \
+    && visudo -cf /etc/sudoers.d/intentic-os
+
+# What this image is, read by `ic os` and everything that calls it.
+RUN printf '{"name":"Intentic OS","edition":"server","version":"%s","channel":"%s","repository":"%s"}\n' \
+        "$VERSION" "$CHANNEL" "$REPOSITORY" > /usr/lib/intentic-os/release.json
+
+# bootc's own timer pulls AND reboots on its schedule; on Intentic OS a reboot is the owner's call, so it is masked and
+# intentic-os-update.timer only stages.
+RUN systemctl mask bootc-fetch-apply-updates.timer \
+    && systemctl enable docker.service avahi-daemon.service \
+        intentic-pair.service intentic-os-record.service intentic-os-update.timer intentic-tpm-enroll.service \
+        greenboot-healthcheck.service greenboot-set-rollback-trigger.service
+
+LABEL org.opencontainers.image.title="Intentic OS" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.source="https://github.com/intentic/intentic" \
+      dev.intentic.os.edition="server" \
+      dev.intentic.os.channel="${CHANNEL}" \
+      containers.bootc="1"
+
+RUN bootc container lint

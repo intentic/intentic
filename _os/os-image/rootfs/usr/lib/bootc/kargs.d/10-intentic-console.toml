@@ -1,0 +1,6 @@
+# Serial first, the screen last: the last console= is /dev/console, where a person at the box looks.
+# loglevel=4 keeps the kernel's notices (SELinux audit lines, mostly) off that screen, where the first-boot pairing
+# prompt and the desktop session are; they are still in the journal.
+# rd.luks.options: the initramfs unlocks an encrypted root with the TPM once it is bound (the installer does that),
+# and asks for the passphrase otherwise; the option is inert for a volume with no TPM2 token.
+kargs = ["console=ttyS0,115200n8", "console=tty0", "loglevel=4", "rd.luks.options=tpm2-device=auto"]

@@ -17,6 +17,7 @@ mod machine_sandbox;
 mod notice;
 mod offline;
 mod onboarding;
+mod os;
 mod prefetch;
 mod project;
 mod repair;
@@ -233,6 +234,13 @@ pub fn run() {
             engine::engine_move,
             engine::engine_prefer,
             engine::engine_cleanup,
+            // Intentic OS: this computer's system, and the changes This device makes to it (os.rs).
+            os::os_status,
+            os::os_update_check,
+            os::os_update,
+            os::os_rollback,
+            os::os_reboot,
+            os::os_channel,
         ])
         .setup(|app| {
             // The plugins are up, the single-instance handoff among them: this launch is the copy that runs.

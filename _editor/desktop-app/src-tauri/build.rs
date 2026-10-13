@@ -105,4 +105,11 @@ const COMMANDS: &[&str] = &[
     "engine_move",
     "engine_prefer",
     "engine_cleanup",
+    // Intentic OS: this computer's system, and the changes This device makes to it (os.rs).
+    "os_status",
+    "os_update_check",
+    "os_update",
+    "os_rollback",
+    "os_reboot",
+    "os_channel",
 ];

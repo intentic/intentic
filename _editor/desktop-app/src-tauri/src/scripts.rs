@@ -1281,7 +1281,7 @@ pub fn run_ic_heard(
     let ic = crate::commands::bundled_ic().ok_or_else(|| {
         "Intentic's own ic is not beside this app, so this step cannot run.".to_string()
     })?;
-    let mut command = own_group(Command::new(&ic));
+    let mut command = Command::new(&ic);
     if let Some(dir) = ic.parent() {
         command.current_dir(dir);
     }
@@ -1291,6 +1291,22 @@ pub fn run_ic_heard(
             .into_iter()
             .chain(env.iter().cloned()),
     );
+    run_command_heard(app, id, what, command, None, heard)
+}
+
+/// Run `command`, made by the caller (its program, arguments and environment), streamed and transcribed under `id` as
+/// every run is, and stopped with everything it started once it has run for `limit`. BLOCKING, with [`run_ic_heard`]'s
+/// contract: `Err` only when it never started. For a program other than the `ic` beside this app: Intentic OS's own
+/// (os.rs), the one that knows `ic os`.
+pub fn run_command_heard(
+    app: &AppHandle,
+    id: &str,
+    what: &str,
+    command: Command,
+    limit: Option<Duration>,
+    heard: Option<Heard>,
+) -> Result<Ended, String> {
+    let mut command = own_group(command);
     intentic_bounded::no_window(&mut command);
     let spool = Spool::open(id).map_err(|error| {
         format!("could not start {what}: nowhere to write what it says ({error})")
@@ -1302,7 +1318,7 @@ pub fn run_ic_heard(
             spool.remove();
             format!("could not start {what}: {error}")
         })?;
-    follow(app, id, what, child, spool, None, heard)
+    follow(app, id, what, child, spool, limit, heard)
 }
 
 /* WHERE A RUN'S CHILD WRITES — a file of its own, never a pipe this process holds (2026-10-05).

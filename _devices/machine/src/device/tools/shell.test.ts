@@ -199,6 +199,21 @@ test("the refusal says what was asked for in ic's own verbs, and how it arrived 
     expect(() => assertNoSandboxPower("ic sandbox restart work\n", withSandboxes("off"), "typed")).toThrow(/^Refused: typed into a terminal, this would manage a sandbox/);
 });
 
+// On Intentic OS the box's own OS is the ground every sandbox stands on: updating, rolling back or rebooting it through
+// the shell answers to the same switch as the os_* tools.
+test("an OS update, rollback, channel switch or reboot through the shell is the switch's too, said as the OS's", () => {
+    for (const command of ["ic os update", "ic os update --apply", "ic os rollback --apply", "ic os reboot", "ic os channel beta", "sudo bootc upgrade --apply", "sudo bootc switch ghcr.io/intentic/os:beta"]) {
+        expect(() => assertNoSandboxPower(command, withSandboxes("off")), command).toThrow(ScopeError);
+        expect(() => assertNoSandboxPower(command, withSandboxes("on")), command).not.toThrow();
+    }
+    expect(() => assertNoSandboxPower("ic os reboot", withSandboxes("off"))).toThrow(
+        /^Refused: this command would manage this device's OS, and with it every sandbox on it, \(os-reboot\), and "Manage sandboxes on this device" is switched off/,
+    );
+    for (const command of ["ic os status --json", "ic os update --check --json", "bootc status", "bootc upgrade --check"]) {
+        expect(() => assertNoSandboxPower(command, withSandboxes("off")), command).not.toThrow();
+    }
+});
+
 test("what only reads, and docker aimed at anything else, is untouched with the switch off", () => {
     for (const command of [
         "ic sandbox list --json",

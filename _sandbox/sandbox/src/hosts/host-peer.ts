@@ -15,7 +15,7 @@ import {
 } from "@intentic/sandbox-contract";
 import type { ContractRouterClient } from "@orpc/contract";
 import { capabilityCtx } from "../capabilities/capability.js";
-import { deviceHandler } from "../capabilities/handlers/device.handler.js";
+import { deviceHandler, refreshDeviceSkill } from "../capabilities/handlers/device.handler.js";
 import type { Services } from "../composition.js";
 import type { CardRule } from "../peers/enrollment.js";
 import { HostEnrollmentFieldsSchema, hostEnrollmentsDocument, hostPairConsumedDocument } from "../peers/enrollment.js";
@@ -205,6 +205,10 @@ export const hostPeerRoutes = (services: Services, guards: HostGuardDeps) =>
         onConnected: (id, facts) => {
             void identifyMachine(services, id, facts).catch((err: unknown) => services.logger.warn({ err, id }, "hosts: could not record which machine connected"));
             bootstrapEnvironments(services, id, facts);
+            // The skill was written when the card was applied, before the machine said what it is (an Intentic OS box).
+            void refreshDeviceSkill(capabilityCtx(services), id).catch((err: Error) =>
+                services.logger.warn({ err, id }, "hosts: could not bring the device's skill up to date with what it said as it connected"),
+            );
         },
         // The owner's safety policy, applied here since the bridge is the last thing to see a call while someone can
         // still be asked (host-call-gate.ts). The machine's own scopes remain the floor; a refusal here only stops what

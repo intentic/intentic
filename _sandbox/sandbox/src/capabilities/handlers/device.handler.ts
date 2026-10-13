@@ -1,14 +1,17 @@
-import type { DeviceConfig } from "@intentic/sandbox-contract";
+import { type DeviceConfig, HOST_NATIVE_ENVIRONMENT, parseHostConnection } from "@intentic/sandbox-contract";
 import { revokeSyncEnrollmentsOf } from "../../peers/desktop-sync.js";
-import { HOST_TOOLS_NOTE } from "./host-skills.js";
-import { peerHandler } from "./peer.handler.js";
+import type { CapabilityCtx } from "../capability.js";
+import { HOST_TOOLS_NOTE, hostToolsNote } from "./host-skills.js";
+import { peerHandler, type PeerHandlerSpec, refreshPeerSkill } from "./peer.handler.js";
 
 /* A device of the user's OWN, one capability per machine, the id being its name: the peer handler (peers/) over the host door. */
-export const deviceHandler = peerHandler<DeviceConfig>({
+const DEVICE: PeerHandlerSpec<DeviceConfig> = {
     kind: "device",
     noun: "device",
     where: "on that device",
     note: HOST_TOOLS_NOTE,
+    // What the machine's native side said of itself at its last connect: on Intentic OS the skill says so too.
+    noteFor: (ctx, id) => hostToolsNote(ctx.hostHub.state(id).facts),
     pairHint: "click Connect and run the one-liner on that device",
     awayHint: "the device is offline",
     added: (id) => `Added "${id}". Run the one-time command its entry is offering on that device, the agent can work on it from the next turn.`,
@@ -44,4 +47,19 @@ export const deviceHandler = peerHandler<DeviceConfig>({
         programs: host.programs,
         ...(host.roots !== undefined ? { roots: host.roots } : {}),
     }),
-});
+};
+export const deviceHandler = peerHandler<DeviceConfig>(DEVICE);
+
+/**
+ * Brings a device's skill up to date with what its machine said as it connected (`connection` is the connection key):
+ * the skill is written when the card is applied, usually before the machine has ever connected, so this is where an
+ * Intentic OS box's section arrives. Only the native side speaks for the card; a card never applied is left alone.
+ */
+export const refreshDeviceSkill = async (ctx: CapabilityCtx, connection: string): Promise<boolean> => {
+    const { card, environment } = parseHostConnection(connection);
+    if (environment !== HOST_NATIVE_ENVIRONMENT) {
+        return false;
+    }
+    const capability = (await ctx.capabilities.list()).find((entry) => entry.kind === "device" && entry.id === card);
+    return capability?.kind === "device" ? await refreshPeerSkill(DEVICE, ctx, card, capability.config) : false;
+};

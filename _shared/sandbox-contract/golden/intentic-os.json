@@ -1,0 +1,60 @@
+{
+  "release": {
+    "name": "Intentic OS",
+    "edition": "server",
+    "version": "2026.10.13.0",
+    "channel": "stable",
+    "repository": "ghcr.io/intentic/os"
+  },
+  "status": [
+    {
+      "os": "intentic-os",
+      "edition": "server",
+      "version": "2026.10.13.0",
+      "channel": "stable",
+      "image": "ghcr.io/intentic/os:stable",
+      "booted": { "image": "ghcr.io/intentic/os:stable", "version": "2026.10.13.0", "digest": "sha256:9a1b2c3d4e5f60718293a4b5c6d7e8f9a0b1c2d3e4f5061728394a5b6c7d8e9f", "timestamp": "2026-10-13T09:12:00Z" },
+      "staged": null,
+      "rollback": { "image": "ghcr.io/intentic/os:stable", "version": "2026.10.06.0", "digest": "sha256:0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0", "timestamp": null },
+      "rollbackQueued": false,
+      "rebootRequired": false,
+      "health": { "verdict": "green", "failed": [] },
+      "isolation": "auto",
+      "vmRuntime": true
+    },
+    {
+      "os": "intentic-os",
+      "edition": "desktop",
+      "version": "2026.10.13.0",
+      "channel": "beta",
+      "image": "ghcr.io/intentic/os-desktop:beta",
+      "booted": { "image": "ghcr.io/intentic/os-desktop:beta", "version": "2026.10.13.0", "digest": "sha256:9a1b2c3d4e5f60718293a4b5c6d7e8f9a0b1c2d3e4f5061728394a5b6c7d8e9f", "timestamp": "2026-10-13T09:12:00Z" },
+      "staged": { "image": "ghcr.io/intentic/os-desktop:beta", "version": "2026.10.14.0", "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111", "timestamp": null },
+      "rollback": null,
+      "rollbackQueued": false,
+      "rebootRequired": true,
+      "health": { "verdict": "red", "failed": ["sandbox work is not running", "dockerd did not answer"] },
+      "isolation": "vm",
+      "vmRuntime": false
+    },
+    {
+      "os": "intentic-os",
+      "edition": "server",
+      "version": "2026.10.13.0",
+      "channel": "stable",
+      "image": "ghcr.io/intentic/os:stable",
+      "booted": { "image": null, "version": null, "digest": null, "timestamp": null },
+      "staged": null,
+      "rollback": { "image": "ghcr.io/intentic/os:stable", "version": "2026.10.06.0", "digest": null, "timestamp": null },
+      "rollbackQueued": true,
+      "rebootRequired": true,
+      "health": { "verdict": "unknown", "failed": [] },
+      "isolation": "container",
+      "vmRuntime": false
+    }
+  ],
+  "updateCheck": [
+    { "available": true, "version": "2026.10.20.0", "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222" },
+    { "available": false, "version": null, "digest": null }
+  ]
+}

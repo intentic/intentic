@@ -1,0 +1,62 @@
+# bootc-image-builder's config for the installer ISO (disk.sh --type anaconda-iso). An unattended install: it erases
+# one disk (the first internal one; never the USB stick it booted from, never a second disk) and installs Intentic OS
+# on it. Where the machine has a TPM2 the root is encrypted with a random one-time passphrase and bound to the TPM
+# right there, so the first boot unlocks by itself; intentic-tpm-enroll then shows a recovery key once and removes the
+# one-time passphrase. Without a TPM nothing could unlock an unattended disk, so the root is left unencrypted.
+
+[customizations.installer.kickstart]
+contents = """
+text
+lang en_US.UTF-8
+keyboard us
+timezone UTC --utc
+network --bootproto=dhcp --activate
+rootpw --lock
+zerombr
+%include /tmp/intentic-disk.ks
+reboot --eject
+
+%pre --erroronfail --log=/tmp/intentic-pre.log
+set -euo pipefail
+# The first internal disk: not removable, not the medium this installer runs from, not a zram or loop device.
+media=$(findmnt -no SOURCE /run/install/repo 2>/dev/null | sed -E 's#^/dev/##; s#[0-9]+$##; s#p$##' || true)
+disk=$(lsblk -dnpo NAME,RM,TYPE | awk -v media="/dev/$media" '$2 == 0 && $3 == "disk" && $1 != media && $1 !~ /zram|loop/ && !found { print $1; found = 1 }')
+[ -n "$disk" ] || { echo "No internal disk to install Intentic OS on." >&2; exit 1; }
+disk=${disk#/dev/}
+{
+    echo "ignoredisk --only-use=$disk"
+    echo "clearpart --all --initlabel --disklabel=gpt --drives=$disk"
+    echo "reqpart --add-boot"
+} > /tmp/intentic-disk.ks
+if [ -e /sys/class/tpm/tpm0 ]; then
+    # od, not base64: the installer's environment has no base64, and an empty key here would leave Anaconda waiting
+    # at a passphrase prompt nobody is there to answer.
+    key=$(od -An -N32 -tx1 /dev/urandom | tr -dc '0-9a-f')
+    [ "${#key}" -eq 64 ] || { echo "Could not make a disk passphrase." >&2; exit 1; }
+    umask 077
+    printf '%s' "$key" > /tmp/intentic-luks-key
+    echo "part / --grow --fstype=xfs --ondisk=$disk --encrypted --luks-version=luks2 --passphrase=$key" >> /tmp/intentic-disk.ks
+else
+    echo "part / --grow --fstype=xfs --ondisk=$disk" >> /tmp/intentic-disk.ks
+fi
+%end
+
+%post --nochroot --erroronfail --log=/tmp/intentic-post.log
+set -euo pipefail
+if [ -f /tmp/intentic-luks-key ]; then
+    # Bound to the TPM now (PCR 7, the Secure Boot state, which the installer and the installed system share), so the
+    # first boot needs no passphrase; the first boot adds the recovery key and drops this one-time passphrase.
+    for volume in $(lsblk -nrpo NAME,FSTYPE | awk '$2 == "crypto_LUKS" { print $1 }'); do
+        systemd-cryptenroll --unlock-key-file=/tmp/intentic-luks-key --tpm2-device=auto --tpm2-pcrs=7 "$volume"
+    done
+    # An ostree install: the new system's /etc is its deployment's, under the physical root Anaconda mounted (there is
+    # no /mnt/sysimage). Plain mkdir, cp and chmod: the installer's environment has no `install`.
+    for etc in /mnt/sysroot/ostree/deploy/*/deploy/*/etc; do
+        [ -d "$etc" ] || continue
+        mkdir -p "$etc/intentic"
+        cp /tmp/intentic-luks-key "$etc/intentic/luks-initial-key"
+        chmod 0400 "$etc/intentic/luks-initial-key"
+    done
+fi
+%end
+"""

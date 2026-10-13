@@ -288,9 +288,9 @@ fn inspected_from(listing: &str) -> HashMap<String, Value> {
         .collect()
 }
 
-/// `ic sandbox list --json`: one line of JSON on stdout, and nothing else there.
-pub fn list_json() -> Result<()> {
-    docker::require_daemon()?;
+/// Every container row under the sandbox prefix, from one bounded `docker ps -a`; an engine that did not answer, or
+/// refused, is a stop rather than an empty list.
+fn ps_rows() -> Result<Vec<Row>> {
     let args = ps_args();
     let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
     let ps = docker::capture_bounded(&arg_refs, READ_LIMIT)?;
@@ -308,7 +308,46 @@ pub fn list_json() -> Result<()> {
             )
         );
     }
-    let rows = rows_from(&ps.stdout);
+    Ok(rows_from(&ps.stdout))
+}
+
+/// One sandbox as the listing names it, without the reads a whole listing makes: for the flows that only need to know
+/// what this machine has and what of it runs (`ic os record`, `ic os reboot`, `ic os pair`).
+#[cfg_attr(not(unix), allow(dead_code))] // read by `ic os`, which is unix-only
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Seen {
+    pub slug: String,
+    pub container: String,
+    pub running: bool,
+}
+
+/// Every sandbox on this machine, by the listing's own rules (a sidecar, a parked container beside its live one and a
+/// moved copy are none), with whether each runs. Err when docker could not say, never an empty list in its place.
+#[cfg_attr(not(unix), allow(dead_code))] // read by `ic os`, which is unix-only
+pub fn seen() -> Result<Vec<Seen>> {
+    Ok(seen_from(&ps_rows()?))
+}
+
+/// The same, over rows docker already gave. Pure.
+#[cfg_attr(not(unix), allow(dead_code))] // read by `ic os`, which is unix-only
+fn seen_from(rows: &[Row]) -> Vec<Seen> {
+    rows.iter()
+        .filter(|row| !is_sidecar(&row.name, rows))
+        .filter_map(|row| {
+            let (slug, parked) = row_slug(row, rows)?;
+            Some(Seen {
+                slug: slug.to_string(),
+                container: row.name.clone(),
+                running: row.state == "running" && !parked,
+            })
+        })
+        .collect()
+}
+
+/// `ic sandbox list --json`: one line of JSON on stdout, and nothing else there.
+pub fn list_json() -> Result<()> {
+    docker::require_daemon()?;
+    let rows = ps_rows()?;
     let inspected = if rows.is_empty() {
         HashMap::new()
     } else {
@@ -632,5 +671,26 @@ mod tests {
             inspected.keys().collect::<Vec<_>>(),
             vec!["intentic-sandbox-a"]
         );
+    }
+
+    #[test]
+    fn what_runs_is_named_by_the_listings_own_rules() {
+        let rows = rows_from(
+            "intentic-sandbox-work\trunning\timg:new\n\
+             intentic-sandbox-work.previous\texited\timg:old\n\
+             intentic-sandbox-tunnel-work\trunning\tcloudflare/cloudflared\n\
+             intentic-sandbox-lab\texited\timg:1\n\
+             intentic-sandbox-gone.previous\trunning\timg:1\n\
+             intentic-sandbox-old.moved\texited\timg:1\n",
+        );
+        let seen = seen_from(&rows);
+        let named: Vec<(&str, bool)> = seen
+            .iter()
+            .map(|seen| (seen.slug.as_str(), seen.running))
+            .collect();
+        // The sidecar, the parked container beside its live one and the moved copy are no sandbox; a parked container
+        // alone is its sandbox, down, whatever docker says of its state.
+        assert_eq!(named, vec![("work", true), ("lab", false), ("gone", false)]);
+        assert_eq!(seen[0].container, "intentic-sandbox-work");
     }
 }

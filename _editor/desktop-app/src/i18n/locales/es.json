@@ -323,6 +323,94 @@
         },
         "movingBadge": "moviendo sandboxes"
     },
+    "os": {
+        "title": "Este sistema",
+        "version": "Intentic OS {version}",
+        "edition": {
+            "desktop": "Edición de escritorio",
+            "server": "Edición de servidor"
+        },
+        "channelName": {
+            "stable": "Estable",
+            "beta": "Beta"
+        },
+        "channelLabel": "Canal",
+        "channelNext": "{channel} a partir del próximo reinicio. Hasta entonces, este ordenador sigue en {current}.",
+        "health": {
+            "healthy": "en buen estado",
+            "failing": "con fallos",
+            "unknown": "sin comprobar"
+        },
+        "failedChecks": "Estas comprobaciones fallaron al arrancar este ordenador:",
+        "isolation": {
+            "auto": "Los sandboxes que pueden usar Docker se ejecutan cada uno en su propia microVM, y el resto en un contenedor.",
+            "vm": "Cada sandbox se ejecuta en su propia microVM.",
+            "container": "Cada sandbox se ejecuta en un contenedor."
+        },
+        "vmMissing": {
+            "auto": "Las microVM no están disponibles en este ordenador, así que los sandboxes que pueden usar Docker también se ejecutan en un contenedor.",
+            "vm": "Las microVM no están disponibles en este ordenador, así que cada sandbox se ejecuta en un contenedor."
+        },
+        "waiting": {
+            "update": "Hay una actualización lista. Se aplica a partir del próximo reinicio.",
+            "updateTo": "La versión {version} está lista. Se aplica a partir del próximo reinicio.",
+            "rollback": "Este ordenador vuelve a la versión anterior en el próximo reinicio.",
+            "rollbackTo": "Este ordenador vuelve a la versión {version} en el próximo reinicio."
+        },
+        "restartToUpdate": "Reiniciar para actualizar",
+        "restartIntoPrevious": "Reiniciar en la versión anterior",
+        "restartNote": "Cada sandbox de este ordenador se reinicia con él, y sus turnos en curso se reanudan después.",
+        "running": {
+            "update": "Descargando la actualización",
+            "updateApply": "Actualizando y después reiniciando este ordenador",
+            "rollback": "Preparando la versión anterior",
+            "rollbackApply": "Reiniciando en la versión anterior",
+            "channel": "Cambiando de canal",
+            "channelTo": "Cambiando a {channel}",
+            "reboot": "Reiniciando este ordenador"
+        },
+        "keepsGoing": "Cerrar esta ventana no lo detiene.",
+        "restarting": "Este ordenador se está reiniciando. Tus sandboxes vuelven con él y continúan con sus turnos.",
+        "busy": "Intentic ya está ocupado en este ordenador. Vuelve a intentarlo cuando haya terminado.",
+        "notOs": "Según ic, este ordenador no usa Intentic OS, así que no ha cambiado nada.",
+        "didntFinish": {
+            "update": "La actualización no terminó",
+            "rollback": "La vuelta atrás no terminó",
+            "channel": "El cambio de canal no terminó",
+            "reboot": "El reinicio no se produjo"
+        },
+        "timedOut": "Se detuvo al cabo de una hora.",
+        "showLog": "Mostrar el registro",
+        "didntStart": "El cambio no se inició",
+        "available": "Hay una versión más reciente disponible.",
+        "availableVersion": "La versión {version} está disponible.",
+        "download": "Descargar",
+        "upToDate": "Intentic OS está al día.",
+        "checkFailed": "La búsqueda de actualizaciones no terminó",
+        "checking": "Comprobando…",
+        "checkForUpdates": "Buscar actualizaciones",
+        "rollBack": "Volver atrás",
+        "confirm": {
+            "restartTitle": "¿Reiniciar este ordenador?",
+            "restartUpdate": "Intentic OS se reinicia en su nueva versión. Cada sandbox de este ordenador se reinicia con él, y sus turnos en curso se reanudan después.",
+            "restartRollback": "Intentic OS se reinicia en su versión anterior. Cada sandbox de este ordenador se reinicia con él, y sus turnos en curso se reanudan después.",
+            "restartRollbackTo": "Intentic OS se reinicia en la versión {version}. Cada sandbox de este ordenador se reinicia con él, y sus turnos en curso se reanudan después.",
+            "restart": "Reiniciar ahora",
+            "rollbackTitle": "¿Volver a la versión anterior?",
+            "rollbackTitleTo": "¿Volver a la versión {version}?",
+            "rollback": "Este ordenador arranca la versión anterior de Intentic OS la próxima vez que se reinicie. Hasta entonces no cambia nada.",
+            "rollBack": "Volver atrás",
+            "channelTitle": {
+                "stable": "¿Cambiar al canal estable?",
+                "beta": "¿Cambiar al canal beta?"
+            },
+            "channel": {
+                "stable": "El canal estable recibe cada versión de Intentic OS después de que haya funcionado en beta. Su versión se descarga ahora y se aplica a partir del próximo reinicio.",
+                "beta": "El canal beta recibe las versiones nuevas de Intentic OS primero, antes que el estable. Su versión se descarga ahora y se aplica a partir del próximo reinicio."
+            },
+            "switch": "Cambiar"
+        }
+    },
     "account": {
         "profileUpdateFailed": "No se pudo actualizar el perfil.",
         "sessionCheckFailed": "No se pudo comprobar tu sesión.",

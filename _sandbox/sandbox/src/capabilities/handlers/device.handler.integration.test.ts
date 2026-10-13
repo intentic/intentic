@@ -14,23 +14,30 @@ import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../.
 import type { CapabilityCtx } from "../capability.js";
 import { contributionRegistry } from "../contributions.js";
 import { echoConfig, secretField } from "../summary.js";
-import { deviceHandler } from "./device.handler.js";
+import { deviceHandler, refreshDeviceSkill } from "./device.handler.js";
 
 // The real first-party `devices` extension provides each OS pack; the tool surface it wraps is core.
 const EXTENSIONS_DIR = join(repoRoot(import.meta.url), "_extensions");
 
+interface TempCtxOptions {
+    // The workspace, to act twice on one skill.
+    readonly root?: string;
+    readonly cards?: readonly Capability[];
+    // What the machine said of itself at its last connect; absent for one that has not connected.
+    readonly facts?: object;
+}
+
 // A ctx exposing only what deviceHandler touches. The machine is never enrolled here, which is the pre-Connect
 // state every add starts in: enrolling one needs a real socket from a real device.
-const tempCtx = (): { ctx: CapabilityCtx; root: string } => {
-    const root = mkdtempSync(join(tmpdir(), "host-cap-"));
+const tempCtx = ({ root = mkdtempSync(join(tmpdir(), "host-cap-")), cards = [], facts }: TempCtxOptions = {}): { ctx: CapabilityCtx; root: string } => {
     const ctx = {
         workspace: { root },
         files: { write: writeWorkspaceFile, read: readWorkspaceFile, remove: removeWorkspacePath },
-        capabilities: { list: async () => [] },
+        capabilities: { list: async () => cards },
         extensionsDir: EXTENSIONS_DIR,
         historyRoot: mkdtempSync(join(tmpdir(), "cap-history-")),
         hosts: { enrolled: async () => false },
-        hostHub: { online: () => false },
+        hostHub: { online: () => facts !== undefined, state: () => (facts === undefined ? { online: false } : { online: true, facts }) },
     } as unknown as CapabilityCtx;
     return { ctx, root };
 };
@@ -82,6 +89,59 @@ test("apply installs the contributed OS pack with the core tools note and this i
     expect(await deviceHandler.status(ctx, "my-laptop", laptop.config)).toEqual({
         state: "pending",
         detail: "click Connect and run the one-liner on that device",
+    });
+});
+
+// (2026-10-13) An Intentic OS box says so in its facts at connect, usually long after its card was applied: its skill
+// gains the steward's section then, and only from the side that speaks for the card.
+describe("a device on Intentic OS", () => {
+    const box: Capability = { id: "my-laptop", kind: "device", config: { ...laptop.config, platform: "linux", sandboxes: "on" } };
+    const OS_FACTS = {
+        os: "Intentic OS 2026.10.13.0 (kernel 6.11)",
+        arch: "x64",
+        shell: "/bin/bash",
+        home: "/var/home/intentic",
+        roots: [],
+        intenticOs: { name: "intentic-os", edition: "server", version: "2026.10.13.0", channel: "stable" },
+    };
+
+    test("the skill written at apply carries no steward section until the machine says it is one", async () => {
+        const { ctx, root } = tempCtx({ cards: [box] });
+        await drain(deviceHandler.apply(ctx, "my-laptop", box.config));
+        expect(await readWorkspaceFile(skillPath(root))).not.toContain("Intentic OS box");
+    });
+
+    test("its connect writes the section in, naming the os tools and the yes a reboot needs, once", async () => {
+        const { ctx, root } = tempCtx({ cards: [box] });
+        const online = tempCtx({ root, cards: [box], facts: OS_FACTS }).ctx;
+        await drain(deviceHandler.apply(ctx, "my-laptop", box.config));
+        expect(await refreshDeviceSkill(online, "my-laptop")).toBe(true);
+        const skill = await readWorkspaceFile(skillPath(root));
+        expect(skill).toContain("## This device is an Intentic OS box, and you may be its steward");
+        expect(skill).toContain("mcp__my-laptop__os_status");
+        expect(skill).toContain("Never ask for\n   the Docker socket");
+        expect(skill).toContain("only after the owner says yes in chat");
+        // The rest of the note is all still there, around it.
+        expect(skill).toContain("mcp__my-laptop__run_command");
+        expect(skill).toContain("## Using a website");
+        expect(skill).not.toContain("${id}");
+        // The same facts again change nothing, so a reconnect does not rewrite the file.
+        expect(await refreshDeviceSkill(online, "my-laptop")).toBe(false);
+        // An apply while it is connected keeps the section.
+        await drain(deviceHandler.apply(online, "my-laptop", box.config));
+        expect(await readWorkspaceFile(skillPath(root))).toContain("Intentic OS box");
+    });
+
+    test("a card never applied, another environment's connection and an ordinary machine leave the skill as it is", async () => {
+        const { ctx, root } = tempCtx({ cards: [box] });
+        const online = tempCtx({ root, cards: [box], facts: OS_FACTS }).ctx;
+        expect(await refreshDeviceSkill(online, "my-laptop")).toBe(false);
+        expect(await readWorkspaceFile(skillPath(root))).toBeUndefined();
+        await drain(deviceHandler.apply(ctx, "my-laptop", box.config));
+        expect(await refreshDeviceSkill(online, "my-laptop::wsl:archlinux")).toBe(false);
+        expect(await refreshDeviceSkill(tempCtx({ root, cards: [box], facts: { ...OS_FACTS, intenticOs: undefined } }).ctx, "my-laptop")).toBe(false);
+        expect(await refreshDeviceSkill(tempCtx({ root, cards: [], facts: OS_FACTS }).ctx, "my-laptop")).toBe(false);
+        expect(await readWorkspaceFile(skillPath(root))).not.toContain("Intentic OS box");
     });
 });
 

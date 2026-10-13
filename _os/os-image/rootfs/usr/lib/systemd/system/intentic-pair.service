@@ -1,0 +1,29 @@
+# FIRST BOOT: a box with no sandbox yet asks for a setup code on a page on the local network (and, on the server
+# edition, on its screen: intentic-pair.service.d/50-console.conf), then runs `ic sandbox connect`, which starts the
+# first sandbox and connects this machine to it as a device, so that sandbox can manage it. Runs only until the
+# pairing succeeds: `ic os pair` writes the marker this unit is conditioned on.
+[Unit]
+Description=Intentic OS first-boot pairing
+Documentation=https://github.com/intentic/intentic/tree/main/_os
+ConditionPathExists=!/var/lib/intentic-os/paired
+Wants=network-online.target user@1990.service
+After=network-online.target docker.service user@1990.service systemd-tmpfiles-setup.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=intentic
+Group=intentic
+SupplementaryGroups=docker
+Environment=HOME=/var/home/intentic XDG_RUNTIME_DIR=/run/user/1990 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1990/bus
+WorkingDirectory=/var/home/intentic
+ExecStart=/usr/bin/ic os pair --no-console
+# The page on port 80 without running as root.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+StandardOutput=journal
+StandardError=journal
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

@@ -43,7 +43,7 @@ const tempServices = (): { services: Services; entries: Capability[]; historyRoo
             },
             enrolled: async () => false,
         },
-        hostHub: { online: () => false },
+        hostHub: { online: () => false, state: () => ({ online: false }) },
     } as unknown as Services;
     return { services, entries, historyRoot, upserts, armed };
 };

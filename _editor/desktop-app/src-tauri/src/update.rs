@@ -271,7 +271,9 @@ pub fn start(app: &AppHandle) {
     // artifact it could be moved onto. Everything else checks — INCLUDING deb and rpm, which cannot install
     // what they find and are asked anyway, so a machine that is already current is not nagged about a swap it
     // does not need. Being unable to update yourself only matters when there is something to update to.
-    if updatable() == Updatable::NotARelease {
+    // Nor is a copy the OS image carries (Intentic OS, os.rs): the image updates it with everything else, and a copy
+    // under /usr could not replace itself anyway.
+    if updatable() == Updatable::NotARelease || crate::os::image_carries_app() {
         return;
     }
     let app = app.clone();
@@ -292,6 +294,10 @@ pub fn start(app: &AppHandle) {
 /// is checked if the timer has already done it recently — this is a backstop for the sleep the interval cannot
 /// see, not a second schedule.
 pub fn nudge(app: &AppHandle) {
+    // A copy the OS image carries checks nothing, here as at `start`.
+    if crate::os::image_carries_app() {
+        return;
+    }
     // Two file reads, so asked every time rather than on the check's schedule.
     if installed_anew(app) {
         return;

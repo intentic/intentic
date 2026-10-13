@@ -323,6 +323,94 @@
         },
         "movingBadge": "moving sandboxes"
     },
+    "os": {
+        "title": "This system",
+        "version": "Intentic OS {version}",
+        "edition": {
+            "desktop": "Desktop edition",
+            "server": "Server edition"
+        },
+        "channelName": {
+            "stable": "Stable",
+            "beta": "Beta"
+        },
+        "channelLabel": "Channel",
+        "channelNext": "{channel} from the next restart. Until then this computer stays on {current}.",
+        "health": {
+            "healthy": "healthy",
+            "failing": "failing",
+            "unknown": "not checked yet"
+        },
+        "failedChecks": "These checks failed when this computer started:",
+        "isolation": {
+            "auto": "Sandboxes that can use Docker each run in a microVM of their own, the rest in a container.",
+            "vm": "Every sandbox runs in a microVM of its own.",
+            "container": "Every sandbox runs in a container."
+        },
+        "vmMissing": {
+            "auto": "MicroVMs aren't available on this computer, so sandboxes that can use Docker run in a container too.",
+            "vm": "MicroVMs aren't available on this computer, so every sandbox runs in a container."
+        },
+        "waiting": {
+            "update": "An update is ready. It runs from the next restart.",
+            "updateTo": "Version {version} is ready. It runs from the next restart.",
+            "rollback": "This computer goes back to the previous version at the next restart.",
+            "rollbackTo": "This computer goes back to version {version} at the next restart."
+        },
+        "restartToUpdate": "Restart to update",
+        "restartIntoPrevious": "Restart into the previous version",
+        "restartNote": "Every sandbox on this computer restarts with it, and their running turns resume after.",
+        "running": {
+            "update": "Downloading the update",
+            "updateApply": "Updating, then restarting this computer",
+            "rollback": "Getting the previous version ready",
+            "rollbackApply": "Restarting into the previous version",
+            "channel": "Switching channel",
+            "channelTo": "Switching to {channel}",
+            "reboot": "Restarting this computer"
+        },
+        "keepsGoing": "Closing this window doesn't stop it.",
+        "restarting": "This computer is restarting. Your sandboxes come back with it and carry on with their turns.",
+        "busy": "Intentic is already busy on this computer. Try again once that has finished.",
+        "notOs": "ic says this computer doesn't run Intentic OS, so nothing changed.",
+        "didntFinish": {
+            "update": "The update didn't finish",
+            "rollback": "Going back didn't finish",
+            "channel": "The switch didn't finish",
+            "reboot": "The restart didn't happen"
+        },
+        "timedOut": "It was stopped after an hour.",
+        "showLog": "Show log",
+        "didntStart": "The change didn't start",
+        "available": "A newer version is available.",
+        "availableVersion": "Version {version} is available.",
+        "download": "Download",
+        "upToDate": "Intentic OS is up to date.",
+        "checkFailed": "The check for updates didn't finish",
+        "checking": "Checking…",
+        "checkForUpdates": "Check for updates",
+        "rollBack": "Roll back",
+        "confirm": {
+            "restartTitle": "Restart this computer?",
+            "restartUpdate": "Intentic OS restarts into its new version. Every sandbox on this computer restarts with it, and their running turns resume after.",
+            "restartRollback": "Intentic OS restarts into its previous version. Every sandbox on this computer restarts with it, and their running turns resume after.",
+            "restartRollbackTo": "Intentic OS restarts into version {version}. Every sandbox on this computer restarts with it, and their running turns resume after.",
+            "restart": "Restart now",
+            "rollbackTitle": "Go back to the previous version?",
+            "rollbackTitleTo": "Go back to version {version}?",
+            "rollback": "This computer starts the previous version of Intentic OS the next time it restarts. Nothing changes until then.",
+            "rollBack": "Roll back",
+            "channelTitle": {
+                "stable": "Switch to the stable channel?",
+                "beta": "Switch to the beta channel?"
+            },
+            "channel": {
+                "stable": "Stable gets each version of Intentic OS once it has run on beta. Its version downloads now and runs from the next restart.",
+                "beta": "Beta gets new versions of Intentic OS first, before stable does. Its version downloads now and runs from the next restart."
+            },
+            "switch": "Switch"
+        }
+    },
     "account": {
         "profileUpdateFailed": "Profile update failed.",
         "sessionCheckFailed": "Couldn't check your session.",

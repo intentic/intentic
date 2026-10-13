@@ -1,0 +1,3 @@
+# What `bootc install` (and bootc-image-builder) lay down when nothing else is said.
+[install.filesystem.root]
+type = "xfs"

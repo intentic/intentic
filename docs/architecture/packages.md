@@ -13,7 +13,7 @@ flowchart LR
 ## Areas and packages
 
 - Every top-level directory that starts with `_` is an area, and each directory inside it that holds a `package.json` is a package. [`pnpm-workspace.yaml`](../../pnpm-workspace.yaml) globs `_area/*`, and [`_tools/checks/lib/repo.mjs`](../../_tools/checks/lib/repo.mjs) discovers areas the same way, so a new area needs no registration.
-- The areas are the parts of the product: [`_editor`](../../_editor), [`_sandbox`](../../_sandbox), [`_shared`](../../_shared), [`_extensions`](../../_extensions), [`_devices`](../../_devices), [`_search`](../../_search), [`_platform`](../../_platform), [`_deploy`](../../_deploy), [`_site`](../../_site) and [`_tools`](../../_tools). [repo.md](repo.md) draws how they relate at runtime.
+- The areas are the parts of the product: [`_editor`](../../_editor), [`_sandbox`](../../_sandbox), [`_shared`](../../_shared), [`_extensions`](../../_extensions), [`_devices`](../../_devices), [`_os`](../../_os), [`_search`](../../_search), [`_platform`](../../_platform), [`_deploy`](../../_deploy), [`_site`](../../_site) and [`_tools`](../../_tools). [repo.md](repo.md) draws how they relate at runtime.
 - `_shared` holds the contracts, SDKs and pure helpers more than one part is written against (`workspace-setup` serves the editor's upload and the daemon alike), and depends on nothing but the `_tools` foundation, apart from the exceptions the `shared-boundary` check names.
 - Some directories are not workspace packages:
   - The store shells [`_editor/ios-app`](../../_editor/ios-app) and [`_editor/android-app`](../../_editor/android-app), and the Gradle project [`_devices/android`](../../_devices/android), are negated in the workspace and built by their own toolchains.

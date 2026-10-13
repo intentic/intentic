@@ -46,6 +46,7 @@ import {
     shapeSandbox,
     swapSandbox,
 } from "./tools/sandboxes.js";
+import { osTools } from "./tools/os/os.js";
 import { DEFAULT_TIMEOUT_MS, describeResult, MAX_TIMEOUT_MS, runCommand } from "./tools/shell.js";
 import { appLogs, appStatus, appStop, DEFAULT_LOG_LINES as DEFAULT_APP_LOG_LINES, MAX_LOG_LINES as MAX_APP_LOG_LINES, startApp } from "./tools/programs/programs.js";
 import { calling } from "./indicator.js";
@@ -712,6 +713,8 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         input: z.object({ slug: required.describe("The sandbox's slug, from list_sandboxes, or the first label of its address.") }),
         run: async ({ slug }, scopes) => textResult(await diagnoseSandbox(slug, scopes)),
     }),
+    // os_status, os_update, os_rollback, os_reboot and os_channel, on Intentic OS only (tools/os/os.ts).
+    ...osTools(),
 ];
 
 // Arguments are logged verbatim except typed text, which is redacted to its length: a `device` or `android_act` "type",

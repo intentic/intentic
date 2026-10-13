@@ -1,0 +1,16 @@
+{
+    "name": "@intentic/os-image",
+    "version": "0.0.0",
+    "private": true,
+    "files": [
+        "Containerfile",
+        "Containerfile.desktop",
+        "rootfs",
+        "desktop",
+        "installer",
+        "build.sh",
+        "disk.sh",
+        "smoke.sh",
+        "install-test.sh"
+    ]
+}

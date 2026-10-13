@@ -62,6 +62,15 @@ flowchart LR
   is not ([`tools/ic-binary.ts`](src/device/tools/ic-binary.ts)), since a new verb here arrives with a new verb there.
   A fetch that fails is logged with its reason and reported in the device's facts (`icOutOfDate`, beside `features`),
   so a stale `ic` explains why logs and saving a shape are missing; the next sandbox action tries again.
+- (2026-10-13) **On Intentic OS** (a machine with `/usr/lib/intentic-os/release.json`; see [_os](../../_os/README.md))
+  the agent also serves the OS tools ([`tools/os/os.ts`](src/device/tools/os/os.ts)), thin callers of `ic os` with the
+  contract's argv and schemas (`icOsUpdateArgs`, `IntenticOsStatusSchema`): `os_status`, read-only and gated like the
+  listing; `os_update`, whose `check` is a read too, `stage` downloads for the next boot and `apply` reboots into it;
+  `os_rollback` (queued, or `apply` to reboot), `os_reboot` and `os_channel`, every change behind `sandboxes`. A
+  reboot takes every sandbox here with it, so the descriptions say the caller's turn ends with the call. Anywhere else
+  they are not registered, since `ic os` refuses there. The same switch covers `ic os …` and `bootc
+  upgrade|switch|rollback` sent through `run_command` or another program door, and the facts carry `intenticOs`
+  (edition, version, channel) read off the same file.
 - **sync** (`src/sync/`): `sync setup` enrolls this machine and runs Mutagen against the sandbox: over ssh to its
   sshd, reached through a loopback port tunnelled over a WebSocket, or, for a project whose sandbox container runs on
   this machine's own Docker engine, through Docker itself (below). It keeps a folder two-way synced (a project

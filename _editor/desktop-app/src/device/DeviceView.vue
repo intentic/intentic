@@ -27,6 +27,7 @@ import { openUrl, revealLog, signIn, workspaceOpen } from "../desktop";
 import LeftoverSandboxes from "./machineSandbox/LeftoverSandboxes.vue";
 import MachineSandboxSection from "./machineSandbox/MachineSandboxSection.vue";
 import { machineSandbox } from "./machineSandbox";
+import SystemCard from "./intenticOs/SystemCard.vue";
 import { followOnScreen, onScreen } from "../onScreen";
 import PcSetupCard from "./pcSetup/PcSetupCard.vue";
 import { pcCardShown } from "./pcSetup/livePcCard";
@@ -72,6 +73,21 @@ const {
     dismissEngineMove,
     engineOfferShown,
     engine,
+    osState,
+    osRun,
+    osRunEnd,
+    osRunError,
+    osCheck,
+    osChecking,
+    osCheckError,
+    loadOs,
+    followOs,
+    restartOs,
+    downloadOsUpdate,
+    rollBackOs,
+    switchOsChannel,
+    checkOsUpdate,
+    dismissOsRun,
     sandboxes,
     listError,
     status,
@@ -184,6 +200,10 @@ const sandboxName = (slug: string): string => sandboxes.value.find((sandbox) => 
 const showMoveLog = (path: string): void => {
     revealLog(path).catch((error: unknown) => console.error(`[device] the move's log could not be shown:`, error));
 };
+// The transcript of a change to Intentic OS that did not finish, the same way.
+const showOsLog = (path: string): void => {
+    revealLog(path).catch((error: unknown) => console.error(`[device] the system change's log could not be shown:`, error));
+};
 
 // The way to a sandbox, from a computer that has none: the workspace's setup once there is an account, a sign-in before.
 const signedIn = computed(() => facts.value?.accountSeen === true);
@@ -205,11 +225,14 @@ const reading = usePoll({
     check: async () => {
         await refresh();
         followEngine();
+        followOs();
     },
 });
 onMounted(() => {
     // The engine on opening, not on the timer: `ic engine status` asks WSL and docker, and changes only by a move.
     void loadEngine();
+    // This system on opening, and on the timer only now and then (system.ts `followOs`).
+    void loadOs();
     reading.start();
 });
 </script>
@@ -432,6 +455,27 @@ onMounted(() => {
                     <span class="text-2xs text-subtle">{{ t(`desktop.app.saysPairingAlreadyUsed`) }}</span>
                 </div>
             </section>
+
+            <!-- THIS SYSTEM, on a computer that runs Intentic OS: its version, its health, and what waits for its next boot,
+                 with the restart into it. Ahead of the engine and the sandboxes, which that restart takes down and back. -->
+            <SystemCard
+                v-if="osState"
+                :status="osState"
+                :progress="osRun"
+                :end="osRunEnd"
+                :error="osRunError"
+                :check="osCheck"
+                :checking="osChecking"
+                :check-error="osCheckError"
+                :busy="running || busy !== undefined"
+                @restart="(restart) => void restartOs(restart)"
+                @check="checkOsUpdate"
+                @download="downloadOsUpdate"
+                @roll-back="rollBackOs"
+                @channel="(channel) => void switchOsChannel(channel)"
+                @dismiss="dismissOsRun"
+                @log="showOsLog"
+            />
 
             <!-- A PC WAITING FOR WINDOWS TO END THE SESSION, with the setup card put away: Docker cannot run until then, and
                  a "Docker wouldn't start" card here sent a reader pressing its "Check again" instead of restarting. -->

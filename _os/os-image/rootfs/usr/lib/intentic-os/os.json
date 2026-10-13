@@ -1,0 +1,5 @@
+{
+    "isolation": "container",
+    "pairOnLan": true,
+    "updates": "stage"
+}

@@ -1,0 +1,46 @@
+#!/bin/bash
+# See intentic-tpm-enroll.service. The installer already bound the encrypted root to this machine's TPM (so this boot
+# unlocked by itself); what is left is a recovery key for the day the TPM cannot answer, and the installer's one-time
+# passphrase removed. Each new slot exists before that passphrase's slot goes, so a failure part-way leaves the disk
+# openable, and the unit runs again on the next boot.
+set -euo pipefail
+KEY=/etc/intentic/luks-initial-key
+say() { printf '%s\n' "$*"; }
+
+mapfile -t volumes < <(lsblk -nrpo NAME,FSTYPE | awk '$2 == "crypto_LUKS" { print $1 }')
+if [ "${#volumes[@]}" -eq 0 ]; then
+    say "intentic-tpm-enroll: no encrypted volume on this machine; removing the one-time passphrase file."
+    shred -u "$KEY"
+    exit 0
+fi
+
+recovery_keys=()
+for volume in "${volumes[@]}"; do
+    if ! cryptsetup luksDump "$volume" | grep -q 'systemd-tpm2'; then
+        if ! systemd-cryptenroll --tpm2-device=list 2>/dev/null | grep -q '^/dev/'; then
+            say "intentic-tpm-enroll: $volume has no TPM slot and this machine has no TPM2; keeping its passphrase."
+            continue
+        fi
+        systemd-cryptenroll --unlock-key-file="$KEY" --tpm2-device=auto --tpm2-pcrs=7 "$volume"
+    fi
+    recovery_keys+=("$volume  $(systemd-cryptenroll --unlock-key-file="$KEY" --recovery-key "$volume" | tail -n 1)")
+    systemd-cryptenroll --unlock-key-file="$KEY" --wipe-slot=password "$volume"
+done
+if [ "${#recovery_keys[@]}" -eq "${#volumes[@]}" ]; then
+    shred -u "$KEY"
+fi
+
+say ""
+say "  The disk is bound to this machine's TPM and unlocks by itself here, and nowhere else."
+say "  Its RECOVERY KEY, shown this once:"
+say ""
+for line in "${recovery_keys[@]}"; do say "      $line"; done
+say ""
+say "  Write it down and keep it away from the machine: it opens the disk if the board is replaced"
+say "  or the Secure Boot settings change."
+# On the desktop edition the session would cover this screen at once, so its drop-in hands this unit the keyboard and
+# the key stays up until Enter (or fifteen minutes). On the server edition it stays above the pairing prompt.
+if [ -t 0 ]; then
+    say "  Press Enter once it is written down."
+    read -r -t 900 _ || true
+fi

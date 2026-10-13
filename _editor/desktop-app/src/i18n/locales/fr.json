@@ -323,6 +323,94 @@
         },
         "movingBadge": "déplacement des sandboxes"
     },
+    "os": {
+        "title": "Ce système",
+        "version": "Intentic OS {version}",
+        "edition": {
+            "desktop": "Édition bureau",
+            "server": "Édition serveur"
+        },
+        "channelName": {
+            "stable": "Stable",
+            "beta": "Bêta"
+        },
+        "channelLabel": "Canal",
+        "channelNext": "{channel} à partir du prochain redémarrage. D'ici là, cet ordinateur reste sur {current}.",
+        "health": {
+            "healthy": "en bon état",
+            "failing": "en échec",
+            "unknown": "pas encore vérifié"
+        },
+        "failedChecks": "Ces vérifications ont échoué au démarrage de cet ordinateur :",
+        "isolation": {
+            "auto": "Les sandboxes qui peuvent utiliser Docker tournent chacun dans sa propre microVM, les autres dans un conteneur.",
+            "vm": "Chaque sandbox tourne dans sa propre microVM.",
+            "container": "Chaque sandbox tourne dans un conteneur."
+        },
+        "vmMissing": {
+            "auto": "Les microVM ne sont pas disponibles sur cet ordinateur, donc les sandboxes qui peuvent utiliser Docker tournent aussi dans un conteneur.",
+            "vm": "Les microVM ne sont pas disponibles sur cet ordinateur, donc chaque sandbox tourne dans un conteneur."
+        },
+        "waiting": {
+            "update": "Une mise à jour est prête. Elle s'applique à partir du prochain redémarrage.",
+            "updateTo": "La version {version} est prête. Elle s'applique à partir du prochain redémarrage.",
+            "rollback": "Cet ordinateur revient à la version précédente au prochain redémarrage.",
+            "rollbackTo": "Cet ordinateur revient à la version {version} au prochain redémarrage."
+        },
+        "restartToUpdate": "Redémarrer pour mettre à jour",
+        "restartIntoPrevious": "Redémarrer sur la version précédente",
+        "restartNote": "Chaque sandbox de cet ordinateur redémarre avec lui, et ses tours en cours reprennent ensuite.",
+        "running": {
+            "update": "Téléchargement de la mise à jour",
+            "updateApply": "Mise à jour, puis redémarrage de cet ordinateur",
+            "rollback": "Préparation de la version précédente",
+            "rollbackApply": "Redémarrage sur la version précédente",
+            "channel": "Changement de canal",
+            "channelTo": "Passage à {channel}",
+            "reboot": "Redémarrage de cet ordinateur"
+        },
+        "keepsGoing": "Fermer cette fenêtre ne l'arrête pas.",
+        "restarting": "Cet ordinateur redémarre. Vos sandboxes reviennent avec lui et reprennent leurs tours.",
+        "busy": "Intentic est déjà occupé sur cet ordinateur. Réessayez une fois que c'est terminé.",
+        "notOs": "Selon ic, cet ordinateur n'utilise pas Intentic OS, donc rien n'a changé.",
+        "didntFinish": {
+            "update": "La mise à jour ne s'est pas terminée",
+            "rollback": "Le retour en arrière ne s'est pas terminé",
+            "channel": "Le changement de canal ne s'est pas terminé",
+            "reboot": "Le redémarrage n'a pas eu lieu"
+        },
+        "timedOut": "Il a été arrêté au bout d'une heure.",
+        "showLog": "Afficher le journal",
+        "didntStart": "Le changement n'a pas démarré",
+        "available": "Une version plus récente est disponible.",
+        "availableVersion": "La version {version} est disponible.",
+        "download": "Télécharger",
+        "upToDate": "Intentic OS est à jour.",
+        "checkFailed": "La recherche de mises à jour ne s'est pas terminée",
+        "checking": "Vérification…",
+        "checkForUpdates": "Rechercher des mises à jour",
+        "rollBack": "Revenir en arrière",
+        "confirm": {
+            "restartTitle": "Redémarrer cet ordinateur ?",
+            "restartUpdate": "Intentic OS redémarre sur sa nouvelle version. Chaque sandbox de cet ordinateur redémarre avec lui, et ses tours en cours reprennent ensuite.",
+            "restartRollback": "Intentic OS redémarre sur sa version précédente. Chaque sandbox de cet ordinateur redémarre avec lui, et ses tours en cours reprennent ensuite.",
+            "restartRollbackTo": "Intentic OS redémarre sur la version {version}. Chaque sandbox de cet ordinateur redémarre avec lui, et ses tours en cours reprennent ensuite.",
+            "restart": "Redémarrer maintenant",
+            "rollbackTitle": "Revenir à la version précédente ?",
+            "rollbackTitleTo": "Revenir à la version {version} ?",
+            "rollback": "Cet ordinateur démarre la version précédente d'Intentic OS au prochain redémarrage. Rien ne change d'ici là.",
+            "rollBack": "Revenir en arrière",
+            "channelTitle": {
+                "stable": "Passer au canal stable ?",
+                "beta": "Passer au canal bêta ?"
+            },
+            "channel": {
+                "stable": "Le canal stable reçoit chaque version d'Intentic OS une fois qu'elle a tourné en bêta. Sa version se télécharge maintenant et s'applique à partir du prochain redémarrage.",
+                "beta": "Le canal bêta reçoit les nouvelles versions d'Intentic OS en premier, avant le canal stable. Sa version se télécharge maintenant et s'applique à partir du prochain redémarrage."
+            },
+            "switch": "Changer"
+        }
+    },
     "account": {
         "profileUpdateFailed": "La mise à jour du profil a échoué.",
         "sessionCheckFailed": "Impossible de vérifier votre session.",

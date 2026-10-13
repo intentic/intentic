@@ -11,6 +11,7 @@ packages:
   # The Intentic Device phone app is a Gradle project with no node toolchain at all.
   - "!_devices/android"
   - "_extensions/*"
+  - "_os/*"
   - "_platform/*"
   - "_sandbox/*"
   - "_search/*"

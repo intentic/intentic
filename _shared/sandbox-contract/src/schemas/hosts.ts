@@ -1,5 +1,6 @@
 // hosts: the user's own connected devices (the `host` capability's live half)
 import { z } from "zod";
+import { IntenticOsFactsSchema } from "./intentic-os.js";
 // Manifest says which machines are intended; this says which actually hold a socket now. Nothing persists across a
 // daemon restart except the enrollment itself, so a closed laptop reads offline within a heartbeat.
 
@@ -83,6 +84,10 @@ export const DeviceFactsSchema = z.object({
     // a daemon bug for an afternoon. Override values are the agent's own redaction (secret-looking ones by length).
     ic: z.object({ path: z.string(), version: z.string(), modified: z.string().optional() }).optional(),
     icOverrides: z.array(z.string()).optional(),
+    // (2026-10-13) Present only on Intentic OS (`/usr/lib/intentic-os/release.json`): which edition, version and channel
+    // the machine boots, so the daemon tells the agent it may be this box's steward and the os_* tools are there. `os`
+    // above stays the human name. Absent everywhere else, and from an agent older than the field.
+    intenticOs: IntenticOsFactsSchema.optional(),
 });
 export type DeviceFacts = z.infer<typeof DeviceFactsSchema>;
 

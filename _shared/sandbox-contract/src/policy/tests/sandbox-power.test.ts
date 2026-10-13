@@ -1,4 +1,4 @@
-import { managesSandbox, mayReachSandbox, SANDBOX_POWER_DOING, type SandboxPowerCommand, sandboxPowerCommands } from "../sandbox-power.js";
+import { isOsPower, managesSandbox, mayReachSandbox, SANDBOX_POWER_DOING, type SandboxPowerCommand, sandboxPowerCommands } from "../sandbox-power.js";
 
 const OWN = { slug: "work", container: "intentic-sandbox-work" };
 const PREFIX = "intentic-sandbox-";
@@ -128,6 +128,63 @@ describe("docker", () => {
     });
 });
 
+// On Intentic OS the machine's own OS is changed through `ic os` (and bootc under it): what reboots it stops every
+// sandbox on it, and what only stages for the next boot stops none, like a sandbox's prepare.
+describe("ic os and bootc", () => {
+    const WHOLE_MACHINE = { targets: [], unnamed: true };
+
+    test("reads every verb that changes what the machine boots, as the whole machine's", () => {
+        expect(first("ic os update")).toEqual({ via: "ic", op: "os-update", stops: false, ...WHOLE_MACHINE });
+        expect(first("ic os update --apply")).toEqual({ via: "ic", op: "os-update", stops: true, ...WHOLE_MACHINE });
+        expect(first("ic os rollback")).toEqual({ via: "ic", op: "os-rollback", stops: false, ...WHOLE_MACHINE });
+        expect(first("ic os rollback --apply")).toEqual({ via: "ic", op: "os-rollback", stops: true, ...WHOLE_MACHINE });
+        expect(first("ic os reboot")).toEqual({ via: "ic", op: "os-reboot", stops: true, ...WHOLE_MACHINE });
+        // The channel is the verb's operand, not a sandbox it names.
+        expect(first("ic os channel beta")).toEqual({ via: "ic", op: "os-channel", stops: false, ...WHOLE_MACHINE });
+    });
+
+    test("reads bootc's own spelling of the same ops", () => {
+        expect(first("sudo bootc upgrade")).toEqual({ via: "bootc", op: "os-update", stops: false, ...WHOLE_MACHINE });
+        expect(first("sudo -n /usr/bin/bootc upgrade --apply")).toEqual({ via: "bootc", op: "os-update", stops: true, ...WHOLE_MACHINE });
+        expect(first("bootc switch ghcr.io/intentic/os:beta")).toEqual({ via: "bootc", op: "os-channel", stops: false, ...WHOLE_MACHINE });
+        expect(first("bootc switch --apply --transport registry ghcr.io/intentic/os:beta")?.stops).toBe(true);
+        expect(first("bootc rollback")).toEqual({ via: "bootc", op: "os-rollback", stops: false, ...WHOLE_MACHINE });
+        expect(first("bootc rollback --apply")?.stops).toBe(true);
+    });
+
+    test("leaves alone what only reads or sets up", () => {
+        for (const command of [
+            "ic os status --json",
+            "ic os update --check --json",
+            "ic os health --wait 600",
+            "ic os record",
+            "ic os pair",
+            "bootc status --json",
+            "bootc upgrade --check",
+            "magic os reboot",
+            "echo cosmic os update",
+        ]) {
+            expect(sandboxPowerCommands(command), command).toEqual([]);
+        }
+    });
+
+    test("a reboot may reach this sandbox and is the switch's, wherever this sandbox runs", () => {
+        const reboot = sandboxPowerCommands("ic os reboot")[0];
+        expect(reboot !== undefined && mayReachSandbox(reboot, OWN)).toBe(true);
+        expect(reboot !== undefined && managesSandbox(reboot, PREFIX)).toBe(true);
+        expect(reboot !== undefined && isOsPower(reboot)).toBe(true);
+        const staged = sandboxPowerCommands("sudo bootc upgrade")[0];
+        expect(staged !== undefined && managesSandbox(staged, PREFIX)).toBe(true);
+        expect(isOsPower({ op: "restart" })).toBe(false);
+    });
+
+    test("is found beside a sandbox verb in the same line, in the order written, and quoted it is not live", () => {
+        expect(sandboxPowerCommands("ic sandbox stop work && ic os reboot").map((hit) => hit.op)).toEqual(["stop", "os-reboot"]);
+        expect(sandboxPowerCommands("echo 'ic os reboot'")[0]?.live).toBe(false);
+        expect(sandboxPowerCommands("ic os reboot")[0]?.span).toEqual({ start: 0, end: "ic os reboot".length });
+    });
+});
+
 describe("whether a command may reach this sandbox", () => {
     const reaches = (command: string): boolean => sandboxPowerCommands(command).some((hit) => mayReachSandbox(hit, OWN));
 
@@ -178,4 +235,5 @@ test("every operation has the owner's word for it", () => {
     expect(SANDBOX_POWER_DOING.restart).toBe("Restart");
     expect(SANDBOX_POWER_DOING.resize).toBe("Restart with new resources");
     expect(SANDBOX_POWER_DOING.rollback).toBe("Roll back");
+    expect(`${SANDBOX_POWER_DOING["os-reboot"]} this sandbox now?`).toBe("Reboot the machine running this sandbox now?");
 });

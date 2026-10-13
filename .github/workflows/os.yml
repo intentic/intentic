@@ -1,0 +1,181 @@
+# INTENTIC OS IMAGES: built, booted and published.
+#
+# Two channels, two sources. `beta` is main: every push that touches the OS's files or `ic` builds both editions with
+# an `ic` compiled from that commit, boots the server edition in a VM (smoke.sh), and pushes `:beta` only once it booted.
+# `stable` is a release: when release.yml publishes v<x>, this builds both editions from that release's own `ic` and
+# desktop app, boots, and pushes `:stable` and `:<x>`, then attaches the installer ISO and a VM disk to the run.
+#
+# A machine on a channel follows it by itself: intentic-os-update.timer stages what the tag points at, and the
+# owner (or the agent, with the owner's yes) reboots into it. So pushing a tag here is releasing the OS; nothing is
+# pushed that did not boot first.
+#
+# GitHub-hosted, not the self-hosted pool: the VM needs /dev/kvm, and bootc-image-builder a rootful podman, which the
+# hosted ubuntu image has and the pool's runners deliberately do not.
+name: OS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "_os/**"
+      - "_sandbox/ic/**"
+      - ".github/workflows/os.yml"
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      push:
+        description: Push the images (beta from a branch build, stable from a release tag).
+        type: boolean
+        default: false
+
+concurrency:
+  group: os-${{ github.event_name == 'release' && 'stable' || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'release' }}
+
+permissions:
+  contents: read
+
+jobs:
+  images:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    env:
+      OS_ENGINE: sudo podman
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: What to build
+        id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          TAG: ${{ github.event.release.tag_name }}
+          PUSH_INPUT: ${{ inputs.push }}
+        run: |
+          if [ "$EVENT" = release ]; then
+            version="${TAG#v}"
+            echo "channel=stable" >> "$GITHUB_OUTPUT"
+            echo "version=$version" >> "$GITHUB_OUTPUT"
+            echo "push=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "channel=beta" >> "$GITHUB_OUTPUT"
+            echo "version=0.0.0-beta.$(date -u +%Y%m%d).${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+            if [ "$EVENT" = push ] || [ "$PUSH_INPUT" = true ]; then echo "push=true" >> "$GITHUB_OUTPUT"; else echo "push=false" >> "$GITHUB_OUTPUT"; fi
+          fi
+
+      - name: ic and the desktop app, from the release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          mkdir -p _sandbox/ic/dist-bin _editor/desktop-app/dist-bin
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern ic-linux-amd64 --dir _sandbox/ic/dist-bin
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*x86_64.rpm' --dir _editor/desktop-app/dist-bin
+          chmod +x _sandbox/ic/dist-bin/ic-linux-amd64
+
+      - name: ic, from this commit
+        if: github.event_name != 'release'
+        run: |
+          cargo build --release --locked --manifest-path _sandbox/ic/Cargo.toml
+          mkdir -p _sandbox/ic/dist-bin
+          cp _sandbox/ic/target/release/ic _sandbox/ic/dist-bin/ic-linux-amd64
+
+      - name: KVM for the boot test
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Build the server edition
+        env:
+          CHANNEL: ${{ steps.plan.outputs.channel }}
+          VERSION: ${{ steps.plan.outputs.version }}
+        run: bash _os/os-image/build.sh --edition server --channel "$CHANNEL" --version "$VERSION"
+
+      - name: Boot it
+        env:
+          CHANNEL: ${{ steps.plan.outputs.channel }}
+        run: bash _os/os-image/smoke.sh --image "ghcr.io/intentic/os:$CHANNEL"
+
+      - name: Build the desktop edition
+        env:
+          CHANNEL: ${{ steps.plan.outputs.channel }}
+          VERSION: ${{ steps.plan.outputs.version }}
+        run: bash _os/os-image/build.sh --edition desktop --channel "$CHANNEL" --version "$VERSION"
+
+      - uses: ./.github/actions/ghcr-login
+        if: steps.plan.outputs.push == 'true'
+        with:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push
+        id: push
+        if: steps.plan.outputs.push == 'true'
+        env:
+          CHANNEL: ${{ steps.plan.outputs.channel }}
+          VERSION: ${{ steps.plan.outputs.version }}
+        run: |
+          # The login above is docker's; podman reads the same auth file.
+          export REGISTRY_AUTH_FILE="$HOME/.docker/config.json"
+          for repo in ghcr.io/intentic/os ghcr.io/intentic/os-desktop; do
+            name="${repo##*/}"
+            sudo -E podman push --digestfile "$RUNNER_TEMP/$name.digest" "$repo:$CHANNEL"
+            if [ "$CHANNEL" = stable ]; then
+              sudo -E podman tag "$repo:$CHANNEL" "$repo:$VERSION"
+              sudo -E podman push "$repo:$VERSION"
+            fi
+            echo "$name=$(cat "$RUNNER_TEMP/$name.digest")" >> "$GITHUB_OUTPUT"
+          done
+
+      # Provenance a machine can check before it switches to an image: `gh attestation verify oci://ghcr.io/intentic/os:stable`.
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        if: steps.plan.outputs.push == 'true'
+        with:
+          subject-name: ghcr.io/intentic/os
+          subject-digest: ${{ steps.push.outputs.os }}
+          push-to-registry: true
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        if: steps.plan.outputs.push == 'true'
+        with:
+          subject-name: ghcr.io/intentic/os-desktop
+          subject-digest: ${{ steps.push.outputs.os-desktop }}
+          push-to-registry: true
+
+      - name: Installer and VM disk
+        if: github.event_name == 'release'
+        run: |
+          bash _os/os-image/disk.sh --type anaconda-iso --image ghcr.io/intentic/os:stable --out "$RUNNER_TEMP/iso"
+          bash _os/os-image/disk.sh --type qcow2 --image ghcr.io/intentic/os:stable --out "$RUNNER_TEMP/qcow2"
+          sudo chown -R "$(id -u)" "$RUNNER_TEMP/iso" "$RUNNER_TEMP/qcow2"
+
+      # The installer as a person meets it: a blank disk, Secure Boot and a TPM (software ones), an unattended install,
+      # then a first boot that must unlock its encrypted root by itself.
+      - name: Install from the ISO
+        if: github.event_name == 'release'
+        run: bash _os/os-image/install-test.sh --iso "$RUNNER_TEMP/iso/bootiso/install.iso" --out "$RUNNER_TEMP/install-test"
+
+      # The ISO is past a release asset's 2 GB cap, so the run keeps both for the site's download page to point at.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: github.event_name == 'release'
+        with:
+          name: intentic-os-${{ steps.plan.outputs.version }}
+          path: |
+            ${{ runner.temp }}/iso/bootiso/install.iso
+            ${{ runner.temp }}/qcow2/qcow2/disk.qcow2
+          retention-days: 90
+          compression-level: 0
+
+      - name: Boot log
+        if: always()
+        run: |
+          sudo cat _os/os-image/out/smoke/serial.log 2>/dev/null | tail -n 200 || true
+          sudo cat _os/os-image/out/smoke/journal.txt 2>/dev/null || true

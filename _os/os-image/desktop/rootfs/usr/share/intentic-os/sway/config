@@ -1,0 +1,30 @@
+# Intentic OS kiosk session. The Intentic app fills workspace 1, edge to edge with nothing drawn around it; the owner's
+# Chromium opens on workspace 2. Super+B opens Chromium, Super+Tab goes back and forth between the two, Super+1 and
+# Super+2 go to either, Super+Q closes a Chromium window. Nothing here leaves the session or starts a terminal.
+
+output * bg #0b0b0f solid_color
+font pango:Noto Sans 10
+workspace_layout default
+default_border none
+default_floating_border normal
+hide_edge_borders both
+focus_on_window_activation focus
+seat * hide_cursor 10000
+
+# The machine agent (a user service) drives this screen through sway's IPC: hand it the session's address.
+exec_always systemctl --user import-environment WAYLAND_DISPLAY SWAYSOCK XDG_CURRENT_DESKTOP XDG_SESSION_TYPE
+exec_always dbus-update-activation-environment --systemd WAYLAND_DISPLAY SWAYSOCK XDG_CURRENT_DESKTOP
+
+workspace number 1
+exec /usr/libexec/intentic-os/kiosk-app
+
+assign [app_id="^chromium"] workspace number 2
+
+bindsym --to-code Mod4+b exec chromium-browser --ozone-platform=wayland --no-first-run; workspace number 2
+bindsym --to-code Mod4+Tab workspace back_and_forth
+bindsym --to-code Mod4+1 workspace number 1
+bindsym --to-code Mod4+2 workspace number 2
+bindsym --to-code Mod4+q [con_id=__focused__ app_id="^chromium"] kill
+
+# Keyboard layout and screen settings are the owner's, from /etc/intentic/sway.d/ (written by the app or by hand).
+include /etc/intentic/sway.d/*

@@ -219,6 +219,7 @@ export * from "./schemas/codebase-health.js";
 export * from "./schemas/context-trim.js";
 export * from "./schemas/devices.js";
 export * from "./schemas/device-swaps.js";
+export * from "./schemas/intentic-os.js";
 export * from "./schemas/project-delivery.js";
 export * from "./schemas/device-artifacts.js";
 export * from "./schemas/run-targets.js";
