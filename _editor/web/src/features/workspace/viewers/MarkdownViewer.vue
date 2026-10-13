@@ -182,7 +182,10 @@ const current = computed(() =>
 );
 
 const overlayOpen = ref(false);
-const opener = ref<HTMLElement>();
+// The kit's <Button> is a component, so its template ref is an instance, not the element the overlay hangs off: with
+// the instance as anchor the panel had no document to open in, and the button did nothing. `$el` is its <button>.
+const openerButton = ref<{ $el?: unknown }>();
+const opener = computed(() => (openerButton.value?.$el instanceof HTMLElement ? openerButton.value.$el : undefined));
 const jumpFromOverlay = (index: number): void => {
     overlayOpen.value = false;
     outline.jump(index);
@@ -201,7 +204,7 @@ watch([() => current.value === undefined, () => path], () => (overlayOpen.value 
             <!-- The current section opens the outline when the pane cannot dock it. -->
             <Button
                 v-if="current !== undefined"
-                ref="opener"
+                ref="openerButton"
                 size="small"
                 tier="quiet"
                 class="min-w-0"
