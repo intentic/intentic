@@ -314,7 +314,6 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
         <RowGroup
             v-if="described"
             :label="t(`sandbox.devicePage.sandboxes`)"
-            :count="machine.groups.length > 0 ? machine.groups.length : undefined"
             :flat="true"
             :undivided="true"
         >

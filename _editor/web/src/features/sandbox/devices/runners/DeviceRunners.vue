@@ -190,7 +190,7 @@ const add = async (): Promise<void> => {
 
 <template>
     <!-- The page is the machine, so the heading is the noun alone: this list sits under its own sandbox list. -->
-    <RowGroup v-if="door" :label="t(`sandbox.deviceRunners.runners`)" :count="mine.length > 0 ? mine.length : undefined">
+    <RowGroup v-if="door" :label="t(`sandbox.deviceRunners.runners`)">
         <template #actions>
             <Button
                 v-if="!adding"
