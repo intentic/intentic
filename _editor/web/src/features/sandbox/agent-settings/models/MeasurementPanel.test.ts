@@ -19,9 +19,10 @@ const RESTARTED: TurnExperiment = {
     ],
     minTurns: 30,
     sampleUnit: `opening turns`,
+    // Local noon: the panel names days in the reader's own zone, and a UTC instant lands on another day east of +12.
     previous: {
-        from: Date.UTC(2026, 8, 13, 12),
-        to: Date.UTC(2026, 9, 6, 12),
+        from: new Date(2026, 8, 13, 12).getTime(),
+        to: new Date(2026, 9, 6, 12).getTime(),
         metrics: [{ metric: `openedWithListing`, on: { turns: 601, mean: 0.17 }, off: { turns: 165, mean: 0.31 }, deltaPct: -45.2, marginPct: 20.1 }],
     },
 };
