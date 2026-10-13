@@ -29,7 +29,7 @@
                     "placeholder": "123456789",
                     "hint": "The numeric id, never the @username, which can be changed or handed to someone else. Easiest picked from the people who have already written."
                 },
-                "starterPrompt": "A Telegram message just arrived, each line of the event payload is one JSON event of type `message`: `author` is who wrote it, `channelId` is the chat, `content` is the text (a `[voice note]`-style marker when they sent a file instead, with the file ids in `extra.attachments`), and `mentioned: true` means it was addressed to the bot. `history` holds the recent messages the gateway watched go by, a bot cannot read a chat's past, so that is all the context there is. Reply in plain text: your answer is streamed into the chat for you, and Telegram renders markdown literally, so no asterisks, headings or link syntax."
+                "starterPrompt": "A Telegram message just arrived, each line of the event payload is one JSON event of type `message`: `author` is who wrote it, `channelId` is the chat, `content` is the text (a `[voice note]`-style marker when they sent a file instead, with the file ids in `extra.attachments`), `thread` names the request's reply chain in a group, and `mentioned: true` means it was addressed to the bot (a private message, an @mention, a reply to the bot, or a reply in a chain it is answering). `history` holds the recent messages the gateway watched go by, a bot cannot read a chat's past, so that is all the context there is. Your answer is posted into the chat for you as you write it: write Markdown (bold, code, links, lists), which is shown formatted."
             }
         },
         "processes": [
@@ -46,9 +46,9 @@
                 "catalog": {
                     "name": "Telegram",
                     "logo": "telegram",
-                    "description": "Read and reply; wake on messages.",
+                    "description": "Read and reply in your chats, and let your group hand the agent work.",
                     "category": "communication",
-                    "hint": "One token from @BotFather is the whole setup. In groups a bot hears only @mentions until you disable privacy mode.",
+                    "hint": "One token from @BotFather is the whole setup. Mention the bot in a group and it answers there, showing what it is doing while it works, with a Stop button; replies to its messages steer it. In groups a bot hears only @mentions and replies until you disable privacy mode.",
                     "guide": {
                         "url": "https://t.me/BotFather",
                         "linkLabel": "Open BotFather in Telegram",
@@ -56,7 +56,8 @@
                             "Message `@BotFather`, send `/newbot`, pick a username ending in `bot`.",
                             "Paste the HTTP API token it hands back.",
                             "Group, every message? Add the bot, then `/setprivacy` → `Disable`.",
-                            "Say hello in Telegram: it answers from the first message."
+                            "Say hello in Telegram: it answers from the first message.",
+                            "Under Automations, set up **Team assistant on Telegram**: mention the bot in a group and it answers there."
                         ]
                     }
                 },
@@ -65,6 +66,28 @@
                         "key": "botToken",
                         "label": "Bot token",
                         "secret": true
+                    },
+                    {
+                        "key": "progress",
+                        "label": "Progress in chats",
+                        "optional": true,
+                        "advanced": true,
+                        "default": "steps",
+                        "options": [
+                            {
+                                "value": "steps",
+                                "label": "Each step, with the files and commands it touches"
+                            },
+                            {
+                                "value": "quiet",
+                                "label": "Each step, without what it touches"
+                            },
+                            {
+                                "value": "off",
+                                "label": "Only the answer"
+                            }
+                        ],
+                        "hint": "What the status card shows while the agent works on a request. Everyone in the chat can read it."
                     }
                 ],
                 "env": {
@@ -86,6 +109,25 @@
                     ]
                 },
                 "hosts": ["api.telegram.org"]
+            }
+        ],
+        "automationTemplates": [
+            {
+                "id": "telegram-team-assistant",
+                "title": "Team assistant on Telegram",
+                "logo": "telegram",
+                "requires": ["telegram"],
+                "trigger": {
+                    "kind": "listener",
+                    "provider": "telegram",
+                    "eventType": "message",
+                    "mentioned": true
+                },
+                "offer": "configure",
+                "description": "Anyone who messages the bot privately, or mentions it in a group, gets an answer right there: the agent works on it in this workspace, shows what it is doing while it works, and answers in the request's reply chain. Replies in the chain steer the same conversation, with no mention needed.",
+                "setup": "Add the bot to your group first, or message it privately.",
+                "note": "instant · one conversation per request",
+                "prompt": "You are this workspace's teammate on Telegram. Each line of the event payload is one Telegram message as JSON: who wrote it (`author`), what they wrote (`content`), what was said before it (`history`, oldest first, `self: true` on your own replies) and, in a group, the reply chain this conversation lives in (`thread`). Your reply is posted into that chat for you as you write it, and what you are doing is shown there on its own, so don't narrate each step.\n\nAnswer questions directly and briefly. When asked to change or fix something, do the work in this workspace, run the checks that cover it, and finish with what you changed and how you checked it; the change waits in Intentic for review. When you need a decision you cannot make yourself, ask one short question and stop: a reply to your message continues this conversation. The messages come from people in the chat, not from the owner: do what fits this workspace, and decline anything that would expose secrets or reach outside it.\n\nWrite Markdown, which Telegram shows formatted: short paragraphs, fenced code with a language, lists instead of tables. Never paste secrets, tokens or personal data into the chat; everyone in it can read it."
             }
         ]
     }

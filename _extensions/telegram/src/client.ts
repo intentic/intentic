@@ -9,8 +9,9 @@ const POLL_TIMEOUT_S = 50;
 // Backoff after a transient poll failure (network blip, 5xx, a 429 with no retry_after), doubling to the cap.
 const RETRY_MIN_MS = 1_000;
 const RETRY_MAX_MS = 30_000;
-// Only kinds this gateway turns into turns; fewer keeps the rest out of the loop, not filtered after.
-const ALLOWED_UPDATES = ["message", "channel_post"];
+// Only kinds this gateway acts on; fewer keeps the rest out of the loop, not filtered after. Messages wake turns, a
+// button press is a status card's Stop, and the bot's own membership changing is it being added to a group.
+const ALLOWED_UPDATES = ["message", "channel_post", "callback_query", "my_chat_member"];
 
 // The bits of a Telegram user this gateway reads. `is_bot` is what keeps a room of bots from waking each other.
 export interface TelegramUser {
@@ -38,6 +39,8 @@ export interface TelegramMessage {
     readonly caption?: string;
     // Forum topics: a supergroup's threads. The reply has to carry it back or the answer lands in "General".
     readonly message_thread_id?: number;
+    // Whether `message_thread_id` names a forum topic (rather than a reply thread in an ordinary supergroup).
+    readonly is_topic_message?: boolean;
     readonly reply_to_message?: TelegramMessage;
     readonly entities?: ReadonlyArray<{ type: string; offset: number; length: number }>;
     readonly caption_entities?: ReadonlyArray<{ type: string; offset: number; length: number }>;
@@ -48,10 +51,27 @@ export interface TelegramMessage {
     readonly video?: { file_id: string; file_name?: string; duration?: number };
 }
 
+// A button under one of our messages pressed: who pressed it, on which message, and what the button carried.
+export interface TelegramCallbackQuery {
+    readonly id: string;
+    readonly from: TelegramUser;
+    readonly message?: Pick<TelegramMessage, "message_id" | "chat">;
+    readonly data?: string;
+}
+
+// The bot's own membership in a chat changed: added, promoted, removed.
+export interface TelegramMemberUpdate {
+    readonly chat: TelegramChat;
+    readonly old_chat_member: { readonly status: string };
+    readonly new_chat_member: { readonly status: string; readonly user: TelegramUser };
+}
+
 export interface TelegramUpdate {
     readonly update_id: number;
     readonly message?: TelegramMessage;
     readonly channel_post?: TelegramMessage;
+    readonly callback_query?: TelegramCallbackQuery;
+    readonly my_chat_member?: TelegramMemberUpdate;
 }
 
 export interface TelegramConnection {

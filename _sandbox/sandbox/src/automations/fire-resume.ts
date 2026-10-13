@@ -62,7 +62,9 @@ const resumeFire = async (services: Services, entry: JournalledFire, now: number
 };
 
 // Runs once at boot, beside the engine's own pass over the turns it died under (agent/run/turn/turn-resume.ts). Each
-// entry is consumed or spent before it fires, so a fire that kills the daemon can't loop the boot.
+// entry is consumed or spent before it fires, so a fire that kills the daemon can't loop the boot. The journal holds a
+// fire per conversation, so threads of one automation that were worked on side by side each come back on their own
+// conversation, side by side again (scheduler.ts, FireLanes).
 // `policy`: whether this boot resumes what the restart cut (agent/run/turn/restart-resume-policy.ts), decided once for
 // every pass; absent, it is the settings' autoResumeOnRestart alone.
 export const resumeInterruptedFires = async (services: Services, now: number = Date.now(), policy?: RestartResume): Promise<void> => {

@@ -601,6 +601,18 @@ export const SandboxSettingsSchema = z.object({
         .max(10)
         .default(3)
         .describe("How many levels deep the delegation may go, since a subagent can start subagents of its own."),
+    // Width again, for a team-chat automation rather than a turn: each thread a message lands in is a conversation of
+    // its own, and threads of one automation are worked on side by side up to this many (automations/scheduler.ts in
+    // the daemon); one more waits, told it is queued, until a slot frees. Read per fire, so a change holds from the next
+    // thread on.
+    automationThreadsAtOnce: z
+        .number()
+        .min(1)
+        .max(20)
+        .default(3)
+        .describe(
+            "How many threads of one team-chat automation may be worked on at the same time. Each is its own agent turn, so this is how many agents one busy channel can start at once.",
+        ),
 });
 export type SandboxSettings = z.infer<typeof SandboxSettingsSchema>;
 // What a save takes: the settings as read, less what is only read. `turn.ending` holds only the checks a repository

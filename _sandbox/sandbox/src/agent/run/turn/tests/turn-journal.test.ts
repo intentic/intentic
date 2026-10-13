@@ -53,8 +53,24 @@ describe("sqliteTurnJournal", () => {
 
         await journal.clearTurn("c-1");
         expect((await journal.list()).map((entry) => entry.kind)).toEqual(["automation"]);
-        await journal.clearFire("nightly");
+        await journal.clearFire("a-nightly-1");
         expect(await journal.list()).toEqual([]);
+    });
+
+    // Threads of one team-chat automation are worked on side by side (automations/scheduler.ts), so the journal holds
+    // a fire per conversation rather than one per automation, and each clears alone.
+    it("holds one fire per conversation, two of one automation included, and clears each by its conversation", async () => {
+        const { journal } = registered();
+        const t1 = fire({ conversationId: "a-team-t1", automationId: "team", thread: "discord:team:c1/t1" });
+        const t2 = fire({ conversationId: "a-team-t2", automationId: "team", thread: "discord:team:c1/t2", startedAt: 21 });
+        await journal.recordFire(t1);
+        await journal.recordFire(t2);
+        expect(await journal.list()).toEqual([t1, t2]);
+        // A re-fire's fresh entry on the same conversation replaces the spent one.
+        await journal.recordFire({ ...t1, attempts: 1, startedAt: 22 });
+        expect(await journal.list()).toEqual([t2, { ...t1, attempts: 1, startedAt: 22 }]);
+        await journal.clearFire("a-team-t2");
+        expect(await journal.list()).toEqual([{ ...t1, attempts: 1, startedAt: 22 }]);
     });
 
     it("a second turn on the same conversation replaces the row whole, the first one's session with it", async () => {

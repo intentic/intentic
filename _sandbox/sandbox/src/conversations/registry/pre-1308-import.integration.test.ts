@@ -445,7 +445,7 @@ test("a conversation removed after its import is not imported again from the fil
 
     const conversations = openConversationsDb(conversationsDbPath(roots.history));
     sqliteAgentsStore(conversations).remove([AMBER]);
-    await sqliteTurnJournal(conversations).clearFire("nightly");
+    await sqliteTurnJournal(conversations).clearFire(nightlyFire.conversationId);
     conversations.db.close();
     await rm(conversationUnit(roots.history, AMBER), { recursive: true, force: true });
 

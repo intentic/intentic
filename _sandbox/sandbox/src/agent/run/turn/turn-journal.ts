@@ -94,7 +94,7 @@ type JournalDeps = Pick<Services, "turnJournal" | "logger">;
 // Takes the entry off the journal, its interruption left standing on whatever record it has.
 export const consumeEntry = async (services: JournalDeps, entry: JournalEntry): Promise<void> => {
     const clear =
-        entry.kind === "turn" ? services.turnJournal.clearTurn(entry.turn.conversationId) : services.turnJournal.clearFire(entry.automationId);
+        entry.kind === "turn" ? services.turnJournal.clearTurn(entry.turn.conversationId) : services.turnJournal.clearFire(entry.conversationId);
     await clear.catch((error: unknown) => services.logger.warn({ err: error }, "turn journal: interrupted entry not cleared"));
 };
 
@@ -114,10 +114,12 @@ export interface TurnJournal {
     // Filed under the conversation, whose row must exist; a turn's opening entry is written with it by the fleet
     // (journalRows below), so this is the boot pass's rewrite of a spent attempt.
     readonly recordTurn: (turn: JournalledTurn) => Promise<void>;
-    // Filed under the automation, which never overlaps itself (scheduler.ts's inFlight set).
+    // Filed under the conversation the fire runs in, since an automation's fires overlap only on different
+    // conversations (automations/scheduler.ts, FireLanes): the threads of a team-chat automation are worked on side by
+    // side, each one fire in flight at most, and a fire no thread owns runs alone.
     readonly recordFire: (fire: JournalledFire) => Promise<void>;
     readonly clearTurn: (conversationId: string) => Promise<void>;
-    readonly clearFire: (automationId: string) => Promise<void>;
+    readonly clearFire: (conversationId: string) => Promise<void>;
 }
 
 // The turn rows as statements, synchronous so a writer holding a transaction can put one inside it: the fleet writes a
@@ -145,10 +147,9 @@ interface FireRow {
     readonly payload: string | null;
     readonly origin: string | null;
     readonly title: string | null;
-    // Absent from a row read off a database an older build still has open.
-    readonly lane?: string | null;
-    readonly thread?: string | null;
-    readonly session_id?: string | null;
+    readonly lane: string | null;
+    readonly thread: string | null;
+    readonly session_id: string | null;
 }
 
 export const turnJournalRows = ({ db }: ConversationsDb): TurnJournalRows => {
@@ -221,7 +222,7 @@ const fireOf = (row: FireRow): JournalledFire[] => {
         ...(row.payload === null ? {} : { payload: row.payload }),
         ...(row.origin === null ? {} : { origin: JSON.parse(row.origin) }),
         ...(row.title === null ? {} : { title: row.title }),
-        ...opt("lane", row.lane === undefined || row.lane === null ? undefined : JSON.parse(row.lane)),
+        ...opt("lane", row.lane === null ? undefined : JSON.parse(row.lane)),
         ...opt("thread", row.thread ?? undefined),
         ...opt("sessionId", row.session_id ?? undefined),
     });
@@ -232,15 +233,15 @@ export const sqliteTurnJournal = (conversations: ConversationsDb): TurnJournal =
     const { db } = conversations;
     const rows = turnJournalRows(conversations);
     const selectTurns = db.prepare("SELECT * FROM turn_journal ORDER BY started_at");
-    const selectFires = db.prepare("SELECT * FROM fire_journal ORDER BY started_at");
+    const selectFires = db.prepare("SELECT * FROM fire_journal_by_conversation ORDER BY started_at");
     const upsertFire = db.prepare(`
-        INSERT INTO fire_journal(automation_id, conversation_id, started_at, attempts, payload, origin, title, lane, thread, session_id)
+        INSERT INTO fire_journal_by_conversation(conversation_id, automation_id, started_at, attempts, payload, origin, title, lane, thread, session_id)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(automation_id) DO UPDATE SET conversation_id = excluded.conversation_id, started_at = excluded.started_at,
+        ON CONFLICT(conversation_id) DO UPDATE SET automation_id = excluded.automation_id, started_at = excluded.started_at,
             attempts = excluded.attempts, payload = excluded.payload, origin = excluded.origin, title = excluded.title,
             lane = excluded.lane, thread = excluded.thread, session_id = excluded.session_id
     `);
-    const deleteFire = db.prepare("DELETE FROM fire_journal WHERE automation_id = ?");
+    const deleteFire = db.prepare("DELETE FROM fire_journal_by_conversation WHERE conversation_id = ?");
     return {
         list: async () => [
             ...(selectTurns.all() as unknown as TurnRow[]).flatMap(turnOf),
@@ -249,8 +250,8 @@ export const sqliteTurnJournal = (conversations: ConversationsDb): TurnJournal =
         recordTurn: async (turn) => rows.putTurn(turn),
         recordFire: async (fire) => {
             upsertFire.run(
-                fire.automationId,
                 fire.conversationId,
+                fire.automationId,
                 fire.startedAt,
                 fire.attempts,
                 fire.payload ?? null,
@@ -262,8 +263,8 @@ export const sqliteTurnJournal = (conversations: ConversationsDb): TurnJournal =
             );
         },
         clearTurn: async (conversationId) => rows.deleteTurn(conversationId),
-        clearFire: async (automationId) => {
-            deleteFire.run(automationId);
+        clearFire: async (conversationId) => {
+            deleteFire.run(conversationId);
         },
     };
 };

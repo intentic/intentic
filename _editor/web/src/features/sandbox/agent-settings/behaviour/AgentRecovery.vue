@@ -109,6 +109,17 @@ const setAutomationFailureLimit = (event: Event): void => {
     input.value = String(automationFailureLimit);
     patch({ automationFailureLimit });
 };
+
+// Bounds mirror SandboxSettingsSchema, so the box never keeps a number the save would refuse.
+const setAutomationThreadsAtOnce = (event: Event): void => {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement)) {
+        return;
+    }
+    const automationThreadsAtOnce = Math.min(20, Math.max(1, Math.round(Number(input.value) || 1)));
+    input.value = String(automationThreadsAtOnce);
+    patch({ automationThreadsAtOnce });
+};
 </script>
 
 <template>
@@ -205,6 +216,23 @@ const setAutomationFailureLimit = (event: Event): void => {
                     :value="settings?.automationFailureLimit ?? 0"
                     :disabled="settings === undefined"
                     @change="setAutomationFailureLimit"
+                />
+            </template>
+        </Row>
+
+        <!-- The other automation ceiling: each team-chat thread is its own agent turn, so this bounds how many one busy
+             channel starts at once; a thread past it waits and its channel is told it is queued. -->
+        <Row icon="users" :title="t(`sandbox.agentRecovery.threadsAtOnce`)" :description="t(`sandbox.agentRecovery.threadsAtOnceNote`)">
+            <template #control>
+                <input
+                    type="number"
+                    min="1"
+                    max="20"
+                    :aria-label="t(`sandbox.agentRecovery.threadsAtOnceLabel`)"
+                    class="ui-field-box ui-field-sm w-16 text-right"
+                    :value="settings?.automationThreadsAtOnce ?? 3"
+                    :disabled="settings === undefined"
+                    @change="setAutomationThreadsAtOnce"
                 />
             </template>
         </Row>

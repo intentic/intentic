@@ -1,5 +1,5 @@
 import { runConnectorGateway } from "@intentic/connector-runtime";
-import { closeSlackConnection, FatalSlackError, openSlackConnection, slackConnection, slackConnections } from "./client.js";
+import { closeSlackConnection, FatalSlackError, openSlackConnection, type SlackConnection, slackConnection, slackConnections } from "./client.js";
 import { createSlackListener, deliverToChannel } from "./listener.js";
 
 // Slack gateway process (autoStart, contributes.processes): reconciles one socket per app against
@@ -12,15 +12,27 @@ export interface SlackConnectorConfig {
     readonly botToken: string;
     // The app-level credential (xapp-, connections:write): opens the Socket Mode WebSocket.
     readonly appToken: string;
+    // How much of the agent's work a thread's status card shows: "steps" (the default), "quiet" or "off".
+    readonly progress?: string;
+    // How it shows: "card" (the default, a status card with Stop) or "native" (Slack's own streamed task list).
+    readonly statusStyle?: string;
 }
 
 void runConnectorGateway<SlackConnectorConfig, string>({
     provider: "slack",
     create: (ctx) => {
-        const listener = createSlackListener(ctx, slackConnections);
+        // The connectors as the last reconcile read them; a progress edit takes effect without reconnecting.
+        let connectors: ReadonlyArray<{ readonly config: SlackConnectorConfig }> = [];
+        const configOf = (connection: SlackConnection): SlackConnectorConfig | undefined => connectors.find(({ config }) => config.appToken === connection.appToken)?.config;
+        const listener = createSlackListener(ctx, slackConnections, {
+            progressOf: (connection) => configOf(connection)?.progress,
+            styleOf: (connection) => configOf(connection)?.statusStyle,
+        });
         return {
-            desired: (connectors) =>
-                connectors.filter(({ config }) => config.appToken !== "" && config.botToken !== "").map(({ id, config }) => [id, config] as const),
+            desired: (entries) => {
+                connectors = entries;
+                return entries.filter(({ config }) => config.appToken !== "" && config.botToken !== "").map(({ id, config }) => [id, config] as const);
+            },
             // Both tokens key the connection: a bot-token rotation must reconnect even with the same app token.
             keyOf: (config) => `${config.appToken}\u0000${config.botToken}`,
             open: async (id, config) => {

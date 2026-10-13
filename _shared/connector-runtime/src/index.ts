@@ -1,4 +1,36 @@
 export { chunkMessage, openFenceAfter, tablesToCode } from "./chunks.js";
+export {
+    type ChatMessageRef,
+    type ChatReply,
+    type ChatReplyDeps,
+    type ChatReplyTarget,
+    type ChatSurface,
+    createChatReply,
+    isNarration,
+    LOST_NOTICE,
+    REPLY_TIMING,
+    type ReplyMark,
+    type ReplyRegistry,
+    type ReplyTiming,
+    type RunControl,
+} from "./chat-reply.js";
+export { JOINED_THREADS_MAX, type JoinedThreads, joinedThreads, type RunRegistry, runRegistry, stopFromChat } from "./chat-runs.js";
+export {
+    CARD_LINE_MAX,
+    type CardState,
+    type CardStep,
+    type CardView,
+    clipLine,
+    PLAN_SHOWN,
+    type ProgressDetail,
+    progressDetailOf,
+    STEPS_SHOWN,
+    STOP_BUTTON,
+    type StatusCard,
+    statusCardOf,
+    stopButtonId,
+    stopTarget,
+} from "./status-card.js";
 export type { GatewayCtx } from "./context.js";
 export { createDaemonClient, type DaemonClient, type DaemonState, type SpeakOptions, type Speech } from "./daemon.js";
 export {
@@ -33,15 +65,7 @@ export {
     type TurnProgress,
     type TurnProgressTracker,
 } from "./progress.js";
-export {
-    createBufferedPainter,
-    createStreamingPainter,
-    failureNotice,
-    framePainter,
-    type Painter,
-    type StreamPoster,
-    type StreamTuning,
-} from "./painter.js";
+export { createBufferedPainter, failureNotice, framePainter, type Painter } from "./painter.js";
 // The wire types both ends of the listener routes speak, re-exported so a connector types its payloads without
 // depending on the whole contract package itself.
 export type {

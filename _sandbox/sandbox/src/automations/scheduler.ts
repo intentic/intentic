@@ -100,8 +100,89 @@ const quarantineIfSpinning = async (services: Services, id: string): Promise<str
     return `Disabled after ${failures} consecutive failed runs (automationFailureLimit is ${automationFailureLimit}). Fix the cause and re-enable it.`;
 };
 
-// Run in progress per automation; a queued fire awaits it. Shared by the tick, dispatchers and fire route.
-const inFlight = new Map<string, Promise<unknown>>();
+// How the fires of one automation take turns, shared by the tick, the dispatchers, the doors and the fire route.
+// - A fire no provider thread owns (a schedule, a webhook, a workspace event, a channel-level message, a Visitor chat, a
+//   pressed Run now) runs ALONE, as every fire did before threads shared: it waits for every fire of its automation
+//   already admitted, and every fire admitted after it waits for it. Such an automation still never overlaps itself.
+// - A fire on a provider's own thread (the Discord or Slack thread a team-chat mention is answered in) SHARES its
+//   automation with the fires on its other threads: it waits only for a fire running alone that was admitted before it,
+//   for the last fire on its own conversation, and for one of `automationThreadsAtOnce` slots. Two people mentioning
+//   the bot in two threads are answered side by side; one more than the setting allows is told it is queued.
+// So two fires of one automation overlap only on two conversations, which is what lets the turn journal file a fire
+// in flight under its conversation (agent/run/turn/turn-journal.ts).
+interface FireLanes {
+    // Settles once every fire admitted so far has: what a fire running alone waits for, and what automationIdle reads.
+    all: Promise<void>;
+    // Settles once the last fire admitted to run alone has: what a thread's fire admitted after it waits behind.
+    alone: Promise<void>;
+    // The last fire admitted on each shared conversation, settling with it: what the next one there waits behind.
+    readonly conversations: Map<string, Promise<void>>;
+    // Fires admitted and not yet settled, all of them and those running alone; the lanes go when nothing is admitted.
+    admitted: number;
+    admittedAlone: number;
+    // Thread fires working now, how many may (the setting as last read), and those waiting for a slot, oldest first.
+    working: number;
+    cap: number;
+    readonly waiting: (() => void)[];
+}
+
+const fireLanes = new Map<string, FireLanes>();
+
+const openLanes = (): FireLanes => ({
+    all: Promise.resolve(),
+    alone: Promise.resolve(),
+    conversations: new Map(),
+    admitted: 0,
+    admittedAlone: 0,
+    working: 0,
+    cap: 1,
+    waiting: [],
+});
+
+// The conversation a fire shares its automation on, or undefined for one that runs alone. A fire shares when it
+// belongs to a thread (its thread key and conversation) that is a provider's own thread, which only its origin says: a
+// channel-level message's origin names no thread. All three ride a held wake's snapshot and the turn journal, so an
+// approved hold and a restart's re-fire take turns exactly as the fire they replay did.
+const sharedConversationOf = ({ thread, conversationId, origin }: FireOptions): string | undefined =>
+    thread !== undefined && origin?.threadId !== undefined ? conversationId : undefined;
+
+// Hands free slots to the thread fires waiting longest, as many as the setting allows.
+const fillSlots = (lanes: FireLanes): void => {
+    while (lanes.working < lanes.cap && lanes.waiting.length > 0) {
+        lanes.working += 1;
+        lanes.waiting.shift()?.();
+    }
+};
+
+// How many threads of one automation may be worked on at once, read per fire so a change holds from the next thread
+// on. A read that fails works one thread at a time, as every automation did before the setting existed.
+const threadsAtOnce = async (services: Pick<Services, "sandboxSettings" | "logger">): Promise<number> => {
+    try {
+        return (await services.sandboxSettings.get()).automationThreadsAtOnce;
+    } catch (error) {
+        services.logger.warn({ err: error }, "settings unreadable: threads of an automation are worked on one at a time");
+        return 1;
+    }
+};
+
+// One of the slots a thread's turn runs in, waited for in line once they are all working.
+const takeSlot = async (services: Services, lanes: FireLanes, onWait: () => void): Promise<void> => {
+    lanes.cap = await threadsAtOnce(services);
+    // A raised setting lets in those already waiting first; only then is a slot left over for this fire.
+    fillSlots(lanes);
+    if (lanes.working < lanes.cap) {
+        lanes.working += 1;
+        return;
+    }
+    onWait();
+    // Counted by fillSlots as it hands the slot over, so no fire arriving in between can take it.
+    await new Promise<void>((resolve) => lanes.waiting.push(resolve));
+};
+
+const giveSlot = (lanes: FireLanes): void => {
+    lanes.working -= 1;
+    fillSlots(lanes);
+};
 
 // Branch/worktree name bounded by ConversationIdSchema, built from the automation id with prefix/suffix room.
 const AUTOMATION_ID_IN_CONVERSATION = 40;
@@ -227,7 +308,9 @@ export interface FireOptions {
     // The held wake this fire replays, by id: what a delivery into a conversation is keyed on, so two holds approved
     // together are two deliveries rather than one answered twice.
     readonly held?: string;
-    // What happens when this automation is already running:
+    // What happens when this fire meets one it has to wait for (FireLanes): any fire of its automation, for a fire that
+    // runs alone; a fire running alone or one on its own conversation, for a thread's. Every thread slot being taken is
+    // not an overlap, and always queues.
     // - `drop` (default): a cron or workspace-event re-fire is not wanted twice; the next tick comes anyway.
     // - `queue`: for an inbound message with no next tick; waits for the run in progress, keeping its reply sink open.
     readonly overlap?: "drop" | "queue";
@@ -239,43 +322,79 @@ export interface FireOutcome {
     readonly sessionId?: string;
 }
 
-// Fires one automation, one turn at a time; owns only the overlap policy (refuse or wait), with `runFire` doing the
-// fire itself. Callers run it detached; tests await it directly.
+// Fires one automation, taking its turn among the automation's other fires (FireLanes); owns only that and the overlap
+// policy (refuse or wait), with `runFire` doing the fire itself. Callers run it detached; tests await it directly.
 export const fireAutomation = async (services: Services, automation: AutomationRecord, options: FireOptions = {}): Promise<FireOutcome> => {
-    const running = inFlight.get(automation.id);
-    if (running !== undefined && options.overlap !== "queue") {
+    const lanes = fireLanes.get(automation.id) ?? openLanes();
+    const shared = sharedConversationOf(options);
+    // Whether this fire has to wait for one already admitted, decided now, before anything after it is admitted.
+    const blocked = shared === undefined ? lanes.admitted > 0 : lanes.admittedAlone > 0 || lanes.conversations.has(shared);
+    if (blocked && options.overlap !== "queue") {
         // Dropped as overlapping means no reply is coming; runFire's finally never runs here, so this closes the sink.
         options.stream?.failed("this automation is already running, so the message was not picked up");
         options.stream?.end();
         return {};
     }
-    // Waiting behind a turn already running is said where the message came from, so a quiet thread reads as queued.
-    if (running !== undefined) {
-        options.stream?.queued?.(QUEUED_NOTICE);
+    // Waiting is said where the message came from, once, so a quiet thread reads as queued rather than dead.
+    let toldQueued = false;
+    const tellQueued = (): void => {
+        if (!toldQueued) {
+            toldQueued = true;
+            options.stream?.queued?.(QUEUED_NOTICE);
+        }
+    };
+    if (blocked) {
+        tellQueued();
     }
-    // The chain is the lock: each fire runs after the last; failure still lets the next start (`.then(job, job)`).
-    const turn = (running ?? Promise.resolve()).then(
-        () => runFire(services, automation, options),
-        () => runFire(services, automation, options),
-    );
+    // The lanes are the lock: what a fire waits for never rejects, so a failed fire still lets the next one start.
+    const turn =
+        shared === undefined
+            ? lanes.all.then(() => runFire(services, automation, options))
+            : Promise.all([lanes.alone, lanes.conversations.get(shared)]).then(async () => {
+                  await takeSlot(services, lanes, tellQueued);
+                  try {
+                      return await runFire(services, automation, options);
+                  } finally {
+                      giveSlot(lanes);
+                  }
+              });
     const settled = turn.then(
         () => undefined,
         () => undefined,
     );
-    inFlight.set(automation.id, settled);
+    lanes.admitted += 1;
+    lanes.all = Promise.all([lanes.all, settled]).then(() => undefined);
+    if (shared === undefined) {
+        lanes.admittedAlone += 1;
+        lanes.alone = settled;
+    } else {
+        lanes.conversations.set(shared, settled);
+    }
+    fireLanes.set(automation.id, lanes);
     void settled.then(() => {
-        // Only the last fire in the chain clears the slot; an earlier one must not unlock a turn queued behind it.
-        if (inFlight.get(automation.id) === settled) {
-            inFlight.delete(automation.id);
+        lanes.admitted -= 1;
+        if (shared === undefined) {
+            lanes.admittedAlone -= 1;
+        } else if (lanes.conversations.get(shared) === settled) {
+            // Only the last fire on a conversation clears it; an earlier one must not unlock a fire queued behind it.
+            lanes.conversations.delete(shared);
+        }
+        if (lanes.admitted === 0 && fireLanes.get(automation.id) === lanes) {
+            fireLanes.delete(automation.id);
         }
     });
     return turn;
 };
 
-// Waits for a running fire of this automation. A recorded run isn't the same as free again, since the lock releases
-// only when the fire returns; firing the same automation twice in a row must await this in between.
+// Waits until nothing of this automation is running or waiting, every thread's fire included. A recorded run isn't the
+// same as free again, since a fire lets the next one go only when it returns; firing the same automation twice in a
+// row must await this in between. A fire admitted while this waits is waited for too, until one wait finds nothing new.
 export const automationIdle = async (id: string): Promise<void> => {
-    await inFlight.get(id);
+    let awaited: Promise<void> | undefined;
+    for (let lanes = fireLanes.get(id); lanes !== undefined && lanes.all !== awaited; lanes = fireLanes.get(id)) {
+        awaited = lanes.all;
+        await awaited;
+    }
 };
 
 // Resolved model pin as turn fields (model, effort, thinking, fast, harness); an unpinned knob stays absent. Named
@@ -445,8 +564,19 @@ const tellStream = (stream: TurnStream | undefined, progress: TurnProgressReader
     }
 };
 
-// Guard, then wake, then record the run; reached only through fireAutomation, which guarantees no two runs of one
-// automation overlap here.
+// Takes a fire's own entry off the turn journal, and only its own: another thread of the same automation may be in
+// flight beside it, journalled under its conversation. Nothing to take off for a fire that never journalled one.
+const clearJournalled = async (services: Services, automationId: string, conversationId: string | undefined): Promise<void> => {
+    if (conversationId === undefined) {
+        return;
+    }
+    await services.turnJournal
+        .clearFire(conversationId)
+        .catch((error: unknown) => services.logger.warn({ err: error, automation: automationId }, "turn journal: fire not cleared"));
+};
+
+// Guard, then wake, then record the run; reached only through fireAutomation, which guarantees no two runs on one
+// conversation overlap here, and none at all of an automation whose fire runs alone (FireLanes).
 const runFire = async (
     services: Services,
     automation: AutomationRecord,
@@ -469,6 +599,10 @@ const runFire = async (
 ): Promise<FireOutcome> => {
     // This fire's own name, for a delivery that must not be mistaken for another fire's.
     const fireKey = held === undefined ? `at-${Date.now()}` : `held-${held}`;
+    // The conversation this fire's journal entry is filed under, cleared however the fire ends. A re-fire's is known
+    // from the start, since the boot pass spent its entry before firing it: one that ends before journalling anew
+    // (skipped, refused, expired) still takes that entry off, rather than leaving it to read as interrupted next boot.
+    let journalled = resumedConversationId;
     try {
         // Past its end date it does nothing but end: switched off, and whoever it was for told. A held wake already
         // released by a person is theirs to have, so a replay goes ahead.
@@ -610,6 +744,7 @@ const runFire = async (
         // sender's lane, thread and session ride along: without them a stranger a sender rule put on a narrow persona
         // would come back after a restart wearing the automation's own, on a conversation its thread no longer knows.
         const conversationId = resumedConversationId ?? mintConversationId(automation.id, Date.now());
+        journalled = conversationId;
         await services.turnJournal
             .recordFire(journalledFire(automation.id, conversationId, attempts, { payload: capped, origin, title, lane, thread, sessionId: resumedSessionId }))
             .catch((error: unknown) => services.logger.warn({ err: error, automation: automation.id }, "turn journal: fire not recorded"));
@@ -712,9 +847,7 @@ const runFire = async (
         // Flush the final buffered text (the deltas after the last rate-limited edit). No-op if nothing streamed.
         stream?.end();
         // Clears the journal entry regardless of outcome; only a fire with no end state leaves one, for the boot pass.
-        await services.turnJournal
-            .clearFire(automation.id)
-            .catch((error: unknown) => services.logger.warn({ err: error, automation: automation.id }, "turn journal: fire not cleared"));
+        await clearJournalled(services, automation.id, journalled);
     }
 };
 

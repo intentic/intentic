@@ -22,13 +22,16 @@ import {
     automationIdle,
     createAutomationsScheduler,
     fireAutomation,
+    type FireOptions,
     heldWakeQuiet,
     LAND_QUIET_CAP_MS,
     LAND_QUIET_MS,
     nextOneTimeWakeAt,
+    type TurnStream,
 } from "./scheduler.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
 import { conversationEntry, drivenBy } from "../testing.js";
+import { opt } from "../opt.js";
 
 // Touches automations/heldWakes/activity/turnJournal/workspace/logger/sandboxSettings, plus liveSessionIds and registry
 // entries (mutated in place); the journal is real, since its in-flight entry is asserted on.
@@ -1157,4 +1160,214 @@ test("a conversation not on record yet takes the session its thread names", asyn
         sessionId: "sess-thread",
     });
     expect(turns[0]?.sessionId).toBe("sess-thread");
+});
+
+// Threads of one team-chat automation: each provider thread is a conversation of its own, worked on side by side with
+// the automation's other threads up to `automationThreadsAtOnce`, while anything no thread owns still runs alone.
+
+const teamChat = (id: string): Automation => automationConfig(id, { trigger: { kind: "listener", provider: "discord" } });
+
+// A fire for a message in provider thread `thread` of channel c1, as a listener sends it through fireOnThread: the
+// thread's key, the conversation it opened, and an origin naming the thread.
+const inThread = (automationId: string, thread: string, extra: Partial<FireOptions> = {}): FireOptions => ({
+    payload: `message in ${thread}`,
+    conversationId: `a-${automationId}-${thread}`,
+    thread: `discord:${automationId}:c1/${thread}`,
+    origin: { automationId, provider: "discord", channelId: "c1", threadId: thread, author: "alice" },
+    overlap: "queue",
+    ...extra,
+});
+
+// A wake that holds each conversation's turn open until the test lets that conversation go, so a test can see which
+// turns are running at once. `started` lists conversations in the order their turns began.
+interface HeldTurns {
+    readonly wake: TurnStarter["stream"];
+    readonly started: string[];
+    readonly release: (conversationId: string) => void;
+}
+
+const heldPerConversation = (): HeldTurns => {
+    const started: string[] = [];
+    const gates = new Map<string, PromiseWithResolvers<void>>();
+    const gateOf = (conversationId: string): PromiseWithResolvers<void> => {
+        const gate = gates.get(conversationId) ?? Promise.withResolvers<void>();
+        gates.set(conversationId, gate);
+        return gate;
+    };
+    return {
+        started,
+        // Lets the running turn go; the next turn on the conversation waits on a fresh gate.
+        release: (conversationId) => {
+            gateOf(conversationId).resolve();
+            gates.delete(conversationId);
+        },
+        async *wake(input) {
+            const conversationId = input.conversationId ?? "";
+            const gate = gateOf(conversationId);
+            started.push(conversationId);
+            await gate.promise;
+            yield { kind: "done" };
+        },
+    };
+};
+
+// A reply sink that keeps what it heard, in order.
+const hearing = (heard: string[]): TurnStream => ({
+    delta: () => {},
+    failed: (reason) => void heard.push(`failed:${reason}`),
+    queued: () => void heard.push("queued"),
+    end: () => void heard.push("end"),
+});
+
+const conversationsInJournal = async (services: Services): Promise<string[]> =>
+    (await services.turnJournal.list()).flatMap((entry) => (entry.kind === "automation" ? [entry.conversationId] : [])).toSorted();
+
+test("two threads of one team-chat automation are worked on side by side, each journalled under its own conversation", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
+    await services.automations.upsert(teamChat("team"));
+    const record = await saved(services, "team");
+    const { wake, started, release } = heldPerConversation();
+    const heard: string[] = [];
+    const first = fireAutomation(drivenBy(services, wake), record, inThread("team", "t1"));
+    const second = fireAutomation(drivenBy(services, wake), record, inThread("team", "t2", { stream: hearing(heard) }));
+
+    // Both turns began while neither had ended, and the second thread was never told to wait.
+    await waitFor(() => expect(started.toSorted()).toEqual(["a-team-t1", "a-team-t2"]), SETTLES);
+    expect(heard).not.toContain("queued");
+    expect(await conversationsInJournal(services)).toEqual(["a-team-t1", "a-team-t2"]);
+
+    // One settling takes only its own entry off the journal.
+    release("a-team-t1");
+    await first;
+    expect(await conversationsInJournal(services)).toEqual(["a-team-t2"]);
+    release("a-team-t2");
+    await second;
+    expect(await conversationsInJournal(services)).toEqual([]);
+    expect((await saved(services, "team")).runs.map((run) => run.outcome)).toEqual(["completed", "completed"]);
+});
+
+test("a thread beyond automationThreadsAtOnce is told it is queued, and starts once one of the others ends", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")), { automationThreadsAtOnce: 2 });
+    await services.automations.upsert(teamChat("busy-channel"));
+    const record = await saved(services, "busy-channel");
+    const { wake, started, release } = heldPerConversation();
+    const heard: string[] = [];
+    const fires = [
+        fireAutomation(drivenBy(services, wake), record, inThread("busy-channel", "t1")),
+        fireAutomation(drivenBy(services, wake), record, inThread("busy-channel", "t2")),
+        fireAutomation(drivenBy(services, wake), record, inThread("busy-channel", "t3", { stream: hearing(heard) })),
+    ];
+    await waitFor(() => expect(heard).toEqual(["queued"]), SETTLES);
+    expect(started.toSorted()).toEqual(["a-busy-channel-t1", "a-busy-channel-t2"]);
+
+    release("a-busy-channel-t2");
+    await waitFor(() => expect(started).toContain("a-busy-channel-t3"), SETTLES);
+    expect(started).toHaveLength(3);
+    release("a-busy-channel-t1");
+    release("a-busy-channel-t3");
+    await Promise.all(fires);
+    expect(heard).toEqual(["queued", "end"]);
+});
+
+test("fires on one thread still take turns: a queued one waits for the running one, a dropping one is dropped", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
+    await services.automations.upsert(teamChat("one-thread"));
+    const record = await saved(services, "one-thread");
+    const { wake, started, release } = heldPerConversation();
+    const first = fireAutomation(drivenBy(services, wake), record, inThread("one-thread", "t1"));
+    await waitFor(() => expect(started).toEqual(["a-one-thread-t1"]), SETTLES);
+
+    const heard: string[] = [];
+    const queued = fireAutomation(drivenBy(services, wake), record, inThread("one-thread", "t1", { payload: "and another thing", stream: hearing(heard) }));
+    expect(heard).toEqual(["queued"]);
+    const dropped: string[] = [];
+    expect(await fireAutomation(drivenBy(services, wake), record, inThread("one-thread", "t1", { overlap: "drop", stream: hearing(dropped) }))).toEqual({});
+    expect(dropped).toEqual(["failed:this automation is already running, so the message was not picked up", "end"]);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(started).toHaveLength(1);
+
+    release("a-one-thread-t1");
+    await first;
+    await waitFor(() => expect(started).toEqual(["a-one-thread-t1", "a-one-thread-t1"]), SETTLES);
+    release("a-one-thread-t1");
+    await queued;
+});
+
+test("a fire no thread owns still runs alone: it waits for every thread, and a thread after it waits for it", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
+    await services.automations.upsert(teamChat("mixed"));
+    const record = await saved(services, "mixed");
+    const { wake, started, release } = heldPerConversation();
+    const threaded = fireAutomation(drivenBy(services, wake), record, inThread("mixed", "t1"));
+    await waitFor(() => expect(started).toEqual(["a-mixed-t1"]), SETTLES);
+
+    // By default a fire no thread owns is not wanted twice, so it is dropped as overlapping, as before threads shared.
+    const dropped: string[] = [];
+    expect(await fireAutomation(drivenBy(services, wake), record, { payload: "nightly", stream: hearing(dropped) })).toEqual({});
+    expect(dropped[0]).toBe("failed:this automation is already running, so the message was not picked up");
+
+    // A channel-level message names a thread key but no provider thread, so it queues behind the running thread.
+    const channelHeard: string[] = [];
+    const channel = fireAutomation(drivenBy(services, wake), record, {
+        ...inThread("mixed", "t1"),
+        conversationId: "a-mixed-channel",
+        thread: "discord:mixed:c1",
+        origin: { automationId: "mixed", provider: "discord", channelId: "c1", author: "bob" },
+        stream: hearing(channelHeard),
+    });
+    expect(channelHeard).toEqual(["queued"]);
+    // A thread admitted after it waits for it, slots free or not.
+    const laterHeard: string[] = [];
+    const later = fireAutomation(drivenBy(services, wake), record, inThread("mixed", "t2", { stream: hearing(laterHeard) }));
+    expect(laterHeard).toEqual(["queued"]);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(started).toEqual(["a-mixed-t1"]);
+
+    release("a-mixed-t1");
+    await threaded;
+    await waitFor(() => expect(started).toEqual(["a-mixed-t1", "a-mixed-channel"]), SETTLES);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(started).toHaveLength(2);
+    release("a-mixed-channel");
+    await channel;
+    await waitFor(() => expect(started).toEqual(["a-mixed-t1", "a-mixed-channel", "a-mixed-t2"]), SETTLES);
+    release("a-mixed-t2");
+    await later;
+});
+
+test("the boot pass re-fires every interrupted thread of an automation on its own conversation, side by side again", async () => {
+    const root = mkdtempSync(join(tmpdir(), "sched-"));
+    const services = fakeServices(root, { autoResumeOnRestart: true });
+    const withThreads: Services = {
+        ...services,
+        threadSessions: fileThreadSessionsStore(join(root, "thread-sessions.json"), () => false),
+        logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {}, info: () => {} }),
+    };
+    await services.automations.upsert(teamChat("resumed"));
+    // What a daemon that died with two threads in flight leaves: one row per conversation.
+    for (const thread of ["t1", "t2"]) {
+        const fire = inThread("resumed", thread);
+        await services.turnJournal.recordFire({
+            kind: "automation",
+            automationId: "resumed",
+            conversationId: fire.conversationId ?? "",
+            startedAt: Date.now(),
+            attempts: 0,
+            ...opt("payload", fire.payload),
+            ...opt("origin", fire.origin),
+            ...opt("thread", fire.thread),
+        });
+    }
+    expect(await conversationsInJournal(services)).toEqual(["a-resumed-t1", "a-resumed-t2"]);
+
+    const { wake, started, release } = heldPerConversation();
+    await resumeInterruptedFires(drivenBy(withThreads, wake), Date.now(), restartResume({ ownerAsked: false, storm: false, autoResumeOnRestart: true }));
+    await waitFor(() => expect(started.toSorted()).toEqual(["a-resumed-t1", "a-resumed-t2"]), SETTLES);
+
+    release("a-resumed-t1");
+    release("a-resumed-t2");
+    // Idle means every thread's fire has settled, not just one of them.
+    await automationIdle("resumed");
+    expect(await conversationsInJournal(services)).toEqual([]);
+    expect((await saved(services, "resumed")).runs.map((run) => run.outcome).toSorted()).toEqual(["completed", "completed", "interrupted", "interrupted"]);
 });

@@ -3,7 +3,8 @@ import { unstubbed } from "@intentic/testing";
 import { waitFor } from "@intentic/testing/bun";
 import type { TelegramConnection, TelegramMessage } from "./client.js";
 import type { GatewayCtx } from "@intentic/connector-runtime";
-import { addressesUs, attachmentsOf, authorNameOf, contentOf, createTelegramListener } from "./listener.js";
+import { addressesUs, attachmentsOf, authorNameOf, contentOf, createTelegramListener, welcomeText } from "./listener.js";
+import { REACTIONS } from "./reply.js";
 
 const SELF_ID = 777;
 const SELF_NAME = "acme_intentic_bot";
@@ -36,6 +37,7 @@ const fakeCtx = (): { ctx: GatewayCtx; dispatched: Record<string, unknown>[]; st
                 dispatch: async (message) => void dispatched.push(message as Record<string, unknown>),
                 dispatchStreaming: async (message, onFrame) => {
                     streamed.push(message as Record<string, unknown>);
+                    onFrame({ automationId: "a1", opened: { conversationId: "conv-1" } });
                     onFrame({ automationId: "a1", delta: "on it" });
                     onFrame({ automationId: "a1", end: true });
                 },
@@ -107,18 +109,23 @@ test("an unaddressed group message dispatches without holding a turn stream", as
     expect(calls).toEqual([]);
 });
 
-test("a private message is always addressed to us: it shows typing and streams the reply back", async () => {
+test("a private message is always addressed to us: typing, 👀, the answer, then 👌", async () => {
     const calls: { method: string; body: object }[] = [];
     const fake = fakeCtx();
     const connection = fakeConnection(calls);
     const listener = createTelegramListener(fake.ctx, () => new Map([["token", connection]]));
     listener.onUpdate(connection, { update_id: 1, message: message({ chat: { id: 42, type: "private" }, text: "hello?" }) });
-    await waitFor(() => expect(calls.map((call) => call.method)).toEqual(["sendChatAction", "sendMessage"]));
+    await waitFor(() => expect(calls.map((call) => call.method)).toEqual(["sendChatAction", "setMessageReaction", "sendMessage", "setMessageReaction"]));
     expect(fake.streamed[0]).toMatchObject({ mentioned: true, channelId: "42" });
-    expect(calls[1]?.body).toMatchObject({ chat_id: 42, text: "on it" });
+    // A private chat is one conversation: no thread.
+    expect(fake.streamed[0]).not.toHaveProperty("thread");
+    expect(calls[2]?.body).toMatchObject({ chat_id: 42, text: "on it", parse_mode: "HTML" });
     // Private chat has nothing to disambiguate, so no `reply_parameters`.
-    expect(calls[1]?.body).not.toHaveProperty("reply_parameters");
-    listener.stopAll();
+    expect(calls[2]?.body).not.toHaveProperty("reply_parameters");
+    expect(calls.filter((call) => call.method === "setMessageReaction").map((call) => call.body)).toEqual([
+        { chat_id: 42, message_id: 11, reaction: [{ type: "emoji", emoji: REACTIONS.heard }] },
+        { chat_id: 42, message_id: 11, reaction: [{ type: "emoji", emoji: REACTIONS.done }] },
+    ]);
 });
 
 test("a group reply points at the message it answers, and stays in its forum topic", async () => {
@@ -126,11 +133,12 @@ test("a group reply points at the message it answers, and stays in its forum top
     const fake = fakeCtx();
     const connection = fakeConnection(calls);
     const listener = createTelegramListener(fake.ctx, () => new Map([["token", connection]]));
-    listener.onUpdate(connection, { update_id: 1, message: message({ text: `@${SELF_NAME} status?`, message_thread_id: 5 }) });
+    listener.onUpdate(connection, { update_id: 1, message: message({ text: `@${SELF_NAME} status?`, message_thread_id: 5, is_topic_message: true }) });
     await waitFor(() => expect(calls.some((call) => call.method === "sendMessage")).toBe(true));
     const sent = calls.find((call) => call.method === "sendMessage");
     expect(sent?.body).toMatchObject({ chat_id: -100123, message_thread_id: 5, reply_parameters: { message_id: 11 } });
-    listener.stopAll();
+    // The request's reply chain is its conversation, kept in its topic.
+    expect(fake.streamed[0]).toMatchObject({ mentioned: true, thread: "5/11" });
 });
 
 test("the same message reaching two of our bots wakes an agent once", async () => {
@@ -170,7 +178,6 @@ test("what the gateway watched go by becomes the history a later mention carries
     expect(fake.streamed[0]?.["history"]).toEqual([
         { author: { id: "42", name: "Ada Lovelace" }, content: "the deploy went out at four", timestamp: "2025-08-13T16:20:30.000Z" },
     ]);
-    listener.stopAll();
 });
 
 // Telegram never hands a bot its own messages as updates, so the ring would otherwise hold only the other side of the
@@ -188,7 +195,6 @@ test("our painted reply is in the history the next mention carries, marked as ou
         { author: { id: "42", name: "Ada Lovelace" }, content: `@${SELF_NAME} status?`, timestamp: "2025-08-13T16:20:30.000Z" },
         { author: { id: String(SELF_ID), name: SELF_NAME }, content: "on it", timestamp: expect.any(String), self: true },
     ]);
-    listener.stopAll();
 });
 
 test("a message the daemon delivers between turns is history too, one entry per message it took", async () => {
@@ -197,9 +203,10 @@ test("a message the daemon delivers between turns is history too, one entry per 
     const connection = fakeConnection(calls);
     const listener = createTelegramListener(fake.ctx, () => new Map([["token", connection]]));
     await listener.deliver("-100123", `${"x".repeat(4_096)  }tail`);
+    const html = { parse_mode: "HTML", link_preview_options: { is_disabled: true } };
     expect(calls.map((call) => call.body)).toEqual([
-        { chat_id: "-100123", text: "x".repeat(4_096) },
-        { chat_id: "-100123", text: "tail" },
+        { chat_id: "-100123", text: "x".repeat(4_096), ...html },
+        { chat_id: "-100123", text: "tail", ...html },
     ]);
     listener.onUpdate(connection, { update_id: 1, message: message({ message_id: 3, text: `@${SELF_NAME} did that land?` }) });
     await waitFor(() => expect(fake.streamed).toHaveLength(1));
@@ -208,10 +215,70 @@ test("a message the daemon delivers between turns is history too, one entry per 
         { ...ours, content: "x".repeat(4_096) },
         { ...ours, content: "tail" },
     ]);
-    listener.stopAll();
 });
 
 test("with no bot connected a delivery is refused in words the owner can act on", async () => {
     const listener = createTelegramListener(fakeCtx().ctx, () => new Map());
     await expect(listener.deliver("1", "hi")).rejects.toThrow("no Telegram bot is connected");
+});
+
+test("a reply in a request's chain is heard without a mention, and continues its conversation", async () => {
+    const calls: { method: string; body: object }[] = [];
+    const fake = fakeCtx();
+    const connection = fakeConnection(calls);
+    const listener = createTelegramListener(fake.ctx, () => new Map([["token", connection]]));
+    listener.onUpdate(connection, { update_id: 1, message: message({ message_id: 20, text: `@${SELF_NAME} fix the login redirect` }) });
+    await waitFor(() => expect(fake.streamed).toHaveLength(1));
+    expect(fake.streamed[0]).toMatchObject({ thread: "20" });
+    // A teammate replies to the asker's message, with no mention.
+    listener.onUpdate(connection, {
+        update_id: 2,
+        message: message({ message_id: 21, from: { id: 43, first_name: "Bo" }, text: "also the docs", reply_to_message: bare({ message_id: 20 }) }),
+    });
+    await waitFor(() => expect(fake.streamed).toHaveLength(2));
+    expect(fake.streamed[1]).toMatchObject({ mentioned: true, thread: "20" });
+    // A reply to the bot's own answer lands in the same chain too.
+    // The fake answers each call with its position as the message id.
+    await waitFor(() => expect(calls.some((call) => call.method === "sendMessage")).toBe(true));
+    const answerId = calls.findIndex((call) => call.method === "sendMessage") + 1;
+    listener.onUpdate(connection, {
+        update_id: 3,
+        message: message({ message_id: 22, text: "thanks!", reply_to_message: bare({ message_id: answerId, from: { id: SELF_ID, is_bot: true } }) }),
+    });
+    await waitFor(() => expect(fake.streamed).toHaveLength(3));
+    expect(fake.streamed[2]).toMatchObject({ thread: "20" });
+});
+
+test("a Stop press asks the daemon as the person who pressed it, and answers only them", async () => {
+    const calls: { method: string; body: object }[] = [];
+    const stops: object[] = [];
+    const fake = fakeCtx();
+    const stop = async (asked: object) => {
+        stops.push(asked);
+        return { stopped: true };
+    };
+    const ctx = { ...fake.ctx, daemon: { ...fake.ctx.daemon, stop } };
+    const connection = fakeConnection(calls);
+    const listener = createTelegramListener(ctx, () => new Map([["token", connection]]));
+    listener.onUpdate(connection, { update_id: 1, callback_query: { id: "q1", from: { id: 42, first_name: "Ada" }, data: "stop:zz" } });
+    await waitFor(() => expect(calls.map((call) => call.method)).toEqual(["answerCallbackQuery"]));
+    // A token this process never handed out: that card's work is long over.
+    expect(calls[0]?.body).toEqual({ callback_query_id: "q1", text: "That one has already finished." });
+    expect(stops).toEqual([]);
+});
+
+test("added to a group, the bot says hello there; a private chat or someone else joining is no news", async () => {
+    const calls: { method: string; body: object }[] = [];
+    const fake = fakeCtx();
+    const connection = fakeConnection(calls);
+    const listener = createTelegramListener(fake.ctx, () => new Map([["token", connection]]));
+    const added = (chat: { id: number; type: string }, userId: number) => ({
+        update_id: 1,
+        my_chat_member: { chat, old_chat_member: { status: "left" }, new_chat_member: { status: "member", user: { id: userId } } },
+    });
+    listener.onUpdate(connection, added({ id: 5, type: "private" }, SELF_ID));
+    listener.onUpdate(connection, added({ id: -100999, type: "supergroup" }, 9));
+    listener.onUpdate(connection, added({ id: -100123, type: "supergroup" }, SELF_ID));
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0]).toEqual({ method: "sendMessage", body: { chat_id: -100123, text: welcomeText(SELF_NAME) } });
 });

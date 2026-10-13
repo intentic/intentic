@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type AgentTurn, type Automation, SandboxSettingsSchema, type ListenerMessage } from "@intentic/sandbox-contract";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
+import type { z } from "zod";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
 import { sqliteTurnJournal } from "../agent/run/turn/turn-journal.js";
 import { conversationsDbPath, openConversationsDb } from "../store/conversations-db.js";
@@ -21,12 +22,12 @@ import { opt } from "../opt.js";
 
 // The listener paths touch automations/capabilities/activity/workspace/logger, the senders roster, and on a hold the
 // held-wakes queue and push; `unstubbed` keeps the fake small.
-const fakeServices = (root: string): Services =>
+const fakeServices = (root: string, settings: z.input<typeof SandboxSettingsSchema> = {}): Services =>
     unstubbed<Services>("services", {
         // No conversation here is on record, so a thread resumes the session it kept (routing.ts sessionFor).
         agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),
         automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
-        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
+        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse(settings) }),
         capabilities: fileCapabilitiesStore(join(root, "capabilities.json")),
         threadSessions: fileThreadSessionsStore(join(root, "thread-sessions.json"), () => false),
         senders: fileSendersStore(join(root, "senders.json")),
@@ -554,8 +555,27 @@ test("a sender whose rule needs a person's release is never steered into a runni
     expect(turns).toHaveLength(1);
 });
 
-test("a thread waiting behind another thread's turn of the same automation is told it is queued", async () => {
+test("two people mentioning the bot in two threads are answered side by side, neither told to wait", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-")));
+    await services.automations.upsert(listenerAutomation("side-by-side"));
+    const turns: AgentTurn[] = [];
+    const release = Promise.withResolvers<void>();
+    const driven = drivenBy(services, heldOpen(turns, release.promise));
+    await dispatchListenerMessage(driven, message({ thread: "t1", mentioned: true }), 5);
+    const heard: string[] = [];
+    await dispatchListenerMessage(driven, message({ id: "m2", thread: "t2", mentioned: true, author: { id: "u2", name: "bob" } }), 5, () =>
+        recordingSink(heard),
+    );
+    // Both turns are running before either is let go.
+    await eventually(() => expect(turns).toHaveLength(2));
+    expect(turns[1]?.conversationId).not.toBe(turns[0]?.conversationId);
+    expect(heard).not.toContain("queued");
+    release.resolve();
+    await eventually(() => expect(heard).toContain("end"));
+});
+
+test("a thread beyond the sandbox's threads-at-once is told it is queued, and starts once a thread before it ends", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-")), { automationThreadsAtOnce: 1 });
     await services.automations.upsert(listenerAutomation("queued-threads"));
     const turns: AgentTurn[] = [];
     const release = Promise.withResolvers<void>();
@@ -565,6 +585,7 @@ test("a thread waiting behind another thread's turn of the same automation is to
     const heard: string[] = [];
     await dispatchListenerMessage(driven, message({ id: "m2", thread: "t2", mentioned: true }), 5, () => recordingSink(heard));
     await eventually(() => expect(heard).toContain("queued"));
+    expect(turns).toHaveLength(1);
     release.resolve();
     await eventually(() => expect(turns).toHaveLength(2));
     expect(turns[1]?.conversationId).not.toBe(turns[0]?.conversationId);

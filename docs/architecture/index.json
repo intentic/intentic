@@ -2723,16 +2723,16 @@
           "what": "new folder, move, copy, and the delete that goes to the system's trash."
         }
       ],
-      "behind": 2,
+      "behind": 3,
       "component": "devices",
       "dir": "_devices/local-files",
       "files": 36,
       "hasTests": true,
-      "loc": 4960,
+      "loc": 4980,
       "name": "@intentic/local-files",
       "oneLiner": "intentic-files, the desktop app's sidecar: it serves the folders and documents the app opens from the user's own disk to the editor's file views, over loopback, one grant per window.",
       "readmeRev": "85f3bf6dc3bc0393f5957bd499b5cd5278f640d6",
-      "reason": "2 commits have touched this package since its README was written",
+      "reason": "3 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1791675506000
     },
@@ -2955,18 +2955,18 @@
           "what": "Intentic's engine started again when it stops while this app runs."
         }
       ],
-      "behind": 3,
+      "behind": 1,
       "component": "editor",
       "dir": "_editor/desktop-app",
-      "files": 71,
+      "files": 91,
       "hasTests": true,
-      "loc": 10159,
+      "loc": 13636,
       "name": "@intentic/desktop-app",
       "oneLiner": "The Tauri app for Windows and Linux that opens the editor on a folder of the user's own computer from the first launch, with no account, runs sandboxes on that computer from its This device view,…",
-      "readmeRev": "7d97513c2e2b7b1a0296a15cce000256d596d94f",
-      "reason": "3 commits have touched this package since its README was written",
+      "readmeRev": "c907c2e8f34a22b0f2c54ffd9588e9d30de7406d",
+      "reason": "1 commit has touched this package since its README was written",
       "stale": true,
-      "updatedAt": 1791797810000
+      "updatedAt": 1791840928000
     },
     {
       "anchors": [],
@@ -3007,14 +3007,14 @@
           "what": "what a local window may call, why its documents cannot, and why the workspace gets nothing."
         }
       ],
-      "behind": 13,
+      "behind": 17,
       "dir": "_editor/desktop-app/src-tauri",
-      "files": 35,
+      "files": 36,
       "hasTests": false,
-      "loc": 33310,
+      "loc": 36590,
       "oneLiner": "The Rust crate behind the desktop app, owning its windows, tray, intentic:// links, script runs and self-update.",
       "readmeRev": "a7fe7270555d4ed6a4858417ffd9db4c63840184",
-      "reason": "13 commits have touched this package since its README was written",
+      "reason": "17 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1791495459000
     },
@@ -3160,18 +3160,18 @@
           "what": "the persistent shell, split by form factor."
         }
       ],
-      "behind": 29,
+      "behind": 2,
       "component": "editor",
       "dir": "_editor/web",
-      "files": 2375,
+      "files": 2409,
       "hasTests": true,
-      "loc": 349106,
+      "loc": 355058,
       "name": "@intentic/web",
       "oneLiner": "The Vue app the user works in, with files, chat, terminals and agents, talking to the platform for the account and straight to the sandbox daemon for everything else.",
-      "readmeRev": "2eb00e75bf425497946682bcdb53c5a940b396fc",
-      "reason": "29 commits have touched this package since its README was written",
+      "readmeRev": "6c9238ce3a5b7cf02e79a8ad256eb96d65f5c980",
+      "reason": "2 commits have touched this package since its README was written",
       "stale": true,
-      "updatedAt": 1791811345000
+      "updatedAt": 1791885435000
     },
     {
       "anchors": [
@@ -3311,16 +3311,16 @@
           "what": "the week grid, its lane and its agenda; src/CalendarPeek.vue is the card a slot opens."
         }
       ],
-      "behind": 6,
+      "behind": 8,
       "component": "extensions",
       "dir": "_extensions/automations",
       "files": 24,
       "hasTests": true,
-      "loc": 6492,
+      "loc": 6516,
       "name": "@intentic/ext-automations",
       "oneLiner": "The Automations rail view, where the owner creates, edits and watches the agent's wake-ups: a trigger, an optional guard and the prompt the agent wakes with.",
       "readmeRev": "0b2028682fb8d7e954cb8d951069547ae9020b62",
-      "reason": "6 commits have touched this package since its README was written",
+      "reason": "8 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1791377250000
     },
@@ -3419,41 +3419,40 @@
       "anchors": [
         {
           "path": "_extensions/discord/src/gateway.ts",
-          "what": "the process entry: reconcile hooks, delivery, loopback voice routes."
+          "what": "the process entry: reconcile hooks, delivery, button presses, loopback voice routes."
+        },
+        {
+          "path": "_extensions/discord/src/inbound.ts",
+          "what": "whether a message is for the bot, and which channel, thread and room it belongs to."
+        },
+        {
+          "path": "_extensions/discord/src/reply.ts",
+          "what": "what the shared reply looks like in Discord: thread, reactions, quoting, typing."
+        },
+        {
+          "path": "_extensions/discord/src/card.ts",
+          "what": "the status card drawn as an embed."
         },
         {
           "path": "_extensions/discord/src/listener.ts",
-          "what": "messages to listener events, and the live reply painter."
+          "what": "messages to listener events, history, the Stop button, delivery."
         },
         {
           "path": "_extensions/discord/src/voice.ts",
-          "what": "the voice session: capture, transcribe, dispatch, write the transcript."
-        },
-        {
-          "path": "_extensions/discord/src/audio.ts",
-          "what": "PCM resampling, WAV framing and the serialized transcription queue."
-        },
-        {
-          "path": "_extensions/discord/src/cli.ts",
-          "what": "discord-voice, the agent's join, leave and status command."
-        },
-        {
-          "path": "_extensions/discord/intentic-extension.json",
-          "what": "the card, the listener events and the gateway process."
+          "what": "the voice session: capture, transcribe, dispatch, speak, write the transcript."
         }
       ],
-      "behind": 1,
+      "behind": 0,
       "component": "extensions",
       "dir": "_extensions/discord",
-      "files": 10,
+      "files": 17,
       "hasTests": true,
-      "loc": 1176,
+      "loc": 2703,
       "name": "@intentic/ext-discord",
-      "oneLiner": "The Discord connection: a bot-token card and skill for the agent, plus a gateway process that turns server messages and voice calls into automation events.",
-      "readmeRev": "e6bcfac605b54f611a89b5e07880fac6fa854b5b",
-      "reason": "1 commit has touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1791497775000
+      "oneLiner": "The Discord connection: a bot-token card and skill for the agent, plus a gateway process that turns a mention into a thread the agent works in, and voice calls into automation events.",
+      "readmeRev": "47bc8cc1fca17413bb5ac627bdba9ad62afb8ae5",
+      "stale": false,
+      "updatedAt": 1791886639000
     },
     {
       "anchors": [
@@ -3769,16 +3768,16 @@
           "what": "one package's layers or tiers, its upward imports and its cycles."
         }
       ],
-      "behind": 4,
+      "behind": 5,
       "component": "extensions",
       "dir": "_extensions/repo-apps",
       "files": 23,
       "hasTests": true,
-      "loc": 2581,
+      "loc": 2587,
       "name": "@intentic/ext-repo-apps",
       "oneLiner": "Adds the Apps and Dependencies panels to a repository in the Workspace tree: a monorepo's apps with start, stop and tests, and its package dependency graph.",
       "readmeRev": "56da03f64cb772f8b23a80f022ce157b6638bd99",
-      "reason": "4 commits have touched this package since its README was written",
+      "reason": "5 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1791544361000
     },
@@ -3786,15 +3785,23 @@
       "anchors": [
         {
           "path": "_extensions/slack/intentic-extension.json",
-          "what": "the card, its setup guide, the listener events and the gateway process."
-        },
-        {
-          "path": "_extensions/slack/src/gateway.ts",
-          "what": "the process: a token pair is one connection, reconciled by runConnectorGateway."
+          "what": "the card, its setup guide, the listener events, the template and the gateway process."
         },
         {
           "path": "_extensions/slack/src/listener.ts",
-          "what": "Slack envelopes to dispatched events, and the live reply in the thread."
+          "what": "Slack envelopes to dispatched events, whether a message is for us, Stop, the hello."
+        },
+        {
+          "path": "_extensions/slack/src/reply.ts",
+          "what": "what the shared reply looks like in Slack: reactions, thread status, Markdown answers."
+        },
+        {
+          "path": "_extensions/slack/src/card.ts",
+          "what": "the status card drawn as Block Kit."
+        },
+        {
+          "path": "_extensions/slack/src/stream.ts",
+          "what": "the opt-in alternative: the work as Slack's own streamed task list."
         },
         {
           "path": "_extensions/slack/src/client.ts",
@@ -3802,21 +3809,21 @@
         },
         {
           "path": "_extensions/slack/skills/slack/SKILL.md",
-          "what": "what the agent learns about using Slack."
+          "what": "what the agent learns about using Slack, including the app manifest."
         }
       ],
-      "behind": 6,
+      "behind": 1,
       "component": "extensions",
       "dir": "_extensions/slack",
-      "files": 4,
+      "files": 10,
       "hasTests": true,
-      "loc": 605,
+      "loc": 1780,
       "name": "@intentic/ext-slack",
-      "oneLiner": "Connects a Slack workspace to the sandbox: a capability card and skill for the agent, and a Socket Mode gateway process that wakes automations on messages and reactions.",
-      "readmeRev": "cdd21d419cd19d83541365686f7af7c158a51021",
-      "reason": "6 commits have touched this package since its README was written",
+      "oneLiner": "The Slack connection: a two-token card and skill for the agent, plus a gateway process that turns a mention into a thread the agent works in.",
+      "readmeRev": "47bc8cc1fca17413bb5ac627bdba9ad62afb8ae5",
+      "reason": "1 commit has touched this package since its README was written",
       "stale": true,
-      "updatedAt": 1791106205000
+      "updatedAt": 1791886639000
     },
     {
       "anchors": [
@@ -3853,7 +3860,7 @@
       "anchors": [
         {
           "path": "_extensions/telegram/intentic-extension.json",
-          "what": "the card, its setup guide, the listener event and the gateway process."
+          "what": "the card, its setup guide, the listener event, the template and the gateway process."
         },
         {
           "path": "_extensions/telegram/src/gateway.ts",
@@ -3865,23 +3872,31 @@
         },
         {
           "path": "_extensions/telegram/src/listener.ts",
-          "what": "updates to dispatched messages, history rings and the live reply."
+          "what": "updates to dispatched messages, history rings, Stop and the hello."
+        },
+        {
+          "path": "_extensions/telegram/src/threads.ts",
+          "what": "which reply chain a message belongs to, and the memory of it."
+        },
+        {
+          "path": "_extensions/telegram/src/reply.ts",
+          "what": "what the shared reply looks like in Telegram: reactions, the card, HTML answers."
         },
         {
           "path": "_extensions/telegram/skills/telegram/SKILL.md",
           "what": "what the agent learns about using Telegram."
         }
       ],
-      "behind": 6,
+      "behind": 8,
       "component": "extensions",
       "dir": "_extensions/telegram",
-      "files": 4,
+      "files": 11,
       "hasTests": true,
-      "loc": 758,
+      "loc": 1585,
       "name": "@intentic/ext-telegram",
-      "oneLiner": "Connects a Telegram bot to the sandbox: a capability card and skill for the agent, and a long-polling gateway process that wakes automations on messages.",
+      "oneLiner": "Connects a Telegram bot to the sandbox: a capability card and skill for the agent, and a long-polling gateway process that turns a mention into a request the agent works on in the chat.",
       "readmeRev": "cdd21d419cd19d83541365686f7af7c158a51021",
-      "reason": "6 commits have touched this package since its README was written",
+      "reason": "8 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1791106205000
     },
@@ -3948,16 +3963,16 @@
           "what": "the agent's whatsapp CLI, a forwarder to the gateway's control surface."
         }
       ],
-      "behind": 3,
+      "behind": 5,
       "component": "extensions",
       "dir": "_extensions/whatsapp",
       "files": 22,
       "hasTests": true,
-      "loc": 3307,
+      "loc": 3309,
       "name": "@intentic/ext-whatsapp",
       "oneLiner": "Pairs the sandbox to a WhatsApp number as a linked device: a capability card, a gateway process that holds the session and wakes automations, and a whatsapp CLI for the agent.",
       "readmeRev": "5298a848b3f1fe29b7e31a8167d84b783a8357f8",
-      "reason": "3 commits have touched this package since its README was written",
+      "reason": "5 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1791278385000
     },
@@ -3988,16 +4003,16 @@
           "what": "the CI wiring text for a release gate."
         }
       ],
-      "behind": 5,
+      "behind": 6,
       "component": "extensions",
       "dir": "_extensions/workflows",
       "files": 32,
       "hasTests": true,
-      "loc": 3223,
+      "loc": 3260,
       "name": "@intentic/ext-workflows",
       "oneLiner": "The Workflows rail view, where the owner designs graphs of agent sessions that each produce a declared output, runs them and watches the runs.",
       "readmeRev": "5298a848b3f1fe29b7e31a8167d84b783a8357f8",
-      "reason": "5 commits have touched this package since its README was written",
+      "reason": "6 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1791278385000
     },
@@ -4032,18 +4047,18 @@
           "what": "the hostname and signed grant each sandbox gets."
         }
       ],
-      "behind": 5,
+      "behind": 1,
       "component": "platform",
       "dir": "_platform/api",
-      "files": 164,
+      "files": 167,
       "hasTests": true,
-      "loc": 34131,
+      "loc": 35094,
       "name": "@intentic/api",
       "oneLiner": "The platform's HTTP server (@intentic/api): sign-in, the registry of sandboxes and their addresses, hosted Fly machines, the hosted plan and the agent wallet.",
-      "readmeRev": "2b1b1392989f04cfb4f594599b9b23a357d25e9a",
-      "reason": "5 commits have touched this package since its README was written",
+      "readmeRev": "4f7c1416ec087c40b56410ad7354ffd1cffacbea",
+      "reason": "1 commit has touched this package since its README was written",
       "stale": true,
-      "updatedAt": 1791647501000
+      "updatedAt": 1791836872000
     },
     {
       "anchors": [
@@ -4103,16 +4118,16 @@
           "what": "a guarded forward fix, the model for the runbook below."
         }
       ],
-      "behind": 6,
+      "behind": 8,
       "component": "platform",
       "dir": "_platform/prisma",
-      "files": 99,
+      "files": 100,
       "hasTests": false,
-      "loc": 58631,
+      "loc": 58737,
       "name": "@intentic/prisma",
       "oneLiner": "The platform's Postgres schema, its append-only migration history and the Prisma client generated from them, shared as @intentic/prisma.",
       "readmeRev": "cdd21d419cd19d83541365686f7af7c158a51021",
-      "reason": "6 commits have touched this package since its README was written",
+      "reason": "8 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1791106205000
     },
@@ -4321,22 +4336,23 @@
           "what": "ic image prefetch and the cache connect loads; src/fetch.rs"
         }
       ],
-      "behind": 0,
+      "behind": 1,
       "component": "sandbox",
       "dir": "_sandbox/ic",
       "files": 81,
       "hasTests": false,
-      "loc": 51003,
+      "loc": 51415,
       "oneLiner": "The host-side CLI that starts, updates, diagnoses and removes intentic sandbox containers on the machine that runs them, and gets Docker there first.",
-      "readmeRev": "4ea80c217c46865e43b8ec029ab1a953bf54433a",
-      "stale": false,
-      "updatedAt": 1791825948000
+      "readmeRev": "42c7701c4a4d8a49abadef73c22440df5593e333",
+      "reason": "1 commit has touched this package since its README was written",
+      "stale": true,
+      "updatedAt": 1791831682000
     },
     {
       "anchors": [
         {
           "path": "_sandbox/ic/docker-host/src/refusal.rs",
-          "what": "the three kinds of engine refusal, read off what the docker CLI printed."
+          "what": "the three kinds of engine refusal, and whether any engine was reached, read off"
         },
         {
           "path": "_sandbox/ic/docker-host/src/desktop_app.rs",
@@ -4351,16 +4367,15 @@
           "what": "why the crate exists, and what stays with each caller."
         }
       ],
-      "behind": 3,
+      "behind": 0,
       "dir": "_sandbox/ic/docker-host",
       "files": 6,
       "hasTests": false,
-      "loc": 813,
+      "loc": 905,
       "oneLiner": "What docker's refusals mean and where Docker Desktop lives on a PC: the readings ic and the desktop app share, so the two binaries answer those questions the same way.",
-      "readmeRev": "5298a848b3f1fe29b7e31a8167d84b783a8357f8",
-      "reason": "3 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1791278385000
+      "readmeRev": "42c7701c4a4d8a49abadef73c22440df5593e333",
+      "stale": false,
+      "updatedAt": 1791831682000
     },
     {
       "anchors": [
@@ -4547,18 +4562,18 @@
           "what": "streamAgent: one turn, from placement to settlement."
         }
       ],
-      "behind": 2,
+      "behind": 7,
       "component": "sandbox",
       "dir": "_sandbox/sandbox",
-      "files": 2431,
+      "files": 2554,
       "hasTests": true,
-      "loc": 398700,
+      "loc": 424774,
       "name": "@intentic/sandbox",
       "oneLiner": "The Node daemon at the center of every sandbox: it runs coding agents in git worktrees, serves the workspace to the editor, and lands their work.",
-      "readmeRev": "4ea80c217c46865e43b8ec029ab1a953bf54433a",
-      "reason": "2 commits have touched this package since its README was written",
+      "readmeRev": "29ad9f19a704ef01aa43e4c9613988e5b0c377aa",
+      "reason": "7 commits have touched this package since its README was written",
       "stale": true,
-      "updatedAt": 1791825948000
+      "updatedAt": 1791881718000
     },
     {
       "anchors": [
@@ -4875,16 +4890,16 @@
           "what": "the single typed client the editor uses."
         }
       ],
-      "behind": 5,
+      "behind": 6,
       "component": "shared",
       "dir": "_shared/api-contract",
       "files": 7,
       "hasTests": true,
-      "loc": 1981,
+      "loc": 1982,
       "name": "@intentic/api-contract",
       "oneLiner": "The contracts the platform api is written against: the editor's oRPC contract, and the table of plain routes machines call on it.",
       "readmeRev": "5298a848b3f1fe29b7e31a8167d84b783a8357f8",
-      "reason": "5 commits have touched this package since its README was written",
+      "reason": "6 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1791278385000
     },
@@ -4931,8 +4946,24 @@
           "what": "the client for the daemon's listener routes."
         },
         {
+          "path": "_shared/connector-runtime/src/chat-reply.ts",
+          "what": "createChatReply and the ChatSurface a team-chat platform implements."
+        },
+        {
+          "path": "_shared/connector-runtime/src/status-card.ts",
+          "what": "what a status card says, before any platform draws it."
+        },
+        {
           "path": "_shared/connector-runtime/src/painter.ts",
-          "what": "streaming, buffered and per-automation painters."
+          "what": "the buffered and per-automation painters."
+        },
+        {
+          "path": "_shared/connector-runtime/src/progress.ts",
+          "what": "a turn's progress as a status shows it, and how a step is worded."
+        },
+        {
+          "path": "_shared/connector-runtime/src/chunks.ts",
+          "what": "code-aware message cuts and tables redrawn as code."
         },
         {
           "path": "_shared/connector-runtime/src/reply.ts",
@@ -4943,18 +4974,17 @@
           "what": "dedupe keys, chat rings and typing heartbeats."
         }
       ],
-      "behind": 4,
+      "behind": 0,
       "component": "shared",
       "dir": "_shared/connector-runtime",
-      "files": 15,
+      "files": 25,
       "hasTests": true,
-      "loc": 1421,
+      "loc": 2936,
       "name": "@intentic/connector-runtime",
-      "oneLiner": "The gateway runtime every chat connector extension runs on: the reconcile loop, the daemon client, reply painters and listener memory, written once for all providers.",
-      "readmeRev": "fdbce7b4e69f78e1291f6604a44265ae20815542",
-      "reason": "4 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1791392253000
+      "oneLiner": "The gateway runtime every chat connector extension runs on: the reconcile loop, the daemon client, the team-chat reply, reply painters and listener memory, written once for all providers.",
+      "readmeRev": "47bc8cc1fca17413bb5ac627bdba9ad62afb8ae5",
+      "stale": false,
+      "updatedAt": 1791886639000
     },
     {
       "anchors": [
@@ -5059,16 +5089,17 @@
           "what": "sandboxPoll and sandboxLedger for work done off screen."
         }
       ],
-      "behind": 0,
+      "behind": 1,
       "component": "shared",
       "dir": "_shared/extension-api",
       "files": 18,
       "hasTests": true,
-      "loc": 2469,
+      "loc": 2473,
       "name": "@intentic/extension-api",
       "oneLiner": "The versioned public API an intentic extension compiles against: IntenticApi for its browser half, ExtensionServerApi for its backend half, and the helpers both halves share.",
       "readmeRev": "4ea80c217c46865e43b8ec029ab1a953bf54433a",
-      "stale": false,
+      "reason": "1 commit has touched this package since its README was written",
+      "stale": true,
       "updatedAt": 1791825948000
     },
     {
@@ -5098,16 +5129,16 @@
           "what": "the generated authoring schema."
         }
       ],
-      "behind": 2,
+      "behind": 3,
       "component": "shared",
       "dir": "_shared/extension-manifest",
       "files": 30,
       "hasTests": true,
-      "loc": 2464,
+      "loc": 2466,
       "name": "@intentic/extension-manifest",
       "oneLiner": "The schema of intentic-extension.json: what an extension declares it contributes and may reach, which the install dialog shows and the host holds every registration to.",
       "readmeRev": "fdbce7b4e69f78e1291f6604a44265ae20815542",
-      "reason": "2 commits have touched this package since its README was written",
+      "reason": "3 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1791392253000
     },
@@ -5232,16 +5263,17 @@
           "what": "a narrow entry point, one of several that keep small bundles off the barrel."
         }
       ],
-      "behind": 0,
+      "behind": 10,
       "component": "shared",
       "dir": "_shared/sandbox-contract",
-      "files": 357,
+      "files": 359,
       "hasTests": true,
-      "loc": 50599,
+      "loc": 51925,
       "name": "@intentic/sandbox-contract",
       "oneLiner": "The wire contract between the editor and the sandbox daemon: every route, its schemas and its access policy, as one oRPC contract both ends compile against.",
       "readmeRev": "4ea80c217c46865e43b8ec029ab1a953bf54433a",
-      "stale": false,
+      "reason": "10 commits have touched this package since its README was written",
+      "stale": true,
       "updatedAt": 1791825948000
     },
     {
@@ -5435,16 +5467,16 @@
           "what": "the modes, the viewer tier and the extension override."
         }
       ],
-      "behind": 17,
+      "behind": 23,
       "component": "site",
       "dir": "_site/demo",
       "files": 53,
       "hasTests": false,
-      "loc": 12560,
+      "loc": 12692,
       "name": "@intentic/demo",
       "oneLiner": "The interactive demo at intentic.dev/demo/: the real editor built from @intentic/web source, with its network replaced by an in-browser fixture of the platform and a sandbox daemon.",
       "readmeRev": "4c132e4b4e446624b68515260ef95162a8284f64",
-      "reason": "17 commits have touched this package since its README was written",
+      "reason": "23 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1791651619000
     },
@@ -5475,7 +5507,7 @@
           "what": "the schema, limits and link allowlist for the live document."
         }
       ],
-      "behind": 5,
+      "behind": 8,
       "component": "site",
       "dir": "_site/site",
       "files": 44,
@@ -5484,7 +5516,7 @@
       "name": "@intentic/site",
       "oneLiner": "The Astro site behind intentic.dev, prerendered to static pages and served by a Cloudflare Worker that adds redirects, versionless downloads and a live notice.",
       "readmeRev": "ff8b4ede09f7936230e3588ea02f6d0635b7700a",
-      "reason": "5 commits have touched this package since its README was written",
+      "reason": "8 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1791714276000
     },
@@ -5515,7 +5547,7 @@
           "what": "the home page and desk page copy."
         }
       ],
-      "behind": 1,
+      "behind": 2,
       "component": "site",
       "dir": "_site/site-content",
       "files": 21,
@@ -5524,7 +5556,7 @@
       "name": "@intentic/site-content",
       "oneLiner": "The words, documentation trees and page metadata of intentic.dev as typed TypeScript data, kept apart from the Astro markup that lays them out.",
       "readmeRev": "de07fdb5f309a828adb6b716064a8a8e114d6281",
-      "reason": "1 commit has touched this package since its README was written",
+      "reason": "2 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1791709392000
     },
@@ -5595,16 +5627,16 @@
           "what": "writeFileAtomic (its synchronous twin for a write on the way out, and writeChunksAtomic for content produced a chunk at a time), renameOver, syncDirectories, queueOnFile, pathExists and freePort, the file primitives of every Node tier."
         }
       ],
-      "behind": 2,
+      "behind": 3,
       "component": "tools",
       "dir": "_tools/base",
       "files": 72,
       "hasTests": true,
-      "loc": 9902,
+      "loc": 9954,
       "name": "@intentic/base",
       "oneLiner": "Runtime primitives that every tier, from the daemon to the browser, must run identically: when-expressions, disposal, async schedulers, untrusted-content tags, size and token formatting, fuzzy path…",
       "readmeRev": "3574b35d51ce0640d17793ea7f5873d9878bfd43",
-      "reason": "2 commits have touched this package since its README was written",
+      "reason": "3 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1791811765000
     },
@@ -5671,16 +5703,16 @@
           "what": "the words this repository retired and what each became."
         }
       ],
-      "behind": 13,
+      "behind": 14,
       "component": "tools",
       "dir": "_tools/constants",
       "files": 29,
       "hasTests": true,
-      "loc": 3173,
+      "loc": 3174,
       "name": "@intentic/constants",
       "oneLiner": "The values several packages must agree on (ports, workspace paths, origins, install-script URLs, the sign-in client id, the hosted price ladder), defined once so no copy drifts.",
       "readmeRev": "cdd21d419cd19d83541365686f7af7c158a51021",
-      "reason": "13 commits have touched this package since its README was written",
+      "reason": "14 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1791106205000
     },
@@ -5743,16 +5775,16 @@
           "what": "per-assertion deadlines and the failure count."
         }
       ],
-      "behind": 7,
+      "behind": 8,
       "component": "tools",
       "dir": "_tools/desktop-smoke-windows",
-      "files": 20,
+      "files": 21,
       "hasTests": true,
-      "loc": 2916,
+      "loc": 3000,
       "name": "@intentic/desktop-smoke-windows",
       "oneLiner": "Installs the shipped NSIS installer on a real Windows machine, runs the sandbox setup it ships, drives one /agents turn, and runs Intentic's own container engine beside Docker Desktop, one tier per…",
       "readmeRev": "1aa48551c404775e35e6a20dfd895747e0d866f6",
-      "reason": "7 commits have touched this package since its README was written",
+      "reason": "8 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1791631302000
     },
@@ -5810,16 +5842,16 @@
           "what": "the phone geometry gate."
         }
       ],
-      "behind": 7,
+      "behind": 8,
       "component": "tools",
       "dir": "_tools/e2e",
       "files": 35,
       "hasTests": true,
-      "loc": 3744,
+      "loc": 3821,
       "name": "@intentic/e2e",
       "oneLiner": "Playwright harnesses that drive the real web app in Chromium: the sign-in gate, the local-stack browser tier, the post-deploy sign-in smoke, the mobile geometry gate, the desktop app's local face,…",
       "readmeRev": "4285b9db0a3ab6afe26bfcb5c3912620ab7cf39b",
-      "reason": "7 commits have touched this package since its README was written",
+      "reason": "8 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1791274824000
     },
@@ -5968,16 +6000,16 @@
           "what": "why the world is on loopback, and the check that enforces it."
         }
       ],
-      "behind": 5,
+      "behind": 6,
       "component": "tools",
       "dir": "_tools/onboarding",
       "files": 18,
       "hasTests": true,
-      "loc": 1461,
+      "loc": 1464,
       "name": "@intentic/onboarding",
       "oneLiner": "A Playwright tier that stands up the whole platform from the branch's own images and walks a new account through the setup wizard to a connected sandbox, once per provisioning path.",
       "readmeRev": "cdd21d419cd19d83541365686f7af7c158a51021",
-      "reason": "5 commits have touched this package since its README was written",
+      "reason": "6 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1791106205000
     },
@@ -6124,7 +6156,7 @@
       "updatedAt": 1791106205000
     }
   ],
-  "generatedAt": 1791831837757,
+  "generatedAt": 1791888286230,
   "orphans": [],
   "repo": "intentic",
   "undocumented": [

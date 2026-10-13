@@ -7,6 +7,8 @@ import { WebClient } from "@slack/web-api";
 // needs no public URL; this file adds the pool, identity probe, and an actionable message for a failed start().
 
 export interface SlackConnection {
+    // The app-level token this connection was opened with, which identifies the app.
+    readonly appToken: string;
     readonly socket: SocketModeClient;
     readonly web: WebClient;
     // Bot's own user id (from auth.test); how the listener recognizes a mention and ignores its own posts.
@@ -42,7 +44,7 @@ export const openSlackConnection = async (appToken: string, botToken: string): P
         await socket.disconnect().catch(() => undefined);
         throw authFailure(error, "appToken", "xapp-");
     }
-    const connection: SlackConnection = { socket, web, selfUserId };
+    const connection: SlackConnection = { appToken, socket, web, selfUserId };
     connections.set(appToken, connection);
     return connection;
 };

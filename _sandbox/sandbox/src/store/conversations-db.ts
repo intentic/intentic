@@ -15,7 +15,7 @@ import { defineStep } from "./evolution/state-steps.js";
 export const conversationsDbPath = (historyRoot: string): string => join(historyRoot, "conversations.db");
 
 // Parent before child, the order rows are copied in and the order a reader walks them.
-export const CONVERSATION_TABLES = ["conversation", "conversation_repo", "checkpoint", "turn_journal", "watch", "fire_journal"] as const;
+export const CONVERSATION_TABLES = ["conversation", "conversation_repo", "checkpoint", "turn_journal", "watch", "fire_journal", "fire_journal_by_conversation"] as const;
 
 const SCHEMA = `
 /* One row per conversation: its registry record (agents-store.ts) as JSON, less the repos its checkout carries. */
@@ -92,6 +92,37 @@ export const CONVERSATIONS_STEPS: readonly SqliteStep[] = [
                 ALTER TABLE fire_journal ADD COLUMN lane TEXT CHECK (lane IS NULL OR json_valid(lane));
                 ALTER TABLE fire_journal ADD COLUMN thread TEXT;
                 ALTER TABLE fire_journal ADD COLUMN session_id TEXT;
+            `),
+    },
+    {
+        // The threads of a team-chat automation are worked on side by side (automations/scheduler.ts, FireLanes), so an
+        // automation can have a fire in flight on each of several conversations, and a fire is filed under the
+        // conversation it runs in (turn-journal.ts). Every fire in flight moves across, so one the daemon died under
+        // before this step is still re-fired after it.
+        // A new table rather than fire_journal rebuilt under a new key, because a build from before this step prepares
+        // its upsert into fire_journal ON CONFLICT(automation_id) as it opens the database, which fails on a table with no
+        // such key: a rolled-back build would not boot. fire_journal stays, emptied, so such a build still reads and
+        // writes it; a fire it leaves there in flight is not one this build re-fires.
+        describe: "moves the automation fires in flight from fire_journal into fire_journal_by_conversation, one per conversation",
+        up: (db) =>
+            db.exec(`
+                CREATE TABLE fire_journal_by_conversation (
+                    conversation_id TEXT PRIMARY KEY,
+                    automation_id TEXT NOT NULL,
+                    started_at INTEGER NOT NULL,
+                    attempts INTEGER NOT NULL,
+                    payload TEXT,
+                    origin TEXT CHECK (origin IS NULL OR json_valid(origin)),
+                    title TEXT,
+                    lane TEXT CHECK (lane IS NULL OR json_valid(lane)),
+                    thread TEXT,
+                    session_id TEXT
+                ) STRICT;
+                INSERT OR REPLACE INTO fire_journal_by_conversation
+                    (conversation_id, automation_id, started_at, attempts, payload, origin, title, lane, thread, session_id)
+                    SELECT conversation_id, automation_id, started_at, attempts, payload, origin, title, lane, thread, session_id
+                    FROM fire_journal ORDER BY started_at;
+                DELETE FROM fire_journal;
             `),
     },
 ];
@@ -252,6 +283,9 @@ const conversationsDbOver = (db: DatabaseSync, path: string): ConversationsDb =>
                     // The cascade takes every row the arriving conversation replaces, so none of the old one survives it.
                     db.exec("DELETE FROM main.conversation WHERE id IN (SELECT id FROM arrived.conversation)");
                     db.exec("DELETE FROM main.fire_journal WHERE automation_id IN (SELECT automation_id FROM arrived.fire_journal)");
+                    db.exec(
+                        "DELETE FROM main.fire_journal_by_conversation WHERE conversation_id IN (SELECT conversation_id FROM arrived.fire_journal_by_conversation)",
+                    );
                     for (const table of CONVERSATION_TABLES) {
                         const shared = sharedColumns(db, table)
                             .map((name) => `"${name}"`)

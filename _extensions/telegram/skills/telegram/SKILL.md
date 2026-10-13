@@ -55,23 +55,27 @@ you do not have, ask in the chat.
 
 ## Writing for Telegram
 
-Replies stream out as **plain text**, so write plain prose: no `**bold**`, no `#` headings, no tables, no
-`[label](url)`: those render literally. Short paragraphs, bare URLs, and a `-` list at most. Telegram's own
-formatting exists (`parse_mode`) but a half-written message can't be parsed, so streamed replies never use it;
-if you are sending a one-shot message yourself and really want formatting, set `"parse_mode":"HTML"` and escape
-`<`, `>` and `&` in the text.
+When the gateway posts your answer for you (below), write **Markdown**: it is turned into Telegram's own
+formatting, so `**bold**`, `_italic_`, `` `code` ``, fenced code with a language, `[label](url)`, `-` lists and `>`
+quotes all show as meant. Headings become bold lines, and tables are redrawn as aligned code, so prefer a list.
+When you send a message yourself with curl, it is plain text unless you set `"parse_mode":"HTML"` and escape `<`,
+`>` and `&` in the text.
 
-A message is capped at 4096 characters. Say less, or send more than one.
+A message is capped at 4096 characters; the gateway splits a longer answer, code blocks kept whole.
 
 ## Being mentioned
 
-When someone messages the bot privately, `@mentions` it in a group, or replies to one of its messages, the
-gateway wakes an agent conversation and **streams your reply into that chat for you**: in that case just
-answer in plain text and do not send it yourself with curl. Use the commands above to act *elsewhere*: react,
-send a file, message a different chat.
+When someone messages the bot privately, `@mentions` it in a group, replies to one of its messages, or replies to
+anything in a request's reply chain it is answering, the gateway wakes an agent conversation and **posts your
+answer into that chat for you**, pointing at the message it answers: just write it, and do not send it yourself
+with curl. While you work, a status card shows your steps and checklist with a Stop button, so don't narrate each
+step. Use the commands above to act *elsewhere*: react, send a file, message a different chat.
 
-A chat is one continuing conversation: follow-up messages keep talking to the same agent (with its memory of
-what was said) until it goes quiet for a couple of hours.
+A private chat is one continuing conversation. In a group, each request is its own conversation: its reply chain,
+named by the event's `thread` (`<topic>/<root message id>` in a forum topic, else the root message id). Replies in
+the chain reach you with no new mention, and one sent while you work arrives in the same turn. To post into the
+chain yourself, reply to its root: `"reply_parameters":{"message_id":<ROOT>}`, plus `"message_thread_id":<TOPIC>`
+in a forum.
 
 Notes: `chat not found` usually means the bot was never added to that chat, or the id is wrong, a group id is
 negative and a supergroup's starts `-100`. `bot was blocked by the user` means exactly that; nothing you send

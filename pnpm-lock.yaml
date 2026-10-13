@@ -2075,6 +2075,9 @@ importers:
       '@intentic/connector-runtime':
         specifier: workspace:*
         version: link:../../_shared/connector-runtime
+      zod:
+        specifier: 4.6.5
+        version: 4.6.5
     devDependencies:
       '@intentic/sandbox-contract':
         specifier: workspace:*

@@ -27,7 +27,8 @@ flowchart LR
   before it exists, and the thread is only opened once an automation answers: a message nobody takes leaves no empty
   thread. The daemon keys one conversation per thread, so a request, its follow-ups days later and its worktree stay
   together.
-- The answer ([src/reply.ts](src/reply.ts)): 👀 the moment the message is heard, "typing…" while the turn runs, and a
+- The answer ([src/reply.ts](src/reply.ts)) is the shared team-chat reply from connector-runtime, which Slack's
+  runs on too; this package supplies only how it looks in Discord. 👀 the moment the message is heard, "typing…" while the turn runs, and a
   status card ([src/card.ts](src/card.ts)) once the work outlasts a quick answer. The card is one embed edited in place
   (current step, the last few, the agent's checklist, elapsed time) with **Stop** and **Open in Intentic** under it,
   and it collapses to one line when the turn ends. The reply itself is posted as ordinary messages, never streamed by
@@ -58,15 +59,16 @@ flowchart LR
   the bot joins a new server while an automation is on, it says hello in the server's system channel.
 - Only the manifest is in every image. The built gateway ships in the `messaging` image pack; on a core image the card
   says the runtime is not included.
-- Reconcile, status and shutdown come from [connector-runtime](../../_shared/connector-runtime), as do the progress
-  model and the chunker; this package is only what is Discord-specific.
+- Reconcile, status and shutdown come from [connector-runtime](../../_shared/connector-runtime), as do the reply's
+  lifecycle, the status card's content, the progress model and the chunker; this package is only what is
+  Discord-specific.
 
 ## Key files
 
 - [src/gateway.ts](src/gateway.ts) — the process entry: reconcile hooks, delivery, button presses, loopback voice routes.
 - [src/inbound.ts](src/inbound.ts) — whether a message is for the bot, and which channel, thread and room it belongs to.
-- [src/reply.ts](src/reply.ts) — one message's answer: thread, reactions, status card, the reply's messages.
-- [src/card.ts](src/card.ts) — the status card drawn from the turn's progress.
+- [src/reply.ts](src/reply.ts) — what the shared reply looks like in Discord: thread, reactions, quoting, typing.
+- [src/card.ts](src/card.ts) — the status card drawn as an embed.
 - [src/listener.ts](src/listener.ts) — messages to listener events, history, the Stop button, delivery.
 - [src/voice.ts](src/voice.ts) — the voice session: capture, transcribe, dispatch, speak, write the transcript.
 

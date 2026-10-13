@@ -1,7 +1,7 @@
 import type { ListenerMessage } from "@intentic/sandbox-contract";
 import { chunkMessage } from "./chunks.js";
 import type { DaemonClient } from "./daemon.js";
-import { createBufferedPainter, createStreamingPainter, failureNotice, framePainter, type StreamPoster } from "./painter.js";
+import { createBufferedPainter, failureNotice, framePainter } from "./painter.js";
 
 // What every chat gateway does the same way once it has decided a message is for us: deliver a message outside a turn
 // in chunks, and paint a turn's reply back into the chat. Each platform still decides what "for us" means.
@@ -46,14 +46,13 @@ export const deliverChunked = async <TTarget, TSent>(
     throw tried ? failure : none();
 };
 
-// Where a reply goes: grown by edits through a poster (Discord, Slack, Telegram), or sent whole once the turn ends
-// (WhatsApp, which flags rapid edits as automation).
-export type ReplySurface<THandle> =
-    | { readonly stream: StreamPoster<THandle>; readonly editIntervalMs: number }
-    | { readonly send: (text: string) => Promise<void> };
+// Where a reply goes: sent whole once the turn ends (WhatsApp, which flags rapid edits as automation).
+export interface ReplySurface {
+    readonly send: (text: string) => Promise<void>;
+}
 
-export interface ReplyOptions<THandle> {
-    readonly surface: ReplySurface<THandle>;
+export interface ReplyOptions {
+    readonly surface: ReplySurface;
     // The platform's one-message ceiling; a longer reply spills into a follow-up.
     readonly maxChars: number;
     // A failed post or edit; it ends that painter, never the dispatch.
@@ -62,24 +61,18 @@ export interface ReplyOptions<THandle> {
     readonly settle?: () => void | Promise<void>;
 }
 
-// Dispatches a message that addressed us and paints every matched automation's answer back into the chat, one painter
-// per automation so two answers to one mention never share a message. A turn that fails says so in the chat, posted
-// directly rather than through the painter, which owns reply text a failed turn usually has none of.
-export const paintReply = async <THandle>(
-    daemon: Pick<DaemonClient<unknown>, "dispatchStreaming">,
-    payload: ListenerMessage,
-    options: ReplyOptions<THandle>,
-): Promise<void> => {
+// Dispatches a message that addressed us and sends every matched automation's answer back into the chat once its turn
+// ends, one painter per automation so two answers to one mention never share a message. A turn that fails says so in
+// the chat, posted directly rather than through the painter, which owns reply text a failed turn usually has none of.
+export const paintReply = async (daemon: Pick<DaemonClient<unknown>, "dispatchStreaming">, payload: ListenerMessage, options: ReplyOptions): Promise<void> => {
     const { surface, maxChars, onError } = options;
-    const post = "stream" in surface ? async (text: string): Promise<void> => void (await surface.stream.post(text)) : surface.send;
-    const painter =
-        "stream" in surface
-            ? () => createStreamingPainter(surface.stream, onError, { maxChars, editIntervalMs: surface.editIntervalMs })
-            : () => createBufferedPainter(surface.send, onError, maxChars);
     try {
         await daemon.dispatchStreaming(
             payload,
-            framePainter(painter, (reason) => void post(failureNotice(reason, maxChars)).catch(onError)),
+            framePainter(
+                () => createBufferedPainter(surface.send, onError, maxChars),
+                (reason) => void surface.send(failureNotice(reason, maxChars)).catch(onError),
+            ),
         );
     } finally {
         await options.settle?.();

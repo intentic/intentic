@@ -22,6 +22,10 @@ display_information:
   name: intentic
   description: Your agent, in Slack.
 features:
+  app_home:
+    home_tab_enabled: false
+    messages_tab_enabled: true
+    messages_tab_read_only_enabled: false
   bot_user:
     display_name: intentic
     always_online: true
@@ -49,14 +53,21 @@ settings:
       - message.im
       - message.mpim
       - reaction_added
+      - member_joined_channel
   interactivity:
-    is_enabled: false
+    is_enabled: true
   socket_mode_enabled: true
 ```
 
 Then: **Basic Information → App-Level Tokens → Generate** with the `connections:write` scope (that's the
 `xapp-` token), **Install App → Install to Workspace** (that's the `xoxb-` token), and paste both onto the
 Slack capability. Finally the user must invite the bot to each channel it should see: `/invite @intentic`.
+For the team to hand the app work by mentioning it, the owner switches on the **Team assistant on Slack**
+automation (Automations, under the suggestions).
+
+An app made from an older manifest lacks two things this one has: **Interactivity & Shortcuts** switched on
+(without it, the Stop button on a status card shows an error) and the `member_joined_channel` event (the hello
+when it is invited to a channel). Both are toggles on the app's dashboard; Socket Mode needs no request URL.
 
 Confirm it landed: `curl -s -H "Authorization: Bearer $SLACK_BOT_TOKEN" "$SLACK_API_URL/auth.test" | jq '{ok, team, user, user_id}'`
 
@@ -81,18 +92,25 @@ Confirm it landed: `curl -s -H "Authorization: Bearer $SLACK_BOT_TOKEN" "$SLACK_
 
 ## Writing for Slack
 
-Slack is **not** markdown: it is `mrkdwn`. `*bold*` (single asterisks), `_italic_`, `~strike~`, `` `code` ``,
-```` ```block``` ````, `> quote`. Links are `<https://url|label>`, a person is `<@U123>`, a channel is
-`<#C123>`. Headings, tables and `[label](url)` do not render. Keep replies short and thread them.
+What you post with curl's `text` is **not** markdown: it is `mrkdwn`. `*bold*` (single asterisks), `_italic_`,
+`~strike~`, `` `code` ``, ```` ```block``` ````, `> quote`. Links are `<https://url|label>`, a person is `<@U123>`, a
+channel is `<#C123>`. Headings, tables and `[label](url)` do not render there. To post standard Markdown yourself,
+send it as a `markdown` block instead: `"blocks":[{"type":"markdown","text":"## Heading\n| a | b |\n|---|---|"}]`
+(12,000 characters at most), with a short plain `text` beside it for the notification. Keep replies short and
+thread them.
 
 ## Being mentioned
 
-When someone @mentions the bot, the gateway wakes an agent conversation and **streams your reply into the
-thread for you** — in that case just answer in plain text and do not post it yourself with curl. Use the
-commands above to act *elsewhere*: react, post to a different channel, DM someone.
+When a message is addressed to the app (an @mention, a DM, or anything in a thread it works in), the gateway
+wakes an agent conversation and **posts your reply into that message's thread for you**: just write your
+answer, in standard Markdown (Slack shows it as written, tables included), and never post it yourself with curl
+as well. While you work, a status card in the thread shows your steps and checklist, with a Stop button (or,
+when the owner chose Slack's own streaming, your steps stream into the answer and a ⏹️ reaction on the request
+stops you), so don't narrate each step. Use the commands above to act *elsewhere*: react, post to a different channel, DM someone.
 
-A channel is one continuing conversation: follow-up mentions in the same channel keep talking to the same
-agent (with its memory of the thread) until it goes quiet for a couple of hours.
+Each thread is one continuing conversation: replies in it reach you with no new mention, and one sent while you
+work arrives in the same turn. The event's `thread` field is the thread's root `ts`; post anything else into the
+thread with `thread_ts` set to it.
 
 Notes: `not_in_channel` means the bot hasn't been invited — ask the user to `/invite @intentic` there.
 `missing_scope` names the scope the app lacks; it needs a reinstall from the app dashboard to add one.

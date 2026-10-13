@@ -139,8 +139,6 @@
     "_extensions/onlyoffice/src/server/listener.ts": 1,
     "_extensions/repo-apps/src/AppsView.vue": 1,
     "_extensions/slack/src/client.ts": 1,
-    "_extensions/slack/src/listener.ts": 2,
-    "_extensions/telegram/src/listener.ts": 1,
     "_extensions/viewers/src/MediaViewer.vue": 3,
     "_extensions/whatsapp/src/listener.ts": 2,
     "_extensions/workflows/src/WorkflowDesigner.vue": 2,

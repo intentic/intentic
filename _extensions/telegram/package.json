@@ -12,7 +12,8 @@
     },
     "dependencies": {
         "@intentic/base": "workspace:*",
-        "@intentic/connector-runtime": "workspace:*"
+        "@intentic/connector-runtime": "workspace:*",
+        "zod": "catalog:"
     },
     "devDependencies": {
         "@intentic/sandbox-contract": "workspace:*",

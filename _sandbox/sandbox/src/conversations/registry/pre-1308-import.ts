@@ -371,6 +371,7 @@ const checkpointsOf = (text: string | undefined): ReadonlyMap<string, readonly (
 
 interface Held {
     readonly conversations: ReadonlySet<string>;
+    // The conversations a fire in flight is filed under, as this build files a fire (turn-journal.ts).
     readonly fires: ReadonlySet<string>;
 }
 
@@ -383,6 +384,16 @@ const idsIn = (db: DatabaseSync, sql: string): Set<string> =>
             .all()
             .flatMap(({ id }) => (typeof id === "string" ? [id] : [])),
     );
+
+// Where a fire in flight may be filed: fire_journal on a database from before its rows moved to
+// fire_journal_by_conversation (conversations-db.ts), the latter after. The plan reads the database before any step
+// upgrades it, so it reads whichever of the two the file has.
+const FIRE_TABLES = ["fire_journal", "fire_journal_by_conversation"];
+
+const firesIn = (db: DatabaseSync): Set<string> => {
+    const present = idsIn(db, `SELECT name AS id FROM sqlite_schema WHERE type = 'table' AND name IN (${FIRE_TABLES.map((name) => `'${name}'`).join(", ")})`);
+    return new Set([...present].flatMap((table) => [...idsIn(db, `SELECT conversation_id AS id FROM "${table}"`)]));
+};
 
 // Read without writing a byte: with no WAL beside it the file is the whole database, opened immutable so not even a
 // sidecar appears; with one, a read-only open that reads the WAL too.
@@ -398,7 +409,7 @@ const heldIn = async (context: StepContext, path: string): Promise<Held> => {
     let db: DatabaseSync | undefined;
     try {
         db = new DatabaseSync(location, { readOnly: true });
-        return { conversations: idsIn(db, "SELECT id FROM conversation"), fires: idsIn(db, "SELECT automation_id AS id FROM fire_journal") };
+        return { conversations: idsIn(db, "SELECT id FROM conversation"), fires: firesIn(db) };
     } catch {
         // allow(silent-catch): a read-only mount cannot open a live WAL database; counting it as holding nothing plans the
         // import, and the effect checks each row against the database itself
@@ -464,7 +475,7 @@ const rowWriter = (conversations: ConversationsDb) => {
     const checkpoint = db.prepare("INSERT INTO checkpoint(conversation_id, message, anchor) VALUES (?, ?, ?) ON CONFLICT DO NOTHING");
     const watch = db.prepare("INSERT INTO watch(id, conversation_id, entry) VALUES (?, ?, ?) ON CONFLICT DO NOTHING");
     const fire = db.prepare(`
-        INSERT INTO fire_journal(automation_id, conversation_id, started_at, attempts, payload, origin, title) VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO fire_journal_by_conversation(automation_id, conversation_id, started_at, attempts, payload, origin, title) VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT DO NOTHING
     `);
     return {
@@ -648,7 +659,7 @@ const plan = async (context: StepContext): Promise<StepPlan | undefined> => {
 
     const held = await heldIn(context, conversationsDbPath(history));
     const toImport = unsettled.flatMap(([id, agent]) => (agent !== undefined && !held.conversations.has(id) ? [agent] : []));
-    const fires = unsettledFires.filter(({ automationId }) => !held.fires.has(automationId));
+    const fires = unsettledFires.filter(({ conversationId }) => !held.fires.has(conversationId));
     const unmapped = unsettled.filter(([id, agent]) => agent === undefined && !held.conversations.has(id)).length;
     const standing = linesOf([
         [

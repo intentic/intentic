@@ -4,18 +4,23 @@ import {
     type GatewayCtx,
     GatewayRefusal,
     HISTORY_LIMIT,
+    joinedThreads,
     type ListenerHistoryEntry,
     type ListenerMessage,
     type ListenerStop,
     MESSAGE_LIMITS,
+    progressDetailOf,
     recentKeys,
+    type ReplyTiming,
+    runRegistry,
+    stopFromChat,
+    stopTarget,
 } from "@intentic/connector-runtime";
 import { type ButtonInteraction, type Client, DiscordAPIError, type Guild, type Interaction, type Message, MessageFlags, type REST, Routes } from "discord.js";
-import { progressDetailOf, stopTarget } from "./card.js";
 import { visibleChannel } from "./client.js";
 import { postMessage } from "./discord-rest.js";
 import { inboundOf, type Route, routeOf } from "./inbound.js";
-import { createMessageReply, type ReplyDeps, type ReplyRegistry, type ReplyTiming, type RunControl } from "./reply.js";
+import { createMessageReply, type ReplyDeps } from "./reply.js";
 
 // Text side of the gateway: builds a normalized listener message from every human-authored message a subscribed bot
 // sees, and POSTs it to the daemon's dispatch route. A message addressed to us (inbound.ts) gets its answer back live,
@@ -163,51 +168,6 @@ export interface ListenerOptions {
     readonly timing?: ReplyTiming;
 }
 
-// Threads this process answered in, so a follow-up there is heard without a mention; bounded, and forgotten on restart
-// (a thread the bot opened is its own and needs no memory).
-const JOINED_MAX = 2_000;
-
-interface JoinedThreads {
-    readonly has: (id: string) => boolean;
-    readonly add: (id: string) => void;
-}
-
-const joinedThreads = (): JoinedThreads => {
-    const ids = new Set<string>();
-    return {
-        has: (id) => ids.has(id),
-        add: (id) => {
-            ids.delete(id);
-            ids.add(id);
-            const oldest = ids.size > JOINED_MAX ? ids.values().next().value : undefined;
-            if (oldest !== undefined) {
-                ids.delete(oldest);
-            }
-        },
-    };
-};
-
-// The turns running now, by conversation (for the Stop button) and by room (for a message steered into one).
-const runRegistry = (): ReplyRegistry & { readonly byConversation: (id: string) => RunControl | undefined } => {
-    const byConversation = new Map<string, RunControl>();
-    const byRoom = new Map<string, RunControl>();
-    return {
-        opened: (conversationId, room, run) => {
-            byConversation.set(conversationId, run);
-            byRoom.set(room, run);
-        },
-        closed: (conversationId, room) => {
-            const run = byConversation.get(conversationId);
-            byConversation.delete(conversationId);
-            if (run !== undefined && byRoom.get(room) === run) {
-                byRoom.delete(room);
-            }
-        },
-        running: (room) => byRoom.get(room),
-        byConversation: (id) => byConversation.get(id),
-    };
-};
-
 // The parts of a button press the Stop rule reads: who pressed it, and their roles in the server, which an interaction
 // carries as a list of ids or, for a cached member, in its role cache.
 export interface Presser {
@@ -332,15 +292,8 @@ export const createDiscordListener = (ctx: GatewayCtx, subscribed: Map<string, C
     // The Stop button under a status card: the daemon decides whether the presser may, by the automation's own rules.
     const onStop = async (interaction: ButtonInteraction, conversationId: string): Promise<void> => {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-        const presser = presserOf(interaction);
-        const answer = await ctx.daemon.stop({ conversationId, author: presser }).catch((error: Error) => {
-            ctx.log.warn({ err: error }, "discord stop: the daemon did not answer");
-            return { stopped: false, reason: "I couldn't reach the sandbox to stop it; try again in a moment." };
-        });
-        if (answer.stopped) {
-            runs.byConversation(conversationId)?.stopping(interaction.user.globalName ?? interaction.user.username);
-        }
-        await interaction.editReply(answer.stopped ? "Stopping it now." : (answer.reason ?? "That one can't be stopped from here."));
+        const shownAs = interaction.user.globalName ?? interaction.user.username;
+        await interaction.editReply(await stopFromChat(ctx.daemon, runs, { conversationId, author: presserOf(interaction) }, shownAs, ctx.log));
     };
 
     const onInteraction = (interaction: Interaction): void => {

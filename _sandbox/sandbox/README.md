@@ -337,7 +337,12 @@ flowchart LR
   queued behind another turn of the automation); a subagent's narration no longer reaches the channel. A person in the
   channel may stop the turn through `POST /listeners/<provider>/stop` when the automation's sender rules answer them
   unreleased (`stopChannelTurn` in `automations/listeners.ts`), and an approved hold's answer is posted where it was asked.
-  Threads of one automation still run one turn at a time: the fire journal is keyed by automation.
+  Threads of one automation are worked on side by side (2026-10-13), up to the sandbox's `automationThreadsAtOnce`
+  (default 3); one more waits, and its channel is told it is queued (`FireLanes` in `automations/scheduler.ts`). A fire
+  on one thread still waits for the one running there, and a fire no provider thread owns (a schedule, a webhook, a
+  channel-level message) still runs alone, waiting for every fire of its automation and holding up every one after it.
+  The fire journal holds a fire per conversation (`fire_journal_by_conversation`), so a restart re-fires each thread
+  that was in flight on its own conversation.
 - A persona's folder fence and its `sandbox` power are judged by path segment, by the contract's `fenceAllows` and
   `isSandboxPath`, and see every editing tool `rules/edit-tools.ts` lists, the hashline tools included
   (`personas/persona-scope.ts`, 2026-10-12). The hashline tools check where a path really lands, through symlinks,

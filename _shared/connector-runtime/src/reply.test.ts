@@ -97,7 +97,7 @@ test("a buffered reply is sent whole at the end, and the indicator is retired on
 test("a failed turn says so in the chat, marked and clamped to the ceiling, posted outside the painter", async () => {
     const posted: string[] = [];
     await paintReply(daemonPlaying([{ automationId: "a", failed: "the model is out of credit" }]), PAYLOAD, {
-        surface: { stream: { post: async (text) => posted.push(text), update: async () => undefined }, editIntervalMs: 10 },
+        surface: { send: async (text) => void posted.push(text) },
         maxChars: 12,
         onError: () => undefined,
     });

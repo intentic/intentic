@@ -55,7 +55,7 @@ describe("the conversations database", () => {
     it("is empty until any table holds a row, a fire with no conversation included", () => {
         const db = openConversationsDb(IN_MEMORY);
         expect(db.empty()).toBe(true);
-        db.db.prepare("INSERT INTO fire_journal(automation_id, conversation_id, started_at, attempts) VALUES ('nightly', 'a-1', 1, 0)").run();
+        db.db.prepare("INSERT INTO fire_journal_by_conversation(automation_id, conversation_id, started_at, attempts) VALUES ('nightly', 'a-1', 1, 0)").run();
         expect(db.empty()).toBe(false);
     });
 

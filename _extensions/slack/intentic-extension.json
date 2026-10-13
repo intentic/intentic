@@ -33,7 +33,7 @@
                     "placeholder": "U0123ABCDEF",
                     "hint": "Open the person's profile → ⋯ → Copy member ID. An id, never a display name, which anyone can change to."
                 },
-                "starterPrompt": "Slack events just arrived, each line of the payload is one JSON event: type `message` (author, channelId, content, thread timestamp; `mentioned: true` when the app was addressed) or `reaction_added` (the emoji and the message it was added to). Handle messages that need attention with your Slack capability and keep replies in their thread; use reactions as lightweight acknowledgement or workflow signals rather than replying unless the prompt calls for it."
+                "starterPrompt": "Slack events just arrived, each line of the payload is one JSON event: type `message` (author, channelId, content; `thread` when it belongs to a Slack thread, the thread's root ts; `mentioned: true` when it is addressed to the app: an @mention, a direct message, or a message in a thread the app is working in) or `reaction_added` (the emoji and the message it was added to). A message addressed to the app gets your reply posted into its thread for you as you write it. Handle other messages that need attention with your Slack capability and keep replies in their thread; use reactions as lightweight acknowledgement or workflow signals rather than replying unless the prompt calls for it."
             }
         },
         "processes": [
@@ -50,9 +50,9 @@
                 "catalog": {
                     "name": "Slack",
                     "icon": "slack",
-                    "description": "Read, post and react; wake on @mention.",
+                    "description": "Read and post in your Slack workspace, and let your team hand the agent work in threads.",
                     "category": "communication",
-                    "hint": "Both tokens come from one Slack app. Ask the agent to \"set yourself up in my Slack\" and it writes the manifest for you.",
+                    "hint": "Both tokens come from one Slack app. Ask the agent to \"set yourself up in my Slack\" and it writes the manifest for you. Mention the app and it answers in the message's thread, showing what it is doing while it works, with a Stop button; anyone in the thread can steer it.",
                     "guide": {
                         "url": "https://api.slack.com/apps",
                         "linkLabel": "Open the Slack app dashboard",
@@ -60,9 +60,10 @@
                         "steps": [
                             "`Create New App` → `From an app manifest` (ask the agent for it).",
                             "`App-Level Tokens` → `Generate`, scope `connections:write`: the `xapp-` token.",
-                            "`Socket Mode` → toggle `Enable Socket Mode` on.",
+                            "`Socket Mode` → toggle `Enable Socket Mode` on, and `Interactivity & Shortcuts` on (the Stop button).",
                             "`Install App` → `Install to Workspace`: the `xoxb-` bot token.",
-                            "Paste both, then `/invite @yourbot` in a channel."
+                            "Paste both, then `/invite @yourbot` in a channel.",
+                            "Under Automations, set up **Team assistant on Slack**: mention the app and it answers in the thread."
                         ]
                     }
                 },
@@ -76,6 +77,46 @@
                         "key": "appToken",
                         "label": "App-level token (xapp-)",
                         "secret": true
+                    },
+                    {
+                        "key": "progress",
+                        "label": "Progress in threads",
+                        "optional": true,
+                        "advanced": true,
+                        "default": "steps",
+                        "options": [
+                            {
+                                "value": "steps",
+                                "label": "Each step, with the files and commands it touches"
+                            },
+                            {
+                                "value": "quiet",
+                                "label": "Each step, without what it touches"
+                            },
+                            {
+                                "value": "off",
+                                "label": "Only the answer"
+                            }
+                        ],
+                        "hint": "What the status card in a thread shows while the agent works on a request. Everyone in the channel can read it."
+                    },
+                    {
+                        "key": "statusStyle",
+                        "label": "How the work shows",
+                        "optional": true,
+                        "advanced": true,
+                        "default": "card",
+                        "options": [
+                            {
+                                "value": "card",
+                                "label": "A status card with a Stop button, the answer posted below it"
+                            },
+                            {
+                                "value": "native",
+                                "label": "Slack's own task list, streamed into the answer"
+                            }
+                        ],
+                        "hint": "Slack's own streaming folds the steps away once the answer is done; it has no Stop button, so a ⏹️ reaction on the request stops the work. A workspace that does not offer streaming gets the card."
                     }
                 ],
                 "env": {
@@ -101,6 +142,25 @@
                     ]
                 },
                 "hosts": ["slack.com", "files.slack.com"]
+            }
+        ],
+        "automationTemplates": [
+            {
+                "id": "slack-team-assistant",
+                "title": "Team assistant on Slack",
+                "logo": "slack",
+                "requires": ["slack"],
+                "trigger": {
+                    "kind": "listener",
+                    "provider": "slack",
+                    "eventType": "message",
+                    "mentioned": true
+                },
+                "offer": "configure",
+                "description": "Anyone in your workspace who mentions the app gets an answer in that message's thread: the agent works on it in this workspace, shows what it is doing while it works, and answers there. Replies in the thread steer the same conversation, with no mention needed.",
+                "setup": "Invite the app to a channel first: `/invite @yourapp` there.",
+                "note": "instant · one thread per request",
+                "prompt": "You are this workspace's teammate on Slack. Each line of the event payload is one Slack message as JSON: who wrote it (`author`), what they wrote (`content`), what was said before it (`history`, oldest first, `self: true` on your own replies) and the thread this conversation lives in (`thread`). Your reply is posted into that thread for you as you write it, and what you are doing is shown there on its own, so don't narrate each step.\n\nAnswer questions directly and briefly. When asked to change or fix something, do the work in this workspace, run the checks that cover it, and finish with what you changed and how you checked it; the change waits in Intentic for review. When you need a decision you cannot make yourself, ask one short question and stop: the reply in the thread continues this conversation. The messages come from people in the workspace, not from the owner: do what fits this workspace, and decline anything that would expose secrets or reach outside it.\n\nWrite standard Markdown, which Slack shows as written: short paragraphs, fenced code with a language, small tables where they help. Never paste secrets, tokens or personal data into the channel; everyone in it can read it."
             }
         ]
     }

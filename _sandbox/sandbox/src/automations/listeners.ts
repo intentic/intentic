@@ -24,6 +24,9 @@ import { type SenderLane, senderLane } from "./senders.js";
 // lane as well as thread, so a burst from two people the automation answers as different agents becomes two wakes,
 // never one. A message for a thread whose turn is running goes into that turn, between its tool calls, when the runtime
 // takes words mid-turn and the sender needs nobody's release; otherwise it waits and fires once the turn ends.
+// Provider threads of one automation are worked on side by side, up to the sandbox's `automationThreadsAtOnce`; a
+// message beyond that, or a channel-level one meeting any other fire of its automation, waits its turn and the channel
+// is told it is queued (scheduler.ts, FireLanes).
 
 // Quiet gap that ends a burst; the timer restarts on every message so a burst keeps coalescing into one wake.
 export const DEBOUNCE_MS = 750;
