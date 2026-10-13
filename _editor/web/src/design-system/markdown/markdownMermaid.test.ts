@@ -35,22 +35,26 @@ const render = (source: string): HTMLElement => {
 // A diagram is a queued dynamic import followed by an awaited render, so the DOM settles some time after mount. The
 // timeout bounds a hang rather than measuring latency: a busy CI runner can make the import itself cost far more than
 // idle.
-const settled = (host: HTMLElement, selector: string): Promise<void> =>
+const settled = (host: HTMLElement, selector: string, timeout = 10_000): Promise<void> =>
     waitFor(
         () => {
             expect(host.querySelector(selector)).not.toBeNull();
         },
-        { timeout: 10_000 },
+        { timeout },
     );
+
+// The cold import's own budget, above the unit run's 20 s per hook: on a CI runner sharing its cores with the rest of
+// the suite, loading and initialising mermaid from cold has taken 25 s while it takes 2 s idle.
+const COLD_IMPORT_MS = 60_000;
 
 describe(`<Markdown> with a mermaid fence`, () => {
     // One throwaway diagram, drawn before anything is asserted, purely to pay for mermaid's import cost once for the
     // file rather than charging it to whichever test happens to mount first. Torn down so no assertion can see it.
     beforeAll(async () => {
         const host = render('```mermaid\nflowchart LR\n    warm["Warm"] --> up["Up"]\n```');
-        await settled(host, `.md-mermaid svg`);
+        await settled(host, `.md-mermaid svg`, COLD_IMPORT_MS - 10_000);
         host.remove();
-    });
+    }, COLD_IMPORT_MS);
 
     it(`draws the diagram, and keeps the prose either side of it`, async () => {
         const host = render(`Before.\n\n\`\`\`mermaid\nflowchart LR\n    a["One"] --> b["Two"]\n\`\`\`\n\nAfter.`);
