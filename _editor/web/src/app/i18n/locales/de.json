@@ -4056,8 +4056,7 @@
             "none": "Noch keine Bestätigungen."
         },
         "analytics": {
-            "title": "Intentic-Produktanalyse in dieser Sandbox",
-            "description": "Aus: Kein Besuch dieser Sandbox sendet Nutzungsereignisse oder Bildschirmaufzeichnungen an Intentic, unabhängig davon, was die einzelnen Personen erlaubt haben."
+            "title": "Intentic-Produktanalyse in dieser Sandbox"
         },
         "dataProtection": {
             "intro": "Bevor diese Sandbox personenbezogene Daten verarbeitet, geh drei Schritte durch: Schalte die empfohlenen Schutzmaßnahmen ein, prüfe, wohin Daten gehen, und gib deinem Datenschutzbeauftragten die Dokumente. Nichts ändert sich, bis du in Schritt 1 auf „Anwenden“ drückst.",

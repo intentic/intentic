@@ -4052,8 +4052,7 @@
             "none": "Aucune confirmation."
         },
         "analytics": {
-            "title": "Analyse produit d’Intentic dans ce sandbox",
-            "description": "Désactivé : aucune visite de ce sandbox n’envoie d’événements d’utilisation ni d’enregistrements d’écran à Intentic, quel que soit le choix de chacun."
+            "title": "Analyse produit d’Intentic dans ce sandbox"
         },
         "dataProtection": {
             "intro": "Avant que ce sandbox traite des données personnelles, suivez trois étapes : activez les protections recommandées, vérifiez où vont les données, puis remettez les documents à votre délégué à la protection des données. Rien ne change tant que vous n'appuyez pas sur « Appliquer » à l'étape 1.",
