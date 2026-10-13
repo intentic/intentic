@@ -232,7 +232,9 @@ onMounted(() => {
                     @click="workspaceOpen(DEVICES_PATH)"
                 />
             </template>
-            <template #description>{{ t(`desktop.device.lead`) }}</template>
+            <!-- Sandboxes, a machine agent and a Docker engine mean nothing on a computer that has none of them yet: while this
+                 PC's own card leads an empty page, its heading says what the page is for instead (pcSetup/PcSetupCard.vue). -->
+            <template v-if="!(pcCardShown && groups.length === 0)" #description>{{ t(`desktop.device.lead`) }}</template>
         </PageHeader>
 
         <div class="flex flex-col gap-6">

@@ -728,7 +728,14 @@ At launch the app runs a read-only `ic docker prepare --dry-run` and streams the
 `desktop://onboarding` (`onboarding.rs`, `src/onboarding/pc.ts`). The reader sees it on This device, in a card of its
 own ahead of this computer's sandbox (`src/device/pcSetup/PcSetupCard.vue`, its phase from the pure
 `pcSetup/pcCard.ts`): only on Windows, for as long as the PC is not ready, or nobody is signed in, or the first task
-failed to start. It lists only the rows still to do; the met ones are a count beside the machine. Rows are labelled in
+failed to start. Under a heading that says what agents are and where they run, it walks three numbered steps
+(`pcCard.ts` `pcSteps`, drawn by `PcStep.vue`): **Prepare this PC**, **Sign in**, **Give agents a first task**. Each
+step's marker says whether it is done, running, the next press, waiting on the reader, stopped or not open yet; only
+open steps carry their controls. The sign-in never waits for the setup, but it only becomes the main action once the
+PC is ready or its setup is running. The first task stays closed until someone is signed in, unless a task was already
+begun, saved or failed. A PC that cannot run agents, or a check that could not say, gets the same heading with no
+steps. While the card leads a computer with no sandboxes, the page's own lead line stands back. Step one lists only the
+rows still to do; the met ones are a count beside the machine. Rows are labelled in
 the desktop app's i18n (`desktop.onboarding.rows.*`), falling back to `ic`'s own `title` for an id the catalog does not
 name; a row is ours, the reader's or blocked by `ic`'s `action` (`onboarding.rs` `row_state`). While the card is up,
 This device's no-sandbox card stands back and this computer's sandbox, held for the PC's setup with nothing of its own
@@ -738,6 +745,10 @@ it waits or failed, and shows a quiet mark while it is offered (`src/device/badg
 > 2026-10-12: this card replaced the local shell's **Agents** view (`/agents`, a rail tile of its own), whose
 > signed-out checklist listed every requirement already met, several under raw ids, and whose first-task step said its
 > own heading twice. The dev stand-in draws every phase with `?pc=` (below).
+>
+> 2026-10-13: the card became the three steps above. Before, it was three blocks of equal weight under "Set up agents on
+> this PC" beside a green check: signed out on a ready PC, its biggest element was a first-task box that could do
+> nothing yet, and the one action that mattered, Sign in, was a small button between two rules.
 
 A few seconds after the first launch, on an unmetered connection, the app prefetches what agents need: `ic engine fetch`
 then `ic image prefetch`, parsing both with the same `intentic-prefetch:` markers (`prefetch.rs`). The reader can pause

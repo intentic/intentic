@@ -361,21 +361,32 @@
         }
     },
     "pcSetup": {
-        "title": "Preparar este PC para los agentes",
+        "title": "Ejecuta agentes en este PC",
+        "lead": "Los agentes trabajan en tus carpetas y te devuelven sus cambios. Se ejecutan aquí, en un sandbox: un ordenador propio dentro de este PC.",
+        "step": {
+            "done": "Hecho"
+        },
+        "pc": {
+            "title": "Prepara este PC",
+            "line": "Intentic activa lo que Windows necesita para ejecutar agentes. Solo se hace una vez."
+        },
+        "cantRun": {
+            "title": "Este PC no puede ejecutar agentes"
+        },
+        "details": {
+            "show": "Mostrar detalles",
+            "hide": "Ocultar detalles"
+        },
         "state": {
-            "checkUnknown": "no se pudo comprobar",
-            "needsSetup": "todavía sin preparar",
-            "settingUp": "preparándose",
             "restart": "necesita un reinicio",
             "admin": "necesita el permiso de Windows",
             "signOut": "necesita cerrar sesión",
-            "setupFailed": "detenido",
-            "cantRun": "no puede ejecutar agentes"
+            "setupFailed": "detenido"
         },
         "passed": "{met} de {total} comprobaciones superadas",
         "cost": {
             "minutes": "Unos {count} minutos",
-            "restart": "un reinicio",
+            "restart": "Un reinicio",
             "download": "{size} de descarga",
             "admin": "Windows pide permiso una vez"
         },
@@ -399,10 +410,12 @@
         "repair": "Preguntar a Repair",
         "hosted": "Un ordenador que alojamos nosotros puede ejecutar tus agentes en su lugar.",
         "cloud": "Usar Intentic en la nube",
-        "ready": "Este PC está listo para los agentes.",
+        "ready": "Listo para agentes",
         "signIn": {
-            "now": "Inicia sesión e Intentic crea el sandbox en el que trabajan tus agentes.",
-            "meanwhile": "Los agentes trabajan con tu cuenta. Inicia sesión cuando quieras: la preparación de este PC no espera a eso."
+            "now": "Los agentes trabajan con tu cuenta de Intentic. Cuando inicies sesión, Intentic preparará su sandbox aquí por sí solo.",
+            "meanwhile": "Los agentes trabajan con tu cuenta de Intentic. Inicia sesión ahora o más tarde: la preparación de este PC no lo espera.",
+            "title": "Inicia sesión",
+            "done": "Has iniciado sesión."
         },
         "prefetch": {
             "label": "Descargando lo que necesitan los agentes",
@@ -420,21 +433,27 @@
         },
         "task": {
             "title": "Da a los agentes una primera tarea",
-            "lead": "Elige una carpeta y di lo que quieres que se haga.",
-            "placeholder": "Describe la tarea para tus agentes…",
+            "lead": "Elige una carpeta y di qué quieres que se haga en ella.",
+            "placeholder": "¿Qué deben hacer los agentes? Por ejemplo: arreglar las pruebas que fallan y explicar qué estaba mal.",
             "pickFolder": "Elegir carpeta",
             "changeFolder": "Cambiar carpeta",
-            "queue": "Poner la tarea en cola",
-            "keptTitle": "Tu primera tarea",
+            "queue": "Guardar tarea",
+            "keptTitle": "Tu tarea está guardada.",
             "edit": "Editar",
             "sending": "Enviando…",
-            "failedTitle": "Tu primera tarea no se inició",
+            "failedTitle": "Tu primera tarea no se inició.",
             "starts": {
                 "pc": "Empieza sola en cuanto este PC esté listo.",
                 "pcAndSignIn": "Empieza sola en cuanto este PC esté listo y hayas iniciado sesión.",
                 "signIn": "Empieza en cuanto inicies sesión.",
                 "now": "Empieza ahora mismo."
-            }
+            },
+            "locked": "Elige una carpeta y di qué quieres que se haga. Disponible cuando inicies sesión.",
+            "later": "Escríbela ahora y empezará sola en cuanto este PC esté listo.",
+            "write": "Escribir una tarea",
+            "noFolder": "Aún no has elegido carpeta",
+            "start": "Iniciar tarea",
+            "sent": "Tu primera tarea ha empezado."
         }
     },
     "leftovers": {

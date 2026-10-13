@@ -361,21 +361,32 @@
         }
     },
     "pcSetup": {
-        "title": "Set up agents on this PC",
+        "title": "Run agents on this PC",
+        "lead": "Agents work on your folders and hand back their changes. They run here in a sandbox: a computer of their own, inside this PC.",
+        "step": {
+            "done": "Done"
+        },
+        "pc": {
+            "title": "Prepare this PC",
+            "line": "Intentic turns on what Windows needs to run agents. You only do this once."
+        },
+        "cantRun": {
+            "title": "This PC can't run agents"
+        },
+        "details": {
+            "show": "Show details",
+            "hide": "Hide details"
+        },
         "state": {
-            "checkUnknown": "couldn't be checked",
-            "needsSetup": "not set up yet",
-            "settingUp": "setting up",
             "restart": "needs a restart",
             "admin": "needs Windows' permission",
             "signOut": "needs a sign-out",
-            "setupFailed": "stopped",
-            "cantRun": "can't run agents"
+            "setupFailed": "stopped"
         },
         "passed": "{met} of {total} checks passed",
         "cost": {
             "minutes": "About {count} minutes",
-            "restart": "one restart",
+            "restart": "One restart",
             "download": "{size} download",
             "admin": "Windows asks for permission once"
         },
@@ -399,10 +410,12 @@
         "repair": "Ask Repair",
         "hosted": "A computer we host can run your agents instead.",
         "cloud": "Use Intentic in the cloud",
-        "ready": "This PC is ready for agents.",
+        "ready": "Ready for agents",
         "signIn": {
-            "now": "Sign in, and Intentic makes the sandbox your agents work in.",
-            "meanwhile": "Agents work under your account. Sign in whenever you like: this PC's setup doesn't wait for it."
+            "now": "Agents work under your Intentic account. Once you're signed in, Intentic sets up their sandbox here by itself.",
+            "meanwhile": "Agents work under your Intentic account. Sign in now or later: setting up this PC doesn't wait for it.",
+            "title": "Sign in",
+            "done": "You're signed in."
         },
         "prefetch": {
             "label": "Downloading what agents need",
@@ -420,21 +433,27 @@
         },
         "task": {
             "title": "Give agents a first task",
-            "lead": "Pick a folder and say what you want done.",
-            "placeholder": "Describe the task for your agents…",
+            "lead": "Pick a folder and say what you want done there.",
+            "placeholder": "What should agents do? For example: fix the failing tests and explain what was wrong.",
             "pickFolder": "Choose folder",
             "changeFolder": "Change folder",
-            "queue": "Queue task",
-            "keptTitle": "Your first task",
+            "queue": "Save task",
+            "keptTitle": "Your task is saved.",
             "edit": "Edit",
             "sending": "Sending…",
-            "failedTitle": "Your first task didn't start",
+            "failedTitle": "Your first task didn't start.",
             "starts": {
                 "pc": "It starts by itself once this PC is ready.",
                 "pcAndSignIn": "It starts by itself once this PC is ready and you've signed in.",
                 "signIn": "It starts as soon as you sign in.",
                 "now": "It starts right away."
-            }
+            },
+            "locked": "Pick a folder and say what you want done. Opens once you're signed in.",
+            "later": "Write it now, and it starts by itself once this PC is ready.",
+            "write": "Write a task",
+            "noFolder": "No folder chosen yet",
+            "start": "Start task",
+            "sent": "Your first task started."
         }
     },
     "leftovers": {

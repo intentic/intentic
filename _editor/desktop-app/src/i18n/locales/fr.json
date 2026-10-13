@@ -361,21 +361,32 @@
         }
     },
     "pcSetup": {
-        "title": "Préparer ce PC pour les agents",
+        "title": "Faire travailler des agents sur ce PC",
+        "lead": "Les agents travaillent sur vos dossiers et vous rendent leurs modifications. Ils tournent ici, dans un sandbox : un ordinateur à eux, à l'intérieur de ce PC.",
+        "step": {
+            "done": "Terminé"
+        },
+        "pc": {
+            "title": "Préparer ce PC",
+            "line": "Intentic active ce dont Windows a besoin pour faire tourner des agents. Une seule fois suffit."
+        },
+        "cantRun": {
+            "title": "Ce PC ne peut pas faire tourner d'agents"
+        },
+        "details": {
+            "show": "Afficher les détails",
+            "hide": "Masquer les détails"
+        },
         "state": {
-            "checkUnknown": "n'a pas pu être vérifié",
-            "needsSetup": "pas encore préparé",
-            "settingUp": "en préparation",
             "restart": "redémarrage nécessaire",
             "admin": "nécessite l'autorisation de Windows",
             "signOut": "déconnexion nécessaire",
-            "setupFailed": "arrêté",
-            "cantRun": "ne peut pas faire tourner d'agents"
+            "setupFailed": "arrêté"
         },
         "passed": "{met} vérifications réussies sur {total}",
         "cost": {
             "minutes": "Environ {count} minutes",
-            "restart": "un redémarrage",
+            "restart": "Un redémarrage",
             "download": "{size} à télécharger",
             "admin": "Windows demande une autorisation une seule fois"
         },
@@ -399,10 +410,12 @@
         "repair": "Demander à Repair",
         "hosted": "Un ordinateur que nous hébergeons peut faire tourner vos agents à la place.",
         "cloud": "Utiliser Intentic dans le cloud",
-        "ready": "Ce PC est prêt pour les agents.",
+        "ready": "Prêt pour les agents",
         "signIn": {
-            "now": "Connectez-vous, et Intentic crée le sandbox dans lequel vos agents travaillent.",
-            "meanwhile": "Les agents travaillent sous votre compte. Connectez-vous quand vous voulez : la préparation de ce PC ne l'attend pas."
+            "now": "Les agents travaillent sous votre compte Intentic. Une fois que vous êtes connecté, Intentic prépare leur sandbox ici tout seul.",
+            "meanwhile": "Les agents travaillent sous votre compte Intentic. Connectez-vous maintenant ou plus tard : la préparation de ce PC ne l'attend pas.",
+            "title": "Se connecter",
+            "done": "Vous êtes connecté."
         },
         "prefetch": {
             "label": "Téléchargement de ce dont les agents ont besoin",
@@ -420,21 +433,27 @@
         },
         "task": {
             "title": "Donnez une première tâche aux agents",
-            "lead": "Choisissez un dossier et dites ce que vous voulez faire.",
-            "placeholder": "Décrivez la tâche pour vos agents…",
+            "lead": "Choisissez un dossier et dites ce qu'il faut y faire.",
+            "placeholder": "Que doivent faire les agents ? Par exemple : corriger les tests qui échouent et expliquer ce qui n'allait pas.",
             "pickFolder": "Choisir un dossier",
             "changeFolder": "Changer de dossier",
-            "queue": "Mettre la tâche en file d'attente",
-            "keptTitle": "Votre première tâche",
+            "queue": "Enregistrer la tâche",
+            "keptTitle": "Votre tâche est enregistrée.",
             "edit": "Modifier",
             "sending": "Envoi…",
-            "failedTitle": "Votre première tâche n'a pas démarré",
+            "failedTitle": "Votre première tâche n'a pas démarré.",
             "starts": {
                 "pc": "Elle démarre d'elle-même dès que ce PC est prêt.",
                 "pcAndSignIn": "Elle démarre d'elle-même dès que ce PC est prêt et que vous êtes connecté.",
                 "signIn": "Elle démarre dès que vous vous connectez.",
                 "now": "Elle démarre tout de suite."
-            }
+            },
+            "locked": "Choisissez un dossier et dites ce qu'il faut faire. Disponible une fois connecté.",
+            "later": "Écrivez-la maintenant : elle démarre d'elle-même dès que ce PC est prêt.",
+            "write": "Écrire une tâche",
+            "noFolder": "Aucun dossier choisi",
+            "start": "Lancer la tâche",
+            "sent": "Votre première tâche a démarré."
         }
     },
     "leftovers": {

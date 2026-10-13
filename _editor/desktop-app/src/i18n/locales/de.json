@@ -361,21 +361,32 @@
         }
     },
     "pcSetup": {
-        "title": "Agenten auf diesem PC einrichten",
+        "title": "Agenten auf diesem PC ausführen",
+        "lead": "Agenten arbeiten in Ihren Ordnern und geben Ihnen ihre Änderungen zurück. Sie laufen hier in einer Sandbox: einem eigenen Computer innerhalb dieses PCs.",
+        "step": {
+            "done": "Erledigt"
+        },
+        "pc": {
+            "title": "Diesen PC vorbereiten",
+            "line": "Intentic schaltet ein, was Windows zum Ausführen von Agenten braucht. Das ist nur einmal nötig."
+        },
+        "cantRun": {
+            "title": "Dieser PC kann keine Agenten ausführen"
+        },
+        "details": {
+            "show": "Details anzeigen",
+            "hide": "Details ausblenden"
+        },
         "state": {
-            "checkUnknown": "konnte nicht geprüft werden",
-            "needsSetup": "noch nicht eingerichtet",
-            "settingUp": "wird eingerichtet",
             "restart": "Neustart nötig",
             "admin": "braucht die Erlaubnis von Windows",
             "signOut": "Abmeldung nötig",
-            "setupFailed": "angehalten",
-            "cantRun": "kann keine Agenten ausführen"
+            "setupFailed": "angehalten"
         },
         "passed": "{met} von {total} Prüfungen bestanden",
         "cost": {
             "minutes": "Etwa {count} Minuten",
-            "restart": "ein Neustart",
+            "restart": "Ein Neustart",
             "download": "{size} Download",
             "admin": "Windows fragt einmal nach einer Berechtigung"
         },
@@ -399,10 +410,12 @@
         "repair": "Repair fragen",
         "hosted": "Stattdessen kann ein Computer, den wir betreiben, Ihre Agenten ausführen.",
         "cloud": "Intentic in der Cloud nutzen",
-        "ready": "Dieser PC ist bereit für Agenten.",
+        "ready": "Bereit für Agenten",
         "signIn": {
-            "now": "Melden Sie sich an, und Intentic erstellt die Sandbox, in der Ihre Agenten arbeiten.",
-            "meanwhile": "Agenten arbeiten unter Ihrem Konto. Melden Sie sich an, wann Sie möchten: Die Einrichtung dieses PCs wartet nicht darauf."
+            "now": "Agenten arbeiten unter Ihrem Intentic-Konto. Sobald Sie angemeldet sind, richtet Intentic ihre Sandbox hier von selbst ein.",
+            "meanwhile": "Agenten arbeiten unter Ihrem Intentic-Konto. Melden Sie sich jetzt oder später an: Die Einrichtung dieses PCs wartet nicht darauf.",
+            "title": "Anmelden",
+            "done": "Sie sind angemeldet."
         },
         "prefetch": {
             "label": "Was Agenten brauchen, wird heruntergeladen",
@@ -420,21 +433,27 @@
         },
         "task": {
             "title": "Geben Sie Agenten eine erste Aufgabe",
-            "lead": "Wählen Sie einen Ordner und sagen Sie, was erledigt werden soll.",
-            "placeholder": "Beschreiben Sie die Aufgabe für Ihre Agenten…",
+            "lead": "Wählen Sie einen Ordner und sagen Sie, was dort erledigt werden soll.",
+            "placeholder": "Was sollen die Agenten tun? Zum Beispiel: die fehlschlagenden Tests reparieren und erklären, was falsch war.",
             "pickFolder": "Ordner wählen",
             "changeFolder": "Ordner ändern",
-            "queue": "Aufgabe einreihen",
-            "keptTitle": "Ihre erste Aufgabe",
+            "queue": "Aufgabe speichern",
+            "keptTitle": "Ihre Aufgabe ist gespeichert.",
             "edit": "Bearbeiten",
             "sending": "Wird gesendet…",
-            "failedTitle": "Ihre erste Aufgabe ist nicht gestartet",
+            "failedTitle": "Ihre erste Aufgabe ist nicht gestartet.",
             "starts": {
                 "pc": "Sie startet von selbst, sobald dieser PC bereit ist.",
                 "pcAndSignIn": "Sie startet von selbst, sobald dieser PC bereit ist und Sie angemeldet sind.",
                 "signIn": "Sie startet, sobald Sie sich anmelden.",
                 "now": "Sie startet sofort."
-            }
+            },
+            "locked": "Wählen Sie einen Ordner und sagen Sie, was erledigt werden soll. Verfügbar, sobald Sie angemeldet sind.",
+            "later": "Schreiben Sie sie jetzt, und sie startet von selbst, sobald dieser PC bereit ist.",
+            "write": "Aufgabe schreiben",
+            "noFolder": "Noch kein Ordner gewählt",
+            "start": "Aufgabe starten",
+            "sent": "Ihre erste Aufgabe wurde gestartet."
         }
     },
     "leftovers": {

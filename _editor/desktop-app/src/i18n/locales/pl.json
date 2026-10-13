@@ -361,21 +361,32 @@
         }
     },
     "pcSetup": {
-        "title": "Skonfiguruj agentów na tym komputerze",
+        "title": "Uruchom agentów na tym komputerze",
+        "lead": "Agenci pracują na Twoich folderach i oddają Ci swoje zmiany. Działają tutaj, w sandboxie: osobnym komputerze tylko dla nich, wewnątrz tego PC.",
+        "step": {
+            "done": "Gotowe"
+        },
+        "pc": {
+            "title": "Przygotuj ten komputer",
+            "line": "Intentic włączy to, czego Windows potrzebuje do uruchamiania agentów. Robisz to tylko raz."
+        },
+        "cantRun": {
+            "title": "Ten komputer nie uruchomi agentów"
+        },
+        "details": {
+            "show": "Pokaż szczegóły",
+            "hide": "Ukryj szczegóły"
+        },
         "state": {
-            "checkUnknown": "nie udało się sprawdzić",
-            "needsSetup": "jeszcze nieskonfigurowany",
-            "settingUp": "konfiguracja w toku",
             "restart": "potrzebny restart",
             "admin": "potrzebna zgoda Windows",
             "signOut": "potrzebne wylogowanie",
-            "setupFailed": "konfiguracja zatrzymana",
-            "cantRun": "nie uruchomi agentów"
+            "setupFailed": "konfiguracja zatrzymana"
         },
         "passed": "Spełnione warunki: {met} z {total}",
         "cost": {
             "minutes": "Około {count} min",
-            "restart": "jeden restart",
+            "restart": "Jeden restart",
             "download": "{size} do pobrania",
             "admin": "Windows raz poprosi o zgodę"
         },
@@ -399,10 +410,12 @@
         "repair": "Otwórz Naprawę",
         "hosted": "Twoich agentów może zamiast tego uruchomić nasz komputer w chmurze.",
         "cloud": "Użyj Intentic w chmurze",
-        "ready": "Ten komputer jest gotowy na agentów.",
+        "ready": "Gotowy na agentów",
         "signIn": {
-            "now": "Zaloguj się, a Intentic utworzy sandbox, w którym pracują Twoi agenci.",
-            "meanwhile": "Agenci pracują na Twoim koncie. Zaloguj się, kiedy chcesz: konfiguracja tego komputera na to nie czeka."
+            "now": "Agenci pracują na Twoim koncie Intentic. Gdy się zalogujesz, Intentic sam przygotuje tu ich sandbox.",
+            "meanwhile": "Agenci pracują na Twoim koncie Intentic. Zaloguj się teraz albo później: konfiguracja tego komputera na to nie czeka.",
+            "title": "Zaloguj się",
+            "done": "Zalogowano."
         },
         "prefetch": {
             "label": "Pobieramy to, czego potrzebują agenci",
@@ -420,21 +433,27 @@
         },
         "task": {
             "title": "Daj agentom pierwsze zadanie",
-            "lead": "Wybierz folder i napisz, co ma zostać zrobione.",
-            "placeholder": "Opisz zadanie dla swoich agentów…",
+            "lead": "Wybierz folder i napisz, co ma w nim zostać zrobione.",
+            "placeholder": "Co mają zrobić agenci? Na przykład: napraw nieprzechodzące testy i wyjaśnij, co było nie tak.",
             "pickFolder": "Wybierz folder",
             "changeFolder": "Zmień folder",
-            "queue": "Dodaj do kolejki",
-            "keptTitle": "Twoje pierwsze zadanie",
+            "queue": "Zapisz zadanie",
+            "keptTitle": "Zadanie zapisane.",
             "edit": "Edytuj",
             "sending": "Wysyłanie…",
-            "failedTitle": "Twoje pierwsze zadanie nie ruszyło",
+            "failedTitle": "Twoje pierwsze zadanie nie ruszyło.",
             "starts": {
                 "pc": "Ruszy samo, gdy ten komputer będzie gotowy.",
                 "pcAndSignIn": "Ruszy samo, gdy ten komputer będzie gotowy, a Ty się zalogujesz.",
                 "signIn": "Ruszy, gdy tylko się zalogujesz.",
                 "now": "Ruszy od razu."
-            }
+            },
+            "locked": "Wybierz folder i napisz, co ma zostać zrobione. Dostępne po zalogowaniu.",
+            "later": "Napisz je teraz, a ruszy samo, gdy ten komputer będzie gotowy.",
+            "write": "Napisz zadanie",
+            "noFolder": "Nie wybrano jeszcze folderu",
+            "start": "Uruchom zadanie",
+            "sent": "Twoje pierwsze zadanie ruszyło."
         }
     },
     "leftovers": {

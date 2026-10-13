@@ -1,5 +1,5 @@
 import type { LocalCheckRow, LocalFirstTask, LocalPcCheck } from "@intentic/web/local-host";
-import { checksPassed, minutesLeft, offersWork, pcCardPhase, type PcCardInput, taskStart, unmetRows } from "./pcCard";
+import { checksPassed, minutesLeft, offersWork, pcCardPhase, type PcCardInput, pcSteps, taskStart, unmetRows } from "./pcCard";
 
 // What This computer's card for this PC says, from what the app last said about the PC, its setup, this computer's own
 // sandbox and the first task.
@@ -118,5 +118,37 @@ describe(`what the card lists and counts`, () => {
         expect(taskStart(`settingUp`, false)).toBe(`pc`);
         expect(taskStart(`signIn`, true)).toBe(`signIn`);
         expect(taskStart(`firstTaskFailed`, false)).toBe(`now`);
+    });
+});
+
+describe(`the card's three steps: this PC, the sign-in, the first task`, () => {
+    it(`makes this PC's setup the next press on a first launch, the sign-in a press beside it, and closes the first task`, () => {
+        expect(pcSteps(`needsSetup`, true, `none`)).toEqual({ pc: `current`, account: `todo`, task: `locked` });
+    });
+
+    it(`makes the sign-in the next press once this PC is ready, or while its setup runs by itself`, () => {
+        expect(pcSteps(`signIn`, true, `none`)).toEqual({ pc: `done`, account: `current`, task: `locked` });
+        expect(pcSteps(`settingUp`, true, `none`)).toEqual({ pc: `running`, account: `current`, task: `locked` });
+    });
+
+    it(`keeps the sign-in beside a setup that waits on the reader or stopped`, () => {
+        for (const phase of [`restart`, `admin`, `signOut`] as const) {
+            expect(pcSteps(phase, true, `none`)).toEqual({ pc: `attention`, account: `todo`, task: `locked` });
+        }
+        expect(pcSteps(`setupFailed`, true, `none`)).toEqual({ pc: `failed`, account: `todo`, task: `locked` });
+    });
+
+    it(`opens the first task once someone is signed in, as the next press while the setup runs`, () => {
+        expect(pcSteps(`needsSetup`, false, `none`)).toEqual({ pc: `current`, account: `done`, task: `todo` });
+        expect(pcSteps(`settingUp`, false, `none`)).toEqual({ pc: `running`, account: `done`, task: `current` });
+        expect(pcSteps(`restart`, false, `none`)).toEqual({ pc: `attention`, account: `done`, task: `todo` });
+    });
+
+    it(`shows a task begun, kept, started or failed whoever is signed in`, () => {
+        expect(pcSteps(`needsSetup`, true, `draft`).task).toBe(`current`);
+        expect(pcSteps(`needsSetup`, true, `kept`).task).toBe(`done`);
+        expect(pcSteps(`signIn`, true, `sent`).task).toBe(`done`);
+        expect(pcSteps(`signIn`, true, `failed`).task).toBe(`failed`);
+        expect(pcSteps(`firstTaskFailed`, false, `failed`)).toEqual({ pc: `done`, account: `done`, task: `failed` });
     });
 });
