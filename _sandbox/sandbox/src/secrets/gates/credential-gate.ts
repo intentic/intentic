@@ -6,6 +6,7 @@ import { type HeldAnswer, type HoldDeps, createHeldAsks } from "../../guard/held
 import { wakeWords } from "../../guard/held-cards.js";
 import type { CredentialGatesStore } from "../credential-gates.js";
 import type { CredentialGrants } from "../credential-grants.js";
+import { type ConversationReachOf, outOfReachReason, reachAllows } from "../credential-reach.js";
 import { oneLine } from "@intentic/base/one-line";
 
 // The single choke point every credential-spending exit routes through, so the rule and its refusal wording exist once.
@@ -20,6 +21,8 @@ const DETAIL_MAX = 80;
 export interface CredentialGateDeps extends CardDeps {
     readonly gates: CredentialGatesStore;
     readonly grants: CredentialGrants;
+    // What the conversation may spend as the people it works for may; absent, nobody is limited (a suite's gate).
+    readonly reach?: ConversationReachOf;
     readonly hold: HoldDeps;
     readonly now?: () => number;
 }
@@ -164,6 +167,14 @@ export const createCredentialGate = (deps: CredentialGateDeps): CredentialGate =
     const asks = createHeldAsks<CredentialVerdict>();
     return {
         check: async (input) => {
+            // A person's reach first, and final: it is the owner's decision about who may use what, made ahead of any
+            // turn, so no approver's card answers it and nothing here is raised to ask.
+            if (deps.reach !== undefined) {
+                const reach = await deps.reach(input.conversationId);
+                if (reach.kind === "some" && !reachAllows(reach, input.kind, input.subject)) {
+                    return { allow: false, reason: outOfReachReason(reach, input.subject) };
+                }
+            }
             // The store throws for a policy that exists but cannot be read rather than answering "nothing is gated"; this
             // catch keeps a corrupt policy file closed instead of open.
             let gate;

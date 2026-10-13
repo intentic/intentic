@@ -20,6 +20,8 @@ export interface TurnStanding {
     readonly withheldByPersona: readonly string[];
     // Connected capability ids a gate holds for a named approver.
     readonly withheldByGate: readonly string[];
+    // Connected capability ids the people this conversation works for were not given: final, nothing raises for them.
+    readonly withheldByReach: readonly string[];
     // The folders this turn's file tools may touch; undefined is the whole workspace.
     readonly fence: readonly string[] | undefined;
     // The shelves open to it, fully resolved.

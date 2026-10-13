@@ -15,6 +15,7 @@ import type {
 import { mayDelegate, personaCapabilities, personaPrompt, type TurnPersona } from "../../../personas/personas.js";
 import { withRepoChecks } from "../../../rules/repo-checks.js";
 import { gatedCapabilities } from "../../../secrets/credential-gating.js";
+import { withinReach } from "../../../secrets/credential-reach.js";
 import type { TurnBriefing } from "../../prompt/turn-briefing.js";
 import { composeWirePrompt } from "../../prompt/turn-preamble.js";
 import { contextShortfall } from "../../prompt/window/context-budget.js";
@@ -66,6 +67,8 @@ export interface TurnDecision extends DecidedEffects {
     // approver. Recorded as the turn's standing, which the needs door answers a turn's asks by.
     readonly withheldByPersona: readonly string[];
     readonly withheldByGate: readonly string[];
+    // Connected capability ids the people this conversation works for were not given; final, nothing raises for them.
+    readonly withheldByReach: readonly string[];
     // Where a failing command's dependencies are looked up, the start folder; the planner binds it to the live probe.
     readonly dependencyDir: string;
     readonly briefing: TurnBriefing;
@@ -233,7 +236,9 @@ export const decideTurn = (facts: TurnFacts, input: RoutedAgentTurn, context: Tu
     const settings = underRepoChecks(facts.settings, facts.repoChecks);
     // The owner's gates after the persona's shelves, once for every runtime; honoured notes what they withheld.
     const reachable = personaCapabilities(facts.installed, persona);
-    const mounts = gatedCapabilities(reachable, facts.gates, facts.releases, input.conversationId);
+    // Then what the people it works for may use, which no persona or release widens (secrets/credential-reach.ts).
+    const reached = withinReach(reachable, facts.reach).kept;
+    const mounts = gatedCapabilities(reached, facts.gates, facts.releases, input.conversationId);
     // A child is a whole agent holding shell and write, so spawning needs the delegate shelf and full agency.
     const spawn = context.children !== undefined && input.conversationId !== undefined && mayDelegate(persona);
     const notes = fieldNotesOf(facts, premise.arms.notes, trim);
@@ -265,6 +270,7 @@ export const decideTurn = (facts: TurnFacts, input: RoutedAgentTurn, context: Tu
         granted: mounts.capabilities,
         withheldByPersona: facts.installed.filter((capability) => !reachable.includes(capability)).map((capability) => capability.id),
         withheldByGate: mounts.withheld.map((gate) => gate.subject),
+        withheldByReach: withinReach(facts.installed, facts.reach).withheld.map((capability) => capability.id),
         dependencyDir: premise.startIn ?? "",
         spawn,
         briefing: premise.briefing,

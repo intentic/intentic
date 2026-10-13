@@ -1,6 +1,7 @@
 import { type AgentTurn, DEFAULT_SAFETY_POLICY, type RoutedAgentTurn, SandboxSettingsSchema, withRuntimeDefaults } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { createCredentialGrants } from "../../../secrets/credential-grants.js";
+import { type ConversationReach, REACH_ALL } from "../../../secrets/credential-reach.js";
 import { claudeStoreOf } from "../../../sessions/session-store.js";
 import type { Services } from "../../../composition.js";
 import type { MemoryReading } from "@intentic/constants/memory-room";
@@ -84,6 +85,9 @@ const noClaudeAccounts = (): Pick<Services, "claudeStore" | "claudeSeats" | "cla
 const idleOpenCode = (): Services["openCode"] =>
     unstubbed<Services["openCode"]>("openCode", { connected: async () => false, shielded: async () => true });
 
+// Nobody in a suite's conversation is limited; the reach is tested where it lives (credential-reach.test.ts).
+const nobodyLimited = async (): Promise<ConversationReach> => REACH_ALL;
+
 export const servicesWith = (overrides: Partial<Services> = {}): Services =>
     unstubbed<Services>("services", {
         tools: [],
@@ -100,6 +104,7 @@ export const servicesWith = (overrides: Partial<Services> = {}): Services =>
         // runtime.
         credentialGates: unstubbed<Services["credentialGates"]>("credentialGates", { list: async () => [] }),
         credentialGrants: createCredentialGrants(),
+        credentialReach: nobodyLimited,
         // Where planning records what the turn reaches (turn-standing.ts), for the needs door to read.
         conversations: memoryFleet().conversations,
         // No conversation-level grants: what a conversation nobody has widened reads.

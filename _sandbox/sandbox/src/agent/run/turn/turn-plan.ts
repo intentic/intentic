@@ -64,6 +64,7 @@ const standingOf = (decision: TurnDecision, input: TurnInput): TurnStanding => {
         granted: decision.granted.map((capability) => capability.id),
         withheldByPersona: decision.withheldByPersona,
         withheldByGate: decision.withheldByGate,
+        withheldByReach: decision.withheldByReach,
         fence: persona?.fence,
         powers: persona?.powers ?? PersonaPowersSchema.parse({}),
         runtime: runtime.runtime,

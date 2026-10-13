@@ -109,6 +109,14 @@ export const capabilityNeed = (deps: CapabilityNeedDeps): NeedKindHandler => {
     // What a connected, working capability means for the asking turn.
     const reachFor = async (capability: Capability, entry: CapabilityCatalogEntry, context: AskContext): Promise<Resolved> => {
         const { standing } = context;
+        // First, since it is final: the people this conversation works for were not given it, and nobody a card could
+        // reach may change that from here (secrets/credential-reach.ts).
+        if (standing?.withheldByReach.includes(capability.id) === true) {
+            return refused(
+                "out_of_reach",
+                `${entry.name} is connected as "${capability.id}", but not for this conversation: the people it works for were not given it, and only the sandbox owner changes that, on the Access page. Do not ask again: carry on without it and say what you left undone.`,
+            );
+        }
         if (standing !== undefined && standing.withheldByGate.includes(capability.id)) {
             const gate = (await deps.gates()).find((entry2) => entry2.subject === capability.id);
             if (gate?.scope === "use") {

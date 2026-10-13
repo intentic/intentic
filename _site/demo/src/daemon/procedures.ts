@@ -15,6 +15,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { type FixtureRouter, refuse } from "@intentic/contract-serve";
 import { BROWSER_SESSIONS, closeOwnBrowser, closeOwnTab, OWN_SESSION, openOwnBrowser, ownSession } from "../browser";
+import { demoSecretInventory } from "../fixture/access";
 import { demoApprovals, removeDemoApproval, upsertDemoApproval } from "../fixture/approvals";
 import {
     automationApprovals,
@@ -509,8 +510,10 @@ export const procedures = {
         // reading is taken, so the press moves the age rather than explaining why it couldn't.
         refreshPlanLimits: () => ({ ok: true, held: [] }),
     },
+    // The values a person keeps, so the person dialog's reach lists something besides the connections: three of the
+    // owner's own and one the sandbox generated.
     secrets: {
-        inventory: () => ({ entries: [] }),
+        inventory: () => ({ entries: demoSecretInventory() }),
     },
     // What the agents wait on people for, answered for real against the fixture store (docs/architecture/needs.md).
     needs: {

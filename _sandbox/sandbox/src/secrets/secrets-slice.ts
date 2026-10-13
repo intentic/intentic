@@ -6,6 +6,7 @@ import type { HoldDeps } from "../guard/held-asks.js";
 import type { ConversationGrants } from "../personas/conversation-grants.js";
 import type { WorkspacePaths } from "../workspace/workspace.js";
 import { createCredentialGate, type CredentialGate } from "./gates/credential-gate.js";
+import { type ConversationReachOf, type CredentialReachDeps, createConversationReach } from "./credential-reach.js";
 import { type CredentialGatesStore, fileCredentialGates } from "./credential-gates.js";
 import { type CredentialGrants, credentialReleasesDocument, fileCredentialGrants } from "./credential-grants.js";
 import { createHostGuardGate, type HostGuardGate } from "./gates/host-guard-gate.js";
@@ -25,6 +26,9 @@ export interface SecretsSlice {
     readonly credentialGates: CredentialGatesStore;
     readonly credentialGrants: CredentialGrants;
     readonly credentialGate: CredentialGate;
+    // What a conversation may spend as the people it works for may: read by the turn's preflight and by the gate, so
+    // a capability outside it is neither mounted nor spent (credential-reach.ts).
+    readonly credentialReach: ConversationReachOf;
     // Secrets a person keeps without DevOps: pasted into a need's card, or added on the Secrets view.
     readonly sandboxSecrets: SandboxSecrets;
     // Each secret's host guard, the second half of its approval beside the named approvers: the owner's settings,
@@ -51,8 +55,11 @@ export interface SecretsDeps {
     readonly conversationGrants: Pick<ConversationGrants, "of" | "add">;
     // The hosts each connected capability's connector declares for its credential (host-guards.ts connectorHostDefaults).
     readonly connectorHosts: () => Promise<ReadonlyMap<string, readonly string[]>>;
-    // Who may loosen a guard on a card the agent raised.
+    // Who may loosen a guard on a card the agent raised, and the one person no reach ever limits.
     readonly ownerEmail: () => Promise<string | undefined>;
+    // The roster each member's reach is written on, and the conversation records that name who a conversation works for.
+    readonly members: CredentialReachDeps["members"];
+    readonly conversationEntry: CredentialReachDeps["entry"];
     // Where a release that could not be kept is said; the release itself still holds for this process.
     readonly warn: (message: string, error: unknown) => void;
 }
@@ -68,6 +75,8 @@ export const createSecretsSlice = ({
     conversationGrants,
     connectorHosts,
     ownerEmail,
+    members,
+    conversationEntry,
     warn,
 }: SecretsDeps): SecretsSlice => {
     const credentialGates = fileCredentialGates(join(authRoot, "credential-gates.json"));
@@ -76,6 +85,7 @@ export const createSecretsSlice = ({
     );
     const credentialGrants = releasesChanged === undefined ? keptReleases : notifyingCredentialGrants(keptReleases, releasesChanged);
     const sandboxSecrets = fileSandboxSecrets(join(authRoot, sandboxSecretsDocument.path));
+    const credentialReach = createConversationReach({ members, ownerEmail, entry: conversationEntry });
     const secretHostGuards = fileSecretHostGuards(join(authRoot, secretHostGuardsDocument.path));
     // Read fresh each call, like the registry: a guard the owner tightens mid-turn holds from the very next use.
     const hostGuards = async (): Promise<readonly SecretHostGuard[]> => {
@@ -104,8 +114,9 @@ export const createSecretsSlice = ({
         secretUses: fileSecretUses(join(workspace.root, secretUsesDocument.path)),
         credentialGates,
         credentialGrants,
+        credentialReach,
         // Grants must be one map: a release clicked at the shell exit must be the release the browser reads next turn.
-        credentialGate: createCredentialGate({ gates: credentialGates, grants: credentialGrants, ...cards, hold }),
+        credentialGate: createCredentialGate({ gates: credentialGates, grants: credentialGrants, reach: credentialReach, ...cards, hold }),
     };
 };
 

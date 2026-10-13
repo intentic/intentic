@@ -3345,10 +3345,6 @@
             "whatWouldAdd": "Qué añadiría esto"
         },
         "sandboxAccess": {
-            "areaLeadViewer": "Ve",
-            "areaLeadCollaborator": "Trabaja en",
-            "areaLeadWriter": "Cambia archivos en",
-            "areaLeadGuest": "Habla con los asistentes de",
             "wholeWorkspace": "Todo el espacio de trabajo",
             "areaNoAssistant": "sin asistente",
             "guestHasNobodyAnywhere": "Aún no trabaja ningún asistente en ningún área, así que un invitado no tendría con quién hablar.",
@@ -3369,9 +3365,6 @@
             "guestReachesNobody": "Ningún asistente trabaja en las áreas que tienen, así que no tienen con quién hablar",
             "guestTalksToAssistants": "Talks to the assistants you pick, and only through them. Sees no files, no other conversations, nothing of the box.",
             "idle": "inactivo",
-            "invite": "Invitar como",
-            "invite2": "Invitar",
-            "inviteRole": "Rol de la invitación",
             "maintainer": "Responsable",
             "nameOne": "Crear una",
             "noAreaMeansWhole": "Pueden hablar con todos los asistentes.",
@@ -3391,7 +3384,6 @@
             "releaseGates": "Puertas de liberación",
             "resend": "Reenviar",
             "revokesEveryPassStay": "Revoca todos los pases. Tú sigues con la sesión aquí; todos los demás tendrán que volver a iniciarla.",
-            "role": "Rol de {email}",
             "signOutAllBrowsers": "Cerrar sesión en todos los navegadores",
             "signOutEverywhere": "Cerrar sesión en todas partes",
             "signedIn": "con sesión iniciada",

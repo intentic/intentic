@@ -275,3 +275,14 @@ it("wakes the conversation on a release given after its turn ended, and the repe
     expect(await again).toEqual({ allow: true, approvedBy: "bob@corp.com" });
     expect(frames.filter((frame) => frame.kind === "credential_offer")).toHaveLength(2);
 });
+
+// A person's reach is the owner's decision made ahead of any turn: outside it the gate refuses at once, raises no card
+// for an approver who could otherwise release it, and says nothing can be asked for.
+it("refuses a credential the people the conversation works for were not given, with no card, even where a gate names an approver", async () => {
+    const reach = async () => ({ kind: "some" as const, capabilities: new Set(["github"]), secrets: new Set<string>(), who: ["bob@corp.com"] });
+    const { deps, frames } = fake([policy()], { reach });
+    const verdict = await createCredentialGate(deps).check(asked());
+    expect(verdict).toEqual({ allow: false, reason: expect.stringContaining("not available in this conversation") });
+    expect(frames).toEqual([]);
+    expect(await createCredentialGate(deps).check(asked({ subject: "github", kind: "capability" }))).toEqual({ allow: true });
+});

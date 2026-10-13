@@ -7,6 +7,7 @@ import type { ShortMemory } from "@intentic/constants/memory-room";
 import type { ServiceabilityDeps } from "../../../usage/serviceability/serviceability.js";
 import { repoCheckRules } from "../../../rules/repo-checks.js";
 import { createCredentialGrants, type CredentialGrants } from "../../../secrets/credential-grants.js";
+import type { ConversationReach } from "../../../secrets/credential-reach.js";
 import { loadedSkillCatalogNote } from "../../../store/loaded-skills.js";
 import { LANDING_CHECKS_NOTE } from "../../prompt/checks-note.js";
 import { resolveWithin } from "../../../workspace/files/workspace-files-paths.js";
@@ -65,6 +66,8 @@ export interface AdmittedTurnFacts {
     readonly gates: readonly CredentialGate[];
     // The releases this conversation held for those gates when they were read.
     readonly releases: CredentialGrants;
+    // What the people this conversation works for may spend; outside it, nothing is mounted and nothing is released.
+    readonly reach: ConversationReach;
     readonly iqTeaching: IqSearchTeaching | undefined;
     // Read on both arms of its experiment, so a control turn can still name the revision it was withheld from.
     readonly fieldNotes: FieldNotes | undefined;
@@ -201,6 +204,7 @@ export type TurnFactsDeps = ServiceabilityDeps &
     | "conversationGrants"
     | "credentialGates"
     | "credentialGrants"
+    | "credentialReach"
     | "dependencies"
     | "endpointModels"
     | "iq"
@@ -262,8 +266,14 @@ export const gatherTurnFacts = async (services: TurnFactsDeps, input: RoutedTurn
         runtime,
         settings,
     );
-    // The stored releases are in before they are copied, so a yes from before a restart reaches this turn.
-    const [gates, accountRoute] = await Promise.all([gatesOf(services), accountRouteOf(services, input, entry), services.credentialGrants.ready]);
+    // The stored releases are in before they are copied, so a yes from before a restart reaches this turn. The reach
+    // names this turn's person beside the conversation's own: begin records them, and this must not lean on its order.
+    const [gates, accountRoute, reach] = await Promise.all([
+        gatesOf(services),
+        accountRouteOf(services, input, entry),
+        services.credentialReach(input.conversationId, input.owner === undefined ? [] : [input.owner.email]),
+        services.credentialGrants.ready,
+    ]);
     // A conversation's own grants (personas/conversation-grants.ts) widen its persona from the turn after they are given.
     const grant = input.conversationId === undefined ? undefined : await services.conversationGrants.of(input.conversationId);
     const premise = premiseOf({ entry, settings, personas, areas, grant }, input, runtime);
@@ -292,6 +302,7 @@ export const gatherTurnFacts = async (services: TurnFactsDeps, input: RoutedTurn
         turnContext,
         gates,
         releases: releasesOf(services.credentialGrants, gates, input.conversationId),
+        reach,
         iqTeaching,
         fieldNotes: brief,
         personaPrompt,

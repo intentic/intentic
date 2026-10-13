@@ -45,12 +45,31 @@ const doorReads = {
     ci: jest.fn(async (): Promise<Answer<`ci`, `runs`>> => unread()),
     devices: jest.fn(async (): Promise<Answer<`system`, `devices`>> => unread()),
 };
+// What the person dialog's reach lists: a connection a reach can hold back, one it cannot (Docker has no credential), and
+// one value the owner keeps. No extension contributes a tile, so a connection is named by itself.
+const connected = {
+    capabilities: jest.fn(
+        async (): Promise<Answer<`capabilities`, `list`>> => ({
+            capabilities: [
+                { id: `github`, kind: `cli`, status: { state: `active` }, config: { provider: `github` }, secrets: [`token`] },
+                { id: `docker`, kind: `docker`, status: { state: `active` }, config: {}, secrets: [] },
+            ],
+            recommendations: [],
+        }),
+    ),
+    inventory: jest.fn(async () => ({
+        entries: [{ key: `DATABASE_URL`, kind: `env` as const, status: `set` as const, requiredBy: [], storedAt: `the sandbox`, revealable: true }],
+    })),
+};
 jest.mock(`../../../client/sandbox/sandboxRpc`, () => ({
     sandboxRpc: fakeSandboxRpc({
         automations: { list: () => doorReads.automations() },
         workflows: { list: () => doorReads.workflows() },
         ci: { runs: () => doorReads.ci() },
         system: { devices: () => doorReads.devices() },
+        capabilities: { list: () => connected.capabilities() },
+        secrets: { inventory: () => connected.inventory() },
+        extensions: { list: async () => ({ extensions: [], invalid: [], pending: [] }) },
     }),
 }));
 
@@ -121,23 +140,60 @@ const mount = (): void => {
 
 const shown = (): string => document.body.textContent ?? ``;
 
-const inviteEmail = async (address: string): Promise<void> => {
+const buttonLabelled = (label: string): HTMLButtonElement | undefined =>
+    [...document.body.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === label);
+
+const dialog = (): HTMLElement | null => document.body.querySelector(`[role=dialog]`);
+
+// The person dialog, opened for a new address and filled in; nothing is sent until its commit press.
+const openInvite = async (address: string): Promise<void> => {
+    buttonLabelled(`Add person`)?.click();
+    await settle();
     const field = document.body.querySelector<HTMLInputElement>(`input[type=email]`);
     if (field === null) {
-        throw new Error(`no invite field on the tab`);
+        throw new Error(`no address field in the person dialog`);
     }
     field.value = address;
     field.dispatchEvent(new Event(`input`));
     await nextTick();
-    document.body.querySelector(`form`)?.dispatchEvent(new Event(`submit`));
-    await nextTick();
-    await nextTick();
-    await nextTick();
+};
+
+// Sends whatever the dialog holds: an invite, or an edit's whole grant.
+const commit = async (): Promise<void> => {
+    dialog()?.querySelector(`form`)?.dispatchEvent(new Event(`submit`));
     await settle();
 };
 
-const buttonLabelled = (label: string): HTMLButtonElement | undefined =>
-    [...document.body.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === label);
+const inviteEmail = async (address: string): Promise<void> => {
+    await openInvite(address);
+    await commit();
+};
+
+// The dialog opened on somebody already here.
+const openEdit = async (address: string): Promise<void> => {
+    document.body.querySelector<HTMLButtonElement>(`button[aria-label="Edit access for ${address}"]`)?.click();
+    await settle();
+};
+
+// A tier in the dialog's role list, an area or a reach row ticked by its name, and one of a pair of scope tabs.
+const pickRole = async (label: string): Promise<void> => {
+    [...document.body.querySelectorAll<HTMLButtonElement>(`[role=radio]`)].find((row) => row.textContent?.trim().startsWith(label))?.click();
+    await nextTick();
+};
+const tickRow = async (name: string): Promise<void> => {
+    [...document.body.querySelectorAll<HTMLLabelElement>(`[role=dialog] label`)]
+        .find((row) => row.textContent?.includes(name))
+        ?.querySelector<HTMLInputElement>(`input[type=checkbox]`)
+        ?.click();
+    await nextTick();
+};
+const tab = async (label: string): Promise<void> => {
+    [...document.body.querySelectorAll<HTMLButtonElement>(`[role=tab]`)].find((button) => button.textContent?.trim() === label)?.click();
+    await nextTick();
+};
+const areaRows = (): string[] =>
+    [...document.body.querySelectorAll<HTMLLabelElement>(`[role=dialog] [role=group] label`)].map((row) => row.textContent?.trim() ?? ``);
+const saveButton = (): HTMLButtonElement | undefined => buttonLabelled(`Send invite`) ?? buttonLabelled(`Save`);
 
 // Both rosters land on their own promise, so a row exists a few ticks after mount, not on the next one; a write runs
 // through the operations ledger, which lands its answer a task later.
@@ -146,18 +202,6 @@ const settle = async (): Promise<void> => {
         await nextTick();
     }
     await new Promise((resolve) => setTimeout(resolve));
-    await nextTick();
-};
-
-// Opens a <Picker> by its accessible name and clicks the row whose label starts with `option`. The panel measures
-// itself against its trigger on the tick after opening and closes when that comes back empty, as it does in jsdom;
-// the pick has to land inside that one tick.
-const pick = async (ariaLabel: string, option: string): Promise<void> => {
-    document.body.querySelector<HTMLButtonElement>(`button[aria-label="${ariaLabel}"]`)?.click();
-    await nextTick();
-    [...document.body.querySelectorAll<HTMLButtonElement>(`button[role=option]`)].find((row) => row.textContent?.trim().startsWith(option))?.click();
-    await nextTick();
-    await nextTick();
     await nextTick();
 };
 
@@ -345,137 +389,112 @@ it(`mints an API token as the owner and shows it once with its snippet`, async (
     expect(body.expiresAt).toBeGreaterThan(Date.now());
 });
 
-// A guest reaches the assistants that work in the areas it holds and nothing else, so the daemon refuses one that is
-// unfenced or fenced where nobody works — which means picking the tier can't itself be the write.
-// An area is a pressed-or-not chip named by the area, its guest reach riding after the name.
-const areaChips = (): HTMLButtonElement[] => [...document.body.querySelectorAll<HTMLButtonElement>(`[role=group] button[aria-pressed]`)];
-const areaChip = (name: string): HTMLButtonElement | undefined => areaChips().find((chip) => chip.textContent?.trim().startsWith(name));
+// The daemon's POST /members bodies, in order.
+const grantsSent = (): unknown[] =>
+    // SAFETY: sandboxJson is called as (path, init) by sandboxRaw, and a POST's init carries its JSON body as a string.
+    (sandboxJson.mock.calls as unknown[][])
+        .filter(([path, init]) => path === `/members` && (init as { method?: string } | undefined)?.method === `POST`)
+        .map(([, init]) => JSON.parse((init as { body: string }).body) as unknown);
 
+const accepted = (tier: string) => ({ email: `guest@example.com`, role: tier, status: `accepted`, invitedAt: `2026-08-18T00:00:00.000Z` });
+
+// A guest reaches the assistants that work in the areas it holds and nothing else, so the daemon refuses one that is
+// unfenced or fenced where nobody works. The dialog holds the commit until the pick is one it would take, and then
+// sends tier and fence as one grant.
 it(`holds a member's move to guest until its fence reaches an assistant, then grants tier and fence together`, async () => {
-    const member = (tier: string): unknown => ({ email: `guest@example.com`, role: tier, status: `accepted`, invitedAt: `2026-08-18T00:00:00.000Z` });
-    list.mockResolvedValue({ members: [member(`collaborator`)] });
-    setRole.mockResolvedValue({ members: [member(`guest`)] });
+    list.mockResolvedValue({ members: [accepted(`collaborator`)] });
+    setRole.mockResolvedValue({ members: [accepted(`guest`)] });
     sandboxJson.mockImplementation(async (path: unknown) => (path === `/members` ? { members: daemonMembers() } : quiet(path)));
     mount();
     await settle();
 
-    await pick(`Role for guest@example.com`, `Guest`);
-    // Nothing granted yet: the row opens the fence it would need, and says why it is still a collaborator.
-    expect(sandboxJson).not.toHaveBeenCalledWith(`/members`, expect.objectContaining({ method: `POST` }));
-    expect(setRole).not.toHaveBeenCalled();
-    expect(shown()).toContain(`Talks to assistants in`);
+    await openEdit(`guest@example.com`);
+    await pickRole(`Guest`);
+    // Nothing granted yet: the fence it needs is asked for, and the commit waits on it.
     expect(shown()).toContain(`A guest talks to the assistants that work there`);
+    expect(saveButton()?.disabled).toBe(true);
+    expect(grantsSent()).toEqual([]);
 
+    await tickRow(`Support guest`);
+    expect(saveButton()?.disabled).toBe(false);
     daemonMembers.mockReturnValue([{ email: `guest@example.com`, role: `guest`, areas: [`support`] }]);
-    areaChip(`Support guest`)?.click();
-    await settle();
+    await commit();
 
-    const grant = (sandboxJson.mock.calls as unknown[][]).find(
-        ([path, init]) => path === `/members` && (init as { method?: string } | undefined)?.method === `POST`,
-    );
-    if (grant === undefined) {
-        throw new Error(`no guest grant reached the sandbox`);
-    }
-    expect(JSON.parse((grant[1] as { body: string }).body)).toEqual({ email: `guest@example.com`, role: `guest`, areas: [`support`] });
+    expect(grantsSent()).toEqual([{ email: `guest@example.com`, role: `guest`, areas: [`support`], emailSignIn: false, credentials: `all` }]);
     expect(setRole).toHaveBeenCalledWith({ sandboxId: `s1`, email: `guest@example.com`, role: `guest` });
-    // The row now says who they talk to, which for this tier is the whole of what they can do.
+    // The dialog goes, and the row now says who they talk to, which for this tier is the whole of what they can do.
+    await waitFor(() => expect(dialog()).toBeNull());
     expect(shown()).toContain(`Talks to Support`);
 });
 
 // The refusal the owner cannot read off the fence itself: an area can name real folders and still hand over nobody.
 it(`will not grant a guest fenced where no assistant works, and says what would fix it`, async () => {
-    const member = (tier: string): unknown => ({ email: `guest@example.com`, role: tier, status: `accepted`, invitedAt: `2026-08-18T00:00:00.000Z` });
-    list.mockResolvedValue({ members: [member(`collaborator`)] });
+    list.mockResolvedValue({ members: [accepted(`collaborator`)] });
     sandboxJson.mockImplementation(async (path: unknown) => (path === `/members` ? { members: daemonMembers() } : quiet(path)));
     mount();
     await settle();
 
-    await pick(`Role for guest@example.com`, `Guest`);
+    await openEdit(`guest@example.com`);
+    await pickRole(`Guest`);
     // Finance names folders of its own, and no assistant starts in any of them.
-    areaChip(`Finance`)?.click();
-    await settle();
+    await tickRow(`Finance`);
 
-    expect(sandboxJson).not.toHaveBeenCalledWith(`/members`, expect.objectContaining({ method: `POST` }));
-    expect(setRole).not.toHaveBeenCalled();
+    expect(saveButton()?.disabled).toBe(true);
     expect(shown()).toContain(`No assistant works in these folders`);
     expect(shown()).toContain(`give an assistant a starting folder in one of these areas`);
+    await commit();
+    expect(grantsSent()).toEqual([]);
+    expect(setRole).not.toHaveBeenCalled();
 });
 
-// Fencing somebody is a re-grade at the same tier, so it travels the same two writes in the same order. The
-// absence of the field is the whole workspace, which is why an unfenced row sends no field rather than an empty list.
+// Fencing somebody at the tier they hold is one daemon write; the platform's record, which knows only the tier, is
+// not touched. The absence of the field is the whole workspace, which is why an unfenced row sends no field.
 it(`grants an area on an existing row, at the tier that row already holds`, async () => {
-    const member = (tier: string): unknown => ({ email: `guest@example.com`, role: tier, status: `accepted`, invitedAt: `2026-08-18T00:00:00.000Z` });
-    list.mockResolvedValue({ members: [member(`collaborator`)] });
-    setRole.mockResolvedValue({ members: [member(`collaborator`)] });
+    list.mockResolvedValue({ members: [accepted(`collaborator`)] });
     sandboxJson.mockImplementation(async (path: unknown) => (path === `/members` ? { members: daemonMembers() } : quiet(path)));
     mount();
     await settle();
 
-    // Drawn on demand, not under every row: what a row holds is already on it as badges, and a picker under each
-    // of them would be most of the page. The invite form draws none either until an address is being invited.
-    expect(areaChips()).toHaveLength(0);
-    buttonLabelled(`Areas`)?.click();
-    await nextTick();
-    // The row's own picker: the unfenced answer as a pick of its own, lit, then one chip per area.
-    expect(areaChips().map((chip) => chip.textContent?.trim())).toEqual([`Whole workspace`, `Support guest`, `Finance`]);
-    expect(areaChip(`Whole workspace`)?.getAttribute(`aria-pressed`)).toBe(`true`);
-    expect(shown()).toContain(`Works in`);
+    // The row says where they work and what their assistants may use, in one line.
+    expect(shown()).toContain(`Whole workspace · every connection and secret`);
+    await openEdit(`guest@example.com`);
+    expect(areaRows()).toEqual([]);
     expect(shown()).toContain(`They can talk to every assistant.`);
+    await tab(`Only some areas`);
+    expect(areaRows()).toEqual([`Support guestsupport`, `Financefinance`]);
+    await tickRow(`Support guest`);
     daemonMembers.mockReturnValue([{ email: `guest@example.com`, role: `collaborator`, areas: [`support`] }]);
-    areaChip(`Support guest`)?.click();
-    await settle();
+    await commit();
 
-    const grant = (sandboxJson.mock.calls as unknown[][]).find(
-        ([path, init]) => path === `/members` && (init as { method?: string } | undefined)?.method === `POST`,
-    );
-    if (grant === undefined) {
-        throw new Error(`no fenced grant reached the sandbox`);
-    }
-    expect(JSON.parse((grant[1] as { body: string }).body)).toEqual({ email: `guest@example.com`, role: `collaborator`, areas: [`support`] });
-    // The row now names what it holds, so the fence is readable without opening the picker.
-    expect(shown()).toContain(`Support guest`);
+    expect(grantsSent()).toEqual([{ email: `guest@example.com`, role: `collaborator`, areas: [`support`], emailSignIn: false, credentials: `all` }]);
+    expect(setRole).not.toHaveBeenCalled();
+    expect(shown()).toContain(`Support guest · every connection and secret`);
 });
 
-// Drawn at rest, the invite's areas read as a setting for everybody. They wait for an address, finish the role picked
-// beside them as a sentence, and a tier that needs one says so as the next step rather than as a mistake.
-it(`asks for an invite's areas only once there is an invite, in the words of the role picked`, async () => {
+// The tier decides what the rest of the form asks: a guest has no unfenced answer and each area says who it would
+// hand over, and a maintainer is asked neither where nor with what, since that tier is the owner's authority.
+it(`asks for an invite's areas in the terms of the role picked`, async () => {
     mount();
     await settle();
-    expect(areaChips()).toHaveLength(0);
+    await openInvite(`newcomer@example.com`);
+    expect([...document.body.querySelectorAll(`[role=tab][aria-selected=true]`)].map((selected) => selected.textContent?.trim())).toContain(`Whole workspace`);
 
-    const field = document.body.querySelector(`input[type=email]`) as HTMLInputElement;
-    field.value = `newcomer@example.com`;
-    field.dispatchEvent(new Event(`input`));
-    await nextTick();
-    expect(shown()).toContain(`Works in`);
-    expect(areaChip(`Whole workspace`)?.getAttribute(`aria-pressed`)).toBe(`true`);
-
-    await pick(`Invite role`, `Guest`);
-    // A guest cannot be unfenced, so the unfenced pick is gone, and each area says who it would hand over.
-    expect(shown()).toContain(`Talks to assistants in`);
-    expect(areaChip(`Whole workspace`)).toBeUndefined();
-    expect(areaChip(`Support guest`)?.textContent).toContain(`Support`);
-    expect(areaChip(`Finance`)?.textContent).toContain(`no assistant`);
+    await pickRole(`Guest`);
+    expect(document.body.querySelector(`[role=tab]`)?.textContent).not.toContain(`Whole workspace`);
+    expect(areaRows().find((row) => row.startsWith(`Support guest`))).toContain(`Support`);
+    expect(areaRows().find((row) => row.startsWith(`Finance`))).toContain(`no assistant`);
     expect(shown()).toContain(`Pick at least one area.`);
-    expect(document.body.querySelector(`.ui-field-error`)).toBeNull();
-    expect(buttonLabelled(`Invite`)?.disabled).toBe(true);
+    expect(document.body.querySelector(`[role=dialog] .ui-field-error`)).toBeNull();
+    expect(saveButton()?.disabled).toBe(true);
 
-    areaChip(`Support guest`)?.click();
-    await nextTick();
-    expect(areaChip(`Support guest`)?.getAttribute(`aria-pressed`)).toBe(`true`);
+    await tickRow(`Support guest`);
     expect(shown()).toContain(`They can talk to Support.`);
-    expect(buttonLabelled(`Invite`)?.disabled).toBe(false);
+    expect(saveButton()?.disabled).toBe(false);
 
-    // A maintainer cannot be fenced: no chips, and a line saying why rather than a picker that would mean nothing.
-    await pick(`Invite role`, `Maintainer`);
-    expect(areaChips()).toHaveLength(0);
+    await pickRole(`Maintainer`);
+    expect(areaRows()).toEqual([]);
     expect(shown()).toContain(`A maintainer sees the whole workspace`);
-
-    // Clearing the address puts the line away again.
-    field.value = ``;
-    field.dispatchEvent(new Event(`input`));
-    await nextTick();
-    expect(shown()).not.toContain(`A maintainer sees the whole workspace`);
+    expect(shown()).toContain(`A maintainer can use every connection and secret.`);
 });
 
 // With no assistant homed in any area, no guest grant can be sent; that is said once, before any area is tried.
@@ -485,11 +504,8 @@ it(`tells the owner up front when no area has an assistant a guest could talk to
     try {
         mount();
         await settle();
-        const field = document.body.querySelector(`input[type=email]`) as HTMLInputElement;
-        field.value = `newcomer@example.com`;
-        field.dispatchEvent(new Event(`input`));
-        await nextTick();
-        await pick(`Invite role`, `Guest`);
+        await openInvite(`newcomer@example.com`);
+        await pickRole(`Guest`);
         expect(shown()).toContain(`No assistant works in any area yet, so a guest would have nobody to talk to.`);
     } finally {
         personas.value = homed;
@@ -497,11 +513,9 @@ it(`tells the owner up front when no area has an assistant a guest could talk to
 });
 
 // A grant replaces the member's whole row on the daemon, so one sent while that roster is unread would drop the areas
-// the row holds and widen what the member sees; the tab says the fences are unknown and rewrites nothing.
-it(`rewrites no grant while it cannot read which areas each member holds`, async () => {
-    list.mockResolvedValue({
-        members: [{ email: `guest@example.com`, role: `collaborator`, status: `accepted`, invitedAt: `2026-08-18T00:00:00.000Z` }],
-    });
+// and the reach the row holds and widen what the member gets; the tab says so and opens nothing to rewrite them.
+it(`rewrites no grant while it cannot read what each member holds`, async () => {
+    list.mockResolvedValue({ members: [accepted(`collaborator`)] });
     sandboxJson.mockImplementation(async (path: unknown, init?: unknown) => {
         if (path === `/members` && init === undefined) {
             throw new Error(`Request failed (503).`);
@@ -512,10 +526,45 @@ it(`rewrites no grant while it cannot read which areas each member holds`, async
     await settle();
 
     expect(shown()).toContain(`guest@example.com`);
-    expect(shown()).toContain(`Couldn't read which areas each member holds, so roles and areas can't be changed until the sandbox answers.`);
-    expect(document.body.querySelector<HTMLButtonElement>(`button[aria-label="Role for guest@example.com"]`)?.disabled).toBe(true);
-    expect(buttonLabelled(`Areas`)?.disabled).toBe(true);
-    expect(sandboxJson).not.toHaveBeenCalledWith(`/members`, expect.objectContaining({ method: `POST` }));
+    expect(shown()).toContain(`Couldn't read what each member holds, so nobody's access can be changed until the sandbox answers.`);
+    expect(document.body.querySelector<HTMLButtonElement>(`button[aria-label="Edit access for guest@example.com"]`)?.disabled).toBe(true);
+    expect(grantsSent()).toEqual([]);
+});
+
+/* WHAT A PERSON'S ASSISTANTS MAY SPEND: decided in the same dialog and sent in the same grant, enforced by the sandbox. */
+
+// Narrowing starts from nothing ticked, lists only what a reach can hold back, and names the rest as always available.
+it(`limits what an invited person's assistants may use, and sends the list with the grant`, async () => {
+    create.mockResolvedValue({ members: [], link: `https://localhost:47145/invite/tok`, delivery: `sent` });
+    mount();
+    await settle();
+    await openInvite(`dee@corp.example`);
+
+    await tab(`Only what I choose`);
+    await settle();
+    expect(shown()).toContain(`0 of 2 picked`);
+    expect(shown()).toContain(`Always available, since there is no credential to hold back: Docker.`);
+    await tickRow(`github`);
+    expect(shown()).toContain(`1 of 2 picked`);
+    await commit();
+
+    expect(grantsSent()).toEqual([
+        { email: `dee@corp.example`, role: `collaborator`, emailSignIn: true, credentials: { capabilities: [`github`], secrets: [] } },
+    ]);
+});
+
+// The row reads the reach the daemon holds, so the line under a person says what their assistants may use.
+it(`says on a member's row how much their assistants may use`, async () => {
+    list.mockResolvedValue({ members: [accepted(`collaborator`)] });
+    sandboxJson.mockImplementation(async (path: unknown) =>
+        path === `/members`
+            ? { members: [{ email: `guest@example.com`, role: `collaborator`, credentials: { capabilities: [`github`], secrets: [`DATABASE_URL`, `X`] } }] }
+            : quiet(path),
+    );
+    mount();
+    await settle();
+
+    expect(shown()).toContain(`Whole workspace · 1 connection, 2 secrets`);
 });
 
 // Writer is the tier just under the maintainer floor these surfaces share, so it is the one a looser gate would let in.
@@ -645,62 +694,49 @@ it(`says which owner-wide records could not be read, and draws the list for them
 });
 
 /* EMAIL SIGN-IN: whether intentic's word for an address opens this sandbox for its person, decided with the invite and
-   flipped per row afterwards. */
+   changed in the same dialog afterwards. */
 
-// The daemon's POST /members bodies, in order.
-const grantsSent = (): unknown[] =>
-    // SAFETY: sandboxJson is called as (path, init) by sandboxRaw, and a POST's init carries its JSON body as a string.
-    (sandboxJson.mock.calls as unknown[][])
-        .filter(([path, init]) => path === `/members` && (init as { method?: string } | undefined)?.method === `POST`)
-        .map(([, init]) => JSON.parse((init as { body: string }).body) as unknown);
-
-it(`lets an invited address sign in with an email code by default, and says so beside the invite`, async () => {
+it(`lets an invited address sign in with an email code by default`, async () => {
     create.mockResolvedValue({ members: [], link: `https://localhost:47145/invite/tok`, delivery: `sent` });
     mount();
+    await settle();
     await inviteEmail(`dee@corp.example`);
 
-    expect(grantsSent()).toEqual([{ email: `dee@corp.example`, role: `collaborator`, emailSignIn: true }]);
+    expect(grantsSent()).toEqual([{ email: `dee@corp.example`, role: `collaborator`, emailSignIn: true, credentials: `all` }]);
 });
 
 // Google already vouches for its own addresses: a second road for one is one the owner did not ask for.
 it(`leaves it off for an address Google holds, unless the owner turns it on`, async () => {
     create.mockResolvedValue({ members: [], link: `https://localhost:47145/invite/tok`, delivery: `sent` });
     mount();
-    const address = [`dee`, `gmail.com`].join(`@`);
-    const field = document.body.querySelector<HTMLInputElement>(`input[type=email]`);
-    if (field === null) {
-        throw new Error(`no invite field on the tab`);
-    }
-    field.value = address;
-    field.dispatchEvent(new Event(`input`));
-    await nextTick();
-
-    expect(shown()).toContain(`Can sign in with an email code (intentic confirms the address)`);
-    const toggle = document.body.querySelector<HTMLInputElement>(`input[role="switch"][id]`);
-    expect(toggle?.checked).toBe(false);
-    document.body.querySelector(`form`)?.dispatchEvent(new Event(`submit`));
     await settle();
+    const address = [`dee`, `gmail.com`].join(`@`);
+    await openInvite(address);
 
-    expect(grantsSent()).toEqual([{ email: address, role: `collaborator`, emailSignIn: false }]);
+    expect(shown()).toContain(`Can also sign in with a code sent to this address`);
+    const toggle = document.body.querySelector<HTMLInputElement>(`[role=dialog] input[role="switch"]`);
+    expect(toggle?.checked).toBe(false);
+    await commit();
+
+    expect(grantsSent()).toEqual([{ email: address, role: `collaborator`, emailSignIn: false, credentials: `all` }]);
 });
 
-// The row's switch is one daemon write that carries the person's tier and fence as they stand (a grant replaces the
-// row whole), and nothing for the platform, whose record has no way in to hold.
-it(`flips a member's email sign-in with their tier and fence kept, at the sandbox alone`, async () => {
-    const member = { email: `guest@example.com`, role: `collaborator`, status: `accepted`, invitedAt: `2026-08-18T00:00:00.000Z` };
-    list.mockResolvedValue({ members: [member] });
+// Changing how somebody signs in is one daemon write that carries their tier and fence as they stand (a grant replaces
+// the row whole), and nothing for the platform, whose record has no way in to hold.
+it(`changes a member's email sign-in with their tier and fence kept, at the sandbox alone`, async () => {
+    list.mockResolvedValue({ members: [accepted(`collaborator`)] });
     daemonMembers.mockReturnValue([{ email: `guest@example.com`, role: `collaborator`, areas: [`support`] }]);
     sandboxJson.mockImplementation(async (path: unknown) => (path === `/members` ? { members: daemonMembers() } : quiet(path)));
     mount();
     await settle();
 
-    const toggle = document.body.querySelector<HTMLInputElement>(`input[aria-label="Email-code sign-in for guest@example.com"]`);
+    await openEdit(`guest@example.com`);
+    const toggle = document.body.querySelector<HTMLInputElement>(`[role=dialog] input[role="switch"]`);
     expect(toggle?.checked).toBe(false);
-    daemonMembers.mockReturnValue([{ email: `guest@example.com`, role: `collaborator`, areas: [`support`], emailSignIn: true }]);
     toggle?.click();
-    await settle();
+    await nextTick();
+    await commit();
 
-    expect(grantsSent()).toEqual([{ email: `guest@example.com`, role: `collaborator`, areas: [`support`], emailSignIn: true }]);
+    expect(grantsSent()).toEqual([{ email: `guest@example.com`, role: `collaborator`, areas: [`support`], emailSignIn: true, credentials: `all` }]);
     expect(setRole).not.toHaveBeenCalled();
-    expect(document.body.querySelector<HTMLInputElement>(`input[aria-label="Email-code sign-in for guest@example.com"]`)?.checked).toBe(true);
 });

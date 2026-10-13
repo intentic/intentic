@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { InviteDelivery, InviteRecord } from "@intentic/api-contract";
-import type { GrantedRole } from "@intentic/sandbox-contract";
+import type { MemberGrant } from "@intentic/sandbox-contract";
 import {
     Avatar,
     Button,
@@ -8,8 +8,6 @@ import {
     Notice,
     type IconName,
     type NoticeModel,
-    Picker,
-    type PickerOption,
     Row,
     RowGroup,
     RowNote,
@@ -17,14 +15,11 @@ import {
     SkeletonSnapshot,
     StatusBadge,
     type StatusVariant,
-    ui,
-    useDevice,
     vSkeletonSource,
 } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { formatDate } from "@intentic/ui/format";
-import ToggleSwitch from "primevue/toggleswitch";
-import { computed, onMounted, ref, useId, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
 import { apiClient } from "../../../lib/useApi";
 import { grantMember, revokeMember, useMembers } from "../../../client/sandbox/useMembers";
@@ -38,11 +33,10 @@ import { identityHue } from "../../../lib/identityHue";
 import { presenceActivity, presenceOthers } from "../../../workbench/presence/usePresence";
 import { useAccessInventory } from "./useAccessInventory";
 import ControlTokensSection from "./ControlTokensSection.vue";
-import AreaPicker from "./AreaPicker.vue";
 import PasskeysSection from "./PasskeysSection.vue";
-import { type AccessGrant, emailSignInByDefault, grantBody, grantSendable } from "./accessGrant";
+import { type AccessDraft, draftGrant, grantSendable, roleBounded, roleDrivesAgents } from "./accessGrant";
 import { usePersonaReach } from "./usePersonaReach";
-import AccessMemberBadges from "./AccessMemberBadges.vue";
+import PersonAccessDialog from "./PersonAccessDialog.vue";
 import StandingGrants from "./StandingGrants.vue";
 import { useOperation } from "../../../workbench/operations/operations";
 import { useT } from "@intentic/ui/i18n";
@@ -54,7 +48,6 @@ import { useT } from "@intentic/ui/i18n";
 const t = useT();
 
 const { user } = useAuth();
-const { mobile } = useDevice();
 const sandbox = useSandbox();
 const { sessionExpiresAt } = useSandboxSession();
 
@@ -66,109 +59,102 @@ const { canShip } = useRole();
 
 // The platform's invite records: who was invited and how that stands. The daemon's own roster is `grants` below.
 const members = ref<InviteRecord[]>([]);
-const email = ref(``);
-// An invite is being written once an address is: the form's scope line waits for that, and a pick it held from a
-// previous invite comes back with the next address rather than standing on the page with nobody to apply to.
-const composing = computed(() => email.value.trim().length > 0);
 
-// Tiers an invite can grant, nested order, shared by the invite form and every roster row's <Picker>.
-const ROLE_OPTIONS = computed((): readonly PickerOption<GrantedRole>[] => [
-    { label: t(`sandbox.sandboxAccess.viewer`), value: `viewer`, icon: `eye`, hint: t(`sandbox.sandboxAccess.watchEverythingAgentsChats`) },
-    {
-        label: t(`sandbox.sandboxAccess.collaborator`),
-        value: `collaborator`,
-        icon: `users`,
-        // Files-through-agents is the clause people miss; collaborators land and publish only as requests.
-        hint: t(`sandbox.sandboxAccess.driveAgentsReviewWork`),
-    },
-    {
-        label: t(`sandbox.sandboxAccess.writer`),
-        value: `writer`,
-        icon: `file-edit`,
-        // The areas are the tier, not a refinement of it, which is why this row cannot be granted without one.
-        hint: t(`sandbox.sandboxAccess.changeFilesInTheirFolders`),
-    },
-    // Two rows below whose areas are the tier rather than a narrowing of it; see accessGrant.ts.
-    {
-        label: t(`sandbox.sandboxAccess.maintainer`),
-        value: `maintainer`,
-        icon: `wrench`,
-        hint: t(`sandbox.sandboxAccess.operateEverythingOwnerOwner`),
-    },
-    // Below viewer: talks to the assistants that work in the areas it holds, and is shown nothing else. Listed last,
-    // since it is the narrowest.
-    {
-        label: t(`sandbox.sandboxAccess.guest`),
-        value: `guest`,
-        icon: `comments`,
-        hint: t(`sandbox.sandboxAccess.guestTalksToAssistants`),
-    },
-]);
-// The reader's own tier, in the words the picker uses for it; a role the picker does not grant reads as itself.
-const ownRole = computed((): string => {
-    const role = sandbox.active.value?.role ?? `viewer`;
-    return ROLE_OPTIONS.value.find((option) => option.value === role)?.label ?? (role === `owner` ? t(`sandbox.sandboxAccess.owner`) : role);
-});
-const inviteRole = ref<GrantedRole>(`collaborator`);
-// Whether the invitee may sign in with an email code the platform confirms: undefined follows the address (on, except
-// for an address Google itself holds), a flip of the switch is the owner's own word until the invite goes out.
-const inviteEmailPick = ref<boolean>();
-const inviteEmailSignIn = computed(() => inviteEmailPick.value ?? emailSignInByDefault(email.value));
-const inviteEmailSwitchId = useId();
-// The areas an invite is fenced to; undefined is the whole workspace, which is what an invite means unnarrowed.
-const inviteAreas = ref<string[] | undefined>(undefined);
-// The daemon's own roster, the one copy that knows a fence; the platform's records above carry the tier only. It is the
-// members cache entry (useMembers), which a grant or revoke here fills with the roster the daemon answers, so this tab
-// holds no copy of its own and the board's Everyone/Mine row reads the same list. Only the owner reads it.
+// Each tier in the words the rest of the app uses for it; a role this build does not know reads as itself.
+const roleLabel = (role: string): string =>
+    ({
+        guest: t(`sandbox.sandboxAccess.guest`),
+        viewer: t(`sandbox.sandboxAccess.viewer`),
+        collaborator: t(`sandbox.sandboxAccess.collaborator`),
+        writer: t(`sandbox.sandboxAccess.writer`),
+        maintainer: t(`sandbox.sandboxAccess.maintainer`),
+        owner: t(`sandbox.sandboxAccess.owner`),
+    })[role] ?? role;
+// The reader's own tier, for the row a member sees of themselves.
+const ownRole = computed((): string => roleLabel(sandbox.active.value?.role ?? `viewer`));
+
+// The daemon's own roster, the one copy that knows a fence and a reach; the platform's records above carry the tier
+// only. It is the members cache entry (useMembers), which a grant or revoke here fills with the roster the daemon
+// answers, so this tab holds no copy of its own and the board's Everyone/Mine row reads the same list. Only the owner
+// reads it.
 const { roster, members: grants, error: grantsError } = useMembers({ enabled: isOwner });
-// Why that roster could not be read. While set no row's fence is known, and a grant replaces the whole row, so a
-// re-grade sent now would drop the areas it holds and widen what the member sees: no grant is rewritten until it clears.
+// Why that roster could not be read. While set no row's fence or reach is known, and a grant replaces the whole row, so
+// an edit sent now would drop what it holds and widen what the member sees: no grant is rewritten until it clears.
 const grantsUnread = computed<NoticeModel | undefined>(() =>
     grantsError.value === undefined
         ? undefined
         : noticeFrom(new Error(grantsError.value), t(`sandbox.sandboxAccess.couldntReadMemberAreas`), { tone: `warning` }),
 );
 // Whether the fences are not known: the roster could not be read, or has not been (a sandbox that is not answering never
-// starts the read). No row is re-graded then, for the same reason.
+// starts the read). No row is edited then, for the same reason.
 const fencesUnknown = computed(() => grantsUnread.value !== undefined || roster.value === undefined);
-// Undefined, not an empty list: a row with no areas reaches the whole workspace, which is what every grant means
-// until somebody narrows it.
-const areasOf = (address: string): readonly string[] | undefined => grants.value.find((grant) => grant.email === address.toLowerCase())?.areas;
-// Whether this person may sign in with an email code here; the roster's absent field means no.
-const emailSignInOf = (address: string): boolean => grants.value.find((grant) => grant.email === address.toLowerCase())?.emailSignIn === true;
-// A row on its way to a tier the daemon refuses half-made: a writer with no area, a guest whose areas reach no
-// assistant. The pick is held here, the picker under the row names the areas, and that write is what makes the tier
-// real — so picking the tier is never itself the grant.
-const draft = ref<{ email: string; role: GrantedRole; areas: readonly string[] | undefined }>();
-const draftFor = (address: string): { role: GrantedRole; areas: readonly string[] | undefined } | undefined =>
-    draft.value?.email === address ? draft.value : undefined;
-// What the row reads as: the staged tier while one is being composed, the granted one otherwise.
-const rowRole = (member: InviteRecord): GrantedRole => draftFor(member.email)?.role ?? member.role;
-// Read through the draft rather than `??`: undefined is the whole workspace, so a staged row's own empty list has to
-// survive as itself instead of falling back to what the grant still says.
-const rowAreas = (address: string): readonly string[] | undefined => {
-    const staged = draftFor(address);
-    return staged === undefined ? areasOf(address) : staged.areas;
-};
+const grantOf = (address: string) => grants.value.find((grant) => grant.email === address.toLowerCase());
 // Which assistants a fence hands over: derived from where each card works, never picked per person.
 const { namesOf } = usePersonaReach();
 // An area is named on the row the way it is on its own page; an id with no area behind it reads as itself, since
-// the person still holds it.
-// Held for a guest with no fence, the one tier the daemon refuses this read to; every other tier may list the names.
-const { areas: sandboxAreas, labelOf: areaLabel } = useAreas(() => sandbox.active.value?.role !== `guest`);
-// The names of the areas a row reaches, for its badges; empty when the grant is the whole workspace.
-const areaNames = (address: string): readonly string[] => (rowAreas(address) ?? []).map((area) => areaLabel(area));
-// What a guest row reaches, since for that tier the fence IS the answer: the badges say which folders, this says who.
-// Only on a guest — every other tier does work of its own, and which assistants it may wear is a secondary fact.
-const guestLine = (member: InviteRecord): string | undefined => {
-    if (rowRole(member) !== `guest`) {
-        return undefined;
+// the person still holds it. Held for a guest, the one tier the daemon refuses this read to.
+const { labelOf: areaLabel } = useAreas(() => sandbox.active.value?.role !== `guest`);
+
+// WHAT A ROW SAYS of a person, in one line under their address: where they work, then what their assistants may
+// spend. For a guest the assistants they talk to are the whole of their access, so those are named instead of folders.
+const accessLine = (member: InviteRecord): string => {
+    const grant = grantOf(member.email);
+    const role = grant?.role ?? member.role;
+    if (!roleBounded(role)) {
+        return t(`sandbox.sandboxAccess.lineMaintainer`);
     }
-    const names = namesOf(rowAreas(member.email));
-    return names.length === 0 ? t(`sandbox.sandboxAccess.guestReachesNobody`) : t(`sandbox.sandboxAccess.guestReaches`, { names: names.join(`, `) });
+    const where =
+        role === `guest`
+            ? namesOf(grant?.areas).length === 0
+                ? t(`sandbox.sandboxAccess.guestReachesNobody`)
+                : t(`sandbox.sandboxAccess.guestReaches`, { names: namesOf(grant?.areas).join(`, `) })
+            : grant?.areas === undefined
+              ? t(`sandbox.sandboxAccess.wholeWorkspace`)
+              : grant.areas.map((area) => areaLabel(area)).join(`, `);
+    if (!roleDrivesAgents(role)) {
+        return where;
+    }
+    const reach = grant?.credentials;
+    const uses =
+        reach === undefined
+            ? t(`sandbox.sandboxAccess.lineEverything`)
+            : reach.capabilities.length + reach.secrets.length === 0
+              ? t(`sandbox.sandboxAccess.lineNothing`)
+              : [
+                    ...(reach.capabilities.length > 0
+                        ? [t(`sandbox.sandboxAccess.lineAccounts`, { count: reach.capabilities.length }, reach.capabilities.length)]
+                        : []),
+                    ...(reach.secrets.length > 0 ? [t(`sandbox.sandboxAccess.lineSecrets`, { count: reach.secrets.length }, reach.secrets.length)] : []),
+                ].join(`, `);
+    return `${where} · ${uses}`;
 };
+
+// THE PERSON DIALOG: adding someone and changing what someone holds are one form. `editingEmail` is who it is open on;
+// none is a new invite.
+const dialogOpen = ref(false);
+const editingEmail = ref<string>();
+const editing = computed(() => {
+    const member = members.value.find((record) => record.email === editingEmail.value);
+    return member === undefined ? undefined : { email: member.email, pending: member.status !== `accepted` };
+});
+// A new teammate's usual grant: drives agents across the workspace with what the sandbox has connected. Editing opens
+// on what the daemon holds for them, the platform's tier standing in only for a row the daemon never wrote.
+const NEW_PERSON: AccessDraft = { role: `collaborator`, areas: undefined, emailSignIn: false, credentials: `all` };
+const initialDraft = computed((): AccessDraft => {
+    const member = editing.value === undefined ? undefined : members.value.find((record) => record.email === editing.value?.email);
+    if (member === undefined) {
+        return NEW_PERSON;
+    }
+    const grant = grantOf(member.email);
+    return {
+        role: grant?.role ?? member.role,
+        areas: grant?.areas,
+        emailSignIn: grant?.emailSignIn === true,
+        credentials: grant?.credentials ?? `all`,
+    };
+});
 // Whether a grant at this tier, fenced this way, is one the daemon will take.
-const sendable = (role: GrantedRole, areas: readonly string[] | undefined): boolean => grantSendable(role, areas, namesOf(areas).length);
+const sendable = (draft: AccessDraft): boolean => grantSendable(draft.role, draft.areas, namesOf(draft.areas).length);
 
 // THE ROSTER WRITES ARE THE SANDBOX'S, NOT THIS TAB'S. An invite, a resend, a re-grade and a revoke are each two writes
 // (the daemon's enforced list, then the platform's record), one at a time, and they live in the operations ledger: the
@@ -301,10 +287,6 @@ const clearNotice = (): void => {
     sessions.dismiss();
 };
 
-const emailTouched = ref(false);
-
-const validEmail = (value: string): boolean => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value);
-
 // Tone is a severity ramp, not a role palette: accepted stays quiet; only the waiting states get colour.
 // Built when read, so the labels follow a language switch.
 const statusOf = (status: InviteRecord["status"]): { label: string; variant: StatusVariant; dot: boolean } =>
@@ -382,28 +364,18 @@ const deliveryNote = (delivery: Exclude<InviteDelivery, "sent">): string =>
 
 // Daemon push first, enforced; sandboxRaw throws on non-2xx, so an unenforced grant is never recorded as sent. Its
 // answer is the daemon's whole roster, which lands in the members cache entry (useMembers) whole.
-const grantOnDaemon = async (
-    target: string,
-    role: GrantedRole,
-    areas: readonly string[] | undefined,
-    refused: string,
-    emailSignIn?: boolean,
-): Promise<void> => {
+const grantOnDaemon = async (grant: MemberGrant, refused: string): Promise<void> => {
     try {
-        await grantMember(grantBody(target, role, areas, emailSignIn));
+        await grantMember(grant);
     } catch (err) {
         throw new DaemonRefused(refused, err);
     }
 };
 
-const invite = async (): Promise<void> => {
+const invite = async (value: string, draft: AccessDraft): Promise<boolean> => {
     const id = sandbox.activeSandboxId.value;
-    const value = email.value.trim().toLowerCase();
-    const role = inviteRole.value;
-    const areas = inviteAreas.value;
-    const emailSignIn = inviteEmailSignIn.value;
-    if (id === undefined || busy.value || !validEmail(value) || !sendable(role, areas)) {
-        return;
+    if (id === undefined || busy.value || !sendable(draft)) {
+        return false;
     }
     clearNotice();
     const outcome = await writes.run({
@@ -412,16 +384,12 @@ const invite = async (): Promise<void> => {
         // The link mail could not carry is read here or nowhere.
         keep: true,
         task: async () => {
-            await grantOnDaemon(value, role, areas, t(`sandbox.sandboxAccess.couldntGrantAccess`), emailSignIn);
-            const result = await apiClient.invite.create({ sandboxId: id, email: value, role });
+            await grantOnDaemon(draftGrant(value, draft), t(`sandbox.sandboxAccess.couldntGrantAccess`));
+            const result = await apiClient.invite.create({ sandboxId: id, email: value, role: draft.role });
             return { members: result.members, delivery: result };
         },
     });
-    if (outcome?.state === `done`) {
-        email.value = ``;
-        emailTouched.value = false;
-        inviteEmailPick.value = undefined;
-    }
+    return outcome?.state === `done`;
 };
 
 const resend = async (target: string): Promise<void> => {
@@ -430,7 +398,7 @@ const resend = async (target: string): Promise<void> => {
         return;
     }
     clearNotice();
-    await writes.run({
+    const outcome = await writes.run({
         what: t(`sandbox.sandboxAccess.invitingWhom`, { email: target }),
         // Nothing was granted first, so a refusal leaves the roster as it is.
         failed: (error) => ({ notice: noticeFrom(error, t(`sandbox.sandboxAccess.couldntResendInvite`)), reload: false }),
@@ -440,6 +408,10 @@ const resend = async (target: string): Promise<void> => {
             return { members: result.members, delivery: result };
         },
     });
+    // Sent: the page under the dialog is where a link the mail could not carry is said.
+    if (outcome?.state === `done`) {
+        dialogOpen.value = false;
+    }
 };
 
 // No device roster can exist: a session is a signed claim the daemon verifies, not stored. The group says what's true:
@@ -482,11 +454,12 @@ const revokeSessions = async (): Promise<void> => {
     }
 };
 
-// Re-grades with the same two-write, daemon-first order as a grant; applies on the member's next request. Reports
-// whether both writes landed, since a staged guest clears only once its cards are really granted.
-const setRole = async (target: string, role: GrantedRole, areas: readonly string[] | undefined = areasOf(target)): Promise<boolean> => {
+// Changes what a person holds with the same two-write, daemon-first order as an invite: the whole grant to the daemon,
+// then the tier to the platform's record when it moved. Applies on the member's next request. Reports whether both
+// landed, so the dialog closes only on a change that is really made.
+const saveAccess = async (target: string, draft: AccessDraft): Promise<boolean> => {
     const id = sandbox.activeSandboxId.value;
-    if (id === undefined || busy.value || !sendable(role, areas)) {
+    if (id === undefined || busy.value || !sendable(draft)) {
         return false;
     }
     clearNotice();
@@ -494,78 +467,43 @@ const setRole = async (target: string, role: GrantedRole, areas: readonly string
         localNotice.value = grantsUnread.value;
         return false;
     }
-    // Quiet: the row's own badge is the answer.
+    const recorded = members.value.find((member) => member.email === target)?.role;
     const outcome = await writes.run({
-        what: t(`sandbox.sandboxAccess.changingRoleOf`, { email: target }),
+        what: t(`sandbox.sandboxAccess.changingAccessOf`, { email: target }),
         failed: refusedAs(t(`sandbox.sandboxAccess.recordingRoleFailed`)),
+        // Quiet: the row's own line is the answer.
         quiet: true,
         task: async () => {
-            // Same split as the grant: only the first of the two writes can be a sandbox that isn't answering.
-            await grantOnDaemon(target, role, areas, t(`sandbox.sandboxAccess.couldntChangeRole`));
-            const result = await apiClient.invite.setRole({ sandboxId: id, email: target, role });
+            // Same split as the invite: only the first of the two writes can be a sandbox that isn't answering.
+            await grantOnDaemon(draftGrant(target, draft), t(`sandbox.sandboxAccess.couldntChangeRole`));
+            if (recorded === draft.role) {
+                return {};
+            }
+            const result = await apiClient.invite.setRole({ sandboxId: id, email: target, role: draft.role });
             return { members: result.members };
         },
     });
     return outcome?.state === `done`;
 };
 
-// Picking a tier the daemon would refuse at this row's current fence stages it instead of writing it — a writer
-// holding no area, a guest whose areas reach no assistant — and the picker beneath names what it still needs. Every
-// other pick is a decision complete in itself and is written on the spot.
-const pickRole = (member: InviteRecord, role: GrantedRole): void => {
-    const areas = areasOf(member.email);
-    if (!sendable(role, areas)) {
-        draft.value = { email: member.email, role, areas: areas ?? [] };
-        return;
-    }
-    draft.value = undefined;
-    void setRole(member.email, role);
-};
-
-// A staged row opens its own fence: the pick is not a grant until the areas make it one, so the picker that decides
-// that has to be on screen without being asked for.
-const fenceStaged = (address: string): boolean => draftFor(address) !== undefined;
-
-// Which row has its fence open. On demand rather than always drawn: with a handful of areas and a handful of
-// members, a picker under every row is most of the page, and what each row HOLDS is already on it as badges.
-const fenceOpen = ref<string>();
-
-// Changing which areas a row holds is a re-grade at the same tier; a maintainer cannot be fenced, so the daemon
-// refuses one and the picker is not offered on that row. On a staged row the fence is what makes the tier real, so a
-// pick that still would not be taken leaves it staged rather than sending a grant the daemon would refuse.
-const pickAreas = async (member: InviteRecord, areas: string[] | undefined): Promise<void> => {
-    const role = rowRole(member);
-    if (!sendable(role, areas)) {
-        draft.value = { email: member.email, role, areas: areas ?? [] };
-        return;
-    }
-    if (await setRole(member.email, role, areas)) {
-        draft.value = undefined;
-    }
-};
-
-// The row's email sign-in switch: one write to the daemon, the person's tier and fence sent as they stand (a grant
-// replaces the row whole), and nothing for the platform, whose record carries no way in. Held while the fences are
-// unknown, for the reason a re-grade is.
-const setEmailSignIn = async (member: InviteRecord, on: boolean): Promise<void> => {
-    if (busy.value) {
-        return;
-    }
+const openAdd = (): void => {
     clearNotice();
-    if (fencesUnknown.value) {
-        localNotice.value = grantsUnread.value;
-        return;
+    editingEmail.value = undefined;
+    dialogOpen.value = true;
+};
+
+const openEdit = (member: InviteRecord): void => {
+    clearNotice();
+    editingEmail.value = member.email;
+    dialogOpen.value = true;
+};
+
+// The dialog's commit: an invite for a new address, the whole grant for somebody already here.
+const saveFromDialog = async (address: string, draft: AccessDraft): Promise<void> => {
+    const done = editing.value === undefined ? await invite(address, draft) : await saveAccess(address, draft);
+    if (done) {
+        dialogOpen.value = false;
     }
-    const granted = grants.value.find((grant) => grant.email === member.email.toLowerCase());
-    await writes.run({
-        what: t(`sandbox.sandboxAccess.changingEmailSignInOf`, { email: member.email }),
-        failed: refusedAs(t(`sandbox.sandboxAccess.couldntChangeEmailSignIn`)),
-        quiet: true,
-        task: async () => {
-            await grantOnDaemon(member.email, granted?.role ?? member.role, granted?.areas, t(`sandbox.sandboxAccess.couldntChangeEmailSignIn`), on);
-            return {};
-        },
-    });
 };
 
 const revoke = async (target: string): Promise<void> => {
@@ -574,12 +512,8 @@ const revoke = async (target: string): Promise<void> => {
         return;
     }
     clearNotice();
-    // A staged tier on a row that is about to stop existing.
-    if (draft.value?.email === target) {
-        draft.value = undefined;
-    }
     // Quiet: the row going away is the answer.
-    await writes.run({
+    const outcome = await writes.run({
         what: t(`sandbox.sandboxAccess.revokingWhom`, { email: target }),
         failed: refusedAs(t(`sandbox.sandboxAccess.clearingRecordFailed`)),
         quiet: true,
@@ -594,195 +528,99 @@ const revoke = async (target: string): Promise<void> => {
             return { members: result.members };
         },
     });
+    if (outcome?.state === `done`) {
+        dialogOpen.value = false;
+    }
 };
 </script>
 
 <template>
     <div class="flex flex-col gap-6">
-        <!-- Members + invites (owner) / read-only note (member). -->
-        <!-- Rows use <Row>, taking the group's own tier, like every other list in the app. -->
-        <RowGroup :label="t(`sandbox.words.access`)">
-            <template v-if="isOwner">
-                <Row icon="user" :title="user?.email">
-                    <template #meta><StatusBadge variant="primary" :label="t(`sandbox.sandboxAccess.owner`)" size="xs" /></template>
-                </Row>
-                <div v-if="listing" role="status" aria-busy="true">
-                    <template v-if="outline">
-                        <span class="sr-only">{{ t(`sandbox.sandboxAccess.readingWhoAccess`) }}</span>
-                        <SkeletonRows :rows="2" control />
-                    </template>
-                </div>
-                <template v-for="member in members" :key="member.email">
-                    <!-- A guest's description is the assistants its fence reaches, the whole of what that tier can do. -->
-                    <Row icon="user" :title="member.email" :description="mobile ? undefined : guestLine(member)">
-                        <!-- Status belongs in metadata, not the action slot. Which parts of the workspace they see rides with it; no badge at all is the whole of it. -->
-                        <template v-if="!mobile" #meta>
-                            <AccessMemberBadges :status="statusOf(member.status)" :areas="areaNames(member.email)" />
+        <!-- WHO HAS ACCESS: one row per person saying in a line where they work and what their assistants may use, and one
+             press to change it. Every decision about a person is made in the dialog, never as a control on the row: five
+             controls a row were five half-decisions a re-grade could leave a person stranded between. -->
+        <div class="flex flex-col gap-2.5">
+            <Notice v-if="grantsUnread && isOwner" :of="grantsUnread" />
+            <!-- A link the mail could not carry rides in the slot, so a long one can wrap. -->
+            <Notice v-if="notice && !dialogOpen" :of="notice">
+                <span v-if="handover" class="mt-1 block break-all font-medium">{{ handover }}</span>
+            </Notice>
+            <RowGroup :label="t(`sandbox.sandboxAccess.people`)">
+                <template v-if="isOwner" #actions>
+                    <Button :label="t(`sandbox.sandboxAccess.addPerson`)" size="small" :disabled="busy" @click="openAdd">
+                        <template #icon><Icon name="plus" /></template>
+                    </Button>
+                </template>
+                <template v-if="isOwner">
+                    <Row :title="user?.email" :description="t(`sandbox.sandboxAccess.lineOwner`)">
+                        <template #lead="{ mark }">
+                            <Avatar :size="mark" :name="user?.name ?? user?.email ?? ``" :src="user?.image ?? undefined" :hue="identityHue(user?.email ?? ``)" />
                         </template>
-                        <!-- On a phone the facts go under the address instead, so the row's trailing cluster holds the controls alone and they
-                             fit one line: shared with the facts, they broke across two and left the remove press on a line by itself. -->
-                        <template v-else #description>
-                            <span v-if="guestLine(member) !== undefined" class="block">{{ guestLine(member) }}</span>
-                            <span class="mt-1.5 flex flex-wrap gap-1.5">
-                                <AccessMemberBadges :status="statusOf(member.status)" :areas="areaNames(member.email)" />
-                            </span>
+                        <template #meta><StatusBadge variant="primary" :label="t(`sandbox.sandboxAccess.owner`)" size="xs" /></template>
+                    </Row>
+                    <div v-if="listing" role="status" aria-busy="true">
+                        <template v-if="outline">
+                            <span class="sr-only">{{ t(`sandbox.sandboxAccess.readingWhoAccess`) }}</span>
+                            <SkeletonRows :rows="2" control />
+                        </template>
+                    </div>
+                    <Row v-for="member in members" :key="member.email" :title="member.email" :description="accessLine(member)">
+                        <template #lead="{ mark }">
+                            <Avatar :size="mark" :name="member.email" :hue="identityHue(member.email)" />
+                        </template>
+                        <!-- The tier first, then where the invite stands; an accepted invite is the ordinary case and says nothing. -->
+                        <template #meta>
+                            <StatusBadge variant="neutral" :label="roleLabel(grantOf(member.email)?.role ?? member.role)" size="xs" />
+                            <StatusBadge
+                                v-if="member.status !== `accepted`"
+                                :variant="statusOf(member.status).variant"
+                                :label="statusOf(member.status).label"
+                                :dot="statusOf(member.status).dot"
+                                size="xs"
+                            />
                         </template>
                         <template #control>
-                            <!-- Whether intentic's word for the address opens the sandbox for them, flipped in place. -->
-                            <ToggleSwitch
-                                :model-value="emailSignInOf(member.email)"
-                                :disabled="busy || fencesUnknown"
-                                class="ui-switch-sm shrink-0"
-                                :aria-label="t(`sandbox.sandboxAccess.emailSignInFor`, { email: member.email })"
-                                v-tooltip.top="{ title: t(`sandbox.sandboxAccess.emailSignInSwitch`), note: t(`sandbox.sandboxAccess.emailSignInSwitchNote`) }"
-                                @update:model-value="(on: boolean) => void setEmailSignIn(member, on)"
-                            />
-                            <!-- Changeable in place, since a re-grade is routine and shouldn't cost a revoke + re-invite. -->
-                            <Picker
-                                :model-value="rowRole(member)"
-                                :options="ROLE_OPTIONS"
-                                variant="ghost"
-                                :disabled="busy || fencesUnknown"
-                                class="shrink-0"
-                                :aria-label="t(`sandbox.sandboxAccess.role`, { email: member.email })"
-                                :header="t(`sandbox.sandboxAccess.role`, { email: member.email })"
-                                @update:model-value="(role: GrantedRole | undefined) => role !== undefined && pickRole(member, role)"
-                            />
-                            <!-- Opens this row's fence; the badges above already say what it holds. -->
                             <Button
-                                v-if="rowRole(member) !== 'maintainer'"
-                                :label="t(`sandbox.words.areas`)"
+                                :label="t(`ui.action.edit`)"
                                 size="small"
                                 tier="quiet"
                                 :disabled="busy || fencesUnknown"
-                                @click="fenceOpen = fenceOpen === member.email ? undefined : member.email"
-                            />
-                            <Button
-                                v-if="member.status !== 'accepted'"
-                                :label="t(`sandbox.sandboxAccess.resend`)"
-                                size="small"
-                                tier="quiet"
-                                :disabled="busy"
-                                @click="resend(member.email)"
-                            />
-                            <Button
-                                size="small"
-                                tier="quiet" tone="danger"
-                                :disabled="busy"
-                                :aria-label="t(`sandbox.words.revokeAccess`)"
-                                @click="revoke(member.email)"
+                                :aria-label="t(`sandbox.sandboxAccess.editAccessOf`, { email: member.email })"
+                                @click="openEdit(member)"
                             >
-                                <template #icon><Icon name="times" /></template>
+                                <template #icon><Icon name="pencil" /></template>
                             </Button>
                         </template>
                     </Row>
-                    <!-- Which parts of the workspace they reach, and with it which assistants. Not offered to a
-                     maintainer: that tier carries the owner's operating authority, so a folder fence over it would be
-                     a line on a screen. Forced open on a staged row, since there the fence is what makes the tier. -->
-                    <RowNote v-if="(fenceOpen === member.email || fenceStaged(member.email)) && rowRole(member) !== 'maintainer'" variant="block">
-                        <AreaPicker
-                            :picked="rowAreas(member.email)"
-                            :role="rowRole(member)"
-                            :disabled="busy"
-                            @change="(areas) => void pickAreas(member, areas)"
-                        />
-                    </RowNote>
+                    <RowNote v-if="!listing && members.length === 0" variant="empty">{{ t(`sandbox.sandboxAccess.onlyYouSoFar`) }}</RowNote>
                 </template>
 
-                <!-- Invite affordance as the group's footer row (mirrors the Secrets \"add\" pattern). -->
-                <RowNote variant="block">
-                    <div class="flex flex-col gap-2">
-                        <Notice v-if="grantsUnread" :of="grantsUnread" />
-                        <!-- Links use the slot so long values can wrap. -->
-                        <Notice v-if="notice" :of="notice">
-                            <span v-if="handover" class="mt-1 block break-all font-medium">{{ handover }}</span>
-                        </Notice>
-                        <form class="flex flex-col gap-1.5" @submit.prevent="invite">
-                            <!-- Address first, role beside Invite, since inviting is the primary action and the tier a refinement. -->
-                            <!-- Wraps on its own width, not the window's: this form sits in a pane the docked chat can leave 20rem wide on a screen the `sm:` breakpoint calls roomy. -->
-                            <div class="flex flex-wrap items-center gap-2">
-                                <input
-                                    v-model="email"
-                                    type="email"
-                                    autocomplete="off"
-                                    placeholder="teammate@example.com"
-                                    :class="[
-                                        ui.input({ size: `sm` }, 'min-w-0 flex-1 basis-56'),
-                                        emailTouched && email.trim().length > 0 && !validEmail(email.trim().toLowerCase())
-                                            ? 'ui-field-error-box'
-                                            : '',
-                                    ]"
-                                    @blur="emailTouched = true"
-                                />
-                                <div class="ml-auto flex shrink-0 items-center gap-2">
-                                    <Picker
-                                        v-model="inviteRole"
-                                        :options="ROLE_OPTIONS"
-                                        variant="input"
-                                        :disabled="busy"
-                                        :aria-label="t(`sandbox.sandboxAccess.inviteRole`)"
-                                        :header="t(`sandbox.sandboxAccess.invite`)"
-                                        class="ui-field-sm w-36 min-w-0"
-                                    />
-                                    <Button
-                                        type="submit"
-                                        :label="t(`sandbox.sandboxAccess.invite2`)"
-                                        size="small"
-                                        :loading="busy"
-                                        :disabled="busy || !validEmail(email.trim().toLowerCase()) || !sendable(inviteRole, inviteAreas)"
-                                        class="shrink-0"
-                                    >
-                                        <template #icon><Icon name="send" /></template>
-                                    </Button>
-                                </div>
-                            </div>
-                            <span v-if="emailTouched && email.trim().length > 0 && !validEmail(email.trim().toLowerCase())" class="ui-field-error">
-                                <Icon name="exclamation-triangle" class="text-2xs" />
-                                {{ t(`sandbox.sandboxAccess.enterValidEmailAddress`) }}
-                            </span>
-                            <!-- The invite's scope, only once there is an invite: drawn at rest it read as a setting
-                                 for everybody rather than the next part of this one. Only when the sandbox has named
-                                 areas; unnarrowed is the default, and the empty case is explained from a member
-                                 row's Areas control. -->
-                            <!-- The invitee's way in besides Google and a passkey, decided with the invite: on for most addresses. -->
-                            <div v-if="composing" class="flex items-center gap-2">
-                                <ToggleSwitch
-                                    :input-id="inviteEmailSwitchId"
-                                    :model-value="inviteEmailSignIn"
-                                    :disabled="busy"
-                                    class="ui-switch-sm shrink-0"
-                                    @update:model-value="(on: boolean) => (inviteEmailPick = on)"
-                                />
-                                <label :for="inviteEmailSwitchId" class="cursor-pointer text-2xs text-muted">{{ t(`sandbox.sandboxAccess.inviteEmailSignIn`) }}</label>
-                            </div>
-                            <template v-if="composing && sandboxAreas.length > 0">
-                                <span v-if="inviteRole === 'maintainer'" class="text-2xs text-subtle">{{
-                                    t(`sandbox.sandboxAccess.maintainerUnfenced`)
-                                }}</span>
-                                <AreaPicker
-                                    v-else
-                                    :picked="inviteAreas"
-                                    :role="inviteRole"
-                                    :disabled="busy"
-                                    class="pt-0.5"
-                                    @change="(areas) => (inviteAreas = areas)"
-                                />
-                            </template>
-                        </form>
-                    </div>
-                </RowNote>
-            </template>
+                <template v-else>
+                    <Row :title="user?.email">
+                        <template #lead="{ mark }">
+                            <Avatar :size="mark" :name="user?.name ?? user?.email ?? ``" :src="user?.image ?? undefined" :hue="identityHue(user?.email ?? ``)" />
+                        </template>
+                        <template #meta>
+                            <StatusBadge variant="primary" :label="ownRole" size="xs" />
+                            <StatusBadge variant="neutral" :label="t(`sandbox.sandboxAccess.you`)" size="xs" />
+                        </template>
+                    </Row>
+                    <RowNote>{{ t(`sandbox.sandboxAccess.onlySandboxOwnerInvite`) }}</RowNote>
+                </template>
+            </RowGroup>
+        </div>
 
-            <template v-else>
-                <Row icon="user" :title="user?.email">
-                    <template #meta>
-                        <StatusBadge variant="primary" :label="ownRole" size="xs" />
-                        <StatusBadge variant="neutral" :label="t(`sandbox.sandboxAccess.you`)" size="xs" />
-                    </template>
-                </Row>
-                <RowNote>{{ t(`sandbox.sandboxAccess.onlySandboxOwnerInvite`) }}</RowNote>
-            </template>
-        </RowGroup>
+        <PersonAccessDialog
+            v-if="isOwner"
+            v-model:open="dialogOpen"
+            :editing="editing"
+            :initial="initialDraft"
+            :busy="busy"
+            :notice="notice"
+            @save="saveFromDialog"
+            @remove="revoke"
+            @resend="resend"
+        />
 
         <!-- How people prove themselves to this sandbox, before what programs hold. -->
         <PasskeysSection />

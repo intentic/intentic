@@ -111,3 +111,25 @@ test("a grant over a roster that cannot be read answers 503 and leaves the file 
     expect(await granted.json()).toEqual({ error: expect.stringContaining("members.json could not be read by this build") });
     expect(await readFile(path, "utf8")).toBe("{ this is not json");
 });
+
+// What a person's conversations may spend rides on the grant: `all` lifts a reach, a list sets one, and a re-grade that
+// never mentions it keeps it, so an editor that predates the field can never widen it. A maintainer is refused one.
+test("a grant sets, keeps and lifts what a member's conversations may spend, and a maintainer cannot be limited", async () => {
+    const { app, members } = await ownerApp();
+    const reach = { capabilities: ["github"], secrets: ["DATABASE_URL"] };
+    expect((await postJson(app, "/members", { email: "bob@example.com", role: "collaborator", credentials: reach })).status).toBe(200);
+    expect((await postJson(app, "/members", { email: "bob@example.com", role: "viewer" })).status).toBe(200);
+    expect(await members.list()).toEqual([{ email: "bob@example.com", role: "viewer", credentials: reach }]);
+
+    const maintainer = await postJson(app, "/members", { email: "bob@example.com", role: "maintainer", credentials: reach });
+    expect(maintainer.status).toBe(400);
+    expect(await maintainer.json()).toEqual({ error: expect.stringContaining("cannot be limited") });
+
+    // Graded up to maintainer without naming a reach, the row drops it rather than keeping one nothing enforces.
+    expect((await postJson(app, "/members", { email: "bob@example.com", role: "maintainer" })).status).toBe(200);
+    expect(await members.list()).toEqual([{ email: "bob@example.com", role: "maintainer" }]);
+
+    expect((await postJson(app, "/members", { email: "bob@example.com", role: "collaborator", credentials: reach })).status).toBe(200);
+    expect((await postJson(app, "/members", { email: "bob@example.com", role: "collaborator", credentials: "all" })).status).toBe(200);
+    expect(await members.list()).toEqual([{ email: "bob@example.com", role: "collaborator" }]);
+});

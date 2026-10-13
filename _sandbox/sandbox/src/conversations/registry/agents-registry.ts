@@ -288,6 +288,26 @@ const areasOfConversation = (
     return inherited === undefined ? {} : { areas: [...inherited] };
 };
 
+// Everyone whose word this conversation acts on: kept once set, and grown by each person who asks it for a turn. A turn
+// an agent speaks (a spawned child's opening, a peer's message) brings that conversation's people with it, since its
+// words are theirs at one remove. Never shrinks: what the conversation may spend is what every one of them may
+// (secrets/credential-reach.ts), so a person joining narrows it and nobody leaving widens it. A row from before the field
+// starts from the member it belongs to, the one person it can name.
+const peopleOfConversation = (
+    held: PersistedAgent,
+    turn: BeginTurn,
+    entryOf: (id: string) => PersistedAgent | undefined,
+): { readonly people?: string[] } => {
+    const speaking = parentOfActor(turn.startedBy);
+    const joined = [
+        ...(held.identity.people ?? (held.social.owner === undefined ? [] : [held.social.owner.email])),
+        ...(turn.owner === undefined ? [] : [turn.owner.email]),
+        ...(speaking === undefined ? [] : (entryOf(speaking)?.identity.people ?? [])),
+    ];
+    const people = [...new Set(joined.map((email) => email.toLowerCase()))];
+    return people.length === 0 ? {} : { people };
+};
+
 // Latched with the conversation: each field keeps the first answer it got, and a later turn's differing persona does
 // not move the conversation to another project.
 const identityOf = (existing: Identity, turn: BeginTurn, entryOf: (id: string) => PersistedAgent | undefined): Identity => ({
@@ -390,7 +410,7 @@ const openedEntry = (
     const held = existing ?? freshEntry(turn, now);
     return {
         ...held,
-        identity: identityOf(held.identity, turn, entryOf),
+        identity: { ...identityOf(held.identity, turn, entryOf), ...peopleOfConversation(held, turn, entryOf) },
         profile: settingsOf(held.profile, turn.profile),
         ending: { kind: "interrupted" },
         social: socialOf(held, turn, entryOf, now),

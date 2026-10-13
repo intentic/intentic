@@ -13,6 +13,7 @@ const STANDING: TurnStanding = {
     granted: [],
     withheldByPersona: [],
     withheldByGate: [],
+    withheldByReach: [],
     fence: undefined,
     powers: PersonaPowersSchema.parse({}),
     runtime: "claude-code",

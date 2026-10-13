@@ -1,5 +1,5 @@
-import type { GrantedRole, MemberRole, ProofMethod } from "@intentic/sandbox-contract";
-import { EMAIL_SIGN_IN_OFF, GrantedRoleSchema, PLATFORM_KEY_UNKNOWN, roleAtLeast } from "@intentic/sandbox-contract";
+import type { CredentialReach, GrantedRole, MemberRole, ProofMethod } from "@intentic/sandbox-contract";
+import { CredentialReachSchema, EMAIL_SIGN_IN_OFF, GrantedRoleSchema, PLATFORM_KEY_UNKNOWN, roleAtLeast } from "@intentic/sandbox-contract";
 import { isIdentityAssertion, verifyIdentityAssertion } from "@intentic/sandbox-contract/identity-assertion";
 import { isOwnerTicket, verifyOwnerTicket } from "@intentic/sandbox-contract/owner-ticket";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
@@ -135,14 +135,19 @@ export interface Member {
     // Whether the platform's identity assertion opens this sandbox for them (they sign in with an email code), which the
     // owner decides per person. Absent means no: Google, a passkey or a recovery code are their only ways in.
     readonly emailSignIn?: boolean;
+    // The capabilities and secrets their conversations may spend (secrets/credential-reach.ts). Absent means every one,
+    // which is what a row written before it meant; never on a maintainer, who reads every credential.
+    readonly credentials?: CredentialReach;
 }
 
-// What a grant decides, in the shape both the store and the route pass it around in. `emailSignIn` absent keeps what
-// the row already says, so a re-grade from an editor that predates it never drops it.
+// What a grant decides, in the shape both the store and the route pass it around in. `emailSignIn` and `credentials`
+// absent keep what the row already says, so a re-grade from an editor that predates them never drops a way in or widens
+// what a person's conversations may spend; `credentials: "all"` is how a grant lifts a reach.
 export interface MemberGrant {
     readonly role: GrantedRole;
     readonly areas?: readonly string[] | undefined;
     readonly emailSignIn?: boolean | undefined;
+    readonly credentials?: CredentialReach | "all" | undefined;
 }
 
 export interface MembersStore {
@@ -165,6 +170,8 @@ const MemberSchema = z
         areas: z.array(z.string().min(1)).optional(),
         // Added 2026-10-12, optional: a row written before it is a person who signs in with Google.
         emailSignIn: z.boolean().optional(),
+        // Added 2026-10-13, optional: a row written before it reaches every credential, as it did then.
+        credentials: CredentialReachSchema.optional(),
     })
     .refine((member) => (member.role !== "writer" && member.role !== "guest") || (member.areas?.length ?? 0) > 0, {
         message: "a writer and a guest each name at least one area: what they reach there is what the tier is",
@@ -189,7 +196,19 @@ interface MemberRowDraft {
     role: GrantedRole;
     areas?: string[];
     emailSignIn?: boolean;
+    credentials?: CredentialReach;
 }
+
+// The reach a grant leaves on the row: `all` lifts it, a list replaces it, silence keeps the previous row's. A
+// maintainer holds none, whatever the grant or the row before it said: the tier reads every credential, so a reach kept
+// on it would read as a limit nothing enforces, and would come back the day the person is graded down.
+const reachOfRow = (grant: MemberGrant, previous: Member | undefined): CredentialReach | undefined => {
+    if (grant.role === "maintainer" || grant.credentials === "all") {
+        return undefined;
+    }
+    const reach = grant.credentials ?? previous?.credentials;
+    return reach === undefined ? undefined : { capabilities: [...reach.capabilities], secrets: [...reach.secrets] };
+};
 
 export const memberRow = (email: string, grant: MemberGrant, previous?: Member): Member => {
     const row: MemberRowDraft = { email, role: grant.role };
@@ -198,6 +217,10 @@ export const memberRow = (email: string, grant: MemberGrant, previous?: Member):
     }
     if (grant.emailSignIn ?? previous?.emailSignIn === true) {
         row.emailSignIn = true;
+    }
+    const credentials = reachOfRow(grant, previous);
+    if (credentials !== undefined) {
+        row.credentials = credentials;
     }
     return row;
 };

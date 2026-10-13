@@ -3332,10 +3332,6 @@
             "whatWouldAdd": "Was das hinzufügen würde"
         },
         "sandboxAccess": {
-            "areaLeadViewer": "Sieht",
-            "areaLeadCollaborator": "Arbeitet in",
-            "areaLeadWriter": "Ändert Dateien in",
-            "areaLeadGuest": "Spricht mit Assistenten in",
             "wholeWorkspace": "Gesamter Arbeitsbereich",
             "areaNoAssistant": "kein Assistent",
             "guestHasNobodyAnywhere": "In keinem Bereich arbeitet bisher ein Assistent, ein Gast hätte also niemanden zum Reden.",
@@ -3356,9 +3352,6 @@
             "guestReachesNobody": "In den Bereichen, die sie halten, arbeitet kein Assistent, also haben sie niemanden zum Sprechen",
             "guestTalksToAssistants": "Talks to the assistants you pick, and only through them. Sees no files, no other conversations, nothing of the box.",
             "idle": "untätig",
-            "invite": "Einladen als",
-            "invite2": "Einladen",
-            "inviteRole": "Einladungsrolle",
             "nameOne": "Einen anlegen",
             "noAreaMeansWhole": "Sie können mit jedem Assistenten sprechen.",
             "noAreasToGrant": "Diese Sandbox hat noch keine benannten Bereiche, also sehen alle den gesamten Arbeitsbereich.",
@@ -3377,7 +3370,6 @@
             "releaseGates": "Freigabeschranken",
             "resend": "Erneut senden",
             "revokesEveryPassStay": "Entzieht jeden Pass. Sie bleiben hier angemeldet; alle anderen müssen sich erneut anmelden.",
-            "role": "Rolle für {email}",
             "signOutAllBrowsers": "Alle Browser abmelden",
             "signOutEverywhere": "Überall abmelden",
             "signedIn": "angemeldet",

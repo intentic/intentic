@@ -1,4 +1,4 @@
-import { type GrantedRole, MemberGrantSchema } from "@intentic/sandbox-contract";
+import { type CredentialReach, type GrantedRole, MemberGrantSchema } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
 import type { Services } from "../../composition.js";
 import type { AppEnv } from "../../app-env.js";
@@ -27,16 +27,18 @@ const memberGrant = async (c: Context): Promise<MemberGrantRequest | undefined> 
     if (!body.success) {
         return undefined;
     }
-    const { email, role, areas, emailSignIn } = body.data;
-    return { email: email.toLowerCase(), role, areas, emailSignIn };
+    const { email, role, areas, emailSignIn, credentials } = body.data;
+    return { email: email.toLowerCase(), role, areas, emailSignIn, credentials };
 };
 
-// A grant as the route reads it: who, at what tier, fenced to what, and whether email sign-in is theirs.
+// A grant as the route reads it: who, at what tier, fenced to what, whether email sign-in is theirs, and what their
+// conversations may spend (absent: what their row already says).
 interface MemberGrantRequest {
     readonly email: string;
     readonly role: GrantedRole;
     readonly areas?: readonly string[] | undefined;
     readonly emailSignIn?: boolean | undefined;
+    readonly credentials?: CredentialReach | "all" | undefined;
 }
 
 // The two tiers whose fence IS the tier, refused unfenced: a writer's areas are the folders it may change, a guest's
@@ -67,6 +69,13 @@ const areaRefusal = async (services: Pick<Services, "areas">, grant: { role: Gra
     const missing = grant.areas.filter((id) => !known.has(id));
     return missing.length === 0 ? undefined : `no such area: ${missing.join(", ")}`;
 };
+
+// A maintainer reads every credential the sandbox holds and operates the box as the owner does, so a list of what its
+// conversations may spend would be a line on a screen rather than a boundary, as a folder fence over it would be.
+const reachRefusal = (grant: { role: GrantedRole; credentials?: CredentialReach | "all" | undefined }): string | undefined =>
+    grant.role === "maintainer" && grant.credentials !== undefined && grant.credentials !== "all"
+        ? "a maintainer holds the owner's operating authority and reads every credential, so it cannot be limited to some of them"
+        : undefined;
 
 // Why a guest's fence cannot be granted even though its areas exist: no card works in the folders it names. A guest
 // reaches nothing but its assistants, so such a grant would sign somebody in to a chat that answers nothing.
@@ -115,7 +124,7 @@ export const createMembersRoutes = (services: MembersRoutesDeps) => ({
             return c.json({ error: "email and role required" }, 400);
         }
         // The free refusal first, then the two that read a manifest; reach last, since it needs both of them.
-        const refusal = fenceRequired(grant) ?? (await areaRefusal(services, grant)) ?? (await guestReachRefusal(services, grant));
+        const refusal = fenceRequired(grant) ?? reachRefusal(grant) ?? (await areaRefusal(services, grant)) ?? (await guestReachRefusal(services, grant));
         if (refusal !== undefined) {
             return c.json({ error: refusal }, 400);
         }

@@ -1,5 +1,6 @@
 import type { CredentialGate, CredentialGateKind } from "@intentic/sandbox-contract";
 import { createCredentialGrants } from "./credential-grants.js";
+import { REACH_ALL } from "./credential-reach.js";
 import { effectiveHostGuards, type StoredHostGuard } from "./host-guards.js";
 import type { SecretUse } from "./secret-uses.js";
 import type { SecretsSlice } from "./secrets-slice.js";
@@ -37,6 +38,8 @@ export const secretsSliceFake = () => {
         credentialGrants: createCredentialGrants(),
         // Nothing gated above, so this allows everything and asks nobody; tested where the real gate lives.
         credentialGate: { check: async () => ({ allow: true as const }) },
+        // Nobody limited, the state before an owner narrows a member; tested where it lives (credential-reach.test.ts).
+        credentialReach: async () => REACH_ALL,
         // Every host guard off until a suite writes one through the store, and no connector declares hosts: a suite that
         // wants a connector's default overrides `hostGuards`.
         secretHostGuards: {

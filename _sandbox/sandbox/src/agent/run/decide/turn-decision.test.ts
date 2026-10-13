@@ -12,6 +12,7 @@ import { unstubbed } from "@intentic/testing";
 import type { MemoryReading } from "@intentic/constants/memory-room";
 import type { Admission } from "../../../workload/resource-budget.js";
 import { createCredentialGrants } from "../../../secrets/credential-grants.js";
+import { REACH_ALL } from "../../../secrets/credential-reach.js";
 import { GATED_CREDENTIALS_TITLE } from "../../../secrets/credential-gating.js";
 import type { FieldNotes } from "@intentic/agent-context/field-notes";
 import { IQ_SEARCH_INSTRUCTION_TITLE } from "../../prompt/iq-search-instruction.js";
@@ -48,6 +49,7 @@ const FACTS: AdmittedTurnFacts = {
     turnContext: undefined,
     gates: [],
     releases: createCredentialGrants(),
+    reach: REACH_ALL,
     iqTeaching: undefined,
     fieldNotes: undefined,
     personaPrompt: undefined,

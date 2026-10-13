@@ -54,14 +54,17 @@ const workspaceThumb = (path: string): Response => (path.endsWith(`.svg`) ? refu
 // fence, since for both the areas are the tier rather than a narrowing of it, and a maintainer cannot carry one at
 // all, since it holds the owner's operating authority and a folder fence over it would enforce nothing.
 const grantMember = async ({ request }: RawContext): Promise<Response> => {
-    const grant = (await request.json()) as DemoGrant;
+    const grant = (await request.json()) as Omit<DemoGrant, "credentials"> & { credentials?: DemoGrant["credentials"] | `all` };
     if ((grant.areas?.length ?? 0) === 0 && (grant.role === `writer` || grant.role === `guest`)) {
         return refuse(`a ${grant.role} needs at least one area`, 400);
     }
     if (grant.role === `maintainer` && grant.areas !== undefined) {
         return refuse(`a maintainer holds the owner's operating authority and cannot be fenced to part of the workspace`, 400);
     }
-    grantAccess(grant.email, grant.role, grant.areas);
+    if (grant.role === `maintainer` && grant.credentials !== undefined && grant.credentials !== `all`) {
+        return refuse(`a maintainer holds the owner's operating authority and reads every credential, so it cannot be limited to some of them`, 400);
+    }
+    grantAccess(grant.email, grant.role, grant.areas, grant.credentials);
     return json({ members: grants() });
 };
 

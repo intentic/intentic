@@ -40,14 +40,26 @@ silence them like any other app's.
 
 ## Other people
 
-**Sandbox ▸ Access** (`/sandbox/access`): the owner invites by email and picks a role under **Invite as**:
-**Viewer** (watches everything, changes nothing), **Collaborator** (drives agents and reviews work; landing and
-publishing become requests), **Writer** (changes files in the folders named for them), **Maintainer** (operates
-everything the owner can), **Guest** (talks only to the assistants that work in the areas named). **Areas**
-narrows a person to folders. The invite link is emailed, lasts 7 days and must be accepted by that address,
-signed in with Google or with an emailed code. A person can open the sandbox with an emailed code only where the
-owner allowed it for them: the invite form has that switch, on by default for an address outside Gmail, and
-without it they sign in with Google or a passkey. Only the owner invites or changes roles.
+**Sandbox ▸ Access** (`/sandbox/access`) lists **People**: the owner first, then one row per person saying where they
+work and what their assistants may use. **Add person** opens one dialog, and each row's **Edit** opens the same one,
+with four parts:
+
+- **Email address**, and whether they may also sign in with a code sent to it. That switch is on by default for an
+  address outside Gmail; without it they sign in with Google or a passkey.
+- **Role**: **Guest** (talks only to the assistants that work in the areas named), **Viewer** (watches everything,
+  changes nothing), **Collaborator** (drives agents and reviews work; landing and publishing become requests),
+  **Writer** (changes files in the folders named for them), **Maintainer** (operates everything the owner can).
+- **Where they work**: the whole workspace, or only some **Areas**. Assistants working for them open the same folders
+  and nothing else. A writer and a guest must name at least one area.
+- **Connections and secrets**: everything connected, or only the connections and stored secrets ticked. This is
+  enforced by the sandbox, not told to the model: anything left out is never loaded into their conversations, and
+  every use of it is refused with no approval card that could release it. A conversation can use only what every
+  person who has written in it may use. A maintainer always has everything; a viewer runs no assistants, so it is
+  not asked. Docker, a VPN, a network disk and a local model hold no credential to withhold, so they are listed as
+  always available.
+
+The invite link is emailed, lasts 7 days and must be accepted by that address. Only the owner invites or changes
+anyone's access, from **Edit** (which also holds **Revoke access** and, for a pending invite, **Resend**).
 
 A sandbox older than email sign-in says it needs an update before it accepts one. Right after a first email sign-in
 the app suggests a passkey: passkeys belong to the sandbox itself and keep working while app.intentic.dev is down,

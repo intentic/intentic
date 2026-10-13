@@ -637,6 +637,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
         // The same host the extension enumerators read, so a connector's hosts come from exactly the installed set.
         connectorHosts: () => connectorHostDefaults({ workspace, files: workspaceSlice.files, capabilities, config }),
         ownerEmail: authSlice.ownerEmail,
+        members: authSlice.members,
+        conversationEntry: agents.entry,
         warn: (message, error) => logger.warn({ err: error }, message),
     });
     // The credential gateway's signing key, the owner's per-card policy, and the passes its `ask` rules leave.

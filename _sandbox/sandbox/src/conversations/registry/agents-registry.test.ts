@@ -2478,6 +2478,22 @@ describe("session ownership", () => {
         expect(registry.get("sub-2")?.owner).toBeUndefined();
     });
 
+    // Who it works for grows with each person who asks it for a turn, and a child or a peer's message brings the people
+    // behind the conversation that spoke: what it may spend is what all of them may (secrets/credential-reach.ts).
+    it("gathers everyone who asks it for a turn, and a child the people behind its parent", async () => {
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
+        await registry.init();
+        await beginTurn(conversations, turn({ conversationId: "parent", startedBy: "ania@example.com", owner: { email: "ania@example.com" } }), 1_000);
+        await conversations.send("parent", { kind: "settle" }, 1_500).settled;
+        await beginTurn(conversations, turn({ conversationId: "parent", startedBy: "Bob@Example.com", owner: { email: "Bob@Example.com" } }), 2_000);
+        expect(registry.entry("parent")?.identity.people).toEqual(["ania@example.com", "bob@example.com"]);
+        await beginTurn(conversations, turn({ conversationId: "sub-1", startedBy: "agent:parent" }), 3_000);
+        expect(registry.entry("sub-1")?.identity.people).toEqual(["ania@example.com", "bob@example.com"]);
+        // A program's turn adds nobody.
+        await beginTurn(conversations, turn({ conversationId: "bot", startedBy: "token:nightly" }), 4_000);
+        expect(registry.entry("bot")?.identity.people).toBeUndefined();
+    });
+
     it("assign moves it without counting as activity, and the moved owner survives the next turn", async () => {
         const store = memoryStore();
         const { agents: registry, conversations } = createFleet(store, standings(), presences());

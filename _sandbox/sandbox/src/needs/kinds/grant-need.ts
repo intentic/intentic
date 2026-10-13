@@ -86,6 +86,46 @@ const openShelf = (powers: PersonaPowers, shelf: GrantShelf): PersonaPowers => {
 
 const nextTurnUse = ["It reaches this conversation from its next turn: finish what you can now, and the sandbox continues the conversation with it."];
 
+// A capability its persona leaves out: met when nothing withholds it, a card when the persona does, and refused when the
+// people the conversation works for were not given it, since a grant widens the persona and never a person's reach: a
+// card for it would promise what the next turn withholds.
+const capabilityGrant = (
+    connected: readonly Capability[],
+    asked: string,
+    standing: AskContext["standing"],
+    withPersona: { readonly persona?: string },
+): Resolved => {
+    const capability = connected.find((entry) => entry.id === asked);
+    if (capability === undefined) {
+        return {
+            kind: "refused",
+            code: "not_connected",
+            message: `Nothing is connected as "${asked}": ask for it with \`capabilities request\` instead.`,
+        };
+    }
+    if (standing?.withheldByReach.includes(capability.id) === true) {
+        return {
+            kind: "refused",
+            code: "out_of_reach",
+            message: `"${capability.id}" is not available to the people this conversation works for, and no grant changes that: only the sandbox owner does, on the Access page. Carry on without it.`,
+        };
+    }
+    if (standing === undefined || standing.granted.includes(capability.id) || !standing.withheldByPersona.includes(capability.id)) {
+        return {
+            kind: "met",
+            message: `"${capability.id}" is not withheld from this conversation: use it. If a gate holds it for an approver, \`secrets gates\` says who.`,
+        };
+    }
+    const subject: GrantNeed = {
+        kind: "grant",
+        subject: "capability",
+        what: capability.id,
+        label: `"${capability.id}" (${capability.kind})`,
+        ...withPersona,
+    };
+    return { kind: "raise", subject, title: `Let this conversation use "${capability.id}"` };
+};
+
 export const grantNeed = (deps: GrantNeedDeps): NeedKindHandler => {
     const resolve = async (ask: NeedAsk, context: AskContext): Promise<Resolved> => {
         if (ask.kind !== "grant") {
@@ -95,28 +135,7 @@ export const grantNeed = (deps: GrantNeedDeps): NeedKindHandler => {
         const persona = standing?.persona;
         const withPersona = persona === undefined ? {} : { persona: persona.name };
         if (ask.subject === "capability") {
-            const capability = (await deps.capabilities()).find((entry) => entry.id === ask.what);
-            if (capability === undefined) {
-                return {
-                    kind: "refused",
-                    code: "not_connected",
-                    message: `Nothing is connected as "${ask.what}": ask for it with \`capabilities request\` instead.`,
-                };
-            }
-            if (standing === undefined || standing.granted.includes(capability.id) || !standing.withheldByPersona.includes(capability.id)) {
-                return {
-                    kind: "met",
-                    message: `"${capability.id}" is not withheld from this conversation: use it. If a gate holds it for an approver, \`secrets gates\` says who.`,
-                };
-            }
-            const subject: GrantNeed = {
-                kind: "grant",
-                subject: "capability",
-                what: capability.id,
-                label: `"${capability.id}" (${capability.kind})`,
-                ...withPersona,
-            };
-            return { kind: "raise", subject, title: `Let this conversation use "${capability.id}"` };
+            return capabilityGrant(await deps.capabilities(), ask.what, standing, withPersona);
         }
         if (ask.subject === "folder") {
             const folder = folderOf(ask.what);

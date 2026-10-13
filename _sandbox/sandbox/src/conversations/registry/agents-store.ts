@@ -81,11 +81,14 @@ export type Placement = z.infer<typeof PlacementSchema>;
 
 // Latched on the first turn and never re-read: where it came from (`origin` an automation, `startedBy` who asked, as the
 // daemon verified them), the fence it was born with as area ids (absent: the whole workspace), where it opened and as
-// whom, and the conversation it was forked from.
+// whom, and the conversation it was forked from. `people` is the one field that grows: every person who has asked it for
+// a turn, and what spoke into it carries over, since what it may spend is what all of them may
+// (secrets/credential-reach.ts). Added 2026-10-13, optional: a row written before it reads its starter alone.
 const IdentitySchema = z.object({
     origin: AgentOriginSchema.optional(),
     startedBy: z.string().optional(),
     areas: z.array(z.string()).optional(),
+    people: z.array(z.string()).optional(),
     startIn: z.string().optional(),
     actsAs: z.string().optional(),
     forkedFrom: ForkedFromSchema.optional(),

@@ -17,6 +17,7 @@ import {
     unattendedAccountsNote,
 } from "../../../personas/personas.js";
 import { gatedCliEnv, gatedCredentialsNote, gatedSkills } from "../../../secrets/credential-gating.js";
+import { outOfReachNote, reachCliEnv, withinReach } from "../../../secrets/credential-reach.js";
 import { gatewayHeld, shellEnvOf } from "../../../capabilities/cli-env.js";
 import { SKILL_CATALOG_NOTE_TITLE } from "../../../store/loaded-skills.js";
 import { resolveWithin } from "../../../workspace/files/workspace-files-paths.js";
@@ -55,8 +56,12 @@ const startPathOf = (startIn: string | undefined, effectiveCwd: string): string 
 
 // What the turn may reach. The environment passes two filters, the persona's and the gate's, and a connector caught by
 // either loses every variable carrying its suffix; a withheld credential's skill is denied with it, since it would dangle.
+// A third filter runs first and answers to nobody: what the people the conversation works for were not given loses its
+// variables (the gateway's addresses too) and its skill, whatever the persona or a release would say.
 const turnAccess = (facts: AdmittedTurnFacts, base: TurnBase, persona: TurnPersona, withheldMounts: readonly CredentialGate[]) => {
-    const personaEnv = base.tools.cliEnv === undefined ? undefined : personaCliEnv(base.tools.cliEnv, facts.installed, persona, envSuffix);
+    const outOfReach = withinReach(facts.installed, facts.reach).withheld;
+    const reachEnv = base.tools.cliEnv === undefined ? undefined : reachCliEnv(base.tools.cliEnv, outOfReach, envSuffix);
+    const personaEnv = reachEnv === undefined ? undefined : personaCliEnv(reachEnv, facts.installed, persona, envSuffix);
     const gatedEnv =
         personaEnv === undefined
             ? undefined
@@ -66,7 +71,12 @@ const turnAccess = (facts: AdmittedTurnFacts, base: TurnBase, persona: TurnPerso
         // Git's rewrites onto the credential gateway are folded in only now, from the cards both filters kept.
         shellEnv: gatedEnv === undefined ? undefined : shellEnvOf(gatedEnv.cliEnv),
         withheld,
-        denied: [...(base.policy.disallowedTools ?? []), ...personaDisallowedTools(persona, facts.installed), ...gatedSkills(withheld)],
+        denied: [
+            ...(base.policy.disallowedTools ?? []),
+            ...personaDisallowedTools(persona, facts.installed),
+            ...gatedSkills(withheld),
+            ...outOfReach.map((capability) => `Skill(${capability.id})`),
+        ],
     };
 };
 
@@ -115,6 +125,8 @@ const turnNotes = (facts: AdmittedTurnFacts, premise: TurnPremise, spawn: string
     ...(spawn === undefined ? [] : [{ title: SPAWN_NOTE_TITLE, text: spawn }]),
     // On every turn missing something, not once per conversation: the condition changes the moment someone clicks.
     ...[gatedCredentialsNote(withheld)].filter((note) => note !== undefined),
+    // What the people it works for were not given, said apart from the gates: there is no one to ask for these.
+    ...[outOfReachNote(facts.reach, withinReach(facts.installed, facts.reach).withheld)].filter((note) => note !== undefined),
     // The other reason an account can be missing: nobody is at the composer, so the turn acts as no one.
     ...[unattendedAccountsNote(premise.persona, personaWithheldAccounts(facts.installed, premise.persona))].filter((note) => note !== undefined),
     // Every runtime alike, isolated or not: no runtime runs a check at its end any more, so none is told of one.
