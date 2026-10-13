@@ -14,7 +14,12 @@ import type { SeatRefusal } from "./claude-seats.js";
 // Empty by default, matching a sandbox before any turn runs.
 // What forgetting an account also clears, empty here: this suite is about the credential and the seat.
 const NO_REFUSALS: ClaudeAccountDeps["providerRefusals"] = { read: async () => ({}), onFile: async () => ({}), record: async () => {}, clear: async () => {}, onChange: () => () => {} };
-const NO_OBSERVED: ClaudeAccountDeps["observedLimits"] = { spent: async () => ({}), record: async () => {}, clear: async () => {} };
+const NO_OBSERVED: ClaudeAccountDeps["observedLimits"] = {
+    spent: async () => ({}),
+    record: async () => {},
+    clear: async () => {},
+    forget: async () => false,
+};
 
 const door = (
     claudeStore: ClaudeAccountDeps["claudeStore"],

@@ -126,6 +126,8 @@ export const RAW_ROUTES = {
     // The `agents` CLI's children: start, follow up, answer (never a consent card), cancel, merge held work, list.
     "POST /children/spawn": { agent: true, control: "never" },
     "GET /children/providers": { agent: true, control: "never" },
+    // Marking a provider's model spent (or clearing the mark) by hand, for a plan that publishes no allowance to read.
+    "POST /children/providers/spent": { agent: true, control: "never" },
     "POST /children/wait": { agent: true, control: "never" },
     "POST /children/send": { agent: true, control: "never" },
     "POST /children/answer": { agent: true, control: "never" },

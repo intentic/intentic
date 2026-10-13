@@ -1,11 +1,12 @@
 import { vendorShellEnv } from "../../agent/run/vendor-shell-env.js";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import type { AgentOptions, McpServerConfig as CursorMcpServer, ModelSelection, SDKCustomTool, SendOptions } from "@cursor/sdk";
+import type { AgentOptions, McpServerConfig as CursorMcpServer, ModelSelection, RunError, SDKCustomTool, SendOptions } from "@cursor/sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { whenAborted } from "@intentic/base/async";
 import { type SteeringChannel, steeringRelay } from "../../agent/checkpoints/agent-steering.js";
+import { mentionsSpentAllowance } from "../../agent/providers/failure-sentences.js";
 import type { AgentRequest, CursorCredential } from "../../agent/providers/agent-request.js";
 import { EventQueue } from "../../agent/run/event-queue.js";
 import { splitAttachments, withFileNote } from "../../agent/prompt/attachment-note.js";
@@ -156,6 +157,22 @@ const codedError = async (error: unknown, sdk: Awaited<ReturnType<typeof cursorS
         return { kind: "error", message, code: "provider-outage" };
     }
     return { kind: "error", message };
+};
+
+// What a run's own terminal error calls a spent allowance, in the SDK's code vocabulary (errors.js maps Connect's
+// ResourceExhausted to `resource_exhausted`; the agent store's own quota uses `quota_exceeded`). Matched beside the
+// sentence, since the code is the one half that survives a reworded message.
+const EXHAUSTED_RUN_CODES: ReadonlySet<string> = new Set(["resource_exhausted", "rate_limit", "quota_exceeded", "usage_limit"]);
+
+// A run that ENDED in error, as against one whose send threw: Cursor reports a spent plan this way, and `RateLimitError`
+// is reserved for an HTTP 429, so nothing above ever sees it. Classified here instead of going out bare, which is what
+// cost seven refused subagent turns their record in the observed-limit ledger, their hold and their re-run
+// (2026-10-13). Only a spent allowance is coded: an unknown vendor code must not become a daemon code, and the message
+// carries it to the log either way.
+export const cursorRunErrorFrame = (error: RunError | undefined): Extract<AgentEvent, { kind: "error" }> => {
+    const message = error?.message !== undefined && error.message !== "" ? error.message : "The Cursor turn failed.";
+    const spent = mentionsSpentAllowance(message) || (error?.code !== undefined && EXHAUSTED_RUN_CODES.has(error.code));
+    return spent ? { kind: "error", message, code: "rate_limit" } : { kind: "error", message };
 };
 
 // A sealed request's agent (agent-request.ts `policy.sealed`): its prompt is everything the model reads, so no tool is
@@ -509,7 +526,7 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
                 yield await codedError(sendError, await cursorSdk());
             } else if (result?.status === "error") {
                 errored = true;
-                yield { kind: "error", message: result.error?.message ?? "The Cursor turn failed." };
+                yield cursorRunErrorFrame(result.error);
             }
             yield* mapper.ending(settled && !errored);
         } finally {

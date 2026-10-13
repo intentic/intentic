@@ -18,8 +18,11 @@ export const spawnNote = (): string =>
     '  `agents spawn --provider <id> --model <id> [--effort <tier>] [--description "one line"] \'<task>\'`\n' +
     "prints the subagent's id and returns immediately. Both `--provider` and `--model` are required: a subagent spends " +
     "a real allowance and nothing is chosen for you. Run `agents providers` first for what is connected, which " +
-    "models it serves and how much allowance each has left — it leaves out the models whose every account is at " +
-    "its cap, so what it lists is what can actually run. The subagent runs as its own conversation in an isolated " +
+    "models it serves and how much allowance each has left — it leaves out every model the records call spent, and a " +
+    "spawn naming one is refused before it takes a seat. What it lists is what is not known to be spent, which is not " +
+    "the same as a promise: a provider that publishes no allowance is listed as `not metered`, and the only thing that " +
+    "ever measures one of those is a turn it has already refused. Each figure is one account's, and subagents started " +
+    "together draw on it together. The subagent runs as its own conversation in an isolated " +
     "copy of the repos cut from your current work, on the named provider's account (claude, codex, grok, kimi, gemini, " +
     "cursor — e.g. `--provider cursor --model composer-2.5`). Its finished work comes back into your checkout, as an " +
     "in-process subagent's edits do; where it clashes with your edits it is held, and `agents merge <id>` brings it in. " +

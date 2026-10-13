@@ -130,7 +130,10 @@ export const isToolCallStandIn = (text: string): boolean => text.trim() !== "" &
 // refused credential). Read wherever a refusal is described: the frame's code (error-frames.ts) and the durable refusal
 // filed against the account (agent.routes.ts). "rate limit" stays excluded, since it also covers transient retries the
 // CLI is still working through.
-const SPENT_ALLOWANCE_PHRASES = ["usage limit", "quota", "billing cycle"];
+// "out of usage" is Cursor's own wording ("You're out of usage. Switch to Auto or Composer 2.5…"), which matched none of
+// the others and so reached the daemon uncoded: seven subagent turns were refused for a spent Cursor plan without one
+// line being written down (2026-10-13).
+const SPENT_ALLOWANCE_PHRASES = ["usage limit", "quota", "billing cycle", "out of usage"];
 
 export const mentionsSpentAllowance = (text: string): boolean =>
     isUsageLimitText(text) || SPENT_ALLOWANCE_PHRASES.some((phrase) => text.toLowerCase().includes(phrase));

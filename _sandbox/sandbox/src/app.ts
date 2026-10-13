@@ -497,6 +497,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     serve("POST /children/spawn", childrenRoutes.spawn);
     // What a child could be started on now, with each model's remaining allowance.
     serve("GET /children/providers", childrenRoutes.providers);
+    serve("POST /children/providers/spent", childrenRoutes.markSpent);
     serve("POST /children/wait", childrenRoutes.wait);
     serve("POST /children/send", childrenRoutes.send);
     serve("POST /children/answer", childrenRoutes.answer);

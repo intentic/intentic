@@ -9,6 +9,8 @@ import type { Services } from "../../composition.js";
 import { childLandingWords } from "./child-lands.js";
 import { childReportOf, pendingQuestionOf, supervisorFor } from "./children.js";
 import { spawnCatalogText, spawnableProviders } from "./spawn-catalog.js";
+import { markSpentByHand, unmarkSpentByHand } from "../../usage/observed-accounts.js";
+import { opt } from "../../opt.js";
 
 // The `agents` CLI's shell door onto the child-agent service, using the same engine as the in-process tool calls.
 // Scoped to the agent token; the real gate is the arming planTurn already recorded (children.ts armSupervisor), not the
@@ -55,6 +57,17 @@ const WaitBodySchema = z.object({
     target: z.string().min(1).optional(),
     until: z.array(z.enum(["blocked", "finished"])).min(1).optional(),
     timeoutSeconds: z.number().min(5).max(WAIT_MAX_S).optional(),
+});
+
+// Marking a model spent by hand, the last resort for a plan that reports nothing. `spent: false` unmarks.
+const SpentBodySchema = z.object({
+    provider: z.string().min(1),
+    model: z.string().min(1),
+    // Absent marks every connected account of the provider, which is what a spent subscription usually means.
+    account: z.string().min(1).optional(),
+    spent: z.boolean().default(true),
+    // Kept on the entry so whoever reads the mark later knows what it was about.
+    why: z.string().max(200).optional(),
 });
 
 // A wait's arguments: an empty body is a wait on everything with the defaults, a malformed one is no arguments at all,
@@ -111,8 +124,34 @@ export const createChildrenRoutes = (services: Services) => ({
     /** GET /children/providers — what a child could be started on right now, and what still has allowance. */
     providers: async (c: Context<AppEnv>): Promise<Response> => {
         const providers = await spawnableProviders(services);
+        // `?all=1` names every unmetered model instead of counting the tail of them.
+        const all = c.req.query("all");
+        const named = all !== undefined && all !== "" && all !== "0" && all !== "false";
         // Both shapes: the CLI and the MCP tool print the text, anything reading this as data gets the rows.
-        return c.json({ providers, text: spawnCatalogText(providers) });
+        return c.json({ providers, text: spawnCatalogText(providers, Date.now(), { all: named }) });
+    },
+    /**
+     * POST /children/providers/spent — marks one provider's model out of allowance by hand, or unmarks it. The last
+     * resort for a plan that publishes nothing to read (Cursor, Devin): the ledger a refused turn writes is the only
+     * measurement those have, and until something refuses, nothing knows. Believed 24h, or until unmarked.
+     */
+    markSpent: async (c: Context<AppEnv>): Promise<Response> => {
+        // allow(silent-catch): a body that is not JSON is answered by the refusal below, which says what to send; the
+        // parse error itself adds nothing a caller could act on.
+        const parsed = SpentBodySchema.safeParse(await c.req.json().catch(() => undefined));
+        if (!parsed.success) {
+            return c.json(
+                {
+                    ok: false,
+                    message: `Marking a model spent needs a provider and a model: pass JSON like {"provider": "cursor", "model": "claude-opus-5-5"}, or {"spent": false} to unmark.`,
+                },
+                400,
+            );
+        }
+        const { provider, model, account, spent, why } = parsed.data;
+        const asked = { provider, model, ...opt("account", account) };
+        const outcome = spent ? await markSpentByHand(services, { ...asked, ...opt("why", why) }) : await unmarkSpentByHand(services, asked);
+        return c.json(outcome, outcome.ok ? 200 : 400);
     },
     /** POST /children/wait — long-poll on this conversation's children and background commands. */
     wait: async (c: Context<AppEnv>): Promise<Response> => {

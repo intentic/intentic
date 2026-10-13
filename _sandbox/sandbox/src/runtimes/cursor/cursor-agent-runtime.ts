@@ -78,7 +78,10 @@ const handle = async (call: HostCall): Promise<CallResult> => {
         }
         case "wait": {
             const result = await runOf(call.run).wait();
-            return { status: result.status, ...opt("error", result.error === undefined ? undefined : { message: result.error.message }) };
+            return {
+                status: result.status,
+                ...opt("error", result.error === undefined ? undefined : { message: result.error.message, ...opt("code", result.error.code) }),
+            };
         }
         case "cancel":
             await runOf(call.run).cancel();

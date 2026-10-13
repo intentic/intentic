@@ -22,10 +22,12 @@ export interface WireError {
     readonly coded?: CodedError;
 }
 
-// What `Run.wait()` resolves to, cut to the fields the adapter reads.
+// What `Run.wait()` resolves to, cut to the fields the adapter reads. `code` crosses with the message: it is the half of
+// a terminal error that survives a reworded sentence, and the adapter reads both to tell a spent allowance from any
+// other failure (cursor-agent.ts cursorRunErrorFrame).
 export interface WireRunResult {
     readonly status: string;
-    readonly error?: { readonly message: string };
+    readonly error?: { readonly message: string; readonly code?: string };
 }
 
 export type SteerOutcome = "complete_delivered" | "revert_to_followup";

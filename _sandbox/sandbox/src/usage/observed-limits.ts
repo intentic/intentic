@@ -15,6 +15,9 @@ const StoredLimitSchema = z.object({
     at: z.number(),
     // Vendor's own sentence, so a surface can say why in the words that refused.
     message: z.string(),
+    // Set by hand rather than by a refused turn: believed far longer, since nobody marks a plan spent by accident and
+    // the plan it describes may not reopen for weeks. Absent means a turn's own refusal filed it.
+    byHand: z.literal(true).optional(),
 });
 export type ObservedLimit = z.infer<typeof StoredLimitSchema>;
 
@@ -38,6 +41,14 @@ const keyOf = (provider: string, account: string): string => `${provider}:${acco
 // for exactly this long, and a horizon shorter than that would re-offer a rung the ladder still calls spent.
 export const OBSERVED_FOR_MS = 2 * 60 * 60_000;
 
+// How long a mark set BY HAND is believed. A day: long enough to cover a plan that resets monthly without the mark
+// having to be re-applied every couple of hours, short enough that one forgotten never grounds a provider for good.
+// Cleared the moment someone unmarks it.
+export const BY_HAND_FOR_MS = 24 * 60 * 60_000;
+
+/** When this entry stops being believed; a hand-set mark outlives a refused turn's by a long way. */
+export const observedUntil = (limit: ObservedLimit): number => limit.at + (limit.byHand === true ? BY_HAND_FOR_MS : OBSERVED_FOR_MS);
+
 export interface ObservedLimitStore {
     // Models this account is out of right now; empty for nearly every account, so this must cost one file read and no
     // thought. Forgotten on read, not pruned on write, like the refusal stores beside it.
@@ -46,6 +57,9 @@ export interface ObservedLimitStore {
     readonly record: (provider: string, account: string, model: string, limit: ObservedLimit) => Promise<void>;
     // Drops one account's ledger whole: a forgotten account's refusals describe nothing any more.
     readonly clear: (provider: string, account: string) => Promise<void>;
+    // Drops one model's entry, leaving the account's others standing: what unmarking by hand does, where clearing the
+    // whole ledger would throw away refusals nobody asked about. Answers whether there was one to drop.
+    readonly forget: (provider: string, account: string, model: string) => Promise<boolean>;
 }
 
 export const fileObservedLimitStore = (path: string): ObservedLimitStore => {
@@ -56,9 +70,9 @@ export const fileObservedLimitStore = (path: string): ObservedLimitStore => {
     });
     return {
         spent: async (provider, account) => {
-            const cutoff = Date.now() - OBSERVED_FOR_MS;
+            const now = Date.now();
             const stored = (await file.read())[keyOf(provider, account)] ?? {};
-            return Object.fromEntries(Object.entries(stored).filter(([, limit]) => limit.at > cutoff));
+            return Object.fromEntries(Object.entries(stored).filter(([, limit]) => observedUntil(limit) > now));
         },
         record: async (provider, account, model, limit) => {
             const key = keyOf(provider, account);
@@ -73,6 +87,25 @@ export const fileObservedLimitStore = (path: string): ObservedLimitStore => {
                 const { [key]: _dropped, ...rest } = current;
                 return rest;
             });
+        },
+        forget: async (provider, account, model) => {
+            const key = keyOf(provider, account);
+            let had = false;
+            await file.update((current) => {
+                const stored = current[key];
+                if (stored === undefined || !(model in stored)) {
+                    return current;
+                }
+                had = true;
+                const { [model]: _dropped, ...kept } = stored;
+                // An account whose last entry goes leaves no empty record behind, so the file reads as it did before.
+                if (Object.keys(kept).length === 0) {
+                    const { [key]: _emptied, ...rest } = current;
+                    return rest;
+                }
+                return { ...current, [key]: kept };
+            });
+            return had;
         },
     };
 };

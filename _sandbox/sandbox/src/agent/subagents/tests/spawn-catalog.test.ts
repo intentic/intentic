@@ -1,6 +1,6 @@
 import type { AccountUsage, ProviderRefusal, UsageWindow } from "@intentic/sandbox-contract";
 import { codexConnectedProxy, services, withTranslator } from "../../../harness/route-services.testing.js";
-import { spawnableProviders, spawnCatalogText } from "../spawn-catalog.js";
+import { spawnBlocked, spawnableProviders, spawnCatalogText } from "../spawn-catalog.js";
 import { unstubbed } from "@intentic/testing";
 import type { ProviderRefusalStore } from "../../../usage/provider-refusals.js";
 
@@ -212,8 +212,93 @@ describe("whose figure it is, and how old", () => {
             ],
             now,
         );
-        expect(text).toBe(
+        // A figure on show carries the note that every child started together spends the same one.
+        expect(text.split("\n")[0]).toBe(
             "claude: opus (17% left on work@example.com, read 3h ago), sonnet (17% left on home@example.com, read 5h ago, STALE: re-reading it has failed since 4h ago (Verify your account to continue.))",
         );
+    });
+});
+
+/* Nothing validated a spawn against this listing before: a provider whose plan refused every turn still read "not
+   metered", and five children went onto a spent Cursor model in 32 seconds (2026-10-11). The refusal below is what
+   makes the listing's own words true. */
+describe("a spawn the listing already knows would be refused", () => {
+    const cursorWith = (spentModels: readonly { id: string; label: string; reopensAt?: number }[], models: readonly { id: string; label: string }[]) => [
+        { id: "cursor" as const, label: "Cursor", models: [...models], spent: spentModels.length, spentModels: [...spentModels] },
+        { id: "claude" as const, label: "Claude", models: [{ id: "claude-opus-5-5", label: "Opus" }], spent: 0, spentModels: [] },
+    ];
+
+    it("refuses a model the records call spent, naming where the task can go instead", () => {
+        const blocked = spawnBlocked(cursorWith([{ id: "claude-opus-5-5", label: "Opus" }], [{ id: "composer-2.5", label: "Composer 2.5" }]), {
+            provider: "cursor",
+            model: "claude-opus-5-5",
+        });
+
+        expect(blocked).toContain("cursor/claude-opus-5-5 is out of allowance");
+        // Both ways on, so the retry is one call and not a wait, a failure and a re-spawn.
+        expect(blocked).toContain("With room on cursor right now: composer-2.5.");
+        expect(blocked).toContain("Other providers with room: claude.");
+    });
+
+    // The whole point of the listing is that a plan publishing nothing is listed, not grounded: an unmeasured model may
+    // well answer, and refusing it would stop every Cursor and Devin spawn this sandbox can make.
+    it("lets an unmeasured model through, since no reading is not no allowance", () => {
+        const providers = cursorWith([], [{ id: "composer-2.5", label: "Composer 2.5" }]);
+
+        expect(spawnBlocked(providers, { provider: "cursor", model: "composer-2.5" })).toBeUndefined();
+        // A model the catalog never listed either: it is for the provider to refuse, not for this to guess at.
+        expect(spawnBlocked(providers, { provider: "cursor", model: "muse-spark-1.3" })).toBeUndefined();
+    });
+
+    it("lets a provider nothing on file describes through", () => {
+        expect(spawnBlocked([], { provider: "cursor", model: "claude-opus-5-5" })).toBeUndefined();
+    });
+});
+
+/* Cursor alone publishes 45 models, every one of them reading "(not metered)": ~700 tokens of no information, read
+   before every fan-out. */
+describe("a provider that meters nothing", () => {
+    const many = (count: number) => Array.from({ length: count }, (_, index) => ({ id: `model-${String(index)}`, label: `Model ${String(index)}` }));
+
+    it("names the first few and counts the rest, rather than printing all of them", () => {
+        const text = spawnCatalogText([{ id: "cursor", label: "Cursor", models: many(45), spent: 0 }]);
+
+        expect(text).toContain("cursor: model-0 (not metered)");
+        expect(text).toContain("model-7 (not metered), and 37 more not metered (`agents providers --all`)");
+        expect(text).not.toContain("model-8 (not metered)");
+    });
+
+    it("names every one of them when asked", () => {
+        const text = spawnCatalogText([{ id: "cursor", label: "Cursor", models: many(45), spent: 0 }], Date.now(), { all: true });
+
+        expect(text).toContain("model-44 (not metered)");
+        expect(text).not.toContain("more not metered");
+    });
+
+    // A metered figure is never dropped for an unmetered one: the number is the reason the listing is read.
+    it("keeps every metered figure whatever the cap", () => {
+        const metered = { id: "measured", label: "Measured", headroom: { percentLeft: 40 } };
+        const text = spawnCatalogText([{ id: "cursor", label: "Cursor", models: [...many(20), metered], spent: 0 }]);
+
+        expect(text).toContain("measured (40% left)");
+    });
+});
+
+// Thirteen Claude children were once started against an account reading "96% left" and all hit the wall together: the
+// figure was true and said nothing about spending it thirteen times over.
+describe("one account's figure, spent by every child at once", () => {
+    it("says that subagents started together draw on it together", () => {
+        const text = spawnCatalogText([
+            { id: "claude", label: "Claude", models: [{ id: "opus", label: "Opus", headroom: { percentLeft: 96 } }], spent: 0 },
+        ]);
+
+        expect(text).toContain("subagents you start together draw on it together");
+    });
+
+    // With nothing metered there is no figure to misread, and the sentence would be noise on the listing read most.
+    it("says nothing of the sort where no figure is on show", () => {
+        const text = spawnCatalogText([{ id: "cursor", label: "Cursor", models: [{ id: "auto", label: "Auto" }], spent: 0 }]);
+
+        expect(text).toBe("cursor: auto (not metered)");
     });
 });

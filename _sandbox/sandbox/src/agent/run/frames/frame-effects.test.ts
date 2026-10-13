@@ -224,7 +224,7 @@ describe("a classification's writes", () => {
         const base = services();
         const { deps, writes, lines } = recorded({
             providerRefusals: { ...base.providerRefusals, record: rejecting },
-            observedLimits: { spent: async () => ({}), record: rejecting, clear: async () => {} },
+            observedLimits: { spent: async () => ({}), record: rejecting, clear: async () => {}, forget: async () => false },
             modelRefusals: { refused: async () => new Set(), record: rejecting },
             claudeSeats: { ...base.claudeSeats, refuse: rejecting },
             modelCooldowns: { cooling: async () => new Map(), record: rejecting, clear: async () => {} },

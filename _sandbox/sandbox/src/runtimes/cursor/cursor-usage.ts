@@ -1,5 +1,5 @@
 import type { AgentProvider, ModelRef } from "@intentic/sandbox-contract";
-import type { HeadroomService, HeadroomSource } from "../../usage/headroom.js";
+import type { HeadroomSource } from "../../usage/headroom.js";
 import {
     type ModelLabels,
     type ObservedLimitStore,
@@ -60,15 +60,10 @@ export const cursorHeadroomSource = (deps: CursorUsageDeps): HeadroomSource => (
         })),
 });
 
-/** Everything filing a refusal needs: the ledger it lands in, and the re-read that puts it on screen. */
-export type CursorLimitDeps = CursorUsageDeps & { readonly headroom: Pick<HeadroomService, "refresh"> };
-
-// Files what Cursor just refused against the account that was serving, then re-reads that account so an open picker
-// moves within the same beat rather than at the next sweep. The only way a Cursor ring ever gets a number.
-export const fileCursorLimit = async (deps: CursorLimitDeps, account: string, model: string, message: string): Promise<void> => {
-    await deps.observedLimits.record(CURSOR_PROVIDER, account, model, { at: Date.now(), message });
-    await deps.headroom.refresh({ scope: { providers: [CURSOR_PROVIDER], account }, maxAgeMs: 0 });
-};
+// Nothing cursor-specific files a refusal: a turn's own does it through the failure plan's `observed-limit` write
+// (agent/run/frames/classify-failure.ts, performed in frame-effects.ts), and a person's by hand through
+// usage/mark-spent.ts. A helper that looked like the live path once lived here, orphaned when the one-shot runtime that
+// called it was deleted, and reading it as wired is part of why seven refused Cursor turns were never written down.
 
 // What the ladder reads instead of asking and being refused (agent/models/role-model-quota.ts).
 export const cursorTurnLimit = async (deps: CursorUsageDeps, model: string): Promise<TurnLimit | undefined> => {

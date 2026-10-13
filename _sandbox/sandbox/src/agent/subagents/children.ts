@@ -40,7 +40,9 @@ import { guard } from "../../guard/guard.js";
 import { conversationTaintSource, markConversationTaint, RUNTIME_SOURCE } from "../../guard/turn-taint.js";
 import { killCauseOf, killNote, runtimeKilled } from "./child-death.js";
 import { noteChildWork } from "./child-verification.js";
-import { type SpawnableProvider, spawnableProviders } from "./spawn-catalog.js";
+import { spawnBlocked, spawnCatalogText, type SpawnableProvider, spawnableProviders } from "./spawn-catalog.js";
+import { mentionsSpentAllowance } from "../providers/failure-sentences.js";
+import { spentRung } from "../models/role-model-quota.js";
 import {
     blockedMoveReporter,
     markSubagentEndingReported,
@@ -96,7 +98,8 @@ export interface ChildSpawnSpec {
     // Shown on the roster row and as the child's title, which the naming pass keeps; falls back to the prompt's head,
     // which it names, if omitted.
     readonly description?: string;
-    // Required with `model`, taken verbatim; spawn-catalog.ts is advisory, not a gate.
+    // Required with `model`, taken verbatim — except for a model spawn-catalog.ts measures as spent, which is refused
+    // before a seat is taken (spentAsked). It gates nothing else: an unmeasured model is asked as named.
     readonly provider: AgentProvider;
     readonly model: string;
     readonly harness?: AgentHarness;
@@ -559,6 +562,80 @@ const pauseChild = (services: Services, childId: string, parent: string, kid: Ch
     kid.paused = { failure, run: turnRunOf(services.conversations, childId)?.id, look, unrecord: () => void ledger.forget([childId]) };
 };
 
+// How long the allowance listing gets before whoever wanted it carries on without it. It probes every connected
+// provider's readiness and catalog, which takes seconds; nothing that reads it here is worth stalling a settle or a
+// refusal for, so a slow one simply goes unquoted.
+const LISTING_MS = 3_000;
+
+// The listing, or undefined when it failed or took too long. Never raises: every caller is composing a sentence, and a
+// sentence without its alternatives still says what happened.
+const listingWithin = async (services: Services, what: string): Promise<readonly SpawnableProvider[] | undefined> => {
+    const read = async (): Promise<readonly SpawnableProvider[] | undefined> => {
+        try {
+            return await spawnableProviders(services);
+        } catch (error) {
+            services.logger.warn({ err: error, what }, "the allowance listing could not be read");
+            return undefined;
+        }
+    };
+    return within(read(), LISTING_MS, undefined, { unref: true });
+};
+
+// Where a child that died on a spent allowance could be sent instead, appended to the vendor's own sentence. A parent
+// otherwise gets only the provider's words ("You're out of usage. Switch to Auto or Composer 2.5") and has to spend a
+// turn working out where else the work can go; a provider with no reopen instant is not coming back on a clock, so this
+// is the whole way forward. Never raises: a listing that cannot be read leaves the sentence as the vendor wrote it.
+const elsewhereFor = async (services: Services, spec: ChildSpawnSpec | undefined, failure: string): Promise<string | undefined> => {
+    if (spec === undefined || !mentionsSpentAllowance(failure)) {
+        return undefined;
+    }
+    const providers = await listingWithin(services, "child failure");
+    if (providers === undefined) {
+        return undefined;
+    }
+    const room = providers
+        .filter((provider) => provider.models.length > 0)
+        .map((provider) => `${provider.id}/${provider.models[0]?.id ?? ""}`)
+        .slice(0, 4);
+    if (room.length === 0) {
+        return "Nothing connected has measured room right now, so re-sending this task anywhere would be refused too.";
+    }
+    return `Re-spawning it elsewhere is the way on; with room right now: ${room.join(", ")} (\`agents providers\` for the rest).`;
+};
+
+/** How a child's turn ended, in the words its parent reads, and whether a re-run is booked past it. */
+interface ChildEnding {
+    // The whole sentence: what ended it, then the re-run or where else the task could go.
+    readonly error: string | undefined;
+    // Set only where the sandbox booked one, which is what makes the child paused rather than failed.
+    readonly rerun: string | undefined;
+}
+
+// A cancel and an outside kill each explain themselves; anything else is the child's own ending, dressed with the
+// re-run that is coming or, where none is, somewhere the task could go instead.
+const childEnding = async (
+    services: Services,
+    childId: string,
+    kid: ChildRecord | undefined,
+    tally: ChildTurnTally,
+    outside: { readonly cancelled: boolean; readonly killed: string | undefined },
+): Promise<ChildEnding> => {
+    if (outside.cancelled) {
+        return { error: CANCELLED, rerun: undefined };
+    }
+    if (outside.killed !== undefined) {
+        return { error: outside.killed, rerun: undefined };
+    }
+    const failure = tally.failure;
+    if (failure === undefined) {
+        return { error: undefined, rerun: undefined };
+    }
+    const rerun = tally.rerun === undefined ? undefined : bookedRerunWords(tally.rerun, childId);
+    // Only where nothing is bringing it back: with a re-run booked, where else it could go is noise.
+    const elsewhere = rerun !== undefined ? undefined : await elsewhereFor(services, kid?.spec, failure);
+    return { error: [failure, rerun, elsewhere].filter((part) => part !== undefined).join(" "), rerun };
+};
+
 // Settles a child's turn from its tally: its closing text as the report, a kill named from outside, a re-run the sandbox
 // booked making it paused rather than failed, and its seat freed.
 const settleChildTurn = async (
@@ -573,11 +650,7 @@ const settleChildTurn = async (
     // Read while the record still says running, so a `send` cannot start a follow-up this settle then overwrites.
     const killed = tally.failure === undefined ? undefined : await childKillNote(services, childId, tally.failure);
     const cancelled = kid?.cancelled === true;
-    const rerun =
-        tally.failure === undefined || tally.rerun === undefined || cancelled || killed !== undefined
-            ? undefined
-            : bookedRerunWords(tally.rerun, childId);
-    const error = cancelled ? CANCELLED : (killed ?? (rerun === undefined ? tally.failure : `${tally.failure} ${rerun}`));
+    const { error, rerun } = await childEnding(services, childId, kid, tally, { cancelled, killed });
     if (kid !== undefined) {
         kid.running = false;
         kid.queued = false;
@@ -1231,10 +1304,36 @@ const startAllowed = async (services: Services, parent: ChildParent, start: Chil
     }
 };
 
+// A model the records already call spent, refused before a seat is taken. Nothing validated a spawn against the
+// allowance listing before this, so a fan-out onto a spent provider cost a spawn, a wait and a re-spawn for every child
+// — five of them in 32 seconds on one occasion (2026-10-11). Advisory still where it has to be: only a model measured
+// spent is refused, an unreadable listing refuses nothing, and the refusal names what can run so the retry is one call.
+const spentAsked = async (services: Services, asked: ChildSpawnSpec): Promise<string | undefined> => {
+    // The catalog's default, which names no pool to judge.
+    if (asked.model === "") {
+        return undefined;
+    }
+    // One provider's own records, not the whole listing: `spawnableProviders` probes every connected provider's
+    // readiness and catalog and takes seconds, which a fan-out would pay for every child. `spentRung` only ever says
+    // spent, so an unmeasured model and a failed read both go ahead as before.
+    const spent = await spentRung(services, { provider: asked.provider, model: asked.model });
+    if (spent === undefined) {
+        return undefined;
+    }
+    // Only now, on the rare refusal, is the full listing worth its round trips: it is what makes the retry one call.
+    // The refusal stands on `spentRung`'s own reading either way, so a listing that cannot be read only costs it the
+    // alternatives, never its clarity.
+    const providers = await listingWithin(services, "spawn preflight");
+    const elsewhere = providers === undefined ? undefined : spawnBlocked(providers, { provider: asked.provider, model: asked.model });
+    const listing = providers === undefined ? `` : `\n\nConnected right now:\n${spawnCatalogText(providers)}`;
+    return `${elsewhere ?? `${asked.provider}/${asked.model} is out of allowance: ${spent.reason}`}${listing}`;
+};
+
 /**
  * Starts a child agent and returns once it is queued; on a box short of memory it waits as `pending` before its turn
- * runs. Budget/depth refusals come back immediately; a provider refusal surfaces later as the child's own failure. A
- * start the owner must allow comes back at once as well, `held`, its row waiting until they answer.
+ * runs. Budget/depth refusals and a model the records call spent come back immediately; any other provider refusal
+ * surfaces later as the child's own failure. A start the owner must allow comes back at once as well, `held`, its row
+ * waiting until they answer.
  */
 export const spawnChild = async (services: Services, parent: ChildParent, asked: ChildSpawnSpec): Promise<ChildSpawnResult> => {
     const settings = await services.sandboxSettings.get();
@@ -1244,6 +1343,10 @@ export const spawnChild = async (services: Services, parent: ChildParent, asked:
             ok: false,
             message: `Spawn depth ${settings.subagentDepth} reached: this agent is itself a spawned subagent and may not go deeper.`,
         };
+    }
+    const spent = await spentAsked(services, asked);
+    if (spent !== undefined) {
+        return { ok: false, message: spent };
     }
     const verdict = await judgeMove(services, parent.conversationId, asked.provider);
     if (verdict.effect === "deny") {

@@ -75,10 +75,21 @@ SAY SOMETHING TO ANOTHER CONVERSATION
                                        conversation and read as a peer's words, not as its owner's
 
 SPAWN AND SUPERVISE
-  agents providers                     what a subagent could run on right now: every connected provider, its
-                                       models, and how much allowance each has left. Models whose every
-                                       connected account is at its cap are left out, so what it lists is
-                                       what can actually run
+  agents providers [--all]             what a subagent could run on right now: every connected provider, its
+                                       models, and how much allowance each has left. Models the records call
+                                       spent are left out, and a spawn naming one is refused before it takes
+                                       a seat. What it lists is what is NOT KNOWN to be spent, which is
+                                       weaker than a promise: a provider publishing no allowance reads as
+                                       "not metered", and the only thing that ever measures one of those is
+                                       a turn it has already refused. Each figure is one account's, and
+                                       subagents started together draw on it together.
+                                       --all names every unmetered model instead of counting the tail
+  agents providers --spent <provider> <model> [--account <id>] [--why "reason"]
+  agents providers --unspent <provider> <model> [--account <id>]
+                                       mark a model out of allowance by hand, or clear the mark: the last
+                                       resort for a plan that publishes nothing to read. A hand-set mark is
+                                       believed for 24h, or until unmarked, and leaves the model out of the
+                                       listing exactly as a refused turn would
   agents spawn --provider <id> --model <id> [--effort <tier>] [--on <runner|here>]
                [--harness native|claude-code] [--description "one line"] '<task>'
                                        spawn a subagent; prints its id and returns immediately.
@@ -659,8 +670,36 @@ const show = async (argv) => {
 // What a child could be started on right now, and what still has allowance. The daemon renders the lines
 // (agent/subagents/spawn-catalog.ts) so the CLI, the MCP tool and the spawn refusal cannot drift apart; the
 // rows ride along on stdout as JSON for anything reading this in a pipe.
-const providers = async () => {
-    const { status, text } = await call("GET", "/children/providers");
+const providers = async (argv = []) => {
+    const { flags, positional } = parseFlags(argv, ["provider", "model", "account", "why"]);
+    // `--spent` / `--unspent` mark a model out of allowance by hand, the last resort for a plan that publishes none to
+    // read: Cursor and Devin publish nothing, so until a turn is refused nothing here knows, and a listing that said
+    // "not metered" sent five subagents onto a spent Cursor model in 32 seconds (2026-10-11).
+    const marking = argv.includes("--spent") || argv.includes("--unspent");
+    if (marking) {
+        const provider = flags.provider ?? positional[0];
+        const model = flags.model ?? positional[1];
+        if (provider === undefined || model === undefined) {
+            return die(`agents: marking a model needs a provider and a model, e.g. \`agents providers --spent cursor claude-opus-5-5\``);
+        }
+        const body = JSON.stringify({
+            provider,
+            model,
+            spent: !argv.includes("--unspent"),
+            ...(flags.account !== undefined ? { account: flags.account } : {}),
+            ...(flags.why !== undefined ? { why: flags.why } : {}),
+        });
+        const { status, text } = await call("POST", "/children/providers/spent", body);
+        if (status !== 200) {
+            return die(`agents: ${refusalOf(text)}`);
+        }
+        process.stdout.write(`${JSON.parse(text).message}\n`);
+        return;
+    }
+    // `--all` names every unmetered model instead of counting the tail of them; the default keeps the listing short,
+    // since a provider publishing no allowance has every model in one undifferentiated list (Cursor alone has 45).
+    const query = argv.includes("--all") ? "?all=1" : "";
+    const { status, text } = await call("GET", `/children/providers${query}`);
     if (status !== 200) {
         return die(`agents: ${refusalOf(text)}`);
     }
@@ -875,7 +914,7 @@ const main = async () => {
     if (command === "show") return show(rest);
     if (command === "ls") return ls(rest);
     if (command === "find") return find(rest);
-    if (command === "providers") return providers();
+    if (command === "providers") return providers(rest);
     if (command === "spawn") return spawn(rest);
     if (command === "wait") return wait(rest);
     if (command === "send") return send(rest);

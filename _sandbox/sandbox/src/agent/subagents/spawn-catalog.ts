@@ -14,6 +14,7 @@ import {
 } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import { type FleetReading, fleetLimit, type TurnLimit } from "../../usage/serviceability/fleet-limit.js";
+import { observedOwnLimit } from "../../usage/observed-accounts.js";
 import { accountFactsOf } from "../../usage/serviceability/serviceability.js";
 import { opt } from "../../opt.js";
 
@@ -49,6 +50,10 @@ export interface SpawnableProvider {
     readonly models: readonly SpawnableModel[];
     // How many models were left out because every connected account is at the cap for them.
     readonly spent: number;
+    // Those same models by name, so a spawn naming one can be refused for the right reason rather than for being absent
+    // from `models` (a catalog that failed to read also leaves it empty). Optional like `reopensAt`: `spent` is the
+    // count every reader needs, this is the detail a refusal quotes.
+    readonly spentModels?: readonly { readonly id: string; readonly label: string; readonly reopensAt?: number }[];
     // Epoch seconds when the soonest one reopens, where the provider said; meaningful only with `spent > 0`.
     readonly reopensAt?: number;
     // The loops a spawn may name as its harness, the default first; absent or one long means there is no choice.
@@ -113,13 +118,35 @@ const exhausted = (limit: TurnLimit): boolean => limit.spent > 0 && limit.withHe
 const soonest = (instants: readonly (number | undefined)[]): number | undefined =>
     instants.reduce<number | undefined>((best, at) => (at !== undefined && (best === undefined || at < best) ? at : best), undefined);
 
+/**
+ * What a provider's OWN records say of one model, for a provider whose accounts these readings never cover.
+ * `fleetReadings` is fed by Claude's store and the translator's accounts, so a native provider authenticating on its own
+ * (Cursor, Devin) reads as unmeasured however spent it is — which is how a spent Cursor model stayed listed as "not
+ * metered" through seven refused spawns (2026-10-13). A provider module's own `turnLimit` is the seam for it, the same
+ * one the role ladder reads.
+ */
+export type OwnLimit = (model: string) => Promise<TurnLimit | undefined>;
+
 // `refusals` are the provider's refusals on file, read beside the readings: a plan that just said no ("usage limit, try
 // again at 3:38 PM") is spent in the very next listing, whatever its usage endpoint still reports.
-const spendable = (provider: NativeProvider, catalog: { models: Model[] }, readings: readonly FleetReading[], refusals: RefusalsOnFile): SpawnableProvider => {
-    const judged = catalog.models.map((model) => {
-        const ref: ModelRef = { id: model.id, label: model.label };
-        return { model, ref, limit: fleetLimit(readings, ref, refusals) };
-    });
+const spendable = async (
+    provider: NativeProvider,
+    catalog: { models: Model[] },
+    readings: readonly FleetReading[],
+    refusals: RefusalsOnFile,
+    ownLimit: OwnLimit | undefined,
+): Promise<SpawnableProvider> => {
+    // A provider with readings is judged on them; one with none falls back to its own records, where it keeps any.
+    const own = readings.length === 0 ? ownLimit : undefined;
+    const judged = await Promise.all(
+        catalog.models.map(async (model) => {
+            const ref: ModelRef = { id: model.id, label: model.label };
+            // allow(silent-catch): a failed own-record read leaves the model unmeasured, as it was before one was ever
+            // kept; this listing is advice, and its whole point is that one provider's trouble never silences the rest.
+            const mine = own === undefined ? undefined : await own(model.id).catch(() => undefined);
+            return { model, ref, limit: mine ?? fleetLimit(readings, ref, refusals) };
+        }),
+    );
     const out = judged.filter((row) => exhausted(row.limit));
     const rows = judged
         .filter((row) => !exhausted(row.limit))
@@ -133,6 +160,8 @@ const spendable = (provider: NativeProvider, catalog: { models: Model[] }, readi
         label: PROVIDERS.find((row) => row.value === provider)?.label ?? provider,
         models: rows,
         spent: out.length,
+        // What was left out, by name: a spawn onto one of them is refused naming it, not merely counted (children.ts).
+        spentModels: out.map((row) => ({ id: row.model.id, label: row.model.label, ...opt("reopensAt", row.limit.reopensAt) })),
         ...(reopensAt === undefined ? {} : { reopensAt }),
         loops: loopsOf(provider),
     };
@@ -150,8 +179,15 @@ export const spawnableProviders = async (services: Services): Promise<readonly S
     ]);
     const rows = await Promise.all(
         NATIVE_PROVIDERS.filter((provider) => ready[provider]).map(async (provider) => {
-            const catalog = await services.providerCatalogs[provider].models().catch(() => ({ models: [] }));
-            return spendable(provider, catalog, readings.get(provider) ?? [], refusals[provider]);
+            const mine = readings.get(provider) ?? [];
+            const [catalog, own] = await Promise.all([
+                services.providerCatalogs[provider].models().catch(() => ({ models: [] })),
+                // Only for a provider these readings do not cover; its ledger is read once here, not once per model.
+                // allow(silent-catch): an unreadable ledger leaves the provider unmeasured, which is how it read before
+                // one was ever kept; this listing is advice, and one provider's trouble must not silence the rest.
+                mine.length === 0 ? observedOwnLimit(services, provider).catch(() => undefined) : undefined,
+            ]);
+            return spendable(provider, catalog, mine, refusals[provider], own);
         }),
     );
     return rows;
@@ -204,7 +240,7 @@ const modelText = (model: SpawnableModel, now: number): string => {
 const loopsText = (loops: readonly AgentLoop[] | undefined): string =>
     loops === undefined || loops.length < 2 ? `` : `; harness: ${loops.map((loop, index) => (index === 0 ? `${loop} (default)` : loop)).join(`, `)}`;
 
-const providerText = (provider: SpawnableProvider, now: number): string => {
+const providerText = (provider: SpawnableProvider, now: number, named: number): string => {
     if (provider.models.length === 0) {
         const renews = provider.reopensAt === undefined ? `` : `, renews ${inWords(provider.reopensAt, now)}`;
         // Two different silences: nothing left to spend, versus nothing to list at all.
@@ -212,14 +248,75 @@ const providerText = (provider: SpawnableProvider, now: number): string => {
         return `${provider.id}: ${reason}`;
     }
     const held = provider.spent === 0 ? `` : ` — ${provider.spent} more out of allowance`;
-    return `${provider.id}: ${provider.models.map((model) => modelText(model, now)).join(`, `)}${held}${loopsText(provider.loops)}`;
+    return `${provider.id}: ${modelsText(provider.models, now, named)}${held}${loopsText(provider.loops)}`;
 };
+
+// How many unmetered models are named before the rest are counted. A provider that publishes no allowance has every
+// model in one undifferentiated list — Cursor alone prints 45 of them, each reading "(not metered)" — which a model
+// reads before every fan-out for no information at all. The listing is in the provider's own preference order, so the
+// ones named are the ones worth naming.
+const UNMETERED_NAMED = 8;
+
+// Metered models always print their figure; unmetered ones past the cap are counted instead of named.
+const modelsText = (models: readonly SpawnableModel[], now: number, named: number): string => {
+    const metered = models.filter((model) => model.headroom !== undefined);
+    const plain = models.filter((model) => model.headroom === undefined);
+    const shown = [...metered, ...plain.slice(0, named)].map((model) => modelText(model, now));
+    const rest = plain.length - Math.min(plain.length, named);
+    // Said as what it is: more models this provider serves, none of them metered, nameable on request.
+    return rest === 0 ? shown.join(`, `) : `${shown.join(`, `)}, and ${String(rest)} more not metered (\`agents providers --all\`)`;
+};
+
+// What the figures above do NOT say: they are per account, and children started together spend the same one. Thirteen
+// Claude children were once started against an account reading "96% left" and all hit the wall together (2026-10-12).
+const SHARED_POOL =
+    "Each figure is one account's, and subagents you start together draw on it together: a fan-out of N spends roughly N times what one does, so a listing with room is not a promise that every child finishes.";
+
+/** Every unmetered model named rather than counted, for `agents providers --all`. */
+export interface CatalogTextOptions {
+    readonly now?: number;
+    readonly all?: boolean;
+}
 
 // The listing as the agent reads it, written once and shared by the `agents providers` CLI verb, the `providers` MCP
 // tool, and the refusal for a spawn missing its provider or model.
-export const spawnCatalogText = (providers: readonly SpawnableProvider[], now: number = Date.now()): string => {
+export const spawnCatalogText = (providers: readonly SpawnableProvider[], now: number = Date.now(), options: CatalogTextOptions = {}): string => {
     if (providers.length === 0) {
         return `No AI provider is connected to this sandbox, so no subagent can be started. Connect one in Sandbox ▸ Agent ▸ Accounts.`;
     }
-    return providers.map((provider) => providerText(provider, now)).join(`\n`);
+    const named = options.all === true ? Number.POSITIVE_INFINITY : UNMETERED_NAMED;
+    const listing = providers.map((provider) => providerText(provider, now, named)).join(`\n`);
+    // Said only where a figure is on show: with nothing metered there is no number for a fan-out to misread, and the
+    // sentence would be noise on the listing a reader checks most often.
+    const metered = providers.some((provider) => provider.models.some((model) => model.headroom !== undefined));
+    return metered ? `${listing}\n${SHARED_POOL}` : listing;
+};
+
+/**
+ * Why this provider and model cannot be spawned on right now, or undefined to go ahead. Only a model the records
+ * actually call spent is refused: an unmeasured one may well answer, and refusing it would ground every provider that
+ * publishes no allowance. Read before a seat is taken (children.ts), since nothing validated a spawn against this
+ * listing before — which is how five children went onto a spent Cursor model in 32 seconds (2026-10-11).
+ */
+export const spawnBlocked = (
+    providers: readonly SpawnableProvider[],
+    asked: { readonly provider: string; readonly model: string },
+    now: number = Date.now(),
+): string | undefined => {
+    const row = providers.find((provider) => provider.id === asked.provider);
+    if (row === undefined) {
+        return undefined;
+    }
+    const spent = (row.spentModels ?? []).find((model) => model.id === asked.model);
+    if (spent === undefined) {
+        return undefined;
+    }
+    const renews = spent.reopensAt === undefined ? `` : `, which renews ${inWords(spent.reopensAt, now)}`;
+    const room = row.models.length === 0 ? `` : ` With room on ${asked.provider} right now: ${row.models.map((model) => model.id).join(`, `)}.`;
+    const elsewhere = providers
+        .filter((provider) => provider.id !== asked.provider && provider.models.length > 0)
+        .map((provider) => provider.id)
+        .join(`, `);
+    const others = elsewhere === `` ? `` : ` Other providers with room: ${elsewhere}.`;
+    return `${asked.provider}/${asked.model} is out of allowance${renews}: the records say every connected ${asked.provider} account is at its cap for this model, so a subagent on it would be refused before doing any work.${room}${others}`;
 };

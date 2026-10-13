@@ -149,8 +149,11 @@ const spawnTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool 
 const providersTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool => ({
     description:
         "What a subagent could be spawned on right now: every provider this sandbox has connected, its " +
-        "models, and how much allowance each still has. Models whose every connected account is at its cap are " +
-        "left out, so what this shows is what can actually run.",
+        "models, and how much allowance each still has. Models the records call spent are left out, and a spawn " +
+        "naming one is refused before it takes a seat. What this shows is what is not known to be spent, which is " +
+        "weaker than a promise: a provider publishing no allowance reads as not metered, and the only thing that ever " +
+        "measures one of those is a turn it has already refused. Each figure is one account's, and subagents started " +
+        "together draw on it together.",
     inputSchema: { type: "object", properties: {}, required: [] },
     execute: async () => JSON.stringify({ ok: true, providers: await children.providers() }),
 });

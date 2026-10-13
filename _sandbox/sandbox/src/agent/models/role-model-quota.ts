@@ -1,6 +1,7 @@
 import { KeyedProviderSchema, type ModelChoice, renewsInWords } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import { fleetLimit, type TurnLimit } from "../../usage/serviceability/fleet-limit.js";
+import { observedOwnLimit } from "../../usage/observed-accounts.js";
 
 // Reads a rung's recorded quota instead of discovering it by asking and being refused; a rung whose every account is
 // spent is stepped over on that reading, scoped per-model through fleet-limit's own gates. Only ever says spent —
@@ -41,7 +42,13 @@ export const rungLimit = async (services: Services, choice: ModelChoice): Promis
             return await module.turnLimit(services, choice.model);
         }
         const provider = KeyedProviderSchema.safeParse(choice.provider);
-        return provider.success ? await services.cliProxy.turnLimit(provider.data, choice.model) : undefined;
+        if (provider.success) {
+            return await services.cliProxy.turnLimit(provider.data, choice.model);
+        }
+        // Left: a provider authenticating on its own with no reading of its own either (Devin). Its ledger is still the
+        // one measurement it can have, whether a refused turn filed it or somebody marked it by hand.
+        const own = await observedOwnLimit(services, choice.provider);
+        return own === undefined ? undefined : await own(choice.model);
     } catch {
         // A failed quota lookup should not fail the helper; fall through to asking normally.
         return undefined;
