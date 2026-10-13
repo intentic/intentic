@@ -3875,7 +3875,10 @@
             "read": "Czytaj na głos",
             "stop": "Przestań czytać",
             "preparing": "Przygotowuję głos…",
-            "downloading": "Pobieranie głosu… {percent}%"
+            "downloading": "Pobieranie głosu… {percent}%",
+            "downloadOnce": "Tylko za pierwszym razem: głos zostaje w tym sandboksie.",
+            "reading": "Czytam na głos",
+            "failed": "Nie udało się przeczytać odpowiedzi na głos"
         },
         "voiceCards": {
             "question": "{question} {options}?",

@@ -612,8 +612,11 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
 
             <ChatTodoList v-if="showsTodos" :todos="message.todos!" :live="live" :view="checklistView" />
 
-            <!-- Markdown parts preserve settled DOM while the live tail updates. The read-aloud press sits on the bubble's
-                 corner once the reply has stopped growing, shown on hover (always on a phone, and while it reads). -->
+            <!-- Markdown parts preserve settled DOM while the live tail updates. The read-aloud press sits in the bubble's
+                 bottom corner once the reply has stopped growing, on the line of the fork mark that hangs in the gutter
+                 beside it (ChatForkCut), so the answer's own presses end it together. Not in the gutter itself: this row
+                 paint-contains (.chat-message), and opting every answer out of that is what long transcripts pay for.
+                 Shown on hover, as the fork mark is (dimmed on a phone, and lit while it reads). -->
             <div v-if="message.text" class="group/reply relative w-full">
                 <div class="md-prose chat-markdown chat-surface-assistant w-full rounded-lg px-3.5 py-2.5">
                     <MarkdownParts :parts="body" />
@@ -622,8 +625,8 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     v-if="!live"
                     :text="message.text"
                     :read-key="message.id"
-                    class="absolute top-1 right-1 focus-visible:opacity-100 aria-pressed:opacity-100 group-hover/reply:opacity-100"
-                    :class="mobile ? `opacity-60` : `opacity-0`"
+                    class="absolute right-1 bottom-0 focus-visible:opacity-100 aria-pressed:opacity-100 group-hover/reply:opacity-100"
+                    :class="mobile ? `opacity-40` : `opacity-0`"
                 />
             </div>
             <!-- Marks a message the user wrote in the agent's voice (composer "as agent"); the agent itself never sees this flag. -->

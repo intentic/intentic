@@ -5,6 +5,7 @@ import SandboxRecovery from "../../features/sandbox/gates/SandboxRecovery.vue";
 import { useDiagnosisNotice, useRecoveryDue, useVisibleOutage } from "../../features/sandbox/gates/useVisibleOutage";
 import type { DiagnosisNotice } from "../../features/sandbox/diagnosis/presentation";
 import UploadProgressBody from "../../features/workspace/files/upload/UploadProgressBody.vue";
+import { holdReadAloudNotice } from "../../features/chat/voice/readAloud";
 import { useAppUpdate, type AppUpdate } from "../../app/appUpdate";
 import { hold, type NotificationInput, type NotificationTone } from "../../workbench/notifications/notifications";
 import { onScreen } from "../../workbench/window/onScreen";
@@ -231,6 +232,9 @@ export const startNotificationSources = (): void => {
             dismiss: upload.dismiss,
         };
     });
+
+    // A reply being read aloud: what the voice is doing before its first word, and Stop once the reply has scrolled away.
+    holdReadAloudNotice();
 
     // Shown only when every faster address fails: HTTP/1.1 hits the browser's 6-connection cap.
     const { degradedTransport } = useEndpoint();

@@ -2,10 +2,12 @@
 import { ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
+import { readAloud } from "./readAloud";
 import { useSpeechPlayer } from "./speechPlayer";
 
 // Reads one reply aloud, whole: its code announced rather than spelled, its paths and links shortened (the sandbox's
-// voice-text.ts). One press reads it, the next stops it; while its voice is still loading the press shows that it took.
+// voice-text.ts). One press reads it, the next stops it. The press shows THAT it took (a spinner, then Stop); the card in
+// the notification lane says WHAT is happening in words (readAloud.ts), since the wait for a first word can be long.
 
 const props = defineProps<{
     /** The reply as written. */
@@ -35,7 +37,7 @@ const toggle = (): void => {
         player.stop();
         return;
     }
-    void player.say(props.text, { key: key.value, as: `read`, lang: navigator.language });
+    void readAloud(props.text, key.value, player);
 };
 </script>
 
@@ -45,9 +47,9 @@ const toggle = (): void => {
         :class="ui.iconButton({ size: `sm`, tone: `subtle` })"
         :aria-pressed="mine"
         :aria-label="hint"
-        v-tooltip.top="hint"
+        v-tooltip.left="hint"
         @click.stop="toggle"
     >
-        <Icon :name="loading ? `spinner` : mine ? `volume-off` : `volume-up`" :spin="loading" class="text-2xs" />
+        <Icon :name="loading ? `spinner` : mine ? `stop` : `volume-up`" :spin="loading" class="text-2xs" />
     </button>
 </template>

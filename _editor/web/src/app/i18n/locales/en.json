@@ -3875,7 +3875,10 @@
             "read": "Read aloud",
             "stop": "Stop reading",
             "preparing": "Getting the voice ready…",
-            "downloading": "Downloading the voice… {percent}%"
+            "downloading": "Downloading the voice… {percent}%",
+            "downloadOnce": "Only the first time: the voice stays on this sandbox.",
+            "reading": "Reading aloud",
+            "failed": "Couldn't read the reply aloud"
         },
         "voiceCards": {
             "question": "{question} {options}?",
