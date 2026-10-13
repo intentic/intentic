@@ -17,8 +17,22 @@ import type { AgentWorktrees } from "../worktrees/worktrees.js";
 // Single source for an agent's changed-lines count, shared by the review's live diff and the fleet card's snapshot
 // taken at each land, so both report the same number.
 
-// Anchor for measuring an agent's delta: `landedTip` for the incremental remainder, otherwise merge-base with main.
-// The frozen creation-time base is only a last resort; a rebase invalidates it while merge-base moves with the sync.
+// Where the main line stood under a branch: its merge-base with main (`merged`), unless main was rewritten behind `base`,
+// the main-line commit the branch was cut from or last synced onto. A reset or force-push that drops main-line commits
+// drags the merge-base back past them, and every branch cut on top of them would then claim them as its own work: one
+// owner's `git reset --hard origin/main` re-offered a dropped commit on every finished conversation. So while the branch
+// still descends from `base` and `base` sits ahead of the merge-base, `base` is the floor. A merge-base ahead of `base`
+// (main merged the branch by hand, or a sync has not recorded where it moved) keeps winning, as does an unreadable `base`.
+export const mainLineUnder = async (dir: string, merged: string, base: string, tip: string, git: GitRunner = defaultGit): Promise<string> => {
+    if (merged === base || merged === tip) {
+        return merged;
+    }
+    return (await isAncestor(dir, merged, base, git)) && (await isAncestor(dir, base, tip, git)) ? base : merged;
+};
+
+// Anchor for measuring an agent's delta: `landedTip` for the incremental remainder, otherwise where the branch sits on
+// the main line (mainLineUnder). The recorded base alone is a last resort: a rebase by hand invalidates it while the
+// merge-base moves with the sync.
 export const checkpointOf = async (
     // Worktree while the checkout is attached, main repo once retired; the object store is shared either way.
     dir: string,
@@ -38,14 +52,15 @@ export const checkpointOf = async (
             // Unrelated histories: no merge-base exists.
         }
     }
-    // Valid only while the branch descends from landedTip and merge-base sits behind it; otherwise merge-base wins.
+    const floor = merged === "" ? "" : await mainLineUnder(dir, merged, base, tip, git);
+    // Valid only while the branch descends from landedTip and the main line sits behind it; otherwise the main line wins.
     if (landedTip !== undefined && (await isAncestor(dir, landedTip, tip, git))) {
-        if (merged === "" || (await isAncestor(dir, merged, landedTip, git))) {
+        if (floor === "" || (await isAncestor(dir, floor, landedTip, git))) {
             return landedTip;
         }
-        return merged;
+        return floor;
     }
-    return merged === "" ? base : merged;
+    return floor === "" ? base : floor;
 };
 
 // The anchor for a conversation's own delta, whichever line its branch stands on. A spawned child cut from its parent's

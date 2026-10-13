@@ -345,3 +345,40 @@ test("a rewritten main does not swallow work the branch alone carries", async ()
 
     expect(await standingOf(worktrees, isolatedAgent(conversation.repos))).toBe("ready");
 });
+
+// The incident this guards: an owner's `git reset --hard origin/main` dropped two local commits every finished
+// conversation's branch had synced onto, the merge-base fell back behind them, and each of those conversations read
+// ready with the dropped commits as its own delta, offering to land them back. `base`, where the branch last synced,
+// still says where its own work begins.
+test("main reset behind the commit a branch synced onto does not hand the dropped commit to the branch", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await writeFile(join(work, "pin.json"), "local pin\n");
+    await sh(work, "add", "-A");
+    await commit(work, "owner's local commit");
+    const synced = await syncConversation(worktrees, "c1", conversation.repos, undefined);
+    const repos = conversation.repos.map((repo) => ({ ...repo, base: synced.find((moved) => moved.repo === repo.repo)?.onto ?? repo.base }));
+    expect(await standingOf(worktrees, isolatedAgent(repos))).toBe("idle");
+
+    // Dropped, and main moves on without it.
+    await sh(work, "reset", "-q", "--hard", "HEAD~1");
+    await writeFile(join(work, "upstream.md"), "merged upstream\n");
+    await sh(work, "add", "-A");
+    await commit(work, "upstream work");
+    expect(await standingOf(worktrees, isolatedAgent(repos))).toBe("idle");
+
+    // Work of its own still reads ready, and the next sync replays only that, never the dropped commit.
+    await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
+    await sh(conversation.cwd, "add", "-A");
+    await commit(conversation.cwd, "agent work");
+    expect(await standingOf(worktrees, isolatedAgent(repos))).toBe("ready");
+    const resynced = await syncConversation(worktrees, "c1", repos, undefined);
+    expect(resynced.map((moved) => moved.blocked)).toEqual([undefined]);
+    expect(await sh(conversation.cwd, "ls-files", "pin.json")).toBe("");
+    expect(await sh(conversation.cwd, "log", "--format=%s", "HEAD")).not.toContain("owner's local commit");
+
+    // And a land puts the agent's file in the tree, not the dropped one.
+    await landAgent(worktrees, isolatedAgent(repos.map((repo) => ({ ...repo, base: resynced[0]?.onto ?? repo.base }))));
+    const status = await sh(work, "status", "--porcelain");
+    expect(status).toContain("app.ts");
+    expect(status).not.toContain("pin.json");
+});

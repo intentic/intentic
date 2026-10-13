@@ -2,6 +2,7 @@ import { defaultGit, type GitRunner } from "@intentic/base/git";
 import type { OriginAgent } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { headSha } from "../../git/changes/changes.js";
+import { mainLineUnder } from "./agent-changes.js";
 import { materializedPaths } from "../../git/changes/changes-porcelain.js";
 import { opt } from "../../opt.js";
 import type { AgentsRegistry } from "../registry/agents-registry.js";
@@ -69,8 +70,8 @@ export const createAgentOrigins = (
     const appliedPaths = (dir: string, repo: string, landedHead: string, tip: string): Promise<readonly string[]> =>
         pathsBetween(dir, `applied ${repo} ${landedHead} ${tip}`, [landedHead, tip]);
 
-    // Where the branch left the main line, so the claim is the agent's own work, not what a rebase pulled in; falls
-    // back to the recorded base for unrelated histories. Keyed on tip alone: a rebase already mints a new tip.
+    // Where the branch left the main line (mainLineUnder), so the claim is the agent's own work, not what a rebase pulled
+    // in nor what a rewritten main dropped under it; falls back to the recorded base for unrelated histories. Keyed on tip alone: a rebase already mints a new tip.
     const checkpointOf = async (dir: string, repo: string, head: string, tip: string, base: string): Promise<string> => {
         const key = `anchor ${repo} ${tip}`;
         const hit = anchors.get(key);
@@ -81,7 +82,8 @@ export const createAgentOrigins = (
         try {
             const merged = (await git(dir, ["merge-base", head, tip])).stdout.trim();
             if (merged !== "") {
-                anchor = merged;
+                // A main rewritten behind the landing's base must not hand its dropped commits to the landing.
+                anchor = await mainLineUnder(dir, merged, base, tip, git);
             }
         } catch {
             // Unrelated histories: the recorded base is all there is.

@@ -4,7 +4,7 @@ import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { headSha } from "../../git/changes/changes.js";
 import { rebaseOnto, rebaseSince } from "../../git/changes/changes-commits.js";
 import { AGENT_GIT_AUTHOR, withConversationTrailer } from "../../git-identity.js";
-import { presenceOf } from "./agent-changes.js";
+import { mainLineUnder, presenceOf } from "./agent-changes.js";
 import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
 import type { Upstream } from "./land-target.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
@@ -45,6 +45,16 @@ export interface RepoSync {
 const pathsOf = async (dir: string, args: readonly string[], git: GitRunner): Promise<string[]> => {
     const { stdout } = await git(dir, ["diff", "--name-only", "--no-renames", "-z", ...args]);
     return stdout.split("\0").filter((path) => path !== "");
+};
+
+// The newest commit both share, or "" for unrelated histories.
+const mergeBaseOf = async (dir: string, a: string, b: string, git: GitRunner): Promise<string> => {
+    try {
+        return (await git(dir, ["merge-base", a, b])).stdout.trim();
+        // allow(silent-catch): merge-base exits non-zero only when the histories share no commit, which is the answer.
+    } catch {
+        return "";
+    }
 };
 
 // Whether `tip` already contains `head`, via one `merge-base` spawn.
@@ -111,6 +121,8 @@ const syncOne = async (
     worktrees: AgentWorktrees,
     id: string,
     repo: string,
+    // Main-line commit the branch was cut from or last synced onto.
+    base: string | undefined,
     // Sha where this repo's work last reached main, from the registry's land bookkeeping.
     landedTip: string | undefined,
     title: string | undefined,
@@ -132,15 +144,22 @@ const syncOne = async (
     if (tip === head || (await contains(worktree, tip, head, git))) {
         return undefined;
     }
-    // Three-dot: main-line movement since divergence, read before the rebase moves `tip`.
-    const moved = await pathsOf(worktree, [`${tip}...${head}`], git);
-    const mine = new Set(await pathsOf(worktree, [`${head}...${tip}`], git));
+    // Main rewritten behind `base` (mainLineUnder): the commits between the merge-base and `base` are ones main dropped,
+    // not this branch's work, so only what follows `base` is replayed and counted as the branch's own. A plain rebase
+    // would carry every dropped commit back into the branch, and from there into the owner's tree at the next land.
+    const merged = await mergeBaseOf(worktree, tip, head, git);
+    const floor = base === undefined || merged === "" ? merged : await mainLineUnder(worktree, merged, base, tip, git);
+    const since = floor === merged ? undefined : floor;
+    // Main-line movement since divergence (three-dot), or since `base` when main was rewritten; read before the rebase moves `tip`.
+    const moved = await pathsOf(worktree, since === undefined ? [`${tip}...${head}`] : [since, head], git);
+    const mine = new Set(await pathsOf(worktree, since === undefined ? [`${head}...${tip}`] : [since, tip], git));
     const overlap = moved.filter((path) => mine.has(path));
     const commits = Number((await git(worktree, ["rev-list", "--count", `${tip}..${head}`])).stdout.trim());
     const behind = { repo, onto: head, commits, moved, overlap };
     // Commits the dirty remainder first; `git rebase` refuses to start on a dirty tree.
     await commitWorktreeRemainder(repo, worktree, withConversationTrailer(`Agent: ${title ?? id}`, id), worktrees.mainDir("root"), git);
-    if ((await rebaseOnto(worktree, head, AGENT_GIT_AUTHOR, git)).ok) {
+    const rebased = since === undefined ? await rebaseOnto(worktree, head, AGENT_GIT_AUTHOR, git) : await rebaseSince(worktree, head, since, AGENT_GIT_AUTHOR, git);
+    if (rebased.ok) {
         return behind;
     }
     // Refused; retry without the already-landed prefix, the likely cause of the conflict.
@@ -217,7 +236,7 @@ export const syncConversation = async (
         repos.map((composed) =>
             upstream.kind === "parent"
                 ? syncOntoParent(worktrees, id, upstream.parent, composed, title, git)
-                : syncOne(worktrees, id, composed.repo, composed.landedTip, title, git),
+                : syncOne(worktrees, id, composed.repo, composed.base, composed.landedTip, title, git),
         ),
     );
     return results.filter((result) => result !== undefined);
