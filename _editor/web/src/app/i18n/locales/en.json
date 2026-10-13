@@ -7519,6 +7519,10 @@
                     "label": "Workspace areas",
                     "where": "who is allowed to see which parts of the workspace"
                 },
+                "audit": {
+                    "label": "Audit trail",
+                    "where": "the tamper-evident record of who did what, its check and export"
+                },
                 "automations": {
                     "label": "Automations",
                     "where": "scheduled wake-ups and their approvals"
@@ -7534,6 +7538,10 @@
                 "ci": {
                     "label": "CI",
                     "where": "check runs and their results"
+                },
+                "compliance": {
+                    "label": "Data protection",
+                    "where": "where data can leave, what protects it, and its documents"
                 },
                 "diff": {
                     "label": "Changes",

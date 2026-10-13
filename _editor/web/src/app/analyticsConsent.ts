@@ -12,6 +12,7 @@ const stored = (): AnalyticsChoice => {
     return value === `allow` || value === `deny` ? value : undefined;
 };
 
+// allow(module-state): this browser's analytics answer (device scope), the same whichever sandbox is open
 export const analyticsChoice = ref<AnalyticsChoice>(stored());
 if (`addEventListener` in globalThis) {
     globalThis.addEventListener(`storage`, (event: StorageEvent) => {

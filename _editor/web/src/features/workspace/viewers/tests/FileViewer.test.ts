@@ -22,6 +22,8 @@ jest.mock("../../files/fileWindow", () => ({
 }));
 jest.mock("../../../../client/sandbox/sandboxClient", () => ({
     sandboxBlob: (path: string) => Promise.resolve(new Blob([`bytes of ${path}`])),
+    // Imported on the way in (sandboxRaw, useDirectoryUi); no daemon answers here, so a read never settles.
+    sandboxJson: () => new Promise(() => undefined),
 }));
 // The tree's write half and tier: the owner's, with nothing written here.
 jest.mock("../../explorer/useWorkspaceTree", () => ({

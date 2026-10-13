@@ -24,6 +24,7 @@ type AppMessages = typeof base;
 // - `<area>.<component>.*`: everything else.
 declare module "vue-i18n" {
     interface DefineLocaleMessage {
+        readonly a11yKit: AppMessages["a11yKit"];
         readonly agents: AppMessages["agents"];
         readonly app: AppMessages["app"];
         readonly auth: AppMessages["auth"];

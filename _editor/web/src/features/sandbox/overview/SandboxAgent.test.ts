@@ -31,6 +31,8 @@ jest.mock(`../agent-settings/safety/AgentProjectInstalls.vue`, () => stub(`Proje
 jest.mock(`../agent-settings/safety/AgentSafetyPolicy.vue`, () => stub(`Safety policy`));
 jest.mock(`../agent-settings/safety/AgentPrivacyShield.vue`, () => stub(`Privacy shield`));
 jest.mock(`../agent-settings/safety/AgentSafetyLog.vue`, () => stub(`Recent decisions`));
+jest.mock(`../ai-literacy/AiLiteracySettings.vue`, () => stub(`AI literacy`));
+jest.mock(`../agent-settings/safety/SandboxAnalytics.vue`, () => stub(`Product analytics`));
 jest.mock(`../agent-settings/behaviour/AgentChecks.vue`, () => stub(`After work lands`));
 jest.mock(`../agent-settings/behaviour/AgentFinishedWork.vue`, () => stub(`Finished work`));
 jest.mock(`../agent-settings/behaviour/AgentChangelog.vue`, () => stub(`Changelog`));
@@ -55,6 +57,8 @@ const EVERY_GROUP = [
     `Project installs`,
     `Safety policy`,
     `Privacy shield`,
+    `AI literacy`,
+    `Product analytics`,
     `Recent decisions`,
     `After work lands`,
     `Finished work`,
@@ -136,7 +140,15 @@ it(`opens jobs for the category's old name`, async () => {
 
 it(`opens the safety category with the gate rules alone`, async () => {
     const { el } = await mount({ section: `safety` });
-    expect(shown(el)).toEqual([`Safety judge`, `Project installs`, `Safety policy`, `Privacy shield`, `Recent decisions`]);
+    expect(shown(el)).toEqual([
+        `Safety judge`,
+        `Project installs`,
+        `Safety policy`,
+        `Privacy shield`,
+        `AI literacy`,
+        `Product analytics`,
+        `Recent decisions`,
+    ]);
 });
 
 it(`holds delegation under tools, not under the gate rules`, async () => {
@@ -147,7 +159,15 @@ it(`holds delegation under tools, not under the gate rules`, async () => {
     document.body.innerHTML = ``;
 
     const { el: safety } = await mount({ section: `safety` });
-    expect(shown(safety)).toEqual([`Safety judge`, `Project installs`, `Safety policy`, `Privacy shield`, `Recent decisions`]);
+    expect(shown(safety)).toEqual([
+        `Safety judge`,
+        `Project installs`,
+        `Safety policy`,
+        `Privacy shield`,
+        `AI literacy`,
+        `Product analytics`,
+        `Recent decisions`,
+    ]);
 });
 
 // `?connect=` opened a provider's accounts here when they lived on this tab; a link from then lands on them now.
