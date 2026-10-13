@@ -41,11 +41,12 @@ export const CONTROL_MCP_SERVERS: ReadonlySet<string> = new Set(
 );
 
 // Capability kinds whose id becomes an MCP server name for the turn, and so whose id must not collide with a daemon
-// server: `mcp`, a core kind that is its own endpoint, and every contributable kind the manifest schema says mints one
+// server: `mcp`, a core kind that is its own endpoint, `link`, whose card is mounted as a server named after it, and
+// every contributable kind the manifest schema says mints one
 // (a device's and a connected browser's peer bridge, a cli card that serves tools), read off the schema's own meaning
 // (`contributedServerMintingKinds`), so a kind that starts minting is refused here without a second list. Other kinds
 // mint accounts, providers or infrastructure, never a `mcp__<id>__` server keyed by the id.
-export const MCP_SERVER_MINTING_KINDS: ReadonlySet<string> = new Set(["mcp", ...contributedServerMintingKinds()]);
+export const MCP_SERVER_MINTING_KINDS: ReadonlySet<string> = new Set(["mcp", "link", ...contributedServerMintingKinds()]);
 
 // Whether adding or renaming a capability of this kind to this id would shadow a daemon server. The one predicate the
 // capability routes consult, so the refusal and this list can't drift.

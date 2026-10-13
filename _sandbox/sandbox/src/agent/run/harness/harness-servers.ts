@@ -177,9 +177,6 @@ export interface DaemonServerTurn {
     readonly input: AgentTurn;
     readonly context: TurnContext;
     readonly persona: TurnPersona;
-    // The capability manifest this turn was granted, past its persona, the people's reach and the gates; absent for a
-    // caller that grants nothing beyond the daemon's own servers.
-    readonly granted?: readonly Capability[];
 }
 
 // The secret typist: only when this turn drives a browser at all; the browsers themselves ride the turn's remote mounts.
@@ -188,18 +185,14 @@ export const secretsServerFor = (browser: BrowserTurnTools, secrets: SecretAcces
 
 // `wait` parks until a child of this turn settles, `keep` leaves a background command running for the person, and
 // `spawn` (same server) starts a full agent on any connected provider; `wait` and `keep` are always offered, the rest
-// withheld without the delegate shelf and full agency. `delegate` and `links` ride only where the turn was granted a
-// link card, so a turn with no other sandbox to hand work to is not told of them.
-export const subagentsServerFor = (deps: HarnessServersDeps, { context, persona, granted }: DaemonServerTurn): McpSdkServerConfigWithInstance => {
-    const children = context.children !== undefined && mayDelegate(persona) ? context.children : undefined;
-    return subagentWaitServer({
+// withheld without the delegate shelf and full agency.
+export const subagentsServerFor = (deps: HarnessServersDeps, { context, persona }: DaemonServerTurn): McpSdkServerConfigWithInstance =>
+    subagentWaitServer({
         conversationId: context.base.spec.conversationId,
         conversations: deps.conversations,
         signal: context.base.signal,
-        ...opt("children", children),
-        ...opt("linked", children !== undefined && (granted ?? []).some((capability) => capability.kind === "link") ? (true as const) : undefined),
+        ...opt("children", context.children !== undefined && mayDelegate(persona) ? context.children : undefined),
     });
-};
 
 // Withheld without shell power or a conversation to wake.
 export const watchServerFor = (deps: HarnessServersDeps, { input, context, persona }: DaemonServerTurn): McpSdkServerConfigWithInstance | undefined =>
@@ -220,7 +213,6 @@ export const harnessServers = (
         readonly input: AgentTurn;
         readonly context: TurnContext;
         readonly persona: TurnPersona;
-        readonly granted: readonly Capability[];
         readonly browser: BrowserTurnTools;
         readonly secrets: SecretAccess;
         readonly hashlineEdits: boolean;

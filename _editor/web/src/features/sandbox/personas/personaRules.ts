@@ -13,16 +13,17 @@ export interface PersonaGrantable {
     detail?: string;
 }
 
-// Grantable kinds: cli, host, phone, mcp. Agent-runtime and platform kinds are excluded so a persona cannot disable the
-// runtime serving its own turn. A phone is one of the owner's devices, granted on the same list as their computers
-// (the daemon's `powers.devices` covers both), so it is offered in that group.
-const GRANTABLE_KINDS = new Set([`cli`, `device`, `phone`, `mcp`]);
+// Grantable kinds: cli, host, phone, link, mcp. Agent-runtime and platform kinds are excluded so a persona cannot disable
+// the runtime serving its own turn. A phone, and another of the owner's sandboxes linked to this one, are granted on the
+// same list as their computers (the daemon's `powers.devices` covers all three), so they are offered in that group.
+const GRANTABLE_KINDS = new Set([`cli`, `device`, `phone`, `link`, `mcp`]);
+const DEVICE_GROUP = new Set([`phone`, `link`]);
 export const grantablesFrom = (capabilities: readonly { id: string; kind: string }[]): PersonaGrantable[] =>
     capabilities
         .filter((capability) => GRANTABLE_KINDS.has(capability.kind))
         .map((capability) => ({
             id: capability.id,
-            kind: (capability.kind === `phone` ? `device` : capability.kind) as PersonaGrantable[`kind`],
+            kind: (DEVICE_GROUP.has(capability.kind) ? `device` : capability.kind) as PersonaGrantable[`kind`],
             label: capability.id,
         }));
 

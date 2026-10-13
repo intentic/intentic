@@ -1,13 +1,14 @@
 ---
 name: links
-description: Hand a task to another of the owner's sandboxes that is linked to this one (`delegate`, `links`, or `agents delegate` from a shell), and supervise it like a subagent. Use when the work needs what only that sandbox has (its credentials, its repos, its devices, its persona), not for more hands on this sandbox's own work, which is `spawn`.
+description: Hand a task to another of the owner's sandboxes that is linked to this one (`mcp__<sandbox>__delegate`, or `agents delegate` from a shell), and supervise it like a subagent. Use when the work needs what only that sandbox has (its credentials, its repos, its devices, its persona), not for more hands on this sandbox's own work, which is `spawn`.
 ---
 
 # Linked sandboxes
 
-A **link** lets this sandbox hand tasks to another of the owner's sandboxes. Each link is a `link` card on
-Capabilities here; the token behind it was minted by the other sandbox's owner and stays with this sandbox's
-daemon, never in your environment. What a task may do over there is decided **there**, on the link's terms:
+A **link** lets this sandbox hand tasks to another of the owner's sandboxes. Each linked sandbox sits with the owner's
+devices: a `link` card under Your devices, and a tool server of its own named after the card, the way a computer's is
+(`mcp__ops__delegate` beside `mcp__omen__run_command`). The token behind it was minted by the other sandbox's owner
+and stays with this sandbox's daemon, never in your environment. What a task may do over there is decided **there**, on the link's terms:
 
 - the **persona** its tasks wear (their accounts, tool shelves, folders and model);
 - whether each task **waits for that sandbox's owner** to allow it before anything runs;
@@ -17,16 +18,17 @@ Nothing you say changes those terms. A refusal from over there is that owner's d
 
 ## Tools
 
-| You want | Claude Code | Any shell |
+| You want | Tools | Any shell |
 |---|---|---|
-| which sandboxes you may hand work to, whether each answers, its terms | `links` | `agents links` |
-| hand one a task | `delegate(to, task, description)` | `agents delegate <link> --description "…" '<task>'` |
+| which sandboxes you may hand work to | your tool list: one `mcp__<name>__…` server per linked sandbox | `agents links` |
+| whether one answers now, and its terms | `mcp__<name>__about` | `agents links` |
+| hand one a task | `mcp__<name>__delegate(task, description)` | `agents delegate <name> --description "…" '<task>'` |
 | wait for it to finish or ask something | `wait(target: id)` | `agents wait <id>` |
 | answer its question | `answer(child: id, …)` | `agents answer <id> '<text>'` |
 | follow up, or continue a finished one | `send(child: id, message)` | `agents send <id> '<message>'` |
 | stop it | `cancel(child: id)` | `agents cancel <id>` |
 
-The id `delegate` returns (`linked-…`) is a subagent of this conversation: it shows under your card on the board,
+The id a hand-over returns (`linked-…`) is a subagent of this conversation: it shows under your card on the board,
 `wait` covers it, and if your turn ends first its report wakes this conversation.
 
 ## How a task runs over there
@@ -49,12 +51,14 @@ The id `delegate` returns (`linked-…`) is a subagent of this conversation: it 
   it is refused on both sides, so two sandboxes cannot pass one task back and forth.
 - A link reaches **only the conversations it opened** over there: never that sandbox's files, its other
   conversations or its settings.
-- Your persona's **delegate** shelf gates links as it gates `spawn`, and the people this conversation works for
-  must have been given the link card.
+- Your persona picks linked sandboxes on its **devices** list, beside computers, and handing one work also needs its
+  **delegate** shelf, as `spawn` does; a turn started by outside content may not hand work on. The people this
+  conversation works for must have been given the link card.
 
 ## When there is no link
 
-`delegate` says so. Linking two sandboxes is the owner's, on a card:
+There is no `mcp__<name>__delegate` in your tools, and `agents links` says so. Linking two sandboxes is the owner's, on a
+card:
 
 ```sh
 capabilities request link --why "the migration check needs the ops sandbox's database access"

@@ -20,7 +20,6 @@ const LABELS: Readonly<Record<ModelRole, () => string>> = {
     "acceptance-run": () => t(`sandbox.modelRoles.acceptanceRun.label`),
     "approval-queue": () => t(`sandbox.modelRoles.approvalQueue.label`),
     "extension-review": () => t(`sandbox.modelRoles.extensionReview.label`),
-    "linked-task": () => t(`sandbox.modelRoles.linkedTask.label`),
     "loop-iteration": () => t(`sandbox.modelRoles.loopIteration.label`),
     "spoken-reply": () => t(`sandbox.modelRoles.spokenReply.label`),
 };
@@ -40,7 +39,6 @@ const BLURBS: Readonly<Record<ModelRole, () => string>> = {
     "acceptance-run": () => t(`sandbox.modelRoles.acceptanceRun.blurb`),
     "approval-queue": () => t(`sandbox.modelRoles.approvalQueue.blurb`),
     "extension-review": () => t(`sandbox.modelRoles.extensionReview.blurb`),
-    "linked-task": () => t(`sandbox.modelRoles.linkedTask.blurb`),
     "loop-iteration": () => t(`sandbox.modelRoles.loopIteration.blurb`),
     "spoken-reply": () => t(`sandbox.modelRoles.spokenReply.blurb`),
 };

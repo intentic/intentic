@@ -20,11 +20,11 @@ export interface TurnRemoteTools {
     readonly release: () => void;
 }
 
-export type TurnToolsDeps = Pick<Services, "tools" | "turnMounts" | "browserRouters" | "desktopServers"> & ExtensionHost;
+export type TurnToolsDeps = Pick<Services, "tools" | "turnMounts" | "browserRouters" | "desktopServers" | "linkMounts"> & ExtensionHost;
 
 // Every MCP server a turn may reach, as one list every runtime projects the same way: the daemon's own internal tools,
 // the workspace's mcp-kind capabilities, and, through the daemon's one MCP door on a lease of this turn's own, the
-// connected machines and browsers it was granted, its extension cards' endpoints and its browser routers. One composer
+// connected machines, linked sandboxes and browsers it was granted, its extension cards' endpoints and its browser routers. One composer
 // for every runtime, so a capability the owner connected can't reach one loop and miss another. Internal first; a
 // same-named later entry overrides, matching mcpServersOf's last-wins merge, so the browsers (reserved names) come last.
 export const turnToolsOf = async (
@@ -61,6 +61,8 @@ export const turnToolsOf = async (
                 ...peerToolsOf("device", granted, lease),
                 ...peerToolsOf("webext", granted, lease),
                 ...peerToolsOf("phone", granted, lease),
+                // The owner's other sandboxes this turn may hand work to, each a server of its own like a computer.
+                ...services.linkMounts(granted, lease, turn.conversationId),
                 ...extension,
                 ...browser.servers,
                 ...desktop,

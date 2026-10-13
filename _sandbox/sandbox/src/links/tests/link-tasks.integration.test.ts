@@ -93,7 +93,6 @@ test("a task starts at once, unattended, isolated, in the link's persona, as a p
         conversationId: status.conversationId,
         unattended: true,
         isolated: true,
-        runRole: "linked-task",
         actsAs: "ops",
         speaker: { kind: "program", token: "dev (linked sandbox)" },
     });

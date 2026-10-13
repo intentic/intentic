@@ -114,15 +114,17 @@ describe(`extensionGrantablesFrom`, () => {
     });
 });
 
-test(`a phone is offered with the computers, on the one devices list a persona grants`, () => {
+test(`a phone and a linked sandbox are offered with the computers, on the one devices list a persona grants`, () => {
     expect(
         grantablesFrom([
             { id: `pixel`, kind: `phone` },
             { id: `rog`, kind: `device` },
+            { id: `ops`, kind: `link` },
             { id: `chrome`, kind: `webext` },
         ]),
     ).toEqual([
         { id: `pixel`, kind: `device`, label: `pixel` },
         { id: `rog`, kind: `device`, label: `rog` },
+        { id: `ops`, kind: `device`, label: `ops` },
     ]);
 });

@@ -1542,7 +1542,7 @@
             },
             "devices": {
                 "label": "Your devices",
-                "hint": "Let the agent work on your own device, run commands, handle files, see the screen."
+                "hint": "Let the agent work on your own devices and your other sandboxes: run commands, handle files, see the screen, hand over tasks."
             },
             "servers": {
                 "label": "Servers",
@@ -8139,10 +8139,6 @@
                 "blurb": "The agent that reads an extension update before it is applied.",
                 "label": "Extension update reviews"
             },
-            "linkedTask": {
-                "blurb": "A task another of your sandboxes handed to this one over a link.",
-                "label": "Linked sandbox tasks"
-            },
             "loopIteration": {
                 "blurb": "Each round of a loop working towards its goal.",
                 "label": "Loop iterations"
@@ -8677,6 +8673,13 @@
             "shownOnce": "Shown once. Paste both into the Linked sandbox card on the other sandbox.",
             "address": "Address",
             "token": "Token"
+        },
+        "linkedSandboxRows": {
+            "title": "Linked sandboxes",
+            "online": "answering",
+            "revoked": "revoked there",
+            "notAnswering": "not answering",
+            "manage": "Manage"
         }
     },
     "settings": {

@@ -110,7 +110,8 @@ const turnOf = (link: ResolvedLink, task: StoredLinkTask, prompt: string, messag
     unattended: true,
     // Its own worktree, landing the way this sandbox lands any conversation's work.
     isolated: true,
-    runRole: "linked-task",
+    // No run role of its own: the link's persona names the model its tasks run on, else the sandbox's default does, so
+    // everything about what a link's tasks are is set on the link (Sandbox ▸ Access), not on a second page.
     ...opt("actsAs", link.terms.actsAs),
     ...spokenBy({ kind: "program", token: speakerToken(link.label) }),
 });

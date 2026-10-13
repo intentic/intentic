@@ -2964,16 +2964,16 @@
           "what": "and src/device/intenticOs/SystemCard.vue — Intentic OS: the system as ic os reports it, the changes This device makes to it, and kiosk mode."
         }
       ],
-      "behind": 2,
+      "behind": 3,
       "component": "editor",
       "dir": "_editor/desktop-app",
       "files": 99,
       "hasTests": true,
-      "loc": 15072,
+      "loc": 15073,
       "name": "@intentic/desktop-app",
       "oneLiner": "The Tauri app for Windows and Linux that opens the editor on a folder of the user's own computer from the first launch, with no account, runs sandboxes on that computer from its This device view,…",
       "readmeRev": "4772498b7fa2d6ec6c31e487e1aba13bbebd2da4",
-      "reason": "2 commits have touched this package since its README was written",
+      "reason": "3 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1791898218000
     },
@@ -3169,16 +3169,16 @@
           "what": "the persistent shell, split by form factor."
         }
       ],
-      "behind": 16,
+      "behind": 19,
       "component": "editor",
       "dir": "_editor/web",
-      "files": 2438,
+      "files": 2441,
       "hasTests": true,
-      "loc": 358517,
+      "loc": 358736,
       "name": "@intentic/web",
       "oneLiner": "The Vue app the user works in, with files, chat, terminals and agents, talking to the platform for the account and straight to the sandbox daemon for everything else.",
       "readmeRev": "b7cd9dd7cea6b43bfe44904e58c484f25c07103a",
-      "reason": "16 commits have touched this package since its README was written",
+      "reason": "19 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1791899338000
     },
@@ -4390,11 +4390,11 @@
       "dir": "_sandbox/ic",
       "files": 92,
       "hasTests": false,
-      "loc": 55527,
+      "loc": 55569,
       "oneLiner": "The host-side CLI that starts, updates, diagnoses and removes intentic sandbox containers on the machine that runs them, and gets Docker there first.",
-      "readmeRev": "997698b2576d76361485d4c71fa12fa1d3c163a8",
+      "readmeRev": "786904ec51edc68f4e6be5b2052689f4d2d4ef94",
       "stale": false,
-      "updatedAt": 1791914055000
+      "updatedAt": 1791918884000
     },
     {
       "anchors": [
@@ -4613,14 +4613,14 @@
       "behind": 0,
       "component": "sandbox",
       "dir": "_sandbox/sandbox",
-      "files": 2612,
+      "files": 2619,
       "hasTests": true,
-      "loc": 435448,
+      "loc": 436725,
       "name": "@intentic/sandbox",
       "oneLiner": "The Node daemon at the center of every sandbox: it runs coding agents in git worktrees, serves the workspace to the editor, and lands their work.",
-      "readmeRev": "74b1bf24687d2242906afb49445778ae36d301b5",
+      "readmeRev": "c4f5e9d3c6b7e7bac6fd789756f759b0ddf5597a",
       "stale": false,
-      "updatedAt": 1791919140000
+      "updatedAt": 1791920240000
     },
     {
       "anchors": [
@@ -4973,7 +4973,7 @@
       "dir": "_shared/capability-catalog",
       "files": 4,
       "hasTests": true,
-      "loc": 2049,
+      "loc": 2052,
       "name": "@intentic/capability-catalog",
       "oneLiner": "The catalog of capability tiles an owner can connect, with each tile's add form and the side effects connecting it has, shared by the editor and the daemon.",
       "readmeRev": "cdd21d419cd19d83541365686f7af7c158a51021",
@@ -5309,16 +5309,16 @@
           "what": "a narrow entry point, one of several that keep small bundles off the barrel."
         }
       ],
-      "behind": 3,
+      "behind": 4,
       "component": "shared",
       "dir": "_shared/sandbox-contract",
       "files": 368,
       "hasTests": true,
-      "loc": 53186,
+      "loc": 53183,
       "name": "@intentic/sandbox-contract",
       "oneLiner": "The wire contract between the editor and the sandbox daemon: every route, its schemas and its access policy, as one oRPC contract both ends compile against.",
       "readmeRev": "4772498b7fa2d6ec6c31e487e1aba13bbebd2da4",
-      "reason": "3 commits have touched this package since its README was written",
+      "reason": "4 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1791898218000
     },
@@ -6204,7 +6204,7 @@
       "updatedAt": 1791106205000
     }
   ],
-  "generatedAt": 1791919185285,
+  "generatedAt": 1791921247456,
   "orphans": [],
   "repo": "intentic",
   "undocumented": [

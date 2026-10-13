@@ -1,10 +1,14 @@
 import { join } from "node:path";
+import type { Capability } from "@intentic/sandbox-contract";
+import type { AgentTool } from "../agent/tools/agent-tools.js";
+import type { TurnLease } from "../agent/tools/turn-mounts.js";
 import type { Logger } from "pino";
 import type { Services } from "../composition.js";
 import { turnStandingOf } from "../conversations/actor/turn-standing.js";
 import { conversationProfile } from "../conversations/registry/agents-store.js";
 import { fileInboundLinks, type InboundLinks, inboundLinksDocument } from "./inbound-links.js";
 import { createLinkedChildren, type LinkedChildren, linkedChildrenDocument } from "./linked-children.js";
+import { linkMountsOf } from "./link-mounts.js";
 
 // LINKED SANDBOXES, both halves: the other sandboxes allowed to hand this one tasks, and the tasks this one handed to
 // others. Either half works without the other; a sandbox is usually one side of a given link and may be both.
@@ -13,6 +17,8 @@ export interface LinksSlice {
     readonly inboundLinks: InboundLinks;
     // Outbound: tasks this sandbox's agents handed over through `link` cards, followed until they settle.
     readonly linkedChildren: LinkedChildren;
+    // A turn's linked sandboxes as tool servers on its lease, one per granted card, as its computers are mounted.
+    readonly linkMounts: (granted: readonly Capability[], lease: Pick<TurnLease, "open">, conversationId: string | undefined) => AgentTool[];
 }
 
 export const createLinksSlice = ({
@@ -46,5 +52,7 @@ export const createLinksSlice = ({
         logger,
         historyPath: join(historyRoot, linkedChildrenDocument.path),
     });
-    return { inboundLinks, linkedChildren };
+    const linkMounts: LinksSlice["linkMounts"] = (granted, lease, conversationId) =>
+        linkMountsOf({ conversations: { holdings: (holding) => whole().conversations.holdings(holding) }, about: linkedChildren.about }, granted, lease, conversationId);
+    return { inboundLinks, linkedChildren, linkMounts };
 };

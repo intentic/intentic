@@ -153,8 +153,10 @@ export const CAPABILITY_CATEGORIES: readonly { readonly id: CapabilityCategory; 
     { id: "data", label: "Data", hint: "Let the agent query your SQL databases." },
     { id: "communication", label: "Communication", hint: "Let the agent read and send messages." },
     { id: "business", label: "Business & docs", hint: "Connect payments and knowledge bases." },
-    // Distinct from Servers: a server is something the sandbox dials, a device is something that dials the sandbox.
-    { id: "devices", label: "Your devices", hint: "Let the agent work on your own device, run commands, handle files, see the screen." },
+    // Distinct from Servers: a device is a place of the owner's own the agent acts in, which holds the agent to its own
+    // limits (a computer or a phone dialling in, another of their sandboxes dialled with a link); a server is a machine the
+    // sandbox signs in to, with nothing on it enforcing anything for the owner.
+    { id: "devices", label: "Your devices", hint: "Let the agent work on your own devices and your other sandboxes: run commands, handle files, see the screen, hand over tasks." },
     { id: "servers", label: "Servers", hint: "Give the agent remote machines over SSH, private networks over VPN, and the disks on them." },
     { id: "deploy", label: "Deploy & infra", hint: "Drive your container deployments, stacks, services and releases." },
     { id: "extend", label: "Extend", hint: "Add any MCP server or Claude Code plugin." },
@@ -913,14 +915,15 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         },
         hint: "The agent runs `sandboxes create` and every create asks you in chat first, naming the machine it would run on. New sandboxes land on a computer you have connected as a device — this never provisions hosted machines, so it cannot spend your plan.",
     },
-    // Another of the owner's sandboxes this one may hand tasks to: the fleet's sibling for work rather than machines. The
-    // token is minted over there, where the terms live; the editor pairs the two sandboxes and fills this in by itself,
-    // and the fields are the way to do it by hand.
+    // Another of the owner's sandboxes this one may hand tasks to, kept with their computers: to them it is another place
+    // their agent can act, its tools named after it, picked by personas on the same devices list, and held to what that
+    // side allows as a device is. The token is minted over there, where the terms live; the editor pairs the two
+    // sandboxes and fills this in by itself, and the fields are the way to do it by hand.
     {
         id: "link",
         name: "Linked sandbox",
         kind: "link",
-        category: "deploy",
+        category: "devices",
         icon: "link",
         description: "Hand tasks to another of your sandboxes.",
         fields: [

@@ -1500,7 +1500,7 @@
             },
             "devices": {
                 "label": "Twoje urządzenia",
-                "hint": "Pozwól agentowi pracować na Twoim własnym urządzeniu: uruchamiać polecenia, obsługiwać pliki, widzieć ekran."
+                "hint": "Pozwól agentowi pracować na Twoich własnych urządzeniach i innych sandboxach: uruchamiać polecenia, obsługiwać pliki, widzieć ekran, przekazywać zadania."
             },
             "servers": {
                 "label": "Serwery",
@@ -7736,10 +7736,6 @@
                 "blurb": "Agent, który czyta aktualizację rozszerzenia, zanim zostanie zastosowana.",
                 "label": "Przeglądy aktualizacji rozszerzeń"
             },
-            "linkedTask": {
-                "blurb": "Zadanie, które inny z Twoich sandboxów przekazał temu przez połączenie.",
-                "label": "Zadania z połączonych sandboxów"
-            },
             "loopIteration": {
                 "blurb": "Każde okrążenie pętli zmierzającej do celu.",
                 "label": "Iteracje pętli"
@@ -8274,6 +8270,13 @@
             "shownOnce": "Pokazane raz. Wklej oba w kartę Połączony sandbox w drugim sandboxie.",
             "address": "Adres",
             "token": "Token"
+        },
+        "linkedSandboxRows": {
+            "title": "Połączone sandboxy",
+            "online": "odpowiada",
+            "revoked": "unieważnione tam",
+            "notAnswering": "nie odpowiada",
+            "manage": "Zarządzaj"
         }
     },
     "settings": {

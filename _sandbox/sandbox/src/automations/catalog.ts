@@ -310,10 +310,10 @@ export const CORE_AUTOMATION_TEMPLATES: readonly AutomationTemplate[] = [
         trigger: { kind: "schedule", cron: "0 8 * * 1" },
         description: "Every Monday, ask each sandbox this one is linked to for its week: what landed, what is open or stuck, what fails. One report here.",
         prompt:
-            "Gather one weekly digest from every sandbox this one is linked to. Call the links tool (from a shell: `agents links`) for which " +
-            "linked sandboxes this turn may hand work to and which answer right now. If there are none, say so in one line and stop: linking " +
-            "one is the owner's, on a Linked sandbox card.\n\n" +
-            "For each one that is online, delegate one read-only task, with a description naming that sandbox: \"Report on this sandbox's last " +
+            "Gather one weekly digest from every sandbox this one is linked to. Each linked sandbox this turn may hand work to is a tool " +
+            "server of its own in your tools, `mcp__<name>__about` and `mcp__<name>__delegate` (from a shell: `agents links`). If there are " +
+            "none, say so in one line and stop: linking one is the owner's, on a Linked sandbox card.\n\n" +
+            "For each one whose `about` says it answers, delegate one read-only task, with a description naming that sandbox: \"Report on this sandbox's last " +
             "seven days: what landed in its repositories, which conversations are still open or stuck and why, anything failing in CI, and " +
             "anything that needs the owner. Change nothing: read only. End with the three lines the owner should read first.\" Hand them all " +
             "over before waiting on any, then wait on whichever moves first until each has finished, failed or been declined. One that is " +

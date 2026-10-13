@@ -128,6 +128,8 @@ export interface LinkedChildren {
     readonly owns: (childId: string) => boolean;
     readonly delegate: (parent: ChildParent, ask: DelegateAsk) => Promise<ChildSpawnResult>;
     readonly links: (conversationId: string) => Promise<readonly LinkListing[]>;
+    // One card's listing, for its own `about` tool; undefined for a card this turn was not granted.
+    readonly about: (conversationId: string, link: string) => Promise<LinkListing | undefined>;
     readonly send: (parent: ChildParent, childId: string, message: string) => Promise<ChildActionResult>;
     readonly answer: (parent: ChildParent, childId: string, answers: Record<string, string[]>) => Promise<ChildActionResult>;
     readonly cancel: (parent: ChildParent, childId: string) => Promise<ChildActionResult>;
@@ -441,9 +443,11 @@ const delegate = async (engine: Engine, parent: ChildParent, ask: DelegateAsk): 
     return { ok: true, id, note: `${where} Supervise it with wait(target: "${id}").` };
 };
 
-const listLinks = async (engine: Engine, conversationId: string): Promise<readonly LinkListing[]> => {
+const listLinks = async (engine: Engine, conversationId: string, only?: string): Promise<readonly LinkListing[]> => {
     const standing = engine.deps.standingOf(conversationId);
-    const cards = (await engine.deps.capabilities()).filter(isLinkCard).filter((card) => standing === undefined || standing.granted.includes(card.id));
+    const cards = (await engine.deps.capabilities())
+        .filter(isLinkCard)
+        .filter((card) => (standing === undefined || standing.granted.includes(card.id)) && (only === undefined || card.id === only));
     return Promise.all(
         cards.map(async (card): Promise<LinkListing> => {
             const hello: LinkAnswerOf<LinkHello> = await engine.wire.hello(targetOf(card), AbortSignal.timeout(HELLO_MS));
@@ -566,6 +570,7 @@ export const createLinkedChildren = (deps: LinkedChildrenDeps): LinkedChildren =
         owns: (childId) => childId.startsWith(LINKED_PREFIX) && engine.live.has(childId),
         delegate: (parent, ask) => delegate(engine, parent, ask),
         links: (conversationId) => listLinks(engine, conversationId),
+        about: async (conversationId, link) => (await listLinks(engine, conversationId, link))[0],
         send: async (parent, childId, message) => {
             const child = mine(parent, childId);
             return child === undefined ? notMine : sendTo(engine, child, message);
