@@ -56,6 +56,13 @@ test("a family member on a runtime with no permission rules of its own is never 
     expect(messageTaint(ungated, "blind", "root")).toBe("a message from `blind`, which runs on pi, a runtime with no permission rules of its own");
 });
 
+// Pi itself now passes every call through the daemon's hooks (agent-runtimes.ts PI `rulebook: "hooks"`), so on the real
+// catalog a Pi family member's clean words are its family's, and what its own turn read still passes on.
+test("a family member on Pi, whose every call the daemon's hooks gate, is as clean as any other", () => {
+    expect(messageTaint(taintOf(), "blind", "root")).toBeUndefined();
+    expect(messageTaint(taintOf(new Map([["blind", "a fetched page"]])), "blind", "root")).toBe("a fetched page, relayed by `blind`");
+});
+
 // A message that opens a turn on the target continues the target's own session, on the routing it runs on now: the
 // session decision is the one every turn the daemon starts takes (routing.ts sessionFor).
 test("a message that opens a turn on its target continues the target's session on the target's own provider", async () => {

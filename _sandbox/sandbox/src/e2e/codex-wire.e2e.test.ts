@@ -295,6 +295,49 @@ describe.skipIf(!tier.runs)(tier.title, () => {
             expect(existsSync(join(codexHome, "instructions"))).toBe(false);
         });
 
+        // The same field rides thread/resume, so a resumed thread reads the wording the turn resuming it sends rather
+        // than the one that started it.
+        test("a resumed thread reads the custom prompt its resuming turn sends, not the one it started with", async () => {
+            const { cwd, codexHome } = await scratch();
+            const model = await startFakeModel({ script: [{ text: "first answer" }, { text: "second answer" }], requireKey: AUTH_TOKEN });
+            const controller = new AbortController();
+            const lease = rootExecution({ localCwd: cwd });
+            try {
+                const agent = createCodexAgent({ codexHome });
+                const base: Omit<AgentRequest<CodexCredential>, "spec"> = {
+                    execution: lease.context,
+                    policy: {},
+                    tools: {},
+                    credential: { kind: "codex-endpoint", baseUrl: model.baseUrl, authToken: AUTH_TOKEN },
+                    hooks: { cards },
+                    signal: controller.signal,
+                };
+
+                let sessionId: string | undefined;
+                for await (const event of agent({ ...base, spec: { cwd, model: MODEL, prompt: "first", systemPrompt: "The first wording." } })) {
+                    if (event.kind === "session") {
+                        sessionId = event.sessionId;
+                    }
+                }
+                if (sessionId === undefined) {
+                    throw new Error("a fresh turn must publish the thread it started");
+                }
+
+                const before = model.requests.length;
+                for await (const _ of agent({ ...base, spec: { cwd, model: MODEL, prompt: "second", systemPrompt: "The second wording.", sessionId } })) {
+                    // Drained only; the assertion is about the resumed request.
+                }
+                expect(systemInstructions(model.requests[0]!)).toBe("The first wording.");
+                expect(model.requests.length).toBeGreaterThan(before);
+                expect(userMessages(model.requests[before]!).at(-1), "the second turn must be the resumed thread's").toBe("second");
+                expect(systemInstructions(model.requests[before]!)).toBe("The second wording.");
+            } finally {
+                controller.abort();
+                lease.release();
+                await model.close();
+            }
+        });
+
         // Proved from inside the process (the command prints the value) rather than trusting the adapter's env object.
         test("cliEnv reaches the spawned app-server's shell", async () => {
             const { requests } = await runTurn(MODEL, [{ shell: `/bin/echo "seen:$CONFORMANCE_TOKEN"` }, { text: "done" }], {
