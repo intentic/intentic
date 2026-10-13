@@ -187,7 +187,7 @@ const PL: Words = {
         "audit-forward": {
             name: "Kopia dziennika poza systemem",
             what: "Każdy wpis dziennika jest równolegle wysyłany do systemu urzędu (SIEM), poza zasięgiem osób pracujących w systemie.",
-            where: "ustawienia piaskownicy: audit.forwardUrl",
+            where: "Sandbox ▸ Dziennik zdarzeń ▸ Przechowywanie",
         },
         "encryption-at-rest": {
             name: "Szyfrowanie danych w spoczynku",
@@ -398,7 +398,7 @@ const EN: Words = {
         "audit-forward": {
             name: "Copy of the audit trail outside the system",
             what: "Each audit record is also sent to the office's own system (SIEM), out of reach of the people working in this one.",
-            where: "sandbox settings: audit.forwardUrl",
+            where: "Sandbox ▸ Audit log ▸ How it is kept",
         },
         "encryption-at-rest": {
             name: "Encryption at rest",

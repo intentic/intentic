@@ -22,17 +22,37 @@ import { noticeFrom } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { useSecretInventory } from "../../capabilities/connect/secrets/useSecrets";
 import { commitCount } from "../agent-settings/models/numberInputs";
 import { useSandboxSettings } from "../overview/useSandboxSettings";
 import { actionFilters, actionTitle, actorLine, detailLines, exportSpan, verdictLine } from "./auditRows";
 import { downloadAudit, useAuditLog, useAuditStatus, useAuditVerify } from "./useAudit";
 
-// The audit trail, for the owner and maintainers: whether it is intact, how it is kept, a period to download, and the
-// records themselves. It answers "who changed this, and when", which the activity log (what bots sent and received)
-// does not. Its settings live here rather than on the Agent tab, beside the record they shape.
+// The audit trail, for the owner and maintainers. It answers "who changed this, and when", which Activity, beside it in
+// Oversight (what woke the agent and what it called), does not. Two parts: the records, which are what the page is opened
+// for, under whether they are intact and with a period to download; and how they are kept, set once and left alone. The
+// settings led the page until 2026-10-13, and a reader looking for who changed something met three groups of controls
+// before the first record. They live here rather than on the Agent tab, beside the record they shape.
 
 const t = useT();
+
+const SECTIONS = computed(
+    () =>
+        [
+            { label: t(`sandbox.sandboxAudit.records`), value: `records` },
+            { label: t(`sandbox.sandboxAudit.keeping`), value: `keeping` },
+        ] as const,
+);
+type Section = (typeof SECTIONS.value)[number][`value`];
+const route = useRoute();
+const router = useRouter();
+// In the query, as the Agent tab's categories are, so Data protection's "Change" lands on the settings; the default
+// writes no param, and a push rather than a replace lets Back return to the records.
+const section = computed<Section>({
+    get: () => (route.query[`section`] === `keeping` ? `keeping` : `records`),
+    set: (value) => void router.push({ query: { ...route.query, section: value === `records` ? undefined : value } }),
+});
 
 /* ---- Whether the record is intact ---- */
 
@@ -78,6 +98,9 @@ const pickSecret = (value: string | undefined): void => {
 
 // Spelled out whole so the stylesheet keeps each class.
 const TONE_CLASS = { success: `text-success`, warning: `text-warning`, danger: `text-danger` } as const;
+
+// Whether a copy leaves the sandbox at all: the one copy nobody inside can change, so the records say when there is none.
+const forwarded = computed(() => audit.value !== undefined && audit.value.forwardUrl !== ``);
 
 const forwardingLine = computed(() => {
     const forwarding = status.value?.forwarding;
@@ -140,32 +163,125 @@ const outcomeBadge = (record: AuditRecord): { label: string; variant: `danger` |
 
 <template>
     <div class="flex flex-col gap-6">
-        <RowGroup :label="t(`sandbox.sandboxAudit.integrity`)">
-            <Row icon="shield" :title="t(`sandbox.sandboxAudit.integrityTitle`)" :description="t(`sandbox.sandboxAudit.integrityDescription`)">
-                <template #control>
-                    <Button
-                        :label="t(`sandbox.sandboxAudit.checkAgain`)"
-                        size="small"
-                        tier="boring"
-                        :loading="isChecking"
-                        @click="void recheck()"
-                    />
-                </template>
-                <template #below>
-                    <Notice v-if="verifyError !== undefined" tone="danger">{{ verifyError }}</Notice>
-                    <p v-else-if="verdictText !== undefined" class="text-xs" :class="verdictText.tone === `success` ? `text-success` : `text-danger`">
-                        {{ verdictText.text }}
-                    </p>
-                    <p v-if="verdict?.torn" class="mt-1 text-2xs text-muted">{{ t(`sandbox.sandboxAudit.tornNote`) }}</p>
-                    <p v-if="verdict?.prunedThrough !== undefined" class="mt-1 text-2xs text-muted">
-                        {{ t(`sandbox.sandboxAudit.prunedNote`, { date: formatDateTime(verdict.prunedThrough.at) }) }}
-                    </p>
-                </template>
-            </Row>
-            <RowNote>{{ t(`sandbox.sandboxAudit.reachNote`) }}</RowNote>
-        </RowGroup>
+        <SegmentedControl v-model="section" :options="SECTIONS" :aria-label="t(`sandbox.sandboxAudit.part`)" />
 
-        <RowGroup :label="t(`sandbox.sandboxAudit.keeping`)">
+        <template v-if="section === `records`">
+            <RowGroup :label="t(`sandbox.sandboxAudit.integrity`)">
+                <Row icon="shield" :title="t(`sandbox.sandboxAudit.integrityTitle`)" :description="t(`sandbox.sandboxAudit.integrityDescription`)">
+                    <template #control>
+                        <Button
+                            :label="t(`sandbox.sandboxAudit.checkAgain`)"
+                            size="small"
+                            tier="boring"
+                            :loading="isChecking"
+                            @click="void recheck()"
+                        />
+                    </template>
+                    <template #below>
+                        <Notice v-if="verifyError !== undefined" tone="danger">{{ verifyError }}</Notice>
+                        <p v-else-if="verdictText !== undefined" class="text-xs" :class="verdictText.tone === `success` ? `text-success` : `text-danger`">
+                            {{ verdictText.text }}
+                        </p>
+                        <p v-if="verdict?.torn" class="mt-1 text-2xs text-muted">{{ t(`sandbox.sandboxAudit.tornNote`) }}</p>
+                        <p v-if="verdict?.prunedThrough !== undefined" class="mt-1 text-2xs text-muted">
+                            {{ t(`sandbox.sandboxAudit.prunedNote`, { date: formatDateTime(verdict.prunedThrough.at) }) }}
+                        </p>
+                        <!-- The forwarded copy is what makes the seals worth trusting, so a failing one is said beside the verdict. -->
+                        <p v-if="forwardingLine?.tone === `danger`" class="mt-1 text-xs text-danger">{{ forwardingLine.text }}</p>
+                    </template>
+                </Row>
+                <RowNote>
+                    {{ t(`sandbox.sandboxAudit.reachNote`) }}
+                    <button v-if="audit !== undefined && !forwarded" type="button" :class="ui.textButton()" @click="section = `keeping`">
+                        {{ t(`sandbox.sandboxAudit.forwardTitle`) }}<Icon name="arrow-right" class="text-2xs" />
+                    </button>
+                </RowNote>
+            </RowGroup>
+
+            <RowGroup :label="t(`sandbox.sandboxAudit.download`)">
+                <Row icon="download" :title="t(`sandbox.sandboxAudit.downloadTitle`)" :description="t(`sandbox.sandboxAudit.downloadDescription`)">
+                    <template #below>
+                        <div class="flex flex-wrap items-end gap-3">
+                            <label class="ui-field">
+                                <span class="ui-field-label">{{ t(`sandbox.sandboxAudit.from`) }}</span>
+                                <input v-model="exportFrom" type="date" :class="ui.input({ size: `sm` })" />
+                            </label>
+                            <label class="ui-field">
+                                <span class="ui-field-label">{{ t(`sandbox.sandboxAudit.to`) }}</span>
+                                <input v-model="exportTo" type="date" :class="ui.input({ size: `sm` })" />
+                            </label>
+                            <Button :label="t(`sandbox.sandboxAudit.downloadButton`)" size="small" :loading="exporting" @click="void runExport()">
+                                <template #icon><Icon name="download" /></template>
+                            </Button>
+                        </div>
+                        <Notice v-if="exportNotice !== undefined" :of="exportNotice" class="mt-2" />
+                    </template>
+                </Row>
+            </RowGroup>
+
+            <div class="flex flex-col gap-3">
+                <FilterBar v-model="actorQuery" :placeholder="t(`sandbox.sandboxAudit.filterPlaceholder`)" clearable>
+                    <template #controls>
+                        <SegmentedControl v-model="actionFilter" size="xs" :options="actionFilters()" />
+                    </template>
+                </FilterBar>
+
+                <RowGroup :label="t(`sandbox.sandboxAudit.records`)">
+                    <RowNote v-if="listError !== undefined" variant="block"><Notice tone="danger">{{ listError }}</Notice></RowNote>
+                    <div v-else-if="isLoading" role="status" aria-busy="true">
+                        <span class="sr-only">{{ t(`sandbox.sandboxAudit.reading`) }}</span>
+                        <SkeletonRows :rows="4" description />
+                    </div>
+                    <RowNote v-else-if="records.length === 0" variant="empty">{{ t(`sandbox.sandboxAudit.empty`) }}</RowNote>
+                    <template v-else>
+                        <DisclosureRow
+                            v-for="record in records"
+                            :key="record.id"
+                            body="rail"
+                            :open="opened === record.id"
+                            @update:open="(open: boolean) => (opened = open ? record.id : undefined)"
+                        >
+                            <template #title>
+                                <span class="block truncate text-xs font-medium text-content">
+                                    {{ actionTitle(record.action) }}<span v-if="record.target !== undefined" class="font-normal text-muted"> · {{ record.target }}</span>
+                                </span>
+                            </template>
+                            <template #description>
+                                <span class="block truncate text-2xs text-muted">{{ actorLine(record.actor) }}</span>
+                            </template>
+                            <template #meta>
+                                <StatusBadge v-if="outcomeBadge(record) !== undefined" :variant="outcomeBadge(record)!.variant" :label="outcomeBadge(record)!.label" size="xs" />
+                                <span class="shrink-0 text-2xs text-subtle" v-tooltip.top="formatDateTime(record.at)">{{ timeAgo(record.at) }}</span>
+                            </template>
+                            <template #below>
+                                <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 py-1 text-2xs">
+                                    <dt class="text-subtle">{{ t(`sandbox.sandboxAudit.when`) }}</dt>
+                                    <dd class="text-content">{{ formatDateTime(record.at) }}</dd>
+                                    <dt class="text-subtle">{{ t(`sandbox.sandboxAudit.action`) }}</dt>
+                                    <dd class="font-mono text-content">{{ record.action }}</dd>
+                                    <template v-if="detailLines(record).length > 0">
+                                        <dt class="text-subtle">{{ t(`sandbox.sandboxAudit.details`) }}</dt>
+                                        <dd class="font-mono text-content [overflow-wrap:anywhere]">
+                                            <div v-for="line in detailLines(record)" :key="line">{{ line }}</div>
+                                        </dd>
+                                    </template>
+                                    <dt class="text-subtle">{{ t(`sandbox.sandboxAudit.hash`) }}</dt>
+                                    <dd class="font-mono text-subtle [overflow-wrap:anywhere]">{{ record.hash }}</dd>
+                                </dl>
+                            </template>
+                        </DisclosureRow>
+                        <RowNote v-if="hasOlder">
+                            <Button :label="t(`sandbox.sandboxAudit.showOlder`)" size="small" tier="boring" :loading="loadingOlder" @click="void loadOlder()" />
+                        </RowNote>
+                    </template>
+                </RowGroup>
+                <p v-if="status?.oldestAt !== undefined" class="text-2xs text-subtle">
+                    {{ t(`sandbox.sandboxAudit.oldest`, { date: formatDateTime(status.oldestAt) }) }}
+                </p>
+            </div>
+        </template>
+
+        <RowGroup v-else :label="t(`sandbox.sandboxAudit.keeping`)">
             <Row icon="clock" :title="t(`sandbox.sandboxAudit.retentionTitle`)" :description="t(`sandbox.sandboxAudit.retentionDescription`)">
                 <template #control>
                     <input
@@ -224,87 +340,5 @@ const outcomeBadge = (record: AuditRecord): { label: string; variant: `danger` |
             </Row>
             <RowNote v-if="refusal !== undefined" variant="block"><Notice :of="refusal" /></RowNote>
         </RowGroup>
-
-        <RowGroup :label="t(`sandbox.sandboxAudit.download`)">
-            <Row icon="download" :title="t(`sandbox.sandboxAudit.downloadTitle`)" :description="t(`sandbox.sandboxAudit.downloadDescription`)">
-                <template #below>
-                    <div class="flex flex-wrap items-end gap-3">
-                        <label class="ui-field">
-                            <span class="ui-field-label">{{ t(`sandbox.sandboxAudit.from`) }}</span>
-                            <input v-model="exportFrom" type="date" :class="ui.input({ size: `sm` })" />
-                        </label>
-                        <label class="ui-field">
-                            <span class="ui-field-label">{{ t(`sandbox.sandboxAudit.to`) }}</span>
-                            <input v-model="exportTo" type="date" :class="ui.input({ size: `sm` })" />
-                        </label>
-                        <Button :label="t(`sandbox.sandboxAudit.downloadButton`)" size="small" :loading="exporting" @click="void runExport()">
-                            <template #icon><Icon name="download" /></template>
-                        </Button>
-                    </div>
-                    <Notice v-if="exportNotice !== undefined" :of="exportNotice" class="mt-2" />
-                </template>
-            </Row>
-        </RowGroup>
-
-        <div class="flex flex-col gap-3">
-            <FilterBar v-model="actorQuery" :placeholder="t(`sandbox.sandboxAudit.filterPlaceholder`)" clearable>
-                <template #controls>
-                    <SegmentedControl v-model="actionFilter" size="xs" :options="actionFilters()" />
-                </template>
-            </FilterBar>
-
-            <RowGroup :label="t(`sandbox.sandboxAudit.records`)">
-                <RowNote v-if="listError !== undefined" variant="block"><Notice tone="danger">{{ listError }}</Notice></RowNote>
-                <div v-else-if="isLoading" role="status" aria-busy="true">
-                    <span class="sr-only">{{ t(`sandbox.sandboxAudit.reading`) }}</span>
-                    <SkeletonRows :rows="4" description />
-                </div>
-                <RowNote v-else-if="records.length === 0" variant="empty">{{ t(`sandbox.sandboxAudit.empty`) }}</RowNote>
-                <template v-else>
-                    <DisclosureRow
-                        v-for="record in records"
-                        :key="record.id"
-                        body="rail"
-                        :open="opened === record.id"
-                        @update:open="(open: boolean) => (opened = open ? record.id : undefined)"
-                    >
-                        <template #title>
-                            <span class="block truncate text-xs font-medium text-content">
-                                {{ actionTitle(record.action) }}<span v-if="record.target !== undefined" class="font-normal text-muted"> · {{ record.target }}</span>
-                            </span>
-                        </template>
-                        <template #description>
-                            <span class="block truncate text-2xs text-muted">{{ actorLine(record.actor) }}</span>
-                        </template>
-                        <template #meta>
-                            <StatusBadge v-if="outcomeBadge(record) !== undefined" :variant="outcomeBadge(record)!.variant" :label="outcomeBadge(record)!.label" size="xs" />
-                            <span class="shrink-0 text-2xs text-subtle" v-tooltip.top="formatDateTime(record.at)">{{ timeAgo(record.at) }}</span>
-                        </template>
-                        <template #below>
-                            <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 py-1 text-2xs">
-                                <dt class="text-subtle">{{ t(`sandbox.sandboxAudit.when`) }}</dt>
-                                <dd class="text-content">{{ formatDateTime(record.at) }}</dd>
-                                <dt class="text-subtle">{{ t(`sandbox.sandboxAudit.action`) }}</dt>
-                                <dd class="font-mono text-content">{{ record.action }}</dd>
-                                <template v-if="detailLines(record).length > 0">
-                                    <dt class="text-subtle">{{ t(`sandbox.sandboxAudit.details`) }}</dt>
-                                    <dd class="font-mono text-content [overflow-wrap:anywhere]">
-                                        <div v-for="line in detailLines(record)" :key="line">{{ line }}</div>
-                                    </dd>
-                                </template>
-                                <dt class="text-subtle">{{ t(`sandbox.sandboxAudit.hash`) }}</dt>
-                                <dd class="font-mono text-subtle [overflow-wrap:anywhere]">{{ record.hash }}</dd>
-                            </dl>
-                        </template>
-                    </DisclosureRow>
-                    <RowNote v-if="hasOlder">
-                        <Button :label="t(`sandbox.sandboxAudit.showOlder`)" size="small" tier="boring" :loading="loadingOlder" @click="void loadOlder()" />
-                    </RowNote>
-                </template>
-            </RowGroup>
-            <p v-if="status?.oldestAt !== undefined" class="text-2xs text-subtle">
-                {{ t(`sandbox.sandboxAudit.oldest`, { date: formatDateTime(status.oldestAt) }) }}
-            </p>
-        </div>
     </div>
 </template>

@@ -119,6 +119,11 @@ jest.mock(`./useStandingGrants`, () => ({
     useStandingGrants: () => ({ conversations: standing, ownerWide, unreadable, error: ref(undefined), revoke: { mutateAsync: (...args: unknown[]) => takeBackGrant(...args) } }),
 }));
 
+// The AI notice and the analytics switch read the sandbox's settings, which no test here is about.
+const quietGroup = { default: { render: () => null } };
+jest.mock(`../ai-literacy/AiLiteracySettings.vue`, () => quietGroup);
+jest.mock(`../analytics/SandboxAnalytics.vue`, () => quietGroup);
+
 const { default: SandboxAccess } = await import("./SandboxAccess.vue");
 const { forgetOperations } = await import("../../../workbench/operations/operations");
 const { queryClient } = await import("../../../lib/queryPersistence");

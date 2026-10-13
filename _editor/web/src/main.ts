@@ -9,7 +9,7 @@ import { computed, createApp } from "vue";
 import App from "./App.vue";
 import { startAppI18n } from "./app/i18n";
 import { initAnalytics } from "./app/analytics";
-import { sandboxAnalyticsGate } from "./features/sandbox/agent-settings/safety/analyticsGate";
+import { sandboxAnalyticsGate } from "./features/sandbox/analytics/analyticsGate";
 import { useAuth } from "./client/auth/useAuth";
 import { startAudienceSync } from "./client/sandbox/audienceSync";
 import { dropOutdatedMirrors } from "./app/buildEpoch";

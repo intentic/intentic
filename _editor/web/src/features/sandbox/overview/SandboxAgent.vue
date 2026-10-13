@@ -19,8 +19,6 @@ import AgentMemoryImport from "../agent-settings/skills/AgentMemoryImport.vue";
 import AgentModels from "../agent-settings/models/AgentModels.vue";
 import AgentRecovery from "../agent-settings/behaviour/AgentRecovery.vue";
 import AgentRepoChecks from "../agent-settings/behaviour/AgentRepoChecks.vue";
-import AiLiteracySettings from "../ai-literacy/AiLiteracySettings.vue";
-import SandboxAnalytics from "../agent-settings/safety/SandboxAnalytics.vue";
 import AgentPrivacyShield from "../agent-settings/safety/AgentPrivacyShield.vue";
 import AgentProjectInstalls from "../agent-settings/safety/AgentProjectInstalls.vue";
 import AgentSafetyJudge from "../agent-settings/safety/AgentSafetyJudge.vue";
@@ -150,10 +148,9 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
             <!-- Beside the judge: the other answer to whether a person is asked before an agent's command runs. -->
             <AgentProjectInstalls />
             <AgentSafetyPolicy />
-            <!-- After the command gate, before its log: the other thing kept from leaving, personal data bound for a model provider, and the log still sits last. -->
+            <!-- After the command gate, before its log: the other thing kept from leaving, personal data bound for a model provider, and the log still sits last.
+                 The AI notice and the product analytics switch sat here until 2026-10-13; both are about the people using the box, so they are on Access. -->
             <AgentPrivacyShield />
-            <AiLiteracySettings />
-            <SandboxAnalytics />
             <AgentSafetyLog />
         </template>
 

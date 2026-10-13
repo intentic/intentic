@@ -47,7 +47,7 @@ const touchScreen = (): boolean => `matchMedia` in globalThis && globalThis.matc
 
 // Whether the place the person is in now may be recorded at all, beyond their own consent, and a way to hear when that
 // may have changed. The sandbox's own switch (`productAnalytics`) is read by the gate beside that switch
-// (features/sandbox/agent-settings/safety/analyticsGate.ts), handed in from main.ts, since the sandbox's client sits
+// (features/sandbox/analytics/analyticsGate.ts), handed in from main.ts, since the sandbox's client sits
 // above this module. `asking` says the person has agreed, so the gate may go and find out what it does not know yet.
 export interface AnalyticsGate {
     readonly permitted: (asking: boolean) => boolean;

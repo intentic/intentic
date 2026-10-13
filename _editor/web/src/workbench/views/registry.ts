@@ -52,8 +52,10 @@ export const registerView = (owner: string, registration: ViewRegistration): Dis
     };
 };
 
-// One resolved sidebar element: the view registration plus the activation it contributed.
+// One resolved sidebar element: the view registration plus the activation it contributed, and who registered it
+// (RegisteredView.owner), which the Sandbox hub's slots are kept by.
 export interface ActiveExtension {
+    readonly owner: string;
     readonly extension: ViewRegistration;
     readonly activation: Activation;
 }
@@ -222,14 +224,15 @@ const safeDetect = (entry: RegisteredView, repos: readonly RepoFacts[], capabili
 // Runs every detect() and composes the sidebar; fallback activations drop for repos a claiming view already
 // serves. Neither `fallback` nor `auxiliary` claims; repo-less activations sit outside the rule.
 export const detectActivations = (repos: readonly RepoFacts[], capabilities: readonly CapabilityFacts[]): ActiveExtension[] => {
-    const detected = views.value.map((entry) => ({ extension: entry.registration, activations: safeDetect(entry, repos, capabilities) }));
+    const detected = views.value.map((entry) => ({ owner: entry.owner, extension: entry.registration, activations: safeDetect(entry, repos, capabilities) }));
     const claimed = new Set(
         detected
             .filter(({ extension }) => extension.fallback !== true && extension.auxiliary !== true)
             .flatMap(({ activations }) => activations.flatMap((a) => (a.repo === undefined ? [] : [a.repo]))),
     );
-    const resolved = detected.flatMap(({ extension, activations }) =>
+    const resolved = detected.flatMap(({ owner, extension, activations }) =>
         (extension.fallback === true ? activations.filter((a) => a.repo === undefined || !claimed.has(a.repo)) : activations).map((activation) => ({
+            owner,
             extension,
             activation,
         })),
@@ -242,7 +245,7 @@ export const detectActivations = (repos: readonly RepoFacts[], capabilities: rea
 // Normalizes to undefined when there's nothing to draw, so callers only test for presence. `badgeSpeaks`
 // counts a running mark as something to draw: a view whose only news is "this is happening now" keeps its
 // badge, and with it its tile.
-export const activationBadge = ({ extension, activation }: ActiveExtension): ViewBadge | undefined => {
+export const activationBadge = ({ extension, activation }: Pick<ActiveExtension, "extension" | "activation">): ViewBadge | undefined => {
     if (extension.badge === undefined) {
         return undefined;
     }

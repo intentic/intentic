@@ -6207,6 +6207,7 @@
             "whatWouldAdd": "Co to by dodało"
         },
         "sandboxAccess": {
+            "noticeAndAnalytics": "Informacja o AI i analityka",
             "wholeWorkspace": "Cała przestrzeń robocza",
             "areaNoAssistant": "brak asystenta",
             "guestHasNobodyAnywhere": "W żadnym obszarze nie pracuje jeszcze asystent.",
@@ -6476,6 +6477,7 @@
             "extensions": "Rozszerzenia",
             "overview": "Przegląd",
             "reach": "Zasięg",
+            "oversight": "Nadzór",
             "secrets": "Sekrety",
             "usage": "Zużycie",
             "dataProtection": "Ochrona danych",
@@ -8156,6 +8158,7 @@
             "formatWord": "Word"
         },
         "sandboxAudit": {
+            "part": "Część dziennika zdarzeń",
             "integrity": "Integralność",
             "integrityTitle": "Czy dziennik jest nienaruszony?",
             "integrityDescription": "Każdy wpis jest zapieczętowany razem z poprzednim, więc wpis zmieniony lub usunięty później będzie tu widoczny.",

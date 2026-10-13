@@ -1,10 +1,10 @@
 import type { SandboxSettings } from "@intentic/sandbox-contract";
 import { type Ref, watch } from "vue";
-import type { AnalyticsGate } from "../../../../app/analytics";
-import { activeSandboxId } from "../../../../lib/activeSandbox";
-import { rpcKey } from "../../../../lib/queryKeys";
-import { queryClient } from "../../../../lib/queryPersistence";
-import { rpcQuery } from "../../../../client/sandbox/rpcQuery";
+import type { AnalyticsGate } from "../../../app/analytics";
+import { activeSandboxId } from "../../../lib/activeSandbox";
+import { rpcKey } from "../../../lib/queryKeys";
+import { queryClient } from "../../../lib/queryPersistence";
+import { rpcQuery } from "../../../client/sandbox/rpcQuery";
 
 // The open sandbox's say in product analytics (settings.productAnalytics, the switch SandboxAnalytics.vue beside this
 // edits), for app/analytics.ts. While a sandbox is open

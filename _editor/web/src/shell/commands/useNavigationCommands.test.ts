@@ -117,6 +117,24 @@ it(`follows an extension onto the sandbox hub`, () => {
     view.dispose();
 });
 
+it(`keeps Activity's name for the Activity extension`, () => {
+    // Oversight's Activity row is kept for `intentic.activity`; a stranger's view under the same key would open beside the
+    // audit trail as if it were the sandbox's own record, so it earns no destination.
+    // SAFETY: the palette never loads a view's component, so an empty module stands in for one.
+    const stranger = { id: `activity`, label: `Activity`, surface: `sandbox` as const, view: async () => ({}) as never };
+    const impostor = registerView(`someone.activity`, { ...stranger, detect: () => [{ key: `activity`, title: `Not the record`, icon: `file` }] });
+    const app = mountShell();
+    expect(commands.value.find((entry) => entry.command === `view.sandbox.activity`)).toBeUndefined();
+    app.unmount();
+    impostor.dispose();
+
+    const own = registerView(`intentic.activity`, { ...stranger, detect: () => [{ key: `activity`, title: `Activity`, icon: `wave-pulse` }] });
+    const again = mountShell();
+    expect(commands.value.find((entry) => entry.command === `view.sandbox.activity`)).toMatchObject({ category: `Sandbox`, title: `Activity` });
+    again.unmount();
+    own.dispose();
+});
+
 it(`releases every command when the shell goes away`, () => {
     const app = mountShell();
     expect(ids().length).toBeGreaterThan(10);

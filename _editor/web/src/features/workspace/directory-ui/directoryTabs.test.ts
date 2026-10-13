@@ -6,6 +6,7 @@ import { directoryTabs } from "./directoryTabs";
 // which one it opens on is the whole affordance: a wrong order silently buries one.
 
 const tab = (id: string, repo: string, surface: ViewRegistration[`surface`] = `directory`): ActiveExtension => ({
+    owner: `builtin`,
     extension: { id, label: id, surface, detect: () => [], view: () => Promise.resolve({}) },
     activation: { key: repo, title: id, repo },
 });

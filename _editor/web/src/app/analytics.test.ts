@@ -257,7 +257,7 @@ describe(`sandbox switch`, () => {
         const route = ref(`chat`);
         const { posthog } = await import(`posthog-js`);
         const analytics = await freshImport<typeof import("./analytics")>("./analytics", import.meta.url);
-        const { sandboxAnalyticsGate } = await import(`../features/sandbox/agent-settings/safety/analyticsGate`);
+        const { sandboxAnalyticsGate } = await import(`../features/sandbox/analytics/analyticsGate`);
         await analytics.initAnalytics(routePatternOf, user, sandboxAnalyticsGate(route));
         analytics.track(`unknown`);
         expect(posthog.capture).not.toHaveBeenCalled();
@@ -287,7 +287,7 @@ describe(`sandbox switch`, () => {
         activeSandboxId.value = `older-daemon`;
         const { posthog } = await import(`posthog-js`);
         const analytics = await freshImport<typeof import("./analytics")>("./analytics", import.meta.url);
-        const { sandboxAnalyticsGate } = await import(`../features/sandbox/agent-settings/safety/analyticsGate`);
+        const { sandboxAnalyticsGate } = await import(`../features/sandbox/analytics/analyticsGate`);
         await analytics.initAnalytics(routePatternOf, user, sandboxAnalyticsGate(ref(`chat`)));
         analytics.track(`before-answer`);
         expect(posthog.capture).not.toHaveBeenCalledWith(`before-answer`, undefined);

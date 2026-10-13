@@ -45,10 +45,13 @@ export const STATUS_TONE = { on: `success`, partial: `info`, off: `warning`, una
 >;
 
 const SAFETY = { name: `sandbox`, params: { tab: `agent` }, query: { section: `safety` } } as const;
+const RETENTION = { name: `sandbox`, params: { tab: `agent` }, query: { section: `finishing` } } as const;
+const AUDIT_KEEPING = { name: `sandbox`, params: { tab: `audit` }, query: { section: `keeping` } } as const;
 const tab = (name: string): RouteLocationRaw => ({ name: `sandbox`, params: { tab: name } });
 
-// Where each measure is changed in the editor. Those the preset changes point at the panel below on this page instead,
-// and those set outside the editor (the key file, backups) have no link.
+// Where each measure is changed in the editor; one with no link here and a preset item points at the panel below on this
+// page instead, and those set outside the editor (the key file, backups) have none. The audit trail's, retention's, the
+// AI notice's and analytics' went to that panel until 2026-10-13, which only ever tightens them.
 export const MEASURE_LINKS = new Map<MeasureId, RouteLocationRaw>([
     [`privacy-shield`, SAFETY],
     [`privacy-images`, SAFETY],
@@ -63,6 +66,12 @@ export const MEASURE_LINKS = new Map<MeasureId, RouteLocationRaw>([
     [`credential-gates`, tab(`secrets`)],
     [`host-guards`, tab(`secrets`)],
     [`agent-domain`, tab(`agent`)],
+    [`retention`, RETENTION],
+    [`audit`, AUDIT_KEEPING],
+    [`audit-reads`, AUDIT_KEEPING],
+    [`audit-forward`, AUDIT_KEEPING],
+    [`ai-notice`, tab(`access`)],
+    [`product-analytics`, tab(`access`)],
 ]);
 
 // A preset item's own words: the setting it changes, and for an action rule, which action on which service.

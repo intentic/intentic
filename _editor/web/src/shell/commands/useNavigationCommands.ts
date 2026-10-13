@@ -8,7 +8,7 @@ import { usePanels } from "../../features/extensions/usePanels";
 import { openBrowsers, openPreview } from "../../workbench/browsers/browsersSurface";
 import { browsersPath } from "../../workbench/browsers/browsersPaths";
 import { DELETED_PATH, DEVICES_PATH } from "../../features/sandbox/devices/deviceLinks";
-import { sandboxBuiltInSlugs, sandboxSectionPath, sandboxSections } from "../../features/sandbox/sandboxNav";
+import { sandboxKeyAllowed, sandboxSectionPath, sandboxSections } from "../../features/sandbox/sandboxNav";
 import { useRole } from "../../client/sandbox/useRole";
 import { useHostedPlan } from "../../features/settings/hosted-plan/useHostedPlan";
 import { settingsSectionPath, settingsSections } from "../../features/settings/settingsNav";
@@ -90,7 +90,8 @@ export function useNavigationCommands(): void {
     );
 
     // The sandbox hub's sections, plus the ones extensions add to it — the same filter the hub applies, so a key that
-    // collides with a built-in section is dropped here too rather than registering a row that opens something else.
+    // collides with a built-in section, or with a slot kept for another extension, is dropped here too rather than
+    // registering a row that opens something else.
     const sandboxDestinations = computed<readonly NavCommand[]>(() => [
         ...sandboxSections(canShip.value, isGuest.value).map((section) => ({
             command: `view.sandbox.${section.slug}`,
@@ -100,7 +101,7 @@ export function useNavigationCommands(): void {
             to: sandboxSectionPath(section.slug),
         })),
         ...detectActivations(panels.value, capabilities.value)
-            .filter(({ extension, activation }) => extension.surface === `sandbox` && !sandboxBuiltInSlugs().has(activation.key))
+            .filter(({ owner, extension, activation }) => extension.surface === `sandbox` && sandboxKeyAllowed(owner, activation.key))
             .map(({ activation }) => ({
                 command: `view.sandbox.${activation.key}`,
                 title: activation.title,

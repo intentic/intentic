@@ -1,6 +1,6 @@
 # activity
 
-The Activity tab on the Sandbox hub: a read-only audit feed of what woke the agent, which provider calls it made and how each turn went.
+The Activity section of the Sandbox hub, under Oversight beside the audit log: a read-only record of what woke the agent, which provider calls it made and how each turn went.
 
 ```mermaid
 flowchart LR
@@ -16,7 +16,7 @@ flowchart LR
 - `episodes.ts` folds the event-per-append log into episodes (one turn, message or event) and sources (who set it off: a connection or the owner typing). Pure functions, tested without Vue.
 - A connection is named by its listener manifest's automation label (`useSourceNames.ts`, from `GET /extensions`), so a newly installed gateway is named without a release here; only the sources no extension owns (you, a schedule, web chat) carry this extension's own translated words.
 - Pages back through the log as far as the chosen time window needs, up to the daemon's prune ceiling. It never polls: the daemon's `activity` push refreshes the feed, and writes to `automations.json` or extension enablement refresh the status.
-- It sits on the Sandbox hub and never badges, since an always-moving feed would keep the rail lit.
+- It sits on the Sandbox hub and never badges, since an always-moving feed would keep the rail lit. The hub files it under Oversight, beside the audit log (who changed what), through a slot kept for this extension's id (`sandboxNav.ts` in the editor), not under "Added by extensions".
 
 ## Key files
 

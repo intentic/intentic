@@ -3350,6 +3350,7 @@
             "whatWouldAdd": "Ce que cela ajouterait"
         },
         "sandboxAccess": {
+            "noticeAndAnalytics": "Avis sur l’IA et analyse",
             "wholeWorkspace": "Tout l’espace de travail",
             "areaNoAssistant": "aucun assistant",
             "giveAssistantFolder": "Donner un dossier de départ à un assistant",
@@ -3498,6 +3499,7 @@
             "box": "Cette boîte",
             "overview": "Vue d'ensemble",
             "reach": "Portée",
+            "oversight": "Supervision",
             "dataProtection": "Protection des données",
             "audit": "Journal d’audit"
         },
@@ -4291,6 +4293,7 @@
             "formatWord": "Word"
         },
         "sandboxAudit": {
+            "part": "Partie du journal d’audit",
             "integrity": "Intégrité",
             "integrityTitle": "Le journal est-il intact ?",
             "integrityDescription": "Chaque entrée est scellée avec la précédente : une entrée modifiée ou supprimée après coup apparaît ici.",

@@ -6604,6 +6604,7 @@
             "whatWouldAdd": "What this would add"
         },
         "sandboxAccess": {
+            "noticeAndAnalytics": "AI notice and analytics",
             "browser": "This browser",
             "ciNotifications": "CI notifications",
             "collaborator": "Collaborator",
@@ -6847,6 +6848,7 @@
             "extensions": "Extensions",
             "overview": "Overview",
             "reach": "Reach",
+            "oversight": "Oversight",
             "secrets": "Secrets",
             "usage": "Usage",
             "dataProtection": "Data protection",
@@ -8559,6 +8561,7 @@
             "formatWord": "Word"
         },
         "sandboxAudit": {
+            "part": "Part of the audit log",
             "integrity": "Integrity",
             "integrityTitle": "Is the log intact?",
             "integrityDescription": "Each record is sealed together with the one before it, so a record changed or removed afterwards shows up here.",

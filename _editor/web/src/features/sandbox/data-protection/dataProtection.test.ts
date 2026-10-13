@@ -1,5 +1,5 @@
 import type { DataFlow, PresetItem } from "@intentic/sandbox-contract";
-import { documentLanguageFor, groupFlows, keyOf, presetLabel, presetValue } from "./dataProtection";
+import { documentLanguageFor, groupFlows, keyOf, MEASURE_LINKS, presetLabel, presetValue } from "./dataProtection";
 
 // The data protection page's table: flows grouped in the page's order with those in use first, catalog keys derived
 // from the daemon's ids, and a preset value worded the way its setting means it.
@@ -49,4 +49,16 @@ it(`names an action rule by its action and service`, () => {
 it(`writes the documents in Polish for a Polish reader and in English for anyone else`, () => {
     expect(documentLanguageFor(`pl`)).toBe(`pl`);
     expect(documentLanguageFor(`de`)).toBe(`en`);
+});
+
+// "Change" opens the setting itself wherever the editor has one, and the preset only tightens, so a measure with a home is
+// sent there rather than to the panel at the foot of the page.
+it(`sends the audit trail's, retention's and the people-facing measures to where each is set`, () => {
+    const keeping = { name: `sandbox`, params: { tab: `audit` }, query: { section: `keeping` } };
+    expect(MEASURE_LINKS.get(`audit`)).toEqual(keeping);
+    expect(MEASURE_LINKS.get(`audit-reads`)).toEqual(keeping);
+    expect(MEASURE_LINKS.get(`audit-forward`)).toEqual(keeping);
+    expect(MEASURE_LINKS.get(`retention`)).toEqual({ name: `sandbox`, params: { tab: `agent` }, query: { section: `finishing` } });
+    expect(MEASURE_LINKS.get(`ai-notice`)).toEqual({ name: `sandbox`, params: { tab: `access` } });
+    expect(MEASURE_LINKS.get(`product-analytics`)).toEqual({ name: `sandbox`, params: { tab: `access` } });
 });

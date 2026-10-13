@@ -3239,7 +3239,7 @@
       "hasTests": true,
       "loc": 1125,
       "name": "@intentic/ext-activity",
-      "oneLiner": "The Activity tab on the Sandbox hub: a read-only audit feed of what woke the agent, which provider calls it made and how each turn went.",
+      "oneLiner": "The Activity section of the Sandbox hub, under Oversight beside the audit log: a read-only record of what woke the agent, which provider calls it made and how each turn went.",
       "readmeRev": "4772498b7fa2d6ec6c31e487e1aba13bbebd2da4",
       "stale": false,
       "updatedAt": 1791898218000

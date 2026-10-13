@@ -3348,6 +3348,7 @@
             "whatWouldAdd": "Was das hinzufügen würde"
         },
         "sandboxAccess": {
+            "noticeAndAnalytics": "KI-Hinweis und Analyse",
             "wholeWorkspace": "Gesamter Arbeitsbereich",
             "areaNoAssistant": "kein Assistent",
             "giveAssistantFolder": "Einem Assistenten einen Startordner geben",
@@ -3497,6 +3498,7 @@
             "extensions": "Erweiterungen",
             "overview": "Überblick",
             "reach": "Reichweite",
+            "oversight": "Aufsicht",
             "secrets": "Geheimnisse",
             "usage": "Nutzung",
             "dataProtection": "Datenschutz",
@@ -4295,6 +4297,7 @@
             "formatWord": "Word"
         },
         "sandboxAudit": {
+            "part": "Teil des Prüfprotokolls",
             "integrity": "Unversehrtheit",
             "integrityTitle": "Ist das Protokoll unverändert?",
             "integrityDescription": "Jeder Eintrag ist zusammen mit dem vorherigen versiegelt, sodass ein später geänderter oder entfernter Eintrag hier auffällt.",

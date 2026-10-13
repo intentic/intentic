@@ -3361,6 +3361,7 @@
             "whatWouldAdd": "Qué añadiría esto"
         },
         "sandboxAccess": {
+            "noticeAndAnalytics": "Aviso de IA y analítica",
             "wholeWorkspace": "Todo el espacio de trabajo",
             "areaNoAssistant": "sin asistente",
             "giveAssistantFolder": "Dale a uno una carpeta de inicio",
@@ -3511,6 +3512,7 @@
             "extensions": "Extensiones",
             "overview": "Resumen",
             "reach": "Alcance",
+            "oversight": "Supervisión",
             "secrets": "Secretos",
             "usage": "Uso",
             "dataProtection": "Protección de datos",
@@ -4311,6 +4313,7 @@
             "formatWord": "Word"
         },
         "sandboxAudit": {
+            "part": "Parte del registro de auditoría",
             "integrity": "Integridad",
             "integrityTitle": "¿Está intacto el registro?",
             "integrityDescription": "Cada entrada queda sellada junto con la anterior, así que una entrada cambiada o eliminada después aparece aquí.",
