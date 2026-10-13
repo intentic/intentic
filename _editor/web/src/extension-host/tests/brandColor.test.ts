@@ -18,9 +18,11 @@ import { brandPalette, contrastRatio, lightnessSeparation, officialHex } from "@
 const CATALOG = {
     docker: `#2496ED`,
     discord: `#5865F2`,
+    facebook: `#0866FF`,
     github: `#181717`,
     gitlab: `#FC6D26`,
     googlegemini: `#8E75B2`,
+    instagram: `#FF0069`,
     invoiceninja: `#000000`,
     linux: `#FCC624`,
     mysql: `#4479A1`,
@@ -36,6 +38,7 @@ const CATALOG = {
     sentry: `#362D59`,
     stripe: `#635BFF`,
     telegram: `#26A5E4`,
+    tiktok: `#000000`,
     turborepo: `#FF1E56`,
     whatsapp: `#25D366`,
     x: `#000000`,
@@ -83,7 +86,7 @@ describe(`brand mark colours`, () => {
 
     // A hueless brand has no colour to protect, and moving it the minimum distance would land it on mid-grey, the muddy
     // non-colour the change exists to remove. It must snap to the scheme's ink instead: white on dark, black on light.
-    for (const slug of [`github`, `x`, `outline`, `opencode`, `invoiceninja`] as const) {
+    for (const slug of [`github`, `x`, `tiktok`, `outline`, `opencode`, `invoiceninja`] as const) {
         it(`snaps a hueless brand to the scheme's ink, ${slug}`, () => {
             const palette = brandPalette(CATALOG[slug]);
             expect(contrastRatio(palette?.markDark ?? ``, palette?.plateDark ?? ``)).toBeGreaterThan(10);

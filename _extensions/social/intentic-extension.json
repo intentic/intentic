@@ -52,6 +52,51 @@
                 "loginUrl": "https://accounts.google.com/ServiceLogin?continue=https%3A%2F%2Fwww.youtube.com%2F",
                 "homeUrl": "https://www.youtube.com/",
                 "skill": "skills/youtube/SKILL.md"
+            },
+            {
+                "id": "facebook",
+                "kind": "browser",
+                "catalog": {
+                    "name": "Facebook",
+                    "logo": "facebook",
+                    "description": "Post, comment, react and join groups on Facebook as you.",
+                    "category": "communication",
+                    "hint": "Sign in once with `Log in`: the agent then acts as you. Facebook may ask you to confirm a new device. Automating an account may be against Meta's terms."
+                },
+                "fields": [],
+                "loginUrl": "https://www.facebook.com/login/",
+                "homeUrl": "https://www.facebook.com/",
+                "skill": "skills/facebook/SKILL.md"
+            },
+            {
+                "id": "instagram",
+                "kind": "browser",
+                "catalog": {
+                    "name": "Instagram",
+                    "logo": "instagram",
+                    "description": "Post, comment, like and follow on Instagram as you.",
+                    "category": "communication",
+                    "hint": "Sign in once with `Log in`: the agent then acts as you. Instagram may ask you to confirm a new device. Automating an account may be against Meta's terms."
+                },
+                "fields": [],
+                "loginUrl": "https://www.instagram.com/accounts/login/",
+                "homeUrl": "https://www.instagram.com/",
+                "skill": "skills/instagram/SKILL.md"
+            },
+            {
+                "id": "tiktok",
+                "kind": "browser",
+                "catalog": {
+                    "name": "TikTok",
+                    "logo": "tiktok",
+                    "description": "Watch, comment, like, follow and upload on TikTok as you.",
+                    "category": "communication",
+                    "hint": "Sign in yourself in the live window: TikTok puts a puzzle in front of automated logins. Automating an account may be against TikTok's terms."
+                },
+                "fields": [],
+                "loginUrl": "https://www.tiktok.com/login",
+                "homeUrl": "https://www.tiktok.com/",
+                "skill": "skills/tiktok/SKILL.md"
             }
         ]
     }

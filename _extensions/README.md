@@ -40,7 +40,7 @@ flowchart LR
 | [preview](preview) | Sandbox tabs for exposed ports and the served `public/` directory. |
 | [repo-apps](repo-apps) | Per-repository panels for a monorepo's apps, tests and dependencies. |
 | [slack](slack) | Slack card plus a Socket Mode gateway. |
-| [social](social) | Browser cards for acting as the owner on Reddit, X and YouTube. |
+| [social](social) | Browser cards for acting as the owner on Reddit, X, YouTube, Facebook, Instagram and TikTok. |
 | [telegram](telegram) | Telegram bot card plus a long-polling gateway. |
 | [viewers](viewers) | File viewers for images, PDF, media, office formats and EPUB. |
 | [whatsapp](whatsapp) | WhatsApp linked-device card plus its gateway. |

@@ -5,6 +5,7 @@
 export const MESSAGE_LIMITS = {
     bluesky: 300,
     discord: 2_000,
+    facebook: 63_206,
     instagram: 2_200,
     linkedin: 3_000,
     mastodon: 500,
@@ -12,6 +13,8 @@ export const MESSAGE_LIMITS = {
     slack: 4_000,
     // sendMessage refuses anything longer outright.
     telegram: 4_096,
+    // A video's caption; a comment under one stops at 150.
+    tiktok: 4_000,
     // A linked device (what the WhatsApp extension is) sends up to 65,536; the 4,096 often quoted is the Business API's.
     whatsapp: 65_536,
     x: 280,
