@@ -18,6 +18,7 @@ import { fileModelRefusalStore, modelRefusalsDocument, type ModelRefusalStore } 
 import type { ObservedLimitStore } from "../../usage/observed-limits.js";
 import type { AgentExecutionContext } from "../../workload/agent-execution.js";
 import { fileProviderRefusalStore, providerRefusalsDocument, type ProviderRefusalStore } from "../../usage/provider-refusals.js";
+import { fileRunOutStore, runOutsDocument, type RunOutStore } from "../../usage/run-outs.js";
 import { fileUsageStore, type UsageStore, usageLedgerDocument } from "../../usage/usage-store.js";
 import { type HarnessRequest, runAgent } from "../run/agent.js";
 import { judgeCommand, type JudgeFacts } from "../tools/command-judge.js";
@@ -85,6 +86,9 @@ export interface ProvidersSlice {
     // What each account has run out of, per model, for a plan that publishes no allowance to poll: the refusal itself
     // is the reading, and the only one Cursor ever gives.
     readonly observedLimits: ObservedLimitStore;
+    // When each provider's allowance last ran out, and under how many of this sandbox's agents: the rate beside the
+    // figure left that a parent fanning out reads (usage/run-outs.ts).
+    readonly runOuts: RunOutStore;
 }
 
 // What the slice is built from: the members built before it, since the provider areas and the headroom read them too;
@@ -132,6 +136,7 @@ export const createProvidersSlice = ({ historyRoot, conversations, whole, ...bui
         providerRefusals: fileProviderRefusalStore(join(historyRoot, providerRefusalsDocument.path), { log }),
         modelRefusals: fileModelRefusalStore(join(historyRoot, modelRefusalsDocument.path), { log }),
         modelCooldowns: fileModelCooldownStore(join(historyRoot, modelCooldownsDocument.path), { log }),
+        runOuts: fileRunOutStore(join(historyRoot, runOutsDocument.path)),
         providerCatalogs: providerCatalogsOf(built.providerModules, whole),
         providerReadiness: () => providerReadiness(whole()),
         judgeCommand: (execution, input, signal) => judgeCommand(whole(), execution, input, signal),

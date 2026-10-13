@@ -888,6 +888,8 @@ interface TurnState {
     readonly remint: FailureContext["remint"];
     readonly frames: TurnFrames;
     readonly carriedOff: boolean;
+    // Held at the door for a spent allowance (spent-door.ts): nothing was sent, so its refusal files nothing.
+    readonly door: boolean;
 }
 
 // A failure frame as the window reads it: counted against the provider's breaker when it is an outage on a
@@ -909,6 +911,7 @@ const classified = async (services: Services, event: ErrorFrame, turn: TurnState
             sessionId: readings.sessionId,
             answered: readings.silence.answered,
             carriedOff: turn.carriedOff,
+            door: turn.door,
             remint: turn.remint,
             limitReset: readings.limitReset,
             outage,
@@ -1026,6 +1029,7 @@ async function* runPreparedTurn(
         remint: remintFor(input, account, request),
         frames,
         carriedOff,
+        door: plan.door === true,
     };
     const aborted = (): boolean => signal?.aborted === true;
     const silent = (): string | undefined => silentEnding(silenceOf(frames, { conversationId: input.conversationId, aborted: aborted() }));

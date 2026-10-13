@@ -97,6 +97,7 @@ import { modelCooldownsDocument } from "../usage/model-cooldowns.js";
 import { modelRefusalsDocument } from "../usage/model-refusals.js";
 import { observedLimitsDocument } from "../usage/observed-limits.js";
 import { providerRefusalsDocument } from "../usage/provider-refusals.js";
+import { runOutsDocument } from "../usage/run-outs.js";
 import { usageParksDocument } from "../usage/usage-parks.js";
 import { usageLedgerDocument } from "../usage/usage-store.js";
 import { walletLedgerDocument } from "../wallet/wallet-ledger.js";
@@ -211,6 +212,7 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     modelRefusalsDocument,
     observedLimitsDocument,
     providerRefusalsDocument,
+    runOutsDocument,
     usageParksDocument,
     usageLedgerDocument,
     walletLedgerDocument,

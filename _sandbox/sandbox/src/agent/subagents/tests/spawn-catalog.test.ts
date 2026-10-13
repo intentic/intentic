@@ -263,9 +263,8 @@ describe("a provider that meters nothing", () => {
     it("names the first few and counts the rest, rather than printing all of them", () => {
         const text = spawnCatalogText([{ id: "cursor", label: "Cursor", models: many(45), spent: 0 }]);
 
-        expect(text).toContain("cursor: model-0 (not metered)");
-        expect(text).toContain("model-7 (not metered), and 37 more not metered (`agents providers --all`)");
-        expect(text).not.toContain("model-8 (not metered)");
+        // One "(not metered)" for the eight named, not eight of them.
+        expect(text).toBe("cursor: model-0, model-1, model-2, model-3, model-4, model-5, model-6, model-7 (not metered), and 37 more not metered (`agents providers --all`)");
     });
 
     it("names every one of them when asked", () => {
@@ -300,5 +299,72 @@ describe("one account's figure, spent by every child at once", () => {
         const text = spawnCatalogText([{ id: "cursor", label: "Cursor", models: [{ id: "auto", label: "Auto" }], spent: 0 }]);
 
         expect(text).toBe("cursor: auto (not metered)");
+    });
+});
+
+/* Codex read "84% left" at 17:00 on 2026-10-13, and it was true: the weekly pool had 84% left and the five-hour window
+   had just reset. Four Sol subagents started on it spent that whole window in about fifty minutes of work, as five had
+   spent the window before it in twenty-one. The listing said neither which pool the figure was, nor how fast agents
+   had spent one, nor how many were already on it. */
+describe("what a fan-out needs beside the figure", () => {
+    const NOW = Date.UTC(2026, 9, 13, 17, 0);
+    const codexAccount = (reading: AccountUsage) =>
+        services({
+            // SAFETY: an empty list satisfies every account row type the store's `list` could be typed to return.
+            claudeStore: { list: async () => [] as never },
+            config: withTranslator,
+            cliProxy: {
+                ...codexConnectedProxy,
+                accounts: async () => ({ codex: [{ name: "codex-team.json", label: "radarsu@gmail.com", usage: reading }], grok: [], kimi: [], gemini: [] }),
+            },
+        });
+
+    it("names the pool a figure is about whenever the account has another, and says what that one has left", async () => {
+        const rows = await spawnableProviders(
+            codexAccount({
+                windows: [window({ kind: "five_hour", utilization: 0 }), window({ kind: "seven_day", utilization: 16 })],
+                measuredAt: Date.now(),
+            }),
+        );
+        const headroom = rows.find((row) => row.id === "codex")?.models[0]?.headroom;
+        expect(headroom).toMatchObject({ percentLeft: 84, pool: "weekly", others: [{ pool: "five-hour", percentLeft: 100 }] });
+    });
+
+    it("says it once for every model that shares it, with the agents already on it and when it last ran out", () => {
+        const text = spawnCatalogText(
+            [
+                {
+                    id: "codex",
+                    label: "Codex",
+                    models: ["gpt-6.1-sol", "gpt-6-sol"].map((id) => ({
+                        id,
+                        label: id,
+                        headroom: { percentLeft: 84, pool: "weekly", others: [{ pool: "five-hour", percentLeft: 100 }], account: "radarsu@gmail.com", readAt: NOW },
+                    })),
+                    spent: 0,
+                    running: { "gpt-6.1-sol": 1 },
+                    lastRunOut: {
+                        at: NOW - 5 * 3_600_000,
+                        pool: "five-hour",
+                        openedAt: NOW - 5 * 3_600_000 - 21 * 60_000,
+                        models: { "gpt-6-sol": 5 },
+                    },
+                },
+            ],
+            NOW,
+        );
+        expect(text.split("\n")[0]).toBe(
+            "codex: gpt-6.1-sol, gpt-6-sol (weekly 84% left on radarsu@gmail.com (five-hour 100% left), read just now); " +
+                "1 agent of this sandbox running on it now (gpt-6.1-sol); " +
+                "last ran out 5h ago, 21 min into its five-hour window, with 5 agents of this sandbox on it (gpt-6-sol ×5)",
+        );
+    });
+
+    it("keeps saying when it ran out while every model is out of allowance", () => {
+        const text = spawnCatalogText(
+            [{ id: "codex", label: "Codex", models: [], spent: 8, reopensAt: Math.floor(NOW / 1000) + 4 * 3_600, lastRunOut: { at: NOW - 60_000, models: { "gpt-6.1-sol": 3, "gpt-6-sol": 1 } } }],
+            NOW,
+        );
+        expect(text).toBe("codex: every model is out of allowance, renews in about 4h; last ran out just now, with 4 agents of this sandbox on it (gpt-6.1-sol ×3, gpt-6-sol)");
     });
 });

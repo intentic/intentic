@@ -62,6 +62,10 @@ export interface FailureContext {
     readonly answered: boolean;
     // Whether this turn re-ran a held one, its session carried onto another account than the one it was held on.
     readonly carriedOff?: boolean | undefined;
+    // Held at the door for a spent allowance (spent-door.ts): no request went out, so nothing is filed against the
+    // provider (the records already say it, and a refusal filed now would only push its reopening out), and the
+    // session is as the last turn left it.
+    readonly door?: boolean | undefined;
     // The stored Claude credential a refusal of it would re-mint and re-run the turn on; undefined when none would be.
     readonly remint: HeldTurn["remint"];
     // The reset instant the stream last named, which outranks the frame's own and the account snapshot's.
@@ -132,12 +136,22 @@ const refusalKind = (event: ErrorFrame): ProviderRefusal["kind"] => {
     return event.code === "rate_limit" || mentionsSpentAllowance(event.message) ? "limit" : "auth";
 };
 
+/* A TRANSLATOR-ROUTED TURN NAMES NO ACCOUNT. The translator picks the credential, so whatever rides as the turn's account
+   is a label (Codex's "codex-subscription"), the key of no reading. Filed under it, a refusal was read as one for an
+   account since disconnected ("gone", refusalVerdict) and the listing a parent read next ignored it, and the re-read it
+   owes was scoped to that label and read nothing (2026-10-13). Filed under no account, it stands over the provider's
+   accounts until a reading after it shows room, and its re-read covers them all. */
+const refusingAccount = (provider: AgentProvider, account: string | undefined): string | undefined =>
+    KeyedProviderSchema.safeParse(provider).success ? undefined : account;
+
 // The durable refusal a refusing code files, the re-measure it owes, and for a plan with nothing to poll, the reading.
 const refusalWrites = (event: ErrorFrame, context: FailureContext): FailureWrite[] => {
-    if (event.code === undefined || !REFUSING_CODES.has(event.code)) {
+    if (event.code === undefined || !REFUSING_CODES.has(event.code) || context.door === true) {
         return [];
     }
-    const { provider, account, now } = context;
+    const { provider, now } = context;
+    const account = refusingAccount(provider, context.account);
+    const { account: _label, ...actor } = context.attribution;
     const model = named(context.model);
     // Routed turns have no account to name; the model, so the refusal reads the pool it spends.
     const kind = refusalKind(event);
@@ -147,7 +161,8 @@ const refusalWrites = (event: ErrorFrame, context: FailureContext): FailureWrite
         at: now,
         kind,
         message: event.message,
-        ...context.attribution,
+        ...actor,
+        ...opt("account", refusingAccount(provider, context.attribution.account)),
         ...opt("model", model),
         ...opt("resetsAt", kind === "limit" ? (context.limitReset ?? event.resetsAt) : undefined),
     };
@@ -305,7 +320,7 @@ const dressLimit = async (event: ErrorFrame, context: FailureContext, queries: F
     const resetsAt = context.limitReset ?? event.resetsAt ?? (await queries.reopensAt({ provider, model: context.model, account }));
     const model = named(context.model);
     const writes: FailureWrite[] =
-        KeyedProviderSchema.safeParse(provider).success && model !== undefined && resetsAt !== undefined
+        KeyedProviderSchema.safeParse(provider).success && model !== undefined && resetsAt !== undefined && context.door !== true
             ? [{ kind: "model-cooldown", provider, model, cooldown: { until: resetsAt * 1000, message: event.message } }]
             : [];
     const way = await queries.limitWay({
@@ -320,7 +335,9 @@ const dressLimit = async (event: ErrorFrame, context: FailureContext, queries: F
         sessionId: context.sessionId,
     });
     const { conversationId } = turn;
-    const held = conversationId === undefined ? undefined : holding(context, conversationId, "limit", { ...opt("reopensAt", resetsAt), ...way });
+    // A door's hold names its run, whose rows the model never saw, and re-runs on the session as it stood (turn-resume.ts).
+    const turnedAway: Partial<HeldTurn> = context.door === true ? { turnedAway: true, ...opt("run", context.run) } : {};
+    const held = conversationId === undefined ? undefined : holding(context, conversationId, "limit", { ...opt("reopensAt", resetsAt), ...way, ...turnedAway });
     // Worth dressing for a reset or a hold; with neither, it goes out bare.
     if (resetsAt === undefined && held === undefined) {
         return { frame: event, held, writes };

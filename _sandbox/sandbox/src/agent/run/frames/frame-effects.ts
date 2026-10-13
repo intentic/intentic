@@ -1,10 +1,22 @@
-import { type ActivityEvent, type AgentEvent, type AgentProvider, KeyedProviderSchema, type UsageWindow } from "@intentic/sandbox-contract";
+import {
+    type ActivityEvent,
+    type AgentEvent,
+    type AgentProvider,
+    AgentProviderSchema,
+    KeyedProviderSchema,
+    type ProviderRefusal,
+    type ServiceFacts,
+    type UsageWindow,
+} from "@intentic/sandbox-contract";
 import type { Services } from "../../../composition.js";
 import { recordProviderSuccess } from "../../providers/provider-health.js";
 import { opt } from "../../../opt.js";
 import type { TurnInput } from "../../../seams/turn-starter.js";
 import type { FailureWrite } from "./classify-failure.js";
 import type { Attribution } from "./frame-decorators.js";
+import { accountFactsOf } from "../../../usage/serviceability/serviceability.js";
+import { runOutOf } from "../../../usage/run-outs.js";
+import { runningOn } from "../turn/turn-pulse.js";
 
 // The writes a turn's frames cause beyond the stream: its activity rows, the refusals its first answer disproves, the
 // allowance reading it carried, and the records a failure's classification named. Every one fire-and-forget, each
@@ -114,7 +126,35 @@ export const fileAccountUsage = async (
     }
 };
 
-type FailureWriteDeps = Pick<Services, "providerRefusals" | "headroom" | "observedLimits" | "modelRefusals" | "claudeSeats" | "modelCooldowns" | "logger">;
+type FailureWriteDeps = Pick<
+    Services,
+    | "providerRefusals"
+    | "headroom"
+    | "observedLimits"
+    | "modelRefusals"
+    | "claudeSeats"
+    | "modelCooldowns"
+    | "logger"
+    | "runOuts"
+    | "accountUsage"
+    | "claudeStore"
+    | "cliProxy"
+>;
+
+// A spent allowance's refusal is also the moment its window ran out (usage/run-outs.ts): the window the readings show
+// ran out, and the agents running on the provider then, which the next spawn listing quotes beside the figure left.
+const noteRunOut = async (deps: FailureWriteDeps, provider: string, refusal: ProviderRefusal): Promise<void> => {
+    const known = AgentProviderSchema.safeParse(provider);
+    const facts = known.success ? await accountFactsOf(deps, known.data).catch((): readonly ServiceFacts[] => []) : [];
+    const runOut = runOutOf({
+        at: refusal.at,
+        model: refusal.model,
+        resetsAt: refusal.resetsAt,
+        readings: facts.flatMap((fact) => (fact.usage === undefined ? [] : [fact.usage])),
+        running: runningOn(provider),
+    });
+    await deps.runOuts.record(provider, runOut);
+};
 
 // Performs what a failure's classification named, in its order, without waiting on any of it: a turn's frames go out
 // whatever the records do.
@@ -132,7 +172,10 @@ const performFailureWrite = (deps: FailureWriteDeps, write: FailureWrite): Promi
     const warn = (message: string) => (error: unknown) => deps.logger.warn({ err: error }, message);
     switch (write.kind) {
         case "provider-refusal":
-            return deps.providerRefusals.record(write.provider, write.refusal).catch(warn("provider refusal: write failed"));
+            return Promise.all([
+                deps.providerRefusals.record(write.provider, write.refusal).catch(warn("provider refusal: write failed")),
+                write.refusal.kind === "limit" ? noteRunOut(deps, write.provider, write.refusal).catch(warn("run-out: write failed")) : undefined,
+            ]).then(() => undefined);
         case "headroom-refresh":
             // Unwaited even here: a re-measure is the freshest signal, not a record anything reads back at once.
             void deps.headroom.refresh(write.options);

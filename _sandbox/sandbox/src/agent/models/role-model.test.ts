@@ -108,6 +108,13 @@ const asPins = (keys: readonly string[]): ModelPin[] =>
 // A setup written out in full, as a snapshot a caller hands the walk.
 const written = (keys: readonly string[]): SetupLadder => ({ kind: `pins`, pins: asPins(keys) });
 
+// A routed provider's one account, its allowance read full when the case spends that provider.
+const routedAccount = (provider: string, spent: readonly string[]) => ({
+    name: `${provider}-one.json`,
+    label: `${provider}-one`,
+    usage: { windows: [{ kind: `five_hour`, utilization: spent.includes(provider) ? 100 : 4, gates: `all` as const }], measuredAt: Date.now() },
+});
+
 const fakeServices = (pinned: readonly string[], spent: readonly string[] = []): Services =>
     unstubbed<Services>(`services`, {
         privacyShield: privacySliceFake().privacyShield,
@@ -119,12 +126,19 @@ const fakeServices = (pinned: readonly string[], spent: readonly string[] = []):
         capabilities: unstubbed<Services[`capabilities`]>(`capabilities`, { list: async () => [] }),
         // The real modules, so a provider keeping its own allowance reading answers for itself.
         providerModules: PROVIDER_MODULES,
+        // One translator account per routed provider, read full where the case spends that provider.
         cliProxy: unstubbed<Services[`cliProxy`]>(`cliProxy`, {
-            turnLimit: async (provider) => (spent.includes(provider) ? { spent: 1, withHeadroom: 0 } : { spent: 0, withHeadroom: 1 }),
+            accounts: async () => ({
+                codex: [routedAccount(`codex`, spent)],
+                grok: [routedAccount(`grok`, spent)],
+                kimi: [routedAccount(`kimi`, spent)],
+                gemini: [routedAccount(`gemini`, spent)],
+            }),
         }),
         claudeStore: unstubbed<Services[`claudeStore`]>(`claudeStore`, {
             list: async () => [{ id: `claude-one` }] as Awaited<ReturnType<Services[`claudeStore`][`list`]>>,
         }),
+        claudeSeats: unstubbed<Services[`claudeSeats`]>(`claudeSeats`, { read: async () => ({}) }),
         accountUsage: unstubbed<Services[`accountUsage`]>(`accountUsage`, {
             read: async () => ({
                 "claude-one": { windows: [{ kind: `seven_day`, utilization: spent.includes(`claude`) ? 100 : 4, gates: `all` }], measuredAt: 0 },
@@ -137,7 +151,7 @@ const fakeServices = (pinned: readonly string[], spent: readonly string[] = []):
         // The seam a sealed request's hooks carry; nothing is ever parked on it.
         cards: unstubbed<Services[`cards`]>(`cards`, {}),
         // An answer settles what its provider last refused, as a turn's first words do.
-        providerRefusals: unstubbed<Services[`providerRefusals`]>(`providerRefusals`, { clear: async () => {} }),
+        providerRefusals: unstubbed<Services[`providerRefusals`]>(`providerRefusals`, { clear: async () => {}, onFile: async () => ({}) }),
         // ...and reopens the model it benched, as the same first words do.
         modelCooldowns: unstubbed<Services[`modelCooldowns`]>(`modelCooldowns`, { clear: async () => {} }),
         logger: unstubbed<Services[`logger`]>(`logger`, {

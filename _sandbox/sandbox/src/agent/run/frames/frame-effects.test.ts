@@ -5,6 +5,7 @@ import { recordingTurnStores, services } from "../../../harness/route-services.t
 import { beginTurn } from "../../../testing.js";
 import { providerOutage, recordProviderFailure, recordProviderSuccess } from "../../providers/provider-health.js";
 import type { FailureWrite } from "./classify-failure.js";
+import { beginPulse, endPulse } from "../turn/turn-pulse.js";
 import {
     activityOf,
     fileAccountUsage,
@@ -239,5 +240,31 @@ describe("a classification's writes", () => {
             "observed limit: write failed",
         ]);
         expect(writes.headroomRefreshes).toStrictEqual([{ scope: { providers: ["cursor"], account: "acct" }, maxAgeMs: 0 }]);
+    });
+});
+
+// A spent allowance's refusal is also the moment its window ran out: what the next spawn listing quotes beside the figure.
+describe("a spent allowance's refusal", () => {
+    test("notes when the window ran out and the agents running on the provider then", async () => {
+        const recordedRunOuts: { provider: string; runOut: unknown }[] = [];
+        const { deps } = recorded({
+            runOuts: { read: async () => ({}), record: async (provider, runOut) => void recordedRunOuts.push({ provider, runOut }) },
+        });
+        beginPulse({ conversationId: "runout-child", turnId: "t-1", provider: "codex", harness: "native", model: "gpt-6.1-sol", startedAt: 1 });
+        try {
+            performFailureWrites(deps, [{ kind: "provider-refusal", provider: "codex", refusal: { at: 5, kind: "limit", message: "spent", model: "gpt-6.1-sol" } }]);
+            await waitFor(() => expect(recordedRunOuts).toHaveLength(1), SETTLES);
+            expect(recordedRunOuts).toStrictEqual([{ provider: "codex", runOut: { at: 5, models: { "gpt-6.1-sol": 1 } } }]);
+        } finally {
+            endPulse("runout-child", "t-1");
+        }
+    });
+
+    test("notes nothing for a refused credential", async () => {
+        const recordedRunOuts: unknown[] = [];
+        const { deps } = recorded({ runOuts: { read: async () => ({}), record: async (_provider, runOut) => void recordedRunOuts.push(runOut) } });
+        performFailureWrites(deps, [{ kind: "provider-refusal", provider: "claude", refusal: { at: 5, kind: "auth", message: "revoked", account: "acct" } }]);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        expect(recordedRunOuts).toStrictEqual([]);
     });
 });

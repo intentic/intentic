@@ -1,6 +1,7 @@
 import { KeyedProviderSchema, type ModelChoice, renewsInWords } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
-import { fleetLimit, type TurnLimit } from "../../usage/serviceability/fleet-limit.js";
+import { askableLimit, type TurnLimit } from "../../usage/serviceability/fleet-limit.js";
+import { accountFactsOf } from "../../usage/serviceability/serviceability.js";
 import { observedOwnLimit } from "../../usage/observed-accounts.js";
 
 // Reads a rung's recorded quota instead of discovering it by asking and being refused; a rung whose every account is
@@ -19,31 +20,24 @@ const spentSentence = (subject: string, pool: string | undefined, reopensAt: num
     return `${subject} out of ${allowance}${renews}.`;
 };
 
-// Fleet reading for a rung, or undefined when no quota is on file or the reading failed. Claude counts spent only when
-// every connected account is at cap; an unmeasured account keeps the rung askable.
+// Async, so a store that throws as it is called rejects beside the facts read alongside it instead of stranding them.
+const refusalsOnFile = async (services: Services): Promise<Awaited<ReturnType<Services["providerRefusals"]["onFile"]>>> => services.providerRefusals.onFile();
+
+// Fleet reading for a rung, or undefined when no quota is on file or the reading failed. Spent only when every connected
+// account is at cap; an unmeasured account keeps the rung askable. Claude's and a routed provider's accounts are judged
+// on the very facts and refusals the account rows and the spawn listing publish (askableLimit), so a gate never refuses
+// what the listing offers, nor lets through what it calls spent.
 export const rungLimit = async (services: Services, choice: ModelChoice): Promise<TurnLimit | undefined> => {
     try {
-        if (choice.provider === `claude`) {
-            const [connected, usage] = await Promise.all([services.claudeStore.list(), services.accountUsage.read()]);
-            if (connected.length === 0) {
-                return undefined;
-            }
-            const limit = fleetLimit(
-                connected.map((account) => ({ account: account.id, usage: usage[account.id] })),
-                { id: choice.model },
-            );
-            // An unmeasured account may still answer, so it counts as headroom rather than as spent.
-            return limit.spent + limit.withHeadroom < connected.length ? { ...limit, withHeadroom: limit.withHeadroom + 1 } : limit;
+        if (choice.provider === `claude` || KeyedProviderSchema.safeParse(choice.provider).success) {
+            const [facts, refusals] = await Promise.all([accountFactsOf(services, choice.provider), refusalsOnFile(services)]);
+            return facts.length === 0 ? undefined : askableLimit(facts, { id: choice.model }, refusals[choice.provider]);
         }
         // A provider keeping its own reading (Cursor's, what it has already refused, per account and per model) answers
         // for itself; read from the pool instead, one account's spent Composer would bench the rung for every account.
         const module = services.providerModules.find((candidate) => candidate.id === choice.provider);
         if (module?.turnLimit !== undefined) {
             return await module.turnLimit(services, choice.model);
-        }
-        const provider = KeyedProviderSchema.safeParse(choice.provider);
-        if (provider.success) {
-            return await services.cliProxy.turnLimit(provider.data, choice.model);
         }
         // Left: a provider authenticating on its own with no reading of its own either (Devin). Its ledger is still the
         // one measurement it can have, whether a refused turn filed it or somebody marked it by hand.

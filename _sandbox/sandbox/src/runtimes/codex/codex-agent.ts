@@ -7,7 +7,7 @@ import { splitAttachments, withFileNote } from "../../agent/prompt/attachment-no
 import { opt } from "../../opt.js";
 import { type EmulatedPlan, EXECUTE_PROMPT, planMode } from "../decorators/plan-mode.js";
 import { POST_PLAN_MODE } from "../../agent/run/agent.js";
-import { isRateLimited, vendorFailureFrame, type VendorRule } from "../decorators/vendor-errors.js";
+import { isRateLimited, RATE_LIMIT_PATIENCE_MS, vendorFailureFrame, type VendorRule } from "../decorators/vendor-errors.js";
 import { isContextOverflowText } from "../../agent/providers/failure-sentences.js";
 import { transientUpstream } from "../../agent/providers/routed-refusal.js";
 import { toolCategoryOf } from "@intentic/agent-context/tool-calls";
@@ -271,7 +271,12 @@ const retryFrame = (event: Extract<CodexEvent, { type: "error" }>, retries: { co
 interface CodexErrorReading {
     readonly frames: AgentEvent[];
     readonly errored: boolean;
+    // A retry of a rate limit: Codex is waiting out a refusal, which the turn gives only so long (LimitWait).
+    readonly limited?: true;
 }
+
+// Whether a retry Codex announced is it waiting out a rate limit: typed so, a 429 behind it, or said so.
+const limitRetry = (event: Extract<CodexEvent, { type: "error" }>): boolean => codexFailureCode(event.info) === "rate_limit" || isRateLimited(event.message);
 
 // `hosted`: another provider's model, whose fallback-metadata advisory is expected and says nothing (CodexStreamContext).
 const codexError = (event: Extract<CodexEvent, { type: "error" }>, retries: { count: number }, hosted = false): CodexErrorReading => {
@@ -279,7 +284,8 @@ const codexError = (event: Extract<CodexEvent, { type: "error" }>, retries: { co
         return { frames: [], errored: false };
     }
     if (event.willRetry === true) {
-        return { frames: [retryFrame(event, retries)], errored: false };
+        const retry: CodexErrorReading = { frames: [retryFrame(event, retries)], errored: false };
+        return limitRetry(event) ? { ...retry, limited: true } : retry;
     }
     // An advisory isn't a failure: the turn still answers normally, so it must not mark the phase errored.
     if (CODEX_ADVISORY.test(event.message)) {
@@ -445,6 +451,8 @@ interface CodexStreamContext {
     readonly taint?: TurnTaint;
     // Stops the running phase: a call ran that the gate never answered.
     readonly halt?: () => void;
+    // How long a rate limit Codex waits out in the turn is let run (LimitWait); absent leaves Codex to wait (a test).
+    readonly limitWait?: LimitWait;
     // The turn runs another provider's model on its route (codex-endpoint `hosted`), whose window the route already
     // gave Codex: Codex's every-turn notice that it fell back to default metadata for an id outside OpenAI's catalog
     // tells the reader nothing, so it is dropped.
@@ -838,6 +846,57 @@ const bypassed = (event: CodexEvent, context: CodexStreamContext): boolean => {
     return event.type === "item.started" && event.parent === undefined && HOOKED_ITEMS.has(event.item.type) && hooks.record(event.item.id) === undefined;
 };
 
+/* A RATE LIMIT CODEX WAITS OUT INSIDE THE TURN IS GIVEN ONLY SO LONG. Codex honours the translator's Retry-After, which
+   for a spent allowance is the rest of its window ("retrying sampling request (1/5 in 13734s)" in Codex's own log), and
+   tells this client only "Reconnecting... 1/5" before going quiet. A turn sat as working for 2h42m that way on a spent
+   Codex allowance (2026-10-11), and three subagents sat until the reset four hours off (2026-10-13), each holding its
+   seat, its parent's wait and its card. Past RATE_LIMIT_PATIENCE_MS with no answer the phase is interrupted and the
+   turn ends coded `rate_limit`, which the daemon holds and books for the reset (classify-failure.ts), as OpenCode's and
+   Claude's loops already hand theirs over. A short limit the provider lifts in seconds is answered well inside it. */
+export interface LimitWait {
+    // Codex announced a rate-limited retry: the clock starts, unless it is already running.
+    readonly retrying: () => void;
+    // The provider answered again, so whatever it was waiting out is over.
+    readonly answered: () => void;
+    // Whether patience ran out and the phase was stopped for it.
+    readonly handedOver: () => boolean;
+    readonly dispose: () => void;
+}
+
+export const limitWait = (stop: () => void, patienceMs: number = RATE_LIMIT_PATIENCE_MS): LimitWait => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let handed = false;
+    const clear = (): void => {
+        if (timer !== undefined) {
+            clearTimeout(timer);
+            timer = undefined;
+        }
+    };
+    return {
+        retrying: () => {
+            if (timer === undefined && !handed) {
+                timer = setTimeout(() => {
+                    timer = undefined;
+                    handed = true;
+                    stop();
+                }, patienceMs);
+            }
+        },
+        answered: clear,
+        handedOver: () => handed,
+        dispose: clear,
+    };
+};
+
+// What the turn ends on when its wait is handed over: coded, so it is held and booked rather than offered as a Continue.
+export const LIMIT_WAIT_HANDED_OVER =
+    "The provider refused this Codex turn with a rate limit (HTTP 429), and Codex was waiting inside the turn for it to lift; a spent allowance lifts only at its reset, which can be hours away. The wait is handed to the sandbox, which holds the turn for the reset instead of keeping it open.";
+
+const handedOverFrame = (): ErrorFrame => ({ kind: "error", code: "rate_limit", message: LIMIT_WAIT_HANDED_OVER });
+
+// Codex events that mean the provider answered: what it streamed, or a turn that went on to finish.
+const ANSWERING: ReadonlySet<CodexEvent["type"]> = new Set(["item.started", "item.updated", "item.completed", "item.delta", "turn.completed"]);
+
 // Normalizes one Codex turn onto AgentEvents and returns what it captured (read via `yield*` by the plan phase,
 // discarded by an ordinary turn). `holdMessages` holds agent messages one-deep, flushing each as the next arrives, so
 // whatever remains at the end is the plan text.
@@ -847,7 +906,6 @@ async function* streamTurn(events: AsyncIterable<CodexEvent>, context: CodexStre
     // The subagents this turn's multi-agent calls start; their items read as the turn's own do, under their spawn call.
     const subagents = codexSubagents();
     let charged = subagentSpend(subagents);
-    const subagentItems = (event: CodexItemEvent): AsyncIterable<AgentEvent> => itemFrames(event, { ...context, holdMessages: false }, {}, state);
     const spent = (usage: CodexUsageOf | undefined): AgentEvent[] => {
         if (usage === undefined) {
             return [];
@@ -857,7 +915,57 @@ async function* streamTurn(events: AsyncIterable<CodexEvent>, context: CodexStre
         charged = delegated;
         return [frame];
     };
+    // Once a handed-over wait has been said, the interrupt it caused must not be said again as a failure of its own.
+    let handOverSaid = false;
+    const handOver = (): AgentEvent[] => {
+        if (handOverSaid || context.limitWait?.handedOver() !== true) {
+            return [];
+        }
+        handOverSaid = true;
+        capture.errored = true;
+        return [handedOverFrame()];
+    };
+    try {
+        yield* streamEvents(events, context, capture, state, subagents, spent, handOver);
+    } catch (error) {
+        // The interrupt patience sent may end in the app-server being killed: that is the hand-over, not a crash.
+        if (context.limitWait?.handedOver() !== true) {
+            throw error;
+        }
+    }
+    yield* handOver();
+    return capture;
+}
+
+// How a failed turn is said: as the hand-over a patience-sent interrupt ended it on, else as its own failure.
+const turnFailure = (event: Extract<CodexEvent, { type: "turn.failed" }>, handed: readonly AgentEvent[]): readonly AgentEvent[] =>
+    handed.length > 0 ? handed : [failureFrame(event.error.message, event.error.info)];
+
+// Codex's error channel: its frames, whether the turn died, and a rate-limited retry's patience clock started.
+function* errorChannel(event: Extract<CodexEvent, { type: "error" }>, context: CodexStreamContext, capture: TurnCapture, state: StreamState): Generator<AgentEvent> {
+    const failure = codexError(event, state.retries, context.hosted === true);
+    if (failure.limited === true) {
+        context.limitWait?.retrying();
+    }
+    yield* failure.frames;
+    capture.errored ||= failure.errored;
+}
+
+// The body of streamTurn: every Codex event onto its frames. `handOver` answers the frame a handed-over wait ends on, once.
+async function* streamEvents(
+    events: AsyncIterable<CodexEvent>,
+    context: CodexStreamContext,
+    capture: TurnCapture,
+    state: StreamState,
+    subagents: ReturnType<typeof codexSubagents>,
+    spent: (usage: CodexUsageOf | undefined) => AgentEvent[],
+    handOver: () => AgentEvent[],
+): AsyncGenerator<AgentEvent> {
+    const subagentItems = (event: CodexItemEvent): AsyncIterable<AgentEvent> => itemFrames(event, { ...context, holdMessages: false }, {}, state);
     for await (const event of events) {
+        if (ANSWERING.has(event.type)) {
+            context.limitWait?.answered();
+        }
         if (bypassed(event, context)) {
             context.halt?.();
             capture.errored = true;
@@ -898,20 +1006,16 @@ async function* streamTurn(events: AsyncIterable<CodexEvent>, context: CodexStre
             case "turn.failed":
                 // A failed or interrupted turn still spent what it spent.
                 yield* spent(event.usage);
-                yield failureFrame(event.error.message, event.error.info);
+                yield* turnFailure(event, handOver());
                 capture.errored = true;
                 break;
-            case "error": {
-                const failure = codexError(event, state.retries, context.hosted === true);
-                yield* failure.frames;
-                capture.errored ||= failure.errored;
+            case "error":
+                yield* errorChannel(event, context, capture, state);
                 break;
-            }
             default:
                 yield* reportFrames(event);
         }
     }
-    return capture;
 }
 
 // The request a Codex loop runs: the subscription through the translator, or the container's own OPENAI_API_KEY.
@@ -949,6 +1053,10 @@ const codexPhase = (
 ) =>
     async function* (phase: CodexPhase): AsyncGenerator<AgentEvent, TurnCapture> {
         const steering = channel?.();
+        // Stops this phase alone when a rate limit is waited out past patience: the turn goes on to say so and is held.
+        const handover = new AbortController();
+        const waiting = limitWait(() => handover.abort());
+        const stops = [request.signal, handover.signal, ...(gated === undefined ? [] : [gated.halted])];
         try {
             return yield* streamTurn(
                 runner({
@@ -973,10 +1081,11 @@ const codexPhase = (
                           }
                         : {}),
                     options: threadOptions(request, phase, context.gate?.enforcing === true),
-                    signal: gated === undefined ? request.signal : AbortSignal.any([request.signal, gated.halted]),
+                    signal: AbortSignal.any(stops),
                 }),
                 {
                     ...context,
+                    limitWait: waiting,
                     holdMessages: phase.holdMessages,
                     posture: phase.posture,
                     ...(browser === undefined
@@ -985,6 +1094,7 @@ const codexPhase = (
                 },
             );
         } finally {
+            waiting.dispose();
             // Leaving the channel open would park the steering pump on a promise nothing resolves.
             steering?.close();
         }

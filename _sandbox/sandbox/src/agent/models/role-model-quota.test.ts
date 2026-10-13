@@ -1,8 +1,8 @@
 import { unstubbed } from "@intentic/testing";
-import type { UsageWindow } from "@intentic/sandbox-contract";
+import type { ProviderRefusal, UsageWindow } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import { PROVIDER_MODULES } from "../../runtimes/runtime-table.js";
-import type { TurnLimit } from "../../usage/serviceability/fleet-limit.js";
+import { opt } from "../../opt.js";
 import { spentRung } from "./role-model-quota.js";
 
 // Quota reads must only ever say spent on evidence, never as a guess; the undefined-returning cases are what this suite
@@ -11,17 +11,29 @@ import { spentRung } from "./role-model-quota.js";
 const NOW = 1_700_000_000_000;
 const SECONDS = Math.floor(NOW / 1000);
 
-// Every provider's own module, as composition hands them in: only one keeping its own reading answers for itself.
-const routed = (limit: TurnLimit): Services =>
+// Every provider's own module, as composition hands them in: only one keeping its own reading answers for itself. A
+// routed provider's accounts are the translator's rows, judged with the refusals on file as the listing judges them.
+const routed = (accounts: Record<string, UsageWindow[] | undefined>, refusals: readonly ProviderRefusal[] = []): Services =>
     unstubbed<Services>(`services`, {
         providerModules: PROVIDER_MODULES,
-        cliProxy: unstubbed<Services[`cliProxy`]>(`cliProxy`, { turnLimit: async () => limit }),
+        cliProxy: unstubbed<Services[`cliProxy`]>(`cliProxy`, {
+            accounts: async () => ({
+                codex: [],
+                grok: [],
+                kimi: [],
+                gemini: Object.entries(accounts).map(([name, windows]) => ({ name, label: name, ...(windows === undefined ? {} : { usage: { windows, measuredAt: NOW } }) })),
+            }),
+        }),
+        providerRefusals: unstubbed<Services[`providerRefusals`]>(`providerRefusals`, { onFile: async () => ({ gemini: refusals }) }),
     });
 
-const claude = (accounts: Record<string, UsageWindow[] | undefined>): Services =>
+const claude = (accounts: Record<string, UsageWindow[] | undefined>, seats: Record<string, string> = {}): Services =>
     unstubbed<Services>(`services`, {
         claudeStore: unstubbed<Services[`claudeStore`]>(`claudeStore`, {
             list: async () => Object.keys(accounts).map((id) => ({ id }) as Awaited<ReturnType<Services[`claudeStore`][`list`]>>[number]),
+        }),
+        claudeSeats: unstubbed<Services[`claudeSeats`]>(`claudeSeats`, {
+            read: async () => Object.fromEntries(Object.entries(seats).map(([id, reason]) => [id, { reason, at: NOW }])),
         }),
         accountUsage: unstubbed<Services[`accountUsage`]>(`accountUsage`, {
             read: async () =>
@@ -29,37 +41,58 @@ const claude = (accounts: Record<string, UsageWindow[] | undefined>): Services =
                     Object.entries(accounts).flatMap(([id, windows]) => (windows === undefined ? [] : [[id, { windows, measuredAt: NOW }]])),
                 ),
         }),
+        providerRefusals: unstubbed<Services[`providerRefusals`]>(`providerRefusals`, { onFile: async () => ({}) }),
     });
 
 const GEMINI = { provider: `gemini`, model: `gemini-3-flash-lite` };
 const HAIKU = { provider: `claude`, model: `claude-haiku-4-5` };
 
-test("steps over a routed fleet whose every account is spent, and says when it comes back", async () => {
-    const spent = await spentRung(routed({ pool: `Gemini models`, spent: 31, withHeadroom: 0, reopensAt: SECONDS + 3 * 86_400 }), GEMINI, NOW);
+// A pool the plan meters for Gemini's models alone, as the translator reads it.
+const gemini = (utilization: number, resetsAt?: number): UsageWindow => ({
+    kind: `google:gemini-weekly`,
+    label: `Gemini models`,
+    utilization,
+    gates: { models: [`gemini`] },
+    ...opt(`resetsAt`, resetsAt),
+});
 
-    expect(spent?.reason).toContain(`31`);
+test("steps over a routed fleet whose every account is spent, and says when it comes back", async () => {
+    const spent = await spentRung(routed({ a: [gemini(100, SECONDS + 3 * 86_400)], b: [gemini(100, SECONDS + 4 * 86_400)] }), GEMINI, NOW);
+
+    expect(spent?.reason).toContain(`All 2 connected accounts`);
     expect(spent?.reason).toContain(`Gemini models`);
     expect(spent?.reason).toMatch(/3 days/);
     expect(spent?.reopensAt).toBe(SECONDS + 3 * 86_400);
 });
 
 test("asks a routed rung while any one account still has room", async () => {
-    await expect(spentRung(routed({ spent: 30, withHeadroom: 1 }), GEMINI, NOW)).resolves.toBeUndefined();
+    await expect(spentRung(routed({ a: [gemini(100, SECONDS + 3_600)], b: [gemini(40)] }), GEMINI, NOW)).resolves.toBeUndefined();
 });
 
 test("asks a routed rung that nothing has measured", async () => {
-    // spent:0, withHeadroom:0 means the pool was never measured, not exhausted.
-    await expect(spentRung(routed({ spent: 0, withHeadroom: 0 }), GEMINI, NOW)).resolves.toBeUndefined();
+    await expect(spentRung(routed({ a: undefined }), GEMINI, NOW)).resolves.toBeUndefined();
+});
+
+// The listing believes a plan that just said no over a usage endpoint still showing room; the gate must believe it too,
+// or a spawn the listing calls spent goes through, and a restart re-run lands on the refusal.
+test("steps over a routed rung a standing refusal holds, whatever the reading still shows", async () => {
+    // On the real clock: a refusal stands until the instant it named, judged against now.
+    const reopens = Math.floor(Date.now() / 1000) + 3_600;
+    const refusal: ProviderRefusal = { at: Date.now() - 60_000, kind: `limit`, message: `You've hit your usage limit.`, resetsAt: reopens };
+    const spent = await spentRung(routed({ a: [gemini(10)] }, [refusal]), GEMINI);
+
+    expect(spent?.reopensAt).toBe(reopens);
 });
 
 test("asks the rung when the reading itself cannot be taken", async () => {
     const broken = unstubbed<Services>(`services`, {
         providerModules: PROVIDER_MODULES,
         cliProxy: unstubbed<Services[`cliProxy`]>(`cliProxy`, {
-            turnLimit: async () => {
+            accounts: async () => {
                 throw new Error(`management API unreachable`);
             },
         }),
+        providerRefusals: unstubbed<Services[`providerRefusals`]>(`providerRefusals`, { onFile: async () => ({}) }),
     });
 
     await expect(spentRung(broken, GEMINI, NOW)).resolves.toBeUndefined();
@@ -69,7 +102,7 @@ const weekly = (utilization: number, resetsAt?: number): UsageWindow => ({
     kind: `seven_day`,
     utilization,
     gates: `all`,
-    ...(resetsAt === undefined ? {} : { resetsAt }),
+    ...opt(`resetsAt`, resetsAt),
 });
 
 test("steps over Claude only when every connected account is at its cap", async () => {
@@ -93,6 +126,13 @@ test("a per-model pool at its cap does not retire the whole Claude rung", async 
     await expect(spentRung(claude(account), HAIKU, NOW)).resolves.toBeUndefined();
     const fable = await spentRung(claude(account), { provider: `claude`, model: `claude-fable-5` }, NOW);
     expect(fable?.reason).toContain(`Fable allowance`);
+});
+
+// The account rows call a seatless account unable to serve; the gate once read only its usage and saw room on it.
+test("steps over Claude when the only account with room has lost its seat", async () => {
+    const spent = await spentRung(claude({ one: [weekly(100, SECONDS + 3_600)], two: [weekly(10)] }, { two: `Claude Code is not enabled for your seat.` }), HAIKU, NOW);
+
+    expect(spent?.reason).toContain(`All 2 connected Claude accounts`);
 });
 
 test("asks Claude when an account has no reading at all", async () => {

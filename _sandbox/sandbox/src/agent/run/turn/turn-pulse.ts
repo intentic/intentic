@@ -55,6 +55,10 @@ const causes = new Map<string, string>();
 /** What the conversation's turn last showed of itself, live or just ended; undefined when no turn ran since boot. */
 export const turnPulseOf = (conversationId: string): TurnPulse | undefined => pulses.get(conversationId);
 
+/** Every turn whose runtime is running right now on this provider, one per conversation. */
+export const runningOn = (provider: string): readonly TurnPulse[] =>
+    [...pulses.values()].filter((pulse) => pulse.endedAt === undefined && pulse.provider === provider);
+
 /** A turn's runtime is starting: its record replaces whatever the conversation's last turn left. */
 export const beginPulse = (pulse: Omit<TurnPulse, "lastEventAt" | "retriesSinceAnswer">): void => {
     causes.delete(pulse.conversationId);

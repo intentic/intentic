@@ -2,13 +2,15 @@ import { HISTORY_ROOT, STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { unstubbed } from "@intentic/testing";
 import type { AgentEvent, ToolCallContent } from "@intentic/sandbox-contract";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
+import { sleep } from "@intentic/base/async";
 import type { AgentRequest, CodexCredential, TurnHooks } from "../../agent/providers/agent-request.js";
 import { SteeringQueue } from "../../agent/checkpoints/agent-steering.js";
 import { WORKLOAD_ENV } from "../../seams/workload-stamp.js";
 import { forgetNamespaceEntry, registerMountEntry } from "../../workload/namespace-entry.js";
 import { fakeCodexRunner, memoryFleet } from "../../testing.js";
 import type { CodexEvent, CodexFailureInfo, CodexItem, CodexRunner, CodexTurn } from "./codex-app-server.js";
-import { createCodexAgent, UNGATED_CALL, UNGATED_LIST } from "./codex-agent.js";
+import { createCodexAgent, LIMIT_WAIT_HANDED_OVER, UNGATED_CALL, UNGATED_LIST } from "./codex-agent.js";
+import { RATE_LIMIT_PATIENCE_MS } from "../decorators/vendor-errors.js";
 import { createTurnRelay, type TurnRelay } from "../daemon-tools/turn-relay.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 
@@ -1692,5 +1694,111 @@ describe("hooks on the door's gate", () => {
         expect(config["features.shell_tool"]).toBeUndefined();
         expect(config["mcp_servers.browser.enabled_tools"]).toEqual(["browser_snapshot"]);
         expect(config["mcp_servers.gate.enabled_tools"]).toBeUndefined();
+    });
+});
+
+/* Codex honours the translator's Retry-After, which for a spent allowance is the rest of its window: on 2026-10-13 three
+   subagents sat as working for what would have been 3h48m ("retrying sampling request (1/5 in 13734s)"), each holding
+   its seat and its parent's wait, after Codex had already said "Reconnecting... 1/5" and gone quiet. */
+describe("a rate limit Codex waits out inside the turn", () => {
+    const LIMITED: CodexEvent = {
+        type: "error",
+        message: "Reconnecting... 1/5 (exceeded retry limit, last status: 429 Too Many Requests)",
+        willRetry: true,
+        info: { kind: "responseStreamDisconnected", httpStatus: 429 },
+    };
+    // Codex as it behaves: the retry notice, then nothing until the phase is stopped, then the interrupted ending.
+    const sleepingRunner = (ends: "interrupted" | "killed") => {
+        let stopped = false;
+        const runner: CodexRunner = async function* (turn) {
+            yield { type: "thread.started", thread_id: "thr-limit" };
+            yield LIMITED;
+            await new Promise<void>((resolve) => {
+                turn.signal.addEventListener("abort", () => resolve(), { once: true });
+            });
+            stopped = true;
+            if (ends === "killed") {
+                throw new Error("Codex app-server exited (SIGTERM)");
+            }
+            yield { type: "turn.failed", error: { message: "Codex turn was interrupted" } };
+        };
+        return { runner, stopped: () => stopped };
+    };
+
+    it("hands the wait to the daemon once patience runs out, as a rate limit the turn is held on", async () => {
+        const { runner, stopped } = sleepingRunner("interrupted");
+        jest.useFakeTimers();
+        try {
+            const events = collect(createTestAgent(runner), request);
+            await advanceTimersByTimeAsync(RATE_LIMIT_PATIENCE_MS - 1_000);
+            expect(stopped()).toBe(false);
+            await advanceTimersByTimeAsync(1_000);
+            expect(await events).toEqual([
+                { kind: "session", sessionId: "thr-limit" },
+                { kind: "provider_retry", attempt: 1, maxAttempts: 5, status: 429 },
+                // Coded, so classify-failure holds it for the reset; the interrupt it caused is not said as a second failure.
+                { kind: "error", code: "rate_limit", message: LIMIT_WAIT_HANDED_OVER },
+                { kind: "done" },
+            ]);
+            expect(stopped()).toBe(true);
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    it("reads an app-server killed by that interrupt as the same hand-over, not a crash", async () => {
+        const { runner } = sleepingRunner("killed");
+        jest.useFakeTimers();
+        try {
+            const events = collect(createTestAgent(runner), request);
+            await advanceTimersByTimeAsync(RATE_LIMIT_PATIENCE_MS);
+            expect((await events).filter((event) => event.kind === "error")).toEqual([{ kind: "error", code: "rate_limit", message: LIMIT_WAIT_HANDED_OVER }]);
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    it("lets a limit the provider lifts within patience ride, and starts the clock afresh after an answer", async () => {
+        const runner: CodexRunner = async function* () {
+            yield { type: "thread.started", thread_id: "thr-short" };
+            yield LIMITED;
+            await sleep(RATE_LIMIT_PATIENCE_MS / 2);
+            yield { type: "item.completed", item: { id: "m1", type: "agent_message", text: "back" } };
+            // A second limit later in the turn is given its own full patience, not what the first one left.
+            yield LIMITED;
+            await sleep(RATE_LIMIT_PATIENCE_MS - 1_000);
+            yield { type: "item.completed", item: { id: "m2", type: "agent_message", text: "done" } };
+            yield { type: "turn.completed" };
+        };
+        jest.useFakeTimers();
+        try {
+            const events = collect(createTestAgent(runner), request);
+            await advanceTimersByTimeAsync(RATE_LIMIT_PATIENCE_MS / 2);
+            await advanceTimersByTimeAsync(RATE_LIMIT_PATIENCE_MS - 1_000);
+            const seen = await events;
+            expect(seen.filter((event) => event.kind === "error")).toEqual([]);
+            expect(seen.filter((event) => event.kind === "delta")).toEqual([
+                { kind: "delta", text: "back" },
+                { kind: "delta", text: "done" },
+            ]);
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    it("never counts a retry that is no rate limit against patience", async () => {
+        const runner: CodexRunner = async function* () {
+            yield { type: "error", message: "Reconnecting... waiting for network", willRetry: true, info: { kind: "responseStreamDisconnected", httpStatus: 503 } };
+            await sleep(RATE_LIMIT_PATIENCE_MS * 2);
+            yield { type: "item.completed", item: { id: "m1", type: "agent_message", text: "back" } };
+        };
+        jest.useFakeTimers();
+        try {
+            const events = collect(createTestAgent(runner), request);
+            await advanceTimersByTimeAsync(RATE_LIMIT_PATIENCE_MS * 2);
+            expect((await events).filter((event) => event.kind === "error")).toEqual([]);
+        } finally {
+            jest.useRealTimers();
+        }
     });
 });

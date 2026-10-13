@@ -1,4 +1,5 @@
-import type { HandoffOffer } from "@intentic/sandbox-contract";
+import { type HandoffOffer, RESUME_NOTES, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { unstubbed } from "@intentic/testing";
 import { IN_MEMORY } from "@intentic/base/sqlite";
 import { pino } from "pino";
 import { beginTurn, fleetStoreOver, noPresences } from "../../../testing.js";
@@ -148,5 +149,55 @@ describe("the resume pass fires only the hold it judged", () => {
 
         await createTurnResumeScheduler(services).tick(10_000_000);
         expect(runsOf("c1").map((input) => input.account)).toEqual(["acct-b"]);
+    });
+});
+
+/* A turn the sandbox held at the door for a spent allowance (spent-door.ts) never reached the model: re-run as a refused
+   turn's is, it would open a fresh session and drop everything its conversation had built. It goes as a door's does. */
+describe("a spent allowance's hold taken at the door", () => {
+    const standings = (): LandStandings => ({ of: () => "idle", causesOf: () => [], refresh: async () => false, forget: () => {} });
+    const PROFILE = { agent: "codex", harness: "native" } as const;
+
+    const rerunOfHold = async (hold: Pick<HeldTurn, "ran" | "turnedAway" | "run">): Promise<TurnInput | undefined> => {
+        const { agents, conversations } = createFleet(fleetStoreOver(openConversationsDb(IN_MEMORY)), standings(), noPresences());
+        await agents.init();
+        await beginTurn(conversations, { conversationId: "c1", isolated: true, prompt: "Port the EZD connector", profile: PROFILE }, 1_000);
+        const input = { conversationId: "c1", prompt: "Port the EZD connector", sessionId: "thr-1", ...PROFILE };
+        conversations.send("c1", { kind: "turn-held", held: { input, reason: "limit", reopensAt: 100, ...hold } }, 1_000);
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
+        const started: TurnInput[] = [];
+        const services = unstubbed<Services>("services", {
+            agents,
+            conversations,
+            logger: pino({ level: "silent" }),
+            // The owner's answer to a spent allowance is to send again at the reset, so the booking fires.
+            sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({ limitPolicy: "resend" }) }),
+            resources: unstubbed<Services["resources"]>("resources", { roomSince: async () => undefined }),
+            turns: unstubbed<Services["turns"]>("turns", {
+                drain: async () => {},
+                start: async (turn) => {
+                    started.push(turn);
+                    return { id: "run-rerun", async *frames () {} };
+                },
+            }),
+        });
+        await createTurnResumeScheduler(services).tick(200_000);
+        return started[0];
+    };
+
+    it("goes again on the session it was held on, as a door's does, its unsent run left unseen", async () => {
+        const rerun = await rerunOfHold({ ran: false, turnedAway: true, run: "run-held" });
+
+        expect(rerun?.sessionId).toBe("thr-1");
+        expect(rerun?.resume).toBe("door");
+        expect(rerun?.prompt).toContain(RESUME_NOTES.door);
+        expect(rerun?.unseenRuns).toEqual(["run-held"]);
+    });
+
+    it("leaves a turn the provider itself refused before answering to open fresh, as it always did", async () => {
+        const rerun = await rerunOfHold({ ran: false });
+
+        expect(rerun?.sessionId).toBeUndefined();
+        expect(rerun?.resume).toBe("refused");
     });
 });

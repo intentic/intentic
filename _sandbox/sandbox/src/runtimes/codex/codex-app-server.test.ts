@@ -1187,3 +1187,57 @@ test("frames the daemon's tools raise reach the stream while the turn runs", asy
     ]);
     expect(wake).toBeUndefined();
 });
+
+/* `last` is one request's usage. Read as the turn's spend it filed a 48-minute Codex turn of some two hundred requests
+   as 1.6K in and 668 out, while the thread's own totals moved by 6.65M in and 44.8K out (2026-10-13). */
+describe("what a Codex turn spent", () => {
+    const usage = (input: number, cached: number, output: number) => ({
+        totalTokens: input + output,
+        inputTokens: input,
+        cachedInputTokens: cached,
+        cacheWriteInputTokens: 0,
+        outputTokens: output,
+        reasoningOutputTokens: 0,
+    });
+    const updated = (tokenUsage: object): Incoming => ({ method: "thread/tokenUsage/updated", params: { threadId: "thr-new", turnId: "turn-1", tokenUsage } });
+    const update = (total: object | undefined, last: object): Incoming =>
+        total === undefined ? updated({ last, modelContextWindow: null }) : updated({ total, last, modelContextWindow: null });
+    const spentBy = async (updates: readonly Incoming[]) => {
+        const appServer = fakeAppServer([...updates, COMPLETED]);
+        const events = await collect(createCodexAppServerRunner(appServer.connector)(turn()));
+        const ending = events.find((event) => event.type === "turn.completed");
+        return ending?.type === "turn.completed" ? ending.usage : undefined;
+    };
+
+    it("is every request of the turn: how far the thread's total moved since just before its first", async () => {
+        // The thread had already spent 1,000 in and 100 out on earlier turns; this turn makes three requests.
+        expect(
+            await spentBy([
+                update(usage(1_500, 400, 150), usage(500, 400, 50)),
+                update(usage(2_200, 1_000, 210), usage(700, 600, 60)),
+                update(usage(3_000, 1_700, 300), usage(800, 700, 90)),
+            ]),
+        ).toEqual({ input_tokens: 2_000, cached_input_tokens: 1_700, cache_write_input_tokens: 0, output_tokens: 200, reasoning_output_tokens: 0 });
+    });
+
+    it("counts a repeated update of the same total once", async () => {
+        const first = update(usage(1_500, 400, 150), usage(500, 400, 50));
+        expect(await spentBy([first, first])).toEqual({
+            input_tokens: 500,
+            cached_input_tokens: 400,
+            cache_write_input_tokens: 0,
+            output_tokens: 50,
+            reasoning_output_tokens: 0,
+        });
+    });
+
+    it("adds each request's own usage where Codex sends no total", async () => {
+        expect(await spentBy([update(undefined, usage(500, 400, 50)), update(undefined, usage(700, 600, 60))])).toEqual({
+            input_tokens: 1_200,
+            cached_input_tokens: 1_000,
+            cache_write_input_tokens: 0,
+            output_tokens: 110,
+            reasoning_output_tokens: 0,
+        });
+    });
+});

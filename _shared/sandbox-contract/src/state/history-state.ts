@@ -57,6 +57,9 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     // What each account has run out of, for a plan publishing no allowance to poll — the refusal is the reading.
     // Carried like the refusals above: an allowance belongs to the account, not to the machine that spent it.
     { path: "observed-limits.json", portability: "carry" },
+    // When each provider's allowance last ran out and under how many agents, which the spawn listing quotes beside the
+    // figure left. Carried like the refusals: it describes the subscription's windows, not the machine that spent them.
+    { path: "run-outs.json", portability: "carry" },
     // First-time dependency setup requests; carried so an interrupted queue survives export, entries self-remove.
     { path: "dependency-requests.json", portability: "carry" },
     // Which device cards were already offered; carry, not identity, since it holds ids, never a token.

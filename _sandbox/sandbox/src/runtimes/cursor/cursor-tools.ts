@@ -1,3 +1,4 @@
+import { spawnCatalogText } from "../../agent/subagents/spawn-catalog.js";
 import type { McpServerConfig as CursorMcpServer, SDKCustomTool, SDKJsonValue, ToolName } from "@cursor/sdk";
 import type { AgentEvent, AskQuestion } from "@intentic/sandbox-contract";
 import { z } from "zod";
@@ -149,13 +150,15 @@ const spawnTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool 
 const providersTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool => ({
     description:
         "What a subagent could be spawned on right now: every provider this sandbox has connected, its " +
-        "models, and how much allowance each still has. Models the records call spent are left out, and a spawn " +
-        "naming one is refused before it takes a seat. What this shows is what is not known to be spent, which is " +
-        "weaker than a promise: a provider publishing no allowance reads as not metered, and the only thing that ever " +
-        "measures one of those is a turn it has already refused. Each figure is one account's, and subagents started " +
-        "together draw on it together.",
+        "models, how much allowance each still has and in which pool, how many of this sandbox's agents already run " +
+        "on each provider, and when each last ran out and under how many agents. Models the records call spent are " +
+        "left out, and a spawn naming one is refused before it takes a seat. What this shows is what is not known to " +
+        "be spent, which is weaker than a promise: a provider publishing no allowance reads as not metered, and the " +
+        "only thing that ever measures one of those is a turn it has already refused. Each figure is one account's, " +
+        "and subagents started together draw on it together: N children spend it about N times as fast as one.",
     inputSchema: { type: "object", properties: {}, required: [] },
-    execute: async () => JSON.stringify({ ok: true, providers: await children.providers() }),
+    // The listing as the CLI prints it, the same words every runtime's agent reads before it fans out.
+    execute: async () => spawnCatalogText(await children.providers()),
 });
 
 // Wait ceiling/default match the harness tool's; long enough for a real child, short enough within the turn.

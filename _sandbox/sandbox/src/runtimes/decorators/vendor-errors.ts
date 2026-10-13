@@ -14,6 +14,12 @@ const RATE_LIMITED = /rate.?limit|resource.?exhausted|too many requests|\b429\b/
 // that would just re-fail.
 export const isRateLimited = (message: string): boolean => mentionsSpentAllowance(message) || RATE_LIMITED.test(message);
 
+// How long any loop may wait out a rate limit inside a turn before the turn hands the wait to the daemon, which holds
+// the conversation and books it for the reset (classify-failure.ts) instead of keeping a turn open on nothing. One
+// figure for every runtime that waits in-turn: OpenCode reads the wait it scheduled, Codex counts from the refusal,
+// since its notice ("Reconnecting... 1/5") names no wait at all.
+export const RATE_LIMIT_PATIENCE_MS = 2 * 60_000;
+
 // One way a runtime recognizes its own failure sentence, and the code the frame then carries.
 export type VendorRule = readonly [recognizes: (message: string) => boolean, code: NonNullable<ErrorFrame["code"]>];
 

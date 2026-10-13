@@ -22,7 +22,10 @@ export const spawnNote = (): string =>
     "spawn naming one is refused before it takes a seat. What it lists is what is not known to be spent, which is not " +
     "the same as a promise: a provider that publishes no allowance is listed as `not metered`, and the only thing that " +
     "ever measures one of those is a turn it has already refused. Each figure is one account's, and subagents started " +
-    "together draw on it together. The subagent runs as its own conversation in an isolated " +
+    "together draw on it together: N of them spend it about N times as fast as one. The listing says which pool each " +
+    "figure is (a five-hour window, a weekly one), how many agents already run on each provider, and when each last ran " +
+    "out, how far into its window and under how many agents: read that before starting several on one provider. " +
+    "The subagent runs as its own conversation in an isolated " +
     "copy of the repos cut from your current work, on the named provider's account (claude, codex, grok, kimi, gemini, " +
     "cursor — e.g. `--provider cursor --model composer-2.5`). Its finished work comes back into your checkout, as an " +
     "in-process subagent's edits do; where it clashes with your edits it is held, and `agents merge <id>` brings it in. " +

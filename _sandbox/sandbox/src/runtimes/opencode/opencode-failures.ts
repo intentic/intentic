@@ -2,7 +2,7 @@ import type { AgentEvent } from "@intentic/sandbox-contract";
 import { isContextOverflowText } from "../../agent/providers/failure-sentences.js";
 import { modelUnavailableFrame } from "../../agent/run/error-frames.js";
 import { opt } from "../../opt.js";
-import { isRateLimited, vendorFailureFrame, type VendorRule } from "../decorators/vendor-errors.js";
+import { isRateLimited, RATE_LIMIT_PATIENCE_MS, vendorFailureFrame, type VendorRule } from "../decorators/vendor-errors.js";
 import { OPENCODE_XAI_PROVIDER } from "./xai-models.js";
 
 // How an OpenCode turn's failures are coded. OpenCode 2 types every provider failure it ends an execution or schedules a
@@ -104,10 +104,9 @@ export const executionErrorFrame = (error: StructuredError, target: FailureTarge
     return typedFrame(error, kindOf(error), target) ?? vendorFailureFrame(plain, SENTENCE_RULES);
 };
 
-// How long a rate limit OpenCode means to wait out in-turn is left to it: past this, the turn hands the wait to the
-// daemon, which holds the conversation and resumes it at the reset (classify-failure.ts) instead of keeping a turn open
-// on nothing. OpenCode honours a provider's retry-after of up to 15 minutes.
-export const RATE_LIMIT_PATIENCE_MS = 2 * 60_000;
+// How long a rate limit OpenCode means to wait out in-turn is left to it is the one figure every loop shares
+// (vendor-errors.ts); OpenCode honours a provider's retry-after of up to 15 minutes, so it is what cuts the wait short.
+export { RATE_LIMIT_PATIENCE_MS };
 
 // How many attempts OpenCode makes at a provider having a bad time before the turn hands it to the daemon's backoff;
 // its own first attempt is 1, its first retry 2. OpenCode alone would try ten times, the last ones minutes apart.

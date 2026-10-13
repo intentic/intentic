@@ -1,3 +1,4 @@
+import { spawnCatalogText } from "./spawn-catalog.js";
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
 import { sdk } from "../../engines/claude-sdk.js";
 import { AgentHarnessSchema, AgentProviderSchema, harnessChoosable, loopsOf, PROVIDERS } from "@intentic/sandbox-contract";
@@ -62,19 +63,25 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                       sdk().tool(
                           "providers",
                           "What a subagent could be spawned on right now: every provider this sandbox has connected, its models, " +
-                              "and how much allowance each still has. Call it before spawn when you do not already know which model " +
-                              "you want — spawn requires a provider and a model, models the records call spent are left out of this " +
-                              "list, and a spawn naming one is refused before it takes a seat. What it shows is what is not known to " +
-                              "be spent, which is weaker than a promise: a provider publishing no allowance reads as not metered, " +
-                              "and the only thing that ever measures one of those is a turn it has already refused. Each figure is " +
-                              "one account's, and subagents started together draw on it together.",
+                              "how much allowance each still has and in which pool (a five-hour window, a weekly one), how many of " +
+                              "this sandbox's agents already run on each provider, and when each last ran out, how far into its " +
+                              "window and under how many agents. Call it before spawn when you do not already know which model you " +
+                              "want, and before a fan-out: spawn requires a provider and a model, models the records call spent are " +
+                              "left out of this list, and a spawn naming one is refused before it takes a seat. What it shows is what " +
+                              "is not known to be spent, which is weaker than a promise: a provider publishing no allowance reads as " +
+                              "not metered, and the only thing that ever measures one of those is a turn it has already refused. Each " +
+                              "figure is one account's, and subagents started together draw on it together: N children spend it " +
+                              "about N times as fast as one, so read the last run-out before starting several on one provider.",
                           {},
                           async () => {
                               const children = deps.children;
                               if (children === undefined) {
                                   return answer({ ok: false, message: "This turn cannot spawn agents." });
                               }
-                              return answer({ ok: true, providers: await children.providers() });
+                              // The listing as the CLI prints it: what each model has left and in which pool, how many
+                              // agents already run on each provider, when each last ran out. Raw rows once went out
+                              // here instead, and every word added to the listing for a fan-out never reached the model.
+                              return { content: [{ type: "text" as const, text: spawnCatalogText(await children.providers()) }] };
                           },
                           { annotations: toolAnnotations("read") },
                       ),

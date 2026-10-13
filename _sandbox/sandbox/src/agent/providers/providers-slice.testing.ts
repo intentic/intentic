@@ -95,6 +95,8 @@ export const providersSliceFake = (context: SliceFakeContext, { usage, cliProxy 
         },
         // Nothing cooling; the write sits on the routed rate-limit path, so any refused routed turn touches this store.
         modelCooldowns: { cooling: async () => new Map(), record: async () => {}, clear: async () => {} },
+        // Nothing ran out yet; written beside every spent allowance's refusal, so any refused turn touches this store.
+        runOuts: { read: async () => ({}), record: async () => {} },
         cliProxy: emptyCliProxy(cliProxy),
         providerCatalogs: testProviderCatalogs,
         // The real tables: which runtime a pair reaches and which module answers for a provider are facts about the

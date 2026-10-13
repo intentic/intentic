@@ -86,3 +86,18 @@ export const fleetLimit = (readings: readonly FleetReading[], model: ModelRef | 
         ...(room.length === 0 ? {} : { roomMeasuredAt: Math.max(...room) }),
     };
 };
+
+/**
+ * The verdict a gate and the listing share: whether a model is out of allowance on every account, read from the same
+ * facts and refusals the account rows publish. An account nothing has measured may still answer, so it keeps the model
+ * askable. Two readings of one question drifted before: the spawn gate read Claude's bare usage with no refusal, the
+ * listing read seat marks and the refusals on file, and each could call spent what the other let through.
+ */
+export const askableLimit = (readings: readonly FleetReading[], model: ModelRef | undefined, refusals?: RefusalsOnFile): TurnLimit => {
+    const limit = fleetLimit(readings, model, refusals);
+    if (limit.spent + limit.withHeadroom >= readings.length) {
+        return limit;
+    }
+    const { reopensAt: _closed, ...open } = limit;
+    return { ...open, withHeadroom: limit.withHeadroom + 1 };
+};

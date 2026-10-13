@@ -204,6 +204,45 @@ describe("a spent allowance", () => {
         ]);
     });
 
+    // Codex's subscription turns ride as "codex-subscription", the key of no reading: filed under it, the refusal read as
+    // one for a disconnected account, so the listing ignored it, and its re-read was scoped to nothing (2026-10-13).
+    test("on a routed provider names no account, whatever label the turn rode under", async () => {
+        const parent = { actor: "agent:parent" };
+        const plan = await classifyFailure(
+            { ...limit, message: "You've hit your usage limit." },
+            context({
+                provider: "codex",
+                model: "gpt-6.1-sol",
+                account: "codex-subscription",
+                attribution: { account: "codex-subscription", ...parent },
+                limitReset: 1_900_000_000,
+            }),
+            answering({ way }),
+        );
+        expect(plan.writes.slice(0, 2)).toStrictEqual([
+            {
+                kind: "provider-refusal",
+                provider: "codex",
+                // The actor still rides it, as every refusal's does; only the label is left off.
+                refusal: { at: NOW, kind: "limit", message: "You've hit your usage limit.", ...parent, model: "gpt-6.1-sol", resetsAt: 1_900_000_000 },
+            },
+            { kind: "headroom-refresh", options: { scope: { providers: ["codex"] }, maxAgeMs: 0 } },
+        ]);
+    });
+
+    // Held at the door for a spent allowance (spent-door.ts): nothing went out, so nothing is filed against the provider
+    // (a refusal filed now would only push its reopening out), and the hold re-runs on the session as it stood.
+    test("held at the door, it files nothing and books the hold as turned away, on the run it never sent", async () => {
+        const plan = await classifyFailure(
+            { ...limit, resetsAt: 1_900_000_000 },
+            context({ provider: "codex", model: "gpt-6.1-sol", account: undefined, attribution: {}, answered: false, door: true, run: "run-held" }),
+            answering({ way }),
+        );
+        expect(plan.writes).toStrictEqual([]);
+        expect(plan.held).toMatchObject({ reason: "limit", ran: false, turnedAway: true, run: "run-held", reopensAt: 1_900_000_000 });
+        expect(plan.frame).toMatchObject({ code: "rate_limit", resetsAt: 1_900_000_000, held: { ran: false } });
+    });
+
     test("on a routed provider with no reset benches nothing", async () => {
         const plan = await classifyFailure(
             limit,

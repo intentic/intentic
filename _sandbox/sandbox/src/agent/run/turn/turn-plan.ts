@@ -1,6 +1,6 @@
 import { capabilitiesOf, PersonaPowersSchema, type UsageTurn, withRuntimeDefaults } from "@intentic/sandbox-contract";
 import type { Services } from "../../../composition.js";
-import type { TurnArmPlan, TurnContext, TurnRefusal } from "../../providers/adapter.js";
+import { armPlan, type TurnArmPlan, type TurnContext, type TurnRefusal } from "../../providers/adapter.js";
 import type { TurnBriefing } from "../../prompt/turn-briefing.js";
 import type { TurnTrimState } from "../../prompt/window/context-trim.js";
 import { armSupervisor } from "../../subagents/children.js";
@@ -12,6 +12,7 @@ import { gatherTurnFacts } from "../decide/turn-facts.js";
 import { withTurnSafety } from "./turn-safety.js";
 import { opt } from "../../../opt.js";
 import type { TurnInput } from "../../../seams/turn-starter.js";
+import { heldAtTheDoor, spentDoor } from "./spent-door.js";
 
 // Plans a turn: gatherTurnFacts reads what it stands on, decideTurn decides it without I/O (both in ../decide), and the
 // adapter its (provider, harness) row names preflights it. A refusal is a value (`ok: false` + code) the route turns
@@ -50,6 +51,9 @@ export type TurnPlan =
           // notes it adds after planning to the same window and disclose one list. Absent when nothing was trimmed,
           // which is every model whose window holds a full turn.
           readonly contextTrim?: TurnTrimState;
+          // Held at the door for a spent allowance (spent-door.ts): its loop answers the refusal it is held on, nothing
+          // went out, and so nothing is filed against the provider for it.
+          readonly door?: true;
       });
 
 // The turn's standing as its decision settled it: what it mounted, what its persona and the gates withheld, and how its
@@ -116,6 +120,12 @@ export const planTurn = async (services: Services, sent: TurnInput, context: Tur
         },
         decision.context.settings ?? (await services.sandboxSettings.get()),
     );
+    // Before the arm mounts anything for a loop that would only be refused: no request, no tools to release.
+    const door = await spentDoor(services, { ...decision.input, agent: decision.provider });
+    if (door !== undefined) {
+        // SAFETY of the credential: the held loop sends nothing, so the container's (which spends nothing) is what it carries.
+        return { ...armPlan(heldAtTheDoor(door), { ...base, credential: { kind: "container" } }), briefing: decision.briefing, experiments: decision.experiments, door: true };
+    }
     const plan = await services.adapters
         .for(decision.provider, decision.harness)
         .preflight(services, decision.input, { ...decision.context, base }, decision.granted);

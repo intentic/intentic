@@ -59,6 +59,8 @@ export const StoredLimitHoldSchema = z.object({
     move: RoutingPickSchema.optional(),
     onto: RoutingPickSchema.optional(),
     carryRefused: z.boolean().optional(),
+    // Held at the door (spent-door.ts): its re-run keeps the session, so a restart must keep this too.
+    turnedAway: z.boolean().optional(),
     handoff: HandoffOfferSchema.optional(),
     // When the refusal was recorded: the resume pass never fires at a reopen instant at or before it (turn-resume.ts).
     recordedAt: z.number(),

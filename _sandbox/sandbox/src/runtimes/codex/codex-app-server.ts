@@ -709,9 +709,8 @@ const turnIdFrom = (value: unknown): string => {
 const sandboxPolicy = (mode: CodexSandboxMode): JsonValue =>
     mode === "read-only" ? { type: "readOnly", networkAccess: false } : { type: "dangerFullAccess" };
 
-const usageFrom = (value: unknown): CodexUsage => {
-    const params = object(value, "thread/tokenUsage/updated params");
-    const tokenUsage = object(params["tokenUsage"], "thread/tokenUsage/updated params.tokenUsage");
+// One request's usage, as `last` carries it; a malformed one fails the turn, as it always has.
+const lastUsageOf = (tokenUsage: JsonObject): CodexUsage => {
     const last = object(tokenUsage["last"], "thread/tokenUsage/updated params.tokenUsage.last");
     return {
         input_tokens: number(last, "inputTokens", "token usage"),
@@ -720,6 +719,59 @@ const usageFrom = (value: unknown): CodexUsage => {
         output_tokens: number(last, "outputTokens", "token usage"),
         reasoning_output_tokens: number(last, "reasoningOutputTokens", "token usage"),
     };
+};
+
+// The thread's running total, where Codex sends a whole one; anything less leaves the turn to the sum of `last`.
+const TotalUsageSchema = z.object({
+    inputTokens: z.number(),
+    cachedInputTokens: z.number(),
+    cacheWriteInputTokens: z.number(),
+    outputTokens: z.number(),
+    reasoningOutputTokens: z.number(),
+});
+const totalUsageOf = (tokenUsage: JsonObject): CodexUsage | undefined => {
+    const parsed = TotalUsageSchema.safeParse(tokenUsage["total"]);
+    if (!parsed.success) {
+        return undefined;
+    }
+    const total = parsed.data;
+    return {
+        input_tokens: total.inputTokens,
+        cached_input_tokens: total.cachedInputTokens,
+        cache_write_input_tokens: total.cacheWriteInputTokens,
+        output_tokens: total.outputTokens,
+        reasoning_output_tokens: total.reasoningOutputTokens,
+    };
+};
+
+// Field by field, `left` plus or minus `right`, never below zero (a total that went backwards spent nothing).
+const combined = (left: CodexUsage, right: CodexUsage, sign: 1 | -1): CodexUsage => ({
+    input_tokens: Math.max(0, left.input_tokens + sign * right.input_tokens),
+    cached_input_tokens: Math.max(0, left.cached_input_tokens + sign * right.cached_input_tokens),
+    cache_write_input_tokens: Math.max(0, left.cache_write_input_tokens + sign * right.cache_write_input_tokens),
+    output_tokens: Math.max(0, left.output_tokens + sign * right.output_tokens),
+    reasoning_output_tokens: Math.max(0, left.reasoning_output_tokens + sign * right.reasoning_output_tokens),
+});
+
+/* What one Codex turn spent: every request it made, not only its last. `last` is one request's usage (what the context
+   fill reads), and reading it as the turn's spend filed a 48-minute turn of some two hundred requests as 1.6K in and 668
+   out while the thread's own totals moved by 6.65M in and 44.8K out (2026-10-13): every Codex figure in the ledger, the
+   cards and the usage panels was its turn's final request. The thread's running `total` is the authority where Codex
+   sends it, read as how far it moved since just before the turn's first request; an update without one adds its `last`. */
+export interface TurnTokens {
+    // The thread's total before this turn's first request; absent once an update came without a total.
+    readonly baseline?: CodexUsage;
+    readonly usage: CodexUsage;
+}
+
+export const turnTokensAfter = (tokens: TurnTokens | undefined, tokenUsage: JsonObject): TurnTokens => {
+    const last = lastUsageOf(tokenUsage);
+    const total = totalUsageOf(tokenUsage);
+    if (total !== undefined && (tokens === undefined || tokens.baseline !== undefined)) {
+        const baseline = tokens?.baseline ?? combined(total, last, -1);
+        return { baseline, usage: combined(total, baseline, -1) };
+    }
+    return { usage: tokens === undefined ? last : combined(tokens.usage, last, 1) };
 };
 
 // How full the window is after the latest request, as Codex itself measures it for auto-compaction: everything that
@@ -1484,17 +1536,18 @@ const watchFrames = (inbox: CodexFrameInbox | undefined, messages: AsyncQueue<Tu
 // The current turn's token usage and context fill, from a thread/tokenUsage/updated; another turn's leaves `usage` as it
 // was and says nothing.
 interface TurnSpend {
-    readonly usage: CodexUsage | undefined;
+    readonly tokens: TurnTokens | undefined;
     readonly events: readonly CodexEvent[];
 }
 
-const tokenUsageOf = (notification: AppServerNotification, turnId: string, usage: CodexUsage | undefined): TurnSpend => {
+const tokenUsageOf = (notification: AppServerNotification, turnId: string, tokens: TurnTokens | undefined): TurnSpend => {
     const params = object(notification.params, "thread/tokenUsage/updated params");
     if (string(params, "turnId", "thread/tokenUsage/updated params") !== turnId) {
-        return { usage, events: [] };
+        return { tokens, events: [] };
     }
     const context = contextFrom(params);
-    return { usage: usageFrom(params), events: context === undefined ? [] : [context] };
+    const tokenUsage = object(params["tokenUsage"], "thread/tokenUsage/updated params.tokenUsage");
+    return { tokens: turnTokensAfter(tokens, tokenUsage), events: context === undefined ? [] : [context] };
 };
 
 export const createCodexAppServerRunner = (connect: CodexAppServerConnector = stdioConnector()): CodexRunner =>
@@ -1570,7 +1623,7 @@ export const createCodexAppServerRunner = (connect: CodexAppServerConnector = st
                 finished = true;
                 turn.closeSteering?.();
             };
-            let usage: CodexUsage | undefined;
+            let tokens: TurnTokens | undefined;
             for await (const notification of messages) {
                 if (notification.kind === "steering") {
                     await steerWaiting();
@@ -1601,13 +1654,13 @@ export const createCodexAppServerRunner = (connect: CodexAppServerConnector = st
                     continue;
                 }
                 if (notification.method === "thread/tokenUsage/updated") {
-                    const spent = tokenUsageOf(notification, turnId, usage);
-                    usage = spent.usage;
+                    const spent = tokenUsageOf(notification, turnId, tokens);
+                    tokens = spent.tokens;
                     yield* spent.events;
                     continue;
                 }
                 if (notification.method === "turn/completed") {
-                    const ending = ownEnding(notification, turnId, usage);
+                    const ending = ownEnding(notification, turnId, tokens?.usage);
                     if (ending === undefined) {
                         continue;
                     }
@@ -1621,7 +1674,7 @@ export const createCodexAppServerRunner = (connect: CodexAppServerConnector = st
                         const followupInput = waiting.splice(0).map((text) => ({ type: "text", text, text_elements: [] }));
                         turnId = turnIdFrom(await connection.request("turn/start", { ...startParams, input: followupInput }));
                         turnIds.add(turnId);
-                        usage = undefined;
+                        tokens = undefined;
                         continue;
                     }
                     return;

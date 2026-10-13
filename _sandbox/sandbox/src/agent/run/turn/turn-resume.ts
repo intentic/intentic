@@ -96,6 +96,9 @@ export interface HeldTurn {
     // A flagged hold's session entry before the stopped response (refusal-fork.ts): the re-run resumes there, so the
     // model never reads what the classifier stopped. Absent when the CLI named no such point: a plain resume then.
     readonly resumeAt?: string | undefined;
+    // A spent allowance's hold taken at the door (spent-door.ts): nothing was sent, so the re-run goes as a door's does,
+    // on the session as the last turn left it, rather than as a refused turn's, which opens fresh.
+    readonly turnedAway?: boolean | undefined;
 }
 
 // Where a press sends the held turn, by the one routing rule (agent/providers/accounts/routing.ts), with the held turn's own
@@ -201,14 +204,20 @@ const wallNote = (held: HeldTurn, routing: ResumeRouting | undefined): RerunNote
     return { reason: held.ran ? "switched" : "refused", fresh: true, restate: true };
 };
 
+// A turn turned away before a word reached the model: its session stays, unless the press moved runtimes.
+const doorNote = (held: HeldTurn, routing: ResumeRouting | undefined): RerunNote =>
+    retiresSession(held.input, routing) ? { reason: "door", fresh: true } : { reason: "door" };
+
 const rerunNote = (held: HeldTurn, routing: ResumeRouting | undefined): RerunNote => {
     switch (held.reason) {
         case "auth":
         case "outage":
             return { reason: held.reason };
-        // Its own session never saw it, and stays unless the press moved runtimes.
+        // Its own session never saw it, and stays unless the press moved runtimes; so for a spent allowance's door.
         case "door":
-            return retiresSession(held.input, routing) ? { reason: "door", fresh: true } : { reason: "door" };
+            return doorNote(held, routing);
+        case "limit":
+            return held.turnedAway === true ? doorNote(held, routing) : wallNote(held, routing);
         // The one wall whose own session is the obstacle: fresh whatever ran, with the hand-off the record seeds.
         case "overflow":
             return { reason: "overflow", fresh: true, restate: true };
@@ -1156,10 +1165,11 @@ const cutTurnFields = (services: Services, entry: JournalledTurn): Record<string
 
 /* A CUT TURN RUNS AGAIN ON WHAT ITS ACCOUNT HAS LEFT, AND THE LINE SAYS WHAT THAT IS. A restart once re-ran a turn on a
    Codex allowance spent on every account, and its loop retried the refusals for 2h42m with nothing in the log between
-   "restart auto-resume fired" and the refusal (2026-10-11). The fleet's reading is asked first and rides the line, a
-   warning when it says the allowance is spent. The turn still starts: it is the runtime's refusal that holds a turn for
-   its reset and tells its card why (classify-failure.ts), where a hold taken here would hold it unseen, on a reading
-   that may be older than the allowance's reset. */
+   "restart auto-resume fired" and the refusal (2026-10-11); another re-ran three subagents onto one, and two sat on the
+   translator's Retry-After for what would have been 3h48m (2026-10-13). The re-run starts as any turn does, and a turn
+   the sandbox starts onto an allowance its records call spent is held at the door (spent-door.ts): nothing is sent, and
+   the hold is the one a refusal would have left, booked for the reopening and said on its card. The fleet's reading
+   rides the line either way, so the log says which it was. */
 const restartCutTurn = async (
     services: Services,
     entry: JournalledTurn,
@@ -1183,7 +1193,7 @@ const restartCutTurn = async (
         services.logger.info(line, "restart auto-resume fired: the turn the restart cut runs again under a new run id");
         return;
     }
-    services.logger.warn(line, "restart auto-resume fired onto an allowance the fleet reads as spent: expect the provider to refuse it");
+    services.logger.info(line, "restart auto-resume on an allowance the fleet reads as spent: the re-run is held at the door until it reopens");
 };
 
 // Uses resumedTurn's own rules for the prompt and session; the journal just renames the fields a failure record uses.
