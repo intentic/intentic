@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createKnownMatcher } from "../known-matcher.js";
 import { filePrivacyVault } from "../privacy-vault.js";
-import { pesel } from "../detect/tests/ids.testing.js";
+import { luhn, pesel } from "../detect/tests/ids.testing.js";
 
 // The vault is what makes a token mean one value forever: a provider holds old transcripts, so an index handed to a
 // second value would restore somebody else's data into a command. These pin the properties that guarantee it.
@@ -170,6 +170,21 @@ describe("what a found value is matched as alone", () => {
         expect(hits(vault, `call ${["601", "234", "567"].join(" ")}`)).toBe(1);
     });
 
+    // The name model took a product's two-word name for a person, and the vault then found it in every path and package
+    // name spelled from it. A word that is ordinary English and no name ("Crew", "Haven") proves nothing, as a name that
+    // is a word does not; a surname nobody listed still does.
+    test("two words that are each an ordinary word are not matched alone; a name with an unlisted surname is", async () => {
+        const vault = filePrivacyVault(join(dir, "vault.json"));
+        await vault.load();
+        const product = ["Kiro", "Crew"].join(" ");
+        vault.tokenFor(product, "person-name");
+        vault.tokenFor(["Poly", "Haven"].join(" "), "person-name");
+        vault.tokenFor(["Ada", "Lovelace"].join(" "), "person-name");
+        expect(hits(vault, `ls refs: herdr ${product.replace(" ", "").toLowerCase()} kube-coder`)).toBe(0);
+        expect(hits(vault, `${product} is an open-source agent; textures from ${["Poly", "Haven"].join(" ")}`)).toBe(0);
+        expect(hits(vault, `notes by ${["Ada", "Lovelace"].join(" ")}`)).toBe(1);
+    });
+
     test("a taught value is matched however ordinary it is", async () => {
         const vault = filePrivacyVault(join(dir, "vault.json"));
         await vault.learn("crm", [{ value: "Grace", class: "person-name" }]);
@@ -240,6 +255,16 @@ describe("the exact matcher", () => {
     test("a number inside a longer number is not the number", () => {
         expect(matcher.find("id 1850101123456")).toEqual([]);
         expect(matcher.find("PESEL: 85010112345.").map((hit) => hit.payload)).toEqual(["pesel"]);
+    });
+
+    // A float's places once taken for a card number come back in every float that prints them.
+    test("a number is not found as the places of a decimal, but is beside a comma or ending a sentence", () => {
+        const places = luhn("558999999999999");
+        const known = createKnownMatcher([{ value: places, payload: "card", spelling: "folded" }]);
+        expect(known.find(`"end": 0.${places} }`)).toEqual([]);
+        expect(known.find(`${places}.25`)).toEqual([]);
+        expect(known.find(`17,${places}`).map((hit) => hit.payload)).toEqual(["card"]);
+        expect(known.find(`card ${places}.`).map((hit) => hit.payload)).toEqual(["card"]);
     });
 });
 

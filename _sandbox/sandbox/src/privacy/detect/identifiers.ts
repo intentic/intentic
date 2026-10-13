@@ -1,5 +1,5 @@
 import { cardIssuerPlausible, ibanLength, ibanValid, idCardValid, luhnValid, nipValid, nrbValid, passportValid, peselValid } from "./checksums.js";
-import { digitsOf, type Emit, jsonKeyWordsBefore, keywordBefore, partOfNumber } from "./text.js";
+import { digitsOf, type Emit, jsonKeyWordsBefore, keywordBefore, partOfDecimal, partOfNumber } from "./text.js";
 
 // Checksummed identifiers: PESEL, NIP, Polish ID card and passport numbers, IBAN and NRB accounts, payment cards. Each
 // pattern only proposes; the checksum decides. Every pattern refuses a match that is part of a longer run of letters
@@ -129,11 +129,14 @@ const groupedLikeCard = (value: string): boolean => {
     return groups[0]?.length === 4 && groups.slice(1).every((group) => group.length >= 3 && group.length <= 6);
 };
 
+// The digits after a decimal point are a measurement however card-like: a float's sixteen places pass Luhn with an
+// issuer's prefix about one time in twenty-five.
 export const findPaymentCards = (text: string, emit: Emit): void => {
     for (const match of text.matchAll(CARD)) {
         const digits = digitsOf(match[0]);
-        if (groupedLikeCard(match[0]) && cardIssuerPlausible(digits) && luhnValid(digits)) {
-            emit(match.index, match.index + match[0].length, "payment-card");
+        const end = match.index + match[0].length;
+        if (!partOfDecimal(text, match.index, end) && groupedLikeCard(match[0]) && cardIssuerPlausible(digits) && luhnValid(digits)) {
+            emit(match.index, end, "payment-card");
         }
     }
 };

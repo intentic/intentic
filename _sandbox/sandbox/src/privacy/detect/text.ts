@@ -40,6 +40,12 @@ export const partOfNumber = (text: string, start: number, end: number): boolean 
     return (after === "." || after === ",") && isDigit(text[end + 1]);
 };
 
+// The same for a decimal point only. A float prints sixteen or seventeen digits after its point (`0.55899…99`,
+// `0.153846153846…`), a card number's length. A comma is left out: before a card it is the cell separator of a CSV
+// row far more often than a decimal written with sixteen places.
+export const partOfDecimal = (text: string, start: number, end: number): boolean =>
+    (text[start - 1] === "." && isDigit(text[start - 2])) || (text[end] === "." && isDigit(text[end + 1]));
+
 // Whether a keyword (a non-global pattern) appears in the few characters before a match: "NIP: 1234567890",
 // "tel. 600100200". Bare digit runs are too common to report without one.
 export const keywordBefore = (text: string, start: number, keyword: RegExp, window = 25): boolean =>

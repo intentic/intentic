@@ -12,11 +12,13 @@ import { wordInfo } from "./lexicon.js";
 const WORDS = /[\p{L}\p{N}]+/gu;
 
 // A full name that proves itself: two words or more, none a word that is never a name, and not all of them ordinary
-// words. The local name model's finds are held to it too: the model reads context, but a single capitalized word is a
-// name to it as often as it is a button, a heading or the start of a sentence.
+// words, whether names that are words too ("Kiro", "Grace") or words that are no name at all ("Crew", "Haven"). The
+// local name model's finds are held to it too: the model reads context, but a single capitalized word is a name to it
+// as often as it is a button, a heading or the start of a sentence, and it takes a product's two-word name
+// ("Poly Haven") for a person.
 export const fullNameAlone = (value: string): boolean => {
     const infos = (value.match(WORDS) ?? []).map((word) => wordInfo(word));
-    return infos.length >= 2 && !infos.some((info) => info.never) && infos.some((info) => !info.ambiguous);
+    return infos.length >= 2 && !infos.some((info) => info.never) && infos.some((info) => !info.ambiguous && !info.ordinary);
 };
 
 const phoneAlone = (value: string): boolean => {

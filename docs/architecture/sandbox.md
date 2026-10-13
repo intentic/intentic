@@ -218,6 +218,16 @@ Nothing the sandbox runs checks a push, and nothing is kept about one. The app p
   shield's log showed list items, tool descriptions and sentence openings masked across ordinary text. An ordinary word
   is one on the hand-written lists or in [`common-words.ts`](../../_sandbox/sandbox/src/privacy/detect/data/common-words.ts):
   the names the Leipzig corpora of 33 languages write in lowercase, rebuilt by `generate-common-words.mjs` beside it.
+- (2026-10-13) Two more kinds of find the shield's log showed to be wrong. A name standing alone also needs a word that
+  is no ordinary English word: the local name model had taken a product's two-word name for a person, the second word
+  being a plain English noun no list held, and the vault then masked the product's lowercase slug in every directory
+  listing. [`ordinary-words.ts`](../../_sandbox/sandbox/src/privacy/detect/data/ordinary-words.ts) holds the
+  English words that are no name, from the Leipzig English news corpus (`generate-ordinary-words.mjs`), and only
+  `fullNameAlone` reads it, so an unlisted surname after a title or under a name field is still found. And the digits
+  after a decimal point are no card number: a float prints sixteen places, and one in twenty-five random runs of
+  sixteen digits passes Luhn with an issuer's prefix. Most of the cards in the vault were such places. The card
+  detector and the vault's matcher both skip a run that continues a decimal, read by its point only: a comma before a
+  card is a CSV cell separator far more often.
 - A runtime it cannot read at all (an ACP agent, Pi, Codex on the container's own key) is
   turned away on an untrusted provider before it starts (`privacy-unshielded`), a
   child agent stays off runners, and a conversation placed on a runner runs there only on a trusted provider, since a

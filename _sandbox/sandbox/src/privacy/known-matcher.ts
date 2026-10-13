@@ -1,4 +1,4 @@
-import { afterEscape } from "./detect/text.js";
+import { afterEscape, isDigit } from "./detect/text.js";
 
 // Finds every value the vault already holds, wherever it stands as a whole word, in each spelling its kind allows
 // (`Spelling`). Indexed by the first few characters of each value as compared rather than as one automaton: the vault
@@ -91,10 +91,14 @@ const endAt = <C>(text: string, at: number, candidate: Candidate<C>): number | u
 // Whole-word on each side the value itself is a word on: `Ala` is not found inside `Alabama`, and a PESEL not inside a
 // longer number, while a value that ends in punctuation needs nothing after it. The letter of a JSON escape before it
 // (`\n` in raw JSON text) is the escape's, not a word's.
+// Nor where a digit at its edge continues a decimal: a float's places once found as a card number (`0.55899…99`) are a
+// float's wherever they come back. A decimal point only, as the card detector reads it (detect/text.ts partOfDecimal).
 const boundedAt = <C>(text: string, start: number, end: number, candidate: Candidate<C>): boolean => {
     const before = candidate.lead === "" && isWordChar(text[start - 1]) && !afterEscape(text, start);
     const after = isWordChar(candidate.units.at(-1)) && isWordChar(text[end]);
-    return !before && !after;
+    const fractionBefore = candidate.lead === "" && isDigit(candidate.units[0]) && text[start - 1] === "." && isDigit(text[start - 2]);
+    const fractionAfter = isDigit(candidate.units.at(-1)) && text[end] === "." && isDigit(text[end + 1]);
+    return !before && !after && !fractionBefore && !fractionAfter;
 };
 
 // A number a folded spelling matched with two lone digits or more, each standing between separators: no number is

@@ -172,6 +172,17 @@ describe("payment cards", () => {
         expect(found(`${visa}12345`, "payment-card")).toEqual([]);
     });
 
+    // A float prints sixteen or seventeen places, a card's length, and some pass Luhn with an issuer's prefix: the
+    // places of `"end": 0.55899…99` were masked as a Mastercard.
+    test("the places of a decimal are not a card, while a card after a comma or ending a sentence is", () => {
+        const places = luhn("558999999999999");
+        expect(found(`"start": 0.243, "end": 0.${places} }`, "payment-card")).toEqual([]);
+        expect(found(`ratio = 12.${places}`, "payment-card")).toEqual([]);
+        expect(found(`${places}.5`, "payment-card")).toEqual([]);
+        expect(found(`17,${places},Jan`, "payment-card")).toEqual([places]);
+        expect(found(`card ${places}.`, "payment-card")).toEqual([places]);
+    });
+
     // Millisecond timestamps and snowflake ids are 13 to 19 digits starting with 1; no network issues those.
     test("timestamps and snowflake ids are not cards", () => {
         const ids = Array.from({ length: 100 }, (_, index) => String(1_727_786_400_000 + index * 104_729)).join("\n");

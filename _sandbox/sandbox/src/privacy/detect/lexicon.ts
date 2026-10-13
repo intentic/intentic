@@ -2,6 +2,7 @@ import { AMBIGUOUS_EN, AMBIGUOUS_PL } from "./data/ambiguous.js";
 import { COMMON_WORDS } from "./data/common-words.js";
 import { FIRST_NAMES_PL, FIRST_NAMES_PL_RARE } from "./data/first-names-pl.js";
 import { FIRST_NAMES_EN, SURNAMES_EN } from "./data/names-en.js";
+import { ORDINARY_WORDS_EN } from "./data/ordinary-words.js";
 import { SURNAMES_PL } from "./data/surnames-pl.js";
 import {
     DIMINUTIVES_PL,
@@ -32,6 +33,10 @@ export interface WordInfo {
     // The word as written is an ordinary word too, in Polish, English or another language, so it proves nothing on its
     // own and is no surname a first name can be paired with.
     readonly ambiguous: boolean;
+    // An ordinary English word the name lists know nothing about ("crew", "haven"): no name, though no list says it is
+    // never one. Only a name standing alone (standalone.ts) asks, since elsewhere an unlisted capitalized word after a
+    // title or under a name field is somebody's surname.
+    readonly ordinary: boolean;
     // Never part of a name: a function word, an institution, a title, an adjective of a place, a noun in -ska.
     readonly never: boolean;
     // A noun of an institution, a place or a thing, which makes a name before it a thing's: "Victoria Station".
@@ -44,6 +49,7 @@ interface Lexicon {
     readonly declinedSurnames: ReadonlySet<string>;
     readonly plainSurnames: ReadonlySet<string>;
     readonly ambiguous: ReadonlySet<string>;
+    readonly ordinary: ReadonlySet<string>;
     readonly never: ReadonlySet<string>;
     readonly things: ReadonlySet<string>;
     readonly notSurnames: ReadonlySet<string>;
@@ -57,7 +63,7 @@ interface Lexicon {
 
 const words = (...lists: readonly string[]): Set<string> => new Set(lists.flatMap((list) => list.split(/\s+/)).filter((word) => word !== ""));
 
-// Built on first use: some 15,000 entries, a few milliseconds, not worth paying for in a process that never masks.
+// Built on first use: some 28,000 entries, a few milliseconds, not worth paying for in a process that never masks.
 let built: Lexicon | undefined;
 const lexicon = (): Lexicon => {
     built ??= {
@@ -66,6 +72,7 @@ const lexicon = (): Lexicon => {
         declinedSurnames: words(SURNAMES_PL),
         plainSurnames: words(SURNAMES_EN),
         ambiguous: words(AMBIGUOUS_EN, AMBIGUOUS_PL, COMMON_WORDS),
+        ordinary: words(ORDINARY_WORDS_EN),
         never: words(NEVER_NAMES),
         things: words(THING_NOUNS),
         notSurnames: words(NOT_SURNAMES),
@@ -106,6 +113,7 @@ const analyse = (lower: string): WordInfo => {
         surnameSuffix: strong ? "strong" : weak ? "weak" : undefined,
         surnameForm: STRONG_FORM.test(lower),
         ambiguous: sets.ambiguous.has(lower),
+        ordinary: sets.ordinary.has(lower),
         thing: sets.things.has(lower),
         // A title is not part of the name it announces: "Pan" in "Pan Tadeusz", "Mr" in "Mr. Wickham".
         never:
