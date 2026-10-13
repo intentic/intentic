@@ -15,6 +15,7 @@ import { useRouter } from "vue-router";
 import { agentTabOf } from "../panel/useChat-reveal";
 import { subagentOnScreen } from "../panel/subagent/subagentView";
 import { summonChat } from "../run/summon";
+import { openLinkedSubagent } from "../../agents/fleet/linkedSubagent";
 
 // THE BOARD'S TRAYS, UNDER THE CHAT LIST'S CARDS. Every agent a chat's conversation started rides under that chat's card
 // in the list, as it does under the card on the board: the conversations it spawned and the subagents its runtime ran
@@ -78,6 +79,10 @@ export const useChatTrays = (host: ChatTraysHost) => {
     };
     // An in-process one: its transcript, in its parent's column.
     const openSubagent = (card: FleetAgent, subagent: SubagentSession): void => {
+        // A task handed to a linked sandbox opens where it runs, in that sandbox.
+        if (openLinkedSubagent(subagent)) {
+            return;
+        }
         summonChat({ kind: `subagent`, parent: agentTabOf(agentSeed(card)), id: subagent.id });
         agents.markSeen(card.id);
     };

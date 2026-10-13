@@ -27,6 +27,7 @@ import { cleanedPaste, containerUrlFix, expandPaste, normalizeFieldValue, summar
 import { answersSummary, hostPresets } from "./model/previews";
 import { versionReadToken } from "./model/refs";
 import { openingName, suggestName } from "./model/tiles";
+import type { PairedLink } from "./connect/links/linkPairing";
 
 // The configuration form over the open tile: its answers and name, which boxes were left and whether a submit was
 // refused, what a paste unpacked, the Advanced fold, and what the answers add up to. Re-seeded whenever the URL opens
@@ -56,6 +57,27 @@ export interface FormHost {
     // The page's notice, which a fresh form clears.
     readonly error: Ref<NoticeModel | null>;
 }
+
+// The form's state a pairing in <LinkPairing> writes: the far sandbox already holds the link, so only Add is left.
+interface LinkedFill {
+    readonly name: Ref<string>;
+    readonly nameEdited: Ref<boolean>;
+    readonly keptSecrets: Ref<StoredSecrets>;
+    readonly values: FormValues;
+    readonly touched: Set<string>;
+}
+
+const linkedPicker =
+    (form: LinkedFill) =>
+    (paired: PairedLink): void => {
+        form.name.value = paired.id;
+        form.nameEdited.value = true;
+        form.keptSecrets.value = new Set<string>();
+        form.values[`url`] = paired.url;
+        form.values[`token`] = paired.token;
+        form.values[`name`] = paired.name;
+        form.touched.clear();
+    };
 
 export const useCapabilityForm = ({ selected, editing, instances, capabilities, device, recommendationFor, contributionOf, manifestOf, error }: FormHost) => {
     const name = ref(``);
@@ -262,6 +284,7 @@ export const useCapabilityForm = ({ selected, editing, instances, capabilities, 
             // Land on the fields still needed, not the top of the form.
             touched.clear();
         },
+        pickLinked: linkedPicker({ name, nameEdited, keptSecrets, values, touched }),
         auditable: computed(() => auditOffered(selected.value?.kind, values)),
         updateFrom: computed(() => replacedPin(selected.value?.kind, editing.value, values)),
         // After a Test that failed, the press says what it now does: keeps a connection its own service just refused. It

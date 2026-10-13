@@ -160,6 +160,14 @@ export const MODEL_ROLES = [
         setup: "medium",
     },
     {
+        id: "linked-task",
+        label: "Linked sandbox tasks",
+        blurb: "A task another of your sandboxes handed to this one over a link.",
+        kind: "run",
+        icon: "link",
+        setup: "medium",
+    },
+    {
         id: "loop-iteration",
         label: "Loop iterations",
         blurb: "Each round of a loop working towards its goal.",

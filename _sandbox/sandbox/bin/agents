@@ -99,6 +99,14 @@ SPAWN AND SUPERVISE
                                        --on names the machine: a runner, or "here" for this sandbox.
                                        Left out, the fleet decides, which is what spreads a fan-out
                                        across every machine you have connected
+  agents links                         the owner's other sandboxes this conversation may hand tasks to, whether
+                                       each answers now, and the terms each holds its tasks to
+  agents delegate <link> [--description "one line"] '<task>'
+                                       hand a task to another of the owner's sandboxes over a link; prints its id
+                                       and returns. It runs in a conversation of its own OVER THERE, with that
+                                       sandbox's repos, connections and credentials, under the terms its owner
+                                       set (persona, approval, turns an hour), and lands there, never in your
+                                       checkout. wait, send, answer and cancel reach it like any subagent
   agents wait [<id>] [--until blocked|finished] [--timeout <seconds>]
                                        block until a subagent needs input or finishes (default: either,
                                        whichever comes first); no id means whichever subagent moves first.
@@ -746,6 +754,41 @@ const spawn = async (argv) => {
     );
 };
 
+const links = async () => {
+    const { status, text } = await call("GET", "/children/links");
+    if (status !== 200) {
+        return die(`agents: ${refusalOf(text)}`);
+    }
+    const answer = JSON.parse(text);
+    if (!Array.isArray(answer.links) || answer.links.length === 0) {
+        process.stdout.write("No linked sandbox this conversation may hand work to. Linking one is the owner's: capabilities request link --why \"…\"\n");
+        return;
+    }
+    for (const link of answer.links) {
+        const terms = link.online
+            ? [link.persona === undefined ? "no persona" : `wears ${link.persona}`, link.approve ? "each task waits for its owner" : "starts at once", `${link.turnsPerHour} turns/h`].join(" · ")
+            : `offline: ${link.why ?? "no answer"}`;
+        process.stdout.write(`${link.to}  "${link.sandbox}"  ${terms}\n`);
+    }
+};
+
+const delegate = async (argv) => {
+    const { flags, positional } = parseFlags(argv, ["description"]);
+    const [to, ...words] = positional;
+    const task = words.join(" ").trim();
+    if (to === undefined || task === "") {
+        return die(`agents: delegate needs a link and a task: agents delegate <link> '<task>' (\`agents links\` names them)`);
+    }
+    const body = JSON.stringify({ to, task, ...(flags.description !== undefined ? { description: flags.description } : {}) });
+    const { status, text } = await call("POST", "/children/delegate", body);
+    if (status !== 200) {
+        return die(`agents: ${refusalOf(text)}`);
+    }
+    const { id, note } = JSON.parse(text);
+    process.stdout.write(`${id}\n`);
+    process.stderr.write(`${typeof note === "string" && note !== "" ? note : `Handed over. Follow it with: agents wait ${id}`}\n`);
+};
+
 const wait = async (argv) => {
     const { flags, positional } = parseFlags(argv, ["until", "timeout"]);
     const body = JSON.stringify({
@@ -890,7 +933,8 @@ const list = async () => {
     // Both kinds alike, each saying which it is: a spawned one is a conversation `send`, `answer` and `cancel` reach, and
     // one this conversation's own runtime ran in-process lives inside the turn that started it, where only that turn does.
     for (const session of sessions) {
-        const what = [session.kind === "subagent" ? "in-process" : "spawned", session.agentType, session.model].filter(Boolean).join(" · ");
+        const kind = session.kind === "subagent" ? "in-process" : session.kind === "linked" ? "linked" : "spawned";
+        const what = [kind, session.agentType, session.model].filter(Boolean).join(" · ");
         const label = session.description !== undefined ? ` — ${session.description}` : "";
         process.stdout.write(`${session.id}  [${session.status}]  ${what}${label}\n`);
     }
@@ -916,6 +960,8 @@ const main = async () => {
     if (command === "find") return find(rest);
     if (command === "providers") return providers(rest);
     if (command === "spawn") return spawn(rest);
+    if (command === "delegate") return delegate(rest);
+    if (command === "links") return links();
     if (command === "wait") return wait(rest);
     if (command === "send") return send(rest);
     if (command === "message") return message(rest);

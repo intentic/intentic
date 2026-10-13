@@ -413,8 +413,9 @@ flowchart LR
 - `agent/` runs one turn: its prompt, tools, provider seam and the pipeline in `agent/run/stream-agent.ts`.
   `conversations/` is what turns belong to: the actors, the registry, each conversation's worktree and its land.
   `system/` is this container and its link to the platform: boot, resources and memory admission, TLS, listeners and
-  the platform client. `sandboxes/` creates other sandboxes on the owner's account; `hosts/` holds the owner's own
-  computers, desktop sync included.
+  the platform client. `sandboxes/` creates other sandboxes on the owner's account; `links/` hands tasks to them and
+  takes tasks from them over owner-made links (docs/architecture/links.md); `hosts/` holds the owner's own computers,
+  desktop sync included.
 - Each subsystem declares its part of `Services` beside its code (`auth/auth-slice.ts`,
   `conversations/conversations-slice.ts`, …) with the builder that makes it from typed dependencies
   (`createConversationsSlice`, `createGitSlice`, …); `composition.ts` calls the builders in dependency order, so a new

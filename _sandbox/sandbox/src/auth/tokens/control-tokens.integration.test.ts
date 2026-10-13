@@ -82,6 +82,8 @@ test("a token file this build cannot read is unknowable, not empty: resolve thro
 test("editor reaches exactly the agent-conversation surface: one conversation, not the fleet", () => {
     expect(controlScoped("editor", "POST", "/agent")).toBe(true);
     expect(controlScoped("editor", "POST", "/agent/reply")).toBe(true);
+    // The bridge watches the turn it started; without this it starts turns it can never see.
+    expect(controlScoped("editor", "POST", "/agent/attach")).toBe(true);
     expect(controlScoped("editor", "GET", "/sessions")).toBe(true);
     expect(controlScoped("editor", "GET", "/sessions/abc")).toBe(true);
     expect(controlScoped("editor", "GET", "/workspace/search")).toBe(true);

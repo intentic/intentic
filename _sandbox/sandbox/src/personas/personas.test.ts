@@ -195,6 +195,22 @@ test("a persona filters accounts, connectors, devices and MCP; other kinds pass 
     expect(visible.map((capability) => capability.id)).toEqual(["reddit-work", "github", "pi"]);
 });
 
+test("handing work to a linked sandbox follows the delegate shelf", () => {
+    const link: Capability = { id: "ops", kind: "link", config: { url: "https://sandbox-ops.sbx.test", token: "ilk_x" } };
+    const shut = turnPersona({ personas: [personaOf("solo", [], { powers: powers({ delegate: false }) })], actsAs: "solo", unattended: false });
+    const open = turnPersona({ personas: [personaOf("lead", [], { powers: powers({}) })], actsAs: "lead", unattended: false });
+    expect(shut.allows(link)).toBe(false);
+    expect(open.allows(link)).toBe(true);
+});
+
+test("making sandboxes on the owner's account follows the sandbox shelf", () => {
+    const fleet: Capability = { id: "fleet", kind: "fleet", config: { token: "itk_x" } };
+    const shut = turnPersona({ personas: [personaOf("tidy", [], { powers: powers({ sandbox: false }) })], actsAs: "tidy", unattended: false });
+    const open = turnPersona({ personas: [personaOf("admin", [], { powers: powers({}) })], actsAs: "admin", unattended: false });
+    expect(shut.allows(fleet)).toBe(false);
+    expect(open.allows(fleet)).toBe(true);
+});
+
 test("an unpinned wake keeps its non-account capabilities while losing every logged-in account", () => {
     const installed: Capability[] = [browser("reddit-work"), mcp("linear")];
     const visible = personaCapabilities(installed, turnPersona({ personas: CAST, actsAs: undefined, unattended: true }));

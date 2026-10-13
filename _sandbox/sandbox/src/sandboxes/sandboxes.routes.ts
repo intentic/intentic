@@ -8,7 +8,8 @@ import { manageDeviceSandbox } from "../hosts/device-reports.js";
 import { hostRunningSelf } from "../hosts/self-host.js";
 import { fleetList, fleetProvision } from "./fleet-client.js";
 import { createSandboxThroughFleet, listFleet } from "./fleet-gate.js";
-import { turnRunOf } from "../conversations/actor/conversation-holdings.js";
+import { soleLiveConversation, turnRunOf } from "../conversations/actor/conversation-holdings.js";
+import { type TurnStanding, turnStandingOf } from "../conversations/actor/turn-standing.js";
 import { holdDepsOf } from "../guard/held-asks.js";
 
 /* The `sandboxes` CLI's two routes, scoped to the agent token like the wallet's and the capability ask's. */
@@ -31,6 +32,25 @@ const reachableDevices = async (services: Services): Promise<{ ids: readonly str
     self: await hostRunningSelf(services),
 });
 
+// A persona's shelves, or the reach of the people a conversation works for, can leave the fleet card out of a turn
+// (turn-standing.ts): its CLI's routes then refuse that turn too, rather than answering for the sandbox. A shell no
+// planned turn owns (a person's own terminal) is answered as before, and the card on every create still stands.
+// Undefined lets the call through; otherwise the sentence to refuse it with.
+export const fleetWithheld = (fleetId: string | undefined, standing: Pick<TurnStanding, "granted"> | undefined): string | undefined =>
+    fleetId === undefined || standing === undefined || standing.granted.includes(fleetId)
+        ? undefined
+        : `This conversation's turn was not given the "${fleetId}" card: its persona leaves the sandbox shelf shut, or the people it ` +
+          "works for were not given the owner's account. Nothing was listed or created; carry on without it and say what you left undone.";
+
+const withheldFrom = async (services: Services, c: Context<AppEnv>): Promise<Response | undefined> => {
+    const fleet = (await services.capabilities.list()).find((capability) => capability.kind === "fleet");
+    const named = c.req.header("x-intentic-conversation");
+    const conversationId = named !== undefined && named !== "" ? named : soleLiveConversation(services.conversations);
+    const standing = conversationId === undefined ? undefined : turnStandingOf(services.conversations, conversationId);
+    const refused = fleetWithheld(fleet?.id, standing);
+    return refused === undefined ? undefined : c.json({ error: { type: "withheld", message: refused } }, 403);
+};
+
 export const createSandboxesRoutes = (services: Services) => {
     const deps = {
         token: async () => (await fleetEntry(services))?.token,
@@ -43,9 +63,13 @@ export const createSandboxesRoutes = (services: Services) => {
     };
     return {
         list: async (c: Context<AppEnv>): Promise<Response> => {
-            return answerResponse(c, await listFleet(deps));
+            return (await withheldFrom(services, c)) ?? answerResponse(c, await listFleet(deps));
         },
         create: async (c: Context<AppEnv>): Promise<Response> => {
+            const withheld = await withheldFrom(services, c);
+            if (withheld !== undefined) {
+                return withheld;
+            }
             const body = await cliBody(c, "create", '{"name":"…"}');
             if (body instanceof Response) {
                 return body;

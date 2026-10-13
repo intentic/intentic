@@ -17,9 +17,9 @@ const NONE: readonly SubagentSession[] = [];
 export interface SubagentRoster {
     // Live first, then most recently active, as the daemon orders them; do not re-sort.
     readonly sessions: ComputedRef<readonly SubagentSession[]>;
-    // The ones a conversation's own runtime ran in-process, by the conversation whose turn started them. A spawned one
-    // is a conversation too, and rides under its parent's card through the fleet (childFold) with everything a
-    // conversation has, so it is left out here rather than counted twice.
+    // The ones a conversation's own runtime ran in-process, and the tasks it handed to a linked sandbox, by the conversation
+    // whose turn started them: neither is a conversation here. A spawned one is, and rides under its parent's card through
+    // the fleet (childFold) with everything a conversation has, so it is left out here rather than counted twice.
     readonly inProcessOf: (conversationId: string) => readonly SubagentSession[];
 }
 
@@ -30,7 +30,8 @@ export const useSubagentRoster = (): SubagentRoster => {
     const byConversation = computed(() => {
         const grouped = new Map<string, SubagentSession[]>();
         for (const session of sessions.value) {
-            if (session.kind !== `subagent`) {
+            // A linked task is no conversation here either: its tray row is how its parent's card shows it.
+            if (session.kind === `spawned`) {
                 continue;
             }
             const own = grouped.get(session.conversationId);

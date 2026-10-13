@@ -34,6 +34,7 @@ import { identityHue } from "../../../lib/identityHue";
 import { presenceActivity, presenceOthers } from "../../../workbench/presence/usePresence";
 import { useAccessInventory } from "./useAccessInventory";
 import ControlTokensSection from "./ControlTokensSection.vue";
+import LinkedSandboxesSection from "./LinkedSandboxesSection.vue";
 import PasskeysSection from "./PasskeysSection.vue";
 import { type AccessDraft, accessWord, draftGrant, draftOf, draftProblem, newPerson } from "./accessGrant";
 import { usePersonaReach } from "./usePersonaReach";
@@ -671,6 +672,9 @@ const revoke = async (target: string): Promise<void> => {
 
         <!-- Program credentials follow people and include every sandbox token. -->
         <ControlTokensSection />
+
+        <!-- The owner's other sandboxes that may hand this one tasks, each held to the terms written on its link. -->
+        <LinkedSandboxesSection />
 
         <!-- Credential revocation answers whether any access remains active. -->
         <RowGroup v-if="canShip" :label="t(`sandbox.sandboxAccess.signedInBrowsers`)">

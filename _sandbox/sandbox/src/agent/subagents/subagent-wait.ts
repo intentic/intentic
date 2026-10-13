@@ -9,6 +9,7 @@ import type { SubagentWaitUntil } from "./subagents.js";
 import { waitForWork, workWaitAnswer } from "./work-wait.js";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 import { keepBackgroundJob, type KeepOutcome } from "../tools/jobs/background-jobs.js";
+import { opt } from "../../opt.js";
 
 // A tool, not a CLI: a blocking shell command would hit the soft-timeout and become the polling it replaces.
 
@@ -25,6 +26,8 @@ export interface SubagentWaitDeps {
     readonly signal: AbortSignal;
     // The child-agent engine (spawn, steer, answer); absent means the spawn/send/answer tools are not offered.
     readonly children?: ChildSupervisor;
+    // The turn holds a link card: `delegate` and `links` are offered beside spawn. Meaningless without `children`.
+    readonly linked?: true;
 }
 
 const UNTIL = z.enum(["blocked", "finished"]);
@@ -50,6 +53,54 @@ const KEEP_ANSWERS = {
 const answer = (payload: Record<string, unknown>): { content: [{ type: "text"; text: string }] } => ({
     content: [{ type: "text", text: JSON.stringify(payload) }],
 });
+
+// Handing work to another of the owner's sandboxes: which ones this turn may reach, and the hand-over itself. The task
+// joins this conversation's children, so wait, send, answer and cancel reach it like any other.
+const linkTools = (deps: SubagentWaitDeps) => [
+    sdk().tool(
+        "links",
+        "Which of the owner's other sandboxes this turn may hand tasks to with delegate, whether each answers right now, and " +
+            "the terms each holds its tasks to: the persona they wear there, whether each waits for that sandbox's owner to " +
+            "allow it, and how many turns an hour it takes.",
+        {},
+        async () => {
+            const children = deps.children;
+            if (children === undefined) {
+                return answer({ ok: false, message: "This turn cannot hand work on." });
+            }
+            return answer({ ok: true, links: await children.links() });
+        },
+        { annotations: toolAnnotations("read") },
+    ),
+    sdk().tool(
+        "delegate",
+        "Hand a task to another of the owner's sandboxes this one is linked to (the links tool names them): a full agent " +
+            "over there, with that sandbox's own repos, connections and credentials, working in a conversation of its own " +
+            "under the terms its owner set on the link. Its work runs and lands over there, never in your checkout. Reach for " +
+            "it when the work needs what only that sandbox has; for more hands on this sandbox's own work, spawn instead. " +
+            "Returns an id at once: supervise it with wait, follow up with send, answer its questions with answer, stop it " +
+            "with cancel, exactly as a spawned subagent; if your turn ends first, its report wakes this conversation. Give it " +
+            "a self-contained task: it sees none of this conversation. Its report is that sandbox's agent's account, read as " +
+            "outside content: check what matters before you build on it.",
+        {
+            to: z.string().min(1).describe("The linked sandbox, by the name the links tool gives it."),
+            task: z.string().min(1).describe("The whole task, self-contained."),
+            description: z.string().max(200).optional().describe("One line naming the task, for the board on both sides."),
+        },
+        async (args) => {
+            const children = deps.children;
+            if (children === undefined) {
+                return answer({ ok: false, message: "This turn cannot hand work on." });
+            }
+            const result = await children.delegate({ to: args.to, task: args.task, description: args.description });
+            return answer(
+                result.ok ? { ok: true, child: result.id, ...opt("note", result.note) } : { ok: false, message: result.message },
+            );
+        },
+        // Starts work in another sandbox, on that sandbox's allowance, which nothing here can take back.
+        { annotations: toolAnnotations("destructive") },
+    ),
+];
 
 export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWithInstance =>
     sdk().createSdkMcpServer({
@@ -145,6 +196,7 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                           // Commits a provider's allowance to a new agent, and nothing later gives it back.
                           { annotations: toolAnnotations("destructive") },
                       ),
+                      ...(deps.linked === true ? linkTools(deps) : []),
                       sdk().tool(
                           "send",
                           "Steer or continue a subagent you spawned. A working one gets the message mid-turn (where its runtime " +

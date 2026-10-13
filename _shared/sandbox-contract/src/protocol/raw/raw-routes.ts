@@ -135,6 +135,10 @@ export const RAW_ROUTES = {
     "POST /children/answer": { agent: true, control: "never" },
     "POST /children/cancel": { agent: true, control: "never" },
     "POST /children/merge": { agent: true, control: "never" },
+    // Handing a task to another of the owner's sandboxes over a link card (`agents delegate`), and which links this
+    // conversation's turn may hand work to (`agents links`); held to the cards the turn was granted, like the tool.
+    "POST /children/delegate": { agent: true, control: "never" },
+    "GET /children/links": { agent: true, control: "never" },
     "GET /children": { agent: true, control: "never" },
     // The fleet reads, and the one write: words in front of another conversation, which a person can do by typing.
     "GET /fleet": { agent: true },
@@ -218,6 +222,21 @@ export const RAW_ROUTES = {
     // Its sibling for MCP: a hooked runtime's (Cursor's) calls to its turn's MCP servers, on a session signed the same
     // way, naming the provider and the one server it may forward to. Held open while a server streams its answer.
     "ALL /privacy/mcp/{session}": { auth: "door", control: "never", stream: true },
+    // Inbound links: another of the owner's sandboxes handing this one tasks (schemas/links.ts). Minted, re-termed and
+    // revoked by the owner alone, checked in the handler like a control token; a waiting task is the owner's to allow.
+    "GET /system/links": { control: "never" },
+    "POST /system/links": { control: "never" },
+    "POST /system/links/{id}": { control: "never" },
+    "DELETE /system/links/{id}": { control: "never" },
+    "POST /system/links/{id}/requests/{request}": { control: "never" },
+    // The link doors, called by the asking sandbox's daemon: each checks the link token itself (x-intentic-link) and
+    // reaches only the conversations that link opened, which is the whole of a link's reach.
+    "GET /link": { auth: "door", control: "never" },
+    "POST /link/conversations": { auth: "door", control: "never" },
+    "GET /link/conversations/{id}": { auth: "door", control: "never" },
+    "POST /link/conversations/{id}/messages": { auth: "door", control: "never" },
+    "POST /link/conversations/{id}/answer": { auth: "door", control: "never" },
+    "POST /link/conversations/{id}/stop": { auth: "door", control: "never" },
     "POST /system/control/tokens": { control: "never" },
     "GET /system/control/tokens": { control: "never" },
     "DELETE /system/control/tokens/{id}": { control: "never" },

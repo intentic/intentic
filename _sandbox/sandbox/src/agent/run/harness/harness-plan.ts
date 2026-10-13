@@ -178,7 +178,7 @@ export const planHarnessTurn = async (
     const { browser, tools: remote } = mounted;
     const plugins = mounts.map((mount) => mount.pluginDir);
     const secrets = turnSecretAccess(deps, input, context.base.signal);
-    const sdkServers = harnessServers(deps, { input, context, persona, browser, secrets, hashlineEdits: settings.hashlineEdits });
+    const sdkServers = harnessServers(deps, { input, context, persona, granted, browser, secrets, hashlineEdits: settings.hashlineEdits });
     const tools: TurnTools = {
         ...context.base.tools,
         ...(plugins.length > 0 ? { plugins } : {}),

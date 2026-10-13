@@ -157,6 +157,15 @@ const DESCRIBE: Describers = {
         label: t(`capabilities.capabilityEffects.provision`),
         warn: true,
     }),
+    // Warned: the work leaves for a sandbox holding other credentials, which runs it under terms only its owner sets.
+    delegate: (effect) => ({
+        icon: `link`,
+        label:
+            effect.to === undefined
+                ? t(`capabilities.capabilityEffects.delegate`)
+                : t(`capabilities.capabilityEffects.delegateTo`, { to: effect.to }),
+        warn: true,
+    }),
 };
 
 // The key and the handler it selects are correlated by construction and not to the checker, so the narrowing the

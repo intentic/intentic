@@ -21,6 +21,7 @@ import { vpnHandler } from "./handlers/vpn.handler.js";
 import { walletHandler } from "./handlers/wallet.handler.js";
 import { webextHandler } from "./handlers/webext.handler.js";
 import { phoneHandler } from "./handlers/phone.handler.js";
+import { linkHandler } from "./handlers/link.handler.js";
 
 // Every capability kind's handler. Total over CapabilityKind, so an unhandled kind is a compile error.
 export const registry: Record<CapabilityKind, CapabilityHandler> = {
@@ -45,4 +46,5 @@ export const registry: Record<CapabilityKind, CapabilityHandler> = {
     localmodel: localModelHandler,
     wallet: walletHandler,
     fleet: fleetHandler,
+    link: linkHandler,
 };

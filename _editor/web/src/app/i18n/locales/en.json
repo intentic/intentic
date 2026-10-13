@@ -1,5 +1,10 @@
 {
-    "a11yKit": { "toggleDetails": "Toggle headline details", "selectRow": "Select example row", "settingsButton": "Settings icon button example", "codeField": "Code field example" },
+    "a11yKit": {
+        "toggleDetails": "Toggle headline details",
+        "selectRow": "Select example row",
+        "settingsButton": "Settings icon button example",
+        "codeField": "Code field example"
+    },
     "agents": {
         "accountChip": {
             "org": "Organization"
@@ -1112,6 +1117,8 @@
             "ownPhone": "Lets the agent {grants} on your Android phone, in the apps you allow on the phone",
             "privileged": "Privileged",
             "provision": "Lets the agent create sandboxes on your intentic account, asking you in chat each time. Ones it made outlive this connection",
+            "delegate": "Lets the agent hand tasks to another of your sandboxes, which runs them under its own persona, approvals and limits",
+            "delegateTo": "Lets the agent hand tasks to the sandbox at {to}, which runs them under its own persona, approvals and limits",
             "registersMcpServerAgent": "Registers an MCP server the agent connects to next turn",
             "requiresNetworkAdminContainer": "Requires network-admin container access",
             "runsCodeInsideApp": "Runs code inside the app with your session, owner-only; install only publishers you trust",
@@ -1956,6 +1963,33 @@
                     }
                 }
             },
+            "link": {
+                "name": "Linked sandbox",
+                "description": "Hand tasks to another of your sandboxes.",
+                "hint": "The agent hands a task over with `delegate` and waits on it like a subagent. It runs and lands in the other sandbox, under that sandbox's own persona, approvals and limits, which only its owner sets.",
+                "guide": {
+                    "scopes": "Starts, follows up on and stops the tasks it hands over, and reads what they report. Nothing else of that sandbox: not its files, its other conversations or its settings",
+                    "steps": {
+                        "0": "Open the other sandbox → `Sandbox` → `Access` → `Linked sandboxes` → `New link`, and name this sandbox there.",
+                        "1": "Choose what its tasks wear (a persona), whether each one waits for you, and how many turns an hour it may start.",
+                        "2": "Copy the token once, and paste it here with that sandbox's address.",
+                        "3": "Revoke the link over there; tasks stop reaching it the moment you do."
+                    }
+                },
+                "fields": {
+                    "url": {
+                        "label": "Its address",
+                        "placeholder": "https://sandbox-….sbx.intentic.dev"
+                    },
+                    "token": {
+                        "label": "Link token",
+                        "placeholder": "ilk_…"
+                    },
+                    "name": {
+                        "label": "What it is called"
+                    }
+                }
+            },
             "identity": {
                 "name": "Identity",
                 "description": "One email, every account grows from it.",
@@ -2271,6 +2305,24 @@
         },
         "connectionRows": {
             "sitesAllowed": "{browser} · {count} site allowed | {browser} · {count} sites allowed"
+        },
+        "linkPairing": {
+            "title": "Pair with one of your sandboxes",
+            "explain": "Pick the sandbox that will take the tasks and choose what they may do there. This editor is signed in to both, so it makes the link over there and fills this form in; nothing passes through intentic's servers.",
+            "noOthers": "You have no other sandbox to link to yet. Make one from your account, or with the Sandbox fleet card.",
+            "which": "Sandbox",
+            "pickOne": "Pick a sandbox",
+            "persona": "Its tasks wear",
+            "noPersona": "No persona",
+            "noPersonaHint": "No signed-in account over there, and the full toolbox, as any unattended wake.",
+            "askFirst": "Ask me there before each task",
+            "turnsAnHour": "turns an hour",
+            "pair": "Pair",
+            "paired": "Linked to {name}. Add the card to finish.",
+            "thisSandbox": "this sandbox",
+            "tooOld": "{name} runs a sandbox too old for links. Update it, then pair again.",
+            "couldntPair": "Couldn't make the link on {name}.",
+            "couldntReadPersonas": "Couldn't read that sandbox's personas."
         }
     },
     "chat": {
@@ -3100,7 +3152,8 @@
             "openItsTranscript": "Open transcript",
             "toolUses": "{count} tool | {count} tools",
             "viewLarger": "View larger",
-            "watchBrowser": "Watch browser"
+            "watchBrowser": "Watch browser",
+            "openItThere": "Open it in {sandbox}"
         },
         "chatToolDiff": {
             "truncated": "truncated",
@@ -6436,7 +6489,7 @@
             "noMcpConnectionsAdded": "No MCP connections added yet.",
             "none": "None",
             "onEveryOtherLimit": "on, every other limit on this persona is a strong default rather than a wall: a session with a shell can reach a credential it wasn't granted. Turn it off for a persona that has to be fenced in.",
-            "ownSettingsManifestsFolder": "Its own settings and manifests, and the folder that publishes files publicly.",
+            "ownSettingsManifestsFolder": "Its own settings and manifests, the folder that publishes files publicly, and new sandboxes on your account.",
             "pick": "Pick which:",
             "reachingOut": "Reaching out",
             "read": "Read",
@@ -6445,7 +6498,7 @@
             "runCode": "Run code",
             "runCommands": "Run commands",
             "shellTestsBuildsEvery": "Shell, tests, builds, and every CLI on the image.",
-            "startSubagentsRun": "Start subagents and run workflows.",
+            "startSubagentsRun": "Start subagents, run workflows, and hand work to linked sandboxes.",
             "with": "With"
         },
         "placement": {
@@ -8084,6 +8137,10 @@
                 "blurb": "The agent that reads an extension update before it is applied.",
                 "label": "Extension update reviews"
             },
+            "linkedTask": {
+                "blurb": "A task another of your sandboxes handed to this one over a link.",
+                "label": "Linked sandbox tasks"
+            },
             "loopIteration": {
                 "blurb": "Each round of a loop working towards its goal.",
                 "label": "Loop iterations"
@@ -8587,6 +8644,36 @@
             },
             "from": "From",
             "to": "To"
+        },
+        "linkedSandboxes": {
+            "title": "Linked sandboxes",
+            "noPersona": "No persona",
+            "noPersonaHint": "No signed-in account, and the full toolbox, as any unattended wake.",
+            "wearsNothing": "no persona",
+            "wears": "wears {persona}",
+            "eachWaits": "each task waits for you",
+            "startsAtOnce": "tasks start at once",
+            "perHour": "{count} turns an hour",
+            "conversations": "{count} conversation | {count} conversations",
+            "neverUsed": "never used",
+            "usedAgo": "used {ago}",
+            "askedAgo": "asked {ago}",
+            "couldntAnswer": "Couldn't answer that task.",
+            "couldntSave": "Couldn't save those terms.",
+            "waiting": "{count} waiting | {count} waiting",
+            "terms": "Terms",
+            "aTask": "A task",
+            "allow": "Allow",
+            "decline": "Decline",
+            "persona": "Persona",
+            "askMeFirst": "Ask me before each task",
+            "turnsAnHour": "turns an hour",
+            "explain": "Another of your sandboxes can hand this one tasks over a link. They run here, under the terms you set on the link, and land here. Pairing from the other sandbox's Linked sandbox card makes a link for you; one made here by hand is shown once, to paste over there.",
+            "labelPlaceholder": "The other sandbox's name, e.g. dev",
+            "newLink": "New link",
+            "shownOnce": "Shown once. Paste both into the Linked sandbox card on the other sandbox.",
+            "address": "Address",
+            "token": "Token"
         }
     },
     "settings": {

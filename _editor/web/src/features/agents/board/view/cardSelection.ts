@@ -15,6 +15,7 @@ import { isRemote } from "../../fleet/fleetScope";
 import { agentSeed } from "../../fleet/useAgents-actions";
 import type { FleetAgent } from "../../fleet/useAgents-fleet";
 import type { ViewEvent } from "./boardView";
+import { openLinkedSubagent } from "../../fleet/linkedSubagent";
 
 // Which card the board points at and what a press on one does: the ring follows the chat's own selection unless a link
 // just focused a card, a click opens the chat as a look rather than navigating, a modified click composes panes, and a
@@ -244,6 +245,10 @@ export const useCardFocus = (host: FocusHost) => {
     // the card's page, where that chat is.
     const focusSubagent = (card: FleetAgent, subagent: SubagentSession): void => {
         if (host.drag.consumeSuppressedOpen()) {
+            return;
+        }
+        // A task handed to a linked sandbox has no transcript here: it opens where it runs.
+        if (openLinkedSubagent(subagent)) {
             return;
         }
         ring.flashId.value = undefined;

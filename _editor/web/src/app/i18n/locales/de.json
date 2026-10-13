@@ -3276,7 +3276,7 @@
             "noMcpConnectionsAdded": "Noch keine MCP-Verbindungen hinzugefügt.",
             "none": "Keine",
             "onEveryOtherLimit": "an, ist jede andere Grenze auf dieser Persona eine starke Voreinstellung und keine Mauer: eine Session mit einer Shell kann eine Zugangsinformation erreichen, die ihr nicht gewährt wurde. Schalten Sie es für eine Persona aus, die eingezäunt sein muss.",
-            "ownSettingsManifestsFolder": "Ihre eigenen Einstellungen und Manifeste, und den Ordner, der Dateien öffentlich veröffentlicht.",
+            "ownSettingsManifestsFolder": "Ihre eigenen Einstellungen und Manifeste, den Ordner, der Dateien öffentlich veröffentlicht, und neue Sandboxes in Ihrem Konto.",
             "pick": "Wählen Sie, welche:",
             "reachingOut": "Nach außen greifen",
             "read": "Lesen",
@@ -3285,7 +3285,7 @@
             "runCode": "Code ausführen",
             "runCommands": "Befehle ausführen",
             "shellTestsBuildsEvery": "Shell, Tests, Builds und jede CLI im Image.",
-            "startSubagentsRun": "Subagenten starten und Workflows ausführen.",
+            "startSubagentsRun": "Subagenten starten, Workflows ausführen und Arbeit an verknüpfte Sandboxes übergeben.",
             "with": "Mit"
         },
         "planLimitsPanel": {

@@ -57,7 +57,7 @@ const FIELDS = {
 const PINNED = {
     "GET /health": "door early timed viewer panel read drive land",
     "POST /agent": "bearer waits timed collaborator guest panel editor drive land",
-    "POST /agent/attach": "bearer waits stream viewer guest panel read drive land",
+    "POST /agent/attach": "bearer waits stream viewer guest panel editor read drive land",
     "POST /agents/{id}/land": "bearer waits timed maintainer panel land",
     "POST /agents/{id}/place": "bearer waits timed maintainer panel",
     "GET /capabilities/{id}/otp": "bearer waits timed maintainer panel agent",
@@ -107,7 +107,7 @@ const declaredRowOf = (route: ContractRoute, intoAttachments: boolean): string =
     // the route's floor, never an attachment's.
     const read = control !== "never" && (control === "read" || (isRead(method) && floor === "viewer"));
     const drive = read || (control !== "never" && roleAtLeast("collaborator", floor));
-    const rungs = { editor: control === "editor", read, drive, land: drive || control === "land" } satisfies Record<ControlScope, boolean>;
+    const rungs = { editor: control === "editor" || control === "read", read, drive, land: drive || control === "land" } satisfies Record<ControlScope, boolean>;
     return [
         meta.auth === "door" ? "door" : "bearer",
         meta.beforeBoot === true ? "early" : "waits",

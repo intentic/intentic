@@ -1,5 +1,10 @@
 {
-    "a11yKit": { "toggleDetails": "Pokaż lub ukryj szczegóły nagłówka", "selectRow": "Zaznacz przykładowy wiersz", "settingsButton": "Przykładowy przycisk ustawień", "codeField": "Przykładowe pole kodu" },
+    "a11yKit": {
+        "toggleDetails": "Pokaż lub ukryj szczegóły nagłówka",
+        "selectRow": "Zaznacz przykładowy wiersz",
+        "settingsButton": "Przykładowy przycisk ustawień",
+        "codeField": "Przykładowe pole kodu"
+    },
     "agents": {
         "accountChip": {
             "org": "Organizacja"
@@ -1112,6 +1117,8 @@
             "ownPhone": "Pozwala agentowi: {grants} na Twoim telefonie z Androidem, w aplikacjach, na które pozwolisz na telefonie",
             "privileged": "Uprzywilejowany",
             "provision": "Pozwala agentowi tworzyć sandboxy na Twoim koncie intentic, za każdym razem pytając Cię na czacie. Te, które utworzy, przetrwają odłączenie tego połączenia",
+            "delegate": "Pozwala agentowi przekazywać zadania innemu z Twoich sandboxów, który wykonuje je pod własną personą, zatwierdzeniami i limitami",
+            "delegateTo": "Pozwala agentowi przekazywać zadania sandboxowi pod {to}, który wykonuje je pod własną personą, zatwierdzeniami i limitami",
             "registersMcpServerAgent": "Rejestruje serwer MCP, z którym agent połączy się w następnej turze",
             "requiresNetworkAdminContainer": "Wymaga dostępu kontenera z uprawnieniami administratora sieci",
             "runsCodeInsideApp": "Uruchamia kod wewnątrz aplikacji z Twoją sesją, tylko dla właściciela; instaluj tylko wydawców, którym ufasz",
@@ -1914,6 +1921,33 @@
                     }
                 }
             },
+            "link": {
+                "name": "Połączony sandbox",
+                "description": "Przekazuj zadania innemu ze swoich sandboxów.",
+                "hint": "Agent przekazuje zadanie przez `delegate` i czeka na nie jak na podagenta. Zadanie działa i ląduje w tamtym sandboxie, pod jego własną personą, zatwierdzeniami i limitami, które ustawia tylko jego właściciel.",
+                "guide": {
+                    "scopes": "Uruchamia przekazane zadania, dopisuje do nich, zatrzymuje je i czyta ich raporty. Nic więcej z tamtego sandboxa: ani plików, ani innych rozmów, ani ustawień",
+                    "steps": {
+                        "0": "Otwórz drugi sandbox → `Sandbox` → `Dostęp` → `Połączone sandboxy` → `Nowe połączenie` i nazwij tam ten sandbox.",
+                        "1": "Wybierz, jaką personę noszą jego zadania, czy każde czeka na Ciebie i ile tur na godzinę może uruchomić.",
+                        "2": "Skopiuj token od razu i wklej go tutaj razem z adresem tamtego sandboxa.",
+                        "3": "Unieważnij połączenie tam; zadania przestają docierać w tej samej chwili."
+                    }
+                },
+                "fields": {
+                    "url": {
+                        "label": "Jego adres",
+                        "placeholder": "https://sandbox-….sbx.intentic.dev"
+                    },
+                    "token": {
+                        "label": "Token połączenia",
+                        "placeholder": "ilk_…"
+                    },
+                    "name": {
+                        "label": "Jak się nazywa"
+                    }
+                }
+            },
             "identity": {
                 "name": "Tożsamość",
                 "description": "Jeden e-mail, z którego wyrastają wszystkie konta.",
@@ -2271,6 +2305,24 @@
         },
         "connectionRows": {
             "sitesAllowed": "{browser} · {count} dozwolona strona | {browser} · {count} dozwolone strony | {browser} · {count} dozwolonych stron"
+        },
+        "linkPairing": {
+            "title": "Sparuj z jednym ze swoich sandboxów",
+            "explain": "Wybierz sandbox, który przyjmie zadania, i zdecyduj, co mogą tam robić. Ten edytor jest zalogowany do obu, więc tworzy połączenie tam i wypełnia ten formularz; nic nie przechodzi przez serwery intentic.",
+            "noOthers": "Nie masz jeszcze innego sandboxa do połączenia. Utwórz go na swoim koncie albo kartą Flota sandboxów.",
+            "which": "Sandbox",
+            "pickOne": "Wybierz sandbox",
+            "persona": "Jego zadania noszą",
+            "noPersona": "Bez persony",
+            "noPersonaHint": "Bez zalogowanego konta tam, z pełnym zestawem narzędzi, jak każde nienadzorowane wybudzenie.",
+            "askFirst": "Pytaj mnie tam przed każdym zadaniem",
+            "turnsAnHour": "tur na godzinę",
+            "pair": "Sparuj",
+            "paired": "Połączono z {name}. Dodaj kartę, aby zakończyć.",
+            "thisSandbox": "ten sandbox",
+            "tooOld": "{name} działa na zbyt starym sandboxie dla połączeń. Zaktualizuj go i sparuj ponownie.",
+            "couldntPair": "Nie udało się utworzyć połączenia na {name}.",
+            "couldntReadPersonas": "Nie udało się odczytać person tamtego sandboxa."
         }
     },
     "chat": {
@@ -3100,7 +3152,8 @@
             "openItsTranscript": "Otwórz zapis",
             "toolUses": "{count} narzędzie | {count} narzędzia | {count} narzędzi",
             "viewLarger": "Powiększ",
-            "watchBrowser": "Podgląd przeglądarki"
+            "watchBrowser": "Podgląd przeglądarki",
+            "openItThere": "Otwórz w {sandbox}"
         },
         "chatToolDiff": {
             "truncated": "ucięte",
@@ -6055,7 +6108,7 @@
             "noMcpConnectionsAdded": "Nie dodano jeszcze żadnych połączeń MCP.",
             "none": "Żadne",
             "onEveryOtherLimit": "włączone, każdy inny limit na tej karcie jest mocnym ustawieniem domyślnym, a nie murem: sesja z powłoką może sięgnąć po poświadczenie, którego jej nie przyznano. Wyłącz to dla persony, która ma być zamknięta w ogrodzeniu.",
-            "ownSettingsManifestsFolder": "Własne ustawienia i manifesty oraz folder, który publikuje pliki publicznie.",
+            "ownSettingsManifestsFolder": "Własne ustawienia i manifesty, folder, który publikuje pliki publicznie, oraz nowe sandboxy na Twoim koncie.",
             "pick": "Wybierz które:",
             "reachingOut": "Sięganie na zewnątrz",
             "read": "Czytać",
@@ -6064,7 +6117,7 @@
             "runCode": "Uruchamiać kod",
             "runCommands": "Uruchamiać polecenia",
             "shellTestsBuildsEvery": "Powłoka, testy, budowania i każde CLI w obrazie.",
-            "startSubagentsRun": "Uruchamiać podagenty i workflow.",
+            "startSubagentsRun": "Uruchamiać podagenty i workflow oraz przekazywać pracę połączonym sandboxom.",
             "with": "Z"
         },
         "planLimitsPanel": {
@@ -7681,6 +7734,10 @@
                 "blurb": "Agent, który czyta aktualizację rozszerzenia, zanim zostanie zastosowana.",
                 "label": "Przeglądy aktualizacji rozszerzeń"
             },
+            "linkedTask": {
+                "blurb": "Zadanie, które inny z Twoich sandboxów przekazał temu przez połączenie.",
+                "label": "Zadania z połączonych sandboxów"
+            },
             "loopIteration": {
                 "blurb": "Każde okrążenie pętli zmierzającej do celu.",
                 "label": "Iteracje pętli"
@@ -8184,6 +8241,36 @@
             },
             "from": "Od",
             "to": "Do"
+        },
+        "linkedSandboxes": {
+            "title": "Połączone sandboxy",
+            "noPersona": "Bez persony",
+            "noPersonaHint": "Bez zalogowanego konta, z pełnym zestawem narzędzi, jak każde nienadzorowane wybudzenie.",
+            "wearsNothing": "bez persony",
+            "wears": "nosi personę {persona}",
+            "eachWaits": "każde zadanie czeka na Ciebie",
+            "startsAtOnce": "zadania startują od razu",
+            "perHour": "{count} tur na godzinę",
+            "conversations": "{count} rozmowa | {count} rozmowy | {count} rozmów",
+            "neverUsed": "nigdy nieużyte",
+            "usedAgo": "użyte {ago}",
+            "askedAgo": "poproszono {ago}",
+            "couldntAnswer": "Nie udało się odpowiedzieć na to zadanie.",
+            "couldntSave": "Nie udało się zapisać tych warunków.",
+            "waiting": "{count} czeka | {count} czekają | {count} czeka",
+            "terms": "Warunki",
+            "aTask": "Zadanie",
+            "allow": "Zezwól",
+            "decline": "Odrzuć",
+            "persona": "Persona",
+            "askMeFirst": "Pytaj mnie przed każdym zadaniem",
+            "turnsAnHour": "tur na godzinę",
+            "explain": "Inny z Twoich sandboxów może przekazywać temu zadania przez połączenie. Działają tutaj, na warunkach ustawionych przy połączeniu, i lądują tutaj. Parowanie z karty Połączony sandbox w drugim sandboxie tworzy połączenie za Ciebie; utworzone tu ręcznie pokazuje się raz, do wklejenia tam.",
+            "labelPlaceholder": "Nazwa drugiego sandboxa, np. dev",
+            "newLink": "Nowe połączenie",
+            "shownOnce": "Pokazane raz. Wklej oba w kartę Połączony sandbox w drugim sandboxie.",
+            "address": "Adres",
+            "token": "Token"
         }
     },
     "settings": {

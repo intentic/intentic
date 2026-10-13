@@ -80,6 +80,7 @@
                 "workflows",
                 "ci",
                 "chores",
+                "links",
                 "needs",
                 "approvals",
                 "settings",

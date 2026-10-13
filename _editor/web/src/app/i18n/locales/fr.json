@@ -3278,7 +3278,7 @@
             "noMcpConnectionsAdded": "Aucune connexion MCP ajoutée pour l'instant.",
             "none": "Aucun",
             "onEveryOtherLimit": "activé, toute autre limite de ce persona est une valeur par défaut forte et non un mur : une session avec un shell peut atteindre un identifiant qui ne lui a pas été accordé. Désactivez-le pour un persona qui doit rester clôturé.",
-            "ownSettingsManifestsFolder": "Ses propres réglages et manifestes, et le dossier qui publie des fichiers publiquement.",
+            "ownSettingsManifestsFolder": "Ses propres réglages et manifestes, le dossier qui publie des fichiers publiquement, et de nouvelles sandboxes sur votre compte.",
             "pick": "Choisissez lesquels :",
             "reachingOut": "Aller au-dehors",
             "read": "Lire",
@@ -3287,7 +3287,7 @@
             "runCode": "Exécuter du code",
             "runCommands": "Exécuter des commandes",
             "shellTestsBuildsEvery": "Shell, tests, compilations, et chaque CLI présente sur l'image.",
-            "startSubagentsRun": "Lancer des sous-agents et exécuter des workflows.",
+            "startSubagentsRun": "Lancer des sous-agents, exécuter des workflows et confier du travail aux sandboxes liées.",
             "with": "Avec"
         },
         "planLimitsPanel": {

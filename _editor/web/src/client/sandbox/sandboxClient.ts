@@ -1,4 +1,5 @@
 import { sandboxRouteName } from "@intentic/sandbox-contract";
+import type { output, ZodType } from "zod";
 import { t } from "@intentic/ui/i18n";
 import { driftedRouteReason, staleDaemonReason } from "./useDaemonRoutes";
 import { trackPerf } from "../../app/perf/perf";
@@ -51,6 +52,17 @@ export async function sandboxJson<T>(path: string, init?: RequestInit): Promise<
         throw await sandboxError(response, { method: init?.method ?? `GET`, path });
     }
     return (await response.json()) as T;
+}
+
+// The same, on another of the reader's sandboxes by id, under the reader's own session there: what pairing two of their
+// sandboxes reads and writes on the far one. A refusal there says the far daemon's words, never a drift reading of this one.
+// Read with the route's own answer schema, the one boundary this answer crosses.
+export async function sandboxJsonAt<Answer extends ZodType>(sandboxId: string, path: string, answer: Answer, init?: RequestInit): Promise<output<Answer>> {
+    const response = await requestTo(targetFor(sandboxId), path, init);
+    if (!response.ok) {
+        throw await sandboxError(response);
+    }
+    return answer.parse(await response.json());
 }
 
 // Raw bytes for binary preview (images/PDF), where a utf8 decode would corrupt the file. `at` names the sandbox when

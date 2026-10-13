@@ -59,7 +59,10 @@ export type CapabilityEffect =
     | { readonly kind: "mount"; readonly target: string; readonly writable: boolean }
     // Reaches the owner's ACCOUNT rather than this sandbox: the agent may create sandboxes on it. Its own row because
     // no other effect outlives the tile the way a sandbox somebody else's agent made does.
-    | { readonly kind: "provision" };
+    | { readonly kind: "provision" }
+    // Hands tasks to another of the owner's sandboxes, which runs them under its own terms; `to` names its host once the
+    // address is typed. Its own row because the work leaves this sandbox for one with other credentials.
+    | { readonly kind: "delegate"; readonly to?: string | undefined };
 
 export interface CapabilityEffectInput {
     readonly kind: CapabilityKind;
@@ -310,6 +313,8 @@ const KIND_EFFECTS: Record<CapabilityKind, (input: CapabilityEffectInput) => rea
     // The token is held by the daemon and never injected into the agent's env, so its `secret` row is `disk`: what the
     // agent gets is the door, not the credential. Every create still asks in chat.
     fleet: () => [{ kind: "provision" }, { kind: "secret", exposure: "disk" }, { kind: "skill", name: "fleet" }],
+    // Held by the daemon like the fleet's token: the agent gets the `delegate` tool, never the credential.
+    link: (input) => [{ kind: "delegate", to: host(input.config["url"]) }, { kind: "secret", exposure: "disk" }, { kind: "skill", name: "links" }],
 };
 
 export const capabilityEffects = (input: CapabilityEffectInput): readonly CapabilityEffect[] => KIND_EFFECTS[input.kind](input);

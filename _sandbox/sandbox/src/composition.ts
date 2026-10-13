@@ -128,6 +128,7 @@ import { createRunGrants } from "./hosts/device-door.js";
 import { createWebextSlice, type WebextSlice } from "./webext/webext-slice.js";
 import { createPhonesSlice, type PhonesSlice } from "./phones/phone-slice.js";
 import { createRunnersSlice, type RunnersSlice } from "./runners/runners-slice.js";
+import { createLinksSlice, type LinksSlice } from "./links/links-slice.js";
 import { type AgentToolsMember, createCapabilitiesSlice, type CapabilitiesSlice } from "./capabilities/capabilities-slice.js";
 import { connectorHostDefaults } from "./capabilities/contributions.js";
 import { createSecretsSlice, type SecretsSlice } from "./secrets/secrets-slice.js";
@@ -170,6 +171,7 @@ export interface Services
         WebextSlice,
         PhonesSlice,
         RunnersSlice,
+        LinksSlice,
         CapabilitiesSlice,
         SecretsSlice,
         BrokerSlice,
@@ -751,6 +753,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         ...createWebextSlice(peerDoors),
         ...createPhonesSlice(peerDoors),
         ...createRunnersSlice(peerDoors),
+        ...createLinksSlice({ historyRoot: config.historyRoot, logger, whole }),
         ...createResourcesSlice({
             workspaceRoot: workspace.root,
             perf,

@@ -88,6 +88,9 @@ describe("contributionEntry", () => {
             "fleet",
             // Static like endpoint: an identity has no site to vary, the email is the tile.
             "identity",
+            // Static for the fleet reason: its token reaches another of the owner's sandboxes, and handing work over is core
+            // code an extension must never stand in for.
+            "link",
             // Static for the docker reason: the GPU switch is a privileged directive, and its handler is core code.
             "localmodel",
             "mcp",

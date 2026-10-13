@@ -74,6 +74,7 @@ import type { DomainEventMap } from "../../seams/domain-events.js";
 import { opt } from "../../opt.js";
 import { credentialsTravel, placeFanOut } from "../../runners/runner-scheduler.js";
 import { freshRunnerSummaries } from "../../runners/runner-peer.js";
+import type { DelegateAsk, LinkListing } from "../../links/linked-children.js";
 
 // Spawns, steers and answers full agents from inside a turn, on any connected provider; a child is an ordinary
 // conversation on the same turn pump, queued until the box has memory for it. A parked question is the parent's to
@@ -1836,26 +1837,49 @@ export interface ChildSupervisor {
     readonly cancel: (childId: string) => Promise<ChildActionResult>;
     // Parks until one of the parent's children or background commands moves, or the named one does.
     readonly wait: (options: SubagentWaitOptions) => Promise<WorkWaitOutcome>;
+    // Hands a task to another of the owner's sandboxes over a link card (links/linked-children.ts): a `linked` child,
+    // reached by the calls above like any other, whose work runs and lands over there.
+    readonly delegate: (ask: DelegateAsk) => Promise<ChildSpawnResult>;
+    // The linked sandboxes this turn may hand work to, and whether each answers right now.
+    readonly links: () => Promise<readonly LinkListing[]>;
 }
 
-export const childSupervisor = (services: Services, parent: ChildParent): ChildSupervisor => ({
-    spawn: (spec) => spawnChild(services, parent, spec),
-    providers: () => spawnableProviders(services),
-    send: (childId, message) => sendToChild(services, parent, childId, message),
-    answer: (childId, answers) => answerChild(services, parent, childId, answers),
-    pendingQuestion: (childId) =>
-        services.conversations.holdings(CHILDREN).get(childId)?.parent === parent.conversationId
-            ? pendingQuestionOf(services.conversations, childId)
-            : undefined,
-    report: (childId) =>
-        services.conversations.holdings(CHILDREN).get(childId)?.parent === parent.conversationId
-            ? childReportOf(services.conversations, childId)
-            : undefined,
-    landing: (childId) =>
-        services.conversations.holdings(CHILDREN).get(childId)?.parent === parent.conversationId
-            ? childLandingWords(services.agents, childId)
-            : undefined,
-    merge: (childId) => mergeChild(services, parent, childId),
-    cancel: (childId) => cancelChild(services, parent, childId),
-    wait: (options) => waitForWork(services.conversations, parent.conversationId, options),
-});
+// A merge has nothing to bring in from a linked task: its work never comes into this checkout.
+const LINKED_MERGE: ChildActionResult = {
+    ok: false,
+    message: "That task ran in another sandbox and lands there: there is nothing of it to merge into this checkout.",
+};
+
+export const childSupervisor = (services: Services, parent: ChildParent): ChildSupervisor => {
+    const linked = services.linkedChildren;
+    const ownChild = (childId: string): boolean => services.conversations.holdings(CHILDREN).get(childId)?.parent === parent.conversationId;
+    return {
+        spawn: (spec) => spawnChild(services, parent, spec),
+        providers: () => spawnableProviders(services),
+        send: (childId, message) => (linked.owns(childId) ? linked.send(parent, childId, message) : sendToChild(services, parent, childId, message)),
+        answer: (childId, answers) => (linked.owns(childId) ? linked.answer(parent, childId, answers) : answerChild(services, parent, childId, answers)),
+        pendingQuestion: (childId) => {
+            if (linked.owns(childId)) {
+                return linked.pendingQuestion(childId);
+            }
+            return ownChild(childId) ? pendingQuestionOf(services.conversations, childId) : undefined;
+        },
+        report: (childId) => {
+            if (linked.owns(childId)) {
+                return linked.report(childId);
+            }
+            return ownChild(childId) ? childReportOf(services.conversations, childId) : undefined;
+        },
+        landing: (childId) => {
+            if (linked.owns(childId)) {
+                return linked.landing(childId);
+            }
+            return ownChild(childId) ? childLandingWords(services.agents, childId) : undefined;
+        },
+        merge: (childId) => (linked.owns(childId) ? Promise.resolve(LINKED_MERGE) : mergeChild(services, parent, childId)),
+        cancel: (childId) => (linked.owns(childId) ? linked.cancel(parent, childId) : cancelChild(services, parent, childId)),
+        wait: (options) => waitForWork(services.conversations, parent.conversationId, options),
+        delegate: (ask) => linked.delegate(parent, ask),
+        links: () => linked.links(parent.conversationId),
+    };
+};

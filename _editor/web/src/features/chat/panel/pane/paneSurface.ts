@@ -14,6 +14,7 @@ import type { Conversation } from "../../session/conversation";
 import type { ChatSurface } from "../../tools/chatToolSurface";
 import { agentToolChildren } from "../../transcript/agentTranscript";
 import type { useShotViewer } from "../../transcript/shots/useShotViewer";
+import { openLinkedSubagent } from "../../../agents/fleet/linkedSubagent";
 
 // What a pane's tool cards can lead to: the chat's own checkout, terminal and browser, the calls a delegation's card
 // holds in the chat's record, navigating in the app's own window, and the roster's word on the subagents its calls
@@ -41,6 +42,14 @@ export const paneSurface = (conversation: () => Conversation, router: Router, su
         navigate,
         // A spawned child opens as a look, as its row in the tray does; an in-process one steps this chat's column into it.
         openSubagent: ({ id, kind }) => {
+            // A task handed to a linked sandbox has no transcript here: it opens where it runs.
+            if (kind === `linked`) {
+                const session = subagents().find((candidate) => candidate.id === id);
+                if (session !== undefined) {
+                    openLinkedSubagent(session);
+                }
+                return;
+            }
             const agents = useAgents();
             if (kind === `spawned`) {
                 const child = agents.agentById(id);

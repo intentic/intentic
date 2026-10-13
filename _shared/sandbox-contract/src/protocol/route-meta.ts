@@ -6,7 +6,8 @@ import type { MemberRole } from "../schemas/shared.js";
 // declare nothing; the daemon's bearer, boot, timer, role-floor and grant decisions all derive from this.
 
 // How far a control token reaches a route beyond what its floor alone gives the `read`/`drive` rungs.
-// `never`: no rung; `editor`: the editor slice too; `read`: the read rung, though no GET; `land`: the land rung too.
+// `never`: no rung; `editor`: the editor slice too; `read`: the read rung and the editor slice, though no GET (watching
+// a turn is part of driving one); `land`: the land rung too.
 export type ControlReach = "never" | "editor" | "read" | "land";
 
 export interface RouteMeta {

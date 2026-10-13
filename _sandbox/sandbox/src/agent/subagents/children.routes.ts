@@ -40,6 +40,13 @@ const WAIT_MAX_S = 1800;
 
 const CancelBodySchema = z.object({ child: z.string().min(1) });
 
+// A task for another of the owner's sandboxes: which link card, the whole task, and its one-line name.
+const DelegateBodySchema = z.object({
+    to: z.string().min(1),
+    task: z.string().min(1),
+    description: z.string().max(200).optional(),
+});
+
 const SendBodySchema = z.object({
     child: z.string().min(1),
     message: z.string().min(1),
@@ -173,9 +180,11 @@ export const createChildrenRoutes = (services: Services) => ({
         });
         return c.json(
             workWaitAnswer(result, {
-                pendingQuestion: (childId) => pendingQuestionOf(services.conversations, childId),
-                report: (childId) => childReportOf(services.conversations, childId),
-                landing: (childId) => childLandingWords(services.agents, childId),
+                pendingQuestion: (childId) =>
+                    services.linkedChildren.owns(childId) ? services.linkedChildren.pendingQuestion(childId) : pendingQuestionOf(services.conversations, childId),
+                report: (childId) => (services.linkedChildren.owns(childId) ? services.linkedChildren.report(childId) : childReportOf(services.conversations, childId)),
+                landing: (childId) =>
+                    services.linkedChildren.owns(childId) ? services.linkedChildren.landing(childId) : childLandingWords(services.agents, childId),
             }),
         );
     },
@@ -251,11 +260,39 @@ export const createChildrenRoutes = (services: Services) => ({
         const answers =
             parsed.data.answers ??
             ((): Record<string, string[]> => {
-                const first = pendingQuestionOf(services.conversations, child)?.questions?.[0]?.question;
+                const pending = services.linkedChildren.owns(child) ? services.linkedChildren.pendingQuestion(child) : pendingQuestionOf(services.conversations, child);
+                const first = pending?.questions?.[0]?.question;
                 return { [first ?? ""]: [text ?? ""] };
             })();
         const result = await supervisor.answer(child, answers);
         return c.json(result, result.ok ? 200 : 409);
+    },
+    /** POST /children/delegate — hand a task to another of the owner's sandboxes over a link card. */
+    delegate: async (c: Context<AppEnv>): Promise<Response> => {
+        const conversationId = conversationOf(services, c);
+        if (conversationId === undefined) {
+            return c.json({ ok: false, message: "No conversation to file the task under: this shell carries no turn stamp and nothing is live." }, 400);
+        }
+        const supervisor = supervisorFor(services.conversations, conversationId);
+        if (supervisor === undefined) {
+            return c.json({ ok: false, message: "This conversation may not hand work on: no turn with full agency has run on it (or the daemon restarted since)." }, 403);
+        }
+        // allow(silent-catch): a body that is not JSON is answered as a malformed one, just below.
+        const parsed = DelegateBodySchema.safeParse(await c.req.json().catch(() => undefined));
+        if (!parsed.success) {
+            return c.json({ ok: false, message: 'Pass JSON like {"to": "<link>", "task": "...", "description": "..."}; `agents links` names the links.' }, 400);
+        }
+        const result = await supervisor.delegate({ to: parsed.data.to, task: parsed.data.task, description: parsed.data.description });
+        return c.json(result, result.ok ? 200 : 409);
+    },
+    /** GET /children/links — the linked sandboxes this conversation's turn may hand work to, and whether each answers. */
+    links: async (c: Context<AppEnv>): Promise<Response> => {
+        const conversationId = conversationOf(services, c);
+        const supervisor = conversationId === undefined ? undefined : supervisorFor(services.conversations, conversationId);
+        if (supervisor === undefined) {
+            return c.json({ ok: false, message: "This conversation may not hand work on: no turn with full agency has run on it." }, 403);
+        }
+        return c.json({ ok: true, links: await supervisor.links() });
     },
     /** GET /children — this conversation's children, every kind, live first. */
     list: async (c: Context<AppEnv>): Promise<Response> => {

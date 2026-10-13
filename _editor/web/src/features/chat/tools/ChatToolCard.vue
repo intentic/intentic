@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { linkedConversationHref, openLinkedSubagent } from "../../agents/fleet/linkedSubagent";
 import type { IconName } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import type { TranscriptTool } from "@intentic/sandbox-contract";
@@ -184,6 +185,13 @@ const subagentDoor = computed<{ readonly href: string | undefined; readonly labe
     if (seen === undefined) {
         return undefined;
     }
+    // A task handed to a linked sandbox: its conversation is over there, at an address of that sandbox's, which the roster's
+    // row names.
+    if (seen.subagent.kind === `linked`) {
+        const session = surface.subagent?.(seen.id);
+        const far = session === undefined ? undefined : linkedConversationHref(session);
+        return far === undefined ? undefined : { href: far, label: t(`chat.chatToolCard.openItThere`, { sandbox: session?.linked?.sandbox ?? `` }) };
+    }
     const spawned = seen.subagent.kind === `spawned`;
     const href = spawned ? surface.conversationRoute?.(seen.id) : undefined;
     if (href === undefined && surface.openSubagent === undefined) {
@@ -202,6 +210,15 @@ const openSubagent = (event: MouseEvent): void => {
         return;
     }
     if (route !== undefined && (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)) {
+        return;
+    }
+    // Opened where it runs, in a window of its own: this chat stays on this sandbox.
+    if (seen.subagent.kind === `linked`) {
+        event.preventDefault();
+        const session = surface.subagent?.(seen.id);
+        if (session !== undefined) {
+            openLinkedSubagent(session);
+        }
         return;
     }
     if (surface.openSubagent !== undefined) {

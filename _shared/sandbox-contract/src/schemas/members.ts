@@ -30,6 +30,10 @@ export const REACHABLE_CREDENTIAL_KINDS: readonly CapabilityKind[] = [
     "webext",
     "plugin",
     "extension",
+    // The owner's account: a person this sandbox works for may be kept from making sandboxes on it.
+    "fleet",
+    // Another of the owner's sandboxes: a person may be kept from handing it work.
+    "link",
 ];
 
 // WHAT ONE PERSON MAY DO, as three independent answers rather than one rung of a ladder: whether their conversations

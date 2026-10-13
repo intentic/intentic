@@ -217,6 +217,7 @@ export * from "./schemas/approvals.js";
 export * from "./schemas/automations.js";
 export * from "./schemas/agents-list.js";
 export * from "./schemas/capabilities.js";
+export * from "./schemas/links.js";
 export * from "./schemas/chat-route.js";
 export * from "./schemas/ci.js";
 export * from "./schemas/providers/claude-gate.js";

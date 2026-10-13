@@ -913,6 +913,32 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         },
         hint: "The agent runs `sandboxes create` and every create asks you in chat first, naming the machine it would run on. New sandboxes land on a computer you have connected as a device — this never provisions hosted machines, so it cannot spend your plan.",
     },
+    // Another of the owner's sandboxes this one may hand tasks to: the fleet's sibling for work rather than machines. The
+    // token is minted over there, where the terms live; the editor pairs the two sandboxes and fills this in by itself,
+    // and the fields are the way to do it by hand.
+    {
+        id: "link",
+        name: "Linked sandbox",
+        kind: "link",
+        category: "deploy",
+        icon: "link",
+        description: "Hand tasks to another of your sandboxes.",
+        fields: [
+            { key: "url", label: "Its address", placeholder: "https://sandbox-….sbx.intentic.dev" },
+            { key: "token", label: "Link token", secret: true, placeholder: "ilk_…" },
+            { key: "name", label: "What it is called", advanced: true },
+        ],
+        guide: {
+            scopes: "Starts, follows up on and stops the tasks it hands over, and reads what they report. Nothing else of that sandbox: not its files, its other conversations or its settings",
+            steps: [
+                "Open the other sandbox → `Sandbox` → `Access` → `Linked sandboxes` → `New link`, and name this sandbox there.",
+                "Choose what its tasks wear (a persona), whether each one waits for you, and how many turns an hour it may start.",
+                "Copy the token once, and paste it here with that sandbox's address.",
+                "Revoke the link over there; tasks stop reaching it the moment you do.",
+            ],
+        },
+        hint: "The agent hands a task over with `delegate` and waits on it like a subagent. It runs and lands in the other sandbox, under that sandbox's own persona, approvals and limits, which only its owner sets.",
+    },
     {
         id: "identity",
         name: "Identity",

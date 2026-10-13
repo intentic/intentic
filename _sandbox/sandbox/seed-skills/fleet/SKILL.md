@@ -73,6 +73,13 @@ That is what makes a team of specialized agents a reviewable artifact rather tha
 the definition, commit it, and create from it. What a definition cannot carry is consent — the overlay lands
 there as a draft the owner still approves, and credentials land as names to fill.
 
+## Handing the new sandbox work
+
+Creating a sandbox does not give this one a way to hand it tasks. That is a **link**, which the owner pairs in their
+editor once the new box is up: its terms (the persona its tasks wear, whether each waits for its owner, its hourly
+limit) are set over there. Then `delegate` reaches it; see the `links` skill. Ask for one with
+`capabilities request link --why "…"`.
+
 ## If there is no account connection
 
 `sandboxes` answers with a sentence saying so. Connecting it is the owner's, on a card:

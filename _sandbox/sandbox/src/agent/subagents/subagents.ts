@@ -75,6 +75,8 @@ export interface SubagentRecord {
     // The ending of the turn this record follows already reached the parent by the other door (a report said into its
     // turn) before the record itself settled: whatever status it settles on counts as handed over.
     reportedAhead?: true;
+    // A `linked` one's far end: the sandbox it was handed to and the conversation it runs in there.
+    linked?: SubagentSession["linked"];
 }
 
 // Where the roster and everything kept beside it is held: each conversation's actor.
@@ -155,6 +157,7 @@ const wire = (record: SubagentRecord): SubagentSession => ({
     ...(record.summary !== undefined ? { summary: record.summary } : {}),
     ...(record.error !== undefined ? { error: record.error } : {}),
     ...(record.verification !== undefined ? { verification: record.verification } : {}),
+    ...opt("linked", record.linked),
 });
 
 /** Every known subagent, live first then most recently active. */
@@ -794,6 +797,44 @@ export const openSpawnedChild = (turn: SubagentTurn, birth: SpawnedChildBirth, r
     });
     // Counted once: a record already under this id is the same subagent, starting a follow-up or the start its owner
     // just allowed, so its parent's actor hears that as the move it is rather than as another birth.
+    const born = bornFrame(record);
+    const counted = existing === undefined && birth.again !== true;
+    toParent(turn.conversations, turn.conversationId, born, counted ? born : { kind: "subagent_update", id: record.id, status: record.status });
+};
+
+export interface LinkedChildBirth {
+    // The roster id the parent waits on: this sandbox's own, never the far conversation's.
+    readonly id: string;
+    readonly description?: string;
+    // Where it went: the link card, the sandbox's name, its account id where known, and the conversation it opened there.
+    readonly linked: NonNullable<SubagentSession["linked"]>;
+    readonly spawnDepth?: number;
+    // `pending` while the far sandbox's owner has not allowed it yet.
+    readonly status: "pending" | "running";
+    // A follow-up reopening a record already seen, not another subagent.
+    readonly again?: true;
+}
+
+/**
+ * Opens a roster record for a task handed to another sandbox over a link (links/linked-children.ts). Its moves reach the
+ * record through the same doors a spawned child's do (noteSpawnedChild, settleSpawnedChild), so `wait` and the board's
+ * tray read it like any child; what it never has is a conversation here, so nothing about it is held by a child's actor.
+ */
+export const openLinkedChild = (turn: SubagentTurn, birth: LinkedChildBirth): void => {
+    const roster = turn.conversations.holdings(ROSTER);
+    const existing = roster.get(birth.id);
+    if (existing !== undefined && subagentRunning(existing) && birth.again !== true) {
+        return;
+    }
+    roster.drop(birth.id);
+    const record = open(turn, birth.id, "linked", {
+        background: true,
+        status: birth.status,
+        agentType: birth.linked.sandbox,
+        linked: birth.linked,
+        ...opt("description", birth.description),
+        ...opt("spawnDepth", birth.spawnDepth),
+    });
     const born = bornFrame(record);
     const counted = existing === undefined && birth.again !== true;
     toParent(turn.conversations, turn.conversationId, born, counted ? born : { kind: "subagent_update", id: record.id, status: record.status });

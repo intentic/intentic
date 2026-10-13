@@ -35,6 +35,20 @@ import {
     SessionRecoveredSchema,
 } from "../../schemas/system.js";
 import { WebExtsListSchema } from "../../schemas/webext.js";
+import {
+    InboundLinkMintedSchema,
+    InboundLinkMintSchema,
+    InboundLinksListSchema,
+    InboundLinkSummarySchema,
+    InboundLinkTermsUpdateSchema,
+    LinkAnswerSchema,
+    LinkHelloSchema,
+    LinkMessageReceiptSchema,
+    LinkMessageSchema,
+    LinkRequestDecisionSchema,
+    LinkTaskSchema,
+    LinkTaskStatusSchema,
+} from "../../schemas/links.js";
 import { UploadManifestSchema, UploadSkipSchema } from "../../schemas/workspace/workspace-upload.js";
 import {
     ArrivalAbandonedSchema,
@@ -128,6 +142,20 @@ export const RAW_JSON_ROUTES = {
     "DELETE /system/authorized-key/{machine}": { output: OkSchema },
     // Every browser session revoked, the owner's own included.
     "POST /system/sessions/revoke": { output: OkSchema },
+    // Inbound links: the roster, a mint (its token shown once), new terms, a revoke, and the owner's answer to a waiting task.
+    "GET /system/links": { output: InboundLinksListSchema },
+    "POST /system/links": { input: InboundLinkMintSchema, output: InboundLinkMintedSchema },
+    "POST /system/links/{id}": { input: InboundLinkTermsUpdateSchema, output: InboundLinkSummarySchema },
+    "DELETE /system/links/{id}": { output: OkSchema },
+    "POST /system/links/{id}/requests/{request}": { input: LinkRequestDecisionSchema, output: InboundLinkSummarySchema },
+    // The link doors, as the asking sandbox's daemon reads them. A status takes `?after=<version>&wait=<seconds>` to
+    // be held until it moves past that version.
+    "GET /link": { output: LinkHelloSchema },
+    "POST /link/conversations": { input: LinkTaskSchema, output: LinkTaskStatusSchema },
+    "GET /link/conversations/{id}": { output: LinkTaskStatusSchema },
+    "POST /link/conversations/{id}/messages": { input: LinkMessageSchema, output: LinkMessageReceiptSchema },
+    "POST /link/conversations/{id}/answer": { input: LinkAnswerSchema, output: OkSchema },
+    "POST /link/conversations/{id}/stop": { output: LinkTaskStatusSchema },
     "GET /system/control/tokens": { output: ControlTokensListSchema },
     "POST /system/control/tokens": { input: ControlTokenMintSchema, output: ControlTokenMintedSchema },
     "DELETE /system/control/tokens/{id}": { output: OkSchema },

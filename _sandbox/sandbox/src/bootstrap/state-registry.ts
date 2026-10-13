@@ -45,6 +45,8 @@ import { extensionUsageDocument } from "../extensions/extension-usage.js";
 import { hookApprovalsDocument, hookRequestsDocument } from "../guard/hook-approvals.js";
 import { hostSetupSeededDocument } from "../hosts/host-seed.js";
 import { issuesDocument } from "../issues/issues-store.js";
+import { inboundLinksDocument } from "../links/inbound-links.js";
+import { linkedChildrenDocument } from "../links/linked-children.js";
 import { loopDesignsDocument, loopsDocument } from "../loops/loops-store.js";
 import { needsDocument } from "../needs/needs-store.js";
 import { syncEnrollmentsDocument } from "../peers/desktop-sync.js";
@@ -153,6 +155,8 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     hookRequestsDocument,
     hostSetupSeededDocument,
     issuesDocument,
+    inboundLinksDocument,
+    linkedChildrenDocument,
     loopDesignsDocument,
     loopsDocument,
     needsDocument,

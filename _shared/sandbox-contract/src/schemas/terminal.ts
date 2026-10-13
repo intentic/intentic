@@ -191,7 +191,8 @@ export type DesktopState = z.infer<typeof DesktopStateSchema>;
 // turn, be steered, and land its own work.
 // id is the spawning tool call's id for an in-process one, its own conversation id for a spawned one. The kind changes
 // only where its record is read from and what else can be done with it, never how it looks.
-export const SubagentKindSchema = z.enum(["subagent", "spawned"]);
+// `linked`: a task handed to another of the owner's sandboxes over a link; it runs and lands there, never in this checkout.
+export const SubagentKindSchema = z.enum(["subagent", "spawned", "linked"]);
 export type SubagentKind = z.infer<typeof SubagentKindSchema>;
 // pending/running/blocked/paused are live, the rest terminal. Uses the SDK's own task vocabulary rather than AgentStatus.
 // `blocked` is one addition: a spawned child's question/permission/plan card raises it. `paused` the other: a spawned
@@ -225,7 +226,7 @@ export const SubagentSessionSchema = z.object({
             "The id of the tool call that started it (an SDK child) or the child's own conversation id (a spawned one); either way both sides already hold it, so a card links to its subagent with the id it has and the subagent points back the same way.",
         ),
     kind: SubagentKindSchema.describe(
-        "How it was started: in-process by the runtime's own Agent/Task tool, or spawned by the daemon as a conversation of its own, on any provider. It changes where its record is read from and what else can be done with it, never what it is.",
+        "How it was started: in-process by the runtime's own Agent/Task tool, spawned by the daemon as a conversation of its own, on any provider, or handed to another of the owner's sandboxes over a link, where it runs and lands. It changes where its record is read from and what else can be done with it, never what it is.",
     ),
     // The conversation whose turn started it; how a card links back to the chat it belongs to.
     conversationId: z.string().describe("The conversation whose turn started it, and the way back to the chat it belongs to."),
@@ -279,6 +280,16 @@ export const SubagentSessionSchema = z.object({
     error: z.string().optional().describe("Why it failed, when it did."),
     // Filled once the subagent ends; a standing read mid-work would judge a job not yet done.
     verification: SubagentVerificationSchema.optional().describe("Whether anything proved the work its report describes."),
+    // A `linked` one's far end: where its conversation lives, so a row opens it there rather than here.
+    linked: z
+        .object({
+            link: z.string().describe("The link card it went through: the agent's name for that sandbox."),
+            sandbox: z.string().describe("What that sandbox is called."),
+            sandboxId: z.string().optional().describe("That sandbox's id on the owner's account, when the card knows it."),
+            conversationId: z.string().describe("The conversation it opened there."),
+        })
+        .optional()
+        .describe("For a task handed to another sandbox: which one, and the conversation it runs in there."),
 });
 export type SubagentSession = z.infer<typeof SubagentSessionSchema>;
 export const SubagentsListSchema = z.object({

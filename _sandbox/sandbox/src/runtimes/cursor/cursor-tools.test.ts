@@ -68,6 +68,8 @@ const supervisor = (over: Partial<ChildSupervisor> = {}): ChildSupervisor => ({
     landing: () => undefined,
     merge: async () => ({ ok: true }),
     cancel: async () => ({ ok: true }),
+    delegate: async () => ({ ok: false, message: "no links here" }),
+    links: async () => [],
     wait: (options) => waitForWork(actors, "conv-cursor", options),
     ...over,
 });

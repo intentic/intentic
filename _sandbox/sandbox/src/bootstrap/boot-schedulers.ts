@@ -1,4 +1,5 @@
 import { startRuntimeHealth } from "../agent/providers/adapter-health.js";
+import { noteLinkTurnSettled, noteLinkTurnStarted } from "../links/link-tasks.js";
 import { childLandingWords, reportChildLanded } from "../agent/subagents/child-lands.js";
 import { type ChildReportDeps, reportChildTurn } from "../agent/subagents/child-report.js";
 import { adoptChildTurn, childKillNote } from "../agent/subagents/children.js";
@@ -77,6 +78,18 @@ const startProjectDelivery = ({ role, services, shutdown }: Pick<BootPhase, "rol
     }
 };
 
+// Linked sandboxes, both halves (links/): a task another sandbox handed here reports how each of its turns ended, and the
+// tasks this sandbox handed out are followed again after a restart, so their parents still hear how each one ended.
+const startLinks = ({ role, services, logger, shutdown }: Pick<BootPhase, "role" | "services" | "logger" | "shutdown">): void => {
+    const deps = { links: services.inboundLinks, logger };
+    shutdown.push(services.events.subscribe("run.settled", (settled) => noteLinkTurnSettled(deps, settled)));
+    shutdown.push(services.events.subscribe("run.started", (started) => noteLinkTurnStarted(deps, started)));
+    shutdown.push(() => services.linkedChildren.close());
+    if (role.container) {
+        void services.linkedChildren.resume().catch((error: Error) => logger.warn({ err: error }, "linked tasks: not followed again"));
+    }
+};
+
 // Each scheduler registers its stop whether or not this role starts it, so every role unwinds cleanly.
 export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPhase): void => {
     const scheduler = createAutomationsScheduler(services);
@@ -104,6 +117,7 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
     shutdown.push(services.events.subscribe("workspace", (event) => reportChildLanded(services, event)));
     shutdown.push(services.events.subscribe("run.started", (started) => adoptChildTurn(services, started)));
     startProjectDelivery({ role, services, shutdown });
+    startLinks({ role, services, logger, shutdown });
 
     // A settled turn a person asked for arms a hold on its prompt cache where the setting says so; each hold sets its
     // own deadline, so there is nothing to start, only timers to clear.

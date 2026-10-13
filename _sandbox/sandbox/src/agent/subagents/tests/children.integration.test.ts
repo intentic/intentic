@@ -840,6 +840,8 @@ describe("the shell door's arming", () => {
         merge: async () => ({ ok: true }),
         cancel: async () => ({ ok: true }),
         wait: async () => ({ outcome: "unknown-target" }),
+        delegate: async () => ({ ok: false, message: "no links here" }),
+        links: async () => [],
     });
 
     it("answers with exactly the supervisor a qualifying turn recorded", async () => {

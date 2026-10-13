@@ -17,6 +17,7 @@ import { allowedOriginsOf, originAllowedBy } from "./auth/browser-origins.js";
 import { createPasskeyRoutes } from "./auth/passkeys/passkeys.routes.js";
 import { createAccessRoutes } from "./auth/access.routes.js";
 import { createControlTokenRoutes } from "./auth/tokens/control-tokens.routes.js";
+import { createLinkRoutes, linkRoutesDepsOf } from "./links/links.routes.js";
 import { createMembersRoutes } from "./auth/members/members.routes.js";
 import { openInApp } from "./system/boot/open-in-app.js";
 import { createRelinkRoute } from "./system/boot/relink.routes.js";
@@ -511,6 +512,9 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     serve("POST /children/answer", childrenRoutes.answer);
     serve("POST /children/cancel", childrenRoutes.cancel);
     serve("POST /children/merge", childrenRoutes.merge);
+    // A task handed to another of the owner's sandboxes over a link card, and which ones this turn may hand work to.
+    serve("POST /children/delegate", childrenRoutes.delegate);
+    serve("GET /children/links", childrenRoutes.links);
     serve("GET /children", childrenRoutes.list);
 
     // The fleet surface: which conversations exist, what one is, which said a phrase — joined from the registry, the
@@ -619,6 +623,21 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         "ALL /privacy/mcp/{session}",
         createMcpRoute({ shield: services.privacyShield, warn: (message, error) => services.logger.warn({ err: error }, message) }),
     );
+    // Linked sandboxes: the owner's links for other sandboxes of theirs (mint, terms, revoke, a waiting task's answer), and
+    // the doors those sandboxes hand tasks through, each reaching only the conversations its own link opened.
+    const links = createLinkRoutes(linkRoutesDepsOf(services));
+    serve("GET /system/links", links.list);
+    serve("POST /system/links", links.mint);
+    serve("POST /system/links/{id}", links.update);
+    serve("DELETE /system/links/{id}", links.revoke);
+    serve("POST /system/links/{id}/requests/{request}", links.decide);
+    serve("GET /link", links.hello);
+    serve("POST /link/conversations", links.ask);
+    serve("GET /link/conversations/{id}", links.status);
+    serve("POST /link/conversations/{id}/messages", links.message);
+    serve("POST /link/conversations/{id}/answer", links.answer);
+    serve("POST /link/conversations/{id}/stop", links.stop);
+
     // Control tokens: owner-minted, durable, revocable machine credentials.
     const controlTokens = createControlTokenRoutes(services);
     serve("POST /system/control/tokens", controlTokens.mint);

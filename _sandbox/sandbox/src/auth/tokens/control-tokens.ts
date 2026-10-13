@@ -188,8 +188,13 @@ const controlOf = (method: string, path: string): ControlReach | undefined => {
 const isRead = (method: string): boolean => method === "GET" || method === "HEAD";
 
 // The agent-conversation seam and nothing else: run a turn, answer a parked card, read transcripts, search the tree.
-// Declared route by route, since no member role corresponds to this ACP-bridge slice.
-const editorReach: ScopeReach = (method, path) => controlOf(method, path) === "editor";
+// Declared route by route, since no member role corresponds to this ACP-bridge slice. Watching the turn it just started
+// (/agent/attach, the one read-shaped POST, declared `read`) is part of driving it: without it a bridge starts a turn
+// it can never see.
+const editorReach: ScopeReach = (method, path) => {
+    const control = controlOf(method, path);
+    return control === "editor" || control === "read";
+};
 
 // Observation only: every read a viewer may make, and a read shaped as a POST (/agent/attach carries a replay cursor
 // in its body). A person is behind a viewer's request; the routes withheld are ones a program may not open.

@@ -42,6 +42,7 @@ import CapabilityInstanceRow from "./connect/CapabilityInstanceRow.vue";
 import CapabilityRail from "./connect/CapabilityRail.vue";
 import CapabilityRenameDialog from "./connect/CapabilityRenameDialog.vue";
 import ForticlientImport from "./connect/ForticlientImport.vue";
+import LinkPairing from "./connect/links/LinkPairing.vue";
 import GitRefField from "./connect/GitRefField.vue";
 import HostConnectDialog from "./connect/hosts/HostConnectDialog.vue";
 import PluginRegistryBrowse from "./connect/PluginRegistryBrowse.vue";
@@ -147,7 +148,7 @@ const form = useCapabilityForm({
 const { name, nameEdited, savedName, namePreview, nameCollision, nameProblem, values, attempted, shaking, pasteNotes, advancedOpen } = form;
 const { probeResult, finishName, finishField, onFieldInput, onFieldPaste, fieldAlarm, fieldQuiet, fieldChecked, fieldUrlFix, applyUrlFix } = form;
 const { fieldConfSummary, fieldPlaceholder, mainFields, advancedFields, versionToken, formSummary, liveEffects, hostPresetOptions } = form;
-const { applyHostPreset, applyRegistryPick, pickForticlient, auditable, updateFrom, submitLabel, keptSecrets } = form;
+const { applyHostPreset, applyRegistryPick, pickForticlient, pickLinked, auditable, updateFrom, submitLabel, keptSecrets } = form;
 const { probing, canProbe, runProbe, failure: probeFailure } = useCapabilityProbe({ selected, form });
 // Has an agent read the pinned code, or what an update changes, before the install is approved.
 const startAudit = (): void => void startAgent(auditPrompt(name.value, values, updateFrom.value));
@@ -380,6 +381,9 @@ onBeforeUnmount(() => {
 
                             <!-- Fills this form from FortiClient's own file; keyed on the tile so switching tiles clears the zone. -->
                             <ForticlientImport v-if="selected.kind === 'vpn'" :key="selected.id" @pick="pickForticlient" @notice="error = $event" />
+
+                            <!-- Pairs this sandbox with another of the reader's and fills this form; the fields stay for doing it by hand. -->
+                            <LinkPairing v-if="selected.kind === 'link' && editing === undefined" :key="selected.id" @pick="pickLinked" @notice="error = $event" />
 
                             <!-- Where extensions are found, on the tile people arrive at wanting one. -->
                             <RouterLink

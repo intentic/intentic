@@ -3289,7 +3289,7 @@
             "noMcpConnectionsAdded": "Todavía no se han añadido conexiones MCP.",
             "none": "Ninguno",
             "onEveryOtherLimit": "activado, cualquier otro límite de esta persona es un valor por defecto fuerte, no un muro: una sesión con shell puede alcanzar una credencial que no se le concedió. Desactívalo para una persona que deba quedar acotada.",
-            "ownSettingsManifestsFolder": "Sus propios ajustes y manifiestos, y la carpeta que publica archivos públicamente.",
+            "ownSettingsManifestsFolder": "Sus propios ajustes y manifiestos, la carpeta que publica archivos públicamente y nuevos sandboxes en tu cuenta.",
             "pick": "Elige cuáles:",
             "reachingOut": "Alcanzar fuera",
             "read": "Leer",
@@ -3298,7 +3298,7 @@
             "runCode": "Ejecutar código",
             "runCommands": "Ejecutar comandos",
             "shellTestsBuildsEvery": "Shell, pruebas, compilaciones y todas las CLI de la imagen.",
-            "startSubagentsRun": "Iniciar subagentes y ejecutar flujos de trabajo.",
+            "startSubagentsRun": "Iniciar subagentes, ejecutar flujos de trabajo y pasar trabajo a sandboxes vinculados.",
             "with": "Con"
         },
         "planLimitsPanel": {

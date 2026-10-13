@@ -33,6 +33,7 @@ export const CapabilityKindSchema = z.enum([
     "localmodel",
     "wallet",
     "fleet",
+    "link",
 ]);
 export type CapabilityKind = z.infer<typeof CapabilityKindSchema>;
 export const CapabilityStateSchema = z.enum(["active", "pending", "error", "inactive"]);
@@ -372,6 +373,16 @@ export const FleetConfigSchema = z.object({
     token: z.string().min(1).describe("A provisioning token from Settings ▸ Tokens. Stored, never echoed back."),
 });
 export type FleetConfig = z.infer<typeof FleetConfigSchema>;
+// Another of the owner's sandboxes this one may hand tasks to (schemas/links.ts). The token is an inbound link that
+// sandbox's owner minted, held by this daemon and never put in the agent's env, like the fleet's: the agent gets the
+// `delegate` tool, not the credential. What a task may do over there is that sandbox's terms, never this card's.
+export const LinkConfigSchema = z.object({
+    url: z.url().describe("The other sandbox's own address, the one its editor reaches it at."),
+    token: z.string().min(1).describe("The link token that sandbox minted for this one. Stored, never echoed back."),
+    name: z.string().max(100).optional().describe("What the other sandbox is called, as its owner named it."),
+    sandboxId: z.string().max(100).optional().describe("The other sandbox's id on the owner's account."),
+});
+export type LinkConfig = z.infer<typeof LinkConfigSchema>;
 export type McpConfig = z.infer<typeof McpConfigSchema>;
 export type CliConfig = z.infer<typeof CliConfigSchema>;
 export type PluginConfig = z.infer<typeof PluginConfigSchema>;
@@ -426,6 +437,8 @@ export const CapabilitySchema = z.discriminatedUnion("kind", [
     z.object({ id: entryId, kind: z.literal("wallet"), config: WalletConfigSchema }),
     // The owner's account, one per sandbox: the box holding this may provision sandboxes on it.
     z.object({ id: entryId, kind: z.literal("fleet"), config: FleetConfigSchema }),
+    // Another of the owner's sandboxes, one card per sandbox: the id is the agent's name for it (`delegate`'s `to`).
+    z.object({ id: entryId, kind: z.literal("link"), config: LinkConfigSchema }),
 ]);
 export type Capability = z.infer<typeof CapabilitySchema>;
 // A credential the owner must type elsewhere (a WhatsApp pairing code); rendered large and copyable, not buried in

@@ -129,7 +129,15 @@ test("a persona's powers withhold exactly what they withhold from the Claude loo
     for (const persona of personas) {
         const context = contextOf(cardsAnswering().cards, children);
         const claude = Object.keys(
-            harnessServers(deps, { input, context, persona, browser: NO_BROWSER, secrets: turnSecretAccess(deps, input, context.base.signal), hashlineEdits: false }),
+            harnessServers(deps, {
+                input,
+                context,
+                persona,
+                granted: [],
+                browser: NO_BROWSER,
+                secrets: turnSecretAccess(deps, input, context.base.signal),
+                hashlineEdits: false,
+            }),
         );
         const door = doorFor({ input, context, persona, granted: [], settings: SETTINGS });
         // The door adds only what the Claude loop mounts in agent.ts itself (`ui`), never a server the persona was denied.

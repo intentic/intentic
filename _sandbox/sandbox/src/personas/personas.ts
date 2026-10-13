@@ -97,6 +97,12 @@ const allowsCapability = (capability: Capability, persona: Persona, powers: Pers
             return powers.devices === undefined || powers.devices.includes(capability.id);
         case "mcp":
             return powers.mcp === undefined || powers.mcp.includes(capability.id);
+        // Making sandboxes on the owner's account is administering what this one runs beside: the sandbox shelf.
+        case "fleet":
+            return powers.sandbox;
+        // Handing a task to another of the owner's sandboxes is delegating it, as spawning a subagent is.
+        case "link":
+            return powers.delegate;
         default:
             return true;
     }
