@@ -275,6 +275,21 @@ export type ScratchPath = z.infer<typeof ScratchPathSchema>;
 // Whether a scratch entry covers `path`: a directory entry everything under it, a file entry only itself.
 export const isScratch = (path: string, scratch: readonly Pick<ScratchPath, "path">[]): boolean =>
     scratch.some((entry) => (entry.path.endsWith("/") ? path.startsWith(entry.path) : path === entry.path));
+// Apart from scratch, which is left out for its shape: these are left out because the repository says so, and the
+// owner usually wants them most (a render in `out/`, a build in `dist/`).
+export const IgnoredOutputKindSchema = z
+    .enum(["new", "changed"])
+    .describe("Whether your tree has nothing at this path yet, or holds a different file there that copying would replace.");
+export type IgnoredOutputKind = z.infer<typeof IgnoredOutputKindSchema>;
+export const IgnoredOutputSchema = z.object({
+    path: z.string().describe("Relative to its repository. Always one file, never a directory."),
+    kind: IgnoredOutputKindSchema,
+    bytes: z.number().describe("Its size in bytes."),
+});
+export type IgnoredOutput = z.infer<typeof IgnoredOutputSchema>;
+// How many ignored outputs one repository lists by name; past it they are only counted, since a turn that ran a build
+// can leave tens of thousands.
+export const IGNORED_OUTPUTS_LISTED = 200;
 export const RepoChangesSchema = z.object({
     // The {repo} param the per-repo git routes accept: "root" or a repo id (its root-relative dir).
     repo: z.string(),
@@ -501,6 +516,25 @@ export const AgentChangesSchema = z.object({
         .describe(
             "Untracked files the conversation left in its copy that look like scratch: logs, probe scripts, dumps, a checkout of its own. They are not in the list above and no merge carries them. They stay in its copy until they are included or deleted, and go with the copy when it is archived or retired. Absent when there are none.",
         ),
+    // Read off the live copy like scratch, and judged against the main tree as it stands now, so a file already copied
+    // over drops out.
+    ignored: z
+        .array(
+            z.object({
+                repo: z.string().describe("Which repository."),
+                paths: z.array(IgnoredOutputSchema).describe(`What it wrote there, sorted by path, at most ${IGNORED_OUTPUTS_LISTED} of them.`),
+                more: z
+                    .number()
+                    .optional()
+                    .describe(
+                        "How many more such files it wrote there past the listed ones. A floor, not an exact count, when the copy holds more files than are looked at. Absent when every one is listed.",
+                    ),
+            }),
+        )
+        .optional()
+        .describe(
+            "Files the conversation wrote in its copy that the repository's ignore rules exclude, such as a render in `out/` or a build in `dist/`, which your tree lacks or holds differently. No merge carries them and they never enter git; copying one puts it at the same path in your tree. Dependencies (`node_modules`), hidden files and folders, and logs, dumps and caches are never listed. Absent when there are none.",
+        ),
 });
 export type AgentChanges = z.infer<typeof AgentChangesSchema>;
 
@@ -521,6 +555,18 @@ export const AgentScratchSchema = z.object({
         .describe("Paths exactly as the review lists them under scratch, a directory with its trailing slash."),
 });
 export type AgentScratch = z.infer<typeof AgentScratchSchema>;
+
+// Names ignored outputs as `AgentChanges.ignored` lists them, one file each; a path that is not one now is refused.
+export const AgentIgnoredSchema = z.object({
+    id: z.string().min(1).describe("Which conversation."),
+    repo: z.string().min(1).describe("Which repository of its composition."),
+    paths: z
+        .array(z.string().min(1))
+        .min(1)
+        .max(MAX_ACTION_PATHS)
+        .describe("Paths exactly as the review lists them under ignored, each a file relative to the repository."),
+});
+export type AgentIgnored = z.infer<typeof AgentIgnoredSchema>;
 
 // Own read (a `git log` per repo), not folded into the review, whose rows are differences against main and these are
 // not. A commit CARRIES the work without authoring it: a path is attributed to the newest commit that left it there.

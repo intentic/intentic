@@ -24,6 +24,7 @@ import { type Operation, type RunOptions, useOperations } from "../../../workben
 import {
     agentWork,
     askAgentToResolve,
+    copyAgentIgnored,
     deleteAgentScratch,
     discardAgent,
     includeAgentScratch,
@@ -195,6 +196,9 @@ export function useAgentChanges(
 
     // What this conversation's copy keeps out of every land because it looks like scratch, per repo; never a row above.
     const scratch = computed(() => query.data.value?.scratch ?? []);
+
+    // What it wrote that the repository's ignore rules exclude, per repo: no land carries it, so it is copied over apart.
+    const ignored = computed(() => query.data.value?.ignored ?? []);
 
     // Per-repo package layout from the diff, not /workspace/modules: a new package may exist only in the worktree.
     const modulesByRepo = computed<ReadonlyMap<string, readonly WorkspaceModule[]>>(
@@ -430,6 +434,23 @@ export function useAgentChanges(
         });
     };
 
+    // Ignored outputs the review named, copied into the main tree one repository at a time; nothing is staged.
+    const copyIgnored = async (groups: readonly { readonly repo: string; readonly paths: readonly string[] }[]): Promise<void> => {
+        const id = agentId.value;
+        const box = reach.value;
+        await act(`ignored`, {
+            what: t(`agents.useAgentChanges.copyingIgnored`, { name: name() }),
+            failed: t(`agents.useAgentChanges.copyIgnoredFailed`),
+            task: async () => {
+                for (const group of groups) {
+                    // oxlint-disable-next-line eslint/no-await-in-loop -- one repository at a time, as the daemon copies
+                    await copyAgentIgnored(id, group.repo, group.paths, box);
+                }
+                await invalidateAgentAction(id, box);
+            },
+        });
+    };
+
     // Finishing with an agent rather than its work, the panel's counterpart to the board's archive action; the diff
     // still renders after archiving (re-read from the branch).
     const archive = async (): Promise<void> => {
@@ -449,6 +470,7 @@ export function useAgentChanges(
         absorbed,
         elsewhere,
         scratch,
+        ignored,
         pending,
         blocked,
         fixable,
@@ -478,6 +500,7 @@ export function useAgentChanges(
         discard,
         includeScratch,
         deleteScratch,
+        copyIgnored,
         archive,
         conflicts,
         resolving,

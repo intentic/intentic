@@ -26,7 +26,7 @@ import {
     LandResultSchema,
 } from "../schemas/agents.js";
 import { AgentsListSchema } from "../schemas/agents-list.js";
-import { AgentChangesSchema, AgentConflictsSchema, AgentScratchSchema, AgentHistorySchema } from "../schemas/git/git.js";
+import { AgentChangesSchema, AgentConflictsSchema, AgentIgnoredSchema, AgentScratchSchema, AgentHistorySchema } from "../schemas/git/git.js";
 import { FileDiffSchema } from "../schemas/history.js";
 import { OkSchema } from "../schemas/shared.js";
 import { AgentKeepWarmSchema } from "../schemas/keep-warm.js";
@@ -293,6 +293,18 @@ export const agentsContract = {
                 "Removes files the review lists as scratch from the conversation's copy. Nothing else is touched, and nothing of it was ever merged. Refused while a turn is running, and for a path that is not scratch right now.",
         })
         .input(AgentScratchSchema)
+        .output(OkSchema),
+    // Copied, never staged: an ignored file is ignored for a reason (a render past GitHub's file limit), so it reaches
+    // the owner's tree beside git rather than through it.
+    copyIgnored: procedure
+        .route({
+            method: "POST",
+            path: "/agents/{id}/ignored/copy",
+            summary: "Copy files your .gitignore excludes from a conversation's copy into your tree",
+            description:
+                "Takes files the review lists as ignored and copies each to the same path in your tree, making the folders it needs and replacing a different file already there. Nothing is staged or committed, and the conversation's copy keeps its own. Refused while a turn is running, for a path that leaves the repository, and for a path that is not an ignored file the conversation wrote. A file your tree already holds as it is is left alone.",
+        })
+        .input(AgentIgnoredSchema)
         .output(OkSchema),
     land: procedure
         .route({

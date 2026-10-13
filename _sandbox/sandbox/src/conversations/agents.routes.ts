@@ -15,6 +15,7 @@ import { conversationLines, matchLines } from "../sessions/transcript-search.js"
 import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
 import { pruneEmptiedDirs } from "../git/changes/changes-index.js";
 import { scratchScopeOf } from "../git/changes/scratch.js";
+import { copyIntoMain, ignoredSkipOf, namedIgnoredOutputs } from "../git/changes/ignored-outputs.js";
 import { anchorOf } from "./land/agent-changes.js";
 import { historyOf, liveConflicts, reviewOf } from "./land/review.js";
 import { type IsolatedAgent, isIsolated, type PersistedAgent } from "./registry/agents-store.js";
@@ -485,6 +486,32 @@ export const createAgentsRoutes = (services: Services) => {
                 dir,
                 named.map((entry) => entry.path.replace(/\/$/, "")),
             );
+            return { ok: true } as const;
+        }),
+        // Copied beside git, never staged: the main tree gets the file at the same path and the index never hears of it.
+        // Each path is judged now, not as the review drew it: one that leaves the repository is a bad request, and one
+        // that is no ignored file of the conversation's that main lacks or holds differently has changed since. One main
+        // already holds as it is needs no copy.
+        copyIgnored: i.copyIgnored.handler(async ({ input, context }) => {
+            const entry = isolatedEntryOf(input.id, context);
+            notRunning(input.id);
+            if (!entry.placement.repos.some((composed) => composed.repo === input.repo)) {
+                throw new ORPCError("NOT_FOUND", { message: "repo not in this agent's composition" });
+            }
+            if (!(await services.agentWorktrees.attached(entry.id, input.repo))) {
+                throw new ORPCError("CONFLICT", { message: "this conversation's copy is gone, and the files it kept there went with it" });
+            }
+            const dir = services.agentWorktrees.worktreeDir(entry.id, input.repo);
+            const main = services.agentWorktrees.mainDir(input.repo);
+            const skip = await ignoredSkipOf(input.repo, services.agentWorktrees.mainDir("root"));
+            const { outside, not, named } = await namedIgnoredOutputs(dir, main, input.paths, skip);
+            if (outside.length > 0) {
+                throw new ORPCError("BAD_REQUEST", { message: `outside the repository: ${outside.join(", ")}` });
+            }
+            if (not.length > 0) {
+                throw new ORPCError("CONFLICT", { message: `not an ignored file this conversation wrote: ${not.join(", ")}` });
+            }
+            await copyIntoMain(dir, main, named);
             return { ok: true } as const;
         }),
         // Manual land, the recovery path after a conflicted or aborted auto-land; same patch-apply mechanics.

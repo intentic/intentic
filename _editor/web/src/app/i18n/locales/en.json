@@ -181,6 +181,15 @@
             "size": "{count} file, {size} | {count} files, {size}",
             "title": "{count} path left out of the land as scratch | {count} paths left out of the land as scratch"
         },
+        "agentIgnoredReport": {
+            "changed": "replaces a different one in your tree",
+            "copy": "Copy into my tree",
+            "copyAll": "Copy all into my tree",
+            "hint": "Each one goes to the same path in your tree. Git never sees it, and this conversation keeps its own.",
+            "more": "{count} more not listed here | {count} more not listed here",
+            "new": "new",
+            "title": "This conversation also wrote {count} file your .gitignore excludes. It won't land on its own. | This conversation also wrote {count} files your .gitignore excludes. They won't land on their own."
+        },
         "agentSessionMenu": {
             "agentStillWritingYoull": "The agent is still writing: you'll be asked to confirm",
             "agentStillWritingYoull2": "The agent is still writing, you'll be asked to confirm",
@@ -701,6 +710,7 @@
             "discardFailed": "Discard failed.",
             "includeScratchFailed": "Couldn't add it to the work.",
             "deleteScratchFailed": "Couldn't delete it.",
+            "copyIgnoredFailed": "Couldn't copy it into your tree.",
             "archiveFailed": "Archive failed.",
             "landing": "Landing {name}",
             "landed": "Landed {name} in your workspace",
@@ -711,6 +721,7 @@
             "discarded": "Discarded {name}'s work",
             "includingScratch": "Adding files to {name}'s work",
             "deletingScratch": "Deleting files from {name}'s copy",
+            "copyingIgnored": "Copying files from {name}'s copy into your tree",
             "archiving": "Archiving {name}",
             "otherStaged": "You have {count} other change staged, and saving these settings would commit it too. Commit or unstage it in Changes first, then try again. | You have {count} other changes staged, and saving these settings would commit them too. Commit or unstage them in Changes first, then try again."
         },

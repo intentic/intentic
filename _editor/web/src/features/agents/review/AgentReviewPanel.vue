@@ -43,6 +43,7 @@ import { addedIn, sumCode, sumShown, useChangeWeight, type ShownStat } from "../
 import ChangeRowName from "../../../components/ChangeRowName.vue";
 import ModuleLabel from "../../../components/ModuleLabel.vue";
 import AgentConflictReport from "./AgentConflictReport.vue";
+import AgentIgnoredReport from "./AgentIgnoredReport.vue";
 import AgentScratchReport from "./AgentScratchReport.vue";
 import AgentHistoryChip from "./AgentHistoryChip.vue";
 import AgentReviewOutline from "./AgentReviewOutline.vue";
@@ -684,6 +685,17 @@ const seamWidth = computed<number>({
             :streaming="streaming"
             @include="changes.includeScratch"
             @delete="changes.deleteScratch"
+        />
+
+        <!-- What no land carries because the repository ignores it (a render in out/): copied into the owner's tree on a
+             press, beside git rather than through it. -->
+        <AgentIgnoredReport
+            v-if="changes.ignored.value.length > 0"
+            class="mx-2 mt-2"
+            :ignored="changes.ignored.value"
+            :busy="changes.actionBusy.value"
+            :streaming="streaming"
+            @copy="changes.copyIgnored"
         />
 
         <!-- What landing this work takes on: one quiet line per manifest. Nothing is wrong, so nothing is tinted. -->

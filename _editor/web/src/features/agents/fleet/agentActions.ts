@@ -354,6 +354,12 @@ export const deleteAgentScratch = async (id: string, repo: string, paths: readon
     await sandboxRpc.agents.deleteScratch({ id, repo, paths: [...paths] }, { context: { at } });
 };
 
+// Ignored outputs are what the conversation wrote that the repository's ignore rules exclude (AgentChanges.ignored).
+// Copying puts each at the same path in the main tree, beside git rather than through it; named as the review listed.
+export const copyAgentIgnored = async (id: string, repo: string, paths: readonly string[], at: AgentReach = undefined): Promise<void> => {
+    await sandboxRpc.agents.copyIgnored({ id, repo, paths: [...paths] }, { context: { at } });
+};
+
 // The card a press acts on, from whichever roster it came from.
 const cardAt = (id: string, at: AgentReach): (AgentStanding & { readonly run?: string }) | undefined =>
     at === undefined ? useAgents().agentById(id) : otherBoxes.value.find((box) => box.sandbox.id === at)?.agents.find((agent) => agent.id === id);

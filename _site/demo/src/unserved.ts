@@ -270,6 +270,7 @@ export const UNSERVED = {
     "agent.rewind": UNSIMULATED_WRITE,
     "agent.routeChat": UNSIMULATED_WRITE,
     "agent.switchAccount": UNSIMULATED_WRITE,
+    "agents.copyIgnored": UNSIMULATED_WRITE,
     "agents.deleteScratch": UNSIMULATED_WRITE,
     "agents.includeScratch": UNSIMULATED_WRITE,
     "agents.place": UNSIMULATED_WRITE,

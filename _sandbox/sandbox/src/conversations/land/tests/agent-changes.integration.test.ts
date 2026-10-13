@@ -349,3 +349,29 @@ test("the review's row carries the new dependencies, and says nothing of them wh
     const adding = await reviewOf(deps, isolatedAgent(conversation.repos));
     expect(adding.repos[0]?.addedDependencies).toEqual([{ path: "package.json", added: ["remotion"] }]);
 });
+
+// What the owner most wants is often what the repository ignores (a render in `out/`): no land carries it, so the review
+// names it apart, judged against the main tree as it stands.
+test("an ignored file the conversation wrote never lands, and the review lists it apart until main holds it", async () => {
+    const { work, worktrees, conversation } = await setup({ ".gitignore": "out/\nnode_modules/\n" });
+    const deps = { agentWorktrees: worktrees, agents: unstubbed<Services["agents"]>("agents", {}), logger };
+    await writeTree(conversation.cwd, {
+        "out/film.mp4": "render",
+        "out/poster.png": "poster",
+        "node_modules/dep/index.js": "module.exports = 1;\n",
+        "feature.ts": "export {};\n",
+    });
+    // Already in main as it is: nothing of the conversation's.
+    await writeTree(work, { "out/poster.png": "poster" });
+    const agent = isolatedAgent(conversation.repos);
+
+    const result = await landAgent(worktrees, agent);
+
+    expect(result.landed).toBe(true);
+    const shown = await reviewOf(deps, agent);
+    expect(shown.ignored).toEqual([{ repo: "root", paths: [{ path: "out/film.mp4", kind: "new", bytes: 6 }] }]);
+    expect(shown.repos.flatMap((row) => row.changes.map((change) => change.path))).toEqual(["feature.ts"]);
+
+    await writeTree(work, { "out/film.mp4": "render" });
+    expect(await reviewOf(deps, agent)).not.toHaveProperty("ignored");
+});

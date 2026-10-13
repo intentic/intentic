@@ -13,13 +13,15 @@ import { headSha } from "../../git/changes/changes.js";
 import { materializedPaths } from "../../git/changes/changes-porcelain.js";
 import type { IsolatedAgent, RepoRecord } from "../registry/agents-store.js";
 import { strayStandings } from "../worktrees/stray-work.js";
-import { agentRepoChanges, agentRepoModules, agentRepoReview, anchorOf, presentInMain } from "./agent-changes.js";
+import { NO_IGNORED_OUTPUTS, type IgnoredOutputs } from "../../git/changes/ignored-outputs.js";
+import { agentIgnoredOutputs, agentRepoChanges, agentRepoModules, agentRepoReview, anchorOf, presentInMain } from "./agent-changes.js";
 import { intoOf, landTargetOf } from "./land-target.js";
 import { dirtyPaths, outstandingConflicts } from "./land.js";
 import { commitsCarrying, historySpanStart } from "./landed-history.js";
 
 // What a conversation's review reads, against main as it stands: the rows still its own, what main absorbed, the scratch
-// its live copy keeps, the conflicts a land would meet, and the commits that carried what already landed.
+// its live copy keeps, the ignored files it wrote, the conflicts a land would meet, and the commits that carried what
+// already landed.
 
 export type ReviewDeps = Pick<Services, "agentWorktrees" | "agents" | "logger">;
 
@@ -27,6 +29,33 @@ export type ReviewDeps = Pick<Services, "agentWorktrees" | "agents" | "logger">;
 const scratchField = (scratch: NonNullable<AgentChanges["scratch"]>): Pick<AgentChanges, "scratch"> => {
     const some = scratch.filter((repo) => repo.paths.length > 0);
     return some.length > 0 ? { scratch: some } : {};
+};
+
+// The review's `ignored`: repos with nothing to offer left out, `more` only past the listing, and the field absent when
+// no repo has any.
+const ignoredField = (outputs: readonly { readonly repo: string; readonly outputs: IgnoredOutputs }[]): Pick<AgentChanges, "ignored"> => {
+    const some: NonNullable<AgentChanges["ignored"]> = [];
+    for (const { repo, outputs: found } of outputs) {
+        if (found.paths.length === 0 && found.more === 0) {
+            continue;
+        }
+        const group: NonNullable<AgentChanges["ignored"]>[number] = { repo, paths: found.paths };
+        if (found.more > 0) {
+            group.more = found.more;
+        }
+        some.push(group);
+    }
+    return some.length > 0 ? { ignored: some } : {};
+};
+
+// Read beside the rows, never in their way: a copy whose ignored files cannot be read still shows its work.
+const ignoredOf = async (deps: ReviewDeps, entry: IsolatedAgent, composed: RepoRecord): Promise<IgnoredOutputs> => {
+    try {
+        return await agentIgnoredOutputs(deps.agentWorktrees, entry, composed);
+    } catch (error) {
+        deps.logger.warn({ err: error, repo: composed.repo, id: entry.id }, "agents diff: ignored outputs unreadable");
+        return NO_IGNORED_OUTPUTS;
+    }
 };
 
 const NONE: ReadonlySet<string> = new Set();
@@ -131,7 +160,10 @@ export const liveConflicts = async (deps: ReviewDeps, entry: IsolatedAgent): Pro
           : await outstandingConflicts(deps.agentWorktrees, entry, intoOf(await landTargetOf(deps, entry)));
 // What a conversation's review shows right now, its repos read side by side and kept in composition order.
 export const reviewOf = async (deps: ReviewDeps, entry: IsolatedAgent): Promise<AgentChanges> => {
-    const parts = await Promise.all(entry.placement.repos.map((composed) => repoReviewOf(deps, entry, composed)));
+    const [parts, outputs] = await Promise.all([
+        Promise.all(entry.placement.repos.map((composed) => repoReviewOf(deps, entry, composed))),
+        Promise.all(entry.placement.repos.map(async (composed) => ({ repo: composed.repo, outputs: await ignoredOf(deps, entry, composed) }))),
+    ]);
     const repos = parts.flatMap((part) => (part.row === undefined ? [] : [part.row]));
     const absorbed = parts.reduce((total, part) => total + part.absorbed, 0);
     const scratch = entry.placement.repos.map((composed, index) => ({ repo: composed.repo, paths: parts[index]?.scratch ?? [] }));
@@ -144,6 +176,7 @@ export const reviewOf = async (deps: ReviewDeps, entry: IsolatedAgent): Promise<
         repos,
         absorbed,
         ...scratchField(scratch),
+        ...ignoredField(outputs),
         ...(conflicts.length > 0 ? { conflicts } : {}),
         ...(elsewhere.length > 0 ? { elsewhere } : {}),
     };

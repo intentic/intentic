@@ -47,6 +47,9 @@ const KEPT_HIDDEN_DIRS = new Set([
 const BYPRODUCT_EXTENSIONS = new Set([".bak", ".cpuprofile", ".heapprofile", ".heapsnapshot", ".log", ".orig", ".pid", ".rej", ".swo", ".swp", ".tmp"]);
 const BYPRODUCT_NAMES = new Set([".DS_Store", "Thumbs.db"]);
 
+// Whether a file's own name marks it a by-product; shared with the ignored outputs, which leave the same files out.
+export const isByproductName = (name: string): boolean => BYPRODUCT_NAMES.has(name) || BYPRODUCT_EXTENSIONS.has(extname(name).toLowerCase());
+
 // Bytes: the size GitHub starts warning at, past which a new file is a dump or a download rather than source.
 export const OVERSIZED_BYTES = 50 * 1024 * 1024;
 
@@ -80,7 +83,7 @@ const directoryReason = (path: string): ScratchReason | undefined => {
 
 const fileReason = (path: string, bytes: number, scope: ScratchScope): ScratchReason | undefined => {
     const name = nameOf(path);
-    if (BYPRODUCT_NAMES.has(name) || BYPRODUCT_EXTENSIONS.has(extname(name).toLowerCase())) {
+    if (isByproductName(name)) {
         return "byproduct";
     }
     if (bytes > OVERSIZED_BYTES) {

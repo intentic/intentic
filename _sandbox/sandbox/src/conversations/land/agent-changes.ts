@@ -6,6 +6,7 @@ import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { changesAgainstBase, changesBetweenRefs, headSha } from "../../git/changes/changes.js";
 import { materializedPaths } from "../../git/changes/changes-porcelain.js";
 import { scratchOf, scratchScopeOf } from "../../git/changes/scratch.js";
+import { ignoredOutputsOf, ignoredSkipOf, NO_IGNORED_OUTPUTS, type IgnoredOutputs } from "../../git/changes/ignored-outputs.js";
 import { refAgainstRef, withCodeCounts, worktreeAgainstRef } from "../../git/changes/code-counts.js";
 import { readModules } from "../../workspace/deps/modules.js";
 import type { IsolatedAgent, RepoRecord } from "../registry/agents-store.js";
@@ -123,6 +124,21 @@ const agentRepoScope = async (
         ),
         scratch: attached ? await scratchOf(dir, await scratchScopeOf(composed.repo, worktrees.mainDir("root")), git) : [],
     };
+};
+
+// The ignored files a repo's live copy holds that the main tree lacks or holds differently (ignored-outputs.ts); none
+// once the copy is gone, since they went with it. Asked only by the review: a land never carries them.
+export const agentIgnoredOutputs = async (
+    worktrees: AgentWorktrees,
+    entry: IsolatedAgent,
+    composed: RepoRecord,
+    git: GitRunner = defaultGit,
+): Promise<IgnoredOutputs> => {
+    if (!(await worktrees.attached(entry.id, composed.repo))) {
+        return NO_IGNORED_OUTPUTS;
+    }
+    const skip = await ignoredSkipOf(composed.repo, worktrees.mainDir("root"));
+    return ignoredOutputsOf(worktrees.worktreeDir(entry.id, composed.repo), worktrees.mainDir(composed.repo), skip, git);
 };
 
 // A repo's review: its rows, plus the scratch its live copy keeps out of every land.

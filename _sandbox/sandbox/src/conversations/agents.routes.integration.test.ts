@@ -149,6 +149,19 @@ test("scratch include and delete refuse a foreign repo and a path that is not sc
     expect(await errorCode(client.agents.deleteScratch({ id: "conv1", repo: "root", paths: [".trun/"] }))).toBe("CONFLICT");
 });
 
+// Ignored outputs are copied into the owner's tree, so a named path is judged before anything is read: one that leaves
+// the repository is refused outright, and one that cannot be an output (hidden, like `.env`) is refused as stale.
+test("copying ignored outputs refuses a workspace conversation, a foreign repo, a path that leaves the repository and a hidden file", async () => {
+    const client = clientFor(createApp(services()));
+    await runAgentTurn(client, { prompt: "fix it", conversationId: "conv1", isolated: true });
+    await runAgentTurn(client, { prompt: "fix it", conversationId: "workspace-conv" });
+
+    expect(await errorCode(client.agents.copyIgnored({ id: "workspace-conv", repo: "root", paths: ["out/film.mp4"] }))).toBe("BAD_REQUEST");
+    expect(await errorCode(client.agents.copyIgnored({ id: "conv1", repo: "elsewhere", paths: ["out/film.mp4"] }))).toBe("NOT_FOUND");
+    expect(await errorCode(client.agents.copyIgnored({ id: "conv1", repo: "root", paths: ["../escape.txt"] }))).toBe("BAD_REQUEST");
+    expect(await errorCode(client.agents.copyIgnored({ id: "conv1", repo: "root", paths: [".env"] }))).toBe("CONFLICT");
+});
+
 test("including scratch stages it in the conversation's copy, and a checkout of its own is refused", async () => {
     const staged: string[] = [];
     const daemon = services({

@@ -181,6 +181,15 @@
             "size": "{count} plik, {size} | {count} pliki, {size} | {count} plików, {size}",
             "title": "{count} ścieżka pominięta przy scalaniu jako plik roboczy | {count} ścieżki pominięte przy scalaniu jako pliki robocze | {count} ścieżek pominiętych przy scalaniu jako pliki robocze"
         },
+        "agentIgnoredReport": {
+            "changed": "zastąpi inny plik w Twoim drzewie",
+            "copy": "Skopiuj do mojego drzewa",
+            "copyAll": "Skopiuj wszystkie do mojego drzewa",
+            "hint": "Każdy trafia pod tę samą ścieżkę w Twoim drzewie. Git go nie widzi, a ta rozmowa zachowuje swoją kopię.",
+            "more": "{count} kolejny nie jest tu wymieniony | {count} kolejne nie są tu wymienione | {count} kolejnych nie jest tu wymienionych",
+            "new": "nowy",
+            "title": "Ta rozmowa zapisała też {count} plik wykluczony przez Twój .gitignore. Nie zostanie scalony sam. | Ta rozmowa zapisała też {count} pliki wykluczone przez Twój .gitignore. Nie zostaną scalone same. | Ta rozmowa zapisała też {count} plików wykluczonych przez Twój .gitignore. Nie zostaną scalone same."
+        },
         "agentSessionMenu": {
             "agentStillWritingYoull": "Agent wciąż pisze: poprosimy Cię o potwierdzenie",
             "agentStillWritingYoull2": "Agent wciąż pisze, poprosimy Cię o potwierdzenie",
@@ -701,6 +710,7 @@
             "discardFailed": "Nie udało się odrzucić zmian.",
             "includeScratchFailed": "Nie udało się dodać tego do pracy.",
             "deleteScratchFailed": "Nie udało się tego usunąć.",
+            "copyIgnoredFailed": "Nie udało się skopiować tego do Twojego drzewa.",
             "archiveFailed": "Nie udało się zarchiwizować.",
             "landing": "Scalanie: {name}",
             "landed": "Scalono {name} do przestrzeni roboczej",
@@ -711,6 +721,7 @@
             "discarded": "Odrzucono pracę: {name}",
             "includingScratch": "Dodawanie plików do pracy: {name}",
             "deletingScratch": "Usuwanie plików z kopii: {name}",
+            "copyingIgnored": "Kopiowanie plików z kopii do Twojego drzewa: {name}",
             "archiving": "Archiwizowanie: {name}",
             "otherStaged": "Masz {count} inną zmianę przygotowaną do commita, a zapisanie tych ustawień zacommitowałoby ją razem z nimi. Najpierw zacommituj ją albo cofnij jej przygotowanie w Zmianach, potem spróbuj ponownie. | Masz {count} inne zmiany przygotowane do commita, a zapisanie tych ustawień zacommitowałoby je razem z nimi. Najpierw zacommituj je albo cofnij ich przygotowanie w Zmianach, potem spróbuj ponownie. | Masz {count} innych zmian przygotowanych do commita, a zapisanie tych ustawień zacommitowałoby je razem z nimi. Najpierw zacommituj je albo cofnij ich przygotowanie w Zmianach, potem spróbuj ponownie."
         },
