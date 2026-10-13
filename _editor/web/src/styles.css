@@ -264,21 +264,22 @@
     --session-card-fill-hi: color-mix(in oklab, var(--color-overlay) 58%, var(--color-card));
     --session-card-fill-lo: color-mix(in oklab, var(--color-overlay) 26%, var(--color-card));
 }
-/* CARD GROUND IN DAYLIGHT steps by the ink, not toward overlay. Overlay lies a hair off the card there (1.06:1: near-white
-   paper has no room above it), so the two stops above left a rail row in the chat panel at ~1.03:1, a card found only by
-   its words. A row on a light panel is a sheet laid a shade darker, as a rule on it is an ink (semantic-colors.css), and
-   the pointer and the press go on darkening it rather than lifting it back toward the panel. */
+/* CARD GROUND IN DAYLIGHT steps toward the canvas's cream, not toward overlay. Overlay lies a hair off the card there
+   (1.06:1: near-white paper has no room above it), so the two stops above left a rail row in the chat panel at ~1.03:1,
+   a card found only by its words. Stepping by the ink found it but greyed it: a light card is a softer, warmer sheet of
+   the same paper, so the stops lean on the canvas and take a breath more of the room's tint, and the pointer and the
+   press go on into that cream rather than lifting back toward the panel. */
 :root:not([data-mode="dark"]) .ground-card .session-card {
-    --session-card-fill-hi: color-mix(in oklab, var(--color-content) 6.5%, var(--color-card));
-    --session-card-fill-lo: color-mix(in oklab, var(--color-content) 4%, var(--color-card));
+    --session-card-fill-hi: color-mix(in oklab, color-mix(in oklab, var(--color-canvas) 80%, var(--color-card)), var(--paper-tint) 7%);
+    --session-card-fill-lo: color-mix(in oklab, color-mix(in oklab, var(--color-canvas) 50%, var(--color-card)), var(--paper-tint) 4%);
 }
 @media (hover: hover) {
     :root:not([data-mode="dark"]) .ground-card .session-card:hover {
-        --card-fill: color-mix(in oklab, var(--color-content) 8.5%, var(--color-card));
+        --card-fill: color-mix(in oklab, var(--color-canvas), var(--paper-tint) 9%);
     }
 }
 :root:not([data-mode="dark"]) .ground-card .session-card:active {
-    --card-fill: color-mix(in oklab, var(--color-content) 10.5%, var(--color-card));
+    --card-fill: color-mix(in oklab, var(--color-canvas), var(--paper-tint) 14%);
 }
 @media (hover: hover) {
     :is(.agents-board, .ground-card, .ground-canvas) .session-card:hover {
