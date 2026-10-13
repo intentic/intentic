@@ -8,14 +8,15 @@ import { Button, Icon, ProgressRing, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
-import { localHost, type LocalMachineAction } from "../app/environments/localHost";
+import { localHost } from "../app/environments/localHost";
 import AgentHouse from "./house/AgentHouse.vue";
+import { runMachineAction } from "./machineAction";
 import type { MachineCardAction } from "./machineCard";
 import { useLocalProject } from "./useLocalProject";
 
 const t = useT();
 const router = useRouter();
-const { card, minimized, fold, retryFolder, open, dismiss, pressed, actionFailure } = useLocalProject();
+const { card, minimized, fold, dismiss, actionFailure, attention } = useLocalProject();
 const project = localHost().project;
 
 const tone = computed(() => card.value?.tone ?? `working`);
@@ -28,30 +29,8 @@ const actions = computed(() => (card.value?.actions ?? []).filter((action) => ac
 // What each press is called: the folder's "Try again" is the sandbox's word for it.
 const label = (action: MachineCardAction): string => t(`local.machine.action.${action === `retryFolder` ? `retry` : action}`);
 
-// What each press does: the app's verbs through the host, this computer's page in this window.
-const APP_VERBS: ReadonlySet<MachineCardAction> = new Set<LocalMachineAction>([`signIn`, `startDocker`, `retry`, `log`, `start`, `recreate`]);
-const isAppVerb = (action: MachineCardAction): action is LocalMachineAction => APP_VERBS.has(action);
-
-// Handed back to the button, whose press lock holds it for as long as the press runs: a start of the engine takes minutes,
-// and a second press meanwhile would only start it again. What it came to is said on the card (`actionFailure`).
-const run = (action: MachineCardAction): Promise<void> | undefined => {
-    if (action === `details`) {
-        if (project !== undefined) {
-            void router.push(project.detailsPath);
-        }
-        return undefined;
-    }
-    if (action === `open`) {
-        return open();
-    }
-    if (action === `retryFolder`) {
-        return retryFolder();
-    }
-    if (project !== undefined && isAppVerb(action)) {
-        return pressed(() => project.act(action));
-    }
-    return undefined;
-};
+// What each press does: the same verbs the folder's own button offers (machineAction.ts).
+const run = (action: MachineCardAction): Promise<void> | undefined => runMachineAction(action, (path) => void router.push(path));
 </script>
 
 <template>
@@ -77,7 +56,12 @@ const run = (action: MachineCardAction): Promise<void> | undefined => {
             </button>
         </div>
 
-        <div v-else class="overflow-hidden rounded-lg border border-line-strong bg-card shadow-lg">
+        <!-- `attention`: asked for while already open, so the press that asked has something to show for itself. -->
+        <div
+            v-else
+            class="overflow-hidden rounded-lg border border-line-strong bg-card shadow-lg transition-shadow duration-200"
+            :class="attention ? `ring-2 ring-primary-500` : ``"
+        >
             <!-- The house, on its own ground: the card's picture, drawn by the setup's real progress. -->
             <div class="border-b border-line bg-canvas px-4 pb-1.5 pt-4">
                 <AgentHouse :stage="card.stage" :paused="tone === `waiting`" :failed="tone === `failed`" class="mx-auto h-auto max-h-28 w-full" />

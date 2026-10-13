@@ -47,9 +47,14 @@ export const readAuthLink = (link: string): AuthLink | undefined => {
     return { handoff, state, ...(profile === null ? {} : { profile }) };
 };
 
-/** auth.rs `complete_path`: where the app points its workspace window once the browser hands the sign-in back. */
-export const completePath = (handoff: string, verifier: string, profile?: string): string =>
-    `/desktop-auth/complete?handoff=${handoff}&verifier=${verifier}${profile === undefined ? `` : `&profile=${profile}`}`;
+/**
+ * auth.rs `complete_path`: where the app points its workspace window once the browser hands the sign-in back.
+ *
+ * `fromLocal` is a sign-in that began in a local window — a folder's "Work on this with an agent". The redemption
+ * happens here either way; `back=agent` is what sends the reader back to that folder afterwards.
+ */
+export const completePath = (handoff: string, verifier: string, profile?: string, fromLocal = false): string =>
+    `/desktop-auth/complete?handoff=${handoff}&verifier=${verifier}${profile === undefined ? `` : `&profile=${profile}`}${fromLocal ? `&back=agent` : ``}`;
 
 /**
  * What Tauri injects into each of the app's windows before any script (`window.__INTENTIC_DESKTOP__`,

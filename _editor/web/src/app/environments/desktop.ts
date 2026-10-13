@@ -149,6 +149,14 @@ export const DESKTOP_LAUNCHER_LINK = `intentic://launcher`;
    bare link, which is this computer too. */
 export const openThisComputer = (): void => openDesktopLink(`${DESKTOP_LAUNCHER_LINK}?to=files`);
 
+/* THE WAY BACK FROM A SIGN-IN THAT BEGAN ON A FOLDER (auth.rs `complete_path`, which writes `back=agent` onto the
+   completion this page is). The redemption has to happen here, in the workspace window, because that is where the
+   platform's session cookie is set; this hands the reader back to the folder they actually asked about. Where they land
+   is the app's to decide at the press, against this computer's sandbox as it stands then: This device while it is
+   stopped on them, the folder while it is coming up by itself. An app that predates `to=agent` reads the bare link,
+   which is This device — which is where such a reader is wanted anyway. */
+export const openAgentOnThisComputer = (): void => openDesktopLink(`${DESKTOP_LAUNCHER_LINK}?to=agent`);
+
 /* `frameless` above says the window arrived without a platform frame; these are the presses that work it. */
 export type DesktopWindowVerb = "ready" | "minimize" | "maximize" | "close" | "drag" | "raise";
 

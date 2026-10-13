@@ -121,9 +121,34 @@ describe(`the folder's own button`, () => {
             busy: true,
             press: `card`,
         });
-        expect(folderButtonOf({ hasSandbox: false, machine: at({ state: `needsDocker`, reason: `notRunning` }), folder: folderAt(`queued`) }).label).toBe(
-            `Waiting for this computer's sandbox`,
-        );
+        // Picked up after a quit: under way again, with nothing to ask of anyone.
+        expect(folderButtonOf({ hasSandbox: false, machine: at({ state: `interrupted` }), folder: folderAt(`queued`) })).toEqual({
+            label: `Waiting for this computer's sandbox`,
+            busy: true,
+            press: `card`,
+        });
+        // Before the app has said anything at all.
+        expect(folderButtonOf({ hasSandbox: false, machine: undefined, folder: folderAt(`queued`) })).toEqual({
+            label: `Waiting for this computer's sandbox`,
+            busy: true,
+            press: `card`,
+        });
+    });
+
+    // The report this came from: a PC waiting for its own setup said "Waiting for this computer's sandbox", and the
+    // press unfolded a card that was already open, so the one button in the window did nothing at all.
+    it(`is the next step itself, wherever the sandbox is stopped on the reader rather than on itself`, () => {
+        const next = (state: LocalMachineState) => folderButtonOf({ hasSandbox: false, machine: at(state), folder: folderAt(`queued`) });
+        // This PC's own setup, Docker missing, Docker turned away: all of them are This computer, named by what it is for.
+        expect(next({ state: `waiting`, for: `consent` })).toEqual({ label: `Set this computer up for agents`, busy: false, press: `details` });
+        expect(next({ state: `needsDocker`, reason: `notInstalled` })).toEqual({ label: `Set this computer up for agents`, busy: false, press: `details` });
+        expect(next({ state: `needsDocker`, reason: `notAllowed` }).press).toBe(`details`);
+        // Docker is started on the reader's press, so the button is that press rather than a word about waiting.
+        expect(next({ state: `needsDocker`, reason: `notRunning` })).toEqual({ label: `Start Docker`, busy: false, press: `startDocker` });
+        expect(next({ state: `signedOut` })).toEqual({ label: `Sign in`, busy: false, press: `signIn` });
+        expect(next({ state: `failed`, reason: `docker refused` })).toEqual({ label: `Try again`, busy: false, press: `retry` });
+        expect(next({ state: `stopped` })).toEqual({ label: `Start`, busy: false, press: `start` });
+        expect(next({ state: `gone` })).toEqual({ label: `Set it up again`, busy: false, press: `recreate` });
     });
 
     it(`copies, then opens the sandbox once the folder is in`, () => {

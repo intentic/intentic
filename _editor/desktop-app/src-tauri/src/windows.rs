@@ -12,7 +12,7 @@ use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::commands::SetupReport;
-use crate::setup_link::{parse_link, Link, NoticeVerb, SetupArgs, Source, WindowVerb};
+use crate::setup_link::{parse_link, LauncherTo, Link, NoticeVerb, SetupArgs, Source, WindowVerb};
 use crate::state::{AppState, CloseAction, Face, Mode};
 
 /* ONE WINDOW OF THE APP ON SCREEN — these two labels are two FACES of it, not two windows: the hosted workspace, and
@@ -2133,8 +2133,9 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
             show_device(app);
             let _ = tauri::Emitter::emit(app, "desktop://pending-sync", ());
         }
+        // Asked for by link rather than by a window's press: the workspace's own road back in, so it ends there.
         Some(Link::SignIn { switch_account }) => {
-            if let Err(error) = crate::auth::start(app, switch_account) {
+            if let Err(error) = crate::auth::start(app, switch_account, false) {
                 eprintln!("{error}");
             }
         }
@@ -2149,11 +2150,31 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
         }
         // The workspace's way back to this computer: This device (a setup page's way back to the run it handed over,
         // a sandbox's "restart in the app"), or the folder itself (the sandbox switcher's "This computer").
-        Some(Link::Launcher { files: true }) => {
+        Some(Link::Launcher {
+            to: LauncherTo::Files,
+        }) => {
             app.state::<AppState>().remember_last_face(Face::Home);
             show_home_at(app, Some(FILES_ROUTE), Keyboard::Take);
         }
-        Some(Link::Launcher { files: false }) => show_device(app),
+        Some(Link::Launcher {
+            to: LauncherTo::Device,
+        }) => show_device(app),
+        // The way back from a sign-in that began on a folder (auth.rs `complete_path`): the folder asked for an agent,
+        // so the reader is put down wherever that is standing right now — This device while this computer's sandbox is
+        // stopped on them, which is where its card is answered, and the folder itself while it is coming up by itself.
+        Some(Link::Launcher {
+            to: LauncherTo::Agent,
+        }) => {
+            if crate::machine_sandbox::status(app)
+                .standing
+                .wants_the_reader()
+            {
+                show_device(app);
+            } else {
+                app.state::<AppState>().remember_last_face(Face::Home);
+                show_home_at(app, Some(FILES_ROUTE), Keyboard::Take);
+            }
+        }
         // The setup page took this sandbox to a machine of ours: the main window stops the install it runs for it, if it
         // runs one, as the card's own Stop does (src/device/setup.ts `stopForHosted`). Nothing is shown or swapped: the
         // reader stays on that page, watching the machine start.

@@ -2,6 +2,7 @@
 import { Button, Icon, type Tip, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, onMounted, onUnmounted, provide, ref, watch } from "vue";
+import { useRouter } from "vue-router";
 import { askLocalApp, LOCAL_OPEN_EVENT, localFace } from "../app/environments/local";
 import { useExtensionHost } from "../extension-host/useExtensionHost";
 import WorkspaceTree from "../features/workspace/explorer/WorkspaceTree.vue";
@@ -28,6 +29,7 @@ import { useQuietChecks } from "./bring-back/useBringBack";
 import LocalEmptyFolder from "./LocalEmptyFolder.vue";
 import LocalFolderMenu from "./LocalFolderMenu.vue";
 import { type LocalChord, localChord } from "./localKeys";
+import { runMachineAction } from "./machineAction";
 import { folderButtonOf } from "./machineCard";
 import { nameOf } from "./places";
 import { useLocalProject } from "./useLocalProject";
@@ -130,20 +132,39 @@ const sandboxButton = computed(() => folderButtonOf({ hasSandbox: hasSandbox.val
 useQuietChecks(
     () => face !== undefined && face.file === undefined && hasSandbox.value && (folder.value === undefined || folder.value.state === `ready`),
 );
-const building = computed(() => sandboxButton.value.busy);
 const sandboxLabel = computed(() => sandboxButton.value.label);
-const toSandbox = (): void => {
+// What a folder's sandbox IS, which is what the two presses that make or open one are worth explaining. A button under
+// way says how far in its own label, and one carrying the sandbox's next step has the card above it saying why: neither
+// wants a note about keeping a folder in sync.
+const sandboxTip = computed<Tip | undefined>(() => {
     switch (sandboxButton.value.press) {
+        case `open`:
+            return { title: t(`local.localFiles.syncedSandbox`), note: t(`local.localFiles.startsIfStopped`) };
+        case `ask`:
+            return { title: t(`local.localFiles.machineSandbox`), note: t(`local.localFiles.keepsFolderSynced`) };
+        default:
+            return undefined;
+    }
+});
+const router = useRouter();
+const toSandbox = (): void => {
+    const press = sandboxButton.value.press;
+    switch (press) {
         // The folder's sandbox, started first if it is stopped (the app's project.rs `open_existing`).
         case `open`:
             askLocalApp(`sandbox`);
             return;
-        // On its way in, or turned down: its card says how far, and what to do.
+        // Under way, with nothing to ask of anyone: its card says how far. Already open, the card flashes rather than
+        // the press going nowhere.
         case `card`:
             fold(false);
             return;
-        default:
+        case `ask`:
             void askForSandbox();
+            return;
+        // The sandbox is stopped on the reader: the button carries the card's own next step (machineAction.ts).
+        default:
+            void runMachineAction(press, (path) => void router.push(path));
     }
 };
 
@@ -368,13 +389,7 @@ onUnmounted(() => {
                     size="small"
                     tier="boring"
                     :label="sandboxLabel"
-                    v-tooltip.top="
-                        building
-                            ? undefined
-                            : hasSandbox
-                              ? { title: t(`local.localFiles.syncedSandbox`), note: t(`local.localFiles.startsIfStopped`) }
-                              : { title: t(`local.localFiles.machineSandbox`), note: t(`local.localFiles.keepsFolderSynced`) }
-                    "
+                    v-tooltip.top="sandboxTip"
                     @click="toSandbox"
                 />
             </div>

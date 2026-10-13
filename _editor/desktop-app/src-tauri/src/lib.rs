@@ -54,9 +54,13 @@ pub(crate) fn handle_intentic_link(app: &AppHandle, link: &str, source: setup_li
 /// Open the platform's sign-in page in the default browser (see auth.rs): the local shell's way to agents. It has no
 /// account to reject, so this road never asks for the chooser; the link `intentic://signin?switch=1` is the one that
 /// does.
+///
+/// Which window pressed it decides where the reader lands afterwards: any window but the workspace is a local one —
+/// a folder's — and a sign-in asked for there is a sign-in about that folder, so it hands them back to this
+/// computer's face rather than to the account's sandbox list (auth.rs `complete_path`).
 #[tauri::command]
-fn sign_in(app: AppHandle) -> Result<(), String> {
-    auth::start(&app, false)
+fn sign_in(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
+    auth::start(&app, false, window.label() != windows::WORKSPACE)
 }
 
 /// What a launch opens onto. This device, in the main window, is for the two things a workspace window cannot

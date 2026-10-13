@@ -10,12 +10,22 @@ import * as actualVueRouter from "vue-router";
 // Mounting reads matchMedia (ui) and window.env (environment.ts) at module scope; see Setup.test.ts.
 
 const replace = jest.fn();
+
+/** What the app points this page at (auth.rs `complete_path`); `back` rides a sign-in begun in a folder's window. */
+interface CompleteQuery {
+    handoff: string;
+    verifier: string;
+    back?: string;
+}
+
+// Written per test, by property: the mock reads it at every `useRoute`.
+const query: CompleteQuery = { handoff: `row-1`, verifier: `v`.repeat(43) };
 jest.mock(`vue-router`, () => ({
     ...actualVueRouter,
     // SAFETY: the page reads nothing of the router but `replace`, and nothing of the route but its query.
     useRouter: () => ({ push: jest.fn(), replace }) as never,
     // SAFETY: as above, the query alone.
-    useRoute: () => ({ query: { handoff: `row-1`, verifier: `v`.repeat(43) } }) as never,
+    useRoute: () => ({ query }) as never,
 }));
 const refresh = jest.fn(async () => ({ email: `ana@corp.example` }));
 jest.mock(`../../client/auth/useAuth`, () => ({ useAuth: () => ({ user: ref(null), refresh }) }));
@@ -41,13 +51,27 @@ const mount = async (): Promise<HTMLElement> => {
 // The one-time token's verify, whose Set-Cookie is the whole of what it gives.
 const verify = jest.fn(async () => new Response(`{}`, { status: 200 }));
 
+// The links this page hands the app, caught where they leave (desktop.ts sends them over `location.href`).
+const heard: string[] = [];
+
 beforeEach(() => {
     replace.mockReset();
     refresh.mockClear();
     adoptIdToken.mockReset().mockReturnValue(true);
     redeem.mockReset();
     verify.mockClear();
+    delete query.back;
+    heard.length = 0;
     stubGlobal(`fetch`, verify);
+    Object.defineProperty(document, `readyState`, { configurable: true, get: () => `complete` });
+    stubGlobal(`location`, {
+        get href(): string {
+            return heard.at(-1) ?? ``;
+        },
+        set href(link: string) {
+            heard.push(link);
+        },
+    });
 });
 
 afterEach(() => {
@@ -76,6 +100,28 @@ it(`opens the workspace on the session alone for an account with no Google token
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(replace).toHaveBeenCalledWith(`/`);
     expect(el.textContent).not.toContain(`expired`);
+});
+
+// The report this came from: "Work on this with an agent" on a folder asked for a sign-in, and the reader came back to
+// the account's sandbox list with nothing on screen about that folder. The workspace still has to mount — it is what
+// tells the app who signed in and which sandboxes the account has — and then the reader goes back where they asked.
+it(`hands the reader back to this computer when the sign-in began in a folder's window`, async () => {
+    redeem.mockResolvedValue({ ott: `ott-1` });
+    query.back = `agent`;
+
+    await mount();
+
+    expect(replace).toHaveBeenCalledWith(`/`);
+    expect(heard).toEqual([`intentic://launcher?to=agent`]);
+});
+
+it(`stays in the workspace for a sign-in that began there`, async () => {
+    redeem.mockResolvedValue({ ott: `ott-1` });
+
+    await mount();
+
+    expect(replace).toHaveBeenCalledWith(`/`);
+    expect(heard).toEqual([]);
 });
 
 it(`stops at a Google proof too old to keep, rather than opening a workspace no daemon will take`, async () => {

@@ -8,6 +8,7 @@ import { apiClient } from "../../lib/useApi";
 import { useAuth } from "../../client/auth/useAuth";
 import { useGoogleIdentity } from "../../client/auth/useGoogleIdentity";
 import { environment } from "../../app/environments/environment";
+import { openAgentOnThisComputer } from "../../app/environments/desktop";
 import { useT } from "@intentic/ui/i18n";
 
 // This page runs inside the desktop app's webview, which starts with no session.
@@ -17,6 +18,11 @@ import { useT } from "@intentic/ui/i18n";
 // 3. Adopt the Google ID token into the shared cache, so the first daemon call gets a session that renews silently.
 //    An account with no Google sign-in carries none: its daemon sessions come from the platform's identity assertions,
 //    which this webview asks for with the session step 2 gave it.
+// 4. `back=agent` (auth.rs `complete_path`): the sign-in began on a folder of this computer, not here. The workspace
+//    still has to mount — it is what tells the app who signed in and which sandboxes the account has
+//    (`announceDesktopRoster`) — and then the reader is handed back to that folder's own window. Without this step a
+//    reader who pressed "Work on this with an agent" ended up on the account's sandbox list, with nothing on screen
+//    about the folder they asked about and no sign that anything had been started for it.
 // A failure is terminal for this link; retry means signing in again, not reloading the link.
 
 const t = useT();
@@ -54,6 +60,9 @@ const complete = async (): Promise<void> => {
         }
         await refresh();
         await router.replace(`/`);
+        if (route.query[`back`] === `agent`) {
+            openAgentOnThisComputer();
+        }
     } catch (err) {
         error.value = noticeFrom(err, t(`auth.desktopAuthComplete.couldntFinish`));
     }

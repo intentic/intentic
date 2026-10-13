@@ -146,6 +146,23 @@ it(`brings back the card of a folder on its way in rather than asking a second t
     expect({ open: flow.dialogOpen.value, folded: flow.minimized.value, previewed: asked.mock.calls.length }).toEqual({ open: false, folded: false, previewed: 0 });
 });
 
+// A press that asks for the card it is already looking at used to set `minimized` from false to false, and nothing on
+// screen moved: the folder's button in a window whose card was open did nothing whatsoever.
+it(`flashes a card asked for while it is already open, and simply unfolds a folded one`, async () => {
+    fakeProject(NEW);
+    machine.value = CREATING;
+    const { useLocalProject } = await load();
+    const flow = useLocalProject();
+    await nextTick();
+    expect(flow.attention.value).toBe(false);
+    flow.fold(false);
+    expect({ folded: flow.minimized.value, flashed: flow.attention.value }).toEqual({ folded: false, flashed: true });
+    // Folded, the unfolding is answer enough.
+    flow.fold(true);
+    flow.fold(false);
+    expect(flow.minimized.value).toBe(false);
+});
+
 it(`asks the app by link where there is no app behind the page to answer`, async () => {
     const { useLocalProject } = await load();
     await useLocalProject().ask();

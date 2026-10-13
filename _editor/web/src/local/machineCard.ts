@@ -222,13 +222,23 @@ export const machineCardOf = (facts: CardFacts): MachineCard | undefined => {
         : shown;
 };
 
-/** The folder's own button: what it says, and what a press does (ask the dialog, open its sandbox, unfold the card). */
+/**
+ * The folder's own button: what it says, and what a press does — ask the dialog, open its sandbox, unfold the card, or
+ * the one thing the sandbox is stopped on. `open` here is the folder's own sandbox, which the card's `open` also is;
+ * the two never meet, since a folder whose card offers `open` is one this button has already answered as `open`.
+ */
 export interface FolderButton {
     readonly label: string;
     /** The folder is on its way in: the button says how far rather than what it does. */
     readonly busy: boolean;
-    readonly press: `ask` | `open` | `card`;
+    readonly press: `ask` | `open` | `card` | MachineCardAction;
 }
+
+// The card's verbs, as the folder's own button says them. A press that goes to This computer is named by what it is FOR
+// there, because this button is the window's one way on, with nothing above it to explain itself: "Open This computer"
+// is a destination, and what the reader needs is the sentence that says this computer isn't ready for agents yet.
+const pressLabel = (action: MachineCardAction): string =>
+    action === `details` ? t(`local.machine.button.setUpComputer`) : t(`local.machine.action.${action === `retryFolder` ? `retry` : action}`);
 
 export const folderButtonOf = (facts: {
     readonly hasSandbox: boolean;
@@ -241,6 +251,15 @@ export const folderButtonOf = (facts: {
     }
     if (folder !== undefined && folder.state !== `ready`) {
         if (machine?.state !== `ready`) {
+            // The sandbox stopped on something only the reader can do (this PC's own setup, Docker, a sign-in): the
+            // button IS that thing. It used to say it was waiting and, on a press, unfold a card that was already on
+            // screen — a word that blamed the machine for a wait that was the reader's, and a press that did nothing.
+            const stop = machine === undefined ? undefined : sandboxCard(machine, folder, false);
+            const next = stop === undefined || stop.tone === `working` ? undefined : stop.actions[0];
+            if (next !== undefined) {
+                return { label: pressLabel(next), busy: false, press: next };
+            }
+            // Under way with nothing to ask of anyone: how far it is, and the card for the rest.
             return {
                 label:
                     machine?.state === `creating`

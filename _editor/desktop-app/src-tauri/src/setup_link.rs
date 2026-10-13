@@ -591,6 +591,18 @@ pub enum WindowVerb {
     Mode(crate::state::Mode),
 }
 
+/// Where `intentic://launcher` puts the reader down on this computer's face.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LauncherTo {
+    /// Bare, and anything this app does not know: This device.
+    Device,
+    /// `to=files`: the folder the window is on.
+    Files,
+    /// `to=agent`: whichever of the two the folder's way to an agent is standing at (windows.rs resolves it against
+    /// this computer's sandbox as it is at the moment of the press, not as it was when the link was written).
+    Agent,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Link {
     AnalyticsConsent(bool),
@@ -607,12 +619,13 @@ pub enum Link {
     Auth(AuthArgs),
     /* `intentic://update` — the workspace banner's button, and the reason the SPA can offer a swap it has no way to perform. */
     Update,
-    /// `intentic://launcher[?to=files]`: the workspace's way back to this computer's face, the main local window. Bare,
-    /// This device (the setup page's way back to the run it handed over); `to=files`, the folder itself (the sandbox
-    /// switcher's "This computer"). The name is the launcher's, whose place the main window took: a page that predates
-    /// it still sends it, and an app that predates `to` reads the bare link.
+    /// `intentic://launcher[?to=files|agent]`: the workspace's way back to this computer's face, the main local window.
+    /// Bare, This device (the setup page's way back to the run it handed over); `to=files`, the folder itself (the
+    /// sandbox switcher's "This computer"); `to=agent`, wherever that folder's way to an agent currently stands. The
+    /// name is the launcher's, whose place the main window took: a page that predates it still sends it, and an app
+    /// that predates `to` reads the bare link.
     Launcher {
-        files: bool,
+        to: LauncherTo,
     },
     /// `intentic://setup-stop?sandbox=<id>`: the workspace's setup page took this sandbox to a machine of ours, whose
     /// address it now is, so the install This device runs for it stops rather than download on to an announce the
@@ -751,7 +764,11 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
         },
         "update" => source.is_app().then_some(Link::Update),
         "launcher" => source.is_app().then(|| Link::Launcher {
-            files: get("to").as_deref() == Some("files"),
+            to: match get("to").as_deref() {
+                Some("files") => LauncherTo::Files,
+                Some("agent") => LauncherTo::Agent,
+                _ => LauncherTo::Device,
+            },
         }),
         // App-window only, like `update`. A sandbox id out of shape is no request: there is nothing to stop "for".
         "setup-stop" if source.is_app() => Some(Link::SetupStop {
@@ -1148,16 +1165,29 @@ mod tests {
     fn the_launcher_link_is_honoured_from_the_app_and_refused_from_outside() {
         assert_eq!(
             parse_link("intentic://launcher", APP),
-            Some(Link::Launcher { files: false })
+            Some(Link::Launcher {
+                to: LauncherTo::Device
+            })
         );
         assert_eq!(
             parse_link("intentic://launcher?to=files", APP),
-            Some(Link::Launcher { files: true })
+            Some(Link::Launcher {
+                to: LauncherTo::Files
+            })
+        );
+        // The way back from a sign-in that began on a folder: where it lands is worked out at the press (windows.rs).
+        assert_eq!(
+            parse_link("intentic://launcher?to=agent", APP),
+            Some(Link::Launcher {
+                to: LauncherTo::Agent
+            })
         );
         // Anything else it might say is This device, as a bare link is.
         assert_eq!(
             parse_link("intentic://launcher?to=elsewhere", APP),
-            Some(Link::Launcher { files: false })
+            Some(Link::Launcher {
+                to: LauncherTo::Device
+            })
         );
         assert_eq!(parse_link("intentic://launcher", Source::External), None);
     }

@@ -173,8 +173,21 @@ const cancel = (): void => {
     }
 };
 
-/** The card, folded or unfolded; the fold is remembered for what it showed. */
+// A card asked for while it is already open flashes instead, so the press is never silent. Without it, the folder's
+// button in the states that only point at the card (a copy under way, a folder turned down) set `minimized` from false
+// to false and nothing on screen moved at all.
+// allow(module-state): the one card this window shows.
+const attention = ref(false);
+const ATTENTION_FOR_MS = 1200;
+let attentionUntil: ReturnType<typeof setTimeout> | undefined;
+
+/** The card, folded or unfolded; the fold is remembered for what it showed. One already open is drawn the eye to. */
 const fold = (folded: boolean): void => {
+    if (!folded && !minimized.value && card.value !== undefined) {
+        clearTimeout(attentionUntil);
+        attention.value = true;
+        attentionUntil = setTimeout(() => (attention.value = false), ATTENTION_FOR_MS);
+    }
     minimized.value = folded;
     rememberFold(folded ? card.value?.key : undefined);
 };
@@ -213,5 +226,24 @@ const dismiss = (): void => {
 
 export const useLocalProject = () => {
     watchCard();
-    return { dialogOpen, preview, attaching, failure, minimized, machine, folder, card, ask, attach, cancel, fold, retryFolder, open, dismiss, pressed, actionFailure };
+    return {
+        dialogOpen,
+        preview,
+        attaching,
+        failure,
+        minimized,
+        attention,
+        machine,
+        folder,
+        card,
+        ask,
+        attach,
+        cancel,
+        fold,
+        retryFolder,
+        open,
+        dismiss,
+        pressed,
+        actionFailure,
+    };
 };

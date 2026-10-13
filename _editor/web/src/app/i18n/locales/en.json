@@ -4512,7 +4512,8 @@
                 "waiting": "Waiting for this computer's sandbox",
                 "waitingPercent": "Waiting for this computer's sandbox ({percent}%)",
                 "copying": "Copying your folder…",
-                "failed": "Couldn't add this folder"
+                "failed": "Couldn't add this folder",
+                "setUpComputer": "Set this computer up for agents"
             },
             "action": {
                 "signIn": "Sign in",

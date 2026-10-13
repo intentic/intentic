@@ -110,6 +110,17 @@ pub enum Standing {
 }
 
 impl Standing {
+    /// Whether this computer's sandbox is stopped on the reader rather than moving under its own steam — the one
+    /// question a folder's way to an agent asks of it (`intentic://launcher?to=agent`, windows.rs). Stopped on the
+    /// reader, there is a card to answer on This device; moving by itself, there is nothing to do but the folder's own
+    /// work, with the card in the window's corner saying how far it is.
+    pub fn wants_the_reader(&self) -> bool {
+        !matches!(
+            self,
+            Standing::Ready | Standing::Creating { .. } | Standing::Interrupted
+        )
+    }
+
     /// The word the record's `state` is, for comparing two standings by kind.
     fn kind(&self) -> &'static str {
         match self {
