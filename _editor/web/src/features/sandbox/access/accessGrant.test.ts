@@ -1,58 +1,84 @@
-import { draftGrant, emailSignInByDefault, grantBody, grantSendable, toggledReach } from "./accessGrant";
+import { type AccessDraft, accessWord, draftGrant, draftOf, draftProblem, emailSignInByDefault, newPerson, toggledReach } from "./accessGrant";
 
-describe(`grantBody`, () => {
-    it(`carries areas on a guest grant like any other tier below maintainer`, () => {
-        expect(grantBody(`dee@example.com`, `guest`, [`support`])).toEqual({ email: `dee@example.com`, role: `guest`, areas: [`support`] });
-    });
+const draft = (over: Partial<AccessDraft> = {}): AccessDraft => ({ ...newPerson(`ana@corp.example`), ...over });
 
-    // Absent and empty are different grants: no field is the whole workspace, an empty list is a fence admitting
-    // nothing. Sending one for the other is the difference between a colleague seeing everything and seeing nothing.
-    it(`omits the fence entirely when no area is picked, and sends it when one is`, () => {
-        expect(grantBody(`vic@example.com`, `viewer`, undefined)).toEqual({ email: `vic@example.com`, role: `viewer` });
-        expect(grantBody(`vic@example.com`, `viewer`, [])).toEqual({ email: `vic@example.com`, role: `viewer`, areas: [] });
-        expect(grantBody(`vic@example.com`, `viewer`, [`support`])).toEqual({ email: `vic@example.com`, role: `viewer`, areas: [`support`] });
-    });
-
-    // The tier carries the owner's operating authority and reads every credential; a folder fence over it would be a
-    // line on a screen, and the daemon refuses one, so the body never carries it either.
-    it(`drops the fence on a maintainer, whatever the picker held`, () => {
-        expect(grantBody(`mai@example.com`, `maintainer`, [`support`])).toEqual({ email: `mai@example.com`, role: `maintainer` });
+describe(`newPerson`, () => {
+    // Read-only, no agents, nothing to spend: the invite can go out at once without handing over anything undecided.
+    it(`starts able to see and nothing more`, () => {
+        expect(newPerson(`ana@corp.example`)).toEqual({
+            manage: false,
+            agents: `off`,
+            see: undefined,
+            edit: `none`,
+            emailSignIn: true,
+            credentials: { capabilities: [], secrets: [] },
+        });
     });
 });
 
-describe(`grantSendable`, () => {
-    // A guest reaches its assistants and nothing else, so both halves have to hold: a fence, and a fence with somebody
-    // behind it. Unfenced it would speak through every card in the workspace.
-    it(`holds a guest grant until its areas reach an assistant`, () => {
-        expect(grantSendable(`guest`, undefined, 3)).toBe(false);
-        expect(grantSendable(`guest`, [], 3)).toBe(false);
-        expect(grantSendable(`guest`, [`support`], 0)).toBe(false);
-        expect(grantSendable(`guest`, [`support`], 1)).toBe(true);
+describe(`draftGrant`, () => {
+    // The role sent is the tier the answers make, and the answers ride beside it so the row says what was decided.
+    it(`sends the tier the access makes, with every answer that makes it`, () => {
+        expect(draftGrant(`ana@corp.example`, draft())).toEqual({
+            email: `ana@corp.example`,
+            role: `viewer`,
+            agents: `off`,
+            emailSignIn: true,
+            credentials: { capabilities: [], secrets: [] },
+        });
+        expect(draftGrant(`ana@corp.example`, draft({ agents: `off`, see: [`web`, `support`], edit: [`support`], credentials: `all` }))).toEqual({
+            email: `ana@corp.example`,
+            role: `writer`,
+            agents: `off`,
+            areas: [`web`, `support`],
+            edit: [`support`],
+            emailSignIn: true,
+            credentials: `all`,
+        });
     });
 
-    // An unfenced writer would be a grant to change every file in the workspace; the absent area list is exactly what
-    // the daemon reads as the whole of it, so the form cannot send one either. Which assistants it reaches is not the
-    // writer's question — it does work of its own.
-    it(`holds a writer grant until it names an area, whatever that area reaches`, () => {
-        expect(grantSendable(`writer`, undefined, 3)).toBe(false);
-        expect(grantSendable(`writer`, [], 3)).toBe(false);
-        expect(grantSendable(`writer`, [`support`], 0)).toBe(true);
-    });
-
-    it(`lets every other tier be granted fenced or not, reaching an assistant or not`, () => {
-        expect(grantSendable(`viewer`, undefined, 0)).toBe(true);
-        expect(grantSendable(`collaborator`, [`support`], 0)).toBe(true);
-        expect(grantSendable(`maintainer`, undefined, 0)).toBe(true);
+    // Managing is every other answer at once, and the daemon refuses a fence or a list of credentials on it.
+    it(`sends a manager's tier and sign-in alone`, () => {
+        expect(draftGrant(`mai@example.com`, draft({ manage: true, see: [`web`], credentials: { capabilities: [`github`], secrets: [] } }))).toEqual({
+            email: `mai@example.com`,
+            role: `maintainer`,
+            emailSignIn: true,
+        });
     });
 });
 
-describe(`grantBody's email sign-in`, () => {
-    // Absent is "keep what the row says" at the daemon: a re-grade from this form must not send it, or it would decide
-    // a person's way in as a side effect of their tier.
-    it(`sends the switch only when the caller decides it, either way`, () => {
-        expect(grantBody(`ana@corp.example`, `viewer`, undefined)).toEqual({ email: `ana@corp.example`, role: `viewer` });
-        expect(grantBody(`ana@corp.example`, `viewer`, undefined, true)).toEqual({ email: `ana@corp.example`, role: `viewer`, emailSignIn: true });
-        expect(grantBody(`ana@corp.example`, `viewer`, undefined, false)).toEqual({ email: `ana@corp.example`, role: `viewer`, emailSignIn: false });
+describe(`draftOf`, () => {
+    // A row from before agents and edit reads as its role meant, and a person the daemon never wrote as the platform's tier.
+    it(`reads what the daemon holds, else the platform's tier`, () => {
+        expect(draftOf({ email: `w@x.example`, role: `writer`, areas: [`web`] }, `writer`)).toMatchObject({ agents: `run`, see: [`web`], edit: [`web`], credentials: `all` });
+        expect(draftOf(undefined, `collaborator`)).toMatchObject({ agents: `run`, see: undefined, edit: `none`, emailSignIn: false });
+    });
+});
+
+describe(`draftProblem`, () => {
+    it(`holds a chat until its areas reach an assistant`, () => {
+        expect(draftProblem(draft({ agents: `chat`, see: [] }), 0)).toBe(`chatNeedsArea`);
+        expect(draftProblem(draft({ agents: `chat`, see: [`finance`] }), 0)).toBe(`chatReachesNobody`);
+        expect(draftProblem(draft({ agents: `chat`, see: [`support`] }), 1)).toBeUndefined();
+    });
+
+    // A narrowed scope with nothing ticked is a fence admitting nothing, which nobody means by pressing it.
+    it(`holds a narrowed scope until something is ticked`, () => {
+        expect(draftProblem(draft({ see: [] }), 0)).toBe(`pickSeeArea`);
+        expect(draftProblem(draft({ edit: [] }), 0)).toBe(`pickEditArea`);
+        expect(draftProblem(draft({ see: [`web`], edit: [`finance`] }), 0)).toBe(`editOutsideSee`);
+        expect(draftProblem(draft({ see: [`web`], edit: [`web`] }), 0)).toBeUndefined();
+        expect(draftProblem(draft({ manage: true, see: [] }), 0)).toBeUndefined();
+    });
+});
+
+describe(`accessWord`, () => {
+    it(`names a person by what they can do`, () => {
+        expect(accessWord(draft())).toBe(`sees`);
+        expect(accessWord(draft({ agents: `run` }))).toBe(`runsAgents`);
+        expect(accessWord(draft({ agents: `off`, edit: [`web`] }))).toBe(`edits`);
+        expect(accessWord(draft({ agents: `chat`, see: [`support`] }))).toBe(`chats`);
+        expect(accessWord(draft({ manage: true }))).toBe(`manages`);
     });
 });
 
@@ -66,43 +92,6 @@ describe(`emailSignInByDefault`, () => {
         expect(emailSignInByDefault(at(`gmail.com.example`))).toBe(true);
         expect(emailSignInByDefault(at(`gmail.com`))).toBe(false);
         expect(emailSignInByDefault(` ${at(`GoogleMail.com`)} `)).toBe(false);
-    });
-});
-
-describe(`grantBody's credential reach`, () => {
-    const reach = { capabilities: [`github`], secrets: [`DATABASE_URL`] };
-
-    // Absent keeps the row's reach at the daemon, so only a caller that decided it may send it; `all` lifts one.
-    it(`sends a reach or its lifting only when the caller decides it`, () => {
-        expect(grantBody(`ana@corp.example`, `collaborator`, undefined)).toEqual({ email: `ana@corp.example`, role: `collaborator` });
-        expect(grantBody(`ana@corp.example`, `collaborator`, undefined, undefined, reach)).toEqual({
-            email: `ana@corp.example`,
-            role: `collaborator`,
-            credentials: reach,
-        });
-        expect(grantBody(`ana@corp.example`, `guest`, [`support`], undefined, `all`)).toEqual({
-            email: `ana@corp.example`,
-            role: `guest`,
-            areas: [`support`],
-            credentials: `all`,
-        });
-    });
-
-    // A maintainer reads every credential and the daemon refuses it a list; a viewer runs no assistant, so its row keeps
-    // whatever it held for the day it is graded up.
-    it(`never sends one for a maintainer or a viewer`, () => {
-        expect(grantBody(`mai@example.com`, `maintainer`, undefined, undefined, reach)).toEqual({ email: `mai@example.com`, role: `maintainer` });
-        expect(grantBody(`vic@example.com`, `viewer`, undefined, undefined, reach)).toEqual({ email: `vic@example.com`, role: `viewer` });
-    });
-
-    it(`sends the dialog's whole draft as one grant`, () => {
-        expect(draftGrant(`ana@corp.example`, { role: `writer`, areas: [`support`], emailSignIn: true, credentials: reach })).toEqual({
-            email: `ana@corp.example`,
-            role: `writer`,
-            areas: [`support`],
-            emailSignIn: true,
-            credentials: reach,
-        });
     });
 });
 

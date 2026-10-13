@@ -259,7 +259,7 @@
       "since": "v1.327.0"
     },
     {
-      "type": "{ members: ({ areas?: string[]; credentials?: { capabilities: string[]; secrets: string[] }; email: string; emailSignIn?: boolean; role: \"guest\" | \"viewer\" | \"collaborator\" | \"writer\" | \"maintainer\" })[] }",
+      "type": "{ members: ({ agents?: \"off\" | \"chat\" | \"run\"; areas?: string[]; credentials?: { capabilities: string[]; secrets: string[] }; edit?: \"all\" | string[]; email: string; emailSignIn?: boolean; role: \"guest\" | \"viewer\" | \"collaborator\" | \"writer\" | \"maintainer\" })[] }",
       "since": "unreleased"
     }
   ],

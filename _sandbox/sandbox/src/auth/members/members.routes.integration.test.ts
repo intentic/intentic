@@ -133,3 +133,49 @@ test("a grant sets, keeps and lifts what a member's conversations may spend, and
     expect((await postJson(app, "/members", { email: "bob@example.com", role: "collaborator", credentials: "all" })).status).toBe(200);
     expect(await members.list()).toEqual([{ email: "bob@example.com", role: "collaborator" }]);
 });
+
+// Access is three answers, and the role a grant names must be the tier they make: a person who sees the whole workspace
+// and edits one area of it, with agents off, is a writer; the same answers named as anything else are refused.
+test("a grant carries agents and edit areas, and its role must be the tier they make", async () => {
+    const { app, members } = await ownerApp();
+    const editor = { email: "eli@example.com", role: "writer", agents: "off", edit: ["support"] };
+    expect((await postJson(app, "/members", editor)).status).toBe(200);
+    expect(await members.list()).toEqual([{ email: "eli@example.com", role: "writer", agents: "off", edit: ["support"] }]);
+
+    const misnamed = await postJson(app, "/members", { ...editor, role: "collaborator" });
+    expect(misnamed.status).toBe(400);
+    expect(await misnamed.json()).toEqual({ error: "the role does not match the access granted, which makes a writer" });
+
+    // Editing reaches only where they can see, and every area named for editing exists.
+    const unseen = await postJson(app, "/members", { ...editor, areas: ["finance"] });
+    expect(unseen.status).toBe(400);
+    expect(await unseen.json()).toEqual({ error: expect.stringContaining("support is not among their areas") });
+    expect((await postJson(app, "/members", { ...editor, edit: ["sales"] })).status).toBe(400);
+    expect((await postJson(app, "/members", { ...editor, areas: ["support"], edit: "all" })).status).toBe(400);
+});
+
+// The editor asks what its own grant allows; the answer is the request's own identity, never the roster's raw row.
+test("GET /members/self answers the caller's own access", async () => {
+    const owned = await ownerApp();
+    expect(await (await owned.app.request("/members/self", { headers: { authorization: "Bearer owner" } })).json()).toEqual({
+        role: "owner",
+        agents: "run",
+        edit: "all",
+    });
+    const members = fileMembersStore(join(await mkdtemp(join(tmpdir(), "members-")), "members.json"));
+    const app = createApp(
+        services({
+            auth: {
+                authorize: async () => ({ ...proven(`eli@example.com`, `writer`), agents: `off`, edits: [`support`] }),
+                authorizeOwner: async () => undefined,
+            },
+            ownerEmail: async () => `ada@example.com`,
+            members,
+        }),
+    );
+    expect(await (await app.request("/members/self", { headers: { authorization: "Bearer eli" } })).json()).toEqual({
+        role: "writer",
+        agents: "off",
+        edit: ["support"],
+    });
+});

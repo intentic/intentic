@@ -169,3 +169,16 @@ describe("memberRefusal", () => {
         });
     });
 });
+
+// Editing by hand and running agents are separate answers: a person who edits without agents holds the writer tier,
+// which clears the collaborator floor by rank, and is kept off it by their own answer.
+describe("memberRefusal for a person with agents off", () => {
+    test("refuses every agent door and keeps the file doors open", () => {
+        const editor = { role: "writer" as const, agents: "off" as const };
+        expect(memberRefusal(editor, "POST", "/agent")).toEqual({ error: "running agents is not on for you here", floor: "collaborator" });
+        expect(memberRefusal(editor, "POST", "/agents/abc/request-land")).toMatchObject({ floor: "collaborator" });
+        expect(memberRefusal(editor, "POST", "/workspace/dir")).toBeUndefined();
+        expect(memberRefusal(editor, "GET", "/workspace/tree")).toBeUndefined();
+        expect(memberRefusal({ role: "writer", agents: "run" }, "POST", "/agent")).toBeUndefined();
+    });
+});

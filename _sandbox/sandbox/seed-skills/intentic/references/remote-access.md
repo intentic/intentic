@@ -40,26 +40,27 @@ silence them like any other app's.
 
 ## Other people
 
-**Sandbox ▸ Access** (`/sandbox/access`) lists **People**: the owner first, then one row per person saying where they
-work and what their assistants may use. **Add person** opens one dialog, and each row's **Edit** opens the same one,
-with four parts:
+**Sandbox ▸ Access** (`/sandbox/access`) shows **People** as tiles, the way Personas and Models do: the owner first,
+then one tile per person with a word for what they can do (Can see, Runs agents, Edits, Chats, Manages) and a dot while
+their invite is out. **Add person** asks for an email address alone. The person starts read-only: they see the
+workspace, run no agents and may use no connection or secret, and the invite goes out at once. Their panel then opens
+under the tiles (as does any tile pressed, or a link with `?open=<email>`), and every change in it saves as it is made:
 
-- **Email address**, and whether they may also sign in with a code sent to it. That switch is on by default for an
-  address outside Gmail; without it they sign in with Google or a passkey.
-- **Role**: **Guest** (talks only to the assistants that work in the areas named), **Viewer** (watches everything,
-  changes nothing), **Collaborator** (drives agents and reviews work; landing and publishing become requests),
-  **Writer** (changes files in the folders named for them), **Maintainer** (operates everything the owner can).
-- **Where they work**: the whole workspace, or only some **Areas**. Assistants working for them open the same folders
-  and nothing else. A writer and a guest must name at least one area.
-- **Connections and secrets**: everything connected, or only the connections and stored secrets ticked. This is
-  enforced by the sandbox, not told to the model: anything left out is never loaded into their conversations, and
-  every use of it is refused with no approval card that could release it. A conversation can use only what every
-  person who has written in it may use. A maintainer always has everything; a viewer runs no assistants, so it is
-  not asked. Docker, a VPN, a network disk and a local model hold no credential to withhold, so they are listed as
-  always available.
+- **Agents**: Off (they watch), Chat with assistants (only the assistants that work in their areas, nothing else of the
+  sandbox), or Run agents (their agents' work lands only when somebody who manages the sandbox lands it).
+- **Can see**: the whole workspace or some **Areas**. Their agents work inside the same folders.
+- **Can edit by hand**: nothing, everything they see, or some of their areas. This is separate from agents, so a person
+  can see everything and edit one folder, or edit by hand without running agents.
+- **Connections and secrets**: all, or only the ones ticked. Enforced by the sandbox, not told to the model: what is left
+  out is never loaded into their conversations, and every use of it is refused with no approval card that could release
+  it. A conversation can use only what every person who has written in it may use. Docker, a VPN, a network disk and a
+  local model hold no credential to withhold, so they are listed as always available.
+- **Manage the sandbox**: everything at once (land work, publish, settings, connections), the old Maintainer.
+- **Sign in with an emailed code**: on by default for an address outside Gmail; Google and passkeys always work.
 
-The invite link is emailed, lasts 7 days and must be accepted by that address. Only the owner invites or changes
-anyone's access, from **Edit** (which also holds **Revoke access** and, for a pending invite, **Resend**).
+An answer the sandbox would refuse (chatting with no area, a narrowed scope with nothing ticked) waits in the panel as
+**Not saved** with the reason. The panel's header holds **Resend** for a pending invite and **Remove**. The invite link
+lasts 7 days and must be accepted by that address. Only the owner adds people or changes their access.
 
 A sandbox older than email sign-in says it needs an update before it accepts one. Right after a first email sign-in
 the app suggests a passkey: passkeys belong to the sandbox itself and keep working while app.intentic.dev is down,

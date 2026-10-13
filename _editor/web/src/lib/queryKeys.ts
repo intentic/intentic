@@ -157,6 +157,9 @@ export const PAIRED_PHONES = family(`phones`);
 export const RUNNERS = family(`runners`);
 export const REGISTRY = family(`registry`);
 export const SANDBOX_MEMBERS = family(`members`);
+// What the signed-in person's own grant allows (GET /members/self), read for a writer, whose tier alone does not say
+// whether it runs agents.
+export const SANDBOX_SELF_ACCESS = family(`members-self`);
 // Desktop sync's sandbox-level state (GET /system/sync): the one read behind the sync badges and the Add device card.
 export const SYNC_HEALTH = family(`sync-health`);
 // The voices this sandbox can speak with (GET /speech/voices), read by the Agent tab's Voice card. Not one contract read

@@ -1,5 +1,16 @@
-import type { CredentialReach, GrantedRole, MemberRole, ProofMethod } from "@intentic/sandbox-contract";
-import { CredentialReachSchema, EMAIL_SIGN_IN_OFF, GrantedRoleSchema, PLATFORM_KEY_UNKNOWN, roleAtLeast } from "@intentic/sandbox-contract";
+import type { AgentAccess, CredentialReach, EditScope, GrantedRole, MemberRole, ProofMethod } from "@intentic/sandbox-contract";
+import {
+    accessRefusal,
+    AgentAccessSchema,
+    CredentialReachSchema,
+    EditScopeSchema,
+    EMAIL_SIGN_IN_OFF,
+    GrantedRoleSchema,
+    memberAccess,
+    PLATFORM_KEY_UNKNOWN,
+    roleAtLeast,
+    tierOf,
+} from "@intentic/sandbox-contract";
 import { isIdentityAssertion, verifyIdentityAssertion } from "@intentic/sandbox-contract/identity-assertion";
 import { isOwnerTicket, verifyOwnerTicket } from "@intentic/sandbox-contract/owner-ticket";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
@@ -127,11 +138,16 @@ export const fileOwnerStore = (path: string): OwnerStore => {
 // mirrored.
 export interface Member {
     readonly email: string;
+    // The tier the rest of the row makes (sandbox-contract `tierOf`), kept in step by every write.
     readonly role: GrantedRole;
     // Area ids fencing what of the workspace this person reaches, and with it which persona cards they may wear
     // (personas/persona-reach.ts). Absent means the whole workspace; empty means nothing at all. Never absent on a
-    // writer or a guest row.
+    // guest row.
     readonly areas?: readonly string[];
+    // Whether their conversations run agents, and where they change files by hand; absent, what the role meant
+    // (sandbox-contract `memberAccess`).
+    readonly agents?: AgentAccess;
+    readonly edit?: EditScope;
     // Whether the platform's identity assertion opens this sandbox for them (they sign in with an email code), which the
     // owner decides per person. Absent means no: Google, a passkey or a recovery code are their only ways in.
     readonly emailSignIn?: boolean;
@@ -146,6 +162,8 @@ export interface Member {
 export interface MemberGrant {
     readonly role: GrantedRole;
     readonly areas?: readonly string[] | undefined;
+    readonly agents?: AgentAccess | undefined;
+    readonly edit?: EditScope | undefined;
     readonly emailSignIn?: boolean | undefined;
     readonly credentials?: CredentialReach | "all" | undefined;
 }
@@ -172,9 +190,12 @@ const MemberSchema = z
         emailSignIn: z.boolean().optional(),
         // Added 2026-10-13, optional: a row written before it reaches every credential, as it did then.
         credentials: CredentialReachSchema.optional(),
+        // Added 2026-10-13, optional: a row written before them reads as its role meant (sandbox-contract `memberAccess`).
+        agents: AgentAccessSchema.optional(),
+        edit: EditScopeSchema.optional(),
     })
-    .refine((member) => (member.role !== "writer" && member.role !== "guest") || (member.areas?.length ?? 0) > 0, {
-        message: "a writer and a guest each name at least one area: what they reach there is what the tier is",
+    .refine((member) => accessRefusal(memberAccess(member)) === undefined && tierOf(memberAccess(member)) === member.role, {
+        message: "a row's access must be one a grant could write, and its role the tier that access makes",
     });
 const MembersFileSchema = z.object({ members: z.array(z.unknown()) });
 
@@ -195,6 +216,8 @@ interface MemberRowDraft {
     email: string;
     role: GrantedRole;
     areas?: string[];
+    agents?: AgentAccess;
+    edit?: EditScope;
     emailSignIn?: boolean;
     credentials?: CredentialReach;
 }
@@ -214,6 +237,13 @@ export const memberRow = (email: string, grant: MemberGrant, previous?: Member):
     const row: MemberRowDraft = { email, role: grant.role };
     if (grant.areas !== undefined) {
         row.areas = [...grant.areas];
+    }
+    // Written as the grant said them, and never on a maintainer, whose tier already answers both.
+    if (grant.agents !== undefined && grant.role !== "maintainer") {
+        row.agents = grant.agents;
+    }
+    if (grant.edit !== undefined && grant.role !== "maintainer") {
+        row.edit = grant.edit === "all" ? "all" : [...grant.edit];
     }
     if (grant.emailSignIn ?? previous?.emailSignIn === true) {
         row.emailSignIn = true;
@@ -307,7 +337,12 @@ export { tokenEquals } from "./token-equals.js";
 // A verified identity plus the trust tier it holds here, what every authorized request acts as.
 // Role is resolved fresh on each authorize (owner + members re-read), so a re-grade applies on the very next request.
 export interface Caller extends VerifiedIdentity {
+    // The tier their access makes; an owner and a maintainer hold every other answer below.
     readonly role: MemberRole;
+    // Whether they may start agents, and where they may change files by hand (a subset of `areas`). Absent: what the
+    // tier means, which for the owner is everything.
+    readonly agents?: AgentAccess;
+    readonly edits?: "none" | "all" | readonly string[];
     // Area ids fencing what of the workspace this caller reaches, and with it which persona cards they may wear;
     // absent means the whole workspace, which is what the owner always holds. Carried as ids, not folders, so one read
     // of the area manifest per request answers it freshly: editing an area narrows its holders on their very next
@@ -525,12 +560,16 @@ export const createAuthorizer = (deps: {
         // A maintainer holds the owner's operating authority and reads every credential, so a fence over the tier would
         // enforce nothing (areas/invariant.ts `no-maintainer-is-fenced`), and the grant route refuses one. A row that
         // carries areas anyway, hand-edited or written before that refusal, used to hide most of the tree and every
-        // conversation outside them from that person all the same: it is read as the whole workspace instead.
-        const fenced = member.areas !== undefined && member.role !== "maintainer";
+        // conversation outside them from that person all the same: it is read as the whole workspace instead
+        // (`memberAccess` answers a maintainer with no fence).
+        // The tier is the one the access makes, never the row's own word for it: every floor reads it.
+        const access = memberAccess(member);
         return {
             ...proof,
-            role: member.role,
-            ...(fenced ? { areas: member.areas } : {}),
+            role: tierOf(access),
+            agents: access.agents,
+            edits: access.edit,
+            ...(access.see === undefined ? {} : { areas: access.see }),
         };
     };
     // The require-passkey policy, read per request like the roster. A recovery code counts: it exists to get an owner

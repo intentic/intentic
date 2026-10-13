@@ -154,7 +154,7 @@ const groups = computed<readonly NavGroup<HubTab>[]>(() => [
             <SandboxUsage v-else-if="slug === `usage`" />
             <SandboxSecrets v-else-if="slug === `secrets`" />
             <SandboxEnvironment v-else-if="slug === `environment`" />
-            <SandboxAccess v-else-if="slug === `access`" />
+            <SandboxAccess v-else-if="slug === `access`" :open="openPersona" />
             <SandboxPersonas v-else-if="slug === `personas`" :open="openPersona" />
             <SandboxAreas v-else-if="slug === `areas`" />
             <SandboxModels v-else-if="slug === `models`" />

@@ -1,5 +1,5 @@
 import type { InviteRecord } from "@intentic/api-contract";
-import type { CredentialReach, GrantedRole, SecretInventoryEntry } from "@intentic/sandbox-contract";
+import type { AgentAccess, CredentialReach, EditScope, GrantedRole, SecretInventoryEntry } from "@intentic/sandbox-contract";
 import { demoQuiet } from "../mode";
 
 // THE SHARED ACCESS ROSTER: the Access tab reads two copies of who may reach this sandbox — the platform's record
@@ -14,6 +14,11 @@ export interface DemoGrant {
     email: string;
     role: GrantedRole;
     areas?: string[];
+    // Whether they run agents and where they edit by hand; absent, what the role meant (sandbox-contract memberAccess).
+    agents?: AgentAccess;
+    edit?: EditScope;
+    // Whether an emailed code opens the sandbox for them; absent is no, and a grant silent about it keeps the row's.
+    emailSignIn?: boolean;
     // What their assistants may spend; absent is every connected account and secret, as on the real roster.
     credentials?: CredentialReach;
 }
@@ -50,16 +55,58 @@ export const inviteRecords = (): InviteRecord[] =>
 
 /** The daemon's copy: the enforced grant, with the areas it is fenced to. */
 export const grants = (): DemoGrant[] =>
-    roster.map(({ email, role, areas, credentials }) => ({
-        email,
-        role,
-        ...(areas === undefined ? {} : { areas: [...areas] }),
-        ...(credentials === undefined ? {} : { credentials }),
-    }));
+    roster.map(({ email, role, areas, agents, edit, emailSignIn, credentials }) => {
+        const grant: DemoGrant = { email, role };
+        if (emailSignIn === true) {
+            grant.emailSignIn = true;
+        }
+        if (areas !== undefined) {
+            grant.areas = [...areas];
+        }
+        if (agents !== undefined) {
+            grant.agents = agents;
+        }
+        if (edit !== undefined) {
+            grant.edit = edit === `all` ? `all` : [...edit];
+        }
+        if (credentials !== undefined) {
+            grant.credentials = credentials;
+        }
+        return grant;
+    });
+
+// The answers a grant leaves on the row, as the real store writes them: sign-in kept when the grant is silent, and no
+// agents or edit answer on a maintainer, whose tier is every answer.
+const answersOf = (
+    role: GrantedRole,
+    answers: { readonly agents?: AgentAccess | undefined; readonly edit?: EditScope | undefined; readonly emailSignIn?: boolean | undefined },
+    held: DemoMember | undefined,
+): Partial<Pick<DemoMember, "agents" | "edit" | "emailSignIn">> => {
+    const kept: Partial<Pick<DemoMember, "agents" | "edit" | "emailSignIn">> = {};
+    if (answers.emailSignIn ?? held?.emailSignIn === true) {
+        kept.emailSignIn = true;
+    }
+    if (role === `maintainer`) {
+        return kept;
+    }
+    if (answers.agents !== undefined) {
+        kept.agents = answers.agents;
+    }
+    if (answers.edit !== undefined) {
+        kept.edit = answers.edit;
+    }
+    return kept;
+};
 
 /** Upsert, as both stores do: granting an address that already holds access re-grades it and replaces its fence. A
  *  grant silent about the reach keeps the row's, `all` lifts it, and a maintainer holds none (auth.ts memberRow). */
-export const grantAccess = (email: string, role: GrantedRole, areas: readonly string[] | undefined, credentials?: CredentialReach | `all`): void => {
+export const grantAccess = (
+    email: string,
+    role: GrantedRole,
+    areas: readonly string[] | undefined,
+    credentials?: CredentialReach | `all`,
+    answers: { readonly agents?: AgentAccess | undefined; readonly edit?: EditScope | undefined; readonly emailSignIn?: boolean | undefined } = {},
+): void => {
     const address = email.toLowerCase();
     const at = index(address);
     const held = at === -1 ? undefined : roster[at];
@@ -76,6 +123,7 @@ export const grantAccess = (email: string, role: GrantedRole, areas: readonly st
     if (reach !== undefined) {
         row.credentials = reach;
     }
+    Object.assign(row, answersOf(role, answers, held));
     if (at === -1) {
         roster.push(row);
     } else {

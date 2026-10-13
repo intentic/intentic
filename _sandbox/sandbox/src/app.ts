@@ -408,6 +408,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     serve("POST /members", members.add);
     serve("DELETE /members", members.remove);
     serve("DELETE /members/self", members.removeSelf);
+    serve("GET /members/self", members.self);
 
     // The owner's Reconnect with the platform, adopting the sandbox first when the platform holds no record of it.
     serve("POST /platform/relink", createRelinkRoute(services));

@@ -79,6 +79,8 @@ export const RAW_ROUTES = {
     "POST /members": { control: "never" },
     "DELETE /members": { control: "never" },
     "DELETE /members/self": { floor: "viewer", guest: true, control: "never" },
+    // What one's own grant allows, read by the editor to offer only what will be taken.
+    "GET /members/self": { floor: "viewer", guest: true, control: "never" },
     // The owner's Reconnect: register with the platform now, having it adopt the sandbox first when it holds no record.
     "POST /platform/relink": { control: "never" },
     "GET /environment": {},

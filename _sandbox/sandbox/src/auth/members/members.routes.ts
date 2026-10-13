@@ -1,4 +1,14 @@
-import { type CredentialReach, type GrantedRole, MemberGrantSchema } from "@intentic/sandbox-contract";
+import {
+    accessRefusal,
+    type AgentAccess,
+    type CredentialReach,
+    type EditScope,
+    type GrantedRole,
+    type MemberSelf,
+    MemberGrantSchema,
+    memberAccess,
+    tierOf,
+} from "@intentic/sandbox-contract";
 import type { Context } from "hono";
 import type { Services } from "../../composition.js";
 import type { AppEnv } from "../../app-env.js";
@@ -27,8 +37,8 @@ const memberGrant = async (c: Context): Promise<MemberGrantRequest | undefined> 
     if (!body.success) {
         return undefined;
     }
-    const { email, role, areas, emailSignIn, credentials } = body.data;
-    return { email: email.toLowerCase(), role, areas, emailSignIn, credentials };
+    const { email, role, areas, agents, edit, emailSignIn, credentials } = body.data;
+    return { email: email.toLowerCase(), role, areas, agents, edit, emailSignIn, credentials };
 };
 
 // A grant as the route reads it: who, at what tier, fenced to what, whether email sign-in is theirs, and what their
@@ -37,36 +47,47 @@ interface MemberGrantRequest {
     readonly email: string;
     readonly role: GrantedRole;
     readonly areas?: readonly string[] | undefined;
+    readonly agents?: AgentAccess | undefined;
+    readonly edit?: EditScope | undefined;
     readonly emailSignIn?: boolean | undefined;
     readonly credentials?: CredentialReach | "all" | undefined;
 }
 
-// The two tiers whose fence IS the tier, refused unfenced: a writer's areas are the folders it may change, a guest's
-// are the assistants it speaks through. For each, an absent area list resolves to the whole workspace — every file,
-// every card — which is not a narrower grant of that tier but a different one nobody chose.
-const fenceRequired = (grant: { role: GrantedRole; areas?: readonly string[] | undefined }): string | undefined => {
-    if ((grant.areas?.length ?? 0) > 0) {
-        return undefined;
-    }
-    if (grant.role === "writer") {
+// The refusals an access makes on its face, in the order a reader fixes them: a writer named with nowhere to write (what
+// an editor that predates `edit` sends), an access no grant could make (chatting with no area, editing outside what they
+// see), and a role that is not the tier the access makes. For each, the grant is refused rather than one of its two
+// answers guessed away: an absent area list resolves to the whole workspace, which is not a narrower grant of a tier
+// but a different one nobody chose.
+const accessRefused = (grant: MemberGrantRequest): string | undefined => {
+    const access = memberAccess(grant);
+    if (grant.role === "writer" && access.edit === "none") {
         return "a writer needs at least one area to write in";
     }
-    return grant.role === "guest" ? "a guest needs at least one area: the assistants that work there are the ones it speaks through" : undefined;
+    if (grant.role === "guest" && (grant.areas?.length ?? 0) === 0) {
+        return "a guest needs at least one area: the assistants that work there are the ones it speaks through";
+    }
+    const refused = accessRefusal(access);
+    if (refused !== undefined) {
+        return refused;
+    }
+    const tier = tierOf(access);
+    return tier === grant.role ? undefined : `the role does not match the access granted, which makes a ${tier}`;
 };
 
 // Why a fence cannot be written, or undefined when it can. Every area named exists, since a row pointing at an area
 // nobody wrote resolves to a fence admitting nothing, and somebody would have to guess whether that was intended.
 // A maintainer is not fenceable: the tier carries the owner's operating authority, reads every credential and drives
 // every conversation, so a folder fence over it would be a line on a screen rather than a boundary.
-const areaRefusal = async (services: Pick<Services, "areas">, grant: { role: GrantedRole; areas?: readonly string[] | undefined }): Promise<string | undefined> => {
-    if (grant.areas === undefined) {
+const areaRefusal = async (services: Pick<Services, "areas">, grant: MemberGrantRequest): Promise<string | undefined> => {
+    const editing = grant.edit === undefined || grant.edit === "all" ? [] : grant.edit;
+    if (grant.areas === undefined && editing.length === 0) {
         return undefined;
     }
     if (grant.role === "maintainer") {
         return "a maintainer holds the owner's operating authority and cannot be fenced to part of the workspace";
     }
     const known = new Set((await services.areas.list()).map((area) => area.id));
-    const missing = grant.areas.filter((id) => !known.has(id));
+    const missing = [...new Set([...(grant.areas ?? []), ...editing])].filter((id) => !known.has(id));
     return missing.length === 0 ? undefined : `no such area: ${missing.join(", ")}`;
 };
 
@@ -124,7 +145,7 @@ export const createMembersRoutes = (services: MembersRoutesDeps) => ({
             return c.json({ error: "email and role required" }, 400);
         }
         // The free refusal first, then the two that read a manifest; reach last, since it needs both of them.
-        const refusal = fenceRequired(grant) ?? reachRefusal(grant) ?? (await areaRefusal(services, grant)) ?? (await guestReachRefusal(services, grant));
+        const refusal = accessRefused(grant) ?? reachRefusal(grant) ?? (await areaRefusal(services, grant)) ?? (await guestReachRefusal(services, grant));
         if (refusal !== undefined) {
             return c.json({ error: refusal }, 400);
         }
@@ -151,6 +172,21 @@ export const createMembersRoutes = (services: MembersRoutesDeps) => ({
             revokeHeld(services, email);
             return c.json({ members: await services.members.list() });
         });
+    },
+    /** GET /members/self */
+    // What the signed-in person may do here, as the request's own identity carries it; the owner, and a caller the
+    // sandbox cannot name (loopback, a panel), manage everything.
+    self: (c: Context<AppEnv>): Response => {
+        const identity = c.get("identity");
+        if (identity === undefined || identity.role === "owner") {
+            return c.json({ role: identity?.role ?? "owner", agents: "run", edit: "all" } satisfies MemberSelf);
+        }
+        const edits = identity.edits ?? "all";
+        const self: MemberSelf = { role: identity.role, agents: identity.agents ?? "run", edit: edits === "all" || edits === "none" ? edits : [...edits] };
+        if (identity.areas !== undefined) {
+            self.areas = [...identity.areas];
+        }
+        return c.json(self);
     },
     /** DELETE /members/self */
     removeSelf: async (c: Context<AppEnv>): Promise<Response> => {

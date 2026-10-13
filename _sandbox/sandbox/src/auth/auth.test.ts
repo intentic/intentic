@@ -99,7 +99,7 @@ describe("createAuthorizer (owner TOFU + shared access)", () => {
             owner: memOwner("a@x.com"),
             members: memMembers(granted("m@x.com")),
         });
-        await expect(authz.authorize("tok-m", undefined)).resolves.toEqual({ email: "m@x.com", role: "collaborator", methods: ["google"] });
+        await expect(authz.authorize("tok-m", undefined)).resolves.toEqual({ email: "m@x.com", role: "collaborator", agents: "run", edits: "none", methods: ["google"] });
         await expect(authz.authorize("tok-x", undefined)).rejects.toBeInstanceOf(ForbiddenError);
     });
 
@@ -114,6 +114,8 @@ describe("createAuthorizer (owner TOFU + shared access)", () => {
         await expect(authz.authorize("tok-d", undefined)).resolves.toEqual({
             email: "d@x.com",
             role: "guest",
+            agents: "chat",
+            edits: "none",
             areas: ["support", "sales"],
             methods: ["google"],
         });
@@ -131,8 +133,8 @@ describe("createAuthorizer (owner TOFU + shared access)", () => {
                 { email: "w@x.com", role: "writer", areas: ["support"] },
             ]),
         });
-        await expect(authz.authorize("tok-m", undefined)).resolves.toEqual({ email: "m@x.com", role: "maintainer", methods: ["google"] });
-        await expect(authz.authorize("tok-w", undefined)).resolves.toEqual({ email: "w@x.com", role: "writer", areas: ["support"], methods: ["google"] });
+        await expect(authz.authorize("tok-m", undefined)).resolves.toEqual({ email: "m@x.com", role: "maintainer", agents: "run", edits: "all", methods: ["google"] });
+        await expect(authz.authorize("tok-w", undefined)).resolves.toEqual({ email: "w@x.com", role: "writer", agents: "run", edits: ["support"], areas: ["support"], methods: ["google"] });
     });
 
     test("a granted member is recognised whatever case the claim carries", async () => {
@@ -141,7 +143,7 @@ describe("createAuthorizer (owner TOFU + shared access)", () => {
             owner: memOwner("a@x.com"),
             members: memMembers(granted("alice@corp.com")),
         });
-        await expect(authz.authorize("tok-m", undefined)).resolves.toEqual({ email: "Alice@Corp.com", role: "collaborator", methods: ["google"] });
+        await expect(authz.authorize("tok-m", undefined)).resolves.toEqual({ email: "Alice@Corp.com", role: "collaborator", agents: "run", edits: "none", methods: ["google"] });
     });
 
     test("the owner is recognised whatever case the claim carries, on every owner-only gate", async () => {
@@ -290,7 +292,7 @@ describe("createAuthorizer (daemon-minted sessions)", () => {
             members: memMembers(granted("m@x.com")),
         });
         await expect(authz.authorize("sess-a", undefined)).resolves.toEqual({ email: "a@x.com", role: "owner", methods: ["google"] });
-        await expect(authz.authorize("sess-m", undefined)).resolves.toEqual({ email: "m@x.com", role: "collaborator", methods: ["google"] });
+        await expect(authz.authorize("sess-m", undefined)).resolves.toEqual({ email: "m@x.com", role: "collaborator", agents: "run", edits: "none", methods: ["google"] });
         // A verified session is still subject to per-request membership: revoking a member kills live sessions.
         await expect(authz.authorize("sess-x", undefined)).rejects.toBeInstanceOf(ForbiddenError);
         await expect(authz.authorizeOwner("sess-a")).resolves.toBeUndefined();
@@ -452,7 +454,7 @@ describe("identity assertion", () => {
             members,
             identityAssertion: verifier(),
         });
-        await expect(authz.authorize(assertionFor("bo@example.org"), undefined)).resolves.toEqual({ email: "bo@example.org", role: "collaborator", methods: ["email"] });
+        await expect(authz.authorize(assertionFor("bo@example.org"), undefined)).resolves.toEqual({ email: "bo@example.org", role: "collaborator", agents: "run", edits: "none", methods: ["email"] });
         expect(await reasonOf(authz.authorize(assertionFor("cy@example.org"), undefined))).toBe(EMAIL_SIGN_IN_OFF);
         await expect(authz.authorize("sess-bo", undefined)).resolves.toMatchObject({ email: "bo@example.org", methods: ["email"] });
         // The owner takes it back: the session minted from the platform's word stops at its next request.
@@ -468,7 +470,7 @@ describe("identity assertion", () => {
             members: memMembers([{ email: "cy@example.org", role: "viewer" }]),
             identityAssertion: verifier(),
         });
-        await expect(authz.authorize("sess-cy", undefined)).resolves.toEqual({ email: "cy@example.org", role: "viewer", methods: ["email", "passkey"] });
+        await expect(authz.authorize("sess-cy", undefined)).resolves.toEqual({ email: "cy@example.org", role: "viewer", agents: "off", edits: "none", methods: ["email", "passkey"] });
     });
 
     test("on a hosted machine opens it for anyone on the roster and binds without the connect token, as the owner ticket does", async () => {
@@ -483,7 +485,7 @@ describe("identity assertion", () => {
             assertionsForAnyone: true,
         });
         await expect(authz.authorize(assertionFor("ada@example.org"), undefined)).resolves.toEqual({ email: "ada@example.org", role: "owner", methods: ["email"] });
-        await expect(authz.authorize(assertionFor("cy@example.org"), undefined)).resolves.toEqual({ email: "cy@example.org", role: "viewer", methods: ["email"] });
+        await expect(authz.authorize(assertionFor("cy@example.org"), undefined)).resolves.toEqual({ email: "cy@example.org", role: "viewer", agents: "off", edits: "none", methods: ["email"] });
     });
 
     test("spends each assertion once, and refuses another sandbox's, another key's, and any without a verifier, never asking Google", async () => {
@@ -565,6 +567,8 @@ describe("require-passkey policy", () => {
         await expect(authz.authorize("tok-m", undefined, { enrolment: true })).resolves.toEqual({
             email: "m@x.com",
             role: "collaborator",
+            agents: "run",
+            edits: "none",
             methods: ["google"],
         });
         // Holding one: only that passkey opens the door, registration included, so a stolen Google account adds nothing.

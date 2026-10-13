@@ -45,7 +45,7 @@ import {
     searchPaths,
 } from "./layout/workspace-fence.js";
 import { provenanceOf, refuseUnlessVisible } from "../auth/fleet-scope.js";
-import { callerFence } from "../areas/area-scope.js";
+import { callerEditFence, callerFence } from "../areas/area-scope.js";
 import type { Fence } from "@intentic/sandbox-contract";
 import { publicAddressOf } from "../env.config.js";
 
@@ -85,9 +85,9 @@ export const createWorkspaceRoutes = (services: Services) => {
         if (insideArchive(services.workspace.root, relPath)) {
             throw new ORPCError("BAD_REQUEST", { message: "an archive's contents are read-only; extract it to change them" });
         }
-        // The writer tier's whole boundary: the floor (auth/role-floor.ts) admits the route, this decides the path.
-        // Maintainer and above are unfenced and pass through.
-        refuseFenced(await fenceFor(context), relPath);
+        // The writer tier's whole boundary: the floor (auth/role-floor.ts) admits the route, this decides the path, by
+        // where the caller may edit rather than where it may look. Maintainer and above are unfenced and pass through.
+        refuseFenced(callerEditFence(await services.areas.list(), context.identity), relPath);
         return containedIn(services.workspace.root, relPath);
     };
     // The same guard for a shadow's source, answering the canonical relative path a sidecar is filed under: `./a//b.pdf`
@@ -341,6 +341,8 @@ export const createWorkspaceRoutes = (services: Services) => {
         // The one write whose source may sit inside an archive: copying out is how a member reaches the workspace
         // without extracting the whole thing. The destination is a write target like any other.
         copy: i.copy.handler(async ({ input, context }) => {
+            refuseFenced(await fenceFor(context), input.from);
+            // The source is a read, so it is held to where the caller may look, the target to where it may edit.
             refuseFenced(await fenceFor(context), input.from);
             await services.files.copy(await containedForRead(services.workspace.root, input.from), await contained(context, input.to));
             services.history.notifyUserWrite();

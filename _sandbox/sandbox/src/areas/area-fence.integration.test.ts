@@ -4,6 +4,7 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { MemberRole } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { createApp } from "../app.js";
+import type { ProvenCaller } from "../auth/auth.js";
 import type { Services } from "../composition.js";
 import { clientFor, errorCode, proven, rejectForbidden } from "../harness/route-client.testing.js";
 import { fakeHistory, tempWorkspace } from "../harness/route-fakes.testing.js";
@@ -39,6 +40,7 @@ const guest = async (): Promise<{
     readonly client: ReturnType<typeof clientFor>;
     readonly app: ReturnType<typeof createApp>;
     readonly actAs: (role: MemberRole, areas?: readonly string[]) => void;
+    readonly setCaller: (caller: ProvenCaller) => void;
 }> => {
     let caller = proven(`ada@example.com`, `owner`);
     const workspace = tempWorkspace([]);
@@ -62,6 +64,7 @@ const guest = async (): Promise<{
         client: clientFor(app, { bearer: `member` }),
         app,
         actAs: (role, areas) => (caller = proven(`fay@example.com`, role, [`google`], areas)),
+        setCaller: (next) => (caller = next),
     };
 };
 
@@ -146,6 +149,28 @@ test("a writer changes files inside its areas and is refused on every route outs
     expect(inside.status).toBe(200);
     const outside = await app.request(`/workspace/upload?path=finance/leak.csv`, { method: "POST", body: "hi" });
     expect(outside.status).toBe(403);
+});
+
+// Seeing and editing are told apart: a person may read the whole workspace and change files in one area of it. Every
+// door that writes is held to where they edit, and the one that drops a whole tree to editing everywhere.
+test("a person who sees everything edits only the areas named for editing", async () => {
+    const { client, app, setCaller } = await guest();
+    setCaller({ ...proven(`fay@example.com`, `writer`), agents: `off`, edits: [`support`] });
+    // Reads reach the whole workspace.
+    expect((await client.workspace.tree({})).tree.map((entry) => entry.path)).toEqual([`support`, `finance`]);
+    await expect(client.workspace.mkdir({ path: "support/tickets" })).resolves.toEqual({ ok: true });
+    expect(await errorCode(client.workspace.mkdir({ path: "finance/tickets" }))).toBe("FORBIDDEN");
+    expect(await errorCode(client.workspace.move({ from: "support/faq.md", to: "finance/faq.md" }))).toBe("FORBIDDEN");
+    expect((await app.request(`/workspace/upload?path=support/note.md`, { method: "POST", body: "hi" })).status).toBe(200);
+    expect((await app.request(`/workspace/upload?path=finance/leak.csv`, { method: "POST", body: "hi" })).status).toBe(403);
+    expect((await app.request(`/workspace/upload-archive`, { method: "POST", body: "x" })).status).toBe(403);
+});
+
+// A copy reads its source: a fenced person cannot carry a file in from outside what they may see.
+test("a copy's source is held to where the person may look", async () => {
+    const { client, actAs } = await guest();
+    actAs(`writer`, [`support`]);
+    expect(await errorCode(client.workspace.copy({ from: "finance/payroll.csv", to: "support/payroll.csv" }))).toBe("FORBIDDEN");
 });
 
 // The tier is an editor, not an operator: it changes files and has no way to move them into the owner's tree, read a

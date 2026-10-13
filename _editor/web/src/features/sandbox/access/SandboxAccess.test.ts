@@ -143,57 +143,47 @@ const shown = (): string => document.body.textContent ?? ``;
 const buttonLabelled = (label: string): HTMLButtonElement | undefined =>
     [...document.body.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === label);
 
-const dialog = (): HTMLElement | null => document.body.querySelector(`[role=dialog]`);
-
-// The person dialog, opened for a new address and filled in; nothing is sent until its commit press.
-const openInvite = async (address: string): Promise<void> => {
+// The People group's own add row: an address, and the Add press that sends it.
+const addPerson = async (address: string): Promise<void> => {
     buttonLabelled(`Add person`)?.click();
     await settle();
     const field = document.body.querySelector<HTMLInputElement>(`input[type=email]`);
     if (field === null) {
-        throw new Error(`no address field in the person dialog`);
+        throw new Error(`no address field in the add row`);
     }
     field.value = address;
     field.dispatchEvent(new Event(`input`));
     await nextTick();
-};
-
-// Sends whatever the dialog holds: an invite, or an edit's whole grant.
-const commit = async (): Promise<void> => {
-    dialog()?.querySelector(`form`)?.dispatchEvent(new Event(`submit`));
+    field.closest(`form`)?.dispatchEvent(new Event(`submit`));
     await settle();
 };
 
-const inviteEmail = async (address: string): Promise<void> => {
-    await openInvite(address);
-    await commit();
-};
-
-// The dialog opened on somebody already here.
-const openEdit = async (address: string): Promise<void> => {
-    document.body.querySelector<HTMLButtonElement>(`button[aria-label="Edit access for ${address}"]`)?.click();
+// A person's tile, pressed: their panel opens under the tiles.
+const openPerson = async (address: string): Promise<void> => {
+    [...document.body.querySelectorAll<HTMLButtonElement>(`[role=group] button`)].find((tile) => tile.textContent?.includes(address))?.click();
     await settle();
 };
-
-// A tier in the dialog's role list, an area or a reach row ticked by its name, and one of a pair of scope tabs.
-const pickRole = async (label: string): Promise<void> => {
-    [...document.body.querySelectorAll<HTMLButtonElement>(`[role=radio]`)].find((row) => row.textContent?.trim().startsWith(label))?.click();
+const panel = (): HTMLElement | null => document.body.querySelector(`section[aria-label]`);
+// One part of the open panel, by the label over it.
+const part = (label: string): HTMLElement | undefined =>
+    [...(panel()?.querySelectorAll<HTMLElement>(`div`) ?? [])].find((block) => block.firstElementChild?.textContent?.trim() === label);
+const tab = async (label: string, within?: HTMLElement): Promise<void> => {
+    [...(within ?? document.body).querySelectorAll<HTMLButtonElement>(`[role=tab]`)].find((button) => button.textContent?.trim() === label)?.click();
     await nextTick();
 };
-const tickRow = async (name: string): Promise<void> => {
-    [...document.body.querySelectorAll<HTMLLabelElement>(`[role=dialog] label`)]
+const tickRow = async (name: string, within?: HTMLElement): Promise<void> => {
+    [...(within ?? panel() ?? document.body).querySelectorAll<HTMLLabelElement>(`label`)]
         .find((row) => row.textContent?.includes(name))
         ?.querySelector<HTMLInputElement>(`input[type=checkbox]`)
         ?.click();
     await nextTick();
 };
-const tab = async (label: string): Promise<void> => {
-    [...document.body.querySelectorAll<HTMLButtonElement>(`[role=tab]`)].find((button) => button.textContent?.trim() === label)?.click();
-    await nextTick();
+// The panel saves a moment after the last change, so a run of clicks is one write.
+const autosaved = async (): Promise<void> => {
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    await settle();
 };
-const areaRows = (): string[] =>
-    [...document.body.querySelectorAll<HTMLLabelElement>(`[role=dialog] [role=group] label`)].map((row) => row.textContent?.trim() ?? ``);
-const saveButton = (): HTMLButtonElement | undefined => buttonLabelled(`Send invite`) ?? buttonLabelled(`Save`);
+
 
 // Both rosters land on their own promise, so a row exists a few ticks after mount, not on the next one; a write runs
 // through the operations ledger, which lands its answer a task later.
@@ -237,7 +227,7 @@ afterEach(() => {
 it(`blames the sandbox only when the sandbox is what failed`, async () => {
     sandboxJson.mockRejectedValue(new Error(`Request failed (500).`));
     mount();
-    await inviteEmail(`guest@example.com`);
+    await addPerson(`guest@example.com`);
 
     expect(shown()).toContain(`Couldn't grant access on the sandbox`);
     expect(create).not.toHaveBeenCalled();
@@ -246,7 +236,7 @@ it(`blames the sandbox only when the sandbox is what failed`, async () => {
 it(`does not ask whether the sandbox is online when the platform is what failed`, async () => {
     create.mockRejectedValue(new Error(`Internal server error`));
     mount();
-    await inviteEmail(`guest@example.com`);
+    await addPerson(`guest@example.com`);
 
     expect(shown()).not.toMatch(/online\?/);
     expect(shown()).toContain(`recording the invite failed`);
@@ -261,7 +251,7 @@ it(`hands the owner the link when the email did not carry it`, async () => {
         delivery: `local-link`,
     });
     mount();
-    await inviteEmail(`guest@example.com`);
+    await addPerson(`guest@example.com`);
 
     expect(shown()).toContain(`Invited.`);
     expect(shown()).toContain(`https://localhost:47145/invite/tok`);
@@ -281,7 +271,7 @@ it(`keeps the link to carry across the tab closing and opening again`, async () 
         delivery: `local-link`,
     });
     mount();
-    await inviteEmail(`guest@example.com`);
+    await addPerson(`guest@example.com`);
     app?.unmount();
     document.body.innerHTML = ``;
 
@@ -298,7 +288,7 @@ it(`shows what the mail provider said when it refused`, async () => {
         reason: `Resend rejected the email (429): daily quota reached`,
     });
     mount();
-    await inviteEmail(`guest@example.com`);
+    await addPerson(`guest@example.com`);
 
     expect(shown()).toContain(`The email was refused`);
     expect(shown()).toContain(`daily quota reached`);
@@ -397,124 +387,147 @@ const grantsSent = (): unknown[] =>
         .map(([, init]) => JSON.parse((init as { body: string }).body) as unknown);
 
 const accepted = (tier: string) => ({ email: `guest@example.com`, role: tier, status: `accepted`, invitedAt: `2026-08-18T00:00:00.000Z` });
+// A member the platform and the daemon both know, the daemon answering whatever `daemonMembers` holds.
+const withMember = (tier: string, row: Record<string, unknown> = {}): void => {
+    list.mockResolvedValue({ members: [accepted(tier)] });
+    daemonMembers.mockReturnValue([{ email: `guest@example.com`, role: tier, ...row }]);
+    sandboxJson.mockImplementation(async (path: unknown) => (path === `/members` ? { members: daemonMembers() } : quiet(path)));
+};
 
-// A guest reaches the assistants that work in the areas it holds and nothing else, so the daemon refuses one that is
-// unfenced or fenced where nobody works. The dialog holds the commit until the pick is one it would take, and then
-// sends tier and fence as one grant.
-it(`holds a member's move to guest until its fence reaches an assistant, then grants tier and fence together`, async () => {
-    list.mockResolvedValue({ members: [accepted(`collaborator`)] });
+/* ADDING A PERSON: an address alone, and they start able to see and nothing more. */
+
+it(`adds a person read-only with nothing to spend, and opens them`, async () => {
+    create.mockResolvedValue({
+        members: [{ email: `dee@corp.example`, role: `viewer`, status: `pending`, invitedAt: `2026-08-18T00:00:00.000Z` }],
+        link: `https://localhost:47145/invite/tok`,
+        delivery: `sent`,
+    });
+    mount();
+    await settle();
+    expect(shown()).toContain(`Only you so far.`);
+    await addPerson(`dee@corp.example`);
+
+    expect(grantsSent()).toEqual([
+        { email: `dee@corp.example`, role: `viewer`, emailSignIn: true, agents: `off`, credentials: { capabilities: [], secrets: [] } },
+    ]);
+    expect(create).toHaveBeenCalledWith({ sandboxId: `s1`, email: `dee@corp.example`, role: `viewer` });
+    // Their tile says what they can do, and their panel is open for the rest.
+    expect(shown()).toContain(`Can see`);
+    expect(panel()?.textContent).toContain(`Invite pending`);
+});
+
+/* THE PANEL: each change saves a moment after it is made, as one grant; an answer the daemon would refuse waits, said. */
+
+// A person who only chats reaches the assistants in their areas and nothing else, so the daemon refuses one with no area
+// or one whose areas nobody works in; the panel holds it until it is one the daemon takes, then sends it whole.
+it(`holds a move to chatting until its areas reach an assistant, then saves it`, async () => {
+    withMember(`collaborator`);
     setRole.mockResolvedValue({ members: [accepted(`guest`)] });
-    sandboxJson.mockImplementation(async (path: unknown) => (path === `/members` ? { members: daemonMembers() } : quiet(path)));
     mount();
     await settle();
-
-    await openEdit(`guest@example.com`);
-    await pickRole(`Guest`);
-    // Nothing granted yet: the fence it needs is asked for, and the commit waits on it.
-    expect(shown()).toContain(`A guest talks to the assistants that work there`);
-    expect(saveButton()?.disabled).toBe(true);
+    await openPerson(`guest@example.com`);
+    await tab(`Chat with assistants`);
+    await autosaved();
+    expect(shown()).toContain(`Not saved`);
+    expect(shown()).toContain(`they talk to the assistants that work there`);
     expect(grantsSent()).toEqual([]);
-
-    await tickRow(`Support guest`);
-    expect(saveButton()?.disabled).toBe(false);
-    daemonMembers.mockReturnValue([{ email: `guest@example.com`, role: `guest`, areas: [`support`] }]);
-    await commit();
-
-    expect(grantsSent()).toEqual([{ email: `guest@example.com`, role: `guest`, areas: [`support`], emailSignIn: false, credentials: `all` }]);
-    expect(setRole).toHaveBeenCalledWith({ sandboxId: `s1`, email: `guest@example.com`, role: `guest` });
-    // The dialog goes, and the row now says who they talk to, which for this tier is the whole of what they can do.
-    await waitFor(() => expect(dialog()).toBeNull());
-    expect(shown()).toContain(`Talks to Support`);
-});
-
-// The refusal the owner cannot read off the fence itself: an area can name real folders and still hand over nobody.
-it(`will not grant a guest fenced where no assistant works, and says what would fix it`, async () => {
-    list.mockResolvedValue({ members: [accepted(`collaborator`)] });
-    sandboxJson.mockImplementation(async (path: unknown) => (path === `/members` ? { members: daemonMembers() } : quiet(path)));
-    mount();
-    await settle();
-
-    await openEdit(`guest@example.com`);
-    await pickRole(`Guest`);
-    // Finance names folders of its own, and no assistant starts in any of them.
-    await tickRow(`Finance`);
-
-    expect(saveButton()?.disabled).toBe(true);
-    expect(shown()).toContain(`No assistant works in these folders`);
-    expect(shown()).toContain(`give an assistant a starting folder in one of these areas`);
-    await commit();
-    expect(grantsSent()).toEqual([]);
-    expect(setRole).not.toHaveBeenCalled();
-});
-
-// Fencing somebody at the tier they hold is one daemon write; the platform's record, which knows only the tier, is
-// not touched. The absence of the field is the whole workspace, which is why an unfenced row sends no field.
-it(`grants an area on an existing row, at the tier that row already holds`, async () => {
-    list.mockResolvedValue({ members: [accepted(`collaborator`)] });
-    sandboxJson.mockImplementation(async (path: unknown) => (path === `/members` ? { members: daemonMembers() } : quiet(path)));
-    mount();
-    await settle();
-
-    // The row says where they work and what their assistants may use, in one line.
-    expect(shown()).toContain(`Whole workspace · every connection and secret`);
-    await openEdit(`guest@example.com`);
-    expect(areaRows()).toEqual([]);
-    expect(shown()).toContain(`They can talk to every assistant.`);
-    await tab(`Only some areas`);
-    expect(areaRows()).toEqual([`Support guestsupport`, `Financefinance`]);
-    await tickRow(`Support guest`);
-    daemonMembers.mockReturnValue([{ email: `guest@example.com`, role: `collaborator`, areas: [`support`] }]);
-    await commit();
-
-    expect(grantsSent()).toEqual([{ email: `guest@example.com`, role: `collaborator`, areas: [`support`], emailSignIn: false, credentials: `all` }]);
-    expect(setRole).not.toHaveBeenCalled();
-    expect(shown()).toContain(`Support guest · every connection and secret`);
-});
-
-// The tier decides what the rest of the form asks: a guest has no unfenced answer and each area says who it would
-// hand over, and a maintainer is asked neither where nor with what, since that tier is the owner's authority.
-it(`asks for an invite's areas in the terms of the role picked`, async () => {
-    mount();
-    await settle();
-    await openInvite(`newcomer@example.com`);
-    expect([...document.body.querySelectorAll(`[role=tab][aria-selected=true]`)].map((selected) => selected.textContent?.trim())).toContain(`Whole workspace`);
-
-    await pickRole(`Guest`);
-    expect(document.body.querySelector(`[role=tab]`)?.textContent).not.toContain(`Whole workspace`);
-    expect(areaRows().find((row) => row.startsWith(`Support guest`))).toContain(`Support`);
-    expect(areaRows().find((row) => row.startsWith(`Finance`))).toContain(`no assistant`);
-    expect(shown()).toContain(`Pick at least one area.`);
-    expect(document.body.querySelector(`[role=dialog] .ui-field-error`)).toBeNull();
-    expect(saveButton()?.disabled).toBe(true);
 
     await tickRow(`Support guest`);
     expect(shown()).toContain(`They can talk to Support.`);
-    expect(saveButton()?.disabled).toBe(false);
+    daemonMembers.mockReturnValue([{ email: `guest@example.com`, role: `guest`, agents: `chat`, areas: [`support`] }]);
+    await autosaved();
 
-    await pickRole(`Maintainer`);
-    expect(areaRows()).toEqual([]);
-    expect(shown()).toContain(`A maintainer sees the whole workspace`);
-    expect(shown()).toContain(`A maintainer can use every connection and secret.`);
+    expect(grantsSent()).toEqual([{ email: `guest@example.com`, role: `guest`, emailSignIn: false, agents: `chat`, areas: [`support`], credentials: `all` }]);
+    expect(setRole).toHaveBeenCalledWith({ sandboxId: `s1`, email: `guest@example.com`, role: `guest` });
 });
 
-// With no assistant homed in any area, no guest grant can be sent; that is said once, before any area is tried.
-it(`tells the owner up front when no area has an assistant a guest could talk to`, async () => {
+// The refusal the owner cannot read off the fence itself: an area can name real folders and still hand over nobody.
+it(`will not save a chat in areas no assistant works in, and says so`, async () => {
+    withMember(`collaborator`);
+    mount();
+    await settle();
+    await openPerson(`guest@example.com`);
+    await tab(`Chat with assistants`);
+    await tickRow(`Finance`);
+    await autosaved();
+
+    expect(shown()).toContain(`No assistant works in these areas.`);
+    expect(grantsSent()).toEqual([]);
+    expect(setRole).not.toHaveBeenCalled();
+});
+
+// Seeing and editing are separate answers: someone may read the whole workspace and change files in one area by hand,
+// with agents off, which is a writer that drives nothing.
+it(`lets a person edit some areas by hand, see everything, and run no agents`, async () => {
+    withMember(`collaborator`);
+    setRole.mockResolvedValue({ members: [accepted(`writer`)] });
+    mount();
+    await settle();
+    await openPerson(`guest@example.com`);
+    await tab(`Off`, part(`Agents`));
+    await tab(`Only some areas`, part(`Can edit by hand`));
+    await tickRow(`Support guest`, part(`Can edit by hand`));
+    await autosaved();
+
+    expect(grantsSent()).toEqual([{ email: `guest@example.com`, role: `writer`, emailSignIn: false, agents: `off`, edit: [`support`], credentials: `all` }]);
+    expect(setRole).toHaveBeenCalledWith({ sandboxId: `s1`, email: `guest@example.com`, role: `writer` });
+});
+
+// What their agents may spend is in the same panel, sent in the same grant, and enforced by the sandbox. Narrowing
+// starts from nothing ticked, lists only what a reach can hold back, and names the rest as always available.
+it(`limits what a person's agents may use`, async () => {
+    withMember(`collaborator`);
+    mount();
+    await settle();
+    await openPerson(`guest@example.com`);
+    await tab(`Only these`);
+    await settle();
+    expect(shown()).toContain(`0 of 2 picked`);
+    expect(shown()).toContain(`Always available, nothing to withhold: Docker.`);
+    await tickRow(`github`);
+    await autosaved();
+
+    expect(grantsSent()).toEqual([
+        { email: `guest@example.com`, role: `collaborator`, emailSignIn: false, agents: `run`, credentials: { capabilities: [`github`], secrets: [] } },
+    ]);
+    expect(setRole).not.toHaveBeenCalled();
+});
+
+// Managing is every other answer at once; the panel says so rather than drawing controls that would mean nothing.
+it(`makes a person a manager with one switch`, async () => {
+    withMember(`viewer`);
+    setRole.mockResolvedValue({ members: [accepted(`maintainer`)] });
+    mount();
+    await settle();
+    await openPerson(`guest@example.com`);
+    panel()?.querySelectorAll<HTMLInputElement>(`input[role="switch"]`)[0]?.click();
+    await nextTick();
+    expect(shown()).toContain(`Sees and edits everything, runs agents, uses every connection.`);
+    await autosaved();
+
+    expect(grantsSent()).toEqual([{ email: `guest@example.com`, role: `maintainer`, emailSignIn: false }]);
+    expect(setRole).toHaveBeenCalledWith({ sandboxId: `s1`, email: `guest@example.com`, role: `maintainer` });
+});
+
+// With no assistant homed in any area, nobody can be set to chat; that is said once, before any area is tried.
+it(`tells the owner up front when no area has an assistant to chat with`, async () => {
     const homed = personas.value;
     personas.value = [];
     try {
+        withMember(`viewer`);
         mount();
         await settle();
-        await openInvite(`newcomer@example.com`);
-        await pickRole(`Guest`);
-        expect(shown()).toContain(`No assistant works in any area yet, so a guest would have nobody to talk to.`);
+        await openPerson(`guest@example.com`);
+        await tab(`Chat with assistants`);
+        expect(shown()).toContain(`No assistant works in any area yet.`);
     } finally {
         personas.value = homed;
     }
 });
 
-// A grant replaces the member's whole row on the daemon, so one sent while that roster is unread would drop the areas
-// and the reach the row holds and widen what the member gets; the tab says so and opens nothing to rewrite them.
-it(`rewrites no grant while it cannot read what each member holds`, async () => {
+// A grant replaces the member's whole row on the daemon, so one sent while that roster is unread would drop what the
+// row holds and widen what the person gets; the tab says so and opens nobody to rewrite.
+it(`opens nobody while it cannot read what each person may do`, async () => {
     list.mockResolvedValue({ members: [accepted(`collaborator`)] });
     sandboxJson.mockImplementation(async (path: unknown, init?: unknown) => {
         if (path === `/members` && init === undefined) {
@@ -526,46 +539,20 @@ it(`rewrites no grant while it cannot read what each member holds`, async () => 
     await settle();
 
     expect(shown()).toContain(`guest@example.com`);
-    expect(shown()).toContain(`Couldn't read what each member holds, so nobody's access can be changed until the sandbox answers.`);
-    expect(document.body.querySelector<HTMLButtonElement>(`button[aria-label="Edit access for guest@example.com"]`)?.disabled).toBe(true);
+    expect(shown()).toContain(`Couldn't read what each person may do, so nobody's access can be changed until the sandbox answers.`);
+    await openPerson(`guest@example.com`);
+    expect(panel()).toBeNull();
     expect(grantsSent()).toEqual([]);
 });
 
-/* WHAT A PERSON'S ASSISTANTS MAY SPEND: decided in the same dialog and sent in the same grant, enforced by the sandbox. */
-
-// Narrowing starts from nothing ticked, lists only what a reach can hold back, and names the rest as always available.
-it(`limits what an invited person's assistants may use, and sends the list with the grant`, async () => {
-    create.mockResolvedValue({ members: [], link: `https://localhost:47145/invite/tok`, delivery: `sent` });
+// The tile names a person by what they can do, from the daemon's own row.
+it(`names each person by what they can do`, async () => {
+    withMember(`writer`, { areas: [`support`], agents: `off`, edit: [`support`] });
     mount();
     await settle();
-    await openInvite(`dee@corp.example`);
-
-    await tab(`Only what I choose`);
-    await settle();
-    expect(shown()).toContain(`0 of 2 picked`);
-    expect(shown()).toContain(`Always available, since there is no credential to hold back: Docker.`);
-    await tickRow(`github`);
-    expect(shown()).toContain(`1 of 2 picked`);
-    await commit();
-
-    expect(grantsSent()).toEqual([
-        { email: `dee@corp.example`, role: `collaborator`, emailSignIn: true, credentials: { capabilities: [`github`], secrets: [] } },
-    ]);
+    expect(shown()).toContain(`Edits`);
 });
 
-// The row reads the reach the daemon holds, so the line under a person says what their assistants may use.
-it(`says on a member's row how much their assistants may use`, async () => {
-    list.mockResolvedValue({ members: [accepted(`collaborator`)] });
-    sandboxJson.mockImplementation(async (path: unknown) =>
-        path === `/members`
-            ? { members: [{ email: `guest@example.com`, role: `collaborator`, credentials: { capabilities: [`github`], secrets: [`DATABASE_URL`, `X`] } }] }
-            : quiet(path),
-    );
-    mount();
-    await settle();
-
-    expect(shown()).toContain(`Whole workspace · 1 connection, 2 secrets`);
-});
 
 // Writer is the tier just under the maintainer floor these surfaces share, so it is the one a looser gate would let in.
 it(`keeps the token surfaces off the tab of a member below maintainer`, async () => {
@@ -694,49 +681,35 @@ it(`says which owner-wide records could not be read, and draws the list for them
 });
 
 /* EMAIL SIGN-IN: whether intentic's word for an address opens this sandbox for its person, decided with the invite and
-   changed in the same dialog afterwards. */
-
-it(`lets an invited address sign in with an email code by default`, async () => {
-    create.mockResolvedValue({ members: [], link: `https://localhost:47145/invite/tok`, delivery: `sent` });
-    mount();
-    await settle();
-    await inviteEmail(`dee@corp.example`);
-
-    expect(grantsSent()).toEqual([{ email: `dee@corp.example`, role: `collaborator`, emailSignIn: true, credentials: `all` }]);
-});
+   switched in the panel afterwards. */
 
 // Google already vouches for its own addresses: a second road for one is one the owner did not ask for.
-it(`leaves it off for an address Google holds, unless the owner turns it on`, async () => {
+it(`leaves email-code sign-in off for an address Google holds`, async () => {
     create.mockResolvedValue({ members: [], link: `https://localhost:47145/invite/tok`, delivery: `sent` });
     mount();
     await settle();
     const address = [`dee`, `gmail.com`].join(`@`);
-    await openInvite(address);
+    await addPerson(address);
 
-    expect(shown()).toContain(`Can also sign in with a code sent to this address`);
-    const toggle = document.body.querySelector<HTMLInputElement>(`[role=dialog] input[role="switch"]`);
-    expect(toggle?.checked).toBe(false);
-    await commit();
-
-    expect(grantsSent()).toEqual([{ email: address, role: `collaborator`, emailSignIn: false, credentials: `all` }]);
+    expect(grantsSent()).toEqual([
+        { email: address, role: `viewer`, emailSignIn: false, agents: `off`, credentials: { capabilities: [], secrets: [] } },
+    ]);
 });
 
-// Changing how somebody signs in is one daemon write that carries their tier and fence as they stand (a grant replaces
-// the row whole), and nothing for the platform, whose record has no way in to hold.
-it(`changes a member's email sign-in with their tier and fence kept, at the sandbox alone`, async () => {
-    list.mockResolvedValue({ members: [accepted(`collaborator`)] });
-    daemonMembers.mockReturnValue([{ email: `guest@example.com`, role: `collaborator`, areas: [`support`] }]);
-    sandboxJson.mockImplementation(async (path: unknown) => (path === `/members` ? { members: daemonMembers() } : quiet(path)));
+// Changing how somebody signs in is one daemon write that carries the rest of their access as it stands (a grant
+// replaces the row whole), and nothing for the platform, whose record has no way in to hold.
+it(`changes a person's email sign-in with the rest of their access kept, at the sandbox alone`, async () => {
+    withMember(`collaborator`, { areas: [`support`] });
     mount();
     await settle();
-
-    await openEdit(`guest@example.com`);
-    const toggle = document.body.querySelector<HTMLInputElement>(`[role=dialog] input[role="switch"]`);
+    await openPerson(`guest@example.com`);
+    const toggle = [...(panel()?.querySelectorAll<HTMLInputElement>(`input[role="switch"]`) ?? [])].at(-1);
     expect(toggle?.checked).toBe(false);
     toggle?.click();
-    await nextTick();
-    await commit();
+    await autosaved();
 
-    expect(grantsSent()).toEqual([{ email: `guest@example.com`, role: `collaborator`, areas: [`support`], emailSignIn: true, credentials: `all` }]);
+    expect(grantsSent()).toEqual([
+        { email: `guest@example.com`, role: `collaborator`, emailSignIn: true, agents: `run`, areas: [`support`], credentials: `all` },
+    ]);
     expect(setRole).not.toHaveBeenCalled();
 });

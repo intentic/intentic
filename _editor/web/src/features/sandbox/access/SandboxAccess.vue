@@ -5,6 +5,7 @@ import {
     Avatar,
     Button,
     clipboardOf,
+    FACE_SIZES,
     Notice,
     type IconName,
     type NoticeModel,
@@ -15,11 +16,14 @@ import {
     SkeletonSnapshot,
     StatusBadge,
     type StatusVariant,
+    ui,
     vSkeletonSource,
 } from "@intentic/ui";
+import PersonaTile from "../../../components/PersonaTile.vue";
 import { noticeFrom } from "@intentic/ui/async";
 import { formatDate } from "@intentic/ui/format";
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, ref, useId, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
 import { apiClient } from "../../../lib/useApi";
 import { grantMember, revokeMember, useMembers } from "../../../client/sandbox/useMembers";
@@ -28,15 +32,14 @@ import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useRole } from "../../../client/sandbox/useRole";
 import { useSandboxSession } from "../../../client/session/sandboxSession";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
-import { useAreas } from "../areas/useAreas";
 import { identityHue } from "../../../lib/identityHue";
 import { presenceActivity, presenceOthers } from "../../../workbench/presence/usePresence";
 import { useAccessInventory } from "./useAccessInventory";
 import ControlTokensSection from "./ControlTokensSection.vue";
 import PasskeysSection from "./PasskeysSection.vue";
-import { type AccessDraft, draftGrant, grantSendable, roleBounded, roleDrivesAgents } from "./accessGrant";
+import { type AccessDraft, accessWord, draftGrant, draftOf, draftProblem, newPerson } from "./accessGrant";
 import { usePersonaReach } from "./usePersonaReach";
-import PersonAccessDialog from "./PersonAccessDialog.vue";
+import PersonPanel from "./PersonPanel.vue";
 import StandingGrants from "./StandingGrants.vue";
 import { useOperation } from "../../../workbench/operations/operations";
 import { useT } from "@intentic/ui/i18n";
@@ -60,6 +63,9 @@ const { canShip } = useRole();
 // The platform's invite records: who was invited and how that stands. The daemon's own roster is `grants` below.
 const members = ref<InviteRecord[]>([]);
 
+// A person a link names (`?open=<email>`), handed down by the hub so a reload lands on them.
+const { open = undefined } = defineProps<{ open?: string }>();
+
 // Each tier in the words the rest of the app uses for it; a role this build does not know reads as itself.
 const roleLabel = (role: string): string =>
     ({
@@ -70,91 +76,97 @@ const roleLabel = (role: string): string =>
         maintainer: t(`sandbox.sandboxAccess.maintainer`),
         owner: t(`sandbox.sandboxAccess.owner`),
     })[role] ?? role;
-// The reader's own tier, for the row a member sees of themselves.
+// The reader's own tier, for the tile a member sees of themselves.
 const ownRole = computed((): string => roleLabel(sandbox.active.value?.role ?? `viewer`));
 
-// The daemon's own roster, the one copy that knows a fence and a reach; the platform's records above carry the tier
+// The daemon's own roster, the one copy that knows what each person may do; the platform's records above carry the tier
 // only. It is the members cache entry (useMembers), which a grant or revoke here fills with the roster the daemon
 // answers, so this tab holds no copy of its own and the board's Everyone/Mine row reads the same list. Only the owner
 // reads it.
 const { roster, members: grants, error: grantsError } = useMembers({ enabled: isOwner });
-// Why that roster could not be read. While set no row's fence or reach is known, and a grant replaces the whole row, so
-// an edit sent now would drop what it holds and widen what the member sees: no grant is rewritten until it clears.
+// Why that roster could not be read. While set nobody's access is known, and a grant replaces the whole row, so an edit
+// sent now would drop what it holds and widen what the person gets: no panel opens until it clears.
 const grantsUnread = computed<NoticeModel | undefined>(() =>
     grantsError.value === undefined
         ? undefined
         : noticeFrom(new Error(grantsError.value), t(`sandbox.sandboxAccess.couldntReadMemberAreas`), { tone: `warning` }),
 );
-// Whether the fences are not known: the roster could not be read, or has not been (a sandbox that is not answering never
-// starts the read). No row is edited then, for the same reason.
+// Whether access is not known: the roster could not be read, or has not been (a sandbox that is not answering never
+// starts the read). No panel opens then, for the same reason.
 const fencesUnknown = computed(() => grantsUnread.value !== undefined || roster.value === undefined);
 const grantOf = (address: string) => grants.value.find((grant) => grant.email === address.toLowerCase());
 // Which assistants a fence hands over: derived from where each card works, never picked per person.
 const { namesOf } = usePersonaReach();
-// An area is named on the row the way it is on its own page; an id with no area behind it reads as itself, since
-// the person still holds it. Held for a guest, the one tier the daemon refuses this read to.
-const { labelOf: areaLabel } = useAreas(() => sandbox.active.value?.role !== `guest`);
 
-// WHAT A ROW SAYS of a person, in one line under their address: where they work, then what their assistants may
-// spend. For a guest the assistants they talk to are the whole of their access, so those are named instead of folders.
-const accessLine = (member: InviteRecord): string => {
-    const grant = grantOf(member.email);
-    const role = grant?.role ?? member.role;
-    if (!roleBounded(role)) {
-        return t(`sandbox.sandboxAccess.lineMaintainer`);
-    }
-    const where =
-        role === `guest`
-            ? namesOf(grant?.areas).length === 0
-                ? t(`sandbox.sandboxAccess.guestReachesNobody`)
-                : t(`sandbox.sandboxAccess.guestReaches`, { names: namesOf(grant?.areas).join(`, `) })
-            : grant?.areas === undefined
-              ? t(`sandbox.sandboxAccess.wholeWorkspace`)
-              : grant.areas.map((area) => areaLabel(area)).join(`, `);
-    if (!roleDrivesAgents(role)) {
-        return where;
-    }
-    const reach = grant?.credentials;
-    const uses =
-        reach === undefined
-            ? t(`sandbox.sandboxAccess.lineEverything`)
-            : reach.capabilities.length + reach.secrets.length === 0
-              ? t(`sandbox.sandboxAccess.lineNothing`)
-              : [
-                    ...(reach.capabilities.length > 0
-                        ? [t(`sandbox.sandboxAccess.lineAccounts`, { count: reach.capabilities.length }, reach.capabilities.length)]
-                        : []),
-                    ...(reach.secrets.length > 0 ? [t(`sandbox.sandboxAccess.lineSecrets`, { count: reach.secrets.length }, reach.secrets.length)] : []),
-                ].join(`, `);
-    return `${where} · ${uses}`;
+// What a person's access is as the panel edits it: the daemon's row, or the platform's tier alone for one it never wrote.
+const accessOf = (member: InviteRecord): AccessDraft => draftOf(grantOf(member.email), member.role);
+// The one word under a person's tile.
+const WORDS = {
+    manages: () => t(`sandbox.sandboxAccess.wordManages`),
+    chats: () => t(`sandbox.sandboxAccess.wordChats`),
+    edits: () => t(`sandbox.sandboxAccess.wordEdits`),
+    runsAgents: () => t(`sandbox.sandboxAccess.wordRunsAgents`),
+    sees: () => t(`sandbox.sandboxAccess.wordSees`),
+} as const;
+const wordOf = (member: InviteRecord): string => WORDS[accessWord(accessOf(member))]();
+
+// THE OPEN PERSON: one at a time, under the tiles, as a persona opens. Adding someone opens them, since "added a person"
+// and "now set them up" are one errand; their address names them in the URL.
+const selected = ref<string>();
+const selectedMember = computed(() => members.value.find((member) => member.email === selected.value));
+const panelId = useId();
+const toggle = (member: InviteRecord): void => {
+    clearNotice();
+    selected.value = selected.value === member.email ? undefined : member.email;
 };
-
-// THE PERSON DIALOG: adding someone and changing what someone holds are one form. `editingEmail` is who it is open on;
-// none is a new invite.
-const dialogOpen = ref(false);
-const editingEmail = ref<string>();
-const editing = computed(() => {
-    const member = members.value.find((record) => record.email === editingEmail.value);
-    return member === undefined ? undefined : { email: member.email, pending: member.status !== `accepted` };
-});
-// A new teammate's usual grant: drives agents across the workspace with what the sandbox has connected. Editing opens
-// on what the daemon holds for them, the platform's tier standing in only for a row the daemon never wrote.
-const NEW_PERSON: AccessDraft = { role: `collaborator`, areas: undefined, emailSignIn: false, credentials: `all` };
-const initialDraft = computed((): AccessDraft => {
-    const member = editing.value === undefined ? undefined : members.value.find((record) => record.email === editing.value?.email);
-    if (member === undefined) {
-        return NEW_PERSON;
+const route = useRoute();
+const router = useRouter();
+// Lands on the person a link names once the roster holds them, once per naming: a refetch must not reopen one the
+// owner just closed.
+let landedOn: string | undefined;
+watch(
+    [() => open, members],
+    ([asked]) => {
+        if (asked === undefined || landedOn === asked || !members.value.some((member) => member.email === asked)) {
+            return;
+        }
+        landedOn = asked;
+        selected.value = asked;
+    },
+    { immediate: true },
+);
+watch(selected, (email) => {
+    if (email !== open) {
+        void router.replace({ query: { ...route.query, open: email } });
     }
-    const grant = grantOf(member.email);
-    return {
-        role: grant?.role ?? member.role,
-        areas: grant?.areas,
-        emailSignIn: grant?.emailSignIn === true,
-        credentials: grant?.credentials ?? `all`,
-    };
 });
-// Whether a grant at this tier, fenced this way, is one the daemon will take.
-const sendable = (draft: AccessDraft): boolean => grantSendable(draft.role, draft.areas, namesOf(draft.areas).length);
+
+// ADDING: an address and nothing else, as a persona's name is. The person starts able to see and nothing more (no
+// agents, nothing to spend), so the invite going out at once hands over nothing the owner has not yet decided.
+const adding = ref(false);
+const newEmail = ref(``);
+const newEmailTouched = ref(false);
+const validEmail = (value: string): boolean => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value);
+const newAddress = computed(() => newEmail.value.trim().toLowerCase());
+const newTaken = computed(() => members.value.some((member) => member.email === newAddress.value));
+const startAdd = (): void => {
+    clearNotice();
+    selected.value = undefined;
+    newEmail.value = ``;
+    newEmailTouched.value = false;
+    adding.value = true;
+};
+const addPerson = async (): Promise<void> => {
+    newEmailTouched.value = true;
+    if (!validEmail(newAddress.value) || newTaken.value) {
+        return;
+    }
+    const address = newAddress.value;
+    if (await invite(address, newPerson(address))) {
+        adding.value = false;
+        selected.value = address;
+    }
+};
 
 // THE ROSTER WRITES ARE THE SANDBOX'S, NOT THIS TAB'S. An invite, a resend, a re-grade and a revoke are each two writes
 // (the daemon's enforced list, then the platform's record), one at a time, and they live in the operations ledger: the
@@ -217,6 +229,8 @@ const deliveryNotice = computed((): NoticeModel | undefined => {
 const notice = computed(
     () => localNotice.value ?? writes.failure.value?.notice ?? sessions.failure.value ?? deliveryNotice.value,
 );
+// What the open panel says: a write it made that was refused, or a roster it cannot trust. A link to carry is the page's.
+const panelNotice = computed(() => localNotice.value ?? writes.failure.value?.notice);
 // Accept link the owner carries when mail didn't; beside `notice`, not inside it, since a link is markup.
 const handover = computed(() => (notice.value !== undefined && notice.value === deliveryNotice.value ? undelivered.value?.link : undefined));
 
@@ -374,7 +388,7 @@ const grantOnDaemon = async (grant: MemberGrant, refused: string): Promise<void>
 
 const invite = async (value: string, draft: AccessDraft): Promise<boolean> => {
     const id = sandbox.activeSandboxId.value;
-    if (id === undefined || busy.value || !sendable(draft)) {
+    if (id === undefined || busy.value || draftProblem(draft, namesOf(draft.see).length) !== undefined) {
         return false;
     }
     clearNotice();
@@ -385,17 +399,17 @@ const invite = async (value: string, draft: AccessDraft): Promise<boolean> => {
         keep: true,
         task: async () => {
             await grantOnDaemon(draftGrant(value, draft), t(`sandbox.sandboxAccess.couldntGrantAccess`));
-            const result = await apiClient.invite.create({ sandboxId: id, email: value, role: draft.role });
+            const result = await apiClient.invite.create({ sandboxId: id, email: value, role: draftGrant(value, draft).role });
             return { members: result.members, delivery: result };
         },
     });
     return outcome?.state === `done`;
 };
 
-const resend = async (target: string): Promise<void> => {
+const resend = async (target: string): Promise<boolean> => {
     const id = sandbox.activeSandboxId.value;
     if (id === undefined || busy.value) {
-        return;
+        return false;
     }
     clearNotice();
     const outcome = await writes.run({
@@ -408,10 +422,8 @@ const resend = async (target: string): Promise<void> => {
             return { members: result.members, delivery: result };
         },
     });
-    // Sent: the page under the dialog is where a link the mail could not carry is said.
-    if (outcome?.state === `done`) {
-        dialogOpen.value = false;
-    }
+    // Sent: a link the mail could not carry is said above the tiles, with the panel left open.
+    return outcome?.state === `done`;
 };
 
 // No device roster can exist: a session is a signed claim the daemon verifies, not stored. The group says what's true:
@@ -455,11 +467,10 @@ const revokeSessions = async (): Promise<void> => {
 };
 
 // Changes what a person holds with the same two-write, daemon-first order as an invite: the whole grant to the daemon,
-// then the tier to the platform's record when it moved. Applies on the member's next request. Reports whether both
-// landed, so the dialog closes only on a change that is really made.
+// then the tier to the platform's record when it moved. Applies on the person's next request.
 const saveAccess = async (target: string, draft: AccessDraft): Promise<boolean> => {
     const id = sandbox.activeSandboxId.value;
-    if (id === undefined || busy.value || !sendable(draft)) {
+    if (id === undefined || draftProblem(draft, namesOf(draft.see).length) !== undefined) {
         return false;
     }
     clearNotice();
@@ -467,43 +478,40 @@ const saveAccess = async (target: string, draft: AccessDraft): Promise<boolean> 
         localNotice.value = grantsUnread.value;
         return false;
     }
+    const grant = draftGrant(target, draft);
     const recorded = members.value.find((member) => member.email === target)?.role;
     const outcome = await writes.run({
         what: t(`sandbox.sandboxAccess.changingAccessOf`, { email: target }),
         failed: refusedAs(t(`sandbox.sandboxAccess.recordingRoleFailed`)),
-        // Quiet: the row's own line is the answer.
+        // Quiet: the panel's own Saved is the answer.
         quiet: true,
         task: async () => {
             // Same split as the invite: only the first of the two writes can be a sandbox that isn't answering.
-            await grantOnDaemon(draftGrant(target, draft), t(`sandbox.sandboxAccess.couldntChangeRole`));
-            if (recorded === draft.role) {
+            await grantOnDaemon(grant, t(`sandbox.sandboxAccess.couldntChangeRole`));
+            if (recorded === grant.role) {
                 return {};
             }
-            const result = await apiClient.invite.setRole({ sandboxId: id, email: target, role: draft.role });
+            const result = await apiClient.invite.setRole({ sandboxId: id, email: target, role: grant.role });
             return { members: result.members };
         },
     });
     return outcome?.state === `done`;
 };
 
-const openAdd = (): void => {
-    clearNotice();
-    editingEmail.value = undefined;
-    dialogOpen.value = true;
-};
-
-const openEdit = (member: InviteRecord): void => {
-    clearNotice();
-    editingEmail.value = member.email;
-    dialogOpen.value = true;
-};
-
-// The dialog's commit: an invite for a new address, the whole grant for somebody already here.
-const saveFromDialog = async (address: string, draft: AccessDraft): Promise<void> => {
-    const done = editing.value === undefined ? await invite(address, draft) : await saveAccess(address, draft);
-    if (done) {
-        dialogOpen.value = false;
-    }
+// The panel saves as it goes, and a write is one at a time: a change made while one is on its way waits behind it
+// rather than being dropped, and only the newest change per person is sent once its turn comes.
+let queue: Promise<unknown> = Promise.resolve();
+const latest = new Map<string, AccessDraft>();
+const savePerson = (target: string, draft: AccessDraft): void => {
+    latest.set(target, draft);
+    queue = queue.then(async () => {
+        const next = latest.get(target);
+        if (next === undefined) {
+            return;
+        }
+        latest.delete(target);
+        await saveAccess(target, next);
+    });
 };
 
 const revoke = async (target: string): Promise<void> => {
@@ -529,98 +537,106 @@ const revoke = async (target: string): Promise<void> => {
         },
     });
     if (outcome?.state === `done`) {
-        dialogOpen.value = false;
+        selected.value = undefined;
     }
 };
 </script>
 
 <template>
     <div class="flex flex-col gap-6">
-        <!-- WHO HAS ACCESS: one row per person saying in a line where they work and what their assistants may use, and one
-             press to change it. Every decision about a person is made in the dialog, never as a control on the row: five
-             controls a row were five half-decisions a re-grade could leave a person stranded between. -->
+        <!-- WHO HAS ACCESS, as Personas and Models lay theirs out: a tile per person, and the open one's panel under the
+             tiles. Adding asks for an address alone; everything else is decided in the panel, which saves as it goes. -->
         <div class="flex flex-col gap-2.5">
             <Notice v-if="grantsUnread && isOwner" :of="grantsUnread" />
             <!-- A link the mail could not carry rides in the slot, so a long one can wrap. -->
-            <Notice v-if="notice && !dialogOpen" :of="notice">
+            <Notice v-if="notice && (selectedMember === undefined || handover !== undefined)" :of="notice">
                 <span v-if="handover" class="mt-1 block break-all font-medium">{{ handover }}</span>
             </Notice>
-            <RowGroup :label="t(`sandbox.sandboxAccess.people`)">
-                <template v-if="isOwner" #actions>
-                    <Button :label="t(`sandbox.sandboxAccess.addPerson`)" size="small" :disabled="busy" @click="openAdd">
+            <RowGroup :label="t(`sandbox.sandboxAccess.people`)" flat undivided>
+                <template v-if="isOwner && !adding" #actions>
+                    <Button :label="t(`sandbox.sandboxAccess.addPerson`)" size="small" tier="boring" :disabled="busy" @click="startAdd">
                         <template #icon><Icon name="plus" /></template>
                     </Button>
                 </template>
-                <template v-if="isOwner">
-                    <Row :title="user?.email" :description="t(`sandbox.sandboxAccess.lineOwner`)">
-                        <template #lead="{ mark }">
-                            <Avatar :size="mark" :name="user?.name ?? user?.email ?? ``" :src="user?.image ?? undefined" :hue="identityHue(user?.email ?? ``)" />
-                        </template>
-                        <template #meta><StatusBadge variant="primary" :label="t(`sandbox.sandboxAccess.owner`)" size="xs" /></template>
-                    </Row>
-                    <div v-if="listing" role="status" aria-busy="true">
-                        <template v-if="outline">
-                            <span class="sr-only">{{ t(`sandbox.sandboxAccess.readingWhoAccess`) }}</span>
-                            <SkeletonRows :rows="2" control />
-                        </template>
-                    </div>
-                    <Row v-for="member in members" :key="member.email" :title="member.email" :description="accessLine(member)">
-                        <template #lead="{ mark }">
-                            <Avatar :size="mark" :name="member.email" :hue="identityHue(member.email)" />
-                        </template>
-                        <!-- The tier first, then where the invite stands; an accepted invite is the ordinary case and says nothing. -->
-                        <template #meta>
-                            <StatusBadge variant="neutral" :label="roleLabel(grantOf(member.email)?.role ?? member.role)" size="xs" />
-                            <StatusBadge
-                                v-if="member.status !== `accepted`"
-                                :variant="statusOf(member.status).variant"
-                                :label="statusOf(member.status).label"
-                                :dot="statusOf(member.status).dot"
-                                size="xs"
-                            />
-                        </template>
-                        <template #control>
-                            <Button
-                                :label="t(`ui.action.edit`)"
-                                size="small"
-                                tier="quiet"
-                                :disabled="busy || fencesUnknown"
-                                :aria-label="t(`sandbox.sandboxAccess.editAccessOf`, { email: member.email })"
-                                @click="openEdit(member)"
-                            >
-                                <template #icon><Icon name="pencil" /></template>
-                            </Button>
-                        </template>
-                    </Row>
-                    <RowNote v-if="!listing && members.length === 0" variant="empty">{{ t(`sandbox.sandboxAccess.onlyYouSoFar`) }}</RowNote>
-                </template>
 
-                <template v-else>
-                    <Row :title="user?.email">
-                        <template #lead="{ mark }">
-                            <Avatar :size="mark" :name="user?.name ?? user?.email ?? ``" :src="user?.image ?? undefined" :hue="identityHue(user?.email ?? ``)" />
+                <form v-if="isOwner && adding" class="mb-3 flex flex-col gap-1.5" @submit.prevent="addPerson">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <input
+                            v-model="newEmail"
+                            type="email"
+                            autocomplete="off"
+                            autofocus
+                            placeholder="teammate@example.com"
+                            :aria-label="t(`sandbox.sandboxAccess.emailLabel`)"
+                            :class="[ui.input('min-w-0 max-w-xs flex-1'), newEmailTouched && newEmail.trim() !== `` && !validEmail(newAddress) ? 'ui-field-error-box' : '']"
+                            @blur="newEmailTouched = true"
+                        />
+                        <Button type="submit" :label="t(`ui.action.add`)" size="small" :loading="busy" :disabled="busy || !validEmail(newAddress) || newTaken" />
+                        <button type="button" :class="ui.textButton({ tone: `quiet` })" @click="adding = false">{{ t(`ui.action.cancel`) }}</button>
+                    </div>
+                    <span v-if="newTaken" class="ui-field-error">{{ t(`sandbox.sandboxAccess.alreadyHasAccess`) }}</span>
+                    <span v-else-if="newEmailTouched && newEmail.trim() !== `` && !validEmail(newAddress)" class="ui-field-error">{{
+                        t(`sandbox.sandboxAccess.enterValidEmailAddress`)
+                    }}</span>
+                    <span v-else class="text-xs text-muted">{{ t(`sandbox.sandboxAccess.addPersonNote`) }}</span>
+                </form>
+
+                <div role="group" :aria-label="t(`sandbox.sandboxAccess.people`)" class="flex flex-wrap gap-1">
+                    <!-- The signed-in person first: the owner, or a member reading their own tier. Nothing to open. -->
+                    <PersonaTile :label="user?.email ?? ``" :selected="false" class="size-28 cursor-default" tabindex="-1">
+                        <template #face>
+                            <Avatar :size="FACE_SIZES.card" :name="user?.name ?? user?.email ?? ``" :src="user?.image ?? undefined" :hue="identityHue(user?.email ?? ``)" />
                         </template>
-                        <template #meta>
-                            <StatusBadge variant="primary" :label="ownRole" size="xs" />
-                            <StatusBadge variant="neutral" :label="t(`sandbox.sandboxAccess.you`)" size="xs" />
-                        </template>
-                    </Row>
-                    <RowNote>{{ t(`sandbox.sandboxAccess.onlySandboxOwnerInvite`) }}</RowNote>
-                </template>
+                        <span class="text-2xs text-subtle">{{ isOwner ? t(`sandbox.sandboxAccess.wordOwner`) : ownRole }}</span>
+                    </PersonaTile>
+                    <template v-if="isOwner">
+                        <PersonaTile
+                            v-for="member in members"
+                            :key="member.email"
+                            :label="member.email"
+                            :selected="selected === member.email"
+                            :aria-pressed="selected === member.email"
+                            :aria-controls="panelId"
+                            :disabled="fencesUnknown"
+                            class="size-28"
+                            @click="toggle(member)"
+                        >
+                            <template #face>
+                                <Avatar :size="FACE_SIZES.card" :name="member.email" :hue="identityHue(member.email)" />
+                            </template>
+                            <template v-if="member.status !== `accepted`" #badges>
+                                <span
+                                    class="absolute bottom-1 right-0 size-2.5 rounded-full ring-2 ring-canvas"
+                                    :class="member.status === `expired` ? `bg-danger` : `bg-info`"
+                                    :aria-label="statusOf(member.status).label"
+                                />
+                            </template>
+                            <span class="text-2xs text-subtle">{{ wordOf(member) }}</span>
+                        </PersonaTile>
+                        <div v-if="listing" role="status" aria-busy="true" class="flex items-center">
+                            <span class="sr-only">{{ t(`sandbox.sandboxAccess.readingWhoAccess`) }}</span>
+                        </div>
+                    </template>
+                </div>
+                <p v-if="isOwner && !listing && members.length === 0 && !adding" class="mt-2 text-xs text-muted">{{ t(`sandbox.sandboxAccess.onlyYouSoFar`) }}</p>
+                <p v-if="!isOwner" class="mt-2 text-xs text-muted">{{ t(`sandbox.sandboxAccess.onlySandboxOwnerInvite`) }}</p>
+
+                <div :id="panelId" class="mt-4">
+                    <PersonPanel
+                        v-if="isOwner && selectedMember !== undefined && !fencesUnknown"
+                        :key="selectedMember.email"
+                        :email="selectedMember.email"
+                        :pending="selectedMember.status !== `accepted`"
+                        :initial="accessOf(selectedMember)"
+                        :busy="busy"
+                        :notice="panelNotice"
+                        @save="savePerson"
+                        @remove="revoke"
+                        @resend="resend"
+                    />
+                </div>
             </RowGroup>
         </div>
-
-        <PersonAccessDialog
-            v-if="isOwner"
-            v-model:open="dialogOpen"
-            :editing="editing"
-            :initial="initialDraft"
-            :busy="busy"
-            :notice="notice"
-            @save="saveFromDialog"
-            @remove="revoke"
-            @resend="resend"
-        />
 
         <!-- How people prove themselves to this sandbox, before what programs hold. -->
         <PasskeysSection />

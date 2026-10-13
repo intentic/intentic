@@ -1,4 +1,12 @@
-import { type PasskeysList, ProviderKeysApplySchema, type SandboxVitals, type VoicesView } from "@intentic/sandbox-contract";
+import {
+    accessRefusal,
+    memberAccess,
+    type PasskeysList,
+    ProviderKeysApplySchema,
+    type SandboxVitals,
+    tierOf,
+    type VoicesView,
+} from "@intentic/sandbox-contract";
 import { type RawContext, type RawRoutes, refuse } from "@intentic/contract-serve";
 import { KNOWLEDGE_BASE } from "../../vendor/knowledge/wire-types";
 import { type DemoGrant, grantAccess, grants, revokeAccess } from "../fixture/access";
@@ -50,21 +58,23 @@ const workspaceRaw = (path: string): Response => {
 // Every picture in this fixture is already small, so a tile is the file itself; only SVG is refused, as the daemon does.
 const workspaceThumb = (path: string): Response => (path.endsWith(`.svg`) ? refuse(`not a picture this can draw`, 415) : workspaceRaw(path));
 
-// The refusals the real daemon makes on the spot (auth/members/members.routes.ts): a writer and a guest each need a
-// fence, since for both the areas are the tier rather than a narrowing of it, and a maintainer cannot carry one at
-// all, since it holds the owner's operating authority and a folder fence over it would enforce nothing.
+// The refusals the real daemon makes on the spot (auth/members/members.routes.ts), through the contract's own rules: an
+// access no grant could make, a role that is not the tier the access makes, and a maintainer carrying a fence or a list
+// of credentials, which that tier would enforce nothing of.
 const grantMember = async ({ request }: RawContext): Promise<Response> => {
     const grant = (await request.json()) as Omit<DemoGrant, "credentials"> & { credentials?: DemoGrant["credentials"] | `all` };
-    if ((grant.areas?.length ?? 0) === 0 && (grant.role === `writer` || grant.role === `guest`)) {
-        return refuse(`a ${grant.role} needs at least one area`, 400);
+    const access = memberAccess(grant);
+    const refused = accessRefusal(access);
+    if (refused !== undefined) {
+        return refuse(refused, 400);
     }
-    if (grant.role === `maintainer` && grant.areas !== undefined) {
-        return refuse(`a maintainer holds the owner's operating authority and cannot be fenced to part of the workspace`, 400);
+    if (tierOf(access) !== grant.role) {
+        return refuse(`the role does not match the access granted, which makes a ${tierOf(access)}`, 400);
     }
-    if (grant.role === `maintainer` && grant.credentials !== undefined && grant.credentials !== `all`) {
-        return refuse(`a maintainer holds the owner's operating authority and reads every credential, so it cannot be limited to some of them`, 400);
+    if (grant.role === `maintainer` && (grant.areas !== undefined || (grant.credentials !== undefined && grant.credentials !== `all`))) {
+        return refuse(`a maintainer holds the owner's operating authority and cannot be limited`, 400);
     }
-    grantAccess(grant.email, grant.role, grant.areas, grant.credentials);
+    grantAccess(grant.email, grant.role, grant.areas, grant.credentials, { agents: grant.agents, edit: grant.edit, emailSignIn: grant.emailSignIn });
     return json({ members: grants() });
 };
 
@@ -163,6 +173,8 @@ export const raw = {
     "GET /members": () => json({ members: grants() }),
     "POST /members": grantMember,
     "DELETE /members": revokeMember,
+    // The demo's reader is the owner, who manages everything.
+    "GET /members/self": () => json({ role: `owner`, agents: `run`, edit: `all` }),
     // Two tokens on the roster (one unused, one expiring) make the roster's states visible; a mint answers
     // the once-shown value.
     "GET /system/control/tokens": () =>

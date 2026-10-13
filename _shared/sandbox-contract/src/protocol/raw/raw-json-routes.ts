@@ -15,7 +15,7 @@ import {
 import { SyncStatusSchema } from "../../schemas/devices.js";
 import { HostsListSchema } from "../../schemas/hosts.js";
 import { VoicesViewSchema } from "../../schemas/voice.js";
-import { MemberEmailSchema, MemberGrantSchema, MembersListSchema, MembersRosterSchema } from "../../schemas/members.js";
+import { MemberEmailSchema, MemberGrantSchema, MemberSelfSchema, MembersListSchema, MembersRosterSchema } from "../../schemas/members.js";
 import { PhonesListSchema, PhoneWakeRegistrationSchema } from "../../schemas/phone.js";
 import { OkSchema } from "../../schemas/shared.js";
 import { EnrollCodeAnswerSchema, EnrollCodeRequestSchema, PeerPairingAnswerSchema, SyncPairAnswerSchema, SyncPairRequestSchema } from "../../schemas/short-codes.js";
@@ -75,6 +75,7 @@ export const RAW_JSON_ROUTES = {
     "POST /members": { input: MemberGrantSchema, output: MembersListSchema },
     "DELETE /members": { input: MemberEmailSchema, output: MembersListSchema },
     "DELETE /members/self": { output: OkSchema },
+    "GET /members/self": { output: MemberSelfSchema },
     // Every environment write answers the environment after it. `/environment/contents` takes `?refresh` to probe again.
     "GET /environment": { output: EnvironmentSchema },
     "GET /environment/contents": { output: EnvironmentContentsSchema },

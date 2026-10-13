@@ -13,6 +13,19 @@ import { foldersOf } from "./areas-store.js";
  */
 export const callerFence = (areas: readonly Area[], caller: Caller | undefined): Fence => foldersOf(areas, caller?.areas);
 
+/**
+ * The folders this caller may change by hand, inside what it may see. Undefined is the whole workspace (the owner, a
+ * maintainer, a person editing everything they see across the whole of it); empty is nowhere. A caller with no edit
+ * answer of its own edits where it sees, which is what every writer did before the two were told apart.
+ */
+export const callerEditFence = (areas: readonly Area[], caller: Caller | undefined): Fence => {
+    const edits = caller?.edits;
+    if (edits === undefined || edits === "all") {
+        return callerFence(areas, caller);
+    }
+    return edits === "none" ? [] : foldersOf(areas, edits);
+};
+
 /** The folders a conversation may touch, from the fence it was born with. Undefined is the whole workspace. */
 export const conversationFence = (areas: readonly Area[], entry: { readonly areas?: readonly string[] | undefined } | undefined): Fence =>
     foldersOf(areas, entry?.areas);

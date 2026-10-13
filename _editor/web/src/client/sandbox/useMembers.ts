@@ -1,9 +1,10 @@
-import type { MemberGrant, MembersList, MembersRoster } from "@intentic/sandbox-contract";
-import { computed, type MaybeRefOrGetter, toValue } from "vue";
+import type { AgentAccess, MemberGrant, MemberSelf, MembersList, MembersRoster } from "@intentic/sandbox-contract";
+import { computed, type ComputedRef, effectScope, type MaybeRefOrGetter, toValue } from "vue";
 import { invalidatePushedQueries } from "../../lib/pushInvalidation";
-import { SANDBOX_MEMBERS } from "../../lib/queryKeys";
+import { SANDBOX_MEMBERS, SANDBOX_SELF_ACCESS } from "../../lib/queryKeys";
 import { queryClient } from "../../lib/queryPersistence";
 import { sandboxRaw } from "./sandboxRaw";
+import { useSandbox } from "./useSandbox";
 import { useSandboxQuery } from "./useSandboxQuery";
 
 // THE DAEMON'S MEMBER ROSTER, READ AND WRITTEN IN ONE PLACE. It is the one copy that knows each member's fence, and it
@@ -50,3 +51,27 @@ const adopt = async (answer: MembersList): Promise<MembersList> => {
 export const grantMember = async (grant: MemberGrant): Promise<MembersList> => adopt(await sandboxRaw(`POST /members`, { input: grant }));
 
 export const revokeMember = async (email: string): Promise<MembersList> => adopt(await sandboxRaw(`DELETE /members`, { input: { email } }));
+
+// WHETHER THE SIGNED-IN PERSON RUNS AGENTS, for the one tier whose name does not say: a writer edits files by hand and
+// may or may not drive agents (sandbox-contract `memberAccess`). Every other tier answers it by itself, so the read is
+// made for a writer alone. One query for the whole app, made once in its own scope, since `useRole` is read from plain
+// functions as well as components and a per-call query would need a component to belong to.
+
+let agents: ComputedRef<AgentAccess | undefined> | undefined;
+
+export const selfAgents = (): ComputedRef<AgentAccess | undefined> => {
+    if (agents === undefined) {
+        // Detached: it lives as long as the app, like the sandbox list it reads.
+        agents = effectScope(true).run(() => {
+            const { active } = useSandbox();
+            const { query } = useSandboxQuery<MemberSelf>({
+                queryKey: SANDBOX_SELF_ACCESS.of(),
+                queryFn: () => sandboxRaw(`GET /members/self`),
+                enabled: computed(() => active.value?.role === `writer`),
+            });
+            return computed(() => query.data.value?.agents);
+        });
+    }
+    // SAFETY: `run` on a scope that is active answers what its callback returned, which is always a computed here.
+    return agents as ComputedRef<AgentAccess | undefined>;
+};

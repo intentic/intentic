@@ -18,7 +18,7 @@ import { fenceOpens, refuseFenced } from "../layout/workspace-fence.js";
 import type { Fence } from "@intentic/sandbox-contract";
 import { provenanceOf, refuseUnlessVisible } from "../../auth/fleet-scope.js";
 import type { Caller } from "../../auth/auth.js";
-import { callerFence } from "../../areas/area-scope.js";
+import { callerEditFence, callerFence } from "../../areas/area-scope.js";
 
 // Byte routes that stay off oRPC because their bodies are streamed: raw file read, ranged media read, and file/diff/tar
 // uploads. Registered before the oRPC catch-all, like /health.
@@ -245,7 +245,7 @@ export const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) =
     upload: async (c: Context<AppEnv>): Promise<Response> => {
         const resolved = await uploadTarget(
             services.workspace.root,
-            callerFence(await services.areas.list(), c.get("identity")),
+            callerEditFence(await services.areas.list(), c.get("identity")),
             c.req.query("path"),
         );
         if ("error" in resolved) {
@@ -321,7 +321,8 @@ export const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) =
         }
         // Refused outright rather than filtered entry by entry: a dropped tree lands where its own paths say, and a
         // half-extracted archive is a worse answer to a fenced caller than a refusal they can act on.
-        if (callerFence(await services.areas.list(), c.get("identity")) !== undefined) {
+        // Where they may edit, not where they may look: seeing everything is not changing everything.
+        if (callerEditFence(await services.areas.list(), c.get("identity")) !== undefined) {
             return c.json({ error: "dropping a whole tree needs access to the whole workspace" }, 403);
         }
         try {

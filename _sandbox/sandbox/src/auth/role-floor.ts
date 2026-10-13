@@ -1,4 +1,4 @@
-import type { MemberRole } from "@intentic/sandbox-contract";
+import type { AgentAccess, MemberRole } from "@intentic/sandbox-contract";
 import { defaultFloor, isAttachmentPath, roleAtLeast, sandboxRouteFor } from "@intentic/sandbox-contract";
 
 // Role floors: the minimum trust tier each route demands, read from the route's own RouteMeta (sandbox-contract
@@ -13,7 +13,7 @@ const attachment = (target: string | undefined): boolean => target !== undefined
 // not on its list. Undefined admits. `target` is the upload's `?path=`, the one route whose floor depends on where
 // the bytes land.
 export const memberRefusal = (
-    caller: { readonly role: MemberRole; readonly areas?: readonly string[] | undefined },
+    caller: { readonly role: MemberRole; readonly areas?: readonly string[] | undefined; readonly agents?: AgentAccess | undefined },
     method: string,
     path: string,
     target?: string,
@@ -22,7 +22,12 @@ export const memberRefusal = (
         return guestReach(method, path, target) ? undefined : { error: "not open to a guest member", floor: "viewer" };
     }
     const floor = routeFloor(method, path, target);
-    return roleAtLeast(caller.role, floor) ? undefined : { error: `${floor} access required`, floor };
+    if (!roleAtLeast(caller.role, floor)) {
+        return { error: `${floor} access required`, floor };
+    }
+    // The collaborator floor is driving agents. A person who edits files by hand without running agents holds the
+    // writer tier, which clears that floor by rank: their own answer keeps them off it.
+    return floor === "collaborator" && caller.agents === "off" ? { error: "running agents is not on for you here", floor } : undefined;
 };
 
 // Whether a guest member may reach this request at all: a route on the guest's list, or an upload into the attachments
