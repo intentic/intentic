@@ -31,10 +31,12 @@
         "linux": {
             "deb": {
                 "depends": ["libc6 (>= 2.39)"],
+                "recommends": ["gstreamer1.0-pipewire", "gstreamer1.0-pulseaudio", "gstreamer1.0-plugins-good"],
                 "desktopTemplate": "main.desktop"
             },
             "rpm": {
                 "depends": ["libc.so.6(GLIBC_2.39)(64bit)"],
+                "recommends": ["pipewire-gstreamer", "gstreamer1-plugins-good"],
                 "desktopTemplate": "main.desktop"
             }
         },

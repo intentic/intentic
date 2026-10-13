@@ -2,6 +2,7 @@ mod account;
 mod agent_status;
 mod agents;
 mod auth;
+mod autostart;
 mod badge;
 mod cli_path;
 mod commands;
@@ -14,6 +15,7 @@ mod found;
 mod launch;
 mod local;
 mod machine_sandbox;
+mod microphone;
 mod notice;
 mod offline;
 mod onboarding;
@@ -28,12 +30,15 @@ mod shown;
 mod sidecar;
 mod state;
 mod update;
+mod wake;
 mod webview_sync;
 mod windows;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use tauri::menu::{Menu, MenuBuilder, MenuItem, MenuItemBuilder};
+use tauri::menu::{
+    CheckMenuItemBuilder, Menu, MenuBuilder, MenuItem, MenuItemBuilder, PredefinedMenuItem,
+};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Manager, RunEvent, Wry};
 
@@ -102,6 +107,18 @@ const fn opening(
     }
 }
 
+/// What a launch at sign-in (`--background`, autostart.rs) opens of what an ordinary one would: nothing, since it is the
+/// app going into the tray rather than somebody asking for a window, except a setup parked across a restart, which is
+/// the work the resume entry starts this app for (resume.rs) and which either launch may be the one to run. A sleeping
+/// engine is not shown at every sign-in: Docker coming up a minute after the desktop is an ordinary morning, and This
+/// device says so the moment the reader opens anything.
+const fn in_background(opening: Opening) -> Option<Opening> {
+    match opening {
+        Opening::ParkedSetup => Some(Opening::ParkedSetup),
+        Opening::Workspace | Opening::SleepingEngine | Opening::Home => None,
+    }
+}
+
 pub fn run() {
     // Before anything else: a stuck copy is cleared before the single-instance plugin would wait on it, and this
     // launch writes down how far it gets (launch.rs).
@@ -129,6 +146,18 @@ pub fn run() {
             // twice. This decides one thing: whether the second launch was a bare one.
             .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
                 if argv.iter().any(|arg| arg.starts_with("intentic://")) {
+                    return;
+                }
+                // A launch at sign-in (autostart.rs) that finds the app already up: in the tray is all it asks for.
+                if argv.iter().any(|arg| arg == autostart::ARG) {
+                    return;
+                }
+                // The resume entry's launch (resume.rs) finding the app already up, started at the same sign-in by the
+                // start at login: the parked setup is what it came for, not the last face.
+                if argv.iter().any(|arg| arg == resume::ARG)
+                    && app.state::<state::AppState>().parked_setup().is_some()
+                {
+                    windows::show_device(app);
                     return;
                 }
                 // A double-click on a document, or "Open with Intentic" on a folder, while the app is up.
@@ -254,6 +283,8 @@ pub fn run() {
             app.manage(badge::Badge::default());
             app.manage(notice::Notices::default());
             app.manage(machine_sandbox::MachineSandbox::load(app.handle())?);
+            // Before the tray, whose rows it titles (wake.rs).
+            app.manage(wake::Wake::load(app.handle())?);
             create_tray(app.handle())?;
             // `intentic .` onto PATH, where the installer's own attempt ran out of time (cli_path.rs).
             cli_path::finish_pending(app.handle());
@@ -304,6 +335,9 @@ pub fn run() {
                 std::env::current_dir().ok().as_deref(),
             );
 
+            // A launch at sign-in, which the reader asked for once, from the tray (autostart.rs).
+            let background = std::env::args().any(|arg| arg == autostart::ARG);
+
             /* BEFORE the link, nothing opens. */
             if app.webview_windows().is_empty() && !opened_local {
                 let state = app.state::<state::AppState>();
@@ -315,24 +349,42 @@ pub fn run() {
                     scripts::engine_listening(),
                     state.last_face(),
                 );
+                let opening = if background {
+                    in_background(opening)
+                } else {
+                    Some(opening)
+                };
                 // A launch that shows This device for the engine hands over to the workspace once it wakes, when the
                 // workspace is the face it would otherwise have opened; one last used through the main window stays.
-                if opening == Opening::SleepingEngine && state.last_face() == Face::Workspace {
+                if opening == Some(Opening::SleepingEngine) && state.last_face() == Face::Workspace
+                {
                     *state.pending_docker.lock().unwrap() = true;
                 }
                 match opening {
-                    Opening::Workspace => windows::show_workspace(app.handle()),
+                    Some(Opening::Workspace) => windows::show_workspace(app.handle()),
                     // A launch into the main window is that window shown by the user's own doing: remembered as the
                     // face in use. It starts the file server itself, since it is a window on a folder.
-                    Opening::Home => windows::show_home(app.handle()),
-                    Opening::ParkedSetup | Opening::SleepingEngine => {
+                    Some(Opening::Home) => windows::show_home(app.handle()),
+                    Some(Opening::ParkedSetup | Opening::SleepingEngine) => {
                         windows::show_device(app.handle())
                     }
+                    None => {}
                 }
             }
-            if !app.webview_windows().is_empty() {
+            let windowed = !app.webview_windows().is_empty();
+            if windowed {
                 launch::reached(launch::Stage::Window);
+            } else if background {
+                // The tray is all a launch at sign-in puts in front of anyone, and it is up: this launch has done what
+                // it was started for, and is no stalled launch for the next one to report (launch.rs).
+                launch::reached(launch::Stage::Shown);
             }
+            // A page that was listening for its wake word when the app last ran goes on listening, in the workspace
+            // loaded hidden (wake.rs); after the window this launch put up has had its first paint, when it put one up.
+            wake::resume_on_launch(
+                app.handle(),
+                std::time::Duration::from_secs(if windowed { 3 } else { 0 }),
+            );
             // What earlier launches left to report (a launch that never showed a window, a panic), sent off this thread.
             launch::send_reports(app.handle());
             // This computer's own sandbox, made after sign-in and kept, by a thread of its own rather than any window
@@ -395,16 +447,24 @@ pub fn run() {
 /// The tray's "Open workspace" row, and whether it is in the menu yet: it is offered only once an account has
 /// been seen (state.rs `account_seen`), which can happen while the app runs, so it is inserted then rather than
 /// the menu rebuilt — a rebuilt tray menu flickers on Windows and loses whatever the user has open.
+///
+/// The wake word's two rows and the rule under them come with it (wake.rs): listening is the workspace page's, and an
+/// install with no account has no workspace to listen in.
 struct TrayWorkspace {
     menu: Menu<Wry>,
     row: MenuItem<Wry>,
+    wake_gap: PredefinedMenuItem<Wry>,
     offered: AtomicBool,
 }
 
 /// Where the row goes: after "Open Intentic" and "This computer".
 const WORKSPACE_ROW_AT: usize = 2;
 
-/// Put "Open workspace" in the tray, once, when an account has been seen (a sign-in, or the workspace shown).
+/// The row the wake word's rows go above: the machine agent's, at the head of the group about this computer.
+const AGENT_ROW: &str = "agent";
+
+/// Put "Open workspace" in the tray, once, when an account has been seen (a sign-in, or the workspace shown), and the
+/// wake word's rows with it.
 pub(crate) fn offer_workspace(app: &AppHandle) {
     let Some(tray) = app.try_state::<TrayWorkspace>() else {
         return;
@@ -415,6 +475,24 @@ pub(crate) fn offer_workspace(app: &AppHandle) {
     if let Err(error) = tray.menu.insert(&tray.row, WORKSPACE_ROW_AT) {
         tray.offered.store(false, Ordering::SeqCst);
         eprintln!("intentic: the tray could not offer the workspace: {error}");
+        return;
+    }
+    let Some(wake) = app.try_state::<wake::TrayWake>() else {
+        return;
+    };
+    let at = tray.menu.items().ok().and_then(|items| {
+        items
+            .iter()
+            .position(|item| item.id().as_ref() == AGENT_ROW)
+    });
+    let inserted = match at {
+        Some(at) => tray
+            .menu
+            .insert_items(&[&wake.listen, &wake.pause, &tray.wake_gap], at),
+        None => Ok(()),
+    };
+    if let Err(error) = inserted {
+        eprintln!("intentic: the tray could not offer the wake word: {error}");
     }
 }
 
@@ -439,6 +517,13 @@ fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     let open_folder = MenuItemBuilder::with_id("open-folder", "Open a folder…").build(app)?;
     let open_file = MenuItemBuilder::with_id("open-file", "Open a file…").build(app)?;
     let repair = MenuItemBuilder::with_id("repair", "Repair Intentic…").build(app)?;
+    // Ticked as the system has it, read off this thread just below (autostart.rs).
+    let login = CheckMenuItemBuilder::with_id(autostart::ROW, "Start Intentic at login")
+        .checked(false)
+        .build(app)?;
+    // The wake word's rows, and the rule between them and the agent's; in the menu once there is a workspace.
+    let wake_rows = wake::tray_rows(app)?;
+    let wake_gap = PredefinedMenuItem::separator(app)?;
     let menu = MenuBuilder::new(app)
         .item(&open)
         .item(&manager)
@@ -449,6 +534,7 @@ fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         .separator()
         .item(&agent)
         .item(&update)
+        .item(&login)
         .separator()
         .item(&quit)
         .build()?;
@@ -465,6 +551,9 @@ fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             "open-file" => local::pick(app, false),
             "repair" => windows::show_home_route(app, "/repair?from=tray"),
             "update" => update::act(app),
+            wake::LISTEN_ROW => wake::listen_pressed(app),
+            wake::PAUSE_ROW => wake::pause_pressed(app),
+            autostart::ROW => autostart::pressed(app),
             "quit" => app.exit(0),
             _ => {}
         });
@@ -476,9 +565,13 @@ fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     // and loses whatever the user has open.
     app.manage(update::TrayUpdate(update));
     app.manage(agent_status::TrayAgent(agent));
+    app.manage(autostart::TrayLogin(login));
+    autostart::refresh(app);
+    app.manage(wake_rows);
     app.manage(TrayWorkspace {
         menu,
         row: workspace,
+        wake_gap,
         offered: AtomicBool::new(false),
     });
     offer_workspace(app);
@@ -530,6 +623,18 @@ mod tests {
             opening(false, false, true, Face::Workspace),
             Opening::Workspace
         );
+    }
+
+    /// A launch at sign-in puts nothing on screen but a setup parked for exactly that sign-in.
+    #[test]
+    fn a_launch_at_sign_in_opens_nothing_but_a_parked_setup() {
+        assert_eq!(
+            in_background(Opening::ParkedSetup),
+            Some(Opening::ParkedSetup)
+        );
+        for opening in [Opening::Workspace, Opening::Home, Opening::SleepingEngine] {
+            assert_eq!(in_background(opening), None, "{opening:?}");
+        }
     }
 
     /// A launch opens the face the user was last seen choosing: the main window for a first launch (there is no

@@ -219,7 +219,17 @@ const httpTransport = (lang: string, events: SpeechLinkEvents, deps: SpeechLinkD
     };
 };
 
-export const openSpeechLink = (lang: string, events: SpeechLinkEvents, overrides: Partial<SpeechLinkDeps> = {}): SpeechLink => {
+/** How the link is opened: `guesses: false` asks the daemon for finals alone (the wake listener, which reads no guess). */
+export interface SpeechLinkOptions {
+    readonly guesses?: boolean;
+}
+
+export const openSpeechLink = (
+    lang: string,
+    events: SpeechLinkEvents,
+    overrides: Partial<SpeechLinkDeps> = {},
+    options: SpeechLinkOptions = {},
+): SpeechLink => {
     const deps = { ...DEFAULT_DEPS, ...overrides };
     let transport: Transport | undefined;
     let closed = false;
@@ -265,7 +275,7 @@ export const openSpeechLink = (lang: string, events: SpeechLinkEvents, overrides
     // The stream: the daemon hears, guesses and reports; this only frames what the segmenter says.
     const live = liveSocket<string, StreamOut>({
         // allow(silent-catch): A socket address that cannot be had is the undefined below, which falls back to posting each phrase over HTTP.
-        mint: () => deps.socketUrl(`/speech/stream`, { lang }).catch(() => undefined),
+        mint: () => deps.socketUrl(`/speech/stream`, options.guesses === false ? { lang, guesses: `0` } : { lang }).catch(() => undefined),
         open: webSocketChannel<StreamOut>({ text: (text) => heard(text, events, inFlight), binary: () => undefined }, deps.openSocket),
         onOpen: () => {
             up = true;

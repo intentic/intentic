@@ -41,10 +41,15 @@ export const landRequestWork = (id: string, at: AgentReach = undefined): string 
 // `run` is the model a surface's run button stands at (useAgentRunPick: a job's list, or the reader's pick for this run
 // alone). Without it the draft opens on whatever the composer last held, which is the reader's chat model and says
 // nothing about the job the press starts.
-export const startAgent = (prompt?: string, actsAs?: string, run?: AgentRunChoice): string => {
+// `opening` answers what the opening message carries for the conversation as a whole: whether its finished work lands by
+// itself (a session opened by voice from across the room does not, unless the reader says so on its card).
+export const startAgent = (prompt?: string, actsAs?: string, run?: AgentRunChoice, opening?: { readonly autoLand?: boolean }): string => {
     const conversation = draftConversation();
     if (run !== undefined) {
         wearRunChoice(conversation, run);
+    }
+    if (opening?.autoLand !== undefined) {
+        conversation.autoLandDraft.value = opening.autoLand;
     }
     // "New agent", as one action across every surface (board button, chat strip's +, mobile +): summon the tab in every
     // window, put the caret in its composer, and on mobile navigate to it. A press over an untouched draft reuses it

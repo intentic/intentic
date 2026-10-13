@@ -12,8 +12,9 @@ import { createSegmenter, resampleTo16k, type Segmenter } from "./voiceAudio";
 // phrases spoken while it loads or downloads wait for it and are written out when it is ready, never lost, and the
 // download's progress is `model`'s to show. Per-call state; "send" is the composer's business.
 
-// Capture worklet, inlined as a blob string so it loads identically in a floating window and the dev server.
-const CAPTURE_WORKLET = `
+// Capture worklet, inlined as a blob string so it loads identically in a floating window and the dev server. Shared with
+// the wake listener (chat/wake), which captures the same way.
+export const CAPTURE_WORKLET = `
 class IntenticVoiceCapture extends AudioWorkletProcessor {
     constructor() {
         super();

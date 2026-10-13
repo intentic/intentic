@@ -75,7 +75,8 @@ tauri-plugin-deep-link = "2"
 # The rest of `windows`' features are launch.rs (a running copy that does not answer: its window, its process, and
 # ending it) and offline.rs (a workspace navigation that failed, through WebView2's own event, where webview2-com is
 # also already in the graph through wry, at the version that matches this `windows`). `Win32_System_Registry` is
-# cli_path.rs: the user's PATH, when the installer could not put the terminal command on it.
+# cli_path.rs: the user's PATH, when the installer could not put the terminal command on it. microphone.rs answers
+# WebView2's permission request for the wake word through the same webview2-com.
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.61", features = [
     "Data_Xml_Dom",
@@ -90,6 +91,10 @@ webview2-com = "0.38"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 zbus = "5"
+# The microphone for the workspace's wake word (src/microphone.rs): WebKitGTK's media stream setting and its permission
+# request, on the webview Tauri hands over (`with_webview`), which is this crate's own type. Pinned to the version wry
+# pins and at the features Tauri asks for, so this names what is already compiled rather than adding a download.
+webkit2gtk = { version = "=2.0.2", features = ["v2_40"] }
 
 # Tuned for BUILD time, because that is the only axis this crate can lose on. `lto = true` (fat) with
 # codegen-units = 1 is the slowest release profile rustc offers, and it buys runtime speed this app cannot use:

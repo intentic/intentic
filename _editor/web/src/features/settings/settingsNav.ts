@@ -18,6 +18,8 @@ export interface SettingsSection {
     readonly plan?: true;
     /** About a keyboard, so a phone's index leaves it out. Present-or-absent, like `plan`. */
     readonly keyboard?: true;
+    /** About what only a desktop-sized window does (listening for the wake word), so a phone's index leaves it out too. */
+    readonly desktop?: true;
     /** About what a sandbox does, so a desktop window on a folder of this computer, which has none, leaves it out. */
     readonly sandbox?: true;
 }
@@ -38,18 +40,21 @@ const SETTINGS_SECTIONS = [
     { slug: `appearance`, icon: `palette` },
     // What a sandbox's daemon pushes to this device (usePushNotifications.ts).
     { slug: `notifications`, icon: `volume-up`, sandbox: true },
+    // Whether this device listens for the agent's name (chat/wake): its own microphone, heard by the sandbox's model.
+    { slug: `voice`, icon: `microphone`, sandbox: true, desktop: true },
     { slug: `keybindings`, icon: `bolt`, keyboard: true },
     // Account credentials, not this sandbox's: a token minted here acts for the person on every sandbox they own,
     // which is why it lives beside the account's own rows rather than on a Sandbox tab.
     { slug: `tokens`, icon: `key` },
     { slug: `data`, icon: `database` },
-] as const satisfies readonly { slug: string; icon: IconName; plan?: true; keyboard?: true; sandbox?: true }[];
+] as const satisfies readonly { slug: string; icon: IconName; plan?: true; keyboard?: true; desktop?: true; sandbox?: true }[];
 
 // Named inside a `computed` by both callers, so `t` is read where a language change can re-run it. `phone` drops the
 // sections about a keyboard a phone does not have, `noSandbox` (a desktop window on a folder) the ones about a sandbox.
 export const settingsSections = (planOffered: boolean, phone = false, noSandbox = localFace() !== undefined): readonly SettingsSection[] =>
     SETTINGS_SECTIONS.filter(
-        (section) => (planOffered || !(`plan` in section)) && !(phone && `keyboard` in section) && !(noSandbox && `sandbox` in section),
+        (section) =>
+            (planOffered || !(`plan` in section)) && !(phone && (`keyboard` in section || `desktop` in section)) && !(noSandbox && `sandbox` in section),
     ).map((section) => ({
         ...section,
         label: t(`settings.section.${section.slug}`),

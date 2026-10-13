@@ -103,6 +103,9 @@ Var IntenticAgentKept
     DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "IntenticResumeSetup"
     DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\RunOnce" "IntenticResumeSetup"
     Delete "$APPDATA\${BUNDLEID}\resume-setup.json"
+    ; The tray's "Start Intentic at login" (src/autostart.rs), for the same reason: a program that is gone, started at
+    ; every sign-in. An update keeps it, since it names the same program.
+    DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "Intentic"
     ; The Explorer menu's package, while its DLL is still here to remove it (an update keeps it: the install that
     ; follows re-registers only what changed, and asks nothing). Removing it also ends the surrogate holding the DLL.
     !insertmacro INTENTIC_REGSVR32 "/s /u /n /i:quiet"

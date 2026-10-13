@@ -3968,6 +3968,40 @@
         "voiceReply": {
             "speaking": "Speaking…",
             "stopHint": "Esc stops it"
+        },
+        "wake": {
+            "untitled": "this chat",
+            "toNew": "New session",
+            "toContinue": "Continue in {title}",
+            "toAnswer": "Answer in {title}",
+            "heardLabel": "Heard “{word}”",
+            "sendNow": "Send now",
+            "instead": "{destination} instead",
+            "cancel": "Cancel",
+            "called": "Listening… say what you need",
+            "sentTo": "Sent: {destination}",
+            "open": "Open",
+            "notifyTitle": "{word} → {destination}",
+            "status": {
+                "micBlocked": "Microphone blocked",
+                "micBlockedDetail": "This browser refused the microphone. Allow it for this site in the address bar, then switch listening on again.",
+                "noMic": "No microphone",
+                "noMicDetail": "No microphone answered on this device. Plug one in, then switch listening on again.",
+                "cannotHear": "Sandbox can't hear",
+                "cannotHearDetail": "This sandbox cannot hear speech yet, so it cannot hear “{word}”. Updating the sandbox brings it.",
+                "unsupported": "Can't listen here",
+                "unsupportedDetail": "This page cannot use the microphone: it needs a secure address and a current browser.",
+                "paused": "Paused until {until}",
+                "pausedDetail": "Not listening for “{word}” until {until}. Click to listen again now.",
+                "starting": "Opening the microphone…",
+                "startingDetail": "Asking this browser for the microphone.",
+                "elsewhere": "Listening in another tab",
+                "elsewhereDetail": "Another tab of this browser is the one listening for “{word}”.",
+                "blocked": "Click to start listening",
+                "blockedDetail": "A browser lets a page hear only once it has been clicked since it loaded. Click anywhere here and it listens for “{word}” again.",
+                "goOn": "Go on…",
+                "listeningDetail": "Listening for “{word}” on this device. Click to pause for an hour."
+            }
         }
     },
     "common": {
@@ -8263,7 +8297,11 @@
             "cloudVoicePlaceholder": "default voice",
             "keyFound": "Key found",
             "keyMissing": "No stored secret by that name",
-            "sentTo": "What it speaks is sent to {provider}."
+            "sentTo": "What it speaks is sent to {provider}.",
+            "wakeWord": "Wake word",
+            "wakeWordNote": "The name every device of this sandbox listens for, where its reader switched listening on in Settings ▸ Voice. Two or three syllables wake it reliably.",
+            "wakeWordInvalid": "Use letters only, with a space, hyphen or apostrophe between them.",
+            "wakeWordShort": "A word this short wakes it by mistake. Two or three syllables work best."
         },
         "aiLiteracy": {
             "title": "Working with AI",
@@ -8819,7 +8857,8 @@
             "keybindings": "Keybindings",
             "notifications": "Notifications",
             "profile": "Profile",
-            "tokens": "Tokens"
+            "tokens": "Tokens",
+            "voice": "Voice"
         },
         "settingsBilling": {
             "activating": "Activating…",
@@ -9006,6 +9045,23 @@
             "description": "Help us improve Intentic: allow usage events and recordings of the interface as you use it, linked to your account. What your workspace contains is masked out of them. No thanks sends nothing, and you can change this at any time in Settings.",
             "allow": "Allow",
             "deny": "No thanks"
+        },
+        "settingsVoice": {
+            "group": "Wake word",
+            "listen": "Listen for “{word}” on this device",
+            "listenNote": "Say “{word}” and what you need from anywhere in the room, no keyboard: “{word}, check why the tests fail.”",
+            "pause": "Pause for an hour",
+            "resume": "Listen again",
+            "word": "Wake word",
+            "wordNote": "The name you call the agent by, the same on every device. Two or three syllables wake it reliably.",
+            "wordMaintainer": "A maintainer of this sandbox chooses the word.",
+            "howGroup": "How it works",
+            "where": "Your words go on in the conversation you are in the middle of: one you talked to in the last few minutes, or the one on screen. Anything else starts a new session; say “{word}, new session …” to start one outright. Before they go, a card shows where, and Escape cancels.",
+            "heard": "While listening, only the first seconds of each thing said near this device go to your sandbox's own speech model, to hear whether it starts with “{word}”. Nothing is kept, and nothing reaches the agent unless it does.",
+            "noLanding": "Sessions opened by voice never land by themselves: anyone in the room can say the name.",
+            "inApp": "In the Intentic app it keeps listening while the window is closed to the tray.",
+            "inBrowser": "In a browser it listens while a tab of this workspace is open, and the browser shows its microphone mark. The Intentic app keeps listening from the tray.",
+            "wordChange": "Change the word in Sandbox ▸ Agent ▸ Tools"
         }
     },
     "setup": {

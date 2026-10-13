@@ -19,7 +19,7 @@ import { MemberEmailSchema, MemberGrantSchema, MemberSelfSchema, MembersListSche
 import { PhonesListSchema, PhoneWakeRegistrationSchema } from "../../schemas/phone.js";
 import { OkSchema } from "../../schemas/shared.js";
 import { EnrollCodeAnswerSchema, EnrollCodeRequestSchema, PeerPairingAnswerSchema, SyncPairAnswerSchema, SyncPairRequestSchema } from "../../schemas/short-codes.js";
-import { SpeechStatusSchema, SpeechTranscriptSchema } from "../../schemas/speech.js";
+import { SpeechStatusSchema, SpeechTranscriptSchema, SpeechWakeClaimSchema, SpeechWakeGrantSchema } from "../../schemas/speech.js";
 import {
     AuthenticationOptionsSchema,
     DaemonSessionSchema,
@@ -179,6 +179,8 @@ export const RAW_JSON_ROUTES = {
     "GET /speech/status": { output: SpeechStatusSchema },
     "POST /speech/prepare": { output: SpeechStatusSchema },
     "POST /speech/transcribe": { bytes: true, output: SpeechTranscriptSchema },
+    // One device's claim on a wake word it heard, so two devices hearing the same "Leon" open one session between them.
+    "POST /speech/wake": { input: SpeechWakeClaimSchema, output: SpeechWakeGrantSchema },
     // A file written into the tree (`?path=`, the body its bytes, `x-intentic-base-hash` refusing a stale save), and the
     // pre-drop check of which dropped files are already there.
     "POST /workspace/upload": { bytes: true, output: OkSchema },

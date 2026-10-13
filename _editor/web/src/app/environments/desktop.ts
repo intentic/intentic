@@ -27,6 +27,10 @@ interface DesktopWebview {
     /* THIS BUILD COPIES A BIG DROP INTO A SANDBOX ON THIS COMPUTER ITSELF (the app's drop_copy.rs; nativeCopy.ts). Said
      * only on Windows, whose WebView2 tells the app where a dropped file is. */
     nativeCopy?: boolean;
+    /* THIS BUILD LETS THE WORKSPACE LISTEN FOR THE WAKE WORD (chat/wake): it grants this window the microphone, starts its
+     * sound without a click, keeps it loaded while the window is closed to the tray, and takes `intentic://wake` links
+     * (wakeDesktop.ts). An older one would leave listening to stop with the window, so the page says so there. */
+    wake?: boolean;
 }
 
 declare global {

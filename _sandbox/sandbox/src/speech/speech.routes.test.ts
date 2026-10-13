@@ -1,7 +1,7 @@
 import { createLogger } from "../logger.js";
 import { createPerfTracker } from "../system/resources/perf.js";
 import { testConfig } from "../testing.js";
-import { createSpeechRoute, type SpeechRoutesDeps } from "./speech.routes.js";
+import { createSpeechRoute, createWakeClaims, type SpeechRoutesDeps, WAKE_CLAIM_MS } from "./speech.routes.js";
 import { MAX_UTTERANCE_WAV_BYTES, type Speech, SpeechModelNotReadyError, SpeechUnprovisionedError } from "./transcribe.js";
 import { WavFormatError } from "./wav.js";
 
@@ -134,4 +134,47 @@ test("audio that is not a 16-bit PCM WAV is the caller's mistake, a 400", async 
     const response = await app.request("/speech/transcribe", { method: "POST", body: Buffer.from("OggS") });
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ error: "not a WAV file" });
+});
+
+/* The wake claim: two devices hearing one "Leon" open one session between them. */
+
+const claimOf = (app: ReturnType<typeof createSpeechRoute>, device: string) =>
+    app.request("/speech/wake", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ device }) });
+
+test("the first device to claim a wake acts on it, and another device of the same person stands down for a few seconds", async () => {
+    let now = 1_000_000;
+    const app = createSpeechRoute(
+        speechDeps({}),
+        createWakeClaims(() => now),
+    );
+    expect(await (await claimOf(app, "laptop-aaaa")).json()).toEqual({ granted: true });
+    now += 800;
+    expect(await (await claimOf(app, "desktop-bbbb")).json()).toEqual({ granted: false });
+    // Its own next wake is never refused by its last one.
+    expect(await (await claimOf(app, "laptop-aaaa")).json()).toEqual({ granted: true });
+    now += WAKE_CLAIM_MS;
+    expect(await (await claimOf(app, "desktop-bbbb")).json()).toEqual({ granted: true });
+});
+
+test("a device in the middle of an exchange holds the person's other devices off for as long as it asked", () => {
+    let now = 0;
+    const claims = createWakeClaims(() => now);
+    expect(claims.claim("ada@example.com", "laptop-aaaa", 60_000)).toBe(true);
+    now += 45_000;
+    expect(claims.claim("ada@example.com", "desktop-bbbb")).toBe(false);
+    now += 20_000;
+    expect(claims.claim("ada@example.com", "desktop-bbbb")).toBe(true);
+});
+
+test("two people never stand each other down", () => {
+    const claims = createWakeClaims(() => 5);
+    expect(claims.claim("ada@example.com", "laptop-aaaa")).toBe(true);
+    expect(claims.claim("grace@example.com", "desktop-bbbb")).toBe(true);
+    expect(claims.claim("ada@example.com", "phone-cccc")).toBe(false);
+});
+
+test("a claim that names no usable device is a 400", async () => {
+    const app = createSpeechRoute(speechDeps({}));
+    expect((await claimOf(app, "x")).status).toBe(400);
+    expect((await app.request("/speech/wake", { method: "POST", body: "not json" })).status).toBe(400);
 });

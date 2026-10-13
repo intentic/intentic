@@ -80,7 +80,7 @@ const mounted = (settings: Partial<VoiceSettings> = {}) => {
                         replies.push({ requestId, answer });
                         return true;
                     },
-                    settings: ref({ replies: true, interrupt: false, speed: 1, voices: {}, ...settings }),
+                    settings: ref({ replies: true, interrupt: false, speed: 1, voices: {}, wake: { word: `Leon` }, ...settings }),
                     player: fake.player,
                     words,
                 });

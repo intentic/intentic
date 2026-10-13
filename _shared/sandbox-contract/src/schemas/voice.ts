@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { WAKE_WORD_DEFAULT, WakeWordSchema } from "./speech.js";
 
 // Speaking a reply aloud: which voices a sandbox can speak with, which one speaks a language, and the live wire the
 // editor plays speech over. The daemon's engine is src/speech/voice; the editor's half is
@@ -60,6 +61,16 @@ export const VoiceSettingsSchema = z.object({
     cloud: CloudVoiceSchema.optional().describe(
         "A speech provider of your own, used for every language it speaks unless you picked a voice on this sandbox for it. Its key is a stored secret; text it speaks leaves the sandbox for that provider.",
     ),
+    wake: z
+        .object({
+            word: WakeWordSchema.default(WAKE_WORD_DEFAULT).describe(
+                "The name you call the agent by. Two or three syllables wake it reliably; a short or everyday word wakes it by mistake.",
+            ),
+        })
+        .prefault({})
+        .describe(
+            "Talking to the agent from across the room: say this word and what you want, on a device where listening for it is switched on. Each device is switched on by its own reader, since it is that device's microphone.",
+        ),
 });
 export type VoiceSettings = z.infer<typeof VoiceSettingsSchema>;
 

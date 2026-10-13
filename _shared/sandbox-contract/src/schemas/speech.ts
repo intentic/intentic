@@ -74,7 +74,9 @@ export type SpeechTranscript = z.infer<typeof SpeechTranscriptSchema>;
 // streams each one as it is spoken. A text frame `begin` opens phrase `id`; binary frames that follow are its audio,
 // 16 kHz mono s16le; `end` closes it, keeping its first `keep` samples (the trailing pause trimmed off); `drop`
 // abandons it. The daemon answers with `partial` text while the phrase is still being spoken, one `final` per ended
-// phrase, in order, and `status` whenever the model's readiness moves. The language is the socket's `lang` query.
+// phrase, in order, and `status` whenever the model's readiness moves. The language is the socket's `lang` query;
+// `guesses=0` asks for finals alone, which the wake listener does: nobody reads a running guess at a room's talk, and
+// each one is a decode.
 export const SpeechClientMessageSchema = z.discriminatedUnion("type", [
     z.object({ type: z.literal("begin"), id: z.number() }),
     z.object({ type: z.literal("end"), id: z.number(), keep: z.number() }),
@@ -98,3 +100,38 @@ export type SpeechServerMessage = z.infer<typeof SpeechServerMessageSchema>;
 // The longest phrase either door takes: a minute at 16 kHz. The composer's segmenter cuts a monologue at the same
 // length, so nothing it sends is ever refused.
 export const MAX_SPEECH_SAMPLES = 60 * 16_000;
+
+// THE WAKE WORD: what a person says to the editor across the room to be heard without touching it ("Leon, fix the
+// build"). The editor listens for it on a device the person switched it on for, and hears it with this sandbox's own
+// model, so it is a word the model writes down: letters (any script), with a space, hyphen or apostrophe between them.
+export const WAKE_WORD_DEFAULT = "Leon";
+export const WakeWordSchema = z
+    .string()
+    .trim()
+    .regex(/^[\p{L}\p{M}](?:[\p{L}\p{M}' -]{0,38}[\p{L}\p{M}])?$/u)
+    .refine((word) => [...word].length >= 2, { message: "a wake word has at least two letters" });
+
+// POST /speech/wake: one device's claim on a wake it just heard. Every device listening for the same person hears the
+// same "Leon", and each would open its own session; the first to claim within a few seconds is granted it and the rest
+// stand down. A device keeps its own claims, so its next wake a moment later is never refused by its last one, and a
+// device in the middle of an exchange holds it longer, so a follow-up the other devices also hear stays with it.
+export const WAKE_HOLD_MAX_MS = 10 * 60_000;
+export const SpeechWakeClaimSchema = z.object({
+    device: z
+        .string()
+        .regex(/^[A-Za-z0-9_-]{8,64}$/u)
+        .describe("A random id this browser or app minted for itself once, so its own claims are told from another device's."),
+    holdMs: z
+        .number()
+        .int()
+        .min(0)
+        .max(WAKE_HOLD_MAX_MS)
+        .optional()
+        .describe("Keep the person's other devices off for this long rather than the few seconds a lone wake holds: an exchange this device is in the middle of."),
+});
+export type SpeechWakeClaim = z.infer<typeof SpeechWakeClaimSchema>;
+
+export const SpeechWakeGrantSchema = z.object({
+    granted: z.boolean().describe("This device acts on the wake; false when another device of the same person claimed it first."),
+});
+export type SpeechWakeGrant = z.infer<typeof SpeechWakeGrantSchema>;

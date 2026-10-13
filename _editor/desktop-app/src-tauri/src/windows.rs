@@ -42,7 +42,13 @@ const BROWSER_ARGS: &str = concat!(
     // Terminals and the browser view hold WebSockets on that same address (terminalSession.ts,
     // useBrowserView.ts); Chrome 147 brought them under the same permission.
     "LocalNetworkAccessChecksWebSockets,",
-    "LocalNetworkAccessChecksWebTransport"
+    "LocalNetworkAccessChecksWebTransport",
+    // The wake word (wake.rs): the workspace's page listens through an AudioContext, which Chromium keeps suspended
+    // until somebody clicks in the page. A page reloaded in a window hidden in the tray, or loaded there at launch, has
+    // nobody to click, so it could not listen again until the reader opened the window. This is wry's own flag for
+    // `autoplay`, which our arguments replace; it reaches every window of the app, since every webview sharing the
+    // profile must be built with the same arguments, so a video in a document a local window opens may play by itself.
+    " --autoplay-policy=no-user-gesture-required"
 );
 
 /// The third label, and NOT a third face: a dialog the app draws about the window it is standing in front of.
@@ -349,13 +355,18 @@ fn shown_face(app: &AppHandle) -> Option<WebviewWindow> {
 /// `notices` is the seventh, and also about the build: it puts up the system's notifications and the tab's mark on
 /// its icon when the page asks (`intentic://notice`, `intentic://badge`; notice.rs, badge.rs), so the page offers
 /// them in its settings and sends them only to an app that says this.
-fn workspace_init_script(install_id: &str, update: Option<&str>) -> String {
+///
+/// `wake` is the last, and is about the WINDOW: the workspace face, and only it, has the microphone (microphone.rs), a
+/// tray that says what its listening is doing and switches it, and a page kept loaded in the tray for it (wake.rs). So
+/// only there does the page offer to listen for its wake word inside the app; a floating panel or a local window is
+/// told `false`.
+fn workspace_init_script(install_id: &str, update: Option<&str>, wake: bool) -> String {
     let update = match update {
         Some(version) => format!("\"{}\"", crate::update::escape_js(version)),
         None => "null".to_string(),
     };
     format!(
-        "(function () {{ if (!window.__INTENTIC_DESKTOP__) {{ window.__INTENTIC_DESKTOP__ = Object.freeze({{ version: \"{}\", installId: \"{install_id}\", update: {update}, loopbackUngated: true, frameless: true, projectSync: true, notices: true, nativeCopy: {} }}); }} }})();",
+        "(function () {{ if (!window.__INTENTIC_DESKTOP__) {{ window.__INTENTIC_DESKTOP__ = Object.freeze({{ version: \"{}\", installId: \"{install_id}\", update: {update}, loopbackUngated: true, frameless: true, projectSync: true, notices: true, nativeCopy: {}, wake: {wake} }}); }} }})();",
         crate::commands::VERSION,
         // Only where the page's message reaches drop_copy.rs: WebView2 is what says where a dropped file is.
         cfg!(windows)
@@ -521,6 +532,37 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
             .parse()
             .expect("static app url parses"),
     };
+    let Some(window) = build_workspace(app, url) else {
+        return;
+    };
+    let home = app.get_webview_window(HOME);
+    take_frame(&window, home.as_ref());
+    swap_in(&window, home, Keyboard::Take);
+}
+
+pub fn show_workspace(app: &AppHandle) {
+    show_workspace_at(app, None);
+}
+
+/* THE WORKSPACE'S PAGE, LOADED WHERE NOBODY SEES IT (2026-10-13) — for the wake word, which it listens for (wake.rs). */
+
+/// Build the workspace at the app's address, hidden and left hidden, when there is none: a launch whose page was
+/// listening when the app last ran (wake.rs `resume_on_launch`), and the tray's "Listen for …" with no page to tell. It
+/// is the face the reader would get from the tray, built and placed as always, with nothing put on screen, nothing
+/// focused and nothing remembered: the face this app was last used through (`last-face.json`) and whether the
+/// workspace was ever shown are about what somebody looked at, and nobody looked at this. Showing it later is the swap
+/// every other road takes (`show_workspace_at`), onto a page that is already there.
+pub fn load_workspace_hidden(app: &AppHandle) {
+    if app.get_webview_window(WORKSPACE).is_some() {
+        return;
+    }
+    let url = app_origin(&app.state::<AppState>());
+    let _ = build_workspace(app, url);
+}
+
+/// The workspace window at `url`, hidden: its frame, its handlers and its page, placed for a cold start. Its caller
+/// puts it on screen (`show_workspace_at`) or leaves it in the tray (`load_workspace_hidden`).
+fn build_workspace(app: &AppHandle, url: Url) -> Option<WebviewWindow> {
     let screen = work_area(app);
     let (size, min) = opening_bounds(screen.map(|screen| screen.size));
     let builder = page_window(app, WORKSPACE, url)
@@ -529,51 +571,50 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
         // Built hidden so `swap_in` can place it on the frame it is taking over before it is ever on screen —
         // a finished setup hands the window back, and the workspace must appear where the setup was standing.
         .visible(false);
-    match builder.build() {
-        Ok(window) => {
-            crate::webview_sync::watch(&window);
-            crate::shown::watch(&window);
-            // A page that cannot be reached gets the app's own screen, not the browser's (offline.rs).
-            crate::offline::watch(&window, &app_origin(&app.state::<AppState>()));
-            // A big drop on the explorer, copied into a sandbox on this computer by the app (drop_copy.rs).
-            crate::drop_copy::watch(&window, &app_origin(&app.state::<AppState>()));
-            // Hidden until `swap_in`, so the OS's own light still lands before this window is on screen.
-            settle_background(&window, app.state::<AppState>().ui_mode());
-            let handle = app.clone();
-            window.on_window_event(move |event| match event {
-                // The × is a question, not an exit — see `request_close`. Whichever way it is answered, the
-                // window is HIDDEN rather than destroyed, so reopening from the tray is instant and this
-                // webview keeps the session it signed in with instead of reloading the SPA. The page's own ×
-                // arrives here too: it asks the window to close rather than deciding anything itself.
-                WindowEvent::CloseRequested { api, .. } => {
-                    api.prevent_close();
-                    request_close(&handle);
-                }
-                /* WHAT THE PAGE'S MAXIMISE BUTTON DRAWS FOLLOWS THE WINDOW, NOT THE PRESS. */
-                WindowEvent::Resized(_) => {
-                    if let Some(window) = handle.get_webview_window(WORKSPACE) {
-                        announce_frame(&window, false);
-                    }
-                }
-                _ => {}
-            });
-            arm_frame_fallback(app, WORKSPACE);
-            // Before `swap_in`, and while the window is still hidden. This is the placement for a COLD start —
-            // a swap that has a frame to inherit overwrites it a line later, which is the right precedence:
-            // the window the user is already looking at beats the middle of the screen.
-            if let Some(screen) = screen {
-                place_in_work_area(&window, screen, size);
-            }
-            let home = app.get_webview_window(HOME);
-            take_frame(&window, home.as_ref());
-            swap_in(&window, home, Keyboard::Take);
+    let window = match builder.build() {
+        Ok(window) => window,
+        Err(error) => {
+            eprintln!("workspace window failed to open: {error}");
+            return None;
         }
-        Err(error) => eprintln!("workspace window failed to open: {error}"),
+    };
+    crate::webview_sync::watch(&window);
+    crate::shown::watch(&window);
+    // A page that cannot be reached gets the app's own screen, not the browser's (offline.rs).
+    crate::offline::watch(&window, &app_origin(&app.state::<AppState>()));
+    // A big drop on the explorer, copied into a sandbox on this computer by the app (drop_copy.rs).
+    crate::drop_copy::watch(&window, &app_origin(&app.state::<AppState>()));
+    // The microphone for the wake word, granted to the workspace's own page and to nothing else (microphone.rs).
+    crate::microphone::allow(&window, &app_origin(&app.state::<AppState>()));
+    // Hidden until `swap_in`, so the OS's own light still lands before this window is on screen.
+    settle_background(&window, app.state::<AppState>().ui_mode());
+    let handle = app.clone();
+    window.on_window_event(move |event| match event {
+        // The × is a question, not an exit — see `request_close`. Whichever way it is answered, the
+        // window is HIDDEN rather than destroyed, so reopening from the tray is instant and this
+        // webview keeps the session it signed in with instead of reloading the SPA. The page's own ×
+        // arrives here too: it asks the window to close rather than deciding anything itself. It is also
+        // what keeps the wake word listening with the window out of sight (wake.rs).
+        WindowEvent::CloseRequested { api, .. } => {
+            api.prevent_close();
+            request_close(&handle);
+        }
+        /* WHAT THE PAGE'S MAXIMISE BUTTON DRAWS FOLLOWS THE WINDOW, NOT THE PRESS. */
+        WindowEvent::Resized(_) => {
+            if let Some(window) = handle.get_webview_window(WORKSPACE) {
+                announce_frame(&window, false);
+            }
+        }
+        _ => {}
+    });
+    arm_frame_fallback(app, WORKSPACE);
+    // While the window is still hidden. This is the placement for a COLD start — a swap that has a frame to
+    // inherit overwrites it a line later, which is the right precedence: the window the user is already looking
+    // at beats the middle of the screen.
+    if let Some(screen) = screen {
+        place_in_work_area(&window, screen, size);
     }
-}
-
-pub fn show_workspace(app: &AppHandle) {
-    show_workspace_at(app, None);
+    Some(window)
 }
 
 /// What the workspace page registers to be told a path without a reload (the web's desktop.ts
@@ -686,6 +727,7 @@ fn page_window<'a>(
         .initialization_script(workspace_init_script(
             &install_id,
             update_told(&crate::update::stage(app), false),
+            label == WORKSPACE,
         ))
         .on_navigation({
             let app = app.clone();
@@ -886,6 +928,7 @@ pub fn show_files_window(
         .initialization_script(workspace_init_script(
             &state.install_id(),
             update_told(&crate::update::stage(app), true),
+            false,
         ))
         .initialization_script(init)
         .inner_size(size.0, size.1)
@@ -2138,6 +2181,8 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
                 crate::notice::status(app, window);
             }
         }
+        // The workspace's listening for its wake word: for the tray's rows and the next launch (wake.rs).
+        Some(Link::Wake(args)) => crate::wake::reported(app, args),
         // The page saying what light it is drawn in; about this app's faces, not the workspace window.
         Some(Link::Window(WindowVerb::Mode(mode))) => apply_mode(app, mode),
         // The page's own title bar, working the window it is drawn in (`work_the_window`). Nothing is parked
@@ -2244,7 +2289,7 @@ mod loopback_tests {
     /// nothing on screen to explain it; one that says so without disabling it costs them the same dialog.
     #[test]
     fn the_page_is_told_the_reach_is_ungated() {
-        let script = workspace_init_script("install-1", None);
+        let script = workspace_init_script("install-1", None, true);
         assert!(script.contains("loopbackUngated: true"), "{script}");
     }
 
@@ -2252,7 +2297,7 @@ mod loopback_tests {
     /// reports that version so the updater smoke can distinguish it from the old window still being on screen.
     #[test]
     fn the_workspace_reports_the_stamped_release_version() {
-        let script = workspace_init_script("install-1", None);
+        let script = workspace_init_script("install-1", None, true);
         assert!(
             script.contains(&format!("version: \"{}\"", crate::commands::VERSION)),
             "{script}"
@@ -2262,7 +2307,7 @@ mod loopback_tests {
     /* THE OTHER PAIR THAT HAS TO STAY A PAIR: this window opens with no platform frame, and the page is told so. */
     #[test]
     fn the_page_is_told_the_window_has_no_frame_of_its_own() {
-        let script = workspace_init_script("install-1", None);
+        let script = workspace_init_script("install-1", None, true);
         assert!(script.contains("frameless: true"), "{script}");
     }
 
@@ -2270,7 +2315,7 @@ mod loopback_tests {
     /// that parses `project=` on a sync link says so, and one that doesn't never reaches that lane.
     #[test]
     fn the_page_is_told_this_build_copies_a_folder_into_its_project() {
-        let script = workspace_init_script("install-1", None);
+        let script = workspace_init_script("install-1", None, true);
         assert!(script.contains("projectSync: true"), "{script}");
     }
 
@@ -2278,7 +2323,7 @@ mod loopback_tests {
     /// dropped file is: a build anywhere else must not invite a message nothing will answer.
     #[test]
     fn the_page_is_told_whether_this_build_copies_a_drop_itself() {
-        let script = workspace_init_script("install-1", None);
+        let script = workspace_init_script("install-1", None, true);
         assert!(
             script.contains(&format!("nativeCopy: {}", cfg!(windows))),
             "{script}"
@@ -2289,8 +2334,32 @@ mod loopback_tests {
     /// `desktopNotices`): a build that hears `notice` and `badge` says so.
     #[test]
     fn the_page_is_told_this_build_puts_up_notifications() {
-        let script = workspace_init_script("install-1", None);
+        let script = workspace_init_script("install-1", None, true);
         assert!(script.contains("notices: true"), "{script}");
+    }
+
+    /// The page listens for its wake word in the app only where the app gave it a microphone and a tray to say so:
+    /// the workspace face, never a floating panel or a local window.
+    #[test]
+    fn only_the_workspace_face_is_told_it_may_listen_for_its_wake_word() {
+        assert!(workspace_init_script("install-1", None, true).contains("wake: true"));
+        assert!(workspace_init_script("install-1", None, false).contains("wake: false"));
+    }
+
+    /// The page's AudioContext resumes with nobody there to click (wake.rs), and the flag rides beside the one list of
+    /// disabled features rather than inside it.
+    #[test]
+    fn the_browser_arguments_let_a_page_in_the_tray_start_its_audio() {
+        assert!(
+            BROWSER_ARGS.contains(" --autoplay-policy=no-user-gesture-required"),
+            "{BROWSER_ARGS}"
+        );
+        assert!(BROWSER_ARGS.starts_with("--disable-features="));
+        assert!(!BROWSER_ARGS
+            .split(' ')
+            .next()
+            .unwrap_or_default()
+            .contains("autoplay"));
     }
 }
 
@@ -2520,10 +2589,11 @@ mod unsaved_tests {
         assert_eq!(update_told(&ready, true), None);
         assert_eq!(update_told(&ready, false), Some("9.9.9"));
         assert!(
-            workspace_init_script("install-1", update_told(&ready, true)).contains("update: null")
+            workspace_init_script("install-1", update_told(&ready, true), false)
+                .contains("update: null")
         );
         assert!(
-            workspace_init_script("install-1", update_told(&ready, false))
+            workspace_init_script("install-1", update_told(&ready, false), true)
                 .contains("update: \"9.9.9\"")
         );
         assert_eq!(update_told(&crate::update::Stage::Current, false), None);

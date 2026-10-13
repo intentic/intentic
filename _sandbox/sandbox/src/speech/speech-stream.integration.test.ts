@@ -54,7 +54,7 @@ const fakeSpeech = (options: { readonly guessable?: boolean; readonly delayMs?: 
     return { speech, heard, move };
 };
 
-const stand = async (speech: Speech) => {
+const stand = async (speech: Speech, query = "lang=pl-PL") => {
     // No auth: the loopback daemon, which takes no ticket.
     const services = unstubbed<Parameters<typeof createSpeechStreamRoute>[0]>("services", {
         speech,
@@ -71,7 +71,7 @@ const stand = async (speech: Speech) => {
     await once(server, "listening");
     const { port } = z.object({ port: z.number() }).parse(server.address());
     const said: SpeechServerMessage[] = [];
-    const socket = new WebSocket(`ws://127.0.0.1:${port}/speech/stream?lang=pl-PL`);
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/speech/stream?${query}`);
     socket.on("message", (data) => said.push(SpeechServerMessageSchema.parse(JSON.parse(String(data)))));
     await once(socket, "open");
     return {
@@ -146,6 +146,22 @@ test("a phrase still being spoken is guessed at when the model can spare it, nev
         await waitFor(() => expect(wire.said).toContainEqual({ type: "partial", id: 7, text: "heard 32000" }));
         wire.socket.send(JSON.stringify({ type: "end", id: 7, keep: 32_000 }));
         await waitFor(() => expect(finals(wire.said)).toEqual([expect.objectContaining({ id: 7, text: "heard 32000" })]));
+    } finally {
+        wire.close();
+    }
+});
+
+test("a socket that asks for no guesses (the wake listener's) gets finals alone, however guessable the model is", async () => {
+    const fake = fakeSpeech({ guessable: true });
+    const wire = await stand(fake.speech, "lang=pl-PL&guesses=0");
+    try {
+        wire.socket.send(JSON.stringify({ type: "begin", id: 4 }));
+        wire.socket.send(frame(32_000));
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        expect(wire.said.filter((message) => message.type === "partial")).toEqual([]);
+        expect(fake.heard).toEqual([]);
+        wire.socket.send(JSON.stringify({ type: "end", id: 4, keep: 32_000 }));
+        await waitFor(() => expect(finals(wire.said)).toEqual([expect.objectContaining({ id: 4, text: "heard 32000" })]));
     } finally {
         wire.close();
     }

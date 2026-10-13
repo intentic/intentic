@@ -26,7 +26,9 @@ flowchart LR
 - **Talking back to pages.** The workspace learns it is inside the app from `window.__INTENTIC_DESKTOP__`, set by
   an initialization script, and hears about updates and setups through `intentic-desktop-update` and
   `intentic-desktop-setup` DOM events, and whether its window is on screen through `intentic-desktop-shown`
-  (`shown.rs`), which WebView2's own `document.visibilityState` does not say for a window in the tray. A local window learns its folder from `window.__INTENTIC_LOCAL__` (local.rs)
+  (`shown.rs`), which WebView2's own `document.visibilityState` does not say for a window in the tray. The workspace
+  alone is told `wake: true` and the microphone, says what its wake-word listening does on `intentic://wake`, and is
+  told to start, stop, pause or resume it with `intentic-desktop-wake` (`wake.rs`, `microphone.rs`). A local window learns its folder from `window.__INTENTIC_LOCAL__` (local.rs)
   and hears `intentic:face`, `intentic:repoint`, `intentic:open`, `intentic:close-requested`, `intentic:project` and, in the main window,
   `intentic:navigate` (`../README.md` has what each carries).
 - **The app's icon and the system's notifications.** `badge.rs` puts the workspace tab's mark on the tray icon, the

@@ -1934,6 +1934,7 @@ dependencies = [
  "trash",
  "url",
  "uuid",
+ "webkit2gtk",
  "webview2-com",
  "windows 0.61.3",
  "zbus",

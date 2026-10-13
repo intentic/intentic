@@ -18,6 +18,8 @@ import { LIVE_METRICS_KEY, showLiveMetrics, useLiveMetrics } from "../features/a
 import StatusBar from "../features/agents/status-bar/StatusBar.vue";
 import { openPanel } from "../features/agents/status-bar/statusBarState";
 import RuntimeChips from "./status-bar/RuntimeChips.vue";
+import WakeStatusChip from "../features/chat/wake/WakeStatusChip.vue";
+import { useWakeListener } from "../features/chat/wake/useWakeListener";
 import { useRuntimeChips } from "./status-bar/useRuntimeChips";
 import { GO_TO } from "../workbench/commands/categories";
 import { useNavigationCommands } from "./commands/useNavigationCommands";
@@ -494,7 +496,9 @@ provide(LIVE_METRICS_KEY, liveMetrics);
 // The runtime chips, read here so the bar knows whether it has anything to say: a developer's terminal chip keeps it
 // drawn for good, but a maker's chips all come and go, and with no chip and no metrics the bar would be an empty strip.
 const runtimeChips = useRuntimeChips();
-const statusBarShown = computed(() => runtimeChips.chips.value.length > 0);
+// The wake word's chip keeps the bar up while this device listens, so where listening stands is always in sight.
+const wakeListener = useWakeListener();
+const statusBarShown = computed(() => runtimeChips.chips.value.length > 0 || wakeListener.enabled.value);
 
 // ONE PANEL ABOVE THE BAR AT A TIME. The docked terminal and the metrics panel both open at the foot of the window, and
 // the two stacked leave the page a sliver: opening either closes the other. A terminal in a window of its own takes no
@@ -729,7 +733,7 @@ useGettingStarted();
              and with geek metrics on, how full it is. Outside the gate, like the chat column: a stalled sandbox still says
              what it had going, and the terminal's chip goes inert until it answers. -->
         <StatusBar :persistent="statusBarShown" :metrics="liveMetrics" style="grid-area: status">
-            <template #start><RuntimeChips :runtime="runtimeChips" /></template>
+            <template #start><RuntimeChips :runtime="runtimeChips" /><WakeStatusChip /></template>
         </StatusBar>
 
         <!-- The parked chat's scratch pad, floating in the section's own cell: opening it must not reflow the page the reader

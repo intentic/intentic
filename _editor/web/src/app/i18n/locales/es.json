@@ -1974,6 +1974,40 @@
             "waitHoursMinutes": "{hours} h {minutes} min",
             "pickTime": "Otro día u hora",
             "caretNote": "Elige una hora, un día o espera a otro agente"
+        },
+        "wake": {
+            "untitled": "este chat",
+            "toNew": "Nueva sesión",
+            "toContinue": "Seguir en {title}",
+            "toAnswer": "Responder en {title}",
+            "heardLabel": "Oído «{word}»",
+            "sendNow": "Enviar ya",
+            "instead": "En su lugar: {destination}",
+            "cancel": "Cancelar",
+            "called": "Escuchando… di lo que necesitas",
+            "sentTo": "Enviado: {destination}",
+            "open": "Abrir",
+            "notifyTitle": "{word} → {destination}",
+            "status": {
+                "micBlocked": "Micrófono bloqueado",
+                "micBlockedDetail": "Este navegador rechazó el micrófono. Permítelo para este sitio en la barra de direcciones y vuelve a activar la escucha.",
+                "noMic": "Sin micrófono",
+                "noMicDetail": "Ningún micrófono respondió en este dispositivo. Conecta uno y vuelve a activar la escucha.",
+                "cannotHear": "El sandbox no oye",
+                "cannotHearDetail": "Este sandbox aún no reconoce la voz, así que no puede oír «{word}». Actualizar el sandbox lo trae.",
+                "unsupported": "Aquí no se puede escuchar",
+                "unsupportedDetail": "Esta página no puede usar el micrófono: necesita una dirección segura y un navegador actual.",
+                "paused": "En pausa hasta las {until}",
+                "pausedDetail": "Sin escuchar «{word}» hasta las {until}. Haz clic para escuchar ya.",
+                "starting": "Abriendo el micrófono…",
+                "startingDetail": "Pidiendo el micrófono al navegador.",
+                "elsewhere": "Escucha otra pestaña",
+                "elsewhereDetail": "Otra pestaña de este navegador es la que escucha «{word}».",
+                "blocked": "Haz clic para escuchar",
+                "blockedDetail": "Un navegador deja oír a una página solo después de que se haga clic en ella desde que cargó. Haz clic en cualquier parte y volverá a escuchar «{word}».",
+                "goOn": "Sigue…",
+                "listeningDetail": "Escuchando «{word}» en este dispositivo. Haz clic para pausar una hora."
+            }
         }
     },
     "common": {
@@ -4404,6 +4438,12 @@
             },
             "from": "Desde",
             "to": "Hasta"
+        },
+        "agentVoice": {
+            "wakeWord": "Palabra de activación",
+            "wakeWordNote": "El nombre que escucha cada dispositivo de este sandbox donde se activó la escucha en Ajustes ▸ Voz. Dos o tres sílabas lo activan con fiabilidad.",
+            "wakeWordInvalid": "Usa solo letras, con un espacio, guion o apóstrofo entre ellas.",
+            "wakeWordShort": "Una palabra tan corta lo activa por error. Funcionan mejor dos o tres sílabas."
         }
     },
     "settings": {
@@ -4537,7 +4577,8 @@
             "data": "Datos",
             "keybindings": "Atajos de teclado",
             "notifications": "Notificaciones",
-            "profile": "Perfil"
+            "profile": "Perfil",
+            "voice": "Voz"
         },
         "settingsBilling": {
             "activating": "Activando…",
@@ -4664,6 +4705,23 @@
             "description": "Ayúdanos a mejorar Intentic: permite eventos de uso y grabaciones de la interfaz mientras trabajas, vinculados a tu cuenta. El contenido de tu espacio de trabajo queda enmascarado en ellos. «No, gracias» no envía nada, y puedes cambiarlo en cualquier momento en Ajustes.",
             "allow": "Permitir",
             "deny": "No, gracias"
+        },
+        "settingsVoice": {
+            "group": "Palabra de activación",
+            "listen": "Escuchar «{word}» en este dispositivo",
+            "listenNote": "Di «{word}» y lo que necesitas desde cualquier punto de la habitación, sin teclado: «{word}, mira por qué fallan los tests».",
+            "pause": "Pausar una hora",
+            "resume": "Volver a escuchar",
+            "word": "Palabra de activación",
+            "wordNote": "El nombre con el que llamas al agente, el mismo en cada dispositivo. Dos o tres sílabas lo activan con fiabilidad.",
+            "wordMaintainer": "La palabra la elige quien mantiene este sandbox.",
+            "howGroup": "Cómo funciona",
+            "where": "Tus palabras siguen en la conversación que tienes en marcha: una con la que hablaste en los últimos minutos, o la que está en pantalla. Cualquier otra cosa empieza una sesión nueva; di «{word}, nueva sesión …» para empezar una directamente. Antes de que salgan, una tarjeta muestra adónde, y Escape cancela.",
+            "heard": "Mientras escucha, solo los primeros segundos de cada cosa dicha cerca de este dispositivo van al modelo de voz de tu sandbox, para oír si empieza por «{word}». No se guarda nada, y nada llega al agente si no empieza así.",
+            "noLanding": "Las sesiones abiertas por voz nunca se integran solas: cualquiera en la habitación puede decir el nombre.",
+            "inApp": "En la app de Intentic sigue escuchando con la ventana cerrada en la bandeja.",
+            "inBrowser": "En un navegador escucha mientras haya una pestaña de este espacio de trabajo abierta, y el navegador muestra su marca de micrófono. La app de Intentic sigue escuchando desde la bandeja.",
+            "wordChange": "Cambia la palabra en Sandbox ▸ Agente ▸ Herramientas"
         }
     },
     "setup": {

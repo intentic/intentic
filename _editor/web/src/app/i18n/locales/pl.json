@@ -3968,6 +3968,40 @@
         "voiceReply": {
             "speaking": "Mówi…",
             "stopHint": "Esc przerywa"
+        },
+        "wake": {
+            "untitled": "ten czat",
+            "toNew": "Nowa sesja",
+            "toContinue": "Dalej w: {title}",
+            "toAnswer": "Odpowiedź w: {title}",
+            "heardLabel": "Usłyszano „{word}”",
+            "sendNow": "Wyślij teraz",
+            "instead": "Zamiast tego: {destination}",
+            "cancel": "Anuluj",
+            "called": "Słucham… powiedz, czego potrzebujesz",
+            "sentTo": "Wysłano: {destination}",
+            "open": "Otwórz",
+            "notifyTitle": "{word} → {destination}",
+            "status": {
+                "micBlocked": "Mikrofon zablokowany",
+                "micBlockedDetail": "Przeglądarka odmówiła dostępu do mikrofonu. Zezwól na niego dla tej strony w pasku adresu i włącz nasłuchiwanie ponownie.",
+                "noMic": "Brak mikrofonu",
+                "noMicDetail": "Na tym urządzeniu nie odpowiedział żaden mikrofon. Podłącz go i włącz nasłuchiwanie ponownie.",
+                "cannotHear": "Sandbox nie słyszy",
+                "cannotHearDetail": "Ten sandbox nie rozpoznaje jeszcze mowy, więc nie usłyszy „{word}”. Przyniesie to aktualizacja sandboxa.",
+                "unsupported": "Tu nie da się słuchać",
+                "unsupportedDetail": "Ta strona nie może użyć mikrofonu: potrzebuje bezpiecznego adresu i aktualnej przeglądarki.",
+                "paused": "Wstrzymano do {until}",
+                "pausedDetail": "Nie słucham „{word}” do {until}. Kliknij, aby słuchać od razu.",
+                "starting": "Otwieram mikrofon…",
+                "startingDetail": "Proszę przeglądarkę o mikrofon.",
+                "elsewhere": "Słucha inna karta",
+                "elsewhereDetail": "„{word}” słucha inna karta tej przeglądarki.",
+                "blocked": "Kliknij, aby słuchać",
+                "blockedDetail": "Przeglądarka pozwala stronie słyszeć dopiero, gdy od wczytania ktoś w nią kliknął. Kliknij gdziekolwiek tutaj, a znów będę słuchać „{word}”.",
+                "goOn": "Mów dalej…",
+                "listeningDetail": "Słucham „{word}” na tym urządzeniu. Kliknij, aby wstrzymać na godzinę."
+            }
         }
     },
     "common": {
@@ -7860,7 +7894,11 @@
             "cloudVoicePlaceholder": "domyślny głos",
             "keyFound": "Klucz znaleziony",
             "keyMissing": "Brak zapisanego sekretu o tej nazwie",
-            "sentTo": "To, co mówi, trafia do {provider}."
+            "sentTo": "To, co mówi, trafia do {provider}.",
+            "wakeWord": "Słowo wywołujące",
+            "wakeWordNote": "Imię, którego słucha każde urządzenie tego sandboxa, na którym włączono nasłuchiwanie w Ustawieniach ▸ Głos. Dwie lub trzy sylaby budzą go niezawodnie.",
+            "wakeWordInvalid": "Użyj samych liter, ze spacją, łącznikiem lub apostrofem między nimi.",
+            "wakeWordShort": "Tak krótkie słowo budzi go przez pomyłkę. Najlepiej działają dwie lub trzy sylaby."
         },
         "aiLiteracy": {
             "title": "Praca z AI",
@@ -8416,7 +8454,8 @@
             "keybindings": "Skróty klawiszowe",
             "notifications": "Powiadomienia",
             "profile": "Profil",
-            "tokens": "Tokeny"
+            "tokens": "Tokeny",
+            "voice": "Głos"
         },
         "settingsBilling": {
             "activating": "Aktywowanie…",
@@ -8603,6 +8642,23 @@
             "description": "Pomóż nam ulepszać Intentic: zezwól na zdarzenia użycia i nagrania interfejsu podczas pracy, powiązane z Twoim kontem. Treść Twojego obszaru roboczego jest w nich zamaskowana. „Nie, dziękuję” nie wysyła niczego, a decyzję możesz zmienić w każdej chwili w Ustawieniach.",
             "allow": "Zezwól",
             "deny": "Nie, dziękuję"
+        },
+        "settingsVoice": {
+            "group": "Słowo wywołujące",
+            "listen": "Słuchaj „{word}” na tym urządzeniu",
+            "listenNote": "Powiedz „{word}” i czego potrzebujesz, z dowolnego miejsca w pokoju, bez klawiatury: „{word}, sprawdź, czemu testy nie przechodzą”.",
+            "pause": "Wstrzymaj na godzinę",
+            "resume": "Słuchaj dalej",
+            "word": "Słowo wywołujące",
+            "wordNote": "Imię, którym wołasz agenta, to samo na każdym urządzeniu. Dwie lub trzy sylaby budzą go niezawodnie.",
+            "wordMaintainer": "Słowo wybiera opiekun tego sandboxa.",
+            "howGroup": "Jak to działa",
+            "where": "Twoje słowa trafiają do rozmowy, którą właśnie prowadzisz: tej, do której mówiłeś w ostatnich minutach, albo tej na ekranie. W każdym innym razie zaczyna się nowa sesja; powiedz „{word}, nowa sesja …”, aby od razu zacząć nową. Zanim pójdą, karta pokazuje dokąd, a Escape anuluje.",
+            "heard": "Podczas nasłuchiwania do modelu mowy twojego sandboxa trafiają tylko pierwsze sekundy każdej wypowiedzi przy tym urządzeniu, żeby usłyszeć, czy zaczyna się od „{word}”. Nic nie jest zachowywane i nic nie trafia do agenta, jeśli się od tego nie zaczyna.",
+            "noLanding": "Sesje otwarte głosem nigdy nie scalają się same: imię może wypowiedzieć każdy w pokoju.",
+            "inApp": "W aplikacji Intentic słucha dalej, gdy okno jest zamknięte do zasobnika.",
+            "inBrowser": "W przeglądarce słucha, dopóki otwarta jest karta tego obszaru roboczego, a przeglądarka pokazuje znak mikrofonu. Aplikacja Intentic słucha dalej z zasobnika.",
+            "wordChange": "Zmień słowo w Sandbox ▸ Agent ▸ Narzędzia"
         }
     },
     "setup": {

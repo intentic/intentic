@@ -17,8 +17,9 @@ use tauri::{AppHandle, Manager};
 
 /// The value's name, under both keys.
 const VALUE: &str = "IntenticResumeSetup";
+/// The key both sign-in entries live under: this one, and the opt-in start at login (autostart.rs).
 #[cfg_attr(not(windows), allow(dead_code))]
-const RUN: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
+pub(crate) const RUN: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
 #[cfg_attr(not(windows), allow(dead_code))]
 const RUN_ONCE: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\RunOnce";
 
@@ -84,8 +85,10 @@ fn remove() {
 fn remove() {}
 
 /// One `reg.exe`, with no window and a bound: the registry answers in milliseconds, and a launch must not wait on it.
+/// Also what the start at login writes, takes away and asks about (autostart.rs). Err with what `reg.exe` said, which
+/// for a `query` or a `delete` includes a value that is not there.
 #[cfg(windows)]
-fn reg(args: &[String]) -> Result<(), String> {
+pub(crate) fn reg(args: &[String]) -> Result<(), String> {
     let mut command = std::process::Command::new("reg.exe");
     command.args(args);
     intentic_bounded::no_window(&mut command);

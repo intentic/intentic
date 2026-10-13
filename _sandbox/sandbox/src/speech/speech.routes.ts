@@ -1,7 +1,7 @@
 import { upgradeWebSocket } from "@hono/node-server";
 import { errorMessage } from "@intentic/base/errors";
 import { binaryFrame } from "@intentic/base/ws-tcp-pump";
-import { MAX_SPEECH_SAMPLES, SpeechClientMessageSchema, type SpeechServerMessage } from "@intentic/sandbox-contract";
+import { MAX_SPEECH_SAMPLES, SpeechClientMessageSchema, type SpeechServerMessage, SpeechWakeClaimSchema } from "@intentic/sandbox-contract";
 import { Hono } from "hono";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
@@ -19,10 +19,37 @@ import { pcm16Samples, WavFormatError, wavSamples } from "./wav.js";
 //   wait it out. Discord's calls and an older composer use it.
 // - `GET /speech/stream?lang=` is the composer's live wire (schemas/speech.ts): phrases stream in as they are spoken,
 //   running guesses and finals stream back, and the model's readiness with them.
+// - `POST /speech/wake` is a device claiming a wake word it heard: the first of one person's devices to claim within a
+//   few seconds acts on it, the rest stand down.
 
 export type SpeechRoutesDeps = Pick<Services, "perf" | "speech">;
 
-export const createSpeechRoute = (services: SpeechRoutesDeps): Hono<AppEnv> => {
+// How long a device's claim on a wake keeps every other device of the same person off it. Two devices hearing one
+// "Leon" claim within a decode of each other (they share this daemon's model, which hears phrases one at a time); a
+// second, separate wake from another device comes seconds later at the earliest.
+export const WAKE_CLAIM_MS = 3000;
+
+/**
+ * Who holds the wake each person last claimed, kept in memory: losing it to a restart only lets one more device through
+ * once. Keyed by the signed-in member, so two people calling the agent from two rooms never stand each other down; a
+ * caller with no person behind it (a token) shares one key.
+ */
+export const createWakeClaims = (now: () => number = Date.now) => {
+    const claims = new Map<string, { readonly device: string; readonly until: number }>();
+    return {
+        claim: (person: string, device: string, holdMs = 0): boolean => {
+            const at = now();
+            const held = claims.get(person);
+            if (held !== undefined && held.device !== device && at < held.until) {
+                return false;
+            }
+            claims.set(person, { device, until: at + Math.max(WAKE_CLAIM_MS, holdMs) });
+            return true;
+        },
+    };
+};
+
+export const createSpeechRoute = (services: SpeechRoutesDeps, wakeClaims = createWakeClaims()): Hono<AppEnv> => {
     const app = new Hono<AppEnv>();
     const serve = rawRouteServer(app);
 
@@ -59,6 +86,16 @@ export const createSpeechRoute = (services: SpeechRoutesDeps): Hono<AppEnv> => {
             }
             throw error;
         }
+    });
+
+    serve("POST /speech/wake", async (c) => {
+        // allow(silent-catch): a body that is not JSON is a claim that names no device, refused below like one the schema refuses.
+        const claim = SpeechWakeClaimSchema.safeParse(await c.req.json().catch(() => undefined));
+        if (!claim.success) {
+            return c.json({ error: "device must be 8-64 letters, digits, - or _" }, 400);
+        }
+        const person = c.get("identity")?.email.toLowerCase() ?? "";
+        return c.json({ granted: wakeClaims.claim(person, claim.data.device, claim.data.holdMs) });
     });
 
     return app;
@@ -109,6 +146,8 @@ export type SpeechStreamDeps = Pick<Services, "speech" | "auth" | "wsTickets" | 
 export const createSpeechStreamRoute = (services: SpeechStreamDeps) =>
     upgradeWebSocket((c) => {
         const locale = new URL(c.req.url).searchParams.get("lang") ?? undefined;
+        // `guesses=0`: finals alone (the wake listener's), so no decode is spent on a running guess nobody reads.
+        const guesses = new URL(c.req.url).searchParams.get("guesses") !== "0";
         const speech: Speech = services.speech;
         let closed = false;
         let phrase: Phrase | undefined;
@@ -195,7 +234,9 @@ export const createSpeechStreamRoute = (services: SpeechStreamDeps) =>
                 unsubscribe = speech.subscribe(() => void pushStatus(ws));
                 // Opening the stream is the person reaching for the mic: fetch and load the model now, while they speak.
                 send(ws, { type: "status", status: await speech.prepare(locale) });
-                ticker = setInterval(() => void guess(ws), TICK_MS);
+                if (guesses) {
+                    ticker = setInterval(() => void guess(ws), TICK_MS);
+                }
             },
             onMessage: (event, ws) => {
                 if (closed) {

@@ -200,8 +200,9 @@ flowchart LR
 - **Tray-resident.** The × of either face hides it into the tray, once the first × has asked whether that is what
   closing should do (`close-action.json`, "Keep Intentic in the tray" or "Quit Intentic"). The tray's "Open Intentic"
   opens the last face, "This computer" the main window, "Open workspace" appears once an account has been seen, then
-  "Open a folder…" and "Open a file…" (each in a window of its own), the machine agent's row (This device), the update
-  row and Quit. Updates download in the background and install on quit or from the editor's banner or This device;
+  "Open a folder…" and "Open a file…" (each in a window of its own), the wake word's two rows once there is an account
+  (below), the machine agent's row (This device), the update row, "Start Intentic at login" and Quit. Updates download
+  in the background and install on quit or from the editor's banner or This device;
   setup and project operations hold an install, while the resumable onboarding downloads pause before it and resume
   on the next launch (or when the install fails). The update smoke checks both the installed bytes and the restarted
   app's native version, so an old window still on screen cannot count as a successful update.
@@ -244,6 +245,36 @@ flowchart LR
   while the reader is in the app, where the board and the mark already show it; and notify-rust, which would bring a
   second `windows` and its own toast wrapper for the two calls the app makes itself on the `windows` and `zbus` crates
   already in its graph._
+- **The wake word, with the window in the tray** (`src-tauri/src/wake.rs`, 2026-10-13). The workspace's page can listen
+  on the microphone for a wake word ("Leon" unless the reader named another) and does all of it itself: the microphone,
+  the audio worklet, the transcription. The app's part is to keep that page where it can go on listening, and to say in
+  the tray what it is doing. Only the workspace face is told `wake: true` (`window.__INTENTIC_DESKTOP__`), and only
+  there does the page offer to listen. Its microphone is granted with no prompt, to the app's own origin and nothing
+  else (`microphone.rs`): on Windows through WebView2's `PermissionRequested`, for that request alone and never saved in
+  the profile every window shares; on Linux by turning on WebKitGTK's media stream setting for that webview and allowing
+  a request for the microphone alone. Every Windows webview runs with `--autoplay-policy=no-user-gesture-required`
+  (`BROWSER_ARGS`, which every webview must share), so the page's audio starts again after a reload with nobody there to
+  click. The page says what it is doing on `intentic://wake` and is told what to do with `intentic-desktop-wake` (the
+  tables below). In the tray, "Listen for “Leon”" is ticked while listening is wanted, and under it "Pause listening for
+  1 hour", "Resume listening" while paused, or "Click to resume listening", which brings the workspace up when the
+  browser holds the audio until a click. Both rows come with "Open workspace", once there is an account. The × hides
+  the workspace as it always has, so the listening goes on in the tray. Whether it is wanted, and the word, are kept in
+  `wake.json`, and a launch that finds it on loads the workspace hidden: nothing on screen, nothing focused, and the
+  last face left as it was (`windows.rs` `load_workspace_hidden`). On Linux WebKitGTK holds a `getUserMedia` made while
+  the window is off screen, unanswered, until the window is shown, so a page loaded hidden starts listening the first
+  time the reader opens it ("Click to resume listening" is the way there when the page reports `blocked`); listening
+  that began on screen goes on after the ×. Measured on WebKitGTK 2.54 with its mock microphone, 2026-10-13: the
+  request answered the moment the window came up, and after the × the track stayed live and the audio kept arriving.
+  WebView2 leaves the page visible in a hidden window (`webview_sync.rs`), so Windows has no such wait. The deb and rpm
+  recommend the GStreamer plugins WebKitGTK records the microphone through (PipeWire's, PulseAudio's, plugins-good), as
+  recommends rather than depends, since a desktop without them only loses the wake word.
+
+  "Start Intentic at login" in the tray (`autostart.rs`) is off until ticked. On Windows it is the `HKCU\…\Run` value
+  `Intentic`, which the uninstaller takes away; on Linux an XDG autostart entry,
+  `~/.config/autostart/dev.intentic.desktop.desktop` (under `$XDG_CONFIG_HOME` when that is set), naming the AppImage
+  itself for an AppImage. Either starts the app with `--background`: the tray and no window, except for a setup parked
+  across a restart, and then the hidden workspace when its page was listening. A second launch with `--background`
+  while the app runs does nothing. The row's tick is read back from the registry or the file after every press.
 - **Google's sign-in runs in the default browser**, because Google refuses OAuth inside an embedded webview. The
   credential returns over `intentic://auth`, which also records that this install has an account (`account-seen.json`)
   and opens the workspace at `/desktop-auth/complete`, in the main window's place. An account that signs in by emailed
@@ -256,7 +287,8 @@ flowchart LR
   workspace (`workspace-seen.json`) and `home` otherwise. A launch opens This device for a setup parked across a Windows
   restart, then for a machine that hosts a sandbox and has no Docker engine listening (handing over to the workspace
   once the engine wakes, when the workspace is the last face), and otherwise the last face (`opening` in
-  `src-tauri/src/lib.rs`). A bare second launch opens the last face too. `home_facts` hands the shell `accountSeen` (a
+  `src-tauri/src/lib.rs`). A launch at sign-in (`--background`, above) opens only the parked setup, if any. A bare
+  second launch opens the last face too. `home_facts` hands the shell `accountSeen` (a
   sign-in, or the workspace ever shown), `lastFace`, `hostsSandboxes` and `homeFolder`.
 - **Local windows.** The main window, and a folder or a document opened from the tray, the folder menu, a
   double-click ("Open with Intentic" on documents, folders, the space inside one and a drive root) or a second launch
@@ -541,6 +573,7 @@ every link and drops what an outside sender may not ask for. The editor builds t
 | `launcher[?to=files]` | app windows | Brings the main window back in the workspace's place: at This device (a setup's way back to its run, a sandbox's restart), or at its folder with `to=files` (the sandbox switcher's "This computer"). |
 | `badge?mark=…[&count=…][&tooltip=…][&icon=…][&overlay=…]` | app windows | The workspace tab's mark (`none`, `asks`, `done`, `working`, `offline`) on the app's icon: `icon` for the tray and `overlay` for the Windows taskbar button, each a PNG as unpadded URL-safe base64 of at most 64 KiB and 256 pixels a side; `count` for a Linux dock, heard only with `asks`; `tooltip` after the app's name in the tray's, one line of at most 100 characters. A value out of shape drops the link. |
 | `notice?do=show&key=…&kind=asks\|finished&title=…[&body=…][&path=…][&silent=1]` | app windows | Puts up one of the system's notifications, replacing the one under the same `key`. `path` is a workspace route (`/?sandbox=<id>&conversation=<id>`) a press opens, `silent` asks for no sound. `do=withdraw&key=…` takes one down, `do=clear` all of them, and `do=status` asks whether the system shows them at all (answered as `intentic-desktop-notices`). A line that is empty, too long or holds a control character, or a path that is not rooted or starts `//`, drops the link. |
+| `wake?state=off\|listening\|paused\|blocked\|error&word=…[&until=…]` | the workspace window | What the workspace page's wake-word listening is doing, whenever that changes: kept for the tray's rows, and whether it is wanted (any state but `off`) and the word written to `wake.json` for the next launch. `word` is one line of 1 to 40 characters; `until` (epoch milliseconds, a positive whole number) rides only with `paused`. A value out of shape drops the link. |
 | `notice?do=open&token=…` | anywhere | A press on one of the app's notifications, as Windows delivers it through the OS: the workspace at that notification's route. A token this run did not issue, letters and digits only, opens the workspace as it is. |
 | `roster?list=<JSON>[&account=<JSON>]` | app windows | The account's sandboxes as the workspace's switcher lists them (`id`, `name`, `place`, `shared`) and who is signed in (`email`, `name`, `image`), kept in `roster.json` for the place chip and the rail's foot; `[]` and no account after a sign-out. One value out of shape drops the link: an id that is not a plain token, a name empty, over 200 characters or holding a control character, a place that is not a lowercase word, an account without an address, an avatar that is not an `https` address. |
 | `window?do=…` | app and local windows | The editor's own title bar: `ready`, `minimize`, `maximize`, `close[&confirmed=1]`, `dirty&value=0\|1`, `drag`, `raise`, `fit`, `mode`. |
@@ -565,6 +598,7 @@ Nothing is returned over a link. The app answers with DOM events it dispatches i
 | `intentic-desktop-shown` | workspace, floating, main window | `{ shown }`: whether the window is visible and not minimised, on each change and once its bar is up. |
 | `intentic-desktop-notices` | the window that sent `notice?do=status` | `{ setting }`: `on`, `off-user` (Windows has every app's notifications off), `off-app`, `off-policy`, `none` (no notification service answers on this Linux desktop) or `unknown`, for Settings ▸ Notifications to say beside its switches. |
 | `intentic-desktop-update` | workspace | `{ version }` of a downloaded update. |
+| `intentic-desktop-wake` | workspace | `{ do: "on" \| "off" \| "pause" \| "resume", minutes? }` from the tray's rows, heard only by a page of the app's origin. Said again every three seconds for up to a minute until the page reports a state that agrees, since a page still loading in the tray has no listener yet. |
 | `intentic-desktop-setup` | workspace | This device's setup progress (`SetupReport`). |
 | `intentic:face` | a worn spare | none: `window.__INTENTIC_LOCAL__` has just been set. |
 | `intentic:repoint` | local window pointed at another folder | the folder's face, kept for the window's reloads. Cancelable: the page takes it to move in place (`local/main.ts` seeds the folder's session, the web's `local/folderSwitch.ts` moves), and a page that does not take it is reloaded onto it. |
@@ -679,6 +713,7 @@ reloaded onto their new address and token.
 - [src-tauri/src/drop_copy.rs](src-tauri/src/drop_copy.rs) — a big drop on the workspace, copied into a sandbox on this computer through helper containers (Windows).
 - [src-tauri/src/commands.rs](src-tauri/src/commands.rs) — the Tauri commands This device calls, and the script each run starts.
 - [src-tauri/src/resume.rs](src-tauri/src/resume.rs) and [src-tauri/src/prefetch.rs](src-tauri/src/prefetch.rs) — a Windows setup across restarts: the sign-in entry that resumes it, and the sandbox image fetched while Docker is installed.
+- [src-tauri/src/wake.rs](src-tauri/src/wake.rs), [src-tauri/src/microphone.rs](src-tauri/src/microphone.rs) and [src-tauri/src/autostart.rs](src-tauri/src/autostart.rs) — the wake word with the window in the tray: what the page says and is told, the tray's rows, the microphone for the workspace alone, and the start at sign-in.
 - [src-tauri/src/found.rs](src-tauri/src/found.rs) — what this computer already uses: the subscriptions its AI tools are signed in to, by who they are for, and the folders their histories name.
 - [src-tauri/src/agents.rs](src-tauri/src/agents.rs) — the machine agents of this computer's environments: this app's own, and each running WSL distro's.
 - [src-tauri/src/project.rs](src-tauri/src/project.rs) — a folder and its sandbox: what its dialog draws, the folder put in line for this computer's sandbox, and the project verbs its window runs.

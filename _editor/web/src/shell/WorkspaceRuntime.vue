@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { loadChunk, useDevice } from "@intentic/ui";
-import { defineAsyncComponent, onMounted, onUnmounted, watch } from "vue";
+import { computed, defineAsyncComponent, onMounted, onUnmounted, watch } from "vue";
+import { localFace } from "../app/environments/local";
 import { useRoute } from "vue-router";
 import { useChat } from "../features/chat/run/useChat";
 import { floatingWindowPanel } from "../workbench/window/floating";
@@ -25,6 +26,10 @@ import { startBrowserAgents } from "./browserAgents";
 // every start although its shell never mounts them. A desktop fetches the chunk the moment the runtime renders; a phone
 // only if it opens a floating window.
 const PoppablePanels = defineAsyncComponent(() => loadChunk(() => import(`./window/PoppablePanels.vue`)));
+// Listening for the agent's name (chat/wake), in a desktop-sized main window on a sandbox: the same chunk rule, since a
+// phone never listens.
+const WakeListener = defineAsyncComponent(() => loadChunk(() => import(`../features/chat/wake/WakeListener.vue`)));
+const listensForWake = computed(() => !mobile.value && floatingWindowPanel.value === undefined && localFace() === undefined);
 
 const liveness = useSandboxLiveness();
 const route = useRoute();
@@ -87,4 +92,5 @@ startBrowserAgents();
 <template>
 <!-- Mobile docks neither panel normally — chat is its own route, the terminal its own tab — but a floating window is always the exception. -->
     <PoppablePanels v-if="!mobile || floatingWindowPanel !== undefined" />
+    <WakeListener v-if="listensForWake" />
 </template>

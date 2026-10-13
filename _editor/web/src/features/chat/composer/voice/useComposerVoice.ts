@@ -70,6 +70,12 @@ export interface VoiceSetup {
     readonly valuetext: string;
 }
 
+// How many composers in this window have their hands-free mic on: the wake listener (chat/wake) is deaf while any does,
+// so a person dictating into a box is never also heard calling the agent by name.
+// allow(module-state): this window's count of open composer microphones
+const armedComposers = ref(0);
+export const handsFreeOn = computed(() => armedComposers.value > 0);
+
 // The glance window between words appearing and the message going: a countdown, not a confirmation. It starts when
 // the last spoken words land: while the person is speaking again, or a phrase is still being heard, it waits.
 const VOICE_SEND_DELAY_MS = 1200;
@@ -154,6 +160,16 @@ export const useComposerVoice = (composer: {
     // Asked once: a page's security, its policy and its browser don't change while it is open.
     const unsupported = voiceUnsupported(composer.page);
     const on = computed(() => state.value !== `idle`);
+    // Counted once per composer, whichever of a quit and an unmount comes first.
+    let counted = false;
+    const count = (now: boolean): void => {
+        if (now !== counted) {
+            counted = now;
+            armedComposers.value += now ? 1 : -1;
+        }
+    };
+    watch(on, count);
+    onBeforeUnmount(() => count(false));
     const armed = ref(false);
     // More words of this message are on their way: someone is speaking, or a phrase is still being heard.
     const busy = (): boolean => speaking.value || pending.value > 0;

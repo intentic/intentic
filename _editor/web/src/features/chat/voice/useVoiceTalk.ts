@@ -40,7 +40,8 @@ export interface VoiceTalk {
     readonly hint: ComputedRef<string | undefined>;
 }
 
-const cardWords = (): CardWords => ({
+/** The words a card is said with, in the reader's language now; shared with the wake listener's answers. */
+export const cardWords = (): CardWords => ({
     question: (question, options) => t(`chat.voiceCards.question`, { question, options }),
     questions: (count) => t(`chat.voiceCards.questions`, { count }),
     permission: (action) => t(`chat.voiceCards.permission`, { action }),

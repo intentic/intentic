@@ -1965,6 +1965,40 @@
             "waitHoursMinutes": "{hours} h {minutes}",
             "pickTime": "Autre jour ou heure",
             "caretNote": "Choisir une heure, un jour, ou attendre un autre agent"
+        },
+        "wake": {
+            "untitled": "ce chat",
+            "toNew": "Nouvelle session",
+            "toContinue": "Continuer dans {title}",
+            "toAnswer": "Répondre dans {title}",
+            "heardLabel": "« {word} » entendu",
+            "sendNow": "Envoyer maintenant",
+            "instead": "Plutôt : {destination}",
+            "cancel": "Annuler",
+            "called": "J'écoute… dites ce dont vous avez besoin",
+            "sentTo": "Envoyé : {destination}",
+            "open": "Ouvrir",
+            "notifyTitle": "{word} → {destination}",
+            "status": {
+                "micBlocked": "Micro bloqué",
+                "micBlockedDetail": "Ce navigateur a refusé le micro. Autorisez-le pour ce site dans la barre d'adresse, puis réactivez l'écoute.",
+                "noMic": "Aucun micro",
+                "noMicDetail": "Aucun micro n'a répondu sur cet appareil. Branchez-en un, puis réactivez l'écoute.",
+                "cannotHear": "La sandbox n'entend pas",
+                "cannotHearDetail": "Cette sandbox ne reconnaît pas encore la parole, elle ne peut donc pas entendre « {word} ». Une mise à jour de la sandbox l'apporte.",
+                "unsupported": "Écoute impossible ici",
+                "unsupportedDetail": "Cette page ne peut pas utiliser le micro : il lui faut une adresse sécurisée et un navigateur récent.",
+                "paused": "En pause jusqu'à {until}",
+                "pausedDetail": "N'écoute pas « {word} » jusqu'à {until}. Cliquez pour écouter de nouveau.",
+                "starting": "Ouverture du micro…",
+                "startingDetail": "Demande du micro au navigateur.",
+                "elsewhere": "Un autre onglet écoute",
+                "elsewhereDetail": "Un autre onglet de ce navigateur écoute « {word} ».",
+                "blocked": "Cliquez pour écouter",
+                "blockedDetail": "Un navigateur ne laisse une page entendre qu'après un clic depuis son chargement. Cliquez n'importe où ici et elle écoute de nouveau « {word} ».",
+                "goOn": "Continuez…",
+                "listeningDetail": "Écoute « {word} » sur cet appareil. Cliquez pour mettre en pause une heure."
+            }
         }
     },
     "common": {
@@ -4384,6 +4418,12 @@
             },
             "from": "Du",
             "to": "Au"
+        },
+        "agentVoice": {
+            "wakeWord": "Mot d'éveil",
+            "wakeWordNote": "Le nom qu'écoute chaque appareil de cette sandbox où l'écoute est activée dans Réglages ▸ Voix. Deux ou trois syllabes le réveillent de façon fiable.",
+            "wakeWordInvalid": "Uniquement des lettres, avec une espace, un trait d'union ou une apostrophe entre elles.",
+            "wakeWordShort": "Un mot aussi court le réveille par erreur. Deux ou trois syllabes fonctionnent le mieux."
         }
     },
     "settings": {
@@ -4516,7 +4556,8 @@
             "data": "Données",
             "keybindings": "Raccourcis clavier",
             "profile": "Profil",
-            "tokens": "Jetons"
+            "tokens": "Jetons",
+            "voice": "Voix"
         },
         "settingsBilling": {
             "activating": "Activation…",
@@ -4622,6 +4663,23 @@
             "description": "Aidez-nous à améliorer Intentic : autorisez les événements d’utilisation et les enregistrements de l’interface pendant votre travail, liés à votre compte. Le contenu de votre espace de travail y est masqué. « Non merci » n’envoie rien, et vous pouvez changer d’avis à tout moment dans les Paramètres.",
             "allow": "Autoriser",
             "deny": "Non merci"
+        },
+        "settingsVoice": {
+            "group": "Mot d'éveil",
+            "listen": "Écouter « {word} » sur cet appareil",
+            "listenNote": "Dites « {word} » et ce dont vous avez besoin depuis n'importe où dans la pièce, sans clavier : « {word}, regarde pourquoi les tests échouent. »",
+            "pause": "Pause d'une heure",
+            "resume": "Écouter de nouveau",
+            "word": "Mot d'éveil",
+            "wordNote": "Le nom par lequel vous appelez l'agent, le même sur chaque appareil. Deux ou trois syllabes le réveillent de façon fiable.",
+            "wordMaintainer": "Le mot est choisi par une personne qui maintient cette sandbox.",
+            "howGroup": "Comment ça marche",
+            "where": "Vos mots continuent dans la conversation en cours : celle à qui vous avez parlé ces dernières minutes, ou celle à l'écran. Tout le reste ouvre une nouvelle session ; dites « {word}, nouvelle session … » pour en ouvrir une directement. Avant leur envoi, une carte montre où ils vont, et Échap annule.",
+            "heard": "Pendant l'écoute, seules les premières secondes de chaque phrase dite près de cet appareil vont au modèle vocal de votre sandbox, pour entendre si elle commence par « {word} ». Rien n'est conservé, et rien n'atteint l'agent si elle ne commence pas ainsi.",
+            "noLanding": "Les sessions ouvertes à la voix ne s'intègrent jamais d'elles-mêmes : n'importe qui dans la pièce peut dire le nom.",
+            "inApp": "Dans l'app Intentic, l'écoute continue quand la fenêtre est fermée dans la zone de notification.",
+            "inBrowser": "Dans un navigateur, l'écoute dure tant qu'un onglet de cet espace de travail est ouvert, et le navigateur affiche son indicateur de micro. L'app Intentic continue d'écouter depuis la zone de notification.",
+            "wordChange": "Changer le mot dans Sandbox ▸ Agent ▸ Outils"
         }
     },
     "setup": {

@@ -379,6 +379,69 @@ fn is_page_route(path: &str) -> bool {
         && !path.chars().any(char::is_control)
 }
 
+/* WHERE THE WORKSPACE'S EARS ARE, for the tray and the next launch (wake.rs). */
+
+/// What the workspace's page says its wake-word listening is doing (the web's desktop wake bridge).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WakeState {
+    /// Not listening, and not wanted: the reader switched it off, or never on.
+    Off,
+    Listening,
+    /// Wanted, and held for a while by the reader ("Pause listening for 1 hour").
+    Paused,
+    /// Wanted, and held by the browser: an audio context that will not start until somebody clicks in the page.
+    Blocked,
+    /// Wanted, and failing: no microphone, a refused one, a model that would not load.
+    Error,
+}
+
+impl WakeState {
+    fn parse(word: &str) -> Option<Self> {
+        Some(match word {
+            "off" => Self::Off,
+            "listening" => Self::Listening,
+            "paused" => Self::Paused,
+            "blocked" => Self::Blocked,
+            "error" => Self::Error,
+            _ => return None,
+        })
+    }
+}
+
+/// `intentic://wake?state=…&word=…[&until=…]`: the workspace page's listening, whenever it changes (the page dedupes
+/// it). `until`, the end of a pause in epoch milliseconds, rides only with `paused`; it is held to its shape and not
+/// kept, since the page's own clock ends the pause and the tray says only how to end it sooner. App-window only, and
+/// only the workspace's: a link from anywhere else could switch the tray's word, or what the next launch loads.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WakeArgs {
+    pub state: WakeState,
+    /// The word the page listens for, as the reader set it: what the tray's row is titled with.
+    pub word: String,
+}
+
+/// A wake word as the tray can show it: one line of one to forty characters.
+pub fn is_wake_word(word: &str) -> bool {
+    is_shown_text(word, 40)
+}
+
+/// `wake`'s values held to their shape. A word out of shape, an `until` that is not a positive whole number or that
+/// rides with anything but `paused`, is no report at all, rather than one the tray would half believe.
+fn wake_of(state: &str, word: String, until: Option<String>) -> Option<WakeArgs> {
+    let state = WakeState::parse(state)?;
+    if !is_wake_word(&word) {
+        return None;
+    }
+    if let Some(until) = until {
+        let positive = !until.is_empty()
+            && until.bytes().all(|byte| byte.is_ascii_digit())
+            && until.parse::<u64>().is_ok_and(|ms| ms > 0);
+        if !positive || state != WakeState::Paused {
+            return None;
+        }
+    }
+    Some(WakeArgs { state, word })
+}
+
 /// `intentic://setup?code=…` — run the sandbox this setup code was minted for on this device.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -566,6 +629,8 @@ pub enum Link {
     Badge(BadgeArgs),
     /// See [`NoticeVerb`]: the system's notifications, put up for the workspace while the reader is elsewhere.
     Notice(NoticeVerb),
+    /// See [`WakeArgs`]: whether the workspace's page is listening for its wake word.
+    Wake(WakeArgs),
     /// See [`WindowVerb`]: the workspace SPA's own title bar, which is a link channel rather than IPC for the
     /// same reason everything else here is.
     Window(WindowVerb),
@@ -706,6 +771,18 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
         )
         .map(Link::Badge),
         "badge" => None,
+        // The workspace's own page and no other: a floating panel is the same page, and has no ears (wake.rs).
+        "wake"
+            if matches!(
+                source,
+                Source::App {
+                    window: crate::windows::WORKSPACE
+                }
+            ) =>
+        {
+            wake_of(&get("state")?, get("word")?, get("until")).map(Link::Wake)
+        }
+        "wake" => None,
         // A press on a notification is heard from anywhere, by a token only this run issued (see [`NoticeVerb`]);
         // putting one up, withdrawing one and clearing them all only from the app's own windows.
         "notice" => Some(Link::Notice(match get("do")?.as_str() {
@@ -1875,5 +1952,128 @@ L"}"#,
             parse_link("intentic://notice?do=open&token=a1b2c3", FILES),
             None
         );
+    }
+
+    /* THE WORKSPACE'S EARS, FOR THE TRAY AND THE NEXT LAUNCH. */
+
+    fn wake_of_link(url: &str, source: Source) -> Option<WakeArgs> {
+        match parse_link(url, source)? {
+            Link::Wake(args) => Some(args),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn the_workspace_says_what_its_listening_is_doing_in_five_words() {
+        for (word, state) in [
+            ("off", WakeState::Off),
+            ("listening", WakeState::Listening),
+            ("paused", WakeState::Paused),
+            ("blocked", WakeState::Blocked),
+            ("error", WakeState::Error),
+        ] {
+            assert_eq!(
+                wake_of_link(&format!("intentic://wake?state={word}&word=Leon"), APP),
+                Some(WakeArgs {
+                    state,
+                    word: "Leon".into()
+                }),
+                "{word}"
+            );
+        }
+        // A pause says when it ends; the app holds that to its shape and leaves the clock to the page.
+        assert_eq!(
+            wake_of_link(
+                "intentic://wake?state=paused&word=Hey%20Leon&until=1792000000000",
+                APP
+            ),
+            Some(WakeArgs {
+                state: WakeState::Paused,
+                word: "Hey Leon".into()
+            })
+        );
+        for state in ["", "on", "Listening", "asleep"] {
+            let link = format!("intentic://wake?state={state}&word=Leon");
+            assert_eq!(parse_link(&link, APP), None, "{link}");
+        }
+    }
+
+    /// The word titles a tray row: one line, one to forty characters, counted as characters and not as bytes.
+    #[test]
+    fn a_wake_word_is_one_short_line() {
+        let forty = "é".repeat(40);
+        assert_eq!(
+            wake_of_link(
+                &format!("intentic://wake?state=listening&word={forty}"),
+                APP
+            )
+            .map(|args| args.word),
+            Some(forty.clone())
+        );
+        for word in [
+            String::new(),
+            "%20%20".to_string(),
+            "x".repeat(41),
+            "é".repeat(41),
+            "two%0Alines".to_string(),
+            "tab%09bed".to_string(),
+            "nul%00".to_string(),
+        ] {
+            let link = format!("intentic://wake?state=listening&word={word}");
+            assert_eq!(parse_link(&link, APP), None, "{link}");
+        }
+        assert_eq!(parse_link("intentic://wake?state=listening", APP), None);
+    }
+
+    /// `until` is a positive whole number of milliseconds, and only a pause has one.
+    #[test]
+    fn a_pause_ends_at_a_positive_whole_millisecond_and_nothing_else_ends_at_all() {
+        for until in [
+            "0",
+            "-5",
+            // A literal `+`: a bare one is a space in a query, and the value is trimmed.
+            "%2B5",
+            "1.5",
+            "soon",
+            "1e12",
+            "99999999999999999999999",
+        ] {
+            let link = format!("intentic://wake?state=paused&word=Leon&until={until}");
+            assert_eq!(parse_link(&link, APP), None, "{link}");
+        }
+        for state in ["off", "listening", "blocked", "error"] {
+            let link = format!("intentic://wake?state={state}&word=Leon&until=1792000000000");
+            assert_eq!(parse_link(&link, APP), None, "{link}");
+        }
+        // A pause the page did not time is still a pause.
+        assert!(wake_of_link("intentic://wake?state=paused&word=Leon", APP).is_some());
+    }
+
+    /// Only the workspace's own page: a floating panel is the same page with no ears, a local window draws documents
+    /// nobody vouched for, and the outside could switch what the next launch loads.
+    #[test]
+    fn only_the_workspace_says_what_its_listening_is_doing() {
+        let link = "intentic://wake?state=listening&word=Leon";
+        assert!(wake_of_link(link, APP).is_some());
+        assert_eq!(
+            parse_link(
+                link,
+                Source::App {
+                    window: "floating-chat"
+                }
+            ),
+            None
+        );
+        assert_eq!(
+            parse_link(
+                link,
+                Source::App {
+                    window: crate::windows::HOME
+                }
+            ),
+            None
+        );
+        assert_eq!(parse_link(link, FILES), None);
+        assert_eq!(parse_link(link, Source::External), None);
     }
 }

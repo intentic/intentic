@@ -18,6 +18,8 @@ export const RAW_ROUTES = {
     "GET /speech/status": { guest: true },
     "POST /speech/prepare": { guest: true },
     "POST /speech/transcribe": { floor: "collaborator", guest: true },
+    // A device claiming a wake word it heard (schemas/speech.ts): what it opens is a turn, so the collaborator's.
+    "POST /speech/wake": { floor: "collaborator" },
     // The live phrase stream (schemas/speech.ts): a WebSocket, so the query ticket, floored at the collaborator in the
     // handler like the transcribe it streams.
     "GET /speech/stream": { auth: "door" },

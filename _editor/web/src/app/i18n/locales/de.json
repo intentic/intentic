@@ -1965,6 +1965,40 @@
             "waitHoursMinutes": "{hours} Std. {minutes} Min.",
             "pickTime": "Anderer Tag oder Uhrzeit",
             "caretNote": "Stunde, Tag wählen oder auf einen anderen Agenten warten"
+        },
+        "wake": {
+            "untitled": "diesem Chat",
+            "toNew": "Neue Sitzung",
+            "toContinue": "Weiter in {title}",
+            "toAnswer": "Antwort in {title}",
+            "heardLabel": "„{word}“ gehört",
+            "sendNow": "Jetzt senden",
+            "instead": "Stattdessen: {destination}",
+            "cancel": "Abbrechen",
+            "called": "Ich höre… sag, was du brauchst",
+            "sentTo": "Gesendet: {destination}",
+            "open": "Öffnen",
+            "notifyTitle": "{word} → {destination}",
+            "status": {
+                "micBlocked": "Mikrofon blockiert",
+                "micBlockedDetail": "Dieser Browser hat das Mikrofon verweigert. Erlaube es für diese Seite in der Adressleiste und schalte das Zuhören wieder ein.",
+                "noMic": "Kein Mikrofon",
+                "noMicDetail": "Auf diesem Gerät hat kein Mikrofon geantwortet. Schließe eines an und schalte das Zuhören wieder ein.",
+                "cannotHear": "Sandbox hört nicht",
+                "cannotHearDetail": "Diese Sandbox erkennt noch keine Sprache und hört deshalb „{word}“ nicht. Ein Update der Sandbox bringt es mit.",
+                "unsupported": "Hier kein Zuhören",
+                "unsupportedDetail": "Diese Seite kann das Mikrofon nicht nutzen: Sie braucht eine sichere Adresse und einen aktuellen Browser.",
+                "paused": "Pausiert bis {until}",
+                "pausedDetail": "Hört bis {until} nicht auf „{word}“. Klicke, um sofort wieder zuzuhören.",
+                "starting": "Mikrofon wird geöffnet…",
+                "startingDetail": "Der Browser wird um das Mikrofon gebeten.",
+                "elsewhere": "Ein anderer Tab hört zu",
+                "elsewhereDetail": "Ein anderer Tab dieses Browsers hört auf „{word}“.",
+                "blocked": "Klicken zum Zuhören",
+                "blockedDetail": "Ein Browser lässt eine Seite erst hören, wenn seit dem Laden auf sie geklickt wurde. Klicke irgendwo hier, und sie hört wieder auf „{word}“.",
+                "goOn": "Sprich weiter…",
+                "listeningDetail": "Hört auf diesem Gerät auf „{word}“. Klicke, um eine Stunde zu pausieren."
+            }
         }
     },
     "common": {
@@ -4388,6 +4422,12 @@
             },
             "from": "Von",
             "to": "Bis"
+        },
+        "agentVoice": {
+            "wakeWord": "Weckwort",
+            "wakeWordNote": "Der Name, auf den jedes Gerät dieser Sandbox hört, auf dem das Zuhören unter Einstellungen ▸ Stimme eingeschaltet ist. Zwei oder drei Silben wecken ihn zuverlässig.",
+            "wakeWordInvalid": "Nur Buchstaben, mit Leerzeichen, Bindestrich oder Apostroph dazwischen.",
+            "wakeWordShort": "Ein so kurzes Wort weckt ihn aus Versehen. Zwei oder drei Silben funktionieren am besten."
         }
     },
     "settings": {
@@ -4518,7 +4558,8 @@
             "data": "Daten",
             "keybindings": "Tastenkürzel",
             "notifications": "Benachrichtigungen",
-            "profile": "Profil"
+            "profile": "Profil",
+            "voice": "Stimme"
         },
         "settingsBilling": {
             "activating": "Wird aktiviert…",
@@ -4644,6 +4685,23 @@
             "description": "Hilf uns, Intentic zu verbessern: Erlaube Nutzungsereignisse und Aufzeichnungen der Oberfläche während der Arbeit, verknüpft mit deinem Konto. Inhalte deines Arbeitsbereichs werden darin maskiert. „Nein danke“ sendet nichts, und du kannst das jederzeit in den Einstellungen ändern.",
             "allow": "Erlauben",
             "deny": "Nein, danke"
+        },
+        "settingsVoice": {
+            "group": "Weckwort",
+            "listen": "Auf diesem Gerät auf „{word}“ hören",
+            "listenNote": "Sag „{word}“ und was du brauchst, von überall im Raum, ohne Tastatur: „{word}, prüf, warum die Tests fehlschlagen.“",
+            "pause": "Eine Stunde pausieren",
+            "resume": "Wieder zuhören",
+            "word": "Weckwort",
+            "wordNote": "Der Name, mit dem du den Agenten rufst, auf jedem Gerät derselbe. Zwei oder drei Silben wecken ihn zuverlässig.",
+            "wordMaintainer": "Das Wort wählt eine Betreuerin oder ein Betreuer dieser Sandbox.",
+            "howGroup": "So funktioniert es",
+            "where": "Deine Worte gehen in das Gespräch, mitten in dem du bist: eines, mit dem du in den letzten Minuten gesprochen hast, oder das auf dem Bildschirm. Alles andere beginnt eine neue Sitzung; sag „{word}, neue Sitzung …“, um gleich eine zu beginnen. Bevor sie gehen, zeigt eine Karte wohin, und Escape bricht ab.",
+            "heard": "Beim Zuhören gehen nur die ersten Sekunden von allem, was in der Nähe dieses Geräts gesagt wird, an das eigene Sprachmodell deiner Sandbox, um zu hören, ob es mit „{word}“ beginnt. Nichts wird behalten, und nichts erreicht den Agenten, wenn es nicht so beginnt.",
+            "noLanding": "Per Stimme geöffnete Sitzungen werden nie von selbst übernommen: Jeder im Raum kann den Namen sagen.",
+            "inApp": "In der Intentic-App hört es weiter, während das Fenster in den Infobereich geschlossen ist.",
+            "inBrowser": "Im Browser hört es zu, solange ein Tab dieses Arbeitsbereichs offen ist, und der Browser zeigt sein Mikrofonzeichen. Die Intentic-App hört aus dem Infobereich weiter.",
+            "wordChange": "Das Wort unter Sandbox ▸ Agent ▸ Werkzeuge ändern"
         }
     },
     "setup": {

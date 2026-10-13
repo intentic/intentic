@@ -453,6 +453,10 @@ flowchart LR
   `sherpa-onnx-node`, so a model's memory goes back to the box when it idles and a native crash takes down only that
   process. Dictation (`speech/transcribe.ts`) hears the composer's microphone and Discord's calls: Parakeet for 25
   European languages, baked into the standard image, and Whisper for the rest, fetched the first time one is spoken.
+  The same live wire hears the editor's wake word (`settings.voice.wake`, "Leon" unless changed): a device that listens
+  sends only each phrase's first seconds, asking for finals alone (`guesses=0`), and the whole phrase only when it opens
+  with the name. Every device of one person hears the same call, so the first to claim it (`POST /speech/wake`, held in
+  memory per member) acts on it and the rest stand down.
   Speaking (`speech/voice/`) reads replies aloud for the editor's player (`GET /speech/say`, a socket) and Discord's
   calls (`POST /speech/say`). The voice is picked from the text's own language: the owner's pick for that language
   (`settings.voice.voices`), else their own provider (ElevenLabs, Cartesia or Deepgram, its key a stored secret)

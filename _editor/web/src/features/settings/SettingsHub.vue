@@ -13,6 +13,7 @@ import SettingsKeybindings from "./SettingsKeybindings.vue";
 import SettingsNotifications from "./SettingsNotifications.vue";
 import SettingsProfile from "./SettingsProfile.vue";
 import SettingsTokens from "./SettingsTokens.vue";
+import SettingsVoice from "./SettingsVoice.vue";
 import { SETTINGS_DEFAULT_SECTION, settingsSections } from "./settingsNav";
 
 // Personal preferences for the signed-in account, cross-sandbox; reached from the account avatar. Built on the same
@@ -49,6 +50,7 @@ const GROUPS = computed<readonly NavGroup<HubTab>[]>(() => [
             <SettingsBilling v-else-if="slug === `billing`" />
             <SettingsAppearance v-else-if="slug === `appearance`" />
             <SettingsNotifications v-else-if="slug === `notifications`" />
+            <SettingsVoice v-else-if="slug === `voice`" />
             <SettingsKeybindings v-else-if="slug === `keybindings`" />
             <SettingsTokens v-else-if="slug === `tokens`" />
             <SettingsData v-else-if="slug === `data`" />

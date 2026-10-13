@@ -5,6 +5,8 @@ import {
     type VoiceSettings,
     VoiceSettingsSchema,
     voiceEngineOf,
+    WAKE_WORD_DEFAULT,
+    WakeWordSchema,
 } from "@intentic/sandbox-contract";
 import { Icon, Notice, type NoticeModel, Row, RowGroup, RowNote, ui } from "@intentic/ui";
 import { activeLocale, useT } from "@intentic/ui/i18n";
@@ -69,6 +71,32 @@ const setSpeed = (event: Event): void => {
     }
 };
 const speeds = computed(() => speedChoices(voice.value.speed));
+
+// ---- the name it is called by ----
+
+// The wake word every device of this sandbox listens for (chat/wake), written when the field is left. A word the model
+// cannot write down is refused here, with why, rather than saved and never heard; a short one is saved, with the warning
+// that it wakes by mistake.
+const wakeDraft = ref<string>();
+const wakeShown = computed(() => wakeDraft.value ?? voice.value.wake.word);
+const wakeInvalid = computed(() => wakeDraft.value !== undefined && wakeDraft.value.trim() !== `` && !WakeWordSchema.safeParse(wakeDraft.value).success);
+const wakeShort = computed(() => [...wakeShown.value.replaceAll(/\s/gu, ``)].length <= 3);
+const onWakeInput = (event: Event): void => {
+    if (event.target instanceof HTMLInputElement) {
+        wakeDraft.value = event.target.value;
+    }
+};
+const commitWake = (): void => {
+    const next = wakeDraft.value?.trim();
+    if (next === undefined || wakeInvalid.value) {
+        return;
+    }
+    wakeDraft.value = undefined;
+    const parsed = WakeWordSchema.safeParse(next === `` ? WAKE_WORD_DEFAULT : next);
+    if (parsed.success && parsed.data !== voice.value.wake.word) {
+        saveVoice({ ...voice.value, wake: { word: parsed.data } });
+    }
+};
 
 // ---- which voice speaks a language ----
 
@@ -230,6 +258,27 @@ const voicesFailure = computed<NoticeModel | undefined>(() =>
                 </select>
             </template>
         </Row>
+
+        <!-- The name every device of this sandbox listens for, where a reader switched listening on (Settings ▸ Voice). -->
+        <Row icon="microphone" :title="t(`sandbox.agentVoice.wakeWord`)" :description="t(`sandbox.agentVoice.wakeWordNote`)">
+            <template #control>
+                <input
+                    type="text"
+                    autocomplete="off"
+                    spellcheck="false"
+                    maxlength="40"
+                    :aria-label="t(`sandbox.agentVoice.wakeWord`)"
+                    :aria-invalid="wakeInvalid"
+                    :class="ui.input({ size: `sm` }, `w-40`)"
+                    :value="wakeShown"
+                    :disabled="!ready"
+                    @input="onWakeInput"
+                    @change="commitWake"
+                />
+            </template>
+        </Row>
+        <RowNote v-if="wakeInvalid" icon="exclamation-triangle" tone="warning">{{ t(`sandbox.agentVoice.wakeWordInvalid`) }}</RowNote>
+        <RowNote v-else-if="wakeShort" icon="exclamation-triangle" tone="warning">{{ t(`sandbox.agentVoice.wakeWordShort`) }}</RowNote>
 
         <!-- One language at a time: the picker shows what speaks it now, and the list under it every language given a voice of its own. -->
         <Row
