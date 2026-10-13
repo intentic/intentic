@@ -24,3 +24,8 @@ export interface ExtensionHostStatus {
 
 // allow(module-state): the extension host's load record, retired with the activations on a switch and on a relocale (retireExtensions)
 export const extensionStatuses = shallowRef<readonly ExtensionHostStatus[]>([]);
+
+// Whether the loader's pass finished, written by it like the statuses above: until then a view that is not registered
+// may simply not have activated yet, not be gone (the rail's tiles, ExtensionHost's "nothing here").
+// allow(module-state): the extension host's load record, retired with the activations on a switch and on a relocale (retireExtensions)
+export const extensionsLoaded = shallowRef(false);

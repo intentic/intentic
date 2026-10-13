@@ -9320,6 +9320,9 @@
         "extensionErrorBoundary": {
             "extensionCrashedRenderingView": "The \"{extensionId}\" extension crashed rendering this view."
         },
+        "extensionView": {
+            "loading": "Loading this view"
+        },
         "infraDeclare": {
             "addServer": "Add server",
             "appServiceAboveFirst": "an app or a service above: the first apply then sets up your server to run it.",

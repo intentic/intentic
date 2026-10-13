@@ -8917,6 +8917,9 @@
         "extensionErrorBoundary": {
             "extensionCrashedRenderingView": "Rozszerzenie „{extensionId}” padło przy rysowaniu tego widoku."
         },
+        "extensionView": {
+            "loading": "Wczytywanie tego widoku"
+        },
         "infraDeclare": {
             "addServer": "Dodaj serwer",
             "appServiceAboveFirst": "powyżej aplikację albo usługę: pierwsze zastosowanie przygotuje wtedy Twój serwer, żeby ją uruchomił.",

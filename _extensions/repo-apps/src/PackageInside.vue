@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { PackageUnit, PackageUnitEdge, WorkspacePackage } from "@intentic/sandbox-contract";
-import { Card, Notice, noticeOf, RowGroup, Row, StatStrip, ui } from "@intentic/extension-ui";
+import { Card, Notice, noticeOf, RowGroup, Row, SkeletonSnapshot, StatStrip, ui, vSkeletonSource } from "@intentic/extension-ui";
 import { computed, ref, toRef, watch } from "vue";
 import { isUpward, stackOf, unitLinks } from "./layerModel";
 import { usePackageModules } from "./useWorkspaceGraph";
@@ -61,6 +61,7 @@ const pick = (id: string): void => {
     picked.value = picked.value === id ? undefined : id;
 };
 const pkg = computed(() => props.packages.find((entry) => entry.name === props.name));
+const imprint = computed(() => `repo-apps.package-inside:${props.repo}/${props.name}`);
 </script>
 
 <template>
@@ -74,14 +75,19 @@ const pkg = computed(() => props.packages.find((entry) => entry.name === props.n
         </p>
         <Notice v-if="error" class="mb-3" :of="noticeOf(error)" />
         <Notice v-if="modules?.invalid" class="mb-3" :of="noticeOf(modules.invalid, { tone: `warning` })" />
-        <div v-if="isLoading" class="flex flex-col gap-2" role="status" aria-busy="true">
-            <span class="sr-only">{{ t(`dependenciesView.inside.reading`) }}</span>
-            <span v-for="row in 4" :key="row" class="skeleton block h-10 w-full" aria-hidden="true" />
-        </div>
-        <Card v-else-if="modules && modules.units.length === 0" dashed class="text-center text-sm text-muted">{{
+        <!-- Each package's layers as they last stood (its own imprint, since two packages' stacks share nothing); the bars
+             only until this package has been opened once. -->
+        <SkeletonSnapshot v-if="isLoading" :of="imprint" :label="t(`dependenciesView.inside.reading`)">
+            <div class="flex flex-col gap-2" role="status" aria-busy="true">
+                <span class="sr-only">{{ t(`dependenciesView.inside.reading`) }}</span>
+                <span v-for="row in 4" :key="row" class="skeleton block h-10 w-full" aria-hidden="true" />
+            </div>
+        </SkeletonSnapshot>
+        <Card v-else-if="modules && modules.units.length === 0" v-skeleton-source="imprint" dashed class="text-center text-sm text-muted">{{
             t(`dependenciesView.inside.empty`)
         }}</Card>
-        <template v-else-if="stack && modules">
+        <!-- One element in the bars' place, so the imprint is the whole answer: the strip, the layers, the lists. -->
+        <div v-else-if="stack && modules" v-skeleton-source="imprint">
             <StatStrip :items="stats" />
             <div class="mt-2 flex flex-col gap-1.5">
                 <div v-for="row in stack.rows" :key="row.key" class="flex items-start gap-3 rounded-md border border-line-subtle p-2">
@@ -215,6 +221,6 @@ const pkg = computed(() => props.packages.find((entry) => entry.name === props.n
                 </p>
                 <p v-if="!stack.declared" :class="ui.emptyState()" class="text-xs">{{ t(`dependenciesView.inside.declareHint`) }}</p>
             </section>
-        </template>
+        </div>
     </div>
 </template>

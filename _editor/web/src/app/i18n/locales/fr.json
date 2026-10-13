@@ -4800,6 +4800,9 @@
         "extensionErrorBoundary": {
             "extensionCrashedRenderingView": "L'extension « {extensionId} » a planté en dessinant cette vue."
         },
+        "extensionView": {
+            "loading": "Chargement de cette vue"
+        },
         "infraDeclare": {
             "addServer": "Ajouter un serveur",
             "appServiceAboveFirst": "une application ou un service ci-dessus : le premier apply prépare alors votre serveur pour le faire tourner.",

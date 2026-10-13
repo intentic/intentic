@@ -4842,6 +4842,9 @@
         "extensionErrorBoundary": {
             "extensionCrashedRenderingView": "Die Erweiterung „{extensionId}“ ist beim Rendern dieser Ansicht abgestürzt."
         },
+        "extensionView": {
+            "loading": "Diese Ansicht wird geladen"
+        },
         "infraDeclare": {
             "addServer": "Server hinzufügen",
             "appServiceAboveFirst": "oben eine App oder einen Dienst: das erste Anwenden richtet dann Ihren Server ein, damit er sie betreibt.",

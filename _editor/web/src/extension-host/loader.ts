@@ -7,7 +7,7 @@ import { extensionApiVersion, satisfiesEngines } from "@intentic/extension-api";
 import { extensionIdOf } from "@intentic/extension-manifest";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import { shallowRef } from "vue";
-import { type ExtensionHostStatus, extensionStatuses } from "../features/extensions/extensionStatuses";
+import { type ExtensionHostStatus, extensionsLoaded, extensionStatuses } from "../features/extensions/extensionStatuses";
 import { extensionSettingsStore } from "../features/extensions/useExtensionSettings";
 import { sandboxError, sandboxRequest } from "../client/sandbox/sandboxClient";
 import { sandboxRpc } from "../client/sandbox/sandboxRpc";
@@ -38,15 +38,14 @@ const reportLoadFailure = (status: ExtensionHostStatus, listSource: string): voi
     reportClient(`extension.loadError`, `${status.extensionId} ${status.state}: ${status.detail ?? `no detail`}`, { level: `warn`, fields });
 };
 
-
 // Revision each extension loaded at, per handle (codeRevisionOf: the pinned commit, or a dev checkout's bundle
 // fingerprint); divergence from the list's current one triggers the reload prompt.
 // allow(module-state): the extension host's load record, retired with the activations on a switch and on a relocale (retireExtensions)
 export const loadedCommits = shallowRef<ReadonlyMap<string, string>>(new Map());
 
-// Whether the load pass finished; a missing tile may simply not have activated yet, not be gone.
-// allow(module-state): the extension host's load record, retired with the activations on a switch and on a relocale (retireExtensions)
-export const extensionsLoaded = shallowRef(false);
+// Whether the load pass finished: held beside the statuses (extensionStatuses.ts), below this host, so a page in
+// features can tell "not activated yet" from "gone" without importing it. Re-exported for the host's own readers.
+export { extensionsLoaded };
 
 // When the list the last pass loaded from was read (epoch ms). A list read before it says nothing about what came
 // since: the persisted cache paints one from a previous visit, and it may name what has been removed after.

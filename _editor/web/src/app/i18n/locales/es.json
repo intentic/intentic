@@ -4868,6 +4868,9 @@
         "extensionErrorBoundary": {
             "extensionCrashedRenderingView": "La extensión «{extensionId}» se ha caído al dibujar esta vista."
         },
+        "extensionView": {
+            "loading": "Cargando esta vista"
+        },
         "infraDeclare": {
             "addServer": "Añadir un servidor",
             "appServiceAboveFirst": "una aplicación o un servicio arriba: la primera aplicación prepara entonces tu servidor para ejecutarlo.",
