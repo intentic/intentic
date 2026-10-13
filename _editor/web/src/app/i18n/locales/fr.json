@@ -2235,12 +2235,16 @@
             "commandOutput": "Sortie des commandes",
             "ledgerFillsAssistantRuns": "Le registre se remplit à mesure que l'assistant lance des commandes shell, une ligne par commande.",
             "ofCommandsRunUncleaned": "des commandes tournent sans nettoyage",
-            "outputSavings": "Économies de sortie",
             "raw": "Brutes",
             "tokensSavedAllTime": "jetons économisés, en tout",
-            "tokensStillReachingAssistant": "jetons qui atteignent encore l'assistant",
             "trimNoisyShellOutput": "Élaguer la sortie shell bruyante avant qu'elle n'atteigne l'assistant.",
-            "unCleanedAddHandler": "Non nettoyée (ajoutez un gestionnaire)"
+            "advanced": "Avancé",
+            "allCleanersOn": "Les {total} nettoyeurs actifs",
+            "someCleanersOn": "{on} nettoyeurs actifs sur {total}",
+            "heldOutForComparison": "{pct} % des commandes laissées brutes, pour comparer",
+            "breakdown": "Détail →",
+            "notCovered": "Aucun nettoyeur pour",
+            "runs": "{count} exécution | {count} exécutions"
         },
         "agentDataRetention": {
             "caches": "Documents convertis",

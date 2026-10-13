@@ -2245,12 +2245,16 @@
             "commandOutput": "Salida de comandos",
             "ledgerFillsAssistantRuns": "El registro se llena a medida que el asistente ejecuta comandos de shell, una fila por comando.",
             "ofCommandsRunUncleaned": "de los comandos se ejecutan sin limpiar",
-            "outputSavings": "Ahorro de salida",
             "raw": "Sin limpiar",
             "tokensSavedAllTime": "tokens ahorrados, en total",
-            "tokensStillReachingAssistant": "tokens que siguen llegando al asistente",
             "trimNoisyShellOutput": "Recortar la salida ruidosa de la shell antes de que llegue al asistente.",
-            "unCleanedAddHandler": "Sin limpiar (añade un manejador)"
+            "advanced": "Avanzado",
+            "allCleanersOn": "Los {total} limpiadores activos",
+            "someCleanersOn": "{on} de {total} limpiadores activos",
+            "heldOutForComparison": "{pct}% de los comandos sin limpiar, para comparar",
+            "breakdown": "Desglose →",
+            "notCovered": "Sin limpiador",
+            "runs": "{count} ejecución | {count} ejecuciones"
         },
         "agentDataRetention": {
             "caches": "Documentos convertidos",

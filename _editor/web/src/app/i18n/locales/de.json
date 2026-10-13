@@ -2236,12 +2236,16 @@
             "commandOutput": "Befehlsausgabe",
             "ledgerFillsAssistantRuns": "Das Register füllt sich, während der Assistent Shell-Befehle ausführt, eine Zeile pro Befehl.",
             "ofCommandsRunUncleaned": "der Befehle laufen ungereinigt",
-            "outputSavings": "Ausgabe-Ersparnis",
             "raw": "Roh",
             "tokensSavedAllTime": "Tokens gespart, insgesamt",
-            "tokensStillReachingAssistant": "Tokens, die den Assistenten weiterhin erreichen",
             "trimNoisyShellOutput": "Lärmende Shell-Ausgabe kürzen, bevor sie den Assistenten erreicht.",
-            "unCleanedAddHandler": "Ungesäubert (einen Handler hinzufügen)"
+            "advanced": "Erweitert",
+            "allCleanersOn": "Alle {total} Säuberer an",
+            "someCleanersOn": "{on} von {total} Säuberern an",
+            "heldOutForComparison": "{pct}% der Befehle zum Vergleich ungesäubert",
+            "breakdown": "Aufschlüsselung →",
+            "notCovered": "Kein Säuberer für",
+            "runs": "{count} Lauf | {count} Läufe"
         },
         "agentDataRetention": {
             "caches": "Umgewandelte Dokumente",
