@@ -213,7 +213,7 @@ const statusMeta = () =>
         // The daemon is rebasing the branch and carrying its work into the workspace; nothing has finished yet, nothing has
         // failed, and nothing may act on the branch until it settles, so the running spinner and blue.
         landing: { icon: `spinner`, spin: true, label: useVocabulary().value.landing, class: `text-link` },
-        awaiting: { icon: `exclamation-circle`, label: t(`shared.needs`), class: `text-primary-500` },
+        awaiting: { icon: `exclamation-circle`, label: t(`shared.needs`), class: `text-accent` },
         landed: { icon: `check-circle`, label: useVocabulary().value.landed, class: `text-success` },
         // Finished with auto-land off: work is safe on the branch, waiting for a deliberate Land. Link-blue, not an
         // attention hue, since the user chose this.
@@ -1091,7 +1091,7 @@ export const tileRim = (agent: RimAgent, { quiet }: { quiet: boolean }): TileRim
     const done = Math.min(agent.checklist?.done ?? 0, total);
     const finished = done === total && laneOf(agent) === `finished`;
     // A quiet rim states its count without arguing for it, which is what a receipt and a destination row both want.
-    return { segments: total + 1, filled: finished ? total + 1 : done, tone: quiet ? `text-subtle` : `text-primary-500` };
+    return { segments: total + 1, filled: finished ? total + 1 : done, tone: quiet ? `text-subtle` : `text-accent` };
 };
 
 // The activity line's icon by tool family, a glanceable "what is it doing" glyph, mock-style.

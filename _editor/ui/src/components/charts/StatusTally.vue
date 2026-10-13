@@ -25,7 +25,7 @@ const TEXT: Record<StatusVariant, string> = {
     warning: `text-warning`,
     info: `text-info`,
     neutral: `text-subtle`,
-    primary: `text-primary-500`,
+    primary: `text-accent`,
 };
 
 // Uneven on purpose and walked in order: state names are words of different lengths ("running", "stopped",

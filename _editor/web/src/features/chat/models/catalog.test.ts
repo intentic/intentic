@@ -14,7 +14,7 @@ describe(`statusTabClass`, () => {
     });
 
     it(`gives each state its own colour, so the glyph is never the only difference`, () => {
-        expect(statusTabClass(`awaiting`)).toBe(`text-primary-500`);
+        expect(statusTabClass(`awaiting`)).toBe(`text-accent`);
         expect(statusTabClass(`error`)).toBe(`text-danger`);
         expect(statusTabClass(`idle`)).toBe(``);
     });

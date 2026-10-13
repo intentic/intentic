@@ -61,8 +61,8 @@ const run = (action: MachineCardAction): Promise<void> | undefined => {
             <Icon v-if="tone === `ready`" name="check-circle" class="shrink-0 text-sm text-success" aria-hidden="true" />
             <Icon v-else-if="tone === `failed`" name="exclamation-circle" class="shrink-0 text-sm text-danger" aria-hidden="true" />
             <Icon v-else-if="tone === `waiting`" name="exclamation-circle" class="shrink-0 text-sm text-warning" aria-hidden="true" />
-            <ProgressRing v-else-if="percent !== undefined" :value="percent" :size="16" class="text-primary-500" />
-            <Icon v-else name="spinner" spin class="shrink-0 text-sm text-primary-500" aria-hidden="true" />
+            <ProgressRing v-else-if="percent !== undefined" :value="percent" :size="16" class="text-accent" />
+            <Icon v-else name="spinner" spin class="shrink-0 text-sm text-accent" aria-hidden="true" />
             <span class="min-w-0 flex-1 truncate text-xs text-content">{{ card.short }}</span>
             <span v-if="percent !== undefined" class="shrink-0 text-2xs tabular-nums text-muted">{{ t(`local.project.percent`, { percent }) }}</span>
             <Button v-if="actions[0] !== undefined" size="small" class="-my-1 shrink-0" :label="label(actions[0])" @click="run(actions[0])" />

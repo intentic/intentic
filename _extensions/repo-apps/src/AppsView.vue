@@ -60,7 +60,7 @@ interface AppKind {
 const BACKEND = computed((): AppKind => ({
     icon: `server`,
     label: t(`appsView.api`),
-    tint: `text-primary-500`,
+    tint: `text-accent`,
     pill: toneWash(`primary`),
     known: true,
 }));

@@ -425,7 +425,7 @@ onUnmounted(() => {
                  centred too (the empty folder's own words) and would read through it. -->
             <div
                 v-if="rootDragging"
-                class="pointer-events-none absolute inset-2 z-10 flex flex-col items-center justify-center gap-2 rounded-sm border-2 border-dashed border-primary-500/60 bg-canvas/95 text-primary-500"
+                class="pointer-events-none absolute inset-2 z-10 flex flex-col items-center justify-center gap-2 rounded-sm border-2 border-dashed border-primary-500/60 bg-canvas/95 text-accent"
             >
                 <Icon name="upload" class="text-2xl" />
                 <span class="text-xs font-medium">{{ t(`local.localFiles.dropFilesToAdd`, { name: face?.name ?? `` }) }}</span>

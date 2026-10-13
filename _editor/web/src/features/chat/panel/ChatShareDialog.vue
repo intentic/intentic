@@ -132,7 +132,7 @@ const done = (): void => {
                     <Icon
                         class="mt-0.5 text-2xs"
                         :name="detail === option.value ? 'check-circle' : 'circle'"
-                        :class="detail === option.value ? 'text-primary-500' : 'text-subtle'"
+                        :class="detail === option.value ? 'text-accent' : 'text-subtle'"
                     />
                     <span class="flex min-w-0 flex-col gap-0.5">
                         <span class="text-xs font-medium text-content">{{ option.label }}</span>

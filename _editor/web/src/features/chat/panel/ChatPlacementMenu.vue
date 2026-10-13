@@ -104,7 +104,7 @@ const place = (at: { box?: string; runner?: string }): void => {
             <Icon
                 name="box"
                 class="mt-0.5 text-xs"
-                :class="picked === undefined && pickedRunner === undefined ? 'text-primary-500' : 'text-subtle'"
+                :class="picked === undefined && pickedRunner === undefined ? 'text-accent' : 'text-subtle'"
             />
             <span class="flex min-w-0 flex-col">
                 <span class="text-sm text-content md:text-xs">{{ t(`shared.thisSandbox`) }}</span>
@@ -120,7 +120,7 @@ const place = (at: { box?: string; runner?: string }): void => {
             :disabled="settled || !runner.online"
             @click="place({ runner: runner.id })"
         >
-            <Icon name="desktop" class="mt-0.5 text-xs" :class="pickedRunner === runner.id ? 'text-primary-500' : 'text-subtle'" />
+            <Icon name="desktop" class="mt-0.5 text-xs" :class="pickedRunner === runner.id ? 'text-accent' : 'text-subtle'" />
             <span class="flex min-w-0 flex-1 flex-col">
                 <span class="flex items-center gap-1.5">
                     <span class="text-sm text-content md:text-xs">{{ runner.id }}</span>
@@ -147,7 +147,7 @@ const place = (at: { box?: string; runner?: string }): void => {
                 :disabled="settled || !answering(box)"
                 @click="place({ box: box.sandbox.id })"
             >
-                <Icon name="boxes" class="mt-0.5 text-xs" :class="picked === box.sandbox.id ? 'text-primary-500' : 'text-subtle'" />
+                <Icon name="boxes" class="mt-0.5 text-xs" :class="picked === box.sandbox.id ? 'text-accent' : 'text-subtle'" />
                 <span class="flex min-w-0 flex-col">
                     <span class="truncate text-sm text-content md:text-xs">{{ box.sandbox.name }}</span>
                     <span class="text-2xs text-subtle">{{ boxDetail(box) }}</span>

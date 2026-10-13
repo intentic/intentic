@@ -226,7 +226,7 @@ const add = async (): Promise<void> => {
 
         <ul v-if="mine.length > 0" class="flex flex-col">
             <li v-for="runner in mine" :key="runner.id" class="flex items-center gap-2 px-4 py-2.5">
-                <Icon name="desktop" class="text-xs" :class="runner.online ? 'text-primary-500' : 'text-subtle'" />
+                <Icon name="desktop" class="text-xs" :class="runner.online ? 'text-accent' : 'text-subtle'" />
                 <span class="flex min-w-0 flex-col">
                     <span class="truncate text-xs text-content">{{ runner.id }}</span>
                     <!-- Which side it was built through, only where a PC has more than one. -->

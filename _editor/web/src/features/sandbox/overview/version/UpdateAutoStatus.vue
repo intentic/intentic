@@ -44,7 +44,7 @@ const press = (): void => {
     }
 };
 
-const TONE = { info: `text-link`, progress: `text-primary-500`, paused: `text-subtle`, consent: `text-warning` } as const;
+const TONE = { info: `text-link`, progress: `text-accent`, paused: `text-subtle`, consent: `text-warning` } as const;
 
 // A promise with nothing to wait on or answer yet (the update is still downloading) is one quiet line, not a panel.
 const line = computed(() => {

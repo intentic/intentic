@@ -1155,7 +1155,7 @@ const includeTip = computed((): Tip => ({
                 <!-- Drop-to-root hint for OS files; a row or tile on the move lights the folder it is over instead. -->
                 <div
                     v-if="rootDragging && canEditFiles"
-                    class="pointer-events-none absolute inset-2 z-10 flex flex-col items-center justify-center gap-2 rounded-sm border-2 border-dashed border-primary-500/60 bg-primary-500/6 text-primary-500"
+                    class="pointer-events-none absolute inset-2 z-10 flex flex-col items-center justify-center gap-2 rounded-sm border-2 border-dashed border-primary-500/60 bg-primary-500/6 text-accent"
                 >
                     <Icon name="upload" class="text-2xl" />
                     <span class="text-xs font-medium">{{ t(`workspace.workspaceDesktop.dropFilesToAdd`) }}</span>

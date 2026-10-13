@@ -52,7 +52,7 @@ const dismiss = (): void => {
          the reader's place on the tour's say-so. -->
     <AnchoredOverlay v-model="open" :anchor="anchor" :side="side" :cross="cross" :restore-focus="false" :gap="10">
         <div class="flex w-72 max-w-[calc(100vw-2rem)] flex-col gap-1 p-3.5" :aria-label="title">
-            <p v-if="eyebrow" class="text-2xs font-medium text-primary-400">{{ eyebrow }}</p>
+            <p v-if="eyebrow" class="text-2xs font-medium text-accent">{{ eyebrow }}</p>
             <p class="text-sm font-semibold text-content">{{ title }}</p>
             <div class="text-xs leading-relaxed text-muted"><slot /></div>
             <div class="mt-2 flex items-center justify-end gap-2">

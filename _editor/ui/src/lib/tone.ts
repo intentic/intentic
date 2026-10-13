@@ -37,7 +37,7 @@ const inkRecipe = tv({
             danger: `text-danger`,
             info: `text-info`,
             neutral: `text-subtle`,
-            primary: `text-primary-500`,
+            primary: `text-accent`,
         },
     },
 });
@@ -57,15 +57,17 @@ const dotRecipe = tv({
 });
 
 /** A borderless wash with the tone's ink: a status pill, a badge, a highlighted word. One strength, for every tone. */
+// A wash, a tint's fill and a hover all lay down the tone's TINT, never its ink at an alpha: the ink is tuned to be
+// read, and in daylight a tenth of it is mud. The tint is an area role (semantic-colors.css) each scheme answers.
 const washRecipe = tv({
     variants: {
         tone: {
-            success: `bg-success/10 text-success`,
-            warning: `bg-warning/10 text-warning`,
-            danger: `bg-danger/10 text-danger`,
-            info: `bg-info/10 text-info`,
+            success: `bg-success-tint text-success`,
+            warning: `bg-warning-tint text-warning`,
+            danger: `bg-danger-tint text-danger`,
+            info: `bg-info-tint text-info`,
             neutral: `bg-subtle/10 text-subtle`,
-            primary: `bg-primary-600/10 text-primary-500`,
+            primary: `bg-primary-tint text-accent`,
         },
     },
 });
@@ -95,34 +97,35 @@ const rimRecipe = tv({
 const fillRecipe = tv({
     variants: { tone: TONES, weight: { strong: ``, soft: `` } },
     compoundVariants: [
-        { tone: `success`, weight: `strong`, class: `bg-success/10` },
-        { tone: `warning`, weight: `strong`, class: `bg-warning/10` },
-        { tone: `danger`, weight: `strong`, class: `bg-danger/10` },
-        { tone: `info`, weight: `strong`, class: `bg-info/10` },
+        { tone: `success`, weight: `strong`, class: `bg-success-tint` },
+        { tone: `warning`, weight: `strong`, class: `bg-warning-tint` },
+        { tone: `danger`, weight: `strong`, class: `bg-danger-tint` },
+        { tone: `info`, weight: `strong`, class: `bg-info-tint` },
         { tone: `neutral`, weight: `strong`, class: `bg-overlay` },
-        { tone: `primary`, weight: `strong`, class: `bg-primary-500/10` },
-        { tone: `success`, weight: `soft`, class: `bg-success/5` },
-        { tone: `warning`, weight: `soft`, class: `bg-warning/5` },
-        { tone: `danger`, weight: `soft`, class: `bg-danger/5` },
-        { tone: `info`, weight: `soft`, class: `bg-info/5` },
+        { tone: `primary`, weight: `strong`, class: `bg-primary-tint` },
+        { tone: `success`, weight: `soft`, class: `bg-success-tint/50` },
+        { tone: `warning`, weight: `soft`, class: `bg-warning-tint/50` },
+        { tone: `danger`, weight: `soft`, class: `bg-danger-tint/50` },
+        { tone: `info`, weight: `soft`, class: `bg-info-tint/50` },
         { tone: `neutral`, weight: `soft`, class: `bg-canvas` },
-        { tone: `primary`, weight: `soft`, class: `bg-primary-500/5` },
+        { tone: `primary`, weight: `soft`, class: `bg-primary-tint/50` },
     ],
 });
 
-// A PLATE IS THE TONE'S OWN INK, INVERTED — painted rather than written, with the surface those inks were measured
-// against as the label. Opaque, because a wash reads as part of whatever it sits on instead of as something laid on
-// it. Inverting the ink rather than reaching for `*-fill` keeps a skin's own accent: every skin tunes these inks to be
-// legible against its canvas, so the contrast comes with them.
+// A PLATE IS THE TONE PAINTED rather than written: an opaque chip with its label knocked out of it. Opaque, because a
+// wash reads as part of whatever it sits on instead of as something laid on it. Its colours are area roles
+// (semantic-colors.css): in the dark the tone's own ink inverted, which keeps a skin's accent (Sanctum's gold count);
+// in daylight the tone's fill with a white label, since the inks there are tuned for type and inverted they made the
+// darkest, heaviest marks on the page.
 const plateRecipe = tv({
     variants: {
         tone: {
-            success: `bg-success text-canvas`,
-            warning: `bg-warning text-canvas`,
-            danger: `bg-danger text-canvas`,
-            info: `bg-link text-canvas`,
+            success: `bg-success-plate text-plate-content`,
+            warning: `bg-warning-plate text-plate-content`,
+            danger: `bg-danger-plate text-plate-content`,
+            info: `bg-info-plate text-plate-content`,
             neutral: `bg-muted text-canvas`,
-            primary: `bg-primary-500 text-canvas`,
+            primary: `bg-primary-plate text-plate-content`,
         },
     },
 });
@@ -131,12 +134,12 @@ const plateRecipe = tv({
 const hoverRecipe = tv({
     variants: {
         tone: {
-            success: `hover:bg-success/10 hover:text-success active:bg-success/10 active:text-success`,
-            warning: `hover:bg-warning/10 hover:text-warning active:bg-warning/10 active:text-warning`,
-            danger: `hover:bg-danger/10 hover:text-danger active:bg-danger/10 active:text-danger`,
-            info: `hover:bg-info/10 hover:text-info active:bg-info/10 active:text-info`,
+            success: `hover:bg-success-tint hover:text-success active:bg-success-tint active:text-success`,
+            warning: `hover:bg-warning-tint hover:text-warning active:bg-warning-tint active:text-warning`,
+            danger: `hover:bg-danger-tint hover:text-danger active:bg-danger-tint active:text-danger`,
+            info: `hover:bg-info-tint hover:text-info active:bg-info-tint active:text-info`,
             neutral: `hover:bg-overlay hover:text-content active:bg-overlay active:text-content`,
-            primary: `hover:bg-primary-500/10 hover:text-primary-500 active:bg-primary-500/10 active:text-primary-500`,
+            primary: `hover:bg-primary-tint hover:text-accent active:bg-primary-tint active:text-accent`,
         },
     },
 });
@@ -147,16 +150,16 @@ type ClassArg = string | false | null | undefined;
 export const toneInk = (tone: Tone, ...classes: ClassArg[]): string => inkRecipe({ tone, class: classes });
 /** `bg-danger`: the tone as a solid dot or fill. */
 export const toneDot = (tone: Tone, ...classes: ClassArg[]): string => dotRecipe({ tone, class: classes });
-/** `bg-danger/10 text-danger`: a borderless pill or badge. */
+/** `bg-danger-tint text-danger`: a borderless pill or badge. */
 export const toneWash = (tone: Tone, ...classes: ClassArg[]): string => washRecipe({ tone, class: classes });
-/** `border-danger/40 bg-danger/10`: the colours of a tinted box; the caller states `border`/`border-b` and the shape. */
+/** `border-danger/40 bg-danger-tint`: the colours of a tinted box; the caller states `border`/`border-b` and the shape. */
 export const toneTint = (tone: Tone, weight: TintWeight = `strong`, ...classes: ClassArg[]): string =>
     rimRecipe({ tone, weight, class: [fillRecipe({ tone, weight }), ...classes] });
 /** `border-danger/40`: the tint's rim alone, over a fill the box keeps (a chip's plate, a floating card's). */
 export const toneRim = (tone: Tone, weight: TintWeight = `strong`, ...classes: ClassArg[]): string => rimRecipe({ tone, weight, class: classes });
-/** `bg-danger/10`: the tint's fill alone, under a rule the box doesn't own (a row's hairline in its group). */
+/** `bg-danger-tint`: the tint's fill alone, under a rule the box doesn't own (a row's hairline in its group). */
 export const toneFill = (tone: Tone, weight: TintWeight = `strong`, ...classes: ClassArg[]): string => fillRecipe({ tone, weight, class: classes });
-/** `bg-danger text-canvas`: an opaque plate (a count badge). */
+/** `bg-danger-plate text-plate-content`: an opaque plate (a count badge). */
 export const tonePlate = (tone: Tone, ...classes: ClassArg[]): string => plateRecipe({ tone, class: classes });
 /** The tone arriving under the pointer, for a control that is neutral at rest. */
 export const toneHover = (tone: Tone, ...classes: ClassArg[]): string => hoverRecipe({ tone, class: classes });

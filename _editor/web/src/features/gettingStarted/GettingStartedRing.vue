@@ -32,7 +32,7 @@ watch(
         <button
             ref="trigger"
             type="button"
-            class="icon-rail-tile flex items-center justify-center rounded-lg text-primary-500 transition-colors hover:bg-overlay"
+            class="icon-rail-tile flex items-center justify-center rounded-lg text-accent transition-colors hover:bg-overlay"
             :class="{ 'bg-primary-600/15': open }"
             aria-haspopup="dialog"
             :aria-expanded="open"

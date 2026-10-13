@@ -55,8 +55,10 @@ const presets = PRESETS.value.map((preset) => ({ label: preset.label, hex: accen
                     model === preset.hex
                         ? // A ring held OFF the swatch by the row's own background, rather than an outline drawn on
                           // its edge: half these colours are pale and half are deep, and only a gap reads as
-                          // 'chosen' against both.
-                          `border-transparent ring-2 ring-content ring-offset-2 ring-offset-card`
+                          // 'chosen' against both. The gap carries that, so the ring is the accent's ink — the very
+                          // colour just picked, at a weight legible on paper — not the near-black of body type,
+                          // which made the chosen dot the heaviest mark on the page.
+                          `border-transparent ring-2 ring-accent ring-offset-2 ring-offset-card`
                         : `border-line`,
                 ]
             "

@@ -104,7 +104,7 @@ defineExpose({ move, pickActive });
                     <span class="w-14 shrink-0 text-2xs uppercase tracking-wide text-subtle">{{ kindMeta()[row.kind].badge }}</span>
                     <span class="truncate text-xs text-content">{{ row.label }}</span>
                     <span v-if="row.detail" class="truncate text-2xs text-subtle">{{ row.detail }}</span>
-                    <Icon v-if="row.current" name="check" class="ml-auto shrink-0 text-2xs text-primary-500" aria-hidden="true" />
+                    <Icon v-if="row.current" name="check" class="ml-auto shrink-0 text-2xs text-accent" aria-hidden="true" />
                 </template>
             </button>
         </div>

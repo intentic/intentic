@@ -87,7 +87,7 @@ watch(
         <div class="flex min-w-0 items-center gap-2">
             <!-- Dotted under the words when there is a command behind them: the cue that resting on the card shows it. -->
             <p class="flex min-w-0 flex-1 items-center gap-1.5 text-2xs leading-snug text-content" data-permission-ask>
-                <Icon name="shield" class="shrink-0 text-2xs text-primary-500" /><span
+                <Icon name="shield" class="shrink-0 text-2xs text-accent" /><span
                     class="truncate"
                     :class="program !== undefined && `underline decoration-subtle decoration-dotted underline-offset-3`"
                     >{{ line }}</span
@@ -119,7 +119,7 @@ watch(
                 @pointerleave="onLeave"
             >
                 <p class="flex min-w-0 items-start gap-1.5 text-xs font-medium leading-snug text-content">
-                    <Icon name="shield" class="mt-0.5 shrink-0 text-2xs text-primary-500" /><span class="min-w-0">{{ line }}</span>
+                    <Icon name="shield" class="mt-0.5 shrink-0 text-2xs text-accent" /><span class="min-w-0">{{ line }}</span>
                 </p>
                 <ChatCommandBlock :program="program" />
             </div>

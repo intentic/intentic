@@ -329,7 +329,7 @@ const decidedFiles = (question: AskQuestion): { name: string; path: string }[] =
                             <Icon
                                 class="chat-option-mark text-2xs"
                                 :name="markFor(question, isSelected(index, option.label))"
-                                :class="isSelected(index, option.label) ? 'text-primary-500' : 'text-subtle'"
+                                :class="isSelected(index, option.label) ? 'text-accent' : 'text-subtle'"
                             />
                             <!-- Muted, not subtle: the description is read before choosing, not glanced past. -->
                             <span class="flex min-w-0 flex-col gap-0.5">
@@ -351,7 +351,7 @@ const decidedFiles = (question: AskQuestion): { name: string; path: string }[] =
                             <Icon
                                 class="chat-option-mark text-2xs"
                                 :name="markFor(question, isSelected(index, OTHER_LABEL))"
-                                :class="isSelected(index, OTHER_LABEL) ? 'text-primary-500' : 'text-subtle'"
+                                :class="isSelected(index, OTHER_LABEL) ? 'text-accent' : 'text-subtle'"
                             />
                             <span class="flex min-w-0 flex-col gap-0.5">
                                 <span class="text-xs font-medium text-content">{{ t(`chat.chatQuestionCard.other`) }}</span>
@@ -425,7 +425,7 @@ const decidedFiles = (question: AskQuestion): { name: string; path: string }[] =
                             :class="{ 'chat-option-picked': option.picked }"
                         >
                             <span class="chat-option-mark">
-                                <Icon v-if="option.picked" name="check" class="text-2xs text-primary-500" />
+                                <Icon v-if="option.picked" name="check" class="text-2xs text-accent" />
                             </span>
                             <span class="flex min-w-0 flex-col gap-0.5">
                                 <span class="text-xs font-medium" :class="option.picked ? 'text-content' : 'text-muted'">

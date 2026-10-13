@@ -169,7 +169,7 @@ watch(
                 size="small"
                 tier="quiet"
                 class="shrink-0"
-                :class="following ? `text-primary-500` : ``"
+                :class="following ? `text-accent` : ``"
                 @click="toggleFollow"
                 v-tooltip.bottom="t(`workspace.bigTextView.liveTail`)"
             >

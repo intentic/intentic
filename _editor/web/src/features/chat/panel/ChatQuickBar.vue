@@ -56,7 +56,7 @@ const rim = computed<{ percent: number; tone: string; spin: boolean } | undefine
         return { percent: 25, tone: `text-link`, spin: true };
     }
     const percent = contextPct(contextUsage.value?.tokens, contextUsage.value?.contextWindow);
-    return percent === undefined ? undefined : { percent, tone: percent >= 80 ? `text-warning` : `text-primary-500`, spin: false };
+    return percent === undefined ? undefined : { percent, tone: percent >= 80 ? `text-warning` : `text-accent`, spin: false };
 });
 
 // A question is answered where its card is drawn, which is /chat, so nothing opens for one. Only a press asks for the

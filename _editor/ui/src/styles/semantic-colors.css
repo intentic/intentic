@@ -53,6 +53,7 @@
     --color-warning-700: var(--color-amber-700);
     --color-warning-800: var(--color-amber-800);
 /* `info` carries a 400 step like the others because the dark scheme needs one: every other status role lightens to ~72–74% L on a near-black canvas. */
+    --color-info-300:    var(--color-blue-300);
     --color-info-400:    var(--color-blue-400);
     --color-info-500:    var(--color-blue-500);
     --color-info-600:    var(--color-blue-600);
@@ -73,6 +74,9 @@
     --color-muted:       var(--role-muted);
     --color-subtle:      var(--role-subtle);
     --color-link:        var(--role-link);
+/* THE ACCENT AS A MARK — a ticked option, a selected lane's glyph, a ring that is filling, a word that names the live
+   state. Not a link, and not a fill: an ink, so it has to be legible as one on every surface it lands on. */
+    --color-accent:      var(--role-accent);
     --color-danger:      var(--role-danger);
     --color-success:     var(--role-success);
     --color-warning:     var(--role-warning);
@@ -86,6 +90,22 @@
     --color-danger-fill:        var(--role-danger-fill);
     --color-fill-content:       var(--role-fill-content);
 
+/* AREA ROLES — what a status PAINTS, kept apart from what it WRITES. An ink is tuned to be read on paper, so in the light
+   scheme it sits near 50% L; laid down as a 10% wash that dark ink came out as mud (a grey-green, a khaki, a grey-blue),
+   and inverted as a plate it made the darkest, heaviest dot on the screen. A tint is the area under a tinted box, a pill
+   or a hovered control (tone.ts names its strengths); a plate is an opaque chip carrying a count or a step's number,
+   labelled in `plate-content`. The dark scheme answers both from its inks, which already sit at the light end. */
+    --color-success-tint:  var(--role-success-tint);
+    --color-warning-tint:  var(--role-warning-tint);
+    --color-danger-tint:   var(--role-danger-tint);
+    --color-info-tint:     var(--role-info-tint);
+    --color-primary-tint:  var(--role-primary-tint);
+    --color-success-plate: var(--role-success-plate);
+    --color-warning-plate: var(--role-warning-plate);
+    --color-danger-plate:  var(--role-danger-plate);
+    --color-info-plate:    var(--role-info-plate);
+    --color-primary-plate: var(--role-primary-plate);
+    --color-plate-content: var(--role-plate-content);
 }
 
 /* Chart series identity — five categorical slots plus the tail. */
@@ -108,8 +128,12 @@
     --role-card:        color-mix(in oklab, var(--color-surface-0) 97%, var(--paper-tint));
 /* OVERLAY SITS BETWEEN THE OTHER TWO, WHICH IS NOT THE ORDER THE DARK SCHEME USES, and the reason is that this token has two jobs. */
     --role-overlay:     color-mix(in oklab, var(--color-surface-50) 92%, var(--paper-tint));
-    --role-line:        color-mix(in oklab, var(--color-surface-200) 92%, var(--paper-tint));
-    --role-line-strong: color-mix(in oklab, var(--color-surface-300) 89%, var(--paper-tint));
+/* RULES ARE INK LAID ON THE PAPER, as the dark scheme's are, not a darker paper. Drawn from the 200/300 paper steps they
+   came out at 1.25:1 and 1.46:1 against a card and 1.13:1 against the canvas, so a field's edge, a divider and a card's
+   border all dissolved into the ground they were meant to cut. Mixed from the warm ink they stay warm, and land at
+   1.35:1 and 1.7:1 on a card (1.2:1 and 1.55:1 on the canvas); `line-subtle` keeps its place halfway back to the card. */
+    --role-line:        color-mix(in oklab, var(--role-content) 13%, var(--role-card));
+    --role-line-strong: color-mix(in oklab, var(--role-content) 23%, var(--role-card));
     --role-line-subtle: color-mix(in oklab, var(--role-line) 50%, var(--role-card));
 /* THE INK IS WARM TOO, or the whole picture falls in half: grey type on warm paper reads as a print fault, and the eye finds it before it finds the words. */
     --role-content:     color-mix(in oklab, var(--color-surface-900) 92%, var(--color-brand-800));
@@ -117,6 +141,10 @@
     --role-subtle:      color-mix(in oklab, var(--color-surface-500) 78%, var(--color-brand-950));
 /* 800 RATHER THAN 700, because 700 is 58% L and orange at 58% on near-white is 4.3:1 — the accent colour. */
     --role-link:        var(--color-primary-800);
+/* HALFWAY BETWEEN THE FILL AND THE LINK — 500, which every accent mark used to be written in, is 2.4:1 on the canvas: a
+   tick beside the picked option and the ring of a running job were the faintest things in their rows. 700 alone is the
+   fill (3.9:1, a white label's ground); this is ~4.6:1, an ink, and still the accent rather than the link's brown. */
+    --role-accent:      color-mix(in oklab, var(--color-primary-700) 45%, var(--color-primary-800));
 /* THE STATUS ROLES ARE TEXT COLOURS FIRST, so they sit at the lightness `--role-link` does — around 50% L — and not one step up. */
     --role-danger:      var(--color-danger-700);
     --role-success:     var(--color-success-700);
@@ -129,6 +157,28 @@
     --role-warning-fill:       var(--color-warning-700);
     --role-danger-fill:        var(--color-danger-700);
     --role-fill-content:       var(--color-white);
+
+/* TINTS ARE PASTELS: the tone's light step at a quarter, not its ink at a tenth. Still translucent, so a tint keeps the
+   surface and texture under it; every one sits ~1.15:1 off a card, enough to read as a box without a rim. */
+    --role-success-tint: color-mix(in oklab, var(--color-success-300) 26%, transparent);
+    --role-warning-tint: color-mix(in oklab, var(--color-warning-300) 26%, transparent);
+    --role-danger-tint:  color-mix(in oklab, var(--color-danger-300) 24%, transparent);
+    --role-info-tint:    color-mix(in oklab, var(--color-info-300) 24%, transparent);
+    --role-primary-tint: color-mix(in oklab, var(--color-primary-300) 28%, transparent);
+/* PLATES ARE FILLS, white on the step tuned to carry a white label: the count badge was the link's own brown (#984b00)
+   and the warning plate an olive, the two darkest marks on the page. The resting count (`info`) is the accent's fill. */
+    --role-success-plate: var(--role-success-fill);
+    --role-warning-plate: var(--role-warning-fill);
+    --role-danger-plate:  var(--role-danger-fill);
+    --role-info-plate:    var(--role-primary-fill);
+    --role-primary-plate: var(--role-primary-fill);
+    --role-plate-content: var(--role-fill-content);
+
+/* A FIELD'S EDGE IS THE STRONG RULE AT REST, and darker under the pointer (primeng.css reads both). A field on the canvas
+   is the canvas with a rim, so the rim is all that says "type here": the plain rule left it at 1.13:1. Dark is answered
+   in lightness already (a field is a well cut into its card), so it keeps the plain rules — `initial` hands it back. */
+    --ui-field-rest-line: var(--role-line-strong);
+    --ui-field-hover-line: color-mix(in oklab, var(--role-content) 38%, var(--role-card));
 
     /* WHAT THE LIGHT CASTS A warm room does not throw a neutral shadow. */
     --ui-shadow-tint: 61 40 22;
@@ -191,6 +241,7 @@
     --role-muted:       var(--color-surface-400);
     --role-subtle:      var(--color-surface-500);
     --role-link:        var(--color-primary-400);
+    --role-accent:      var(--color-primary-500);
     --role-danger:      var(--color-danger-400);
     --role-success:     var(--color-success-500);
     --role-warning:     var(--color-warning-500);
@@ -203,6 +254,23 @@
     --role-warning-fill:       var(--color-warning-400);
     --role-danger-fill:        var(--color-danger-400);
     --role-fill-content:       var(--color-surface-900);
+
+/* The inks are already the light end of their ramps here, so a tint is the ink at a tenth and a plate is the ink itself,
+   labelled in the canvas — what tone.ts drew before the roles existed, and what a skin that re-inks a status inherits. */
+    --role-success-tint: color-mix(in oklab, var(--role-success) 10%, transparent);
+    --role-warning-tint: color-mix(in oklab, var(--role-warning) 10%, transparent);
+    --role-danger-tint:  color-mix(in oklab, var(--role-danger) 10%, transparent);
+    --role-info-tint:    color-mix(in oklab, var(--role-info) 10%, transparent);
+    --role-primary-tint: color-mix(in oklab, var(--color-primary-500) 10%, transparent);
+    --role-success-plate: var(--role-success);
+    --role-warning-plate: var(--role-warning);
+    --role-danger-plate:  var(--role-danger);
+    --role-info-plate:    var(--role-link);
+    --role-primary-plate: var(--color-primary-500);
+    --role-plate-content: var(--role-canvas);
+
+    --ui-field-rest-line: initial;
+    --ui-field-hover-line: initial;
 
 /* Near-black surfaces use the existing shadow alpha tokens. */
     --ui-shadow-tint: 0 0 0;

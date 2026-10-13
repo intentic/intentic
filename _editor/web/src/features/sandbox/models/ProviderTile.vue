@@ -38,7 +38,7 @@ const DOT = {
 
 const LINE = {
     muted: `text-subtle`,
-    live: `text-primary-500`,
+    live: `text-accent`,
     warning: `text-warning`,
     danger: `text-danger`,
 } as const satisfies Record<TileTone, string>;

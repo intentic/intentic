@@ -60,7 +60,7 @@ defineExpose({ reveal });
                 :name="phase === `failed` ? `exclamation-circle` : phase === `starting` ? `spinner` : `sign-in`"
                 :spin="phase === `starting`"
                 class="mt-0.5 shrink-0"
-                :class="phase === `failed` ? `text-danger` : `text-primary-500`"
+                :class="phase === `failed` ? `text-danger` : `text-accent`"
             />
             <div class="flex min-w-0 flex-1 flex-col gap-0.5">
                 <h3 :id="headingId" ref="headingEl" tabindex="-1" class="text-sm font-medium leading-tight outline-none">{{ heading }}</h3>

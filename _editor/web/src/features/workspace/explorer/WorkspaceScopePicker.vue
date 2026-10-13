@@ -168,7 +168,7 @@ onMounted(() => {
                 <Icon
                     name="folder"
                     class="w-4 shrink-0 text-sm"
-                    :class="current === undefined ? `text-primary-500` : `text-muted`"
+                    :class="current === undefined ? `text-accent` : `text-muted`"
                     aria-hidden="true"
                 />
                 <span class="flex min-w-0 flex-1 flex-col">
@@ -179,7 +179,7 @@ onMounted(() => {
                 </span>
                 <Icon
                     name="check"
-                    class="w-3 shrink-0 text-2xs text-primary-500"
+                    class="w-3 shrink-0 text-2xs text-accent"
                     :class="current === undefined ? `` : `invisible`"
                     aria-hidden="true"
                 />
@@ -225,7 +225,7 @@ onMounted(() => {
                     <span class="min-w-11 shrink-0 text-right text-2xs tabular-nums text-subtle">{{ row.age }}</span>
                     <Icon
                         name="check"
-                        class="w-3 shrink-0 text-2xs text-primary-500"
+                        class="w-3 shrink-0 text-2xs text-accent"
                         :class="row.agent.id === current ? `` : `invisible`"
                         aria-hidden="true"
                     />

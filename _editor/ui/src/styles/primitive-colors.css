@@ -31,7 +31,8 @@
     --color-brand-900: oklch(44% 0.115 46);
     --color-brand-950: oklch(33% 0.085 45);
 
-    /* Red (hue 27) — danger / destructive. */
+    /* Red (hue 27) — danger / destructive. The steps light reads as ink and fill (600–800) stop short of the gamut's
+       edge: at 0.20+ chroma the danger word was the loudest thing on warm paper, a signal red from another system. */
     --color-red-0:   oklch(97% 0.02 27);
     --color-red-50:  oklch(96% 0.03 27);
     --color-red-100: oklch(93% 0.05 27);
@@ -39,9 +40,9 @@
     --color-red-300: oklch(81% 0.13 27);
     --color-red-400: oklch(72% 0.18 27);
     --color-red-500: oklch(64% 0.21 27);
-    --color-red-600: oklch(58% 0.22 27);
-    --color-red-700: oklch(50% 0.20 27);
-    --color-red-800: oklch(43% 0.16 27);
+    --color-red-600: oklch(57% 0.195 27);
+    --color-red-700: oklch(51% 0.17 27);
+    --color-red-800: oklch(44% 0.145 27);
     --color-red-900: oklch(38% 0.13 27);
     --color-red-950: oklch(28% 0.09 27);
 
@@ -59,7 +60,8 @@
     --color-green-900: oklch(36% 0.08 150);
     --color-green-950: oklch(27% 0.06 150);
 
-    /* Blue (hue 255) is the informational palette, distinct from the orange brand. */
+    /* Blue (hue 255) is the informational palette, distinct from the orange brand. Its ink steps (600–800) are held
+       below full chroma for the reason red's are: a pure screen blue sat on the paper as a foreign object. */
     --color-blue-0:   oklch(97% 0.02  255);
     --color-blue-50:  oklch(96% 0.03  255);
     --color-blue-100: oklch(93% 0.05  255);
@@ -67,9 +69,9 @@
     --color-blue-300: oklch(80% 0.12  255);
     --color-blue-400: oklch(72% 0.16  255);
     --color-blue-500: oklch(64% 0.19  255);
-    --color-blue-600: oklch(56% 0.185 255);
-    --color-blue-700: oklch(48% 0.16  255);
-    --color-blue-800: oklch(41% 0.13  255);
+    --color-blue-600: oklch(56% 0.16  255);
+    --color-blue-700: oklch(49% 0.135 255);
+    --color-blue-800: oklch(42% 0.115 255);
     --color-blue-900: oklch(36% 0.10  255);
     --color-blue-950: oklch(27% 0.075 255);
 
@@ -85,7 +87,9 @@
     --color-series-4-dark:  oklch(51.9% 0.180 294.9); /* violet  #734ac3 */
     --color-series-5-dark:  oklch(60.0% 0.191 344.9); /* magenta #ca449a */
 
-    /* Amber stays distinct from the other warning colors. */
+    /* Amber stays distinct from the brand orange — but a yellow held at hue 88 all the way down goes OLIVE below ~60% L,
+       and the light scheme reads its ink (800) and fill (700) there: the warning word was khaki mud. So the dark steps
+       turn toward gold as they darken, as every amber ramp has to, and stop short of the brand's 55. */
     --color-amber-0:   oklch(98% 0.02 88);
     --color-amber-50:  oklch(97% 0.04 88);
     --color-amber-100: oklch(94% 0.07 88);
@@ -93,9 +97,9 @@
     --color-amber-300: oklch(85% 0.14 88);
     --color-amber-400: oklch(80% 0.16 88);
     --color-amber-500: oklch(74% 0.16 88);
-    --color-amber-600: oklch(65% 0.15 88);
-    --color-amber-700: oklch(55% 0.13 88);
-    --color-amber-800: oklch(46% 0.11 88);
-    --color-amber-900: oklch(40% 0.09 88);
-    --color-amber-950: oklch(30% 0.07 88);
+    --color-amber-600: oklch(65% 0.145 82);
+    --color-amber-700: oklch(55% 0.125 76);
+    --color-amber-800: oklch(49% 0.108 74);
+    --color-amber-900: oklch(42% 0.09 70);
+    --color-amber-950: oklch(32% 0.07 66);
 }

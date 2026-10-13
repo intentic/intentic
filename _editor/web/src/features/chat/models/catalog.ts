@@ -48,7 +48,7 @@ export const statusIcon = (status: ConversationStatus): StatusGlyph => {
         return { name: `spinner`, spin: true, class: `text-2xs text-link` };
     }
     if (status === `awaiting`) {
-        return { name: `exclamation-circle`, class: `text-2xs text-primary-500` };
+        return { name: `exclamation-circle`, class: `text-2xs text-accent` };
     }
     if (status === `error`) {
         return { name: `exclamation-triangle`, class: `text-2xs text-danger` };
@@ -80,7 +80,7 @@ export const statusTabClass = (status: ConversationStatus): string => {
         return `text-link`;
     }
     if (status === `awaiting`) {
-        return `text-primary-500`;
+        return `text-accent`;
     }
     if (status === `error`) {
         return `text-danger`;

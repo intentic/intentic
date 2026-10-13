@@ -569,7 +569,7 @@ watch(
                             :key="speed"
                             type="button"
                             class="block w-full px-3 py-1 text-left text-2xs tabular-nums text-content transition-colors hover:bg-overlay"
-                            :class="{ 'text-primary-500': speed === rate }"
+                            :class="{ 'text-accent': speed === rate }"
                             @click="setRate(speed)"
                         >
                             {{ speed }}×
@@ -581,7 +581,7 @@ watch(
                     :key="control.key"
                     type="button"
                     class="media-btn"
-                    :class="{ 'text-primary-500': control.active }"
+                    :class="{ 'text-accent': control.active }"
                     :aria-label="control.label"
                     v-tooltip.top="control.hint"
                     v-action="control.press"

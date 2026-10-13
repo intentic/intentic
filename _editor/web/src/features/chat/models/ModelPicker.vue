@@ -396,7 +396,7 @@ onMounted(() => {
                     :aria-label="t(`shared.allProviders`)"
                     @click="railTo(undefined)"
                 >
-                    <Icon name="th-large" class="text-sm" :class="rail === undefined ? 'text-primary-500' : 'text-subtle'" />
+                    <Icon name="th-large" class="text-sm" :class="rail === undefined ? 'text-accent' : 'text-subtle'" />
                 </button>
                 <div class="mx-0.5 my-auto h-5 w-px shrink-0 bg-line" aria-hidden="true"></div>
                 <button
@@ -413,7 +413,7 @@ onMounted(() => {
                 >
                     <ProviderLogo
                         :provider="railLead(lane)"
-                        :class="[rail === lane.key ? 'text-primary-500' : 'text-subtle', { 'opacity-50': !railReady(lane) }]"
+                        :class="[rail === lane.key ? 'text-accent' : 'text-subtle', { 'opacity-50': !railReady(lane) }]"
                     />
                     <!-- The current provider's dot: independent of the filter selection; both must be legible at once. -->
                     <span v-if="railActive(lane)" class="absolute right-1 top-1 h-1 w-1 rounded-full bg-primary-500" aria-hidden="true"></span>
@@ -466,7 +466,7 @@ onMounted(() => {
                                     class="rounded px-1 py-px text-[0.6rem] font-medium normal-case tracking-normal"
                                     :class="
                                         promoteFree && accessStateFor(section.provider).access?.kind === `free`
-                                            ? `bg-primary-500/15 text-primary-500`
+                                            ? `bg-primary-500/15 text-accent`
                                             : `bg-content/5 text-subtle`
                                     "
                                     >{{ section.badge }}</span
@@ -483,7 +483,7 @@ onMounted(() => {
                         <!-- The trial's count; no Connect beside it, since this provider already works. -->
                         <span
                             v-if="section.trial !== undefined"
-                            class="rounded bg-primary-500/15 px-1 py-px text-[0.6rem] font-medium normal-case tracking-normal text-primary-500"
+                            class="rounded bg-primary-500/15 px-1 py-px text-[0.6rem] font-medium normal-case tracking-normal text-accent"
                             >{{ section.trial }}</span
                         >
                     </div>
@@ -513,7 +513,7 @@ onMounted(() => {
                             <ProviderLogo
                                 :provider="row.entry.provider"
                                 class="shrink-0 text-xs"
-                                :class="isSelected(row.entry) ? 'text-primary-500' : 'text-muted'"
+                                :class="isSelected(row.entry) ? 'text-accent' : 'text-muted'"
                             />
                             <span
                                 class="max-w-[55%] shrink-0 truncate text-sm md:text-xs"
@@ -540,7 +540,7 @@ onMounted(() => {
                                 class="shrink-0 text-2xs text-subtle"
                                 v-tooltip.top="accessBadge(row.entry.provider)"
                             />
-                            <Icon v-if="isSelected(row.entry)" name="check" class="shrink-0 text-2xs text-primary-500" aria-hidden="true" />
+                            <Icon v-if="isSelected(row.entry)" name="check" class="shrink-0 text-2xs text-accent" aria-hidden="true" />
                         </button>
                     </template>
                     <!-- Group disclosure: a group opens at one row per family so Claude's catalog doesn't bury others. -->

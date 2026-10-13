@@ -88,7 +88,9 @@ const custom = {
                 // `subtle` a disabled button wears (primeng.css): a row of them read as one grey, the ones that could
                 // not be pressed a shade darker than the one that could, and at 4.1:1 below AA. `muted` is the step
                 // above `subtle` that dark's own surface.400 already is, so dark is left as Aura has it.
-                light: { text: { secondary: { color: `var(--color-muted)` } } },
+                // The quiet accent tier is the accent written bare on the page, so it takes the accent's INK: Aura inks it
+                // in the primary fill, which is a white label's ground (3.9:1 on the canvas), not a word.
+                light: { text: { secondary: { color: `var(--color-muted)` }, primary: { color: `var(--color-accent)` } } },
             },
         },
         card: {

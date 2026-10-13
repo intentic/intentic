@@ -720,7 +720,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
             class="pointer-events-none sticky inset-x-0 bottom-0 z-10 flex justify-center pb-3"
             aria-hidden="true"
         >
-            <span class="rounded-full border border-primary-500/60 bg-canvas/90 px-3 py-1 text-2xs font-medium text-primary-500 backdrop-blur">
+            <span class="rounded-full border border-primary-500/60 bg-canvas/90 px-3 py-1 text-2xs font-medium text-accent backdrop-blur">
                 {{ dragging ? t(`workspace.homeView.moveInto`, { here }) : t(`workspace.homeView.dropToAddTo`, { here }) }}
             </span>
         </div>

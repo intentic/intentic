@@ -160,7 +160,7 @@ const uncommitted = computed(() => props.conversation.isolated.value && byId(NAM
                 >
                     <Icon name="download" class="text-2xs text-link" />{{ t(`chat.sendLater.autoLand`) }}
                 </button>
-                <Icon v-if="pickedAfter === agent.id" name="check" class="mt-0.5 shrink-0 text-2xs text-primary-500" aria-hidden="true" />
+                <Icon v-if="pickedAfter === agent.id" name="check" class="mt-0.5 shrink-0 text-2xs text-accent" aria-hidden="true" />
             </div>
             <p v-if="targets.length > 0 && uncommitted" class="flex flex-col items-start gap-1 px-2.5 py-1.5 text-2xs text-subtle">
                 <span>{{ t(`chat.sendLater.uncommitted`) }}</span>

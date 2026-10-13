@@ -379,7 +379,7 @@ watch(
             <div v-if="coarse" class="flex shrink-0 items-center gap-1 overflow-x-auto border-t border-line bg-card px-1.5 py-1.5">
                 <button
                     type="button"
-                    :class="[KEY_CLASS, ctrlArmed ? 'border-primary-500/60 bg-primary-500/16 text-primary-500' : '']"
+                    :class="[KEY_CLASS, ctrlArmed ? 'border-primary-500/60 bg-primary-500/16 text-accent' : '']"
                     @pointerdown.prevent="ctrlArmed = !ctrlArmed"
                 >
                     {{ t(`terminal.terminalPanel.ctrl`) }}

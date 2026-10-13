@@ -42,7 +42,12 @@ flowchart LR
   `primary`) and the only file that spells a tone at a strength: `toneInk`, `toneDot`, `toneWash` (a pill),
   `toneTint(tone, "strong" | "soft")` (a tinted box's rim and fill), `tonePlate` (a count), `toneHover`, and
   `diffMark` for a diff's added, removed and changed marks. `<Notice>`, `<StatusBadge>`, the count badge and row tones
-  draw from it; the `tones` check refuses a `bg-danger/10` written anywhere else. `<Button>` takes `tier` (`loud`,
+  draw from it; the `tones` check refuses a `bg-danger/10` written anywhere else. A tone writes in its ink
+  (`text-danger`) but paints in its area roles (`semantic-colors.css`): `bg-danger-tint` under a pill, a tinted box
+  or a hover, and `bg-danger-plate` with `text-plate-content` for a count. Light makes tints pastels and plates
+  white-on-fill, because its inks sit near 50% lightness for reading and turn muddy as a wash. Dark answers both from
+  its inks. `text-accent` is the accent as an ink (a tick, a selected glyph, a filling ring). It stays legible on
+  paper, where the `primary-500` it replaced was 2.4:1. `<Button>` takes `tier` (`loud`,
   `accent`, `boring`, `quiet`) and `tone` rather than PrimeVue's `severity`/`text` (`src/components/primitives/button.ts`).
   `RowGroup equal-rows` aligns simple settings rows to the tallest row on desktop; leave it off groups with drawers
   or below-row content. On phones, rows grow with their own content. `ColorPicker size="sm"` fits a settings row.

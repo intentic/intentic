@@ -173,7 +173,7 @@ const stateWord = (state: string): string | undefined => {
         <div class="flex items-start gap-2.5">
             <Icon v-if="running" name="spinner" spin class="mt-0.5 shrink-0 text-link" />
             <Icon v-else-if="settled" name="check-circle" class="mt-0.5 shrink-0 text-success" />
-            <Icon v-else name="wrench" class="mt-0.5 shrink-0 text-primary-400" />
+            <Icon v-else name="wrench" class="mt-0.5 shrink-0 text-accent" />
             <div class="min-w-0 flex-1">
                 <h3 class="text-sm leading-tight font-semibold">{{ heading }}</h3>
                 <p v-if="running" class="mt-0.5 text-2xs text-subtle" role="status">{{ now }}</p>

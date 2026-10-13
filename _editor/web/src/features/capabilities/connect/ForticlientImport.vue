@@ -109,7 +109,7 @@ const protocolOf = (connection: ForticlientConnection): string => (connection.pr
                     @drop.prevent="onDrop"
                 >
                     <Icon v-if="importing" name="spinner" spin class="text-lg text-info" />
-                    <Icon v-else name="upload" :class="['text-lg', dragging ? 'text-primary-500' : 'text-muted']" />
+                    <Icon v-else name="upload" :class="['text-lg', dragging ? 'text-accent' : 'text-muted']" />
                     <span class="text-xs text-content">
                         <template v-if="importing">{{ t(`ui.status.reading`) }}</template>
                         <template v-else-if="dragging">{{ t(`capabilities.forticlientImport.dropToReadConnections`) }}</template>

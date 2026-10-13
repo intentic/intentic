@@ -16,7 +16,7 @@ import { Icon, type IconName } from "@intentic/ui";
 
 const {
     icon,
-    iconClass = `text-primary-500`,
+    iconClass = `text-accent`,
     title,
     status,
     prose = false,

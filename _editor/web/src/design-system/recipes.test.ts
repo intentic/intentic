@@ -43,21 +43,21 @@ describe(`ui recipes`, () => {
 
 describe(`tone`, () => {
     it(`speaks one vocabulary at two strengths`, () => {
-        expect(toneTint(`danger`)).toBe(`border-danger/40 bg-danger/10`);
-        expect(toneTint(`danger`, `soft`)).toBe(`border-danger/20 bg-danger/5`);
-        expect(toneWash(`warning`)).toBe(`bg-warning/10 text-warning`);
+        expect(toneTint(`danger`)).toBe(`border-danger/40 bg-danger-tint`);
+        expect(toneTint(`danger`, `soft`)).toBe(`border-danger/20 bg-danger-tint/50`);
+        expect(toneWash(`warning`)).toBe(`bg-warning-tint text-warning`);
         expect(toneInk(`neutral`)).toBe(`text-subtle`);
     });
 
     it(`splits a tint into its rim and its fill, for a box that keeps the other half`, () => {
         expect(toneRim(`warning`)).toBe(`border-warning/40`);
-        expect(toneFill(`warning`, `soft`)).toBe(`bg-warning/5`);
+        expect(toneFill(`warning`, `soft`)).toBe(`bg-warning-tint/50`);
         expect(toneTint(`warning`)).toBe(`${toneRim(`warning`)} ${toneFill(`warning`)}`);
         expect(toneRim(`danger`, `strong`, `bg-card`)).toBe(`border-danger/40 bg-card`);
     });
 
     it(`puts a caller's own classes after the tone's`, () => {
-        expect(toneTint(`info`, `soft`, `rounded-lg border px-4 py-3`)).toBe(`border-info/20 bg-info/5 rounded-lg border px-4 py-3`);
+        expect(toneTint(`info`, `soft`, `rounded-lg border px-4 py-3`)).toBe(`border-info/20 bg-info-tint/50 rounded-lg border px-4 py-3`);
     });
 
     it(`marks a diff the same way wherever it is drawn`, () => {

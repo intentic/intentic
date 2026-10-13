@@ -171,7 +171,7 @@ onMounted(() => {
                             v-else-if="row.option.icon !== undefined"
                             :name="row.option.icon"
                             class="shrink-0 text-xs"
-                            :class="[row.option.value === selectedValue ? `text-primary-500` : `text-muted`, hinted ? `mt-0.5` : ``]"
+                            :class="[row.option.value === selectedValue ? `text-accent` : `text-muted`, hinted ? `mt-0.5` : ``]"
                             aria-hidden="true"
                         />
                     </slot>
@@ -195,7 +195,7 @@ onMounted(() => {
                     <Icon
                         v-if="row.option.value === selectedValue"
                         name="check"
-                        class="ml-auto shrink-0 text-2xs text-primary-500"
+                        class="ml-auto shrink-0 text-2xs text-accent"
                         :class="hinted ? `mt-0.5` : ``"
                         aria-hidden="true"
                     />

@@ -60,7 +60,7 @@ onUnmounted(() => window.removeEventListener(`keydown`, onKey));
                     class="flex w-full cursor-pointer items-start gap-3 rounded-lg bg-card shadow-sm p-3 text-left transition-colors hover:bg-overlay focus-visible:border-primary-500 focus-visible:outline-none"
                     v-action="() => choose(`tray`)"
                 >
-                    <Icon name="compress" class="mt-0.5 shrink-0 text-primary-400" />
+                    <Icon name="compress" class="mt-0.5 shrink-0 text-accent" />
                     <span class="min-w-0 flex-1">
                         <span class="block text-xs font-medium">{{ t(`desktop.closeConfirm.keepIntenticInTray`) }}</span>
                         <span class="block text-2xs text-muted">{{ t(`desktop.closeConfirm.keepsRunningInBackground`) }}</span>

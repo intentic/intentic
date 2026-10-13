@@ -42,7 +42,7 @@ const hide = (): void => {
                 :filled="tour.progress.value.settled"
                 :size="22"
                 :stroke="3"
-                class="text-primary-500"
+                class="text-accent"
             />
             <div class="min-w-0 flex-1">
                 <p class="text-sm font-semibold text-content">
@@ -67,7 +67,7 @@ const hide = (): void => {
                 <template #lead="{ iconClass }">
                     <Icon
                         :name="leadIcon(row.state)"
-                        :class="[iconClass, row.state === 'done' ? 'text-success' : row.state === 'current' ? 'text-primary-400' : 'text-subtle']"
+                        :class="[iconClass, row.state === 'done' ? 'text-success' : row.state === 'current' ? 'text-accent' : 'text-subtle']"
                     />
                 </template>
                 <template v-if="row.state === 'current' && SKIPPABLE.has(row.id)" #control>

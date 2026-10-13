@@ -220,7 +220,7 @@ const checkout = computed(() => {
 
                     <ol class="flex flex-col gap-3">
                         <li v-for="step in STEPS" :key="step.label" class="flex items-start gap-2.5">
-                            <span class="mt-px grid size-6 shrink-0 place-items-center rounded-full bg-primary-600/15 text-primary-500">
+                            <span class="mt-px grid size-6 shrink-0 place-items-center rounded-full bg-primary-600/15 text-accent">
                                 <Icon :name="step.icon" />
                             </span>
                             <span class="min-w-0 flex-1">

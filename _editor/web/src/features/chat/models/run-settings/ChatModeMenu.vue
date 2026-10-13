@@ -24,7 +24,7 @@ const modes = computed(() => modeOptions(capabilities.value));
                 emit(`selected`);
             "
         >
-            <Icon :name="m.icon" class="mt-0.5 text-xs" :class="mode === m.value ? 'text-primary-500' : 'text-subtle'" />
+            <Icon :name="m.icon" class="mt-0.5 text-xs" :class="mode === m.value ? 'text-accent' : 'text-subtle'" />
             <span class="flex min-w-0 flex-col">
                 <span class="text-sm text-content md:text-xs">{{ m.label }}</span>
                 <span class="text-2xs text-subtle">{{ m.description }}</span>

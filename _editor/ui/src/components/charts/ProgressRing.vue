@@ -2,7 +2,7 @@
 import { computed } from "vue";
 
 // A tiny circular progress meter. The arc is drawn with `currentColor`, so a Tailwind `text-*` class on the
-// element sets its colour (e.g. text-primary-500, or text-warning past a threshold); the track is a faint
+// element sets its colour (e.g. text-accent, or text-warning past a threshold); the track is a faint
 // neutral. Rotated so the arc starts at 12 o'clock and fills clockwise.
 // `tintTrack` draws the track in the arc's own colour, faintly: for a meter that drains, an empty ring is a state worth
 // its colour (a spent allowance), and a neutral track alone would read the same as no reading at all.

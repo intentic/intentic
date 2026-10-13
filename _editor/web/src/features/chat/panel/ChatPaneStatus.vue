@@ -180,7 +180,7 @@ const usageChip = computed(() => {
                 </ResponsiveOverlay>
             </template>
             <span v-if="contextRing" class="inline-flex items-center gap-1" v-tooltip.top="contextRing.tooltip">
-                <ProgressRing :value="contextRing.value" :class="contextRing.warn ? 'text-warning' : 'text-primary-500'" />
+                <ProgressRing :value="contextRing.value" :class="contextRing.warn ? 'text-warning' : 'text-accent'" />
                 <span class="@max-xs:hidden">{{ contextRing.label }}</span>
             </span>
             <!-- The chip answers "am I about to get rate-limited": hover opens the pool-by-pool card, a click goes to the cost. -->

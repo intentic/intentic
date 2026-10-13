@@ -182,7 +182,7 @@ const leadOf = (finding: ActivityFinding): { icon: `eye-slash` | `eye` | `times`
                                 <span class="min-w-0 truncate" v-tooltip.top.overflow="row.value">{{ row.value }}</span>
                                 <Icon name="arrow-right" class="shrink-0 text-3xs text-subtle" />
                             </template>
-                            <code class="shrink-0 rounded bg-primary-500/10 px-1.5 py-0.5 font-mono text-2xs font-normal text-primary-500">{{
+                            <code class="shrink-0 rounded bg-primary-500/10 px-1.5 py-0.5 font-mono text-2xs font-normal text-accent">{{
                                 row.finding.replacement.token
                             }}</code>
                             <span class="shrink-0 rounded bg-content/5 px-1.5 py-0.5 text-3xs font-normal text-subtle">{{
@@ -227,7 +227,7 @@ const leadOf = (finding: ActivityFinding): { icon: `eye-slash` | `eye` | `times`
                                     <span
                                         v-if="part.token"
                                         class="rounded-sm px-0.5"
-                                        :class="part.own ? `bg-primary-500/15 text-primary-500` : `bg-content/10 text-content`"
+                                        :class="part.own ? `bg-primary-500/15 text-accent` : `bg-content/10 text-content`"
                                         >{{ part.text }}</span
                                     >
                                     <template v-else>{{ part.text }}</template>

@@ -145,7 +145,7 @@ onUnmounted(stopRecording);
                 <!-- Chord is a fact (#meta, right-aligned); the buttons that change it are actions (#control), at a fixed width. -->
                 <template #meta>
                     <span class="flex w-40 items-center justify-end gap-1.5">
-                        <span v-if="recording === row.command" class="italic text-primary-500">{{
+                        <span v-if="recording === row.command" class="italic text-accent">{{
                             t(`settings.settingsKeybindings.pressKeysEsc`)
                         }}</span>
                         <template v-else>

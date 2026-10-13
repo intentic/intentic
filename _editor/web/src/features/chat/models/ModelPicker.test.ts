@@ -94,7 +94,7 @@ it(`leads the locked rows with the way in that costs nothing, and prices the res
     expect(element.textContent).toContain(`Free · Google sign-in`);
     expect(element.textContent).toContain(`Needs ChatGPT subscription`);
     // And lit, since for a reader who has connected nothing it is the one row that changes a decision.
-    expect(freeChip(element)?.className).toContain(`text-primary-500`);
+    expect(freeChip(element)?.className).toContain(`text-accent`);
     // The pitch this panel replaced, in the words a new user actually read.
     expect(element.textContent).not.toContain(`Try free with Google`);
 });
@@ -109,7 +109,7 @@ it(`stops pitching the free sign-in once a model is connected`, async () => {
     expect(headings(element).slice(0, 5)).toEqual([`Claude Code`, `Codex`, `Grok`, `Kimi Code`, `Google`]);
     // The price still reads, since a reader comparing options wants it, but in the same chip as every other row.
     expect(freeChip(element)?.className).toContain(`text-subtle`);
-    expect(freeChip(element)?.className).not.toContain(`text-primary-500`);
+    expect(freeChip(element)?.className).not.toContain(`text-accent`);
 });
 
 // The trial is a working row (a count, not a price): connected providers lead, cost only separates the locked ones.

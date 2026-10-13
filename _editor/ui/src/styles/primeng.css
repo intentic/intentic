@@ -47,8 +47,8 @@
         .p-button-text, .p-button-outlined, .p-button-link
     )) {
         --ui-button-tone: var(--color-primary-fill);
-        background: color-mix(in srgb, var(--ui-button-tone) 10%, transparent);
-        color: var(--ui-button-tone);
+        background: var(--ui-button-wash, color-mix(in srgb, var(--ui-button-tone) 10%, transparent));
+        color: var(--ui-button-ink, var(--ui-button-tone));
         border-color: color-mix(in srgb, var(--ui-button-tone) 20%, transparent);
     }
 
@@ -65,12 +65,58 @@
         --ui-button-tone: var(--color-danger-fill);
     }
 
+/* IN DAYLIGHT A TINTED BUTTON IS THE TONE'S TINT WITH THE TONE'S INK ON IT — the same pair a notice and a pill wear
+   (tone.ts), so a success button agrees with the success box beside it. A fill is tuned to carry a white label, not to
+   be one: written on its own 10% the accent's fill read 3.5:1 and the warning's 3.9:1, and a tenth of a deep fill came
+   out as the grey-green and khaki the rest of the kit had already left behind. Success and danger already wear their
+   inks as their fills in the light scheme, so only two labels move. Pointer and press lay the tone's own fill over the
+   tint, a step at a time. Dark's fills sit at the light end of their ramps and read as the rule above draws them. */
+    :root:not([data-mode="dark"]) .p-button:where(:not(
+        .p-button-secondary, .p-button-info, .p-button-contrast,
+        .p-button-text, .p-button-outlined, .p-button-link,
+        .p-button-success, .p-button-warn, .p-button-danger
+    )) {
+        --ui-button-ink: var(--color-accent);
+        --ui-button-wash: var(--color-primary-tint);
+    }
+
+    :root:not([data-mode="dark"]) .p-button-success {
+        --ui-button-wash: var(--color-success-tint);
+    }
+
+    :root:not([data-mode="dark"]) .p-button-warn {
+        --ui-button-ink: var(--color-warning);
+        --ui-button-wash: var(--color-warning-tint);
+    }
+
+    :root:not([data-mode="dark"]) .p-button-danger {
+        --ui-button-wash: var(--color-danger-tint);
+    }
+
+    :root:not([data-mode="dark"]) .p-button:where(:not(
+        .p-button-secondary, .p-button-info, .p-button-contrast,
+        .p-button-text, .p-button-outlined, .p-button-link,
+        .ui-button-loud
+    )):enabled:hover {
+        --ui-button-veil: color-mix(in srgb, var(--ui-button-tone) 9%, transparent);
+        background: linear-gradient(var(--ui-button-veil), var(--ui-button-veil)), var(--ui-button-wash);
+    }
+
+    :root:not([data-mode="dark"]) .p-button:where(:not(
+        .p-button-secondary, .p-button-info, .p-button-contrast,
+        .p-button-text, .p-button-outlined, .p-button-link,
+        .ui-button-loud
+    )):enabled:active {
+        --ui-button-veil: color-mix(in srgb, var(--ui-button-tone) 15%, transparent);
+        background: linear-gradient(var(--ui-button-veil), var(--ui-button-veil)), var(--ui-button-wash);
+    }
+
     .p-button:where(:not(
         .p-button-secondary, .p-button-info, .p-button-contrast,
         .p-button-text, .p-button-outlined, .p-button-link
     )):enabled:hover {
         background: color-mix(in srgb, var(--ui-button-tone) 18%, transparent);
-        color: var(--ui-button-tone);
+        color: var(--ui-button-ink, var(--ui-button-tone));
         border-color: color-mix(in srgb, var(--ui-button-tone) 35%, transparent);
     }
 
@@ -286,8 +332,8 @@
     .ui-field-box,
     .p-inputtext {
 /* The rim is TWO VARIABLES, not two colours, so a state that owns the rim (the error below) re-points them once and every rule that draws an edge follows. */
-        --ui-field-line: var(--color-line);
-        --ui-field-line-hover: var(--color-line-strong);
+        --ui-field-line: var(--ui-field-rest-line, var(--color-line));
+        --ui-field-line-hover: var(--ui-field-hover-line, var(--color-line-strong));
         border-radius: var(--radius-md);
         border: 1px solid var(--ui-field-line);
         background: var(--color-canvas);
@@ -372,8 +418,8 @@
 
     /* AND THE BOX A `field-bare` FIELD SITS IN `field-bare` says the frame belongs to the wrapper. */
     .ui-field-shell {
-        --ui-field-line: var(--color-line);
-        --ui-field-line-hover: var(--color-line-strong);
+        --ui-field-line: var(--ui-field-rest-line, var(--color-line));
+        --ui-field-line-hover: var(--ui-field-hover-line, var(--color-line-strong));
         border-radius: var(--radius-md);
         border: 1px solid var(--ui-field-line);
         background: var(--color-canvas);

@@ -116,7 +116,7 @@ const memoryLine = computed(() => {
                 role="status"
                 class="flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-xl border border-primary-500/40 bg-card px-3 py-2 text-2xs shadow-sm"
             >
-                <Icon :name="look.icon" class="shrink-0 text-primary-500" />
+                <Icon :name="look.icon" class="shrink-0 text-accent" />
                 <!-- A floor, not `min-w-0`: every press beside it is `shrink-0`, and a squeezed line would lose what is asked. -->
                 <span class="min-w-[12rem] flex-1 truncate" v-tooltip.top.overflow="decision.title">
                     <span class="font-medium text-content">{{ look.label() }}</span>

@@ -369,7 +369,7 @@ const finePrint = computed(
                 <!-- WHAT YOU GET: the version, where it takes you from, and how much is in it. -->
                 <header class="flex items-start gap-3.5">
                     <span
-                        class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary-500/10 text-base text-primary-500 ring-1 ring-inset ring-primary-500/25"
+                        class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary-500/10 text-base text-accent ring-1 ring-inset ring-primary-500/25"
                         aria-hidden="true"
                     >
                         <Icon name="sparkles" />

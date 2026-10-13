@@ -42,7 +42,7 @@ const sent = computed(() => {
 </script>
 
 <template>
-    <ChatCard icon="globe" icon-class="text-primary-500" :title="card.page.title" :status="pageAskStatus(card)">
+    <ChatCard icon="globe" icon-class="text-accent" :title="card.page.title" :status="pageAskStatus(card)">
         <p v-if="card.status === `pending`" class="chat-card-body text-xs text-muted">{{ t(`chat.chatPages.askHint`) }}</p>
         <div class="chat-card-body">
             <ChatPageFrame :page="card.page" :submit="submit" :message="actions.message" />

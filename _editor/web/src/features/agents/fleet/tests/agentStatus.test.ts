@@ -637,7 +637,7 @@ describe(`tileRim`, () => {
     // THE COMPLAINT THIS ANSWERS: a finished session that kept no list wore a context arc, half-empty, and read as
     // unfinished in a lane of finished work. No list is one segment, the session's own ending.
     it(`closes a finished session's rim whole when it kept no list`, () => {
-        expect(tileRim(at(), { quiet: false })).toEqual({ segments: 1, filled: 1, tone: `text-primary-500` });
+        expect(tileRim(at(), { quiet: false })).toEqual({ segments: 1, filled: 1, tone: `text-accent` });
     });
 
     it(`leaves a listless rim open while the session works or has not started`, () => {

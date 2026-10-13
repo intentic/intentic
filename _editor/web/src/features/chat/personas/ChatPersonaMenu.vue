@@ -73,7 +73,7 @@ const closeMenu = (event: MouseEvent): void => {
                     <span class="text-sm text-content md:text-xs">{{ t(`chat.words.anyone`) }}</span>
                     <span class="text-2xs text-subtle">{{ t(`chat.chatPersonaMenu.everyAccountYouveConnected`) }}</span>
                 </span>
-                <Icon v-if="picked === undefined" name="check" class="ml-auto mt-0.5 shrink-0 text-2xs text-primary-500" aria-hidden="true" />
+                <Icon v-if="picked === undefined" name="check" class="ml-auto mt-0.5 shrink-0 text-2xs text-accent" aria-hidden="true" />
             </button>
 
             <button
@@ -99,7 +99,7 @@ const closeMenu = (event: MouseEvent): void => {
                         {{ accountsOf(persona) }}<template v-if="!ready(persona)">{{ t(`chat.chatPersonaMenu.notSignedInYet`) }}</template>
                     </span>
                 </span>
-                <Icon v-if="persona.id === picked" name="check" class="ml-auto mt-1 shrink-0 text-2xs text-primary-500" aria-hidden="true" />
+                <Icon v-if="persona.id === picked" name="check" class="ml-auto mt-1 shrink-0 text-2xs text-accent" aria-hidden="true" />
             </button>
 
             <!-- Link to the page that owns these personas, placed where a list's "manage" row always is. -->
