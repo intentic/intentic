@@ -16,9 +16,10 @@ import { openPanel, PANEL_DEFAULT_HEIGHT, PANEL_MIN_HEIGHT, panelHeight, panelMa
 // while the agents work. The reader sets its height on the seam above it, and both are remembered (statusBarState.ts).
 // Opaque, so a skin's backdrop does not show through.
 //
-// `persistent` is the desktop shell's: there the bar is always drawn, at one height, so no page jumps when a chip
-// arrives. Without it (the phone's Agents board, which has no shell bar) the bar is the metrics alone and is absent
-// while they are off.
+// `persistent` is the desktop shell's, set while it has a runtime chip to put at the start: the bar is drawn then even
+// with the metrics off. A developer's terminal chip never leaves, so for them the bar stays at one height and no page
+// jumps when a chip arrives; a maker with no chip and no metrics gets no bar rather than an empty strip. Without it
+// (the phone's Agents board, which has no shell bar) the bar is the metrics alone and is absent while they are off.
 
 const t = useT();
 

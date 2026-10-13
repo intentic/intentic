@@ -2,13 +2,15 @@
 import { toneWash } from "@intentic/ui";
 import RailIcon from "../rail/RailIcon.vue";
 import type { RuntimeChip } from "./runtimeChips";
-import { useRuntimeChips } from "./useRuntimeChips";
+import type { RuntimeChips } from "./useRuntimeChips";
 
 // The runtime half of the desktop status bar: one chip per live thing (runtimeChips.ts), glyph, words and count, the
 // glyph the same one its rail tile used to draw. A link to its page, except the terminal, which opens and closes its
 // panel above the bar, the way Ctrl+` does.
 
-const { chips, toggleTerminal, reachable } = useRuntimeChips();
+// Read by the shell (useRuntimeChips), which also decides from them whether the bar is drawn at all.
+const props = defineProps<{ runtime: RuntimeChips }>();
+const { chips, toggleTerminal, reachable } = props.runtime;
 
 const chipClass = (chip: RuntimeChip): string[] => [
     `flex h-6 min-w-0 shrink-0 items-center gap-1.5 rounded-md px-1.5 transition-colors`,

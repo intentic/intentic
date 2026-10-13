@@ -18,6 +18,7 @@ import { LIVE_METRICS_KEY, showLiveMetrics, useLiveMetrics } from "../features/a
 import StatusBar from "../features/agents/status-bar/StatusBar.vue";
 import { openPanel } from "../features/agents/status-bar/statusBarState";
 import RuntimeChips from "./status-bar/RuntimeChips.vue";
+import { useRuntimeChips } from "./status-bar/useRuntimeChips";
 import { GO_TO } from "../workbench/commands/categories";
 import { useNavigationCommands } from "./commands/useNavigationCommands";
 import { useProjectCommands } from "./commands/useProjectCommands";
@@ -490,6 +491,10 @@ watch(
 // reading serves both. Off, nothing is measured at all (liveMetrics.ts).
 const liveMetrics = useLiveMetrics();
 provide(LIVE_METRICS_KEY, liveMetrics);
+// The runtime chips, read here so the bar knows whether it has anything to say: a developer's terminal chip keeps it
+// drawn for good, but a maker's chips all come and go, and with no chip and no metrics the bar would be an empty strip.
+const runtimeChips = useRuntimeChips();
+const statusBarShown = computed(() => runtimeChips.chips.value.length > 0);
 
 // ONE PANEL ABOVE THE BAR AT A TIME. The docked terminal and the metrics panel both open at the foot of the window, and
 // the two stacked leave the page a sliver: opening either closes the other. A terminal in a window of its own takes no
@@ -723,8 +728,8 @@ useGettingStarted();
         <!-- The foot of the window, under the section and the side panel: what the sandbox is running, the terminal first,
              and with geek metrics on, how full it is. Outside the gate, like the chat column: a stalled sandbox still says
              what it had going, and the terminal's chip goes inert until it answers. -->
-        <StatusBar persistent :metrics="liveMetrics" style="grid-area: status">
-            <template #start><RuntimeChips /></template>
+        <StatusBar :persistent="statusBarShown" :metrics="liveMetrics" style="grid-area: status">
+            <template #start><RuntimeChips :runtime="runtimeChips" /></template>
         </StatusBar>
 
         <!-- The parked chat's scratch pad, floating in the section's own cell: opening it must not reflow the page the reader
