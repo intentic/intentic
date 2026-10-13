@@ -226,6 +226,11 @@ if [ "$ASSEMBLE" -eq 0 ]; then
     # this script invokes tauri twice against ONE frontendDist — so the Windows pass re-ran vue-tsc + vite over
     # bytes the Linux pass had already produced (34s + 14s, release job 15686372011). Built here instead, and
     # switched off in the config below for both passes; an empty beforeBuildCommand is how tauri is told to skip it.
+    # Its workspace dependencies FIRST: their package.json `types` point at dist/, so vue-tsc reads whatever dist/ the
+    # checkout holds — and the desktop runners keep their checkout between runs (clean: false), so a schema added since
+    # the last build reads as "no exported member" (desktop-verify, run 38403991753). Turbo replays verify-core's cache.
+    echo "==> building the app's workspace dependencies"
+    pnpm turbo run build --filter='@intentic/desktop-app^...'
     echo "==> building the app's own pages"
     pnpm --filter @intentic/desktop-app build
 fi
