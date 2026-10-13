@@ -9,7 +9,6 @@ import { within } from "@intentic/base/async";
 declare const __POSTHOG_KEY__: string;
 declare const __POSTHOG_HOST__: string;
 
-const CAPTURE_URL = captureUrl(__POSTHOG_HOST__);
 
 let consent = false;
 let listening = false;
@@ -73,7 +72,8 @@ const send = (event: string, properties?: Record<string, unknown>): Promise<void
         properties: { ...context.shared, ...(engine === undefined ? {} : { desktop_engine: engine }), ...properties },
         timestamp: new Date().toISOString(),
     });
-    return fetch(CAPTURE_URL, { method: `POST`, headers: { "content-type": `application/json` }, body, keepalive: true }).then(
+    // Read here, not at module load: only the Vite build defines __POSTHOG_HOST__, and tests import this module.
+    return fetch(captureUrl(__POSTHOG_HOST__), { method: `POST`, headers: { "content-type": `application/json` }, body, keepalive: true }).then(
         () => undefined,
         () => undefined,
     );
