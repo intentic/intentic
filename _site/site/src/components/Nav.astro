@@ -393,7 +393,9 @@ const currentPath = Astro.url.pathname;
     const bar = document.getElementById("site-bar");
     if (bar) {
         const lift = () => bar.toggleAttribute("data-lifted", window.scrollY > 40);
-        lift();
+        // Reading scrollY while the page is still being built forces a full layout (the flyout above has just moved
+        // nodes), so the first read waits for the first frame to have laid out; a restored scroll fires `scroll` anyway.
+        requestAnimationFrame(() => setTimeout(lift));
         window.addEventListener("scroll", lift, { passive: true });
     }
 

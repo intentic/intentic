@@ -10,7 +10,7 @@ import { getImagePath } from "astro-opengraph-images/util.js";
 import VisitorChat from "../components/VisitorChat.astro";
 import LiveNotice from "../components/LiveNotice.astro";
 import PageBackdrop from "../components/PageBackdrop.astro";
-import { THEME_COLOR, variantScript } from "../lib/variant";
+import { platePreloadScript, THEME_COLOR, variantScript } from "../lib/variant";
 
 interface Props {
     title?: string;
@@ -123,10 +123,12 @@ const cfBeaconToken = import.meta.env.CF_BEACON_TOKEN;
         <meta name="theme-color" content={THEME_COLOR.desk} media="(prefers-color-scheme: light)" />
         {/* After the tags it rewrites, and before the body it skins. */}
         <script is:inline set:html={variantScript()} />
+        {/* Once the skin is known: the plate is the LCP and would otherwise wait for the body's styles to be found. */}
+        <script is:inline set:html={platePreloadScript()} />
         {/* Preload the reading face used by every page. One variable file covers the whole 100–900 axis. */}
         <link rel="preload" as="font" type="font/woff2" href="/fonts/public-sans-100-900-latin.woff2" crossorigin />
-        {/* CTAs point to the app; a preconnect saves one round-trip on the first click. */}
-        <link rel="preconnect" href="https://app.intentic.dev" />
+        {/* No preconnect to the app: nothing on the page loads from it, so the socket idles until it times out, and
+            Lighthouse flags it as unused. A link into the app pays its one round trip on the click. */}
         <noscript>
             <style>
                 .fade-in {

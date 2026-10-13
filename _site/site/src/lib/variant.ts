@@ -137,3 +137,26 @@ export const variantScript = (): string => `(function () {
         carry();
     }
 })();`;
+
+/** The plate art's rungs, as the stylesheets pick them (global.css for the dark skin, desk.css for the light one). */
+const PLATE_ART = { default: "/assets/plate/temple", desk: "/assets/plate/temple-desk" } as const;
+const PLATE_PHONE_QUERY = "(max-width: 48rem)";
+const PLATE_WIDE_QUERY = "(min-width: 100rem)";
+
+/**
+ * The plate is every page's LCP, and it is a CSS background behind a custom property that depends on the skin, so the
+ * browser only finds it once the body is styled. This preloads the exact file the stylesheet will ask for, at high
+ * priority, as soon as the skin is known. It must run after `variantScript()`, which sets `data-variant`; the
+ * rungs and breakpoints here have to stay in step with `--role-plate-art` in global.css and desk.css.
+ */
+export const platePreloadScript = (): string => `(function () {
+    var art = document.documentElement.dataset.variant === ${q(DESK_VARIANT)} ? ${q(PLATE_ART.desk)} : ${q(PLATE_ART.default)};
+    var rung = window.matchMedia(${q(PLATE_PHONE_QUERY)}).matches ? 900 : window.matchMedia(${q(PLATE_WIDE_QUERY)}).matches ? 2400 : 1600;
+    var link = document.createElement("link");
+    link.rel = "preload";
+    link.as = "image";
+    link.type = "image/avif";
+    link.setAttribute("fetchpriority", "high");
+    link.href = art + "-" + rung + ".avif";
+    document.head.appendChild(link);
+})();`;

@@ -11,7 +11,7 @@ const notice = content?.notice;
 const active = notice?.active === true;
 ---
 
-<aside
+<div
     class="live-notice"
     data-live-notice
     data-tone={notice?.tone ?? "info"}
@@ -28,7 +28,7 @@ const active = notice?.active === true;
             {notice?.linkLabel ?? "Details"}
         </a>
     </p>
-</aside>
+</div>
 
 <style is:global>
     /* THE NOTICE STRIP Pinned above the bar, which is `position: fixed` at `top: 0`. */
