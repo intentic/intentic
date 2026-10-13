@@ -62,7 +62,7 @@ export const cursorHeadroomSource = (deps: CursorUsageDeps): HeadroomSource => (
 
 // Nothing cursor-specific files a refusal: a turn's own does it through the failure plan's `observed-limit` write
 // (agent/run/frames/classify-failure.ts, performed in frame-effects.ts), and a person's by hand through
-// usage/mark-spent.ts. A helper that looked like the live path once lived here, orphaned when the one-shot runtime that
+// usage/observed-accounts.ts (markSpentByHand). A helper that looked like the live path once lived here, orphaned when the one-shot runtime that
 // called it was deleted, and reading it as wired is part of why seven refused Cursor turns were never written down.
 
 // What the ladder reads instead of asking and being refused (agent/models/role-model-quota.ts).

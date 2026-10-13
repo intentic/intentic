@@ -73,7 +73,9 @@ jest.mock(`../../../client/sandbox/useSandbox`, () => ({
     useSandbox: () => ({ active, daemonUrl: ref(undefined), reachable: ref(true) }),
     sandboxKey: (name: string) => [name],
 }));
-jest.mock(`@tanstack/vue-query`, () => ({ useQueryClient: () => ({ setQueryData: () => {}, invalidateQueries: async () => {} }) }));
+// The rest of vue-query stays real: the card's imports reach queryPersistence.ts, which needs more than useQueryClient.
+const vueQuery = { ...(await import(`@tanstack/vue-query`)) };
+jest.mock(`@tanstack/vue-query`, () => ({ ...vueQuery, useQueryClient: () => ({ setQueryData: () => {}, invalidateQueries: async () => {} }) }));
 // Every decision the card posts is refused, so a test can see where the refusal is said.
 const sandboxJson = jest.fn(async (..._request: unknown[]): Promise<never> => {
     throw new Error(`the daemon said no`);

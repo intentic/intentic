@@ -82,6 +82,7 @@ export const UNSERVED = {
     "GET /wallet/history": NOT_THE_EDITORS,
     "POST /children/spawn": NOT_THE_EDITORS,
     "GET /children/providers": NOT_THE_EDITORS,
+    "POST /children/providers/spent": NOT_THE_EDITORS,
     "POST /children/wait": NOT_THE_EDITORS,
     "POST /children/send": NOT_THE_EDITORS,
     "POST /children/answer": NOT_THE_EDITORS,
