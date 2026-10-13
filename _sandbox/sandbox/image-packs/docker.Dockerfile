@@ -12,7 +12,7 @@
 # released on their own cadence, docker-ce's own dependency floor holds containerd to a version it supports, and a
 # pin on each would be three more numbers to move for no difference anyone has hit. The tool bumper
 # (_tools/scripts/tools/bump-tools.mjs) moves DOCKER_VERSION once a release has soaked and the repository carries it.
-ARG DOCKER_VERSION=29.8.2
+ARG DOCKER_VERSION=29.9.0
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     install -m 0755 -d /etc/apt/keyrings \
