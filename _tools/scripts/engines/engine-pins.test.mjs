@@ -78,7 +78,8 @@ test("blessing an engine the list does not carry refuses rather than writing som
 test("every engine this repo pins reads back one version per site group", () => {
     for (const [id, pin] of Object.entries(readPins())) {
         assert.deepEqual(pin.problems, [], `${id}'s pins are unreadable or disagree`);
-        assert.match(pin.blessed, /^\d+(\.\d+)+$/, `${id} has no blessed version to read`);
+        // Muse Code's build carries Meta's release suffix (1.4.6-R6000.1) beside the SDK's plain version it pairs with.
+        assert.match(pin.blessed, /^\d+(\.\d+)+(-R\d+(\.\d+)*)?$/, `${id} has no blessed version to read`);
         assert.match(pin.tracked, /^\d+(\.\d+)+$/, `${id} has no tracked version to read`);
     }
 });

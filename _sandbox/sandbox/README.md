@@ -185,16 +185,33 @@ flowchart LR
 - OpenCode (version 2, `@opencode/cli`) runs as one `opencode serve` the daemon spawns itself, on loopback with a
   per-boot password, never OpenCode's own shared background server, which would not read the daemon's environment
   (`runtimes/opencode/opencode-serve.ts`). Its one event stream is opened at boot and read once: it answers every
-  session's permission asks and hands each turn its own session family's events (`opencode-events.ts`). Grok's
+  session's permission asks and hands each turn its own session family's events (`opencode-events.ts`). A stream that
+  drops while the server runs is opened again, and each turn reads back what it missed. Every shell command is asked
+  about, so it reaches the owner's rulebook, and a `default`-mode turn puts edits, fetches and commands on per-tool
+  cards (`opencode-permissions.ts`). OpenCode's `question` forms become question cards (`opencode-forms.ts`), steered
+  messages go in as OpenCode steers, the turn's effort is the session's model variant, and a `/name` prompt runs as
+  OpenCode's command. A turn whose system text replaces the base runs on the daemon's twin agents, whose own base is
+  blank (`opencode-config.ts`). Failures are coded from OpenCode's own failure types, and a provider retry the turn
+  would not outlive, or would wait minutes for, is handed to the daemon's hold and resume (`opencode-failures.ts`).
+  A foreground command holds the silence limit while it runs, and a shell left in the background is waited on for 10
+  minutes at most (`opencode-turn.ts`). Grok's
   sign-in lives in OpenCode's database, read from disk so asking whether Grok is connected never boots the server
   (`opencode-credentials.ts`). The engine store refuses an OpenCode 1 copy an older daemon installed, and the blessed
   list carries OpenCode 2 under `opencode-v2`, so daemons still on OpenCode 1 never read a 2.x number
   (`engines/engine-descriptors.ts`).
-- OpenCode fixes its provider config at spawn, so a Google turn compares the translator's catalog (ids and input
-  modalities) with what the running server registered, and restarts the server onto the new list only when it is idle
+- OpenCode fixes its provider config at spawn, so a Google turn compares the translator's catalog (ids, input
+  modalities and reasoning tiers) with what the running server registered, and restarts the server onto the new list only when it is idle
   (`runtimes/opencode/opencode.ts`). A turn holds the server from setup through cleanup, helpers and Grok sign-in
   included; while it is busy, registered models keep working and a newly listed one asks for a retry. Grok turns
-  never read Google's catalog. A failed, empty or stalled read keeps the working registration.
+  never read Google's catalog. A failed, empty or stalled read keeps the working registration. The providers OpenCode
+  hosts from a route (a ChatGPT plan, Kimi, each Z.ai key, each model endpoint) are written into the same config and
+  compared the same way at each hosted turn (`runtimes/opencode/opencode-routes.ts`).
+- Where a model is reached is separate from which loop drives it: `agent/providers/routes/model-routes.ts` answers
+  (provider, account, model, loop) with the wire, the URL and bearer, the model id, whose account and allowance the
+  turn spends, and which provider the privacy shield keys on. The Claude Code harness's routed credentials, Codex's
+  hosted providers (each its own per-thread provider block) and OpenCode's hosted entries all come from it; Grok's own
+  xAI sign-in and Google's fixed entry on OpenCode keep their own planners. Where providers on one runtime can differ in
+  readiness, the health sweep files each pair under `pairHealthKey(runtime, provider)` beside the runtime's answer.
 - The translator lists Google models from its built-in catalog, not per account, so it can list a model Google does
   not offer these accounts. Google then answers 404 "Requested entity was not found."; the turn codes that
   `model-unavailable` naming the model (`runtimes/opencode/opencode-agent.ts`), which hides it from the picker for a
@@ -303,8 +320,9 @@ flowchart LR
 - Every automation fire runs inside the automation's own `allowedTools`, whichever door it came through (2026-10-12):
   `runFire` reads it off the record, so schedules, webhooks, channel listeners, approved holds and restart re-fires
   are bound the same as the Visitor chat and bug intake. The list is a boundary, not a permission hint: on the Claude
-  Code loop a PreToolUse hook refuses every call off it (`agent/tools/tool-allowlist.ts`), and a runtime with no check
-  before every call (`toolAllowlist: false`: Codex, OpenCode, Cursor, ACP agents, Pi) never runs a turn that carries
+  Code loop a PreToolUse hook refuses every call off it (`agent/tools/tool-allowlist.ts`), on Codex its per-thread
+  PreToolUse hook does the same through the door's policy gate (`runtimes/codex/codex-hooks.ts`), and a runtime with no
+  check before every call (`toolAllowlist: false`: OpenCode, Cursor, ACP agents, Pi) never runs a turn that carries
   one. The model ladder passes such rungs over, and with none left the run is recorded as refused, saying why. Channel listeners hold the same two ceilings as the other
   doors (`automations/door-admission.ts`: messages a minute per sender, wakes a day per automation), and every door
   caps its body while reading it (`http/bounded-body.ts`), so a chunked body with no length is still refused at the

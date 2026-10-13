@@ -38,7 +38,10 @@ const BASE = { append: undefined, unattended: false, browserOutputDir: undefined
 // otherwise.
 const CLAUDE = capabilitiesOf("claude", "native");
 const CODEX = capabilitiesOf("codex", "native");
-const GROK = capabilitiesOf("grok", "native");
+// The runtime that can only add: Cursor's base is its own, and the daemon's text folds onto it.
+const CURSOR = capabilitiesOf("cursor", "native");
+// No loop appends any more (Cursor replaces where its account is entitled); the append seam is made up rather than borrowed.
+const APPENDING = { ...CURSOR, instructions: "append" as const };
 const ACP = capabilitiesOf("some-installed-agent", "native");
 
 test("nothing to append is undefined, not an empty string", () => {
@@ -79,7 +82,7 @@ test("a runtime outside the Claude Code loop is told the workspace conventions; 
 // Cursor seals outside tool results and automations wrap outside messages on every runtime, so the rule that says what
 // an envelope means has to arrive wherever an envelope can.
 test("a runtime outside the Claude Code loop is told what outside content is", () => {
-    for (const capabilities of [CODEX, GROK]) {
+    for (const capabilities of [CODEX, CURSOR]) {
         const placement = turnPromptPlacement({ capabilities, mode: "intentic", systemPrompt: "", stableSystemPrompt: false });
         expect(placement.systemAppend).toContain("<untrusted-content");
     }
@@ -92,7 +95,7 @@ test("a runtime outside the loop carries the guidance block as its append", () =
 
 test("a custom prompt is added where it cannot replace", () => {
     const placement = turnPromptPlacement({
-        capabilities: GROK,
+        capabilities: APPENDING,
         mode: "custom",
         systemPrompt: CUSTOM,
         stableSystemPrompt: false,
@@ -105,9 +108,9 @@ test("a custom prompt is added where it cannot replace", () => {
 // nothing to add.
 test("an emptied custom prompt replaces with nothing, and adds nothing", () => {
     expect(turnPromptPlacement({ capabilities: CLAUDE, mode: "custom", systemPrompt: "", stableSystemPrompt: false }).systemPrompt).toBe("");
-    const grok = turnPromptPlacement({ capabilities: GROK, mode: "custom", systemPrompt: "", stableSystemPrompt: false });
-    expect(grok.systemAppend).toBeUndefined();
-    expect(grok.systemPrompt).toBeUndefined();
+    const cursor = turnPromptPlacement({ capabilities: APPENDING, mode: "custom", systemPrompt: "", stableSystemPrompt: false });
+    expect(cursor.systemAppend).toBeUndefined();
+    expect(cursor.systemPrompt).toBeUndefined();
 });
 
 // The persona note still has to arrive: a session that does not know which accounts it may speak through is unsafe, and
@@ -130,7 +133,7 @@ test("a runtime with no system prompt still hears which persona it is wearing", 
 // The whole point of composing memory here: no runtime's own discovery decides whether the owner's rules arrive, so
 // every placement the axis has must carry them.
 test("the workspace's standing rules reach every runtime, whatever seam it has", () => {
-    for (const capabilities of [CLAUDE, CODEX, GROK]) {
+    for (const capabilities of [CLAUDE, CODEX, CURSOR]) {
         const placement = turnPromptPlacement({ capabilities, mode: "intentic", systemPrompt: "", stableSystemPrompt: false, memoryNote: MEMORY });
         expect(placement.systemAppend).toContain(MEMORY);
     }
@@ -155,8 +158,8 @@ test("a custom prompt drops the harness's guidance and keeps the owner's own rul
     // Still suppressed: the persona note is this harness talking, not the owner.
     expect(claude.systemPrompt).not.toContain(PERSONA);
 
-    const grok = turnPromptPlacement({ capabilities: GROK, mode: "custom", systemPrompt: CUSTOM, stableSystemPrompt: false, memoryNote: MEMORY });
-    expect(grok.systemAppend).toBe(`${CUSTOM}\n\n${MEMORY}`);
+    const cursor = turnPromptPlacement({ capabilities: APPENDING, mode: "custom", systemPrompt: CUSTOM, stableSystemPrompt: false, memoryNote: MEMORY });
+    expect(cursor.systemAppend).toBe(`${CUSTOM}\n\n${MEMORY}`);
 
     // An emptied custom prompt is still an empty prompt; the rules are all that is left, with no separator in front.
     const emptied = turnPromptPlacement({ capabilities: CLAUDE, mode: "custom", systemPrompt: "", stableSystemPrompt: false, memoryNote: MEMORY });

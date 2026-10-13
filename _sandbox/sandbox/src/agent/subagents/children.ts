@@ -7,6 +7,7 @@ import { landTargetOf } from "../../conversations/land/land-target.js";
 import type { Caller } from "../../auth/auth.js";
 import { parentOfActor } from "../../auth/principal.js";
 import type {
+    AgentCapabilities,
     AgentEvent,
     AgentHarness,
     AgentProvider,
@@ -18,7 +19,16 @@ import type {
     ResumeReason,
     TurnProfile,
 } from "@intentic/sandbox-contract";
-import { capabilitiesOf, childRunOf, DEFAULT_HARNESS, newConversationId, PROVIDERS, sameChildRun } from "@intentic/sandbox-contract";
+import {
+    canonicalHarness,
+    capabilitiesOf,
+    childRunOf,
+    loopLabel,
+    loopOf,
+    newConversationId,
+    PROVIDERS,
+    sameChildRun,
+} from "@intentic/sandbox-contract";
 import { cardDeps } from "../../conversations/actor/card-deps.js";
 import { raiseRequest } from "../../guard/card-offers.js";
 import { type Holding, type LiveRun, liveRunOf, turnRunOf } from "../../conversations/actor/conversation-holdings.js";
@@ -907,9 +917,9 @@ const askOwner = async (services: Services, parent: string, run: LiveRun, ask: C
 };
 
 // A child on a runtime with rulebook "none" has no gating of its own, so the parent's turn taints, the same as reading
-// a fetched page.
-const composeRuntimeFloor = (parent: string, provider: AgentProvider, harness: AgentHarness): void => {
-    if (capabilitiesOf(provider, harness).rulebook === "none") {
+// a fetched page. No loop today lacks a seam (each has hooks or an approval channel); the floor stays for one that does.
+export const composeRuntimeFloor = (parent: string, provider: AgentProvider, capabilities: Pick<AgentCapabilities, "rulebook">): void => {
+    if (capabilities.rulebook === "none") {
         markConversationTaint(parent, `${RUNTIME_SOURCE}${provider}`);
     }
 };
@@ -947,10 +957,11 @@ const admitChildTurn = async (
 };
 
 // `provider` and `model` are required, with no fallback default. `harness` still defaults to "native" (the provider's
-// own loop), which spends no extra allowance and needs no account.
+// own loop), which spends no extra allowance and needs no account; a loop the provider doesn't offer reads as that too,
+// so the child is placed and floored for the loop that will actually run it.
 const childRouting = (spec: ChildSpawnSpec): { readonly provider: AgentProvider; readonly harness: AgentHarness; readonly model: string } => ({
     provider: spec.provider,
-    harness: spec.harness ?? DEFAULT_HARNESS,
+    harness: canonicalHarness(spec.provider, spec.harness),
     model: spec.model,
 });
 
@@ -1010,7 +1021,9 @@ const runWords = (run: ChildRun): string =>
         run.effort !== undefined ? `${run.effort} effort` : undefined,
         run.thinking === false ? "no extended thinking" : undefined,
         run.fast === true ? "fast speed" : undefined,
-        run.harness === "claude-code" ? "the Claude Code loop" : undefined,
+        run.harness !== undefined && canonicalHarness(run.provider, run.harness) !== "native"
+            ? `the ${loopLabel(run.provider, loopOf(run.provider, run.harness))} loop`
+            : undefined,
         run.account !== undefined ? `account ${run.account}` : undefined,
     ]
         .filter((part) => part !== undefined)
@@ -1147,7 +1160,7 @@ const startChild = async (
     // Seat is claimed here; every exit must hand it to a running turn or refund it, or the cap drops permanently.
     let handedOff = false;
     try {
-        composeRuntimeFloor(parent.conversationId, provider, harness);
+        composeRuntimeFloor(parent.conversationId, provider, capabilitiesOf(provider, harness));
         const placement = await childPlacement(services, spec, provider, harness);
         const record = childRecordOf(parent, spec, depth);
         const turn: TurnInput & { conversationId: string } = {
@@ -1322,7 +1335,7 @@ const deliverToChild = async (
     childId: string,
     message: string,
 ): Promise<ChildActionResult> => {
-    composeRuntimeFloor(parent.conversationId, kid.spec.provider, childRouting(kid.spec).harness);
+    composeRuntimeFloor(parent.conversationId, kid.spec.provider, capabilitiesOf(kid.spec.provider, childRouting(kid.spec).harness));
     // Asked again: an owner answering later may find the child waiting on something new.
     const waiting = notYet(kid);
     if (waiting !== undefined) {

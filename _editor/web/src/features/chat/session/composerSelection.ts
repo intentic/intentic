@@ -5,7 +5,7 @@ import { providerAccounts } from "../accounts/providerAccounts";
 import { modelLabelFor, providerModels, providerTabs } from "../accounts/providerCatalog";
 import { servingAccount } from "../accounts/servingAccount";
 import { clampEffort } from "../models/run-settings/effortScale";
-import { rememberedModelFor, rememberedProviderFor, rememberPick, turnDefaults } from "../run/turnDefaults";
+import { rememberedHarnessFor, rememberedModelFor, rememberedProviderFor, rememberHarness, rememberPick, turnDefaults } from "../run/turnDefaults";
 import { accountIntent, readsAsContinuing, type TurnSettings } from "../run/turnRequest";
 import type { Conversation } from "./conversation";
 import { type PickAction, type PickEffects, type PickWorld, reduceSelection, type Selection, UNPICKED } from "./selectionReducer";
@@ -194,14 +194,18 @@ export class ComposerSelection {
             session: this.host.session.value,
             local: this.host.box.value === undefined,
             rememberedModel: rememberedModelFor,
-            defaults: () => ({
-                provider: rememberedProviderFor(),
-                picked: turnDefaults.provider.value,
-                harness: turnDefaults.harness.value,
-                effort: turnDefaults.effort.value,
-                thinking: turnDefaults.thinking.value,
-                auto: turnDefaults.auto.value,
-            }),
+            rememberedHarness: rememberedHarnessFor,
+            defaults: () => {
+                const provider = rememberedProviderFor();
+                return {
+                    provider,
+                    picked: turnDefaults.provider.value,
+                    harness: rememberedHarnessFor(provider),
+                    effort: turnDefaults.effort.value,
+                    thinking: turnDefaults.thinking.value,
+                    auto: turnDefaults.auto.value,
+                };
+            },
         };
     }
 
@@ -220,7 +224,7 @@ export class ComposerSelection {
             turnDefaults.auto.value = defaults.auto;
         }
         if (defaults.harness !== undefined) {
-            turnDefaults.harness.value = defaults.harness;
+            rememberHarness(defaults.harness.provider, defaults.harness.harness);
         }
     }
 

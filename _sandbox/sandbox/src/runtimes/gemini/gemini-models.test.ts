@@ -174,3 +174,35 @@ test("the seed floor is non-empty and passes its own filter, so a turn always re
     expect(SEED_GEMINI_MODELS.every((model) => model.inputModalities.includes("text"))).toBe(true);
     expect(SEED_GEMINI_MODELS.some((model) => model.inputModalities.includes("image"))).toBe(true);
 });
+
+// The translator's management catalog is the one place a Google model's thinking scale is published: each model takes
+// the tiers of the shared vocabulary its scale names, weakest first, and a spelling outside it is dropped.
+test("carries each model's reasoning tiers as the translator's thinking scale names them, and none where it names none", async () => {
+    const fake = translator([
+        { id: "gemini-pro-agent", owned_by: "antigravity" },
+        { id: "gpt-oss-120b-medium", owned_by: "antigravity" },
+    ]);
+    const scales = async () =>
+        new Map([
+            ["gemini-pro-agent", ["high", "auto", "low"]],
+            ["gpt-oss-120b-medium", ["dynamic"]],
+        ]);
+
+    const models = await discoverGeminiModels("http://127.0.0.1:8788", "local-bearer", fake, scales);
+
+    expect(models?.map((model) => [model.id, model.efforts])).toEqual([
+        ["gemini-pro-agent", ["low", "high"]],
+        ["gpt-oss-120b-medium", undefined],
+    ]);
+});
+
+test("a thinking scale that cannot be read costs the efforts, never the catalog", async () => {
+    const fake = translator([{ id: "gemini-pro-agent", owned_by: "antigravity" }]);
+
+    const models = await discoverGeminiModels("http://127.0.0.1:8788", "local-bearer", fake, async () => {
+        throw new Error("management API refused");
+    });
+
+    expect(models?.map((model) => model.id)).toEqual(["gemini-pro-agent"]);
+    expect(models?.[0]?.efforts).toBeUndefined();
+});

@@ -1,6 +1,6 @@
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
 import { sdk } from "../../engines/claude-sdk.js";
-import { AgentHarnessSchema, AgentProviderSchema } from "@intentic/sandbox-contract";
+import { AgentHarnessSchema, AgentProviderSchema, harnessChoosable, loopsOf, PROVIDERS } from "@intentic/sandbox-contract";
 import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { z } from "zod";
 import { type ChildSupervisor, spawnedNote } from "./children.js";
@@ -27,6 +27,13 @@ export interface SubagentWaitDeps {
 }
 
 const UNTIL = z.enum(["blocked", "finished"]);
+
+// Every provider offering more than one loop, said with its loops by name, so the parameter's own words say which values
+// mean anything for which provider; derived from the provider table, so a new pair reaches this text by itself.
+const CHOOSABLE_LOOPS = PROVIDERS.filter((provider) => harnessChoosable(provider.value))
+    .map((provider) => `${provider.value}: ${loopsOf(provider.value).join(` or `)}`)
+    .join(`; `);
+const SPAWN_HARNESS_WORDS = `Which agentic loop runs it. Leave it out for the provider's own. ${CHOOSABLE_LOOPS} (the first is its own). A loop the provider doesn't offer runs its own instead.`;
 
 const NOTHING_TO_WAIT_FOR =
     "Nothing to wait for: no subagent or background command of this conversation is still running under that id, or its ending was already reported.";
@@ -95,7 +102,7 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                                       "Which of its models, e.g. composer-2.5 on cursor. Required, and it must be one that provider serves: " +
                                           "a model name only means anything to the provider that vends it.",
                                   ),
-                              harness: AgentHarnessSchema.optional().describe("Which agentic loop runs it. Leave it out for the provider's own."),
+                              harness: AgentHarnessSchema.optional().describe(SPAWN_HARNESS_WORDS),
                               effort: z.string().optional().describe("How hard it should think, where the provider offers a choice."),
                               on: z
                                   .string()

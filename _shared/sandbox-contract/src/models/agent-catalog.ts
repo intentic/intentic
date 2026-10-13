@@ -1,6 +1,6 @@
-import { ACP, type AgentCapabilities, CLAUDE_CODE, PI } from "./agent-runtimes.js";
-import { type NativeProvider, PROVIDER_SPECS, type ProviderAccess, providerSpec } from "./provider-specs.js";
-import type { AgentHarness, AgentProvider, PermissionMode } from "../schemas/agent.js";
+import { ACP, type AgentCapabilities, CLAUDE_CODE, CODEX, MUSE, OPENCODE, PI } from "./agent-runtimes.js";
+import { type LoopTerms, type NativeProvider, PROVIDER_SPECS, type ProviderAccess, type ProviderLoops, providerSpec } from "./provider-specs.js";
+import type { AgentHarness, AgentLoop, AgentProvider, PermissionMode } from "../schemas/agent.js";
 import type { Model, ModelBadge } from "../schemas/providers/provider-oauth.js";
 
 // The provider/harness/model catalog every picker shares, pure data keyed by the wire vocabulary in schemas/agent.ts.
@@ -64,37 +64,128 @@ export const providerLabel = (provider: AgentProvider): string => providerSpec(p
 export const PLAN_LIMIT_PROVIDERS: readonly NativeProvider[] = PROVIDER_SPECS.filter((spec) => spec.planLimits).map((spec) => spec.id);
 export const reportsPlanLimits = (provider: AgentProvider): boolean => PLAN_LIMIT_PROVIDERS.includes(provider as NativeProvider);
 
-// `native` is the provider's own runtime; `claude-code` runs it through that loop instead, for any provider.
+// Every value the harness axis takes, in the wire enum's order; `native` names whichever loop the provider defaults to.
+// Labels are the loops' own names, except `vendor`, which only a provider can name (loopLabel).
 export const HARNESSES: readonly { label: string; value: AgentHarness }[] = [
     { label: "Native", value: "native" },
     { label: "Claude Code", value: "claude-code" },
+    { label: "Codex", value: "codex" },
+    { label: "OpenCode", value: "opencode" },
+    { label: "Pi", value: "pi" },
+    { label: "Muse Code", value: "muse" },
+    { label: "Own agent", value: "vendor" },
 ];
-
-// Whether the harness axis is a real choice for this provider, or a switch whose two positions run the same loop.
-// Derived, so a provider that gains a native runtime tomorrow gains the switch with it.
-export const harnessChoosable = (provider: AgentProvider): boolean => {
-    const spec = providerSpec(provider);
-    return spec !== undefined && spec.runtimes.native.runtime !== spec.runtimes.claudeCode.runtime;
-};
-
-// Maps (provider, harness) to a record: a native spec row, an `endpoint/<id>` at the Claude Code loop's ceiling, `pi`
-// at its own RPC runtime, anything else over ACP. Naming one record on both harnesses is a fact, not a preference.
-export const capabilitiesOf = (provider: AgentProvider, harness: AgentHarness): AgentCapabilities => {
-    const spec = providerSpec(provider);
-    if (spec !== undefined) {
-        return harness === "claude-code" ? spec.runtimes.claudeCode : spec.runtimes.native;
-    }
-    if (isEndpointProvider(provider)) {
-        return CLAUDE_CODE;
-    }
-    if (provider === PI_PROVIDER) {
-        return PI;
-    }
-    return ACP;
-};
 
 // Reserved like a native id: an `agent`-kind capability installed under it is served over Pi's RPC, not ACP.
 export const PI_PROVIDER = "pi";
+
+// The loops of everything that is not a spec row, said once: an `endpoint/<id>` defaults to Claude Code (the loop that
+// speaks Anthropic Messages to any base) and also runs on Codex (Responses, through the translator's entry for it),
+// OpenCode (straight at the endpoint, in its own protocol) and Muse Code (whose provider speaks Responses, which the
+// translator serves for an OpenAI-protocol endpoint); the owner's own key, so no vendor terms. The free trial is the
+// exception, fixed to Claude Code: its one model id is the translator's, its disclosure is that loop's, and its pool
+// refuses a replayed tool call without its own reasoning signature. `pi` runs on its own RPC runtime, and any other id
+// is an installed ACP agent's own.
+const ENDPOINT_LOOPS: ProviderLoops = {
+    default: "claude-code",
+    offered: {
+        "claude-code": { capabilities: CLAUDE_CODE },
+        codex: { capabilities: CODEX },
+        opencode: { capabilities: OPENCODE },
+        muse: { capabilities: MUSE },
+    },
+};
+const TRIAL_LOOPS: ProviderLoops = { default: "claude-code", offered: { "claude-code": { capabilities: CLAUDE_CODE } } };
+const PI_LOOPS: ProviderLoops = { default: "pi", offered: { pi: { capabilities: PI } } };
+const ACP_LOOPS: ProviderLoops = { default: "vendor", offered: { vendor: { capabilities: ACP } } };
+
+// The loop table for any provider id: its spec row's, or the rule for an endpoint, Pi or an ACP agent.
+export const providerLoops = (provider: AgentProvider): ProviderLoops => {
+    const spec = providerSpec(provider);
+    if (spec !== undefined) {
+        return spec.loops;
+    }
+    if (isEndpointProvider(provider)) {
+        return isTrialProvider(provider) ? TRIAL_LOOPS : ENDPOINT_LOOPS;
+    }
+    return provider === PI_PROVIDER ? PI_LOOPS : ACP_LOOPS;
+};
+
+const LOOP_ORDER: readonly AgentLoop[] = HARNESSES.flatMap((entry) => (entry.value === "native" ? [] : [entry.value]));
+
+// The loops this provider offers, its default first and the rest in the wire enum's order.
+export const loopsOf = (provider: AgentProvider): readonly AgentLoop[] => {
+    const loops = providerLoops(provider);
+    return [loops.default, ...LOOP_ORDER.filter((loop) => loop !== loops.default && loops.offered[loop] !== undefined)];
+};
+
+// The loop a turn actually runs on: `native` is the provider's default, an offered loop is itself, and a loop the
+// provider does not offer (a composer setting left over from another provider) runs the default rather than refusing.
+export const loopOf = (provider: AgentProvider, harness: AgentHarness): AgentLoop => {
+    const loops = providerLoops(provider);
+    return harness !== "native" && loops.offered[harness] !== undefined ? harness : loops.default;
+};
+
+// The one spelling of a harness on a turn: `native` wherever it resolves to the default loop, so a turn naming its
+// provider's own loop outright and one naming none are recorded alike.
+export const canonicalHarness = (provider: AgentProvider, harness: AgentHarness | undefined): AgentHarness => {
+    if (harness === undefined) {
+        return "native";
+    }
+    const loop = loopOf(provider, harness);
+    return loop === providerLoops(provider).default ? "native" : loop;
+};
+
+// Whether the loop is a real choice for this provider; derived, so a provider offered a second loop gains the chips.
+export const harnessChoosable = (provider: AgentProvider): boolean => loopsOf(provider).length > 1;
+
+// What a chip or a pill calls the loop. `vendor` is the provider's own agent, so it takes the provider's name, unless
+// the offer names the program (Grok Build, Kimi CLI) because the provider's name is on its other loops too.
+export const loopLabel = (provider: AgentProvider, loop: AgentLoop): string =>
+    providerLoops(provider).offered[loop]?.label ??
+    (loop === "vendor" ? providerLabel(provider) : (HARNESSES.find((entry) => entry.value === loop)?.label ?? loop));
+
+// The account-door variant the loop a turn runs on signs in under (LoopOffer.door), resolved as the turn is; undefined
+// where it spends the provider's default credential.
+export const loopDoor = (provider: AgentProvider, harness: AgentHarness): string | undefined =>
+    providerLoops(provider).offered[loopOf(provider, harness)]?.door;
+
+// The loops whose own sign-in the provider's account door holds beside its default one, in loop order.
+export const loopDoors = (provider: AgentProvider): readonly { readonly loop: AgentLoop; readonly door: string }[] =>
+    loopsOf(provider).flatMap((loop) => {
+        const door = providerLoops(provider).offered[loop]?.door;
+        return door === undefined ? [] : [{ loop, door }];
+    });
+
+// Whether one of the provider's own accounts can serve a turn on this loop: where any loop signs in through a door of its
+// own, an account serves the loop whose door its variant names, and an account naming none serves the default
+// credential's loops; elsewhere (Z.ai's estates are variants too) every account serves every loop.
+export const accountServesLoop = (provider: AgentProvider, harness: AgentHarness, account: { readonly variant?: string | undefined }): boolean => {
+    const doors = loopDoors(provider);
+    if (doors.length === 0) {
+        return true;
+    }
+    const own = doors.some((entry) => entry.door === account.variant) ? account.variant : undefined;
+    return own === loopDoor(provider, harness);
+};
+
+// What (provider, harness) can do, resolved as the turn is (loopOf).
+export const capabilitiesOf = (provider: AgentProvider, harness: AgentHarness): AgentCapabilities => {
+    const loops = providerLoops(provider);
+    // loopOf only answers an offered loop or the default, and a row's default is offered (provider-specs.test.ts).
+    return (loops.offered[loopOf(provider, harness)] ?? loops.offered[loops.default])!.capabilities;
+};
+
+// Where the daemon's runtime health map files one pair's own answer, beside the runtime's (keyed by runtime alone): a
+// loop hosting a provider not its own can be ready for one and not another (Codex signed in to ChatGPT, but no Grok
+// sign-in on the translator for Grok on Codex). A reader asks the pair's key first and the runtime's after it.
+export const pairHealthKey = (runtime: AgentCapabilities["runtime"], provider: AgentProvider): string => `${runtime}:${provider}`;
+
+// What the provider's own terms say about the loop serving it, when they say anything worth a quiet note; undefined
+// where the vendor sanctions it or nothing is on record. Resolved as the turn is: a loop the provider does not offer
+// reads as the one it runs.
+export const termsOf = (provider: AgentProvider, harness: AgentHarness): LoopTerms | undefined =>
+    providerLoops(provider).offered[loopOf(provider, harness)]?.terms;
 
 // Which permission modes a runtime can actually be put in. Under "plan" every other mode collapses onto the autonomous
 // posture the runtime already runs, so offering them would be three names for two behaviours.
@@ -132,6 +223,7 @@ export const limitationsOf = (capabilities: AgentCapabilities): string[] => [
     ...(capabilities.rulebook === "approval" ? ["command rules apply only to calls this agent raises"] : []),
     ...(capabilities.rulebook === "refuse-only" ? ["command rules can refuse but not hold"] : []),
     ...(capabilities.rulebook === "none" ? ["command rules not applied"] : []),
+    ...(capabilities.secrets === "shell" ? ["secrets masked in shell output only, not in files the agent reads"] : []),
     ...(capabilities.secrets === "none" ? ["secrets reach the model unmasked"] : []),
     ...(capabilities.toolAllowlist ? [] : ["no tool lists: an automation limited to some tools won't run here"]),
 ];
@@ -173,7 +265,8 @@ export const sendableEffort = (effort: string | undefined, thinking: boolean | u
 export const sendableThinking = (effort: string | undefined, thinking: boolean | undefined): boolean | undefined =>
     effort === "max" && thinking === undefined ? true : thinking;
 
-// Fast speed needs all three: the runtime can ask (Claude Code loop only), the route is first-party (not the translator
-// or a non-Anthropic endpoint), and the model publishes the `fast` badge. Absent badges reads as false.
+// Fast speed needs the runtime to be able to ask and the model to publish the `fast` badge (absent badges read as
+// false). The Claude Code loop also needs a first-party route, since it serves translated and non-Anthropic endpoints
+// that refuse it; any other loop that can ask speaks to its own vendor, whose catalog is where the badge came from.
 export const fastAllowed = (capabilities: AgentCapabilities, provider: AgentProvider, badges: readonly ModelBadge[] | undefined): boolean =>
-    capabilities.fastMode && provider === "claude" && (badges ?? []).includes("fast");
+    capabilities.fastMode && (capabilities.runtime !== "claude-code" || provider === "claude") && (badges ?? []).includes("fast");

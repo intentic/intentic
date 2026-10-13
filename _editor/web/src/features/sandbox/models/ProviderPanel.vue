@@ -4,6 +4,9 @@ import {
     type AgentProvider,
     type KeyedProvider,
     KeyedProviderSchema,
+    loopDoors,
+    loopLabel,
+    loopOf,
     mintedVariants,
     type OauthAccount,
     providerSpec,
@@ -14,6 +17,7 @@ import { computed, ref, useTemplateRef } from "vue";
 import { accountsOutdated } from "../../chat/accounts/accountsOutdated";
 import { translatorAccounts } from "../../chat/accounts/providerAccounts";
 import { accountsOf, subscriptionOnly } from "../../chat/accounts/useChat-accounts";
+import { offeredLoops } from "../../chat/models/offeredLoops";
 import { useChat } from "../../chat/run/useChat";
 import { hasSignIn } from "../../chat/session/access";
 import {
@@ -105,13 +109,31 @@ const routedAccounts = computed(() => (keyed.value === undefined ? [] : (transla
 // Which plan to sign in to, for a provider sold under several whose keys are not interchangeable (Z.ai, BigModel).
 const estate = ref<string | undefined>(undefined);
 const offersEstates = computed(() => (mintedVariants(provider)?.length ?? 0) > 1);
-// Grok holds a single native account (OpenCode owns the xAI credential); "add another" goes once it is linked.
-const canAddNative = computed(() => provider !== `grok` || nativeAccounts.value.length === 0);
+// The loops this provider's own door signs in with a program of their own (Grok Build, Kimi CLI), each a separate sign-in
+// from the provider's default one; a row says which by its variant. Only those this sandbox's daemon runs: an older one
+// has no door to sign them in through.
+const doors = computed(() => loopDoors(provider).filter((door) => offeredLoops(provider).includes(door.loop)));
+const doorOf = (account: Pick<OauthAccount, `variant`>) => doors.value.find((door) => door.door === account.variant);
+// Whether the provider's own door holds a default sign-in beside its loop doors: every native provider's, and Grok's
+// xAI account (OpenCode's); Kimi's default credential is the translator's subscription, its own door only its CLI's.
+const hasDefaultNative = computed(() => hasNative.value && (provider === `grok` || spec.value?.auth.kind !== `translator`));
+// Grok holds a single default account (OpenCode owns the xAI credential); its "add another" goes once it is linked.
+const canAddDefault = computed(() => provider !== `grok` || nativeAccounts.value.every((account) => doorOf(account) !== undefined));
 
 // No two rows may read the same; distinguished in order: the identity the provider reports, the name (renamable in
 // place), and failing both, when it was connected. Grok is exempt from renaming: OpenCode owns its one account.
 const renameOf = (account: OauthAccount): ((label: string) => Promise<void>) | undefined =>
-    provider === `grok` ? undefined : (label: string) => renameAccount(account.id, label, provider);
+    provider === `grok` && doorOf(account) === undefined ? undefined : (label: string) => renameAccount(account.id, label, provider);
+
+// Which loop a row's sign-in serves, said where the provider holds sign-ins for more than one: a loop door's own, or
+// the default one's loop beside them.
+const loopNote = (account: OauthAccount): string | undefined => {
+    if (doors.value.length === 0) {
+        return undefined;
+    }
+    const door = doorOf(account);
+    return t(`sandbox.aiAccountSection.viaLoop`, { loop: loopLabel(provider, door?.loop ?? loopOf(provider, `native`)) });
+};
 
 const ambiguousLabels = computed(() => {
     const seen = new Map<string, number>();
@@ -242,6 +264,8 @@ interface AccountView {
     readonly verify: string | undefined;
     // Signing in again replaces this credential in place; only the native sign-in can.
     readonly reconnect: boolean;
+    // The loop door a native row signs in through, which its Reconnect asks for again.
+    readonly variant?: string | undefined;
     readonly busy: string;
     readonly disconnect: () => void;
 }
@@ -250,7 +274,7 @@ const nativeViews = computed<readonly AccountView[]>(() =>
     rowsOf(nativeAccounts.value, accountFacts).map(({ account, headroom, exhausted, state }) => ({
         key: account.id,
         title: account.label,
-        note: identityNote(account),
+        note: [loopNote(account), identityNote(account)].filter((part) => part !== undefined).join(` · `) || undefined,
         description: stateLine(state, account.label, account.needsReauth === true && account.detail === undefined),
         state,
         headroom,
@@ -258,19 +282,20 @@ const nativeViews = computed<readonly AccountView[]>(() =>
         activity: needsReconnect(state) || !usageLoaded.value ? undefined : usageLine(account.id),
         rename: renameOf(account),
         verify: verifyUrl(state),
-        reconnect: needsReconnect(state) && canAddNative.value,
+        reconnect: needsReconnect(state) && (doorOf(account) !== undefined || canAddDefault.value),
+        variant: doorOf(account)?.door,
         busy: account.id,
         disconnect: () => void disconnect(account.id, provider),
     })),
 );
 
-// A subscription is named by whoever signs in to it (the translator's label is that email). Only Grok, which can hold
-// both kinds side by side, says which kind this is.
+// A subscription is named by whoever signs in to it (the translator's label is that email). Only a provider that can hold
+// both kinds side by side (Grok, Kimi) says which kind this is.
 const routedViews = computed<readonly AccountView[]>(() =>
     rowsOf(routedAccounts.value, routedAccountFacts).map(({ account, headroom, exhausted, state }) => ({
         key: `${provider}:${account.name}`,
         title: account.label,
-        note: provider === `grok` ? t(`sandbox.aiAccountSection.viaClaudeCode`) : undefined,
+        note: hasNative.value ? t(`sandbox.aiAccountSection.viaClaudeCode`) : undefined,
         description: stateLine(state, account.label, false),
         state,
         headroom,
@@ -302,8 +327,9 @@ const shownRows = computed(() => (shouldCollapse.value && !expanded.value ? rows
 
 const providerName = computed(() => spec.value?.accountLabel ?? provider);
 
-// The ways in this provider offers. One for nearly all; Grok's two (its own xAI account, a SuperGrok subscription under
-// Claude Code) each get a button named for what it connects, since "Connect" twice would ask the reader to guess.
+// The ways in this provider offers. One for nearly all; Grok's three (its own xAI account, Grok Build's sign-in, a
+// SuperGrok subscription under Claude Code) and Kimi's two (Kimi CLI's sign-in, the subscription) each get a button named
+// for what it connects, since "Connect" twice would ask the reader to guess.
 const ROUTED_NAME = computed(
     () =>
         ({
@@ -315,14 +341,33 @@ const ROUTED_NAME = computed(
 );
 const ways = computed(() => {
     const native =
-        hasNative.value && canAddNative.value
-            ? [{ via: `native` as const, name: t(`sandbox.aiAccountSection.account`, { managedLabel: providerName.value }) }]
+        hasDefaultNative.value && canAddDefault.value
+            ? [
+                  {
+                      via: `native` as const,
+                      variant: undefined,
+                      // Beside a loop's own sign-in, the default one says which loop it serves too (Grok's: OpenCode).
+                      name:
+                          doors.value.length === 0
+                              ? t(`sandbox.aiAccountSection.account`, { managedLabel: providerName.value })
+                              : t(`sandbox.aiAccountSection.accountViaLoop`, { managedLabel: providerName.value, loop: loopLabel(provider, loopOf(provider, `native`)) }),
+                  },
+              ]
             : [];
-    const routedWay = keyed.value === undefined ? [] : [{ via: `routed` as const, name: ROUTED_NAME.value[keyed.value] }];
-    const both = [...native, ...routedWay];
-    const several = (hasNative.value ? 1 : 0) + (keyed.value === undefined ? 0 : 1) > 1;
-    return both.map((way) => ({
+    const doorWays = hasNative.value
+        ? doors.value.map((door) => ({
+              via: `native` as const,
+              variant: door.door,
+              name: t(`sandbox.aiAccountSection.loopSignIn`, { loop: loopLabel(provider, door.loop) }),
+          }))
+        : [];
+    const routedWay = keyed.value === undefined ? [] : [{ via: `routed` as const, variant: undefined, name: ROUTED_NAME.value[keyed.value] }];
+    const all = [...native, ...doorWays, ...routedWay];
+    const several = (hasDefaultNative.value ? 1 : 0) + (hasNative.value ? doors.value.length : 0) + (keyed.value === undefined ? 0 : 1) > 1;
+    return all.map((way) => ({
         via: way.via,
+        variant: way.variant,
+        key: `${way.via}:${way.variant ?? ``}`,
         label: several
             ? t(`connect.providerPanel.connectWay`, { way: way.name })
             : rows.value.length === 0
@@ -331,7 +376,9 @@ const ways = computed(() => {
     }));
 });
 
-const ask = (via: `native` | `routed`): void => emit(`connect`, via === `native` && offersEstates.value ? { via, variant: estate.value } : { via });
+// A loop door's way names its own variant; the default native way names the estate, where the provider sells several.
+const ask = (via: `native` | `routed`, variant?: string): void =>
+    emit(`connect`, variant !== undefined ? { via, variant } : via === `native` && offersEstates.value ? { via, variant: estate.value } : { via });
 const otherName = computed(() => (otherLive === undefined ? `` : (providerSpec(otherLive)?.accountLabel ?? otherLive)));
 </script>
 
@@ -339,7 +386,7 @@ const otherName = computed(() => (otherLive === undefined ? `` : (providerSpec(o
     <RowGroup :label="providerName">
         <!-- Adding one more is the list's own action, where every list keeps it; with nothing in the list, the card says it. -->
         <template v-if="rows.length > 0 && !signingInHere" #actions>
-            <Button v-for="way in ways" :key="way.via" size="small" tier="boring" :label="way.label" :disabled="busy" @click="ask(way.via)">
+            <Button v-for="way in ways" :key="way.key" size="small" tier="boring" :label="way.label" :disabled="busy" @click="ask(way.via, way.variant)">
                 <template #icon><Icon name="plus" /></template>
             </Button>
         </template>
@@ -385,7 +432,7 @@ const otherName = computed(() => (otherLive === undefined ? `` : (providerSpec(o
                     :label="t(`ui.action.reconnect`)"
                     size="small"
                     :disabled="busy"
-                    @click="ask(row.via)"
+                    @click="ask(row.via, row.variant)"
                 />
                 <Button
                     :label="t(`ui.action.disconnect`)"
@@ -419,7 +466,7 @@ const otherName = computed(() => (otherLive === undefined ? `` : (providerSpec(o
                 <!-- The plan is the sign-in's own first step, so it is asked beside the button, before anything starts. -->
                 <EstatePicker v-if="offersEstates" v-model="estate" :provider="provider" :label="t(`connect.connect.whichPlan`)" />
                 <div class="flex flex-wrap gap-2">
-                    <Button v-for="way in ways" :key="way.via" size="small" :label="way.label" :disabled="busy" @click="ask(way.via)">
+                    <Button v-for="way in ways" :key="way.key" size="small" :label="way.label" :disabled="busy" @click="ask(way.via, way.variant)">
                         <template #icon><Icon name="sign-in" /></template>
                     </Button>
                 </div>

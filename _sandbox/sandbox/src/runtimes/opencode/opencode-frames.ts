@@ -31,20 +31,43 @@ const TOOL_EVENTS: ReadonlySet<string> = new Set([
 ]);
 export const isToolEvent = (event: OpenCodeEvent): event is ToolEvent => TOOL_EVENTS.has(event.type);
 
-// The session an event is about, where it names one; most of OpenCode's do.
+// The session an event is about, where it names one; most of OpenCode's do at `data.sessionID`, and a form it raises
+// names its session on the form itself.
 export const sessionOf = (event: OpenCodeEvent): string | undefined => {
+    if (event.type === "form.created") {
+        return event.data.form.sessionID;
+    }
     const session = (event.data as { readonly sessionID?: unknown } | undefined)?.sessionID;
     return typeof session === "string" ? session : undefined;
 };
 
-// What a step cost, as the usage frame counts it; keyed per step, since OpenCode reports each model call on its own.
-export const stepTokens = (event: EventOf<"session.step.ended">): TurnTokens => ({
-    inputTokens: event.data.tokens.input,
-    outputTokens: event.data.tokens.output,
-    cacheReadTokens: event.data.tokens.cache.read,
-    cacheCreationTokens: event.data.tokens.cache.write,
-    costUsd: event.data.cost,
+// What one model call cost, as the usage frame counts it. OpenCode reports reasoning apart from the output it is billed
+// as (2.0.26 takes it out of the provider's completion count), so it is added back: the usage frame has no reasoning
+// bucket, and a thinking model's spend would otherwise read as a fraction of what it was.
+export const tokensOf = (tokens: EventOf<"session.step.ended">["data"]["tokens"], cost: number): TurnTokens => ({
+    inputTokens: tokens.input,
+    outputTokens: tokens.output + tokens.reasoning,
+    cacheReadTokens: tokens.cache.read,
+    cacheCreationTokens: tokens.cache.write,
+    costUsd: cost,
 });
+
+// One step's spend; keyed per step, since OpenCode reports each model call on its own.
+export const stepTokens = (event: EventOf<"session.step.ended">): TurnTokens => tokensOf(event.data.tokens, event.data.cost);
+
+// What a session spent between two of its running totals (`session.usage.updated`, the session's own record), less
+// what its steps already reported: the model calls OpenCode makes for the session that no step reports (its title, a
+// compaction). Never below nothing, so a total read late or a step reported twice cannot take spend away.
+export const unreportedTokens = (before: TurnTokens, after: TurnTokens, reported: TurnTokens): TurnTokens => {
+    const left = (key: "inputTokens" | "outputTokens" | "cacheReadTokens" | "cacheCreationTokens"): number => Math.max(0, after[key] - before[key] - reported[key]);
+    return {
+        inputTokens: left("inputTokens"),
+        outputTokens: left("outputTokens"),
+        cacheReadTokens: left("cacheReadTokens"),
+        cacheCreationTokens: left("cacheCreationTokens"),
+        costUsd: Math.max(0, (after.costUsd ?? 0) - (before.costUsd ?? 0) - (reported.costUsd ?? 0)),
+    };
+};
 
 // A finished call's words: its text parts joined; a file it returned is named rather than inlined.
 const contentText = (content: readonly { readonly type: string; readonly text?: string; readonly uri?: string }[]): string =>

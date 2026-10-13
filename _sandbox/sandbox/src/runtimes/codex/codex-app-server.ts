@@ -1,12 +1,13 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { spawnAs } from "../../workload/workload-class.js";
-import { whenAborted } from "@intentic/base/async";
+import { sleep, whenAborted } from "@intentic/base/async";
 import { namespaceTargetOf, nsenterArgv, type NamespaceEntryReference } from "../../workload/namespace-entry.js";
 import { CODEX_BINARY_MISSING, codexBinary } from "./codex-path.js";
 import { type CodexSubagentThreads, codexSubagentThreads } from "./codex-subagents.js";
 import { opt } from "../../opt.js";
 import { jsonLines, outputTail } from "../stdio/child-output.js";
 import { z } from "zod";
+import type { AgentEvent } from "@intentic/sandbox-contract";
 
 // Codex client surface: the request fields Intentic sends and the item fields it renders, not the full generated
 // protocol. Unknown notifications/item kinds pass through untouched; malformed fields on a known kind fail at the
@@ -23,6 +24,32 @@ export interface CodexThreadOptions {
     readonly approvalPolicy: "never" | "untrusted";
     readonly model?: string;
     readonly modelReasoningEffort?: CodexReasoningEffort;
+    // The service tier the turn asks for, by the id model/list publishes ("priority" is the one it names Fast). Absent
+    // is the standard tier: Codex never applies a model's catalog default on its own.
+    readonly serviceTier?: string;
+    // Codex's own collaboration mode for the turn. Absent leaves the thread as it stands; a fresh app-server starts
+    // in default, so only a planning phase and the execution that follows it name one.
+    readonly collaborationMode?: "plan" | "default";
+}
+
+// The owner's standing instructions in the two fields thread/start and thread/resume take: `base` replaces Codex's
+// base prompt, `developer` adds a developer message ahead of its skills.
+export interface CodexInstructions {
+    readonly base?: string;
+    readonly developer?: string;
+}
+
+// Codex's typed reason for a failure (codexErrorInfo): the variant's name, and the upstream HTTP status where the
+// variant carries one. Read before any sentence, since the words change between releases and the type does not.
+export interface CodexFailureInfo {
+    readonly kind: string;
+    readonly httpStatus?: number;
+}
+
+// How a turn failed: Codex's sentence, and its typed reason where it gave one.
+export interface CodexTurnError {
+    readonly message: string;
+    readonly info?: CodexFailureInfo;
 }
 
 export type JsonValue = string | number | boolean | null | readonly JsonValue[] | { readonly [key: string]: JsonValue };
@@ -36,6 +63,14 @@ export interface CodexNamespace {
     readonly namespace?: NamespaceEntryReference;
 }
 
+// Frames the daemon's own tools raised for this turn while it runs (a card a hook's gate call parks on, a page the model
+// asked for): the loop's, read here so they reach the stream while app-server waits on that very call.
+export interface CodexFrameInbox {
+    readonly take: () => readonly AgentEvent[];
+    // Called whenever a frame arrives; the returned function stops it.
+    readonly watch: (wake: () => void) => () => void;
+}
+
 export interface CodexTurn {
     readonly prompt: string;
     readonly images?: readonly string[];
@@ -43,6 +78,7 @@ export interface CodexTurn {
     readonly env: Record<string, string>;
     readonly modelProvider?: string;
     readonly config?: Readonly<Record<string, JsonValue>>;
+    readonly instructions?: CodexInstructions;
     readonly options: CodexThreadOptions;
     // Each message here delivers to the running turn as turn/steer; per-turn, not shared, since plan emulation runs two
     // app-servers in sequence.
@@ -52,12 +88,25 @@ export interface CodexTurn {
     readonly namespace?: CodexNamespace;
     // How deep the turn's conversation sits under the spawns above it: the app-server's OOM rank (workload-class.ts).
     readonly spawnDepth?: number;
+    // MCP servers the turn must not start without: Codex calls a hook's server without waiting for it to connect, and
+    // a hook whose server is not there yet is a hook that let its call through. A server named here that does not
+    // connect fails the turn before it starts.
+    readonly requiredMcp?: readonly string[];
+    readonly frames?: CodexFrameInbox;
     readonly signal: AbortSignal;
 }
 
 interface CodexMcpContent {
     readonly type: string;
     readonly text?: string;
+}
+
+// One file a patch touches. `diff` is what app-server sends for it: the whole content of an added or deleted file, a
+// unified diff of an updated one; absent only where a test or an older server left it out.
+export interface CodexFileChange {
+    readonly path: string;
+    readonly kind: "add" | "delete" | "update";
+    readonly diff?: string;
 }
 
 export type CodexItem =
@@ -74,9 +123,11 @@ export type CodexItem =
     | {
           readonly id: string;
           readonly type: "file_change";
-          readonly changes: readonly { readonly path: string; readonly kind: "add" | "delete" | "update" }[];
+          readonly changes: readonly CodexFileChange[];
           readonly status: "in_progress" | "completed" | "failed";
       }
+    // The plan a planning turn proposed, lifted out of the message that carried it (Codex's <proposed_plan> block).
+    | { readonly id: string; readonly type: "plan"; readonly text: string }
     | {
           readonly id: string;
           readonly type: "mcp_tool_call";
@@ -163,24 +214,61 @@ export type CodexEvent =
           readonly respond: (answers: Readonly<Record<string, readonly string[]>>) => void;
       }
     // A command Codex wants a verdict on (item/commandExecution/requestApproval). command is the classifier's text;
-    // reason is Codex's own words, shown on the card. respond blocks the turn, the same as a Bash hook's hold.
+    // reason is Codex's own words, shown on the card. respond blocks the turn, the same as a Bash hook's hold;
+    // `remember` answers acceptForSession, so the thread stops asking about the same command.
     | {
           readonly type: "command_approval.requested";
           readonly command: string;
           readonly reason?: string;
           // Where Codex will run it, when the request says; the gate places an install by it.
           readonly cwd?: string;
-          readonly respond: (allow: boolean) => void;
+          // The command's item, which is also the call id its PreToolUse hook carried.
+          readonly item_id?: string;
+          // Asked from one of the turn's subagents' threads rather than its own.
+          readonly subagent?: true;
+          readonly respond: (allow: boolean, remember?: boolean) => void;
       }
+    // A patch Codex wants applied (item/fileChange/requestApproval). The request names only the item: its files came
+    // with that item's item.started, which precedes it on the same queue.
+    | {
+          readonly type: "file_change_approval.requested";
+          readonly item_id: string;
+          readonly reason?: string;
+          // Asked from one of the turn's subagents' threads rather than its own.
+          readonly subagent?: true;
+          readonly respond: (allow: boolean, remember?: boolean) => void;
+      }
+    // Extra sandbox permissions for the turn (item/permissions/requestApproval): network reach or filesystem roots.
+    // `writes` says whether filesystem access is among them, which a read-only planning phase must not grant.
+    | {
+          readonly type: "permissions_approval.requested";
+          readonly reason?: string;
+          readonly writes: boolean;
+          readonly respond: (grant: "all" | "network" | "none") => void;
+      }
+    // Live text of an item still running: an agent message's prose, a reasoning summary (`part` is its summary
+    // index, a new part a new paragraph), or a command's output. The item's completion carries the whole of it.
+    | { readonly type: "item.delta"; readonly item_id: string; readonly channel: "message" | "reasoning" | "output"; readonly text: string; readonly part?: number }
+    // How full the thread's context window is after the latest model request.
+    | { readonly type: "context"; readonly tokens: number; readonly window: number }
+    // Codex served the turn on another model than it was asked for (model/rerouted).
+    | { readonly type: "model.rerouted"; readonly from: string; readonly to: string; readonly reason: string }
     | { readonly type: "turn.completed"; readonly usage?: CodexUsage }
-    | { readonly type: "turn.failed"; readonly error: { readonly message: string } }
-    | { readonly type: "error"; readonly message: string }
+    // A failed or interrupted turn still spent what it spent, so its usage rides the failure too.
+    | { readonly type: "turn.failed"; readonly error: CodexTurnError; readonly usage?: CodexUsage }
+    // `willRetry` is Codex saying it is already retrying this failure inside the turn: a status, not an ending.
+    | { readonly type: "error"; readonly message: string; readonly willRetry?: boolean; readonly info?: CodexFailureInfo }
     // Codex's separate advisory channel: the turn carries on regardless, so this is never a failure. Kept apart from
     // `error` because the two read alike but mean opposite things.
     | { readonly type: "warning"; readonly message: string }
     // Rate limits pushed by app-server (account/rateLimits/updated), the same windows ChatGPT's usage endpoint answers
     // with. Passed through raw; usage/translator-usage.ts is the one place that parses the snapshot shape.
-    | { readonly type: "rate_limits"; readonly snapshot: unknown };
+    | { readonly type: "rate_limits"; readonly snapshot: unknown }
+    // One of the turn's own hooks failed (hook/completed with status failed): Codex carries on as if it had no
+    // objection. `event` is Codex's name for the moment (preToolUse, postToolUse, stop); `id` the call it was about.
+    | { readonly type: "hook.failed"; readonly event: string; readonly id?: string; readonly message: string }
+    // A frame from the daemon's own tools (CodexTurn.frames), passed through as it came.
+    | { readonly type: "frame"; readonly frame: AgentEvent };
 
 export type CodexRunner = (turn: CodexTurn) => AsyncIterable<CodexEvent>;
 
@@ -248,99 +336,103 @@ const mcpContent = (value: unknown): CodexMcpContent | undefined => {
     return { type: block["type"], ...(typeof block["text"] === "string" ? { text: block["text"] } : {}) };
 };
 
+const reasoningItem = (id: string, item: JsonObject): CodexItem => {
+    const summary = item["summary"];
+    if (!Array.isArray(summary) || !summary.every((part) => typeof part === "string")) {
+        throw new Error("Codex app-server sent invalid reasoning.summary");
+    }
+    return { id, type: "reasoning", text: summary.join("\n") };
+};
+
+const commandItem = (id: string, item: JsonObject): CodexItem => {
+    const exitCode = item["exitCode"];
+    if (exitCode !== undefined && exitCode !== null && typeof exitCode !== "number") {
+        throw new Error("Codex app-server sent invalid commandExecution.exitCode");
+    }
+    const aggregatedOutput = optionalString(item, "aggregatedOutput", "commandExecution");
+    return {
+        id,
+        type: "command_execution",
+        command: string(item, "command", "commandExecution"),
+        aggregated_output: aggregatedOutput ?? "",
+        ...(typeof exitCode === "number" ? { exit_code: exitCode } : {}),
+        status: status(item["status"], "commandExecution"),
+    };
+};
+
+const fileChangeItem = (id: string, item: JsonObject): CodexItem => {
+    const rawChanges = item["changes"];
+    if (!Array.isArray(rawChanges)) {
+        throw new Error("Codex app-server sent invalid fileChange.changes");
+    }
+    // Return type is explicit: the guard below narrows a string, but an untyped literal would widen it back.
+    const changes = rawChanges.map((entry, index): CodexFileChange => {
+        const what = `fileChange.changes[${index}]`;
+        const change = object(entry, what);
+        const kind = string(object(change["kind"], `${what}.kind`), "type", `${what}.kind`);
+        if (kind !== "add" && kind !== "delete" && kind !== "update") {
+            throw new Error(`Codex app-server sent invalid ${what}.kind`);
+        }
+        return { path: string(change, "path", what), kind, ...opt("diff", optionalString(change, "diff", what)) };
+    });
+    return { id, type: "file_change", changes, status: status(item["status"], "fileChange") };
+};
+
+const mcpResultOf = (raw: unknown): { readonly content: readonly CodexMcpContent[] } | undefined => {
+    if (raw === undefined || raw === null) {
+        return undefined;
+    }
+    const content = object(raw, "mcpToolCall.result")["content"];
+    if (!Array.isArray(content)) {
+        throw new Error("Codex app-server sent invalid mcpToolCall.result.content");
+    }
+    return { content: content.map(mcpContent).filter((block): block is CodexMcpContent => block !== undefined) };
+};
+
+const mcpItem = (id: string, item: JsonObject): CodexItem => {
+    const rawError = item["error"];
+    const error =
+        rawError === undefined || rawError === null ? undefined : { message: string(object(rawError, "mcpToolCall.error"), "message", "mcpToolCall.error") };
+    return {
+        id,
+        type: "mcp_tool_call",
+        server: string(item, "server", "mcpToolCall"),
+        tool: string(item, "tool", "mcpToolCall"),
+        status: status(item["status"], "mcpToolCall"),
+        ...opt("result", mcpResultOf(item["result"])),
+        ...opt("error", error),
+    };
+};
+
+const imageItem = (id: string, item: JsonObject): CodexItem => ({
+    id,
+    type: "image_generation",
+    status: string(item, "status", "imageGeneration"),
+    ...opt("revised_prompt", optionalString(item, "revisedPrompt", "imageGeneration")),
+    result: string(item, "result", "imageGeneration"),
+    ...opt("saved_path", optionalString(item, "savedPath", "imageGeneration")),
+});
+
+// One reader per item kind this client renders; any other kind passes by untouched.
+const ITEM_READERS = {
+    agentMessage: (id, item) => ({ id, type: "agent_message", text: string(item, "text", "agentMessage") }),
+    reasoning: reasoningItem,
+    commandExecution: commandItem,
+    fileChange: fileChangeItem,
+    plan: (id, item) => ({ id, type: "plan", text: string(item, "text", "plan") }),
+    mcpToolCall: mcpItem,
+    webSearch: (id, item) => ({ id, type: "web_search", query: string(item, "query", "webSearch") }),
+    imageGeneration: imageItem,
+    contextCompaction: (id) => ({ id, type: "context_compaction" }),
+} as const satisfies Readonly<Record<string, (id: string, item: JsonObject) => CodexItem>>;
+
+const isReadKind = (type: string): type is keyof typeof ITEM_READERS => Object.hasOwn(ITEM_READERS, type);
+
 const normalizeItem = (value: unknown): CodexItem | undefined => {
     const item = object(value, "thread item");
     const type = string(item, "type", "thread item");
     const id = string(item, "id", `${type} item`);
-    if (type === "agentMessage") {
-        return { id, type: "agent_message", text: string(item, "text", type) };
-    }
-    if (type === "reasoning") {
-        const summary = item["summary"];
-        if (!Array.isArray(summary) || !summary.every((part) => typeof part === "string")) {
-            throw new Error("Codex app-server sent invalid reasoning.summary");
-        }
-        return { id, type: "reasoning", text: summary.join("\n") };
-    }
-    if (type === "commandExecution") {
-        const exitCode = item["exitCode"];
-        if (exitCode !== undefined && exitCode !== null && typeof exitCode !== "number") {
-            throw new Error("Codex app-server sent invalid commandExecution.exitCode");
-        }
-        const aggregatedOutput = item["aggregatedOutput"];
-        if (aggregatedOutput !== undefined && aggregatedOutput !== null && typeof aggregatedOutput !== "string") {
-            throw new Error("Codex app-server sent invalid commandExecution.aggregatedOutput");
-        }
-        return {
-            id,
-            type: "command_execution",
-            command: string(item, "command", type),
-            aggregated_output: typeof aggregatedOutput === "string" ? aggregatedOutput : "",
-            ...(typeof exitCode === "number" ? { exit_code: exitCode } : {}),
-            status: status(item["status"], type),
-        };
-    }
-    if (type === "fileChange") {
-        const rawChanges = item["changes"];
-        if (!Array.isArray(rawChanges)) {
-            throw new Error("Codex app-server sent invalid fileChange.changes");
-        }
-        // Return type is explicit: the guard below narrows a string, but an untyped literal would widen it back.
-        const changes = rawChanges.map((entry, index): { readonly path: string; readonly kind: "add" | "delete" | "update" } => {
-            const change = object(entry, `fileChange.changes[${index}]`);
-            const kind = string(object(change["kind"], `fileChange.changes[${index}].kind`), "type", `fileChange.changes[${index}].kind`);
-            if (kind !== "add" && kind !== "delete" && kind !== "update") {
-                throw new Error(`Codex app-server sent invalid fileChange.changes[${index}].kind`);
-            }
-            return { path: string(change, "path", `fileChange.changes[${index}]`), kind };
-        });
-        return { id, type: "file_change", changes, status: status(item["status"], type) };
-    }
-    if (type === "mcpToolCall") {
-        const rawResult = item["result"];
-        const rawError = item["error"];
-        let result: { readonly content: readonly CodexMcpContent[] } | undefined;
-        if (rawResult !== undefined && rawResult !== null) {
-            const resultRecord = object(rawResult, "mcpToolCall.result");
-            const content = resultRecord["content"];
-            if (!Array.isArray(content)) {
-                throw new Error("Codex app-server sent invalid mcpToolCall.result.content");
-            }
-            result = { content: content.map(mcpContent).filter((block): block is CodexMcpContent => block !== undefined) };
-        }
-        let error: { readonly message: string } | undefined;
-        if (rawError !== undefined && rawError !== null) {
-            error = { message: string(object(rawError, "mcpToolCall.error"), "message", "mcpToolCall.error") };
-        }
-        return {
-            id,
-            type: "mcp_tool_call",
-            server: string(item, "server", type),
-            tool: string(item, "tool", type),
-            status: status(item["status"], type),
-            ...(result !== undefined ? { result } : {}),
-            ...(error !== undefined ? { error } : {}),
-        };
-    }
-    if (type === "webSearch") {
-        return { id, type: "web_search", query: string(item, "query", type) };
-    }
-    if (type === "imageGeneration") {
-        const revisedPrompt = optionalString(item, "revisedPrompt", type);
-        const savedPath = optionalString(item, "savedPath", type);
-        return {
-            id,
-            type: "image_generation",
-            status: string(item, "status", type),
-            ...(revisedPrompt !== undefined ? { revised_prompt: revisedPrompt } : {}),
-            result: string(item, "result", type),
-            ...(savedPath !== undefined ? { saved_path: savedPath } : {}),
-        };
-    }
-    if (type === "contextCompaction") {
-        return { id, type: "context_compaction" };
-    }
-    return undefined;
+    return isReadKind(type) ? ITEM_READERS[type](id, item) : undefined;
 };
 
 export interface AppServerNotification {
@@ -630,6 +722,37 @@ const usageFrom = (value: unknown): CodexUsage => {
     };
 };
 
+// How full the window is after the latest request, as Codex itself measures it for auto-compaction: everything that
+// request held, its answer included, since the next one carries both. Undefined while the model's window is unknown.
+const ContextParamsSchema = z.object({
+    tokenUsage: z.object({ last: z.object({ totalTokens: z.number() }), modelContextWindow: z.number().nullish().catch(undefined) }),
+});
+const contextFrom = (params: JsonObject): CodexEvent | undefined => {
+    const parsed = ContextParamsSchema.safeParse(params);
+    const window = parsed.success ? parsed.data.tokenUsage.modelContextWindow : undefined;
+    return parsed.success && typeof window === "number" && window > 0 ? { type: "context", tokens: parsed.data.tokenUsage.last.totalTokens, window } : undefined;
+};
+
+// codexErrorInfo as this client reads it: a bare variant name, or a one-key object whose value may carry the upstream
+// HTTP status. Anything else (an unknown shape from a later release) reads as no type, leaving the sentence to speak.
+const failureInfoOf = (raw: unknown): CodexFailureInfo | undefined => {
+    if (typeof raw === "string") {
+        return { kind: raw };
+    }
+    const [entry] = Object.entries(maybeObject(raw) ?? {});
+    if (entry === undefined) {
+        return undefined;
+    }
+    const httpStatus = maybeObject(entry[1])?.["httpStatusCode"];
+    return { kind: entry[0], ...(typeof httpStatus === "number" ? { httpStatus } : {}) };
+};
+
+// A TurnError as this client reads it: the sentence, and its type where Codex gave one.
+const turnErrorOf = (value: unknown, what: string): CodexTurnError => {
+    const error = object(value, what);
+    return { message: string(error, "message", what), ...opt("info", failureInfoOf(error["codexErrorInfo"])) };
+};
+
 // What this client reads of Codex's multi-agent calls and of its subagents' threads, parsed at the stream, tolerantly past
 // what identifies them: a subagent's bookkeeping in another shape is left out rather than failing the turn.
 const CollabItemSchema = z.object({
@@ -765,6 +888,12 @@ const skillInput = (prompt: string, skills: readonly CodexSkill[]): { readonly s
 // Whether a request is this turn's to answer: raised in one of its own turns, or in a thread one of its subagents runs
 // in, which on this turn's own connection is every thread but the turn's own. A subagent's command answers to the same
 // rules its parent's does.
+// Whether a request came from a thread other than the turn's own: one of its subagents'.
+const subagentAsked = (params: JsonObject | undefined, own: string): true | undefined => {
+    const thread = RequestScopeSchema.safeParse(params).data?.threadId;
+    return thread !== undefined && thread !== own ? true : undefined;
+};
+
 const ownRequest =
     (turnIds: ReadonlySet<string>, own: string) =>
     (params: JsonObject): boolean => {
@@ -784,7 +913,7 @@ const textField = (params: JsonObject, key: string): string | undefined => {
 const commandApprovalFrom = (
     raw: unknown,
     ours: (params: JsonObject) => boolean,
-): { readonly command: string; readonly reason?: string; readonly cwd?: string } | undefined => {
+): { readonly command: string; readonly reason?: string; readonly cwd?: string; readonly itemId?: string } | undefined => {
     const params = maybeObject(raw);
     if (params === undefined || !ours(params)) {
         return undefined;
@@ -793,7 +922,12 @@ const commandApprovalFrom = (
     if (command === undefined) {
         return undefined;
     }
-    return { command, ...opt("reason", textField(params, "reason")), ...opt("cwd", textField(params, "cwd")) };
+    return {
+        command,
+        ...opt("reason", textField(params, "reason")),
+        ...opt("cwd", textField(params, "cwd")),
+        ...opt("itemId", textField(params, "itemId")),
+    };
 };
 
 // Answers one command approval request: a card when there's a command to judge, else the standing yes. The reply rides
@@ -801,18 +935,98 @@ const commandApprovalFrom = (
 async function* commandApprovalFrames(
     notification: Extract<AppServerMessage, { kind: "request" }>,
     ours: (params: JsonObject) => boolean,
+    own: string,
 ): AsyncGenerator<CodexEvent> {
     const approval = commandApprovalFrom(notification.params, ours);
     if (approval === undefined) {
         notification.respond({ decision: "accept" });
         return;
     }
+    const remembers = offersSessionGrant(DecisionsSchema.safeParse(notification.params).data);
     yield {
         type: "command_approval.requested",
         command: approval.command,
         ...opt("reason", approval.reason),
         ...opt("cwd", approval.cwd),
-        respond: (allow) => notification.respond({ decision: allow ? "accept" : "decline" }),
+        ...opt("item_id", approval.itemId),
+        ...opt("subagent", subagentAsked(maybeObject(notification.params), own)),
+        respond: (allow, remember) => notification.respond({ decision: approvalDecision(allow, remember === true && remembers) }),
+    };
+}
+
+// accept/decline are the schema's words; decline lets the turn carry on, unlike cancel, which interrupts it.
+// acceptForSession is the remembered yes, which Codex then stops asking about for the thread's life.
+const approvalDecision = (allow: boolean, remember: boolean): JsonValue => {
+    if (!allow) {
+        return "decline";
+    }
+    return remember ? "acceptForSession" : "accept";
+};
+
+// Whether a request lets this client answer with acceptForSession: one that lists its decisions must name it, and one
+// that lists none is from a server that offers every decision.
+const DecisionsSchema = z.object({ availableDecisions: z.array(z.json()).nullish().catch(undefined) });
+const offersSessionGrant = (request: z.infer<typeof DecisionsSchema> | undefined): boolean => {
+    const offered = request?.availableDecisions;
+    return offered === undefined || offered === null || offered.includes("acceptForSession");
+};
+
+// What this client reads of a patch's approval request and of a request for extra sandbox permissions. The asked-for
+// profile travels back as given, so its halves stay JSON rather than a shape this client would have to keep in step.
+const FileChangeAskSchema = z.object({ itemId: z.string(), reason: z.string().nullish().catch(undefined) });
+const PermissionsAskSchema = z.object({
+    reason: z.string().nullish().catch(undefined),
+    permissions: z.object({ network: z.json().nullish().catch(undefined), fileSystem: z.json().nullish().catch(undefined) }).catch({}),
+});
+
+// A patch's approval request: a card for one of this turn's own, the standing yes for any other's.
+async function* fileChangeApprovalFrames(
+    notification: Extract<AppServerMessage, { kind: "request" }>,
+    ours: (params: JsonObject) => boolean,
+    own: string,
+): AsyncGenerator<CodexEvent> {
+    const params = maybeObject(notification.params);
+    const asked = FileChangeAskSchema.safeParse(params);
+    if (params === undefined || !asked.success || !ours(params)) {
+        notification.respond({ decision: "accept" });
+        return;
+    }
+    yield {
+        type: "file_change_approval.requested",
+        item_id: asked.data.itemId,
+        ...opt("reason", asked.data.reason ?? undefined),
+        ...opt("subagent", subagentAsked(params, own)),
+        respond: (allow, remember) => notification.respond({ decision: approvalDecision(allow, remember === true) }),
+    };
+}
+
+// A request for extra sandbox permissions. Granted as asked unless the consumer withholds some: `network` keeps the
+// network half and drops filesystem roots, `none` grants nothing. Scoped to the turn, never remembered past it.
+async function* permissionsApprovalFrames(
+    notification: Extract<AppServerMessage, { kind: "request" }>,
+    ours: (params: JsonObject) => boolean,
+): AsyncGenerator<CodexEvent> {
+    const params = maybeObject(notification.params);
+    const parsed = PermissionsAskSchema.safeParse(params);
+    const asked = parsed.success ? parsed.data : { permissions: {} };
+    const { network, fileSystem } = asked.permissions;
+    const grant = (scope: "all" | "network" | "none"): void =>
+        notification.respond({
+            permissions: {
+                ...(scope !== "none" && network != null ? { network } : {}),
+                ...(scope === "all" && fileSystem != null ? { fileSystem } : {}),
+            },
+            scope: "turn",
+        });
+    if (params === undefined || !ours(params)) {
+        grant("all");
+        return;
+    }
+    yield {
+        type: "permissions_approval.requested",
+        ...opt("reason", parsed.data?.reason ?? undefined),
+        writes: fileSystem != null,
+        respond: grant,
     };
 }
 
@@ -962,14 +1176,13 @@ const ownEnding = (notification: AppServerNotification, turnId: string, usage: C
     }
     const completedStatus = string(completed, "status", "turn/completed params.turn");
     if (completedStatus === "failed") {
-        const error = object(completed["error"], "turn/completed params.turn.error");
-        return { type: "turn.failed", error: { message: string(error, "message", "turn/completed params.turn.error") } };
+        return { type: "turn.failed", error: turnErrorOf(completed["error"], "turn/completed params.turn.error"), ...opt("usage", usage) };
     }
     if (completedStatus === "completed") {
         return { type: "turn.completed", ...opt("usage", usage) };
     }
     if (completedStatus === "interrupted") {
-        return { type: "turn.failed", error: { message: "Codex turn was interrupted" } };
+        return { type: "turn.failed", error: { message: "Codex turn was interrupted" }, ...opt("usage", usage) };
     }
     throw new Error("Codex app-server sent invalid turn/completed params.turn.status");
 };
@@ -983,15 +1196,15 @@ async function* requestEvents(
     notification: Extract<AppServerMessage, { kind: "request" }>,
     ours: ReturnType<typeof ownRequest>,
     turnIds: Set<string>,
+    own: string,
 ): AsyncGenerator<CodexEvent> {
-    // accept/decline are the schema's words; decline lets the turn carry on, unlike cancel, which
-    // interrupts it.
+    // Each approval is raised for the consumer to answer by the turn's posture; app-server stays parked on it.
     if (notification.method === COMMAND_APPROVAL_REQUEST) {
-        yield* commandApprovalFrames(notification, ours);
+        yield* commandApprovalFrames(notification, ours, own);
         return;
     }
     if (notification.method === FILE_CHANGE_APPROVAL_REQUEST) {
-        notification.respond({ decision: "accept" });
+        yield* fileChangeApprovalFrames(notification, ours, own);
         return;
     }
     if (notification.method === ELICITATION_REQUEST) {
@@ -999,10 +1212,7 @@ async function* requestEvents(
         return;
     }
     if (notification.method === PERMISSIONS_APPROVAL_REQUEST) {
-        // Grants the profile Codex asked for; the container is the isolation boundary, so narrowing
-        // here protects nothing.
-        const params = object(notification.params, `${PERMISSIONS_APPROVAL_REQUEST} params`);
-        notification.respond({ permissions: (params["permissions"] ?? {}) as JsonValue });
+        yield* permissionsApprovalFrames(notification, ours);
         return;
     }
     // The question request. A question for another turn is answered empty rather than shown.
@@ -1020,6 +1230,47 @@ async function* requestEvents(
             }),
     };
     return;
+}
+
+// The live-text notifications this client streams, by the channel each feeds. Raw reasoning text (item/reasoning/
+// textDelta) is left out: the completed item shows the summary only, and streaming what it then drops would leave the
+// two disagreeing.
+const DELTA_CHANNELS = {
+    "item/agentMessage/delta": "message",
+    "item/reasoning/summaryTextDelta": "reasoning",
+    "item/commandExecution/outputDelta": "output",
+} as const satisfies Readonly<Record<string, Extract<CodexEvent, { type: "item.delta" }>["channel"]>>;
+const isDeltaMethod = (method: string): method is keyof typeof DELTA_CHANNELS => Object.hasOwn(DELTA_CHANNELS, method);
+const DeltaParamsSchema = z.object({ turnId: z.string(), itemId: z.string(), delta: z.string(), summaryIndex: z.number().optional().catch(undefined) });
+const ReroutedParamsSchema = z.object({ turnId: z.string(), fromModel: z.string(), toModel: z.string(), reason: z.string().catch("") });
+
+const HookCompletedSchema = z.object({
+    threadId: z.string(),
+    run: z.object({
+        id: z.string(),
+        eventName: z.string(),
+        status: z.string(),
+        entries: z.array(z.object({ text: z.string() }).loose()).catch([]),
+    }),
+});
+
+// A hook run's call id: Codex names a tool hook's run `<event>:<order>:<source>:<call id>`.
+const HOOKED_TOOL_EVENTS = new Set(["preToolUse", "postToolUse", "permissionRequest"]);
+
+// A failed hook of the turn's own thread, as the event the loop reads; a subagent's thread is its own business.
+function* hookFailures(notification: AppServerNotification, threadId: string): Generator<CodexEvent> {
+    const completed = HookCompletedSchema.safeParse(notification.params);
+    if (!completed.success || completed.data.threadId !== threadId || completed.data.run.status !== "failed") {
+        return;
+    }
+    const { run } = completed.data;
+    const id = HOOKED_TOOL_EVENTS.has(run.eventName) ? run.id.slice(run.id.lastIndexOf(":") + 1) : undefined;
+    yield {
+        type: "hook.failed",
+        event: run.eventName,
+        ...opt("id", id === "" ? undefined : id),
+        message: run.entries.map((entry) => entry.text).join("; "),
+    };
 }
 
 interface CodexNotificationScope {
@@ -1055,8 +1306,38 @@ function* notificationEvents(notification: AppServerNotification, scope: CodexNo
     if (notification.method === "error") {
         const params = object(notification.params, "error params");
         if (turnIds.has(string(params, "turnId", "error params"))) {
-            yield { type: "error", message: string(object(params["error"], "error params.error"), "message", "error params.error") };
+            const error = turnErrorOf(params["error"], "error params.error");
+            yield { type: "error", message: error.message, willRetry: params["willRetry"] === true, ...opt("info", error.info) };
         }
+        return;
+    }
+    if (isDeltaMethod(notification.method)) {
+        const delta = DeltaParamsSchema.safeParse(notification.params);
+        if (delta.success && turnIds.has(delta.data.turnId) && delta.data.delta !== "") {
+            yield {
+                type: "item.delta",
+                item_id: delta.data.itemId,
+                channel: DELTA_CHANNELS[notification.method],
+                text: delta.data.delta,
+                ...opt("part", delta.data.summaryIndex),
+            };
+        }
+        return;
+    }
+    if (notification.method === "model/rerouted") {
+        const rerouted = ReroutedParamsSchema.safeParse(notification.params);
+        if (rerouted.success && turnIds.has(rerouted.data.turnId)) {
+            yield { type: "model.rerouted", from: rerouted.data.fromModel, to: rerouted.data.toModel, reason: rerouted.data.reason };
+        }
+        return;
+    }
+    yield* sideEvents(notification, threadId);
+}
+
+// What the thread says beside its items: a warning, and a hook of its own that failed.
+function* sideEvents(notification: AppServerNotification, threadId: string): Generator<CodexEvent> {
+    if (notification.method === "hook/completed") {
+        yield* hookFailures(notification, threadId);
         return;
     }
     if (notification.method === "warning") {
@@ -1064,7 +1345,6 @@ function* notificationEvents(notification: AppServerNotification, scope: CodexNo
         if (params["threadId"] === undefined || params["threadId"] === null || params["threadId"] === threadId) {
             yield { type: "warning", message: string(params, "message", "warning params") };
         }
-        return;
     }
 }
 
@@ -1078,8 +1358,52 @@ interface StartedCodexTurn {
         readonly sandboxPolicy: JsonValue;
         readonly model?: string;
         readonly effort?: CodexReasoningEffort;
+        readonly serviceTier?: string;
+        readonly collaborationMode?: JsonValue;
     };
 }
+
+// Codex's collaboration mode as turn/start takes it. The mode's settings outrank the turn's own model and effort, so
+// both ride inside it unchanged; null developer instructions take the mode's built-in ones, which Codex adds beside the
+// owner's rather than over them. Absent without a model, which the settings cannot leave out.
+const collaborationModeOf = (options: CodexThreadOptions): JsonValue | undefined =>
+    options.collaborationMode === undefined || options.model === undefined
+        ? undefined
+        : {
+              mode: options.collaborationMode,
+              settings: { model: options.model, reasoning_effort: options.modelReasoningEffort ?? null, developer_instructions: null },
+          };
+
+const McpStatusSchema = z.object({ data: z.array(z.object({ name: z.string(), runtimeStatus: z.string().nullish().catch(undefined) }).loose()) });
+
+// How long a required server may take to connect, and how often its status is asked meanwhile. A door server is the
+// daemon's own and connects in milliseconds; past this something is wrong, and the turn must not run without it.
+const REQUIRED_MCP_WAIT_MS = 30_000;
+const REQUIRED_MCP_POLL_MS = 100;
+const NOT_CONNECTING = new Set(["failed", "cancelled", "disabled", "authenticationRequired"]);
+
+export const requiredMcpMissing = (name: string, state: string | undefined): string =>
+    `The sandbox's ${name} server did not connect to Codex (${state ?? "no status"}), and this turn's safety policy runs through it, so the turn was not started. Send the message again; if it keeps happening, the daemon's log says why.`;
+
+// Waits until every required server reads connected on the thread's own MCP runtime; throws when one cannot.
+const requiredServers = async (connection: CodexAppServerConnection, threadId: string, names: readonly string[], signal: AbortSignal): Promise<void> => {
+    const deadline = Date.now() + REQUIRED_MCP_WAIT_MS;
+    for (const name of names) {
+        for (;;) {
+            const listed = McpStatusSchema.safeParse(await connection.request("mcpServerStatus/list", { threadId, serverName: name, detail: "toolsAndAuthOnly" }));
+            const state = listed.success ? (listed.data.data.find((server) => server.name === name)?.runtimeStatus ?? undefined) : undefined;
+            if (state === "connected") {
+                break;
+            }
+            const refused = state !== undefined && NOT_CONNECTING.has(state);
+            if (refused || Date.now() >= deadline || signal.aborted) {
+                throw new Error(requiredMcpMissing(name, state));
+            }
+            // Short enough to need no abort of its own: the check above reads the signal on the next look.
+            await sleep(REQUIRED_MCP_POLL_MS);
+        }
+    }
+};
 
 async function* startCodexTurn(connection: CodexAppServerConnection, turn: CodexTurn): AsyncGenerator<CodexEvent, StartedCodexTurn> {
     await connection.request("initialize", {
@@ -1095,6 +1419,9 @@ async function* startCodexTurn(connection: CodexAppServerConnection, turn: Codex
         approvalPolicy: turn.options.approvalPolicy,
         sandbox: turn.options.sandboxMode,
         ...(turn.config !== undefined ? { config: turn.config } : {}),
+        ...opt("baseInstructions", turn.instructions?.base),
+        ...opt("developerInstructions", turn.instructions?.developer),
+        ...opt("serviceTier", turn.options.serviceTier),
     };
     const threadId =
         turn.sessionId === undefined
@@ -1103,6 +1430,7 @@ async function* startCodexTurn(connection: CodexAppServerConnection, turn: Codex
     if (turn.sessionId === undefined) {
         yield { type: "thread.started", thread_id: threadId };
     }
+    await requiredServers(connection, threadId, turn.requiredMcp ?? [], turn.signal);
 
     // Read before the turn starts, since the prompt may name a skill; an empty popover is the cost of failure
     // here.
@@ -1127,15 +1455,53 @@ async function* startCodexTurn(connection: CodexAppServerConnection, turn: Codex
         sandboxPolicy: sandboxPolicy(turn.options.sandboxMode),
         ...(turn.options.model !== undefined ? { model: turn.options.model } : {}),
         ...(turn.options.modelReasoningEffort !== undefined ? { effort: turn.options.modelReasoningEffort } : {}),
+        ...opt("serviceTier", turn.options.serviceTier),
+        ...opt("collaborationMode", collaborationModeOf(turn.options)),
     };
     const startedTurnId = turnIdFrom(await connection.request("turn/start", { ...startParams, input }));
     return { threadId, startedTurnId, startParams };
 }
 
+// What the turn's single consumer reads: app-server's own messages, and wake-ups for steering input and tool frames.
+type TurnMessage = AppServerMessage | { readonly kind: "steering" } | { readonly kind: "frames" };
+
+// The frames the daemon's tools raised, as this turn's events; nothing when the turn carries no inbox.
+function* framesOf(inbox: CodexFrameInbox | undefined): Generator<CodexEvent> {
+    for (const frame of inbox?.take() ?? []) {
+        yield { type: "frame", frame };
+    }
+}
+
+// Wakes the turn's single consumer whenever a frame arrives, and once now for any that arrived before it ran.
+const watchFrames = (inbox: CodexFrameInbox | undefined, messages: AsyncQueue<TurnMessage>): (() => void) | undefined => {
+    if (inbox === undefined) {
+        return undefined;
+    }
+    messages.push({ kind: "frames" });
+    return inbox.watch(() => messages.push({ kind: "frames" }));
+};
+
+// The current turn's token usage and context fill, from a thread/tokenUsage/updated; another turn's leaves `usage` as it
+// was and says nothing.
+interface TurnSpend {
+    readonly usage: CodexUsage | undefined;
+    readonly events: readonly CodexEvent[];
+}
+
+const tokenUsageOf = (notification: AppServerNotification, turnId: string, usage: CodexUsage | undefined): TurnSpend => {
+    const params = object(notification.params, "thread/tokenUsage/updated params");
+    if (string(params, "turnId", "thread/tokenUsage/updated params") !== turnId) {
+        return { usage, events: [] };
+    }
+    const context = contextFrom(params);
+    return { usage: usageFrom(params), events: context === undefined ? [] : [context] };
+};
+
 export const createCodexAppServerRunner = (connect: CodexAppServerConnector = stdioConnector()): CodexRunner =>
     async function* runAppServerTurn(turn) {
         const connection = await connect(turn);
         let stopSteering: (() => void) | undefined;
+        let unwatchFrames: (() => void) | undefined;
         try {
             const { threadId, startedTurnId, startParams } = yield* startCodexTurn(connection, turn);
             // Observe every turn id so a steer cannot let an old turn win.
@@ -1147,7 +1513,8 @@ export const createCodexAppServerRunner = (connect: CodexAppServerConnector = st
 
             // A single consumer orders steering against notifications. Input can arrive before acknowledgement;
             // refusals stay pending until completion, then become a follow-up on this same thread.
-            const messages = new AsyncQueue<AppServerMessage | { readonly kind: "steering" }>();
+            const messages = new AsyncQueue<TurnMessage>();
+            unwatchFrames = watchFrames(turn.frames, messages);
             const waiting: string[] = [];
             let active = false;
             let refused = false;
@@ -1209,13 +1576,17 @@ export const createCodexAppServerRunner = (connect: CodexAppServerConnector = st
                     await steerWaiting();
                     continue;
                 }
+                if (notification.kind === "frames") {
+                    yield* framesOf(turn.frames);
+                    continue;
+                }
                 const delegated = fromSubagent(threads, threadId, notification);
                 if (delegated !== undefined) {
                     yield* delegated;
                     continue;
                 }
                 if (notification.kind === "request") {
-                    yield* requestEvents(notification, ours, turnIds);
+                    yield* requestEvents(notification, ours, turnIds, threadId);
                     continue;
                 }
                 if (notification.method === "turn/started") {
@@ -1230,10 +1601,9 @@ export const createCodexAppServerRunner = (connect: CodexAppServerConnector = st
                     continue;
                 }
                 if (notification.method === "thread/tokenUsage/updated") {
-                    const params = object(notification.params, "thread/tokenUsage/updated params");
-                    if (string(params, "turnId", "thread/tokenUsage/updated params") === turnId) {
-                        usage = usageFrom(params);
-                    }
+                    const spent = tokenUsageOf(notification, turnId, usage);
+                    usage = spent.usage;
+                    yield* spent.events;
                     continue;
                 }
                 if (notification.method === "turn/completed") {
@@ -1261,6 +1631,7 @@ export const createCodexAppServerRunner = (connect: CodexAppServerConnector = st
             throw new Error("Codex app-server ended before turn/completed");
         } finally {
             stopSteering?.();
+            unwatchFrames?.();
             connection.close();
         }
     };

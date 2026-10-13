@@ -23,9 +23,10 @@ import {
     type OpenCodeService,
     type SessionJudge,
 } from "./opencode.js";
-import { type OpenCodeConfig, SERVER_PERMISSIONS } from "./opencode-config.js";
+import { AGENT_CONFIG, type OpenCodeConfig, SERVER_PERMISSIONS } from "./opencode-config.js";
 import type { McpRemoteConfig, OpenCodeMcpServer } from "./opencode-mcp.js";
 import type { ServeRequest, SpawnServer } from "./opencode-serve.js";
+import type { OpenCodeRouteEntry } from "./hosted/opencode-routes.js";
 import { SEED_XAI_MODELS } from "./xai-models.js";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 
@@ -338,13 +339,14 @@ describe("boot", () => {
             update: "disable",
             share: "disabled",
             permissions: [...SERVER_PERMISSIONS],
+            agents: AGENT_CONFIG,
             // No Gemini configured, no Google provider; every known xAI model opts out of server-side storage.
             providers: { xai: { models: xaiModels } },
         });
-        // The rules the owner's rulebook depends on: a shell command it should see is asked about, a form nobody renders
-        // is denied.
-        expect(server.config.permissions).toContainEqual({ action: "shell", resource: "*git push*", effect: "ask" });
-        expect(server.config.permissions).toContainEqual({ action: "question", resource: "*", effect: "deny" });
+        // The rules the owner's rulebook depends on: every shell command is asked about, and OpenCode's form to the person
+        // is left to OpenCode, since the daemon renders it as a question card.
+        expect(server.config.permissions).toContainEqual({ action: "shell", resource: "*", effect: "ask" });
+        expect(server.config.permissions?.some((rule) => rule.action === "question")).toBe(false);
         expect(fake.made).toEqual([{ url: server.url, headers: { authorization: "Basic server-0" } }]);
         expect(client).toBe(server.fake.client);
         // Handed to the child alone: the daemon's own environment is as it was.
@@ -368,7 +370,7 @@ describe("boot", () => {
             [OPENCODE_GEMINI_PROVIDER]: {
                 name: "Gemini",
                 package: "aisdk:@ai-sdk/openai-compatible",
-                settings: { baseURL: "http://127.0.0.1:8789/v1", apiKey: "local" },
+                settings: { baseURL: "http://127.0.0.1:8789/v1", apiKey: "local", headerTimeout: 100_000, chunkTimeout: 100_000 },
                 models: {
                     [OLD_MODEL.id]: geminiModel(OLD_MODEL.id, ["text", "image"]),
                     "gpt-oss-120b-medium": geminiModel("gpt-oss-120b-medium", ["text"]),
@@ -575,9 +577,16 @@ describe("event stream", () => {
         const lease = await fake.service.acquire(GROK);
         const lost = Promise.withResolvers<Error>();
         lease.listen({ event: () => {}, lost: lost.resolve });
+        const told = tracked(lost.promise);
+        jest.useFakeTimers();
 
         lose(fake.at(0).fake.stream);
 
+        // The server still runs, so the stream is opened again, three times 250 ms apart times the try; this stand-in's
+        // stream stays lost, so only once the last try fails is the stream given up on.
+        await advanceTimersByTimeAsync(1_499);
+        expect(told()).toBe(false);
+        await advanceTimersByTimeAsync(1);
         expect(await lost.promise).toEqual(reason);
         expect(fake.closes()).toEqual([1]);
         lease.release();
@@ -697,7 +706,7 @@ describe("acquisitions", () => {
             [OPENCODE_GEMINI_PROVIDER]: {
                 name: "Gemini",
                 package: "aisdk:@ai-sdk/openai-compatible",
-                settings: { baseURL: "http://127.0.0.1:9000/gemini/v1", apiKey: "local" },
+                settings: { baseURL: "http://127.0.0.1:9000/gemini/v1", apiKey: "local", headerTimeout: 100_000, chunkTimeout: 100_000 },
                 models: {
                     [OLD_MODEL.id]: geminiModel(OLD_MODEL.id, ["text", "image"]),
                     [NEW_MODEL.id]: geminiModel(NEW_MODEL.id, ["text", "image"]),
@@ -931,6 +940,83 @@ describe("acquisitions", () => {
     });
 });
 
+// A hosted route (opencode-routes.ts) is one more provider entry fixed at spawn: written into the boot's config, reread at
+// each hosted acquisition, and the server restarted onto a changed set only while nothing else runs on it.
+describe("hosted routes", () => {
+    const KIMI: OpenCodeRouteEntry = {
+        id: "intentic-route-kimi",
+        provider: "kimi",
+        label: "Kimi Code",
+        wire: "openai-chat",
+        base: "http://127.0.0.1:8789",
+        path: "/v1",
+        token: "local",
+        shield: "kimi",
+        models: [{ id: "kimi-k3" }],
+    };
+    const KIMI_K4: OpenCodeRouteEntry = { ...KIMI, models: [{ id: "kimi-k3" }, { id: "kimi-k4" }] };
+    const hostedRuntime = (options: Omit<ServiceOptions, "spawnServer" | "makeClient" | "alive" | "routes"> = {}) => {
+        const routes = jest.fn<NonNullable<ServiceOptions["routes"]>>().mockResolvedValue([KIMI]);
+        return { ...runtime({ ...options, routes }), routes };
+    };
+
+    test("a boot writes every route's entry, its base behind the shield's gateway where one stands", async () => {
+        const fake = hostedRuntime({ route: async (provider) => `http://127.0.0.1:9000/${provider}` });
+        await fake.service.client();
+        expect(fake.at(0).config.providers?.["intentic-route-kimi"]).toEqual({
+            name: "Kimi Code",
+            package: "aisdk:@ai-sdk/openai-compatible",
+            settings: { baseURL: "http://127.0.0.1:9000/kimi/v1", apiKey: "local", headerTimeout: 100_000, chunkTimeout: 100_000 },
+            models: { "kimi-k3": { name: "kimi-k3", capabilities: { tools: true, input: ["text"], output: ["text"] } } },
+        });
+    });
+
+    test("an unchanged set reuses the server; a changed one restarts it while idle", async () => {
+        const fake = hostedRuntime();
+        const first = await fake.service.acquire({ providerID: KIMI.id, modelID: "kimi-k3" });
+        first.release();
+        expect(fake.spawnServer).toHaveBeenCalledTimes(1);
+        fake.routes.mockResolvedValue([KIMI_K4]);
+        const second = await fake.service.acquire({ providerID: KIMI.id, modelID: "kimi-k4" });
+        expect(fake.spawnServer).toHaveBeenCalledTimes(2);
+        expect(Object.keys(fake.at(1).config.providers?.[KIMI.id]?.models ?? {})).toEqual(["kimi-k3", "kimi-k4"]);
+        second.release();
+    });
+
+    test("a Grok acquisition never rereads the routes", async () => {
+        const fake = hostedRuntime();
+        await fake.service.client();
+        fake.routes.mockClear();
+        const grok = await fake.service.acquire(GROK);
+        expect(fake.routes).not.toHaveBeenCalled();
+        grok.release();
+    });
+
+    test("busy, a model the running server lacks is refused, and one it holds runs on it", async () => {
+        const fake = hostedRuntime();
+        const held = await fake.service.acquire(GROK);
+        fake.routes.mockResolvedValue([KIMI_K4]);
+        await expect(fake.service.acquire({ providerID: KIMI.id, modelID: "kimi-k4" })).rejects.toThrow(
+            "Kimi Code's connection changed while OpenCode's shared server was running other turns. Send again once they finish.",
+        );
+        const existing = await fake.service.acquire({ providerID: KIMI.id, modelID: "kimi-k3" });
+        expect(existing.client).toBe(held.client);
+        expect(fake.spawnServer).toHaveBeenCalledTimes(1);
+        existing.release();
+        held.release();
+    });
+
+    test("a route read that fails boots without the routes, and the next hosted turn registers them", async () => {
+        const fake = hostedRuntime();
+        fake.routes.mockRejectedValueOnce(new Error("translator down"));
+        await fake.service.client();
+        expect(fake.at(0).config.providers?.[KIMI.id]).toBeUndefined();
+        const lease = await fake.service.acquire({ providerID: KIMI.id, modelID: "kimi-k3" });
+        expect(Object.keys(fake.at(1).config.providers ?? {})).toContain(KIMI.id);
+        lease.release();
+    });
+});
+
 describe("idle stop", () => {
     const IDLE_MS = 60_000;
     const base = { booted: true, activeTurns: 0, judges: 0, lastUsedAt: 1_000, now: 1_000 + IDLE_MS, idleMs: IDLE_MS };
@@ -1025,7 +1111,12 @@ describe("shielded", () => {
 
         const lease = await fake.service.acquire(OLD_SELECTION);
         expect(fake.at(1).config.providers?.["xai"]?.settings).toEqual({ baseURL: "http://127.0.0.1:9000/gateway" });
-        expect(fake.at(1).config.providers?.[OPENCODE_GEMINI_PROVIDER]?.settings).toEqual({ baseURL: "http://127.0.0.1:9000/gateway/v1", apiKey: "local" });
+        expect(fake.at(1).config.providers?.[OPENCODE_GEMINI_PROVIDER]?.settings).toEqual({
+            baseURL: "http://127.0.0.1:9000/gateway/v1",
+            apiKey: "local",
+            headerTimeout: 100_000,
+            chunkTimeout: 100_000,
+        });
         lease.release();
     });
 

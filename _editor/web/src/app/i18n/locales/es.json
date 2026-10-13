@@ -1867,6 +1867,9 @@
             "cantHelpNow": "Ahora no puedo ayudar",
             "notAvailableHere": "No disponible aquí",
             "whatIsntAvailableHere": "Qué no está disponible aquí",
+            "liftThroughLoop": "Ejecútalo a través de {loop} para eliminar estas limitaciones.",
+            "vendorTerms": "Términos del proveedor",
+            "whatTheVendorAllows": "Lo que permite el proveedor",
             "agentNeedsHelp": "El agente necesita tu ayuda:",
             "optionalNoteBackTo": "Nota opcional de vuelta al agente",
             "doneHandBack": "Listo: devolver"
@@ -2443,7 +2446,10 @@
             "underClaudeCode": "Grok en Claude Code",
             "verify": "Verificar",
             "verifyThisAccount": "Google quiere que su titular confirme esta cuenta antes de que vuelva a atender turnos: pulsa Verificar, inicia sesión como {label} y volverá a la rotación en el siguiente reintento.",
-            "viaClaudeCode": "vía Claude Code"
+            "viaClaudeCode": "vía Claude Code",
+            "viaLoop": "vía {loop}",
+            "loopSignIn": "inicio de sesión de {loop}",
+            "accountViaLoop": "cuenta de {managedLabel} vía {loop}"
         },
         "arrivalPanel": {
             "alreadyHere": "ya aquí",

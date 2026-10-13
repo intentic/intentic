@@ -20,7 +20,9 @@ import { releasingMounts } from "../../agent/tools/turn-mounts.js";
 import { turnToolsOf, type TurnToolsDeps } from "../../agent/tools/turn-tools.js";
 import type { Services } from "../../composition.js";
 import { mayDelegate, turnPersona } from "../../personas/personas.js";
-import { createCursorAgent } from "./cursor-agent.js";
+import { createCursorAgent, type CursorTurnExtras } from "./cursor-agent.js";
+import { type HarnessServersDeps, turnSecretAccess } from "../../agent/run/harness/harness-servers.js";
+import { cursorSkillsOf } from "./turn/cursor-skills.js";
 import { type CursorCatalog, createCursorCatalog } from "./models/cursor-catalog.js";
 import { type CursorStore, fileCursorStore, readCursorCredentials } from "./accounts/cursor-credentials.js";
 import { createCursorHookService, type CursorHookService } from "./cursor-hooks.js";
@@ -45,7 +47,7 @@ export interface CursorSlice {
     readonly cursorHooks: CursorHookService;
     // Cursor's runtime over @cursor/sdk: the SDK agent runs in this process, or, for a turn anchored in a mount namespace,
     // in a runtime process born there (cursor-host.ts).
-    readonly cursorAgent: (request: AgentRequest<CursorCredential>) => AsyncGenerator<AgentEvent>;
+    readonly cursorAgent: (request: AgentRequest<CursorCredential>, extras?: CursorTurnExtras) => AsyncGenerator<AgentEvent>;
 }
 
 export const createCursorSlice = (input: { readonly authRoot: string; readonly logger: Logger }): CursorSlice => {
@@ -64,6 +66,7 @@ export const createCursorSlice = (input: { readonly authRoot: string; readonly l
 // What a Cursor turn is planned from: the account store and catalog, the refusal ledger that places an unnamed account,
 // and the seams its MCP tools and browser stack are mounted from.
 export type CursorPlanDeps = TurnToolsDeps &
+    HarnessServersDeps &
     Pick<Services, "capabilities" | "config" | "cursorAgent" | "cursorModels" | "cursorStore" | "files" | "observedLimits" | "privacyShield" | "workspace">;
 
 // Credential rides the request as a key, not an env var: Cursor runs inside this daemon, where an env var is
@@ -94,7 +97,7 @@ export const planCursorTurn = async (
     // this arm decides, the same two a turn's start from.
     if (context.base.policy.sealed === true) {
         return armPlan(
-            services.cursorAgent,
+            (request: AgentRequest<CursorCredential>) => services.cursorAgent(request),
             { ...context.base, spec: { ...context.base.spec, model }, credential: { kind: "cursor-key", apiKey: account.apiKey } },
             account.id,
         );
@@ -117,10 +120,19 @@ export const planCursorTurn = async (
         mounted.release();
         return { ok: false, code: "privacy-unshielded", message: `The privacy shield's policy could not be read, so this turn was not sent. ${error instanceof Error ? error.message : ""}`.trim() };
     }
+    // The skills the turn's persona brings and withholds, which Cursor's own loader takes (cursor-skills.ts).
+    const skills = await cursorSkillsOf(context);
     const request: AgentRequest<CursorCredential> = {
         ...context.base,
         spec: { ...context.base.spec, model, ...opt("steering", context.steering) },
-        tools: { ...context.base.tools, ...(tools.length > 0 ? { remote: tools } : {}), ...browserFields(services.workspace.root, mounted) },
+        tools: {
+            ...context.base.tools,
+            ...(tools.length > 0 ? { remote: tools } : {}),
+            ...browserFields(services.workspace.root, mounted),
+            // The sandbox's stored secrets, which every shell command this turn runs resolves and masks through the hooks
+            // (cursor-secrets.ts): the same registry and release gates a Claude Code turn spends them through.
+            secrets: context.base.tools.secrets ?? turnSecretAccess(services, input, context.base.signal),
+        },
         credential: { kind: "cursor-key", apiKey: account.apiKey },
         hooks: {
             ...context.base.hooks,
@@ -131,7 +143,11 @@ export const planCursorTurn = async (
     };
     // Real account id, not a shared marker: usage and rate-limit frames can name which connection paid. Attachments fold
     // into the prompt as a file list; Cursor's read tool takes them off disk, like OpenCode/Pi.
-    return armPlan(releasingMounts(services.cursorAgent, mounted), withAttachments(request, context.attachmentPaths), account.id);
+    return armPlan(
+        releasingMounts((turn: AgentRequest<CursorCredential>) => services.cursorAgent(turn, { skills }), mounted),
+        withAttachments(request, context.attachmentPaths),
+        account.id,
+    );
 };
 
 // Nothing to probe on PATH, no server to reach: what can be missing is the SDK module (a pack) or a usable credential,

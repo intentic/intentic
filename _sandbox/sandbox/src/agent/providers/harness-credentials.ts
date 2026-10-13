@@ -1,24 +1,16 @@
 import {
     type AgentProvider,
     endpointIdOf,
-    type MintedProvider,
-    mintedVariant,
+    loopsOf,
     type ModelRef,
-    type NativeProvider,
     preferredAccount,
-    PROVIDER_ACCESS,
-    PROVIDER_VENDOR,
-    providerLabel,
     providerSpec,
-    TRIAL_ENDPOINT_ID,
-    TRIAL_MODEL_ID,
 } from "@intentic/sandbox-contract";
 import { ensureFreshToken, replaceRejectedToken } from "../../runtimes/claude/claude-credentials.js";
-import { unversionedBase } from "../../endpoints/endpoint-config.js";
-import { endpointModelId } from "../../endpoints/endpoint-translator.js";
-import { endpointConfigOf } from "../../endpoints/local-model.js";
 import type { Services } from "../../composition.js";
 import { serviceabilities } from "../../usage/serviceability/serviceability.js";
+import { opt } from "../../opt.js";
+import { goneAccountMessage, resolveRoute, type RouteResult } from "./routes/model-routes.js";
 import type { TurnLimit } from "../../usage/serviceability/fleet-limit.js";
 import type { HarnessCredential } from "./agent-request.js";
 import { containerKeyEnv } from "../../seams/sealed-env.js";
@@ -130,12 +122,8 @@ export type HarnessCredentialsResult =
           readonly account?: string;
       };
 
-const requirementOf = (provider: NativeProvider): string => PROVIDER_ACCESS[provider].requirement;
-
-// Validates a routed model pick against the live catalog; falls to the catalog default if the pick isn't offered.
-// Exported so context-budget.ts budgets against the same model this will actually send.
-export const routedModel = (catalog: { models: readonly { id: string }[]; default: string }, model: string | undefined): string =>
-    model !== undefined && model !== "" && catalog.models.some((entry) => entry.id === model) ? model : catalog.default;
+// Validates a routed model pick against the live catalog; context-budget.ts budgets against the same model this sends.
+export { routedModel } from "./routes/model-routes.js";
 
 // What resolving a harness credential reads of the daemon: the stores behind every provider's credential, the runner's
 // parent, and the endpoint catalogs a routed pick is validated against.
@@ -174,152 +162,20 @@ const pickModel = async (services: Pick<Services, "providerCatalogs">, model: st
     return fallback === undefined ? undefined : { id: fallback };
 };
 
-// openai-protocol endpoints run through the translator, keeping the user's key out of the harness; anthropic-protocol
-// endpoints get the harness pointed at them directly, key and all.
-// Resolves from constants, not discovery: the trial's model id and route are fixed. Gates on the platform's cached
-// trial-offered capability, re-probing once if the cache is cold.
-const resolveTrialCredentials = async (services: Pick<Services, "capabilities" | "config" | "trial">): Promise<HarnessCredentialsResult> => {
-    if ((await services.capabilities.get(TRIAL_ENDPOINT_ID)) === undefined) {
-        await services.trial.refresh();
+// A route the harness can take, as the credentials it carries: the URL and bearer (Anthropic Messages, so the base with
+// no version path), whose account answered, whose allowance it spends, and whether it is the trial.
+const harnessOfRoute = (result: RouteResult): HarnessCredentialsResult => {
+    if (!result.ok) {
+        return result;
     }
-    const capability = await services.capabilities.get(TRIAL_ENDPOINT_ID);
-    if (capability === undefined || capability.kind !== "endpoint") {
-        return {
-            ok: false,
-            code: "trial-unavailable",
-            message: "The free trial is no longer available from this sandbox. Connect Google in Sandbox ▸ Agent to keep going for free.",
-        };
-    }
-    if (services.config.translator.url === "") {
-        return {
-            ok: false,
-            code: "trial-unavailable",
-            message:
-                "The free trial needs the sandbox's bundled model translator. Rebuild this sandbox from the published image, or connect Google in Sandbox ▸ Agent.",
-        };
-    }
+    const { route } = result;
     return {
         ok: true,
         credentials: {
-            endpoint: {
-                baseUrl: services.config.translator.url,
-                authToken: services.config.translator.token,
-                model: endpointModelId(TRIAL_ENDPOINT_ID, TRIAL_MODEL_ID),
-            },
-            trial: true,
-        },
-    };
-};
-
-// Idle-unload may have stopped this server, and the model catalog asks the server itself — so it has to be up before
-// that question is worth asking. A wake that fails changes nothing: the empty catalog then reports it as not serving,
-// which is what a model that cannot start looks like either way.
-//
-// Through Services rather than by calling the handler: importing it here put agent/providers into the capability
-// graph and cost the whole package's type inference (a `TurnAllowance` that resolved to its error branch alone, two
-// files away). The daemon wires the closure in composition, where everything is already imported.
-const wakeIfLocalModel = async (services: Pick<Services, "wakeLocalModel">, kind: string, id: string): Promise<void> => {
-    if (kind !== "localmodel") {
-        return;
-    }
-    await services.wakeLocalModel(id);
-};
-
-const resolveEndpointCredentials = async (
-    services: Pick<Services, "capabilities" | "config" | "endpointModels" | "trial" | "wakeLocalModel">,
-    id: string,
-    model: string | undefined,
-): Promise<HarnessCredentialsResult> => {
-    if (id === TRIAL_ENDPOINT_ID) {
-        return resolveTrialCredentials(services);
-    }
-    const capability = await services.capabilities.get(id);
-    // A localmodel capability resolves here too, as its loopback endpoint; id is `endpoint/<id>` either way.
-    const config = capability === undefined ? undefined : endpointConfigOf(capability);
-    if (capability === undefined || config === undefined) {
-        return { ok: false, message: `Unknown model endpoint "${id}", add it as an Endpoint capability first.` };
-    }
-    await wakeIfLocalModel(services, capability.kind, id);
-    const catalog = await services.endpointModels.models(id, config);
-    if (catalog.models.length === 0) {
-        return {
-            ok: false,
-            // Nothing published usually means weights are still downloading or loading, not misconfigured.
-            message:
-                capability.kind === "localmodel"
-                    ? `${id} isn't serving yet, its model may still be downloading or loading. Check its capability card.`
-                    : `${id} has published no models, check the server is running at ${config.baseUrl} and has a model loaded.`,
-        };
-    }
-    const resolved = routedModel(catalog, model);
-    if (config.protocol === "anthropic") {
-        return {
-            ok: true,
-            credentials: { endpoint: { baseUrl: unversionedBase(config.baseUrl), authToken: config.apiKey ?? "", model: resolved } },
-        };
-    }
-    if (services.config.translator.url === "") {
-        return {
-            ok: false,
-            message:
-                "This sandbox has no model translator, so an OpenAI-compatible endpoint can't run here. Run a sandbox built from the published image.",
-        };
-    }
-    return {
-        ok: true,
-        credentials: {
-            endpoint: {
-                baseUrl: services.config.translator.url,
-                authToken: services.config.translator.token,
-                model: endpointModelId(id, resolved),
-            },
-        },
-    };
-};
-
-// The refusal for a conversation whose own account is no longer connected: which way on is the person's to choose.
-const goneAccountMessage = (provider: string): string =>
-    `The ${provider} account this conversation runs on is no longer connected. Pick another account for it, or connect this one again, then send again.`;
-
-// A minted provider publishes an Anthropic Messages endpoint directly, so the harness is pointed at it with the
-// sign-in's key; no translation needed.
-const resolveMintedCredentials = async (
-    services: Pick<Services, "minted">,
-    provider: MintedProvider,
-    input: { readonly account?: string; readonly model?: string },
-): Promise<HarnessCredentialsResult> => {
-    const accounts = await services.minted[provider].store.credentials();
-    // The account the conversation runs on; only a turn naming none takes the first. A named one that is gone refuses:
-    // running on another account instead is a switch nobody chose.
-    const picked = input.account === undefined ? accounts[0] : accounts.find((account) => account.id === input.account);
-    if (picked === undefined && input.account !== undefined) {
-        return { ok: false, message: goneAccountMessage(providerLabel(provider)) };
-    }
-    if (picked === undefined) {
-        return {
-            ok: false,
-            code: "subscription-required",
-            message: `Connect your ${requirementOf(provider)} in Sandbox ▸ Agent to run ${providerLabel(provider)}.`,
-        };
-    }
-    // An estate the provider no longer has is refused, not defaulted to a host the key was never minted for.
-    const variant = mintedVariant(provider, picked.variant);
-    if (variant === undefined) {
-        return {
-            ok: false,
-            code: "subscription-required",
-            message: `That ${providerLabel(provider)} account was connected through a sign-in this sandbox no longer offers. Connect it again in Sandbox ▸ Agent.`,
-        };
-    }
-    // Validated against the estate's live catalog; a retired pick falls to the catalog default, never empty.
-    const catalog = await services.minted[provider].catalogOf(variant.id).models();
-    return {
-        ok: true,
-        credentials: {
-            endpoint: { baseUrl: unversionedBase(variant.anthropicBase), authToken: picked.apiKey, model: routedModel(catalog, input.model) },
-            account: picked.id,
-            // No `limit`: neither vendor here publishes a quota surface a minted key can read.
-            allowance: { vendor: PROVIDER_VENDOR[provider] },
+            endpoint: { baseUrl: `${route.endpoint.base}${route.endpoint.path}`, authToken: route.endpoint.token, model: route.model },
+            ...opt("account", route.account),
+            ...opt("allowance", route.allowance),
+            ...opt("trial", route.trial),
         },
     };
 };
@@ -349,53 +205,21 @@ export const resolveHarnessCredentials = async (
             services.logger.warn({ err: error }, "runner: the parent's credential door is unreachable — falling back to this runner's own accounts");
         }
     }
+    // An endpoint, a minted key or the translator: a route on the Claude Code loop (routes/model-routes.ts).
     const endpointId = input.agent === undefined ? undefined : endpointIdOf(input.agent);
-    if (endpointId !== undefined) {
-        return resolveEndpointCredentials(services, endpointId, input.model);
+    if (input.agent !== undefined && endpointId !== undefined) {
+        return harnessOfRoute(await resolveRoute(services, { provider: input.agent, loop: "claude-code", model: input.model }));
     }
-    // A provider whose Claude Code harness is its own runtime (its spec's `claudeCode` record) has no credential here.
+    // A provider that doesn't offer the Claude Code loop runs only on its own, so it has no credential here.
     const spec = input.agent === undefined ? undefined : providerSpec(input.agent);
-    if (spec !== undefined && spec.runtimes.claudeCode.runtime !== "claude-code") {
+    if (spec !== undefined && !loopsOf(spec.id).includes("claude-code")) {
         return {
             ok: false,
             message: OWN_RUNTIME_ONLY[spec.id] ?? `${spec.label} doesn't run under the Claude Code harness. It runs on its own runtime instead.`,
         };
     }
-    if (input.agent !== undefined && mintedVariant(input.agent) !== undefined) {
-        return await resolveMintedCredentials(services, input.agent as MintedProvider, input);
-    }
-    if (input.agent === "codex" || input.agent === "grok" || input.agent === "kimi") {
-        if (services.config.translator.url === "") {
-            // Codex/Grok fall back to native; Kimi has none, so this is only an image problem for it.
-            const fallback =
-                input.agent === "kimi"
-                    ? "Run a sandbox built from the published image."
-                    : "Use the provider's native harness, or run a sandbox built from the published image.";
-            return {
-                ok: false,
-                message: `This sandbox has no model translator, so a non-Claude model can't run under the Claude Code harness here. ${fallback}`,
-            };
-        }
-        if ((await services.cliProxy.accounts())[input.agent].length === 0) {
-            return {
-                ok: false,
-                code: "subscription-required",
-                message: `Connect your ${requirementOf(input.agent)} in Sandbox ▸ Agent to run ${input.agent} under the Claude Code harness.`,
-            };
-        }
-        // Validated against the provider's own live catalog, same table the native paths and picker read.
-        const catalog = await services.providerCatalogs[input.agent].models();
-        // Narrowed here since the limit lookup outlives this call, unlike the broader `input.agent` type.
-        const routed = input.agent;
-        // Named once and shared: the endpoint sends it upstream and the allowance reads the pool it spends.
-        const model = routedModel(catalog, input.model);
-        return {
-            ok: true,
-            credentials: {
-                endpoint: { baseUrl: services.config.translator.url, authToken: services.config.translator.token, model },
-                allowance: { vendor: PROVIDER_VENDOR[routed], limit: () => services.cliProxy.turnLimit(routed, model) },
-            },
-        };
+    if (spec !== undefined && (spec.auth.kind === "minted" || spec.auth.kind === "translator")) {
+        return harnessOfRoute(await resolveRoute(services, { provider: spec.id, loop: "claude-code", account: input.account, model: input.model }));
     }
     // An unnamed account is picked by the one serviceability rule (usage/serviceability.ts); a named account is never
     // filtered here. Routing decided it before this: a conversation's remembered account is moved off one that cannot

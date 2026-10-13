@@ -1,6 +1,6 @@
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { HISTORY_ROOT } from "@intentic/constants";
+import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import { repoRoot } from "@intentic/constants/node";
 import { type Persona, type SandboxSettings, PersonaPowersSchema, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import type { Services } from "../../../../composition.js";
@@ -355,7 +355,8 @@ test("Codex receives the connected browser granted to its persona, and no other 
     const request = (plan as { request: AgentRequest }).request;
 
     // The routers are made by this daemon and mounted on the turn's lease, so the turn's router can bring that profile
-    // up later; Codex reaches them in `remote`, like every other runtime.
+    // up later; Codex reaches them in `remote`, like every other runtime, ahead of the daemon's own servers on the same
+    // lease (the gate its hooks call among them).
     expect(browserServers).toHaveBeenCalledWith(
         [reddit],
         ROOT,
@@ -363,7 +364,9 @@ test("Codex receives the connected browser granted to its persona, and no other 
         true,
         "reddit-conversation",
     );
-    expect(request.tools.remote).toEqual([routed]);
+    expect(request.tools.remote?.[0]).toEqual(routed);
+    expect(request.tools.remote?.map((tool) => tool.name)).toContain("gate");
+    expect(request.tools.remote?.filter((tool) => tool.name === "browser")).toEqual([routed]);
     expect(request.tools.sdkServers).toBeUndefined();
     expect(request.tools.browserPorts).toEqual({ identity: 41_111 });
     expect(request.tools.browserPasskeys).toEqual({ identity: "/state/identity/passkeys.json" });
@@ -403,7 +406,9 @@ test("Grok receives the connected browser granted to its persona, and no other a
         true,
         "reddit-conversation",
     );
-    expect(request.tools.remote).toEqual([routed]);
+    // The daemon's own servers ride the same lease after it (daemon-tools/door-tools.ts); no other browser does.
+    const daemonOwn = new Set(["ui", "accounts", "secrets", "subagents", "watch", "deps", "diagnostics", "code"]);
+    expect(request.tools.remote?.filter((tool) => !daemonOwn.has(tool.name))).toEqual([routed]);
     expect(request.tools.sdkServers).toBeUndefined();
 });
 
@@ -677,12 +682,30 @@ const asking = (overrides: {
     base: { ...base, spec: { ...base.spec, ...overrides.spec }, policy: { ...base.policy, ...overrides.policy } },
 });
 
-test("a plan-only runtime keeps `plan` and is handed no other permission mode", async () => {
-    const asked = await planTurn(codexServices(), turn({ agent: "codex" }), asking({ policy: { permissionMode: "default" } }));
-    expect((asked as { request: AgentRequest }).request.policy.permissionMode).toBeUndefined();
+// A Grok turn on OpenCode.
+const openCodeServices = (): Services =>
+    servicesWith({
+        openCode: unstubbed<Services["openCode"]>("openCode", {
+            shielded: async () => true,
+            connected: async () => true,
+            xaiModels: async () => ({ default: "grok-4", models: [{ id: "grok-4", label: "Grok 4" }] }),
+        }),
+    });
 
-    const planning = await planTurn(codexServices(), turn({ agent: "codex" }), asking({ policy: { permissionMode: "plan" } }));
+// OpenCode parks the asks its rulebook leaves open on per-tool cards, so the ask-each-tool posture reaches Grok too; what a
+// plan-only runtime is handed is pinned on the rule itself (honoured.test.ts).
+test("OpenCode is handed the permission mode the turn asked for", async () => {
+    const asked = await planTurn(openCodeServices(), turn({ agent: "grok" }), asking({ policy: { permissionMode: "default" } }));
+    expect((asked as { request: AgentRequest }).request.policy.permissionMode).toBe("default");
+
+    const planning = await planTurn(openCodeServices(), turn({ agent: "grok" }), asking({ policy: { permissionMode: "plan" } }));
     expect((planning as { request: AgentRequest }).request.policy.permissionMode).toBe("plan");
+});
+
+// Codex answers its own approval requests by mode (codex-approvals.ts), so the ask-each-tool posture reaches it.
+test("Codex is handed the permission mode the turn asked for", async () => {
+    const asked = await planTurn(codexServices(), turn({ agent: "codex" }), asking({ policy: { permissionMode: "default" } }));
+    expect((asked as { request: AgentRequest }).request.policy.permissionMode).toBe("default");
 });
 
 test("the Claude Code loop keeps every mode: it is the runtime that honours them", async () => {
@@ -723,18 +746,8 @@ test("a card decides each backend on its own: code-only, and shell-only, both pl
     expect(shellOnly.request.policy.disallowedTools ?? []).not.toContain("Bash");
 });
 
-test("a runtime that hosts no js backend is handed no plan for it, whatever the card says", async () => {
-    const plan = await planTurn(codexServices(), turn({ agent: "codex" }), context);
-
-    expect((plan as { request: AgentRequest }).request.tools.jsExecution).toBeUndefined();
-});
-
-// Codex forwards reasoning effort (modelReasoningEffort); OpenCode only takes a model id and a prompt, so an effort
-// riding a Grok request is read by nobody.
-test("effort reaches the runtimes that forward it and no others", async () => {
-    const codex = await planTurn(codexServices(), turn({ agent: "codex" }), asking({ spec: { effort: "high" } }));
-    expect((codex as { request: AgentRequest }).request.spec.effort).toBe("high");
-
+// OpenCode hosts it as the door's `code` server, its scripts consulted against the gate its loop attaches to the relay.
+test("native Grok is handed the js backend's plan, and the `code` server rides its remote list", async () => {
     const grokServices = servicesWith({
         openCode: unstubbed<Services["openCode"]>("openCode", {
             shielded: async () => true,
@@ -742,8 +755,41 @@ test("effort reaches the runtimes that forward it and no others", async () => {
             xaiModels: async () => ({ default: "grok-4", models: [{ id: "grok-4", label: "Grok 4" }] }),
         }),
     });
+    const plan = await planTurn(grokServices, turn({ agent: "grok" }), context);
+    expect(plan).toMatchObject({ ok: true });
+    // SAFETY: an armed plan carries its request, which the line above checked.
+    const request = (plan as { request: AgentRequest }).request;
+
+    expect(request.tools.jsExecution).toMatchObject({ allowSpawn: true });
+    expect(request.tools.remote?.map((tool) => tool.name)).toContain("code");
+});
+
+// Codex hosts it as the door's `code` server, its scripts consulted against the turn's gate.
+test("native Codex is handed the js backend's plan, and the `code` server rides its remote list", async () => {
+    const plan = await planTurn(codexServices(), turn({ agent: "codex" }), context);
+    expect(plan).toMatchObject({ ok: true });
+    // SAFETY: an armed plan carries its request, which the line above checked.
+    const request = (plan as { request: AgentRequest }).request;
+
+    expect(request.tools.jsExecution).toMatchObject({ allowSpawn: true });
+    expect(request.tools.remote?.map((tool) => tool.name)).toContain("code");
+});
+
+// Codex forwards reasoning effort (modelReasoningEffort), and OpenCode sends it as the session's model variant where the
+// model declares that tier; a runtime whose record says it takes none is handed none (capabilities.effort).
+test("effort reaches the runtimes that forward it", async () => {
+    const codex = await planTurn(codexServices(), turn({ agent: "codex" }), asking({ spec: { effort: "high" } }));
+    expect((codex as { request: AgentRequest }).request.spec.effort).toBe("high");
+
+    const grokServices = servicesWith({
+        openCode: unstubbed<Services["openCode"]>("openCode", {
+            shielded: async () => true,
+            connected: async () => true,
+            xaiModels: async () => ({ default: "grok-3-mini", models: [{ id: "grok-3-mini", label: "Grok 3 Mini", efforts: ["low", "high"] }] }),
+        }),
+    });
     const grok = await planTurn(grokServices, turn({ agent: "grok" }), asking({ spec: { effort: "high" } }));
-    expect((grok as { request: AgentRequest }).request.spec.effort).toBeUndefined();
+    expect((grok as { request: AgentRequest }).request.spec.effort).toBe("high");
 });
 
 // Fast speed passes two gates: the runtime's declared capability, and the route — a codex/grok/endpoint turn riding the
@@ -783,9 +829,14 @@ test("the free-trial credential's bounded policy reaches the harness request", a
     expect((plan as { request: AgentRequest }).request.credential).toEqual({ kind: "trial", baseUrl: "http://127.0.0.1:8788", authToken: "local" });
 });
 
-test("fast speed is withheld from every runtime that isn't the Claude Code loop", async () => {
+test("fast speed reaches a native Codex turn, which asks for its own fast tier", async () => {
     const codex = await planTurn(codexServices(), turn({ agent: "codex" }), asking({ spec: { fast: true } }));
-    expect((codex as { request: AgentRequest }).request.spec.fast).toBeUndefined();
+    expect((codex as { request: AgentRequest }).request.spec.fast).toBe(true);
+});
+
+test("fast speed is withheld from a runtime that cannot ask for it", async () => {
+    const grok = await planTurn(openCodeServices(), turn({ agent: "grok" }), asking({ spec: { fast: true } }));
+    expect((grok as { request: AgentRequest }).request.spec.fast).toBeUndefined();
 });
 
 // A runtime that can't enter the turn's mount namespace is only cwd'd into its worktree, so an absolute /work path
@@ -805,7 +856,7 @@ test("a cwd-isolated runtime gets one worktree explanation, then compact reminde
 
     const grok = await planTurn(grokServices, turn({ agent: "grok" }), isolated);
     const prompt = wire(grok);
-    expect(prompt).toContain("/history/worktrees/abc/work");
+    expect(prompt).toContain(`${HISTORY_ROOT}/worktrees/abc/work`);
     expect(prompt).toContain("do the thing");
 
     const followup = await planTurn(grokServices, turn({ agent: "grok" }), {
@@ -816,7 +867,7 @@ test("a cwd-isolated runtime gets one worktree explanation, then compact reminde
     const sharedCheckout = "/nowhere/turn-plan";
     expect(followupPrompt).toMatch(/relative paths/i);
     expect(followupPrompt).toContain(sharedCheckout);
-    expect(followupPrompt).not.toContain("/history/worktrees/abc/work");
+    expect(followupPrompt).not.toContain(`${HISTORY_ROOT}/worktrees/abc/work`);
 
     for (const namespaced of [
         await planTurn(harnessServices(), turn(), isolated),
@@ -874,7 +925,7 @@ const withSettings = (services: Services, settings: SandboxSettings): Services =
     sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => settings }),
 });
 
-test("a runtime that replaces is handed the owner's prompt; one that only adds is handed it to add", async () => {
+test("a runtime that replaces is handed the owner's prompt", async () => {
     const claude = await planTurn(withSettings(harnessServices(), customSettings()), turn(), context);
     expect((claude as { request: AgentRequest }).request.spec.systemPrompt).toBe(CUSTOM_PROMPT);
 
@@ -882,8 +933,8 @@ test("a runtime that replaces is handed the owner's prompt; one that only adds i
     const codex = await planTurn(withSettings(codexServices(), customSettings()), turn({ agent: "codex" }), context);
     expect((codex as { request: AgentRequest }).request.spec.systemPrompt).toBe(CUSTOM_PROMPT);
 
-    // OpenCode has no seam to replace its own base prompt, so the owner's text arrives as an addition instead, matching
-    // what the settings page promises rather than a replacement it can't perform.
+    // OpenCode takes a replacement too: the turn runs on the daemon's blank-base agents, so the owner's text is the whole
+    // system prompt (opencode-config.ts OPENCODE_AGENTS).
     const grokServices = servicesWith({
         openCode: unstubbed<Services["openCode"]>("openCode", {
             shielded: async () => true,
@@ -892,8 +943,8 @@ test("a runtime that replaces is handed the owner's prompt; one that only adds i
         }),
     });
     const grok = await planTurn(withSettings(grokServices, customSettings()), turn({ agent: "grok" }), context);
-    expect((grok as { request: AgentRequest }).request.spec.systemPrompt).toBeUndefined();
-    expect((grok as { request: AgentRequest }).request.spec.systemAppend).toBe(CUSTOM_PROMPT);
+    expect((grok as { request: AgentRequest }).request.spec.systemPrompt).toBe(CUSTOM_PROMPT);
+    expect((grok as { request: AgentRequest }).request.spec.systemAppend).toBeUndefined();
 });
 
 // `refs/` (excluded from scanners) and `public/` (served on the open internet) must reach a runtime with no other way
@@ -910,9 +961,9 @@ test("a native runtime is told the workspace conventions; the Claude Code loop i
 // dependency directories (isolation.ts), so an unqualified command fails. `bash -c` with the whole line quoted keeps a
 // shell line as nsenter's single argv.
 test("a rule's command enters the turn's namespace, and only when there is one", () => {
-    const anchored = ruleCommandIn(`cd intentic && pnpm lint`, { pid: 4242, cwd: `/work`, plan: {} as never, dispose: () => undefined });
+    const anchored = ruleCommandIn(`cd intentic && pnpm lint`, { pid: 4242, cwd: WORKSPACE_ROOT, plan: {} as never, dispose: () => undefined });
     expect(anchored).toContain(`nsenter --mount=/proc/4242/ns/mnt`);
-    expect(anchored).toContain(`--wdns=/work`);
+    expect(anchored).toContain(`--wdns=${WORKSPACE_ROOT}`);
     // Strips the daemon's PWD/OLDPWD so the command's relative cd resolves against nsenter's cwd, not an inherited
     // stale one.
     expect(anchored).toContain(`env -u PWD -u OLDPWD`);
@@ -927,10 +978,10 @@ test("a rule's command enters the turn's namespace, and only when there is one",
 // rule naming a repository has to say so this far down or it runs at the root of the worktree while every other part
 // of the system agrees it is running in the repository.
 test("a rule naming a repository enters the namespace inside that repository", () => {
-    const anchor = { pid: 4242, cwd: `/work`, plan: {} as never, dispose: () => undefined };
-    expect(ruleCommandIn(`pnpm verify:push`, anchor, `intentic`)).toContain(`--wdns=/work/intentic`);
+    const anchor = { pid: 4242, cwd: WORKSPACE_ROOT, plan: {} as never, dispose: () => undefined };
+    expect(ruleCommandIn(`pnpm verify:push`, anchor, `intentic`)).toContain(`--wdns=${WORKSPACE_ROOT}/intentic`);
     // "root" is the workspace's own repository, which is where an unaimed command already runs.
-    expect(ruleCommandIn(`pnpm verify:push`, anchor, `root`)).toContain(`--wdns=/work`);
+    expect(ruleCommandIn(`pnpm verify:push`, anchor, `root`)).toContain(`--wdns=${WORKSPACE_ROOT}`);
 });
 
 // Pre-turn retrieval was fully built and never called; these pin that it is wired, and that the kill-switch really

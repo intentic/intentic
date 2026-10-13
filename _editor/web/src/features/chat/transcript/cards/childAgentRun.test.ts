@@ -1,6 +1,7 @@
 import type { ChildAgentAsk } from "@intentic/sandbox-contract";
 import { DEFAULT_EFFORT, DEFAULT_THINKING } from "../../models/run-settings/pickerRunSettings";
 import { childRunFacts, childRunLine, pickedChildRun } from "./childAgentRun";
+import { advertisedLoops } from "../../models/offeredLoops";
 
 // The picker opens every knob at a state, never at "unset", so what it hands back for a child whose agent named no
 // effort already carries the picker's default. Only what the owner actually moved may count as a change, or merely
@@ -58,5 +59,16 @@ describe(`the run as the card reads it`, () => {
     it(`names the loop only where the provider has two that differ`, () => {
         expect(childRunFacts(asked, { ...asked, harness: `claude-code` })).toEqual([]);
         expect(childRunFacts(asked, { provider: `codex`, model: `gpt-5.5`, harness: `claude-code` })).toEqual([`Through Claude Code`]);
+    });
+
+    // Any loop but the default is named, by its own name, where the daemon offers it; one it does not runs as the default.
+    it(`names whichever non-default loop the daemon offers, and none it does not`, () => {
+        advertisedLoops.value = { codex: [`codex`, `opencode`] };
+        try {
+            expect(childRunFacts(asked, { provider: `codex`, model: `gpt-5.5`, harness: `opencode` })).toEqual([`Through OpenCode`]);
+            expect(childRunFacts(asked, { provider: `codex`, model: `gpt-5.5`, harness: `claude-code` })).toEqual([]);
+        } finally {
+            advertisedLoops.value = undefined;
+        }
     });
 });

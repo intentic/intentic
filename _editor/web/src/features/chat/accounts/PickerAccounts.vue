@@ -8,6 +8,7 @@ import { providerDisplayLabel } from "./providerCatalog";
 import { servingAccount } from "./servingAccount";
 import { formatAge } from "../session/usageStatus";
 import ProviderLogo from "./ProviderLogo.vue";
+import LoopChips from "../models/LoopChips.vue";
 import SandboxOutdatedNotice from "../../sandbox/overview/version/SandboxOutdatedNotice.vue";
 import { accountsOutdated } from "./accountsOutdated";
 import { useT } from "@intentic/ui/i18n";
@@ -45,23 +46,12 @@ const {
     harnessLocked?: boolean;
 }>();
 
-const {
-    accountRows,
-    accountCapacity,
-    routedRows,
-    routedCapacity,
-    unplacedRefusal,
-    harnessOptions,
-    harnessChoosable,
-    measuredAt,
-    measuring,
-    remeasureLabel,
-    remeasure,
-} = usePickerAccounts(
-    toRef(() => provider),
-    toRef(() => harness),
-    toRef(() => model),
-);
+const { accountRows, accountCapacity, routedRows, routedCapacity, unplacedRefusal, measuredAt, measuring, remeasureLabel, remeasure } =
+    usePickerAccounts(
+        toRef(() => provider),
+        toRef(() => harness),
+        toRef(() => model),
+    );
 
 const { mobile } = useDevice();
 
@@ -335,22 +325,6 @@ const pickAccount = (id: string): void => {
         <p v-if="routedRows.length > 1" class="text-2xs text-subtle">{{ t(`chat.pickerAccounts.turnsSpreadAcrossAutomatically`) }}</p>
     </template>
 
-    <!-- Harness axis (codex/grok): the provider's runtime, or its model through Claude Code; same subscription ids run under either. -->
-    <div v-if="harnessChoosable" class="flex items-center justify-between gap-2">
-        <span class="text-2xs font-medium uppercase tracking-wide text-muted">{{ t(`shared.harness`) }}</span>
-        <div class="flex items-center gap-1">
-            <button
-                v-for="h in harnessOptions"
-                :key="h.value"
-                type="button"
-                class="composer-ghost ui-off h-7 gap-1 px-2.5 text-2xs font-medium max-md:h-10"
-                :class="{ 'composer-active': harness === h.value }"
-                :disabled="harnessLocked"
-                :aria-pressed="harness === h.value"
-                @click="emit(`selectHarness`, h.value)"
-            >
-                {{ h.label }}
-            </button>
-        </div>
-    </div>
+    <!-- Loop axis: one chip per loop the daemon offers this provider on; the same subscription ids run under each. -->
+    <LoopChips :provider="provider" :harness="harness" :disabled="harnessLocked" @select="emit(`selectHarness`, $event)" />
 </template>

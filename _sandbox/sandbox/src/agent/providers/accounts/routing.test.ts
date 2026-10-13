@@ -23,7 +23,16 @@ test("an account never crosses to a provider that did not mint it: another provi
 });
 
 test("a harness change keeps the provider's account, but not the session the other loop minted", () => {
-    expect(routingFor(profile, { harness: "claude-code" })).toEqual({ provider: "claude", harness: "claude-code", account: "held", continues: false });
+    const codex = { provider: "codex" as const, harness: "native" as const, account: "held" };
+    expect(routingFor(codex, { agent: "codex", harness: "claude-code" })).toEqual({ provider: "codex", harness: "claude-code", account: "held", continues: false });
+});
+
+// Claude, Kimi, Cursor and the rest run one loop whatever the request names, so naming the other one is no change: a
+// conversation recorded under "claude-code" before requests were normalized keeps its session.
+test("a harness the provider does not offer is its own loop, named as such, and keeps the session", () => {
+    expect(routingFor(profile, { harness: "claude-code" })).toEqual({ provider: "claude", harness: "native", account: "held", continues: true });
+    const recordedAsClaudeCode = { provider: "cursor" as const, harness: "claude-code" as const, account: "held" };
+    expect(routingFor(recordedAsClaudeCode, { agent: "cursor" })).toEqual({ provider: "cursor", harness: "native", account: "held", continues: true });
 });
 
 test("a conversation not opened yet runs on what it names, else auto", () => {
@@ -49,8 +58,13 @@ describe("the session a turn continues", () => {
 
     it("is none on another provider, another loop or another account, however the sender named one", () => {
         expect(sessionFor(held, { conversationId: "c1", agent: "codex", sessionId: "sess-sent" })).toBeUndefined();
-        expect(sessionFor(held, { conversationId: "c1", harness: "claude-code", sessionId: "sess-sent" })).toBeUndefined();
+        const onCodex = recorded({ provider: "codex", harness: "native", account: "held" }, "sess-codex");
+        expect(sessionFor(onCodex, { conversationId: "c1", agent: "codex", harness: "claude-code", sessionId: "sess-sent" })).toBeUndefined();
         expect(sessionFor(held, { conversationId: "c1", account: "other", sessionId: "sess-sent" })).toBeUndefined();
+    });
+
+    it("is kept when the sender names the other name of the same loop", () => {
+        expect(sessionFor(held, { conversationId: "c1", harness: "claude-code" })).toBe("sess-held");
     });
 
     it("is none for a conversation whose actors hold no session yet, even if the sender named one", () => {

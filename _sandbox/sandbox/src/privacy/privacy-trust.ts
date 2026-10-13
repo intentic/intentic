@@ -4,6 +4,7 @@ import {
     capabilitiesOf,
     endpointIdOf,
     endpointProvider,
+    loopsOf,
     type PrivacyProvider,
     type PrivacyShieldPolicy,
     PROVIDER_SPECS,
@@ -65,7 +66,7 @@ export const shieldableRuntime = (provider: string, harness: AgentHarness): bool
 // Every provider this sandbox could run a turn on, for the trusted list: the native ones, then each endpoint, local
 // model and agent the owner connected.
 export const privacyProviders = (capabilities: readonly Capability[]): PrivacyProvider[] => {
-    const shieldable = (provider: string): boolean => shieldableRuntime(provider, "native") || shieldableRuntime(provider, "claude-code");
+    const shieldable = (provider: string): boolean => loopsOf(provider).some((loop) => shieldableRuntime(provider, loop));
     const natives = PROVIDER_SPECS.map((spec) => ({ id: spec.id, label: spec.label, shieldable: shieldable(spec.id), local: false }));
     const connected = capabilities.flatMap((capability): PrivacyProvider[] => {
         if (capability.kind === "endpoint" || capability.kind === "localmodel") {

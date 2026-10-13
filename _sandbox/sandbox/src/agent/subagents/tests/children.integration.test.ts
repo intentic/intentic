@@ -27,6 +27,7 @@ import {
     cancelChild,
     cancelFamily,
     childReportOf,
+    composeRuntimeFloor,
     familyOf,
     type ChildSpawnSpec,
     mergeChild,
@@ -351,26 +352,31 @@ describe("the spawn rulebook and the floors", () => {
         }
     });
 
-    it("a child on a runtime beyond every gate marks the parent's own turn bit", async () => {
+    // Pi's own extension now puts every call to the gate (runtimes/pi), so a Pi child is gated like any other.
+    it("a child on a runtime with a gate of its own leaves the parent's turn bit alone", async () => {
         publishTurnTaint(parent.conversationId, createTurnTaint());
         try {
-            expect(conversationTaintSource(parent.conversationId)).toBeUndefined();
             const result = await spawnChild(drivenBy(spawnServices({}, [], actors), fakeTurn([])), parent, {
                 prompt: "go",
                 model: "claude-sonnet-4-6",
                 provider: "pi",
             });
             expect(result.ok).toBe(true);
-            expect(conversationTaintSource(parent.conversationId)).toBe("runtime:pi");
-            if (result.ok) {
-                await settled(result.id);
-                // Every later move is held, and the parent is told why in words it can act on, not a bare source key.
-                expect(await sendToChild(drivenBy(spawnServices({}, [], actors), fakeTurn([])), parent, result.id, "more")).toEqual({
-                    ok: false,
-                    message:
-                        "Held for the owner: this turn has taken in content from outside (the report of a subagent on pi, a runtime with no permission rules of its own), and a subagent would spend the owner's accounts on its say-so. This call arrived outside a live turn, so there was nowhere to ask them. Ask in chat; they can also set the agents.spawn action rule.",
-                });
-            }
+            expect(conversationTaintSource(parent.conversationId)).toBeUndefined();
+        } finally {
+            clearTurnTaint(parent.conversationId);
+        }
+    });
+
+    // No loop today is beyond every gate, so the floor that taints the parent for one is pinned on its rule.
+    it("a child on a runtime beyond every gate marks the parent's own turn bit; any seam at all does not", () => {
+        publishTurnTaint(parent.conversationId, createTurnTaint());
+        try {
+            composeRuntimeFloor(parent.conversationId, "some-agent", { rulebook: "approval" });
+            composeRuntimeFloor(parent.conversationId, "some-agent", { rulebook: "hooks" });
+            expect(conversationTaintSource(parent.conversationId)).toBeUndefined();
+            composeRuntimeFloor(parent.conversationId, "some-agent", { rulebook: "none" });
+            expect(conversationTaintSource(parent.conversationId)).toBe("runtime:some-agent");
         } finally {
             clearTurnTaint(parent.conversationId);
         }

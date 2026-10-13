@@ -4,12 +4,15 @@ import { OpenCode, type OpenCodeClient } from "@opencode/client";
 import { engineBinary } from "../../engines/engine-resolve.js";
 import { DAEMON_OWNER, WORKLOAD_ENV } from "../../seams/workload-stamp.js";
 import { OPENCODE_GEMINI_PROVIDER } from "../gemini/gemini-models.js";
-import { geminiProviderConfig, OPENCODE_LOCKDOWN_ENV, type OpenCodeGeminiConfig, serverConfig, xaiProviderConfig } from "./opencode-config.js";
+import { geminiProviderConfig, OPENCODE_LOCKDOWN_ENV, type OpenCodeConfig, type OpenCodeGeminiConfig, serverConfig, variantOf, xaiProviderConfig } from "./opencode-config.js";
 import { createXaiCatalog, openCodeCredentials } from "./opencode-credentials.js";
 import { type OpenCodeEvents, type OpenCodeListener, openEventStream } from "./opencode-events.js";
 import type { McpRemoteConfig, OpenCodeMcpServer } from "./opencode-mcp.js";
-import { answerPermission, permissionAskOf, type SessionJudge, type SessionJudges } from "./opencode-permissions.js";
+import { permissionAnswers, permissionAskOf, type SessionJudge, type SessionJudges } from "./opencode-permissions.js";
 import { processAlive, type ServedProcess, type SpawnServer, spawnOpencodeServe, waitForExit } from "./opencode-serve.js";
+import { shellHost } from "./shell/opencode-shell.js";
+import { type OpenCodeRouteEntry, ROUTE_ID_PREFIX, routeLabelOf, routeProviderConfig, routeSignature } from "./hosted/opencode-routes.js";
+import { opt } from "../../opt.js";
 import { OPENCODE_XAI_PROVIDER, SEED_XAI_MODELS } from "./xai-models.js";
 
 export { geminiProviderConfig, type OpenCodeGeminiConfig } from "./opencode-config.js";
@@ -17,8 +20,9 @@ export type { OpenCodeListener } from "./opencode-events.js";
 export type { SessionJudge, SessionJudges } from "./opencode-permissions.js";
 
 // Shared OpenCode runtime: one warm `opencode serve` per container plus its client, used by turn adapters and the Grok
-// auth routes. Two providers ride it credentialed oppositely: xai is OpenCode's own OAuth sign-in; gemini's credential
-// is the translator's (OpenAI-compatible endpoint), so `connected("gemini")` is never answered here.
+// auth routes. Its providers are credentialed two ways: xai is OpenCode's own OAuth sign-in; gemini's credential is the
+// translator's (OpenAI-compatible endpoint), and every hosted route's is the daemon's (opencode-routes.ts), so
+// `connected` answers only for xai.
 export interface OpenCodeLease {
     readonly client: OpenCodeClient;
     // The server's event stream, which every turn on it shares: a listener hears every session's events and picks its own.
@@ -49,7 +53,8 @@ export interface OpenCodeService {
     // xAI's model catalog plus a default id, always non-empty: live discovery with the OAuth token, else the last
     // persisted catalog, else the compile-time seed. Cached briefly, but never the seed, so a freshened token is
     // retried on the next read.
-    readonly xaiModels: () => Promise<{ models: { id: string; label: string }[]; default: string }>;
+    // Each model names the reasoning tiers xAI takes for it (xai-models.ts), where it takes any.
+    readonly xaiModels: () => Promise<{ models: { id: string; label: string; efforts?: string[] }[]; default: string }>;
     // Persists the models xAI named valid in a "Did you mean" rejection as the last-known-good catalog; works even when
     // REST discovery rejects the token. No-op for an empty/media-only list.
     readonly recordModels: (ids: string[]) => Promise<void>;
@@ -60,6 +65,9 @@ export interface OpenCodeService {
     // at spawn, so a server booted before the shield changed is restarted here once no turn is using it; false only
     // while a server booted unshielded is still busy and the shield now wants it shielded.
     readonly shielded: () => Promise<boolean>;
+    // The variant a turn's effort names on one model of the running server, as its config declared it: undefined where
+    // the model declares no such tier (or no server runs), since OpenCode refuses a variant a model lacks.
+    readonly variant: (providerID: string, modelID: string, effort: string | undefined) => string | undefined;
 }
 
 // Where OpenCode's xAI provider sends its requests unless told otherwise.
@@ -105,13 +113,118 @@ const readGeminiModels = async (gemini: OpenCodeGeminiConfig | undefined): Promi
     }
 };
 
-// Provider registration depends on membership and capabilities, not the discovery order or the catalog's default.
-const geminiModelSignature = (models: GeminiModels): string =>
-    JSON.stringify([...models].sort((a, b) => a.id.localeCompare(b.id)).map(({ id, inputModalities }) => [id, [...inputModalities].sort()]));
+// Whether a served server's process still runs; a stand-in with no process is taken at its word.
+const serving =
+    (server: { readonly process: ServedProcess | undefined }, alive: (pid: number) => boolean) =>
+    (): boolean =>
+        server.process === undefined || alive(server.process.pid);
 
-// What a failure sentence calls the backend: one opencode serve drives both providers, so the Gemini turn is the Grok
-// adapter with a different providerID. Keyed off OpenCode's provider id, since that's what the turn actually carries.
-export const openCodeBackendLabel = (providerID: string): string => (providerID === OPENCODE_GEMINI_PROVIDER ? "Google" : "Grok");
+interface BootedProviders {
+    providers: NonNullable<OpenCodeConfig["providers"]>;
+}
+const variantFrom =
+    (booted: BootedProviders): OpenCodeService["variant"] =>
+    (providerID, modelID, effort) =>
+        variantOf(booted.providers, providerID, modelID, effort);
+
+// Every provider the server is configured with. Behind the privacy shield each sends to its gateway, which forwards where
+// it would have gone; `shielded` says whether any does.
+const providersFor = async (input: {
+    readonly route: ((provider: string, upstream: string) => Promise<string | undefined>) | undefined;
+    readonly gemini: OpenCodeGeminiConfig | undefined;
+    readonly geminiModels: GeminiModels;
+    readonly storeOptOut: readonly string[];
+    readonly hosted: readonly OpenCodeRouteEntry[];
+}): Promise<{ readonly providers: NonNullable<OpenCodeConfig["providers"]>; readonly shielded: boolean }> => {
+    const { route, gemini } = input;
+    const xaiGateway = await route?.("grok", XAI_UPSTREAM);
+    const geminiGateway = gemini === undefined ? undefined : await route?.("gemini", gemini.baseUrl);
+    const routed = await Promise.all(input.hosted.map(async (entry) => ({ ...entry, ...opt("gateway", await route?.(entry.shield, entry.base)) })));
+    const geminiConfig = gemini === undefined || geminiGateway === undefined ? gemini : { ...gemini, baseUrl: geminiGateway };
+    return {
+        providers: {
+            ...xaiProviderConfig(input.storeOptOut, xaiGateway),
+            ...geminiProviderConfig(geminiConfig, input.geminiModels),
+            ...routeProviderConfig(routed),
+        },
+        shielded: xaiGateway !== undefined || geminiGateway !== undefined || routed.some((entry) => entry.gateway !== undefined),
+    };
+};
+
+// How many turns hold the server, and when anything last used it: what the idle stop reads.
+interface ServerUse {
+    turns: number;
+    lastAt: number;
+}
+
+// A lease on a booted server, counted in `use` until the turn lets go; letting go twice counts once.
+const leaseOn = (booted: Booted, use: ServerUse): OpenCodeLease => {
+    let released = false;
+    return {
+        client: booted.client,
+        listen: booted.events.listen,
+        release: () => {
+            if (!released) {
+                released = true;
+                use.turns -= 1;
+                use.lastAt = Date.now();
+            }
+        },
+    };
+};
+
+// Whether a hosted turn's acquisition restarts the server onto the routes it just read: when they changed and nothing
+// else runs on it. Busy, a turn whose provider or model the running server lacks is refused rather than sent where
+// OpenCode would answer that it knows no such model; one the server already holds runs as it is.
+const restartsForRoutes = (
+    latest: readonly OpenCodeRouteEntry[] | undefined,
+    booted: readonly OpenCodeRouteEntry[],
+    model: { readonly providerID: string; readonly modelID?: string },
+    idle: boolean,
+): boolean => {
+    if (latest === undefined || routeSignature(latest) === routeSignature(booted)) {
+        return false;
+    }
+    if (idle) {
+        return true;
+    }
+    const held = booted.find((entry) => entry.id === model.providerID);
+    if (held === undefined || (model.modelID !== undefined && !held.models.some((row) => row.id === model.modelID))) {
+        throw new Error(`${openCodeBackendLabel(model.providerID)}'s connection changed while OpenCode's shared server was running other turns. Send again once they finish.`);
+    }
+    return false;
+};
+
+// What a boot is told of the catalogs an acquisition already read, so it does not read them a second time.
+interface KnownCatalogs {
+    readonly gemini?: GeminiModels;
+    readonly routes?: readonly OpenCodeRouteEntry[];
+}
+
+// Same bound and same answer to a failure as Google's: the server boots with the routes it had, or none.
+const readRoutes = async (routes: (() => Promise<readonly OpenCodeRouteEntry[]>) | undefined): Promise<readonly OpenCodeRouteEntry[] | undefined> => {
+    if (routes === undefined) {
+        return undefined;
+    }
+    try {
+        return await within(routes(), CATALOG_TIMEOUT_MS, undefined);
+    } catch {
+        // allow(silent-catch): routes that can't be read now leave the server on the ones it booted with, or none
+        return undefined;
+    }
+};
+
+// Provider registration depends on membership, capabilities and reasoning tiers, not the discovery order or the
+// catalog's default.
+const geminiModelSignature = (models: GeminiModels): string =>
+    JSON.stringify(
+        [...models].sort((a, b) => a.id.localeCompare(b.id)).map(({ id, inputModalities, efforts }) => [id, [...inputModalities].sort(), [...(efforts ?? [])]]),
+    );
+
+// What a failure sentence calls the backend: one opencode serve drives every provider, so a Gemini or hosted turn is the
+// Grok adapter with a different providerID. Keyed off OpenCode's provider id, since that's what the turn actually carries.
+export const openCodeBackendLabel = (providerID: string): string =>
+    providerID === OPENCODE_GEMINI_PROVIDER ? "Google" : (routeLabelOf(providerID) ?? "Grok");
 
 // How long a just-added server gets to connect; past it the turn goes without its tools rather than waiting longer.
 const MCP_CONNECT_MS = 15_000;
@@ -240,12 +353,19 @@ export const createOpenCodeService = (
         // How long an idle server is kept before it is stopped; 0 keeps it for the service's life.
         readonly idleStopMs?: number;
         // The privacy shield's gateway base URL for a provider's requests, or undefined while the shield is off.
-        readonly route?: (provider: "grok" | "gemini", upstream: string) => Promise<string | undefined>;
+        readonly route?: (provider: string, upstream: string) => Promise<string | undefined>;
+        // Every route OpenCode could host now (opencode-routes.ts), each written into the server's config at spawn;
+        // absent hosts none, as a test standing in for the daemon does.
+        readonly routes?: () => Promise<readonly OpenCodeRouteEntry[]>;
+        // Where the daemon's shell script and the socket it asks over live (shell/opencode-shell.ts); absent leaves OpenCode
+        // its own shell, as a test standing in for the server does.
+        readonly shellDir?: string;
     } = {},
 ): OpenCodeService => {
     const {
         gemini,
         route,
+        routes,
         fetchImpl = fetch,
         spawnServer = spawnOpencodeServe,
         makeClient = ({ url, headers }) => OpenCode.make({ baseUrl: url, headers }),
@@ -253,7 +373,7 @@ export const createOpenCodeService = (
         idleStopMs = OPENCODE_IDLE_STOP_MS,
     } = options;
     // When anything last used the server, and the clock that stops it once that is long enough ago.
-    let lastUsedAt = Date.now();
+    const use: ServerUse = { turns: 0, lastAt: Date.now() };
     let idleClock: NodeJS.Timeout | undefined;
     const opencodeDir = join(xdgDataHome, "opencode");
     const credentials = openCodeCredentials(opencodeDir);
@@ -261,9 +381,11 @@ export const createOpenCodeService = (
     // Whether the server now running was booted behind the gateway; undefined before any boot.
     let bootedShielded: boolean | undefined;
     let bootedGeminiModels: GeminiModels = [];
+    let bootedRoutes: readonly OpenCodeRouteEntry[] = [];
+    // The providers the running server was configured with, which decide what variant a turn's effort can name.
+    const configured: BootedProviders = { providers: {} };
     // Acquisitions run in order; leases protect setup, helpers and ungated turns as well as judged sessions.
     let acquisitions = Promise.resolve();
-    let activeTurns = 0;
     let booting: Promise<Booted> | undefined;
     // Which boot is current: an exit or a lost stream from an older one must not forget its replacement.
     let generation = 0;
@@ -271,23 +393,20 @@ export const createOpenCodeService = (
     let serverHandle: { close(): void } | undefined;
     let currentEvents: OpenCodeEvents | undefined;
     const sessionJudges = new Map<string, SessionJudge>();
-    const judgeOf = (sessionId: string): SessionJudge | undefined => sessionJudges.get(sessionId);
+    const asks = permissionAnswers(sessionJudges);
+    // The shell every session's commands run through, placed by session on the judges registered here.
+    const shell = shellHost(options.shellDir, sessionJudges);
 
-    const boot = async (knownGeminiModels?: GeminiModels): Promise<Booted> => {
+    const boot = async (known: KnownCatalogs = {}): Promise<Booted> => {
         const own = (generation += 1);
         // xAI stores request/response server-side by default; every known model opts out (xaiProviderConfig). Config is
         // fixed at spawn, so a self-healed model lacks the flag until the next restart.
         const storeOptOut = [...new Set([...SEED_XAI_MODELS, ...(await xai.persisted())])];
         // An acquisition hands over the exact catalog it compared, so a second discovery cannot race the refresh.
-        const geminiModels = knownGeminiModels ?? (await readGeminiModels(gemini)) ?? [];
-        // Behind the privacy shield, both providers send to its gateway, which forwards where they would have gone.
-        const xaiGateway = await route?.("grok", XAI_UPSTREAM);
-        const geminiGateway = gemini === undefined ? undefined : await route?.("gemini", gemini.baseUrl);
-        const shielded = xaiGateway !== undefined || geminiGateway !== undefined;
-        const config = serverConfig({
-            ...xaiProviderConfig(storeOptOut, xaiGateway),
-            ...geminiProviderConfig(gemini === undefined || geminiGateway === undefined ? gemini : { ...gemini, baseUrl: geminiGateway }, geminiModels),
-        });
+        const geminiModels = known.gemini ?? (await readGeminiModels(gemini)) ?? [];
+        const hosted = known.routes ?? (await readRoutes(routes)) ?? [];
+        const { providers, shielded } = await providersFor({ route, gemini, geminiModels, storeOptOut, hosted });
+        const config = serverConfig(providers, await shell.path());
         const stored = await engineBinary("opencode");
         const server = await spawnServer({
             binary: stored ?? "opencode",
@@ -314,10 +433,15 @@ export const createOpenCodeService = (
                 onEvent: (event) => {
                     const ask = permissionAskOf(event);
                     if (ask !== undefined) {
-                        // allow(silent-catch): a failed reply just leaves the ask standing, which the turn's watchdog ends
-                        void answerPermission(client, judgeOf(ask.sessionID), ask).catch(() => {});
+                        asks.answer(client, ask);
                     }
                 },
+                // A dropped stream is reopened only while this boot's server runs (a stopped one's stream is closed
+                // first, so it never asks).
+                alive: serving(server, alive),
+                // An ask raised while the stream was down was never heard: the judged sessions' standing asks are
+                // read back and answered.
+                onResume: asks.standing(client),
                 // A server whose stream is gone cannot tell any turn when it ends: the next acquisition boots afresh.
                 ended: () => {
                     if (generation === own) {
@@ -354,6 +478,8 @@ export const createOpenCodeService = (
         currentEvents = events;
         bootedShielded = shielded;
         bootedGeminiModels = geminiModels;
+        bootedRoutes = hosted;
+        configured.providers = providers;
         if (idleStopMs > 0) {
             idleClock ??= idleStopClock(idleStopMs, stopIfIdle);
         }
@@ -363,9 +489,9 @@ export const createOpenCodeService = (
     const stopIfIdle = (): void => {
         const idle = openCodeIdleStop({
             booted: booting !== undefined,
-            activeTurns,
+            activeTurns: use.turns,
             judges: sessionJudges.size,
-            lastUsedAt,
+            lastUsedAt: use.lastAt,
             now: Date.now(),
             idleMs: idleStopMs,
         });
@@ -393,10 +519,10 @@ export const createOpenCodeService = (
     };
     // Memoize the in-flight boot as well as the finished client. A failed boot stays retryable; a server that exited
     // or lost its stream has already been forgotten, so the next caller boots a fresh one.
-    const ensure = async (geminiModels?: GeminiModels): Promise<Booted> => {
-        lastUsedAt = Date.now();
+    const ensure = async (known?: KnownCatalogs): Promise<Booted> => {
+        use.lastAt = Date.now();
         await finishStopping();
-        booting ??= retryableBoot(boot(geminiModels));
+        booting ??= retryableBoot(boot(known));
         return booting;
     };
     const mounts = mcpHolds(async () => (await ensure()).client);
@@ -407,6 +533,8 @@ export const createOpenCodeService = (
         booting = undefined;
         bootedShielded = undefined;
         bootedGeminiModels = [];
+        bootedRoutes = [];
+        configured.providers = {};
         currentEvents?.close();
         currentEvents = undefined;
         mounts.forget();
@@ -432,43 +560,40 @@ export const createOpenCodeService = (
         });
         return attempt;
     };
-    const restart = (models: GeminiModels): Promise<Booted> => {
+    // Restarts onto `next`, keeping what the running server already holds of whichever catalog this did not reread.
+    const restart = (next: KnownCatalogs): Promise<Booted> => {
+        const known: KnownCatalogs = { gemini: next.gemini ?? bootedGeminiModels, routes: next.routes ?? bootedRoutes };
         // Publish the replacement boot before yielding, so raw client probes also wait for this exact catalog.
-        booting = retryableBoot(closeServer().then(() => boot(models)));
+        booting = retryableBoot(closeServer().then(() => boot(known)));
         return booting;
     };
     const take = async (model: Parameters<OpenCodeService["acquire"]>[0]): Promise<OpenCodeLease> => {
         // Include this acquisition's asynchronous setup in its lifetime, including privacy-shield checks racing it.
-        activeTurns += 1;
+        use.turns += 1;
         try {
-            // Only a Google acquisition reads Google's catalog: a Grok turn never waits on the translator, and a newly
-            // listed Google model is registered by the next Google turn that finds the runtime idle.
+            // A hosted route's acquisition rereads the routes; Google's, Google's catalog. A Grok turn waits on neither, and a
+            // newly listed model is registered by the next turn of its own provider that finds the runtime idle.
+            if (model.providerID.startsWith(ROUTE_ID_PREFIX)) {
+                const hosted = await readRoutes(routes);
+                const running = await ensure({ routes: hosted ?? [] });
+                const idle = use.turns === 1 && sessionJudges.size === 0;
+                return leaseOn(hosted !== undefined && restartsForRoutes(hosted, bootedRoutes, model, idle) ? await restart({ routes: hosted }) : running, use);
+            }
             const latest = model.providerID === OPENCODE_GEMINI_PROVIDER ? await readGeminiModels(gemini) : undefined;
             // A failed first read already has its answer: do not wait on discovery a second time during boot.
-            let booted = await ensure(model.providerID === OPENCODE_GEMINI_PROVIDER ? (latest ?? []) : undefined);
+            let booted = await ensure(model.providerID === OPENCODE_GEMINI_PROVIDER ? { gemini: latest ?? [] } : undefined);
             if (latest !== undefined && latest.length > 0 && geminiModelSignature(latest) !== geminiModelSignature(bootedGeminiModels)) {
-                if (activeTurns === 1 && sessionJudges.size === 0) {
-                    booted = await restart(latest);
+                if (use.turns === 1 && sessionJudges.size === 0) {
+                    booted = await restart({ gemini: latest });
                 } else if (model.modelID !== undefined && !bootedGeminiModels.some((row) => row.id === model.modelID)) {
                     throw new Error(
                         `Google's model catalog has refreshed, but its shared runtime is still running other turns. Send again once they finish to use ${model.modelID}.`,
                     );
                 }
             }
-            let released = false;
-            return {
-                client: booted.client,
-                listen: booted.events.listen,
-                release: () => {
-                    if (!released) {
-                        released = true;
-                        activeTurns -= 1;
-                        lastUsedAt = Date.now();
-                    }
-                },
-            };
+            return leaseOn(booted, use);
         } catch (error) {
-            activeTurns -= 1;
+            use.turns -= 1;
             throw error;
         }
     };
@@ -485,7 +610,10 @@ export const createOpenCodeService = (
     return {
         client: async () => (await ensure()).client,
         acquire,
-        stop: async () => closeServer(),
+        stop: async () => {
+            await closeServer();
+            await shell.close();
+        },
         mount: mounts.mount,
         judges: {
             register: (sessionId, judge) => {
@@ -515,6 +643,7 @@ export const createOpenCodeService = (
             return false;
         },
         xaiModels: xai.models,
+        variant: variantFrom(configured),
         recordModels: xai.record,
         disconnect: async (providerID) => {
             // The server holds the sign-in in its database and its memory alike; removing it there forgets both.
@@ -529,7 +658,7 @@ export const createOpenCodeService = (
                 return true;
             }
             // Idle: the next turn boots routed the way the shield now wants. Judges cover legacy callers too.
-            if (activeTurns === 0 && sessionJudges.size === 0) {
+            if (use.turns === 0 && sessionJudges.size === 0) {
                 await closeServer();
                 return true;
             }

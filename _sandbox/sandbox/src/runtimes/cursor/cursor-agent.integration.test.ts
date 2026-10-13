@@ -9,11 +9,11 @@ import type { AgentRequest, CursorCredential } from "../../agent/providers/agent
 import { forgetNamespaceEntry, nsenterArgv, registerMountEntry, type NamespaceEntryReference } from "../../workload/namespace-entry.js";
 import { createCursorAgent, type CursorAgentDeps, FIRST_DELTA_MS } from "./cursor-agent.js";
 import type { CallResult, HostCall, HostMessage, RuntimeMessage } from "./cursor-runtime-protocol.js";
-import type { CursorHookService } from "./cursor-hooks.js";
+import type { CursorGateTurn, CursorHookService } from "./cursor-hooks.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { SteeringQueue } from "../../agent/checkpoints/agent-steering.js";
 import { memoryFleet } from "../../testing.js";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pesel } from "../../privacy/detect/tests/ids.testing.js";
@@ -97,13 +97,16 @@ beforeEach(() => {
 // The live failure this bounds: Cursor took the turn, named a session, and then sent neither a delta nor a settle. The
 // turn stood "running" for an hour with no frame, no log and no error to resume from.
 test("a run that takes the turn and then says nothing at all ends as an outage rather than waiting forever", async () => {
+    const sent = Promise.withResolvers<void>();
     agentThat(
-        () => {},
+        () => sent.resolve(),
         () => new Promise(() => {}),
     );
     jest.useFakeTimers();
     try {
         const turn = collect(createCursorAgent(deps())(request()));
+        // The stall clock starts at the send, past the turn's own reads of the project (its commands folder).
+        await sent.promise;
         await advanceTimersByTimeAsync(FIRST_DELTA_MS + 1);
         jest.useRealTimers();
         const events = await turn;
@@ -807,4 +810,163 @@ test("a runtime that dies mid-turn ends the turn with its exit, rather than leav
 
     expect(seen.find((event) => event.kind === `error`)).toMatchObject({ message: expect.stringContaining(`The Cursor runtime process exited (137)`) });
     expect(seen.at(-1)).toEqual({ kind: `done` });
+});
+
+// THE OWNER'S PROMPT IN PLACE OF CURSOR'S (options.d.ts `systemPrompt`): entitlement-gated server-side, so a turn tries
+// it, and an account refused falls back to folding it onto Cursor's base, remembered for that account's later turns.
+describe("an owner's own system prompt", () => {
+    const registered: { systemAppend?: string }[] = [];
+    const hooked = (): CursorAgentDeps => ({
+        ...deps(),
+        logger: unstubbed<Logger>(`logger`, { warn: () => {}, debug: () => {}, info: () => {} }),
+        hooks: unstubbed<CursorHookService>(`hooks`, {
+            register: (turn) => {
+                registered.push(turn);
+                return () => {};
+            },
+        }),
+    });
+    const own = (): AgentRequest<CursorCredential> => ({ ...request(), spec: { ...request().spec, systemPromptMode: `custom`, systemPrompt: `You are terse.` } });
+    // An agent whose sends answer, unless `refuse` names the refusal the server gives an account it does not entitle.
+    const answering = (agentId: string, refuse?: string) => ({
+        agentId,
+        send: async (_prompt: string, options: SendOptions) => {
+            if (refuse !== undefined) {
+                throw new Error(refuse);
+            }
+            // SAFETY: the mapper reads only `type` and `text` off a text delta.
+            options.onDelta?.({ update: { type: `text-delta`, text: `ok` } as InteractionUpdate });
+            return { wait: async () => ({ status: `success` }), cancel };
+        },
+        close: () => {},
+    });
+    beforeEach(() => {
+        registered.length = 0;
+    });
+
+    test("replaces Cursor's base on an account that may", async () => {
+        create.mockResolvedValue(answering(`agent-own`));
+        const events = await collect(createCursorAgent(hooked())(own()));
+
+        // SAFETY: Agent.create is called with the options the turn built.
+        expect((create.mock.calls[0]?.[0] as AgentOptions | undefined)?.systemPrompt).toBe(`You are terse.`);
+        expect(registered[0]?.systemAppend).toBeUndefined();
+        expect(events).toContainEqual({ kind: `delta`, text: `ok` });
+    });
+
+    test("an account refused it runs the turn again with the prompt appended, and is not asked again", async () => {
+        const REFUSAL = `[invalid_argument] --system-prompt is not available for this account`;
+        create.mockResolvedValue(answering(`agent-refused`, REFUSAL));
+        resume.mockResolvedValue(answering(`agent-refused`));
+        const cursor = createCursorAgent(hooked());
+
+        const events = await collect(cursor(own()));
+
+        // The refusal never reaches the person: the turn ran again on the agent it had opened.
+        expect(events.some((event) => event.kind === `error`)).toBe(false);
+        expect(events).toContainEqual({ kind: `delta`, text: `ok` });
+        expect(resume.mock.calls[0]?.[0]).toBe(`agent-refused`);
+        // SAFETY: Agent.resume is called with the options the retry built.
+        expect((resume.mock.calls[0]?.[1] as AgentOptions | undefined)?.systemPrompt).toBeUndefined();
+        expect(registered.at(-1)?.systemAppend).toBe(`You are terse.`);
+
+        create.mockResolvedValue(answering(`agent-next`));
+        await collect(cursor(own()));
+        // SAFETY: as above.
+        expect((create.mock.calls.at(-1)?.[0] as AgentOptions | undefined)?.systemPrompt).toBeUndefined();
+    });
+});
+
+// Cursor's own commands (.cursor/commands/*.md): published for the composer's `/`, and a message opening with one is
+// sent as its text.
+test("the project's commands are published, and `/name` is sent as the command's text", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), `cursor-commands-`));
+    mkdirSync(join(cwd, `.cursor`, `commands`), { recursive: true });
+    writeFileSync(join(cwd, `.cursor`, `commands`, `review.md`), `# Review the diff\n\nRead the staged diff and list risks.`);
+    const prompts: string[] = [];
+    create.mockResolvedValue({
+        agentId: `agent-commands`,
+        send: async (prompt: string) => {
+            prompts.push(prompt);
+            return { wait: async () => ({ status: `success` }), cancel };
+        },
+        close: () => {},
+    });
+    const events = await collect(createCursorAgent(deps())({ ...request(), spec: { ...request().spec, cwd, prompt: `/review focus on auth` } }));
+
+    expect(events).toContainEqual({ kind: `commands`, items: [{ name: `review`, description: `Review the diff` }] });
+    expect(prompts).toEqual([`# Review the diff\n\nRead the staged diff and list risks.\n\nfocus on auth`]);
+});
+
+// A turn held to a tool list (cursor-tool-list.ts): the header offers only its built-ins, only the servers and custom
+// tools it names are mounted, every `Task` child gets the same headers, and the hooks that check each call are given it.
+// The options the last turn's agent was created with.
+const createdOptions = (): AgentOptions =>
+    // SAFETY: Agent.create is called with the turn's AgentOptions, and a test that started no agent reads undefined fields.
+    (create.mock.calls.at(-1)?.[0] ?? {}) as AgentOptions;
+
+describe("a turn carrying a tool list", () => {
+    // What the loop registered with the hook service, by the fields these tests read.
+    const registered: Pick<CursorGateTurn, "allowedTools">[] = [];
+    const hooked = (covered: boolean): CursorAgentDeps => ({
+        ...deps(),
+        hooks: unstubbed<CursorHookService>(`hooks`, {
+            ready: () => true,
+            covers: async () => covered,
+            register: (turn) => {
+                registered.push(turn);
+                return () => {};
+            },
+        }),
+    });
+    const listed = (allowedTools: readonly string[]): AgentRequest<CursorCredential> => ({
+        ...request(),
+        policy: { allowedTools, permissionMode: `default` },
+        tools: {
+            remote: [
+                { name: `crm`, url: `http://127.0.0.1:8787/mcp/crm` },
+                { name: `mail`, url: `http://127.0.0.1:8787/mcp/mail` },
+            ],
+        },
+    });
+    beforeEach(() => {
+        registered.length = 0;
+        create.mockResolvedValue({ agentId: `agent-listed`, send: async () => ({ wait: async () => ({ status: `success` }), cancel }), close: () => {} });
+    });
+
+    test("offers only the listed built-ins and mounts only the listed servers and tools", async () => {
+        await collect(createCursorAgent(hooked(true))(listed([`Read`, `Bash(git log:*)`, `mcp__crm`])));
+        const options = createdOptions();
+        expect(options.tools?.toSorted()).toEqual([`await`, `mcp`, `read`, `shell`]);
+        expect(Object.keys(options.mcpServers ?? {})).toEqual([`crm`]);
+        expect(Object.keys(options.local?.customTools ?? {})).toEqual([]);
+        expect(options.local?.subagentInherit).toEqual({});
+        // The hooks hold every call to the list, and a `default` turn's calls go to the person.
+        expect(registered[0]?.allowedTools).toEqual([`Read`, `Bash(git log:*)`, `mcp__crm`]);
+        expect(Object.keys(registered[0] ?? {})).toContain(`owner`);
+    });
+
+    test("is refused before anything starts when the hooks that check it are not installed", async () => {
+        const events = await collect(createCursorAgent(hooked(false))(listed([`Read`])));
+        expect(create).not.toHaveBeenCalled();
+        expect(events).toEqual([{ kind: `error`, message: expect.stringContaining(`hooks that hold Cursor to that list`) }, { kind: `done` }]);
+    });
+
+    test("a turn with no list is offered Cursor's whole toolbox and asks nobody outside default mode", async () => {
+        await collect(createCursorAgent(hooked(true))(request()));
+        expect(createdOptions().tools).toBeUndefined();
+        expect(Object.keys(registered[0] ?? {})).not.toContain(`owner`);
+    });
+});
+
+// The worn persona's own skills are handed to Cursor's loader as a second workspace root, gone once the turn ends.
+test("a persona's kit rides as a workspace root of the turn's own, removed when the turn ends", async () => {
+    create.mockResolvedValue({ agentId: `agent-kit`, send: async () => ({ wait: async () => ({ status: `success` }), cancel }), close: () => {} });
+    const kit = join(mkdtempSync(join(tmpdir(), `cursor-kit-`)), `review-checklist`);
+    mkdirSync(kit);
+    writeFileSync(join(kit, `SKILL.md`), `---\nname: review-checklist\ndescription: d\n---\nbody\n`);
+    await collect(createCursorAgent(deps())(request(), { skills: { kit: [kit], denied: [] } }));
+    const dirs = createdOptions().local?.dirs ?? [];
+    expect(dirs).toHaveLength(1);
+    expect(existsSync(join(dirs[0] ?? ``, `.agents`, `skills`, `review-checklist`, `SKILL.md`))).toBe(false);
 });

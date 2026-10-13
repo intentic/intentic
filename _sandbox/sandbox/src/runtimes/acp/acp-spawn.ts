@@ -45,7 +45,13 @@ export interface AcpLaunch {
     // Signs the process in over the protocol once it has answered initialize, so a credential reaches the agent without
     // an env var every command it runs would inherit. Sent with the first method the agent advertises.
     readonly authenticate?: { readonly meta: Readonly<Record<string, unknown>> };
+    // Sent as `_meta` on every session/new and session/load, for an agent that reads per-session switches there (Grok
+    // Build's `askUserQuestion`). Part of the process's identity like the rest, so a change respawns it.
+    readonly sessionMeta?: AcpSessionMeta;
 }
+
+// Per-session switches, scalar values only: what an agent reads off session/new's `_meta` is a flag or a name.
+export type AcpSessionMeta = Readonly<Record<string, string | number | boolean>>;
 
 export const acpLaunchOf = (config: AcpAgentConfig): AcpLaunch => ({ argv: splitCommand(config.command), env: parseEnvBlock(config.env) });
 

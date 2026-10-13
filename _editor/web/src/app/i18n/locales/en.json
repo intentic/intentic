@@ -3485,6 +3485,9 @@
             "cantHelpNow": "Can't help now",
             "notAvailableHere": "Not available here",
             "whatIsntAvailableHere": "What isn't available here",
+            "liftThroughLoop": "Run it through {loop} to lift these.",
+            "vendorTerms": "Vendor terms",
+            "whatTheVendorAllows": "What the vendor allows",
             "agentNeedsHelp": "The agent needs your help:",
             "optionalNoteBackTo": "Optional note back to the agent",
             "doneHandBack": "Done: hand back"
@@ -3778,7 +3781,7 @@
                 "requirement": "Muse Code subscription",
                 "requirementNeeded": "Muse Code subscription",
                 "requirementObject": "Muse Code subscription",
-                "runs": "Muse Spark under Claude Code"
+                "runs": "Muse Spark in Muse Code"
             },
             "zai": {
                 "runs": "GLM under Claude Code"
@@ -5241,7 +5244,10 @@
             "underClaudeCode": "Grok under Claude Code",
             "verify": "Verify",
             "verifyThisAccount": "Google wants its owner to confirm this account before it takes turns again: press Verify, sign in as {label}, and it rejoins the rotation on the next retry.",
-            "viaClaudeCode": "via Claude Code"
+            "viaClaudeCode": "via Claude Code",
+            "viaLoop": "via {loop}",
+            "loopSignIn": "{loop} sign-in",
+            "accountViaLoop": "{managedLabel} account via {loop}"
         },
         "arrivalPanel": {
             "alreadyHere": "already here",
@@ -8807,7 +8813,6 @@
         "category": "Category",
         "changes": "Changes",
         "chat": "Chat",
-        "claudeCode": "Claude Code",
         "connected": "Connected",
         "connections": "Your connections",
         "desktop": "Desktop",

@@ -3,7 +3,9 @@ import { join } from "node:path";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { CONTROL_MCP_SERVERS, DAEMON_MCP_SERVERS, RESERVED_MCP_SERVER_NAMES } from "@intentic/sandbox-contract";
-import { mcpServerOf, outsideResultHooks, outsideSourceOf, sealResult } from "./outside-results.js";
+import type { InProcessServer } from "../agent/tools/turn-mounts.js";
+import { JS_SERVER_NAME } from "../seams/js-tool-names.js";
+import { mcpServerOf, outsideResultHooks, outsideSourceOf, sealedDoor, sealResult } from "./outside-results.js";
 
 const ENVELOPE = /^<untrusted-content source="([^"]*)" id="([0-9a-f]{16})">\n([\s\S]*)\n<\/untrusted-content id="\2">$/;
 
@@ -196,6 +198,8 @@ describe("conformance: the reserved list is exactly what the daemon mounts", () 
             // The turn's block, not a sealed request's empty `mcpServers: {}` written above it.
             ...mountedIn("agent/run/agent.ts", /mcpServers:\s*\{(?!\})[\s\S]*?\n\s{8}\}/),
             ...mountedIn("agent/run/harness/harness-servers.ts", /(?<=export const harnessServers[\s\S]*?)\n {4}return \{\n[\s\S]*?\n {4}\};/),
+            // What a non-Claude runtime reaches through the MCP door, the same servers built for its turn.
+            ...mountedIn("runtimes/daemon-tools/daemon-servers.ts", /(?<=export const daemonServersFor[\s\S]*?)\n {4}const servers = \{\n[\s\S]*?\n {4}\} satisfies/),
             constantValue("browser/tools/browser-tools.ts", "ROUTED_BROWSER_SERVER"),
             constantValue("browser/tools/browser-tools.ts", "ANONYMOUS_BROWSER_SERVER"),
             constantValue("desktop/desktop-tools.ts", "DESKTOP_SERVER"),
@@ -221,6 +225,65 @@ describe("conformance: the reserved list is exactly what the daemon mounts", () 
         for (const [server, provenance] of Object.entries(DAEMON_MCP_SERVERS)) {
             expect(CONTROL_MCP_SERVERS.has(server), server).toBe(provenance === "control");
         }
+    });
+});
+
+// The MCP door serves the daemon's own servers to every runtime but the Claude loop (runtimes/daemon-tools/daemon-servers.ts); its
+// results pass the same classification the PostToolUse hook applies, by the name the model calls them by.
+describe("the door's seal, the same rule for a runtime that reaches the daemon's servers over HTTP", () => {
+    const SRC = join(import.meta.dirname, "..");
+    // Every server the door builder mounts, read off its literal as the conformance scan reads it.
+    const doorServers = (): string[] => {
+        const block = /(?<=export const daemonServersFor[\s\S]*?)\n {4}const servers = \{\n([\s\S]*?)\n {4}\} satisfies/.exec(
+            readFileSync(join(SRC, "runtimes/daemon-tools/daemon-servers.ts"), "utf8"),
+        )?.[1];
+        // SAFETY: the pattern's one group always takes part in a match.
+        return [...(block ?? "").matchAll(/^ {8}([a-z][a-zA-Z0-9-]*):/gm)].map((match) => match[1] as string);
+    };
+
+    const answering = (text: string): InProcessServer => ({
+        handle: async (message) => ({ jsonrpc: "2.0", id: message.id ?? null, result: { content: [{ type: "text", text }] } }),
+        close: () => {},
+    });
+    const call = async (server: string, tool: string, args: Record<string, unknown>): Promise<{ text: string; marked: string[] }> => {
+        const marked: string[] = [];
+        const door = sealedDoor(answering("what the server said"), server, (source) => marked.push(source));
+        const answer = await door.handle({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: tool, arguments: args } });
+        // SAFETY: `answering` answers every call with one text part, which the seal keeps a text part.
+        const result = answer?.result as { content: { text: string }[] };
+        return { text: result.content[0]?.text ?? "", marked };
+    };
+
+    test("the builder mounts only reserved names, and the scan found them", () => {
+        const servers = doorServers();
+        expect(servers.length, "the door builder's servers literal moved").toBeGreaterThan(5);
+        for (const server of servers) {
+            expect(RESERVED_MCP_SERVER_NAMES.has(server), server).toBe(true);
+        }
+    });
+
+    test("each door server is wrapped exactly when its provenance says its results come from outside", async () => {
+        for (const server of doorServers()) {
+            const { text, marked } = await call(server, "anything", {});
+            const outside = DAEMON_MCP_SERVERS[server] === "outside";
+            expect(ENVELOPE.test(text), server).toBe(outside);
+            expect(marked, server).toEqual(outside ? [server] : []);
+        }
+    });
+
+    test("the JS backend through the door is wrapped only when its script reached out, as it is in-process", async () => {
+        expect((await call(JS_SERVER_NAME, "run", { code: "console.log(1)" })).marked).toEqual([]);
+        const fetched = await call(JS_SERVER_NAME, "run", { code: 'await fetch("https://example.com/api")' });
+        expect(fetched.marked).toEqual(["code-fetch"]);
+        expect(body(fetched.text)).toBe("what the server said");
+    });
+
+    test("anything but a tool call's result passes the door untouched", async () => {
+        const marked: string[] = [];
+        const door = sealedDoor(answering("x"), "diagnostics", (source) => marked.push(source));
+        const listed = await door.handle({ jsonrpc: "2.0", id: 2, method: "tools/list" });
+        expect(listed).toEqual({ jsonrpc: "2.0", id: 2, result: { content: [{ type: "text", text: "x" }] } });
+        expect(marked).toEqual([]);
     });
 });
 

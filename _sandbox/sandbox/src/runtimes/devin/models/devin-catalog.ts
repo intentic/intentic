@@ -2,9 +2,10 @@ import { mkdir } from "node:fs/promises";
 import { methods } from "@agentclientprotocol/sdk";
 import type { Model } from "@intentic/sandbox-contract";
 import { discoveredCatalog } from "../../../agent/models/model-catalog.js";
+import { opt } from "../../../opt.js";
 import { cacheFile } from "../../../store/open-document.js";
 import type { AcpConnections } from "../../acp/acp-connection.js";
-import { type ModelChoice, sessionModelsOf } from "../../acp/acp-model.js";
+import { type ModelChoice, sessionModelsOf, sessionThoughtsOf, thoughtTiers } from "../../acp/acp-model.js";
 import { type DevinStore, liveDevinAccounts } from "../accounts/devin-credentials.js";
 import { devinAgentId, devinCli, devinLaunch } from "../devin-cli.js";
 
@@ -16,9 +17,12 @@ import { devinAgentId, devinCli, devinLaunch } from "../devin-cli.js";
 // Not a Devin model: the catalog's floor before any account has answered. A turn on it leaves the session's own model.
 export const DEVIN_OWN_PICK = "default";
 
-// One row as the session offered it; `current` marks the account's own default.
+// One row as the session offered it; `current` marks the account's own default, and `efforts` the reasoning depths the
+// session's `thought_level` option offered on the shared ladder. Only the current model's are known: the option is
+// stated for the model the session runs on, and the probe switches to no other.
 export interface OfferedModel extends ModelChoice {
     readonly current?: boolean;
+    readonly efforts?: readonly string[];
 }
 
 export interface DevinCatalog {
@@ -37,6 +41,7 @@ const toModel = (offered: OfferedModel): Model => ({
     id: offered.value,
     label: offered.name,
     ...(offered.description !== undefined ? { description: offered.description } : {}),
+    ...opt("efforts", offered.efforts !== undefined && offered.efforts.length > 0 ? [...offered.efforts] : undefined),
 });
 
 // Rendered the same from a live answer and from the file: what Devin offered, its own default first among equals.
@@ -51,9 +56,18 @@ const parseStored = (raw: unknown): OfferedModel[] | undefined =>
               if (typeof entry !== "object" || entry === null) {
                   return [];
               }
-              const { value, name, description, current } = entry as Record<string, unknown>;
+              const { value, name, description, current, efforts } = entry as Record<string, unknown>;
+              const tiers = Array.isArray(efforts) ? efforts.filter((effort): effort is string => typeof effort === "string") : [];
               return typeof value === "string" && typeof name === "string"
-                  ? [{ value, name, ...(typeof description === "string" ? { description } : {}), ...(current === true ? { current } : {}) }]
+                  ? [
+                        {
+                            value,
+                            name,
+                            ...opt("description", typeof description === "string" ? description : undefined),
+                            ...opt("current", current === true ? true : undefined),
+                            ...opt("efforts", tiers.length > 0 ? tiers : undefined),
+                        },
+                    ]
                   : [];
           })
         : undefined;
@@ -85,9 +99,15 @@ export const createDevinCatalog = (deps: DevinCatalogDeps): DevinCatalog => {
                     .catch((error: unknown) => deps.store.logger.warn({ err: error }, "devin: could not delete the model probe's session"));
             }
             const models = sessionModelsOf(created.configOptions);
+            // As of CLI 3000.11.3 Devin offers no `thought_level` option (DEVIN.effort stays false); read anyway, so the
+            // day it does the catalog already says which depths the account's default takes.
+            const thoughts = sessionThoughtsOf(created.configOptions);
+            const efforts = thoughts === undefined ? [] : thoughtTiers(thoughts);
             return models === undefined
                 ? []
-                : models.choices.map((choice) => (choice.value === models.current ? { ...choice, current: true } : choice));
+                : models.choices.map((choice) =>
+                      choice.value === models.current ? { ...choice, current: true, ...opt("efforts", efforts.length > 0 ? efforts : undefined) } : choice,
+                  );
         } catch (error) {
             deps.store.logger.warn({ err: error }, "devin: model discovery failed, serving the last-known-good list");
             return [];

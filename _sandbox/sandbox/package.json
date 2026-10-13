@@ -59,6 +59,7 @@
         "@intentic/webq": "workspace:*",
         "@intentic/workspace-ignore": "workspace:*",
         "@intentic/workspace-setup": "workspace:*",
+        "@muse-code/sdk": "catalog:",
         "@openai/codex-sdk": "catalog:",
         "@opencode/client": "catalog:",
         "@orpc/client": "catalog:",

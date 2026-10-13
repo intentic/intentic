@@ -1,8 +1,12 @@
-import { type AgentEvent, CLAUDE_CODE, CODEX, type PermissionMode } from "@intentic/sandbox-contract";
+import { type AgentCapabilities, type AgentEvent, CLAUDE_CODE, type PermissionMode } from "@intentic/sandbox-contract";
 import type { AgentRequest } from "../../agent/providers/agent-request.js";
 import { type EmulatedPlan, EXECUTE_PROMPT, type PlanPhaseResult, planMode } from "./plan-mode.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../../testing.js";
+
+// A runtime whose row holds no approval modes, made up rather than borrowed: the real ones gain modes as their seams
+// are wired, and a test pinned to one of them stops testing the emulation the day it does.
+const PLAN_ONLY: Pick<AgentCapabilities, "permissions"> = { permissions: "plan" };
 
 // Where a turn here parks its plan card: one fleet's actors.
 const cards = parkedCards(memoryFleet().conversations);
@@ -85,7 +89,7 @@ test("a runtime whose row holds approval modes plans on its own: the emulation i
 test("a turn not asked to plan runs once, as it is, on a runtime that lacks the modes", async () => {
     for (const mode of [undefined, "bypassPermissions", "default"] as const) {
         const runtime = scripted([planned("1. edit")]);
-        const frames = await run(planMode(CODEX, request(mode), () => runtime.emulated, runtime.direct));
+        const frames = await run(planMode(PLAN_ONLY, request(mode), () => runtime.emulated, runtime.direct));
 
         expect(runtime.phases, String(mode)).toEqual(["direct"]);
         expect(frames, String(mode)).toEqual([{ kind: "delta", text: "ran" }]);
@@ -95,7 +99,7 @@ test("a turn not asked to plan runs once, as it is, on a runtime that lacks the 
 test("asked to plan, the plan phase's text is the card, and approval executes on the session the plan ran in", async () => {
     const runtime = scripted([planned("1. split the lexer")]);
     const frames = await run(
-        planMode(CODEX, request("plan"), () => runtime.emulated, runtime.direct),
+        planMode(PLAN_ONLY, request("plan"), () => runtime.emulated, runtime.direct),
         [{ approve: true }],
     );
 
@@ -111,7 +115,7 @@ test("asked to plan, the plan phase's text is the card, and approval executes on
 test("a rejection plans again, told what the user said, or told only that the plan was rejected", async () => {
     const runtime = scripted([planned("1. rewrite everything"), planned("1. rename one function"), planned("1. rename it")]);
     await run(
-        planMode(CODEX, request("plan"), () => runtime.emulated, runtime.direct),
+        planMode(PLAN_ONLY, request("plan"), () => runtime.emulated, runtime.direct),
         [{ approve: false, feedback: "  smaller, please  " }, { approve: false, feedback: "   " }, { approve: true }],
     );
 
@@ -126,7 +130,7 @@ test("a rejection plans again, told what the user said, or told only that the pl
 test("a phase that reports no session keeps the one the turn resumed", async () => {
     const runtime = scripted([{ sessionId: undefined, planText: "1. edit", errored: false }]);
     await run(
-        planMode(CODEX, request("plan"), () => runtime.emulated, runtime.direct),
+        planMode(PLAN_ONLY, request("plan"), () => runtime.emulated, runtime.direct),
         [{ approve: true }],
     );
 
@@ -140,7 +144,7 @@ test("a planning phase that errored, or proposed nothing, shows no card and runs
         { sessionId: "s-9", planText: "  \n ", errored: false },
     ]) {
         const runtime = scripted([result]);
-        const frames = await run(planMode(CODEX, request("plan"), () => runtime.emulated, runtime.direct));
+        const frames = await run(planMode(PLAN_ONLY, request("plan"), () => runtime.emulated, runtime.direct));
 
         expect(runtime.phases, JSON.stringify(result)).toEqual(["plan s-0: PLAN FIRST: tidy the parser"]);
         expect(frames, JSON.stringify(result)).toEqual([{ kind: "thinking", text: "reading" }]);
@@ -151,7 +155,7 @@ test("a turn stopped while planning shows no card", async () => {
     const controller = new AbortController();
     controller.abort();
     const runtime = scripted([planned("1. edit")]);
-    const frames = await run(planMode(CODEX, request("plan", controller.signal), () => runtime.emulated, runtime.direct));
+    const frames = await run(planMode(PLAN_ONLY, request("plan", controller.signal), () => runtime.emulated, runtime.direct));
 
     expect(frames).toEqual([{ kind: "thinking", text: "reading" }]);
     expect(runtime.phases).toEqual(["plan s-0: PLAN FIRST: tidy the parser"]);

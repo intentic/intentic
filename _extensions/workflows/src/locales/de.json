@@ -59,6 +59,7 @@
         "whatYoullPickMessage": "Was Sie aus dem Nachrichtenfeld wählen. Kurz genug, um auf einem Knopf zu stehen."
     },
     "stepInspector": {
+        "vendorTerms": "Bedingungen des Anbieters",
         "acrossEveryRoundStep": "Über alle Runden dieses Schritts. Leer lässt es ungedeckelt.",
         "acts": "Handelt als",
         "addField": "Feld hinzufügen",

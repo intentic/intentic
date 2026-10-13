@@ -6,9 +6,11 @@ import type { AgentRequest, ContainerCredential, TurnPolicy, TurnSpec } from "..
 import { SteeringQueue } from "../../agent/checkpoints/agent-steering.js";
 import { createPiAgent } from "./pi-agent.js";
 import type { TurnTimeouts } from "../decorators/turn-watchdog.js";
-import type { PiEvent, PiProcessHandlers, PiResponse, PiSpawn } from "./pi-rpc.js";
+import type { PiEvent, PiLaunch, PiProcessHandlers, PiResponse, PiSpawn, PiStarted } from "./pi-rpc.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../../testing.js";
+import { declarationOf, rulesOf } from "../../rules/repo-checks.js";
+import { createTurnRelay } from "../daemon-tools/turn-relay.js";
 
 // Where a turn here parks its cards: one fleet's actors.
 const cards = parkedCards(memoryFleet().conversations);
@@ -24,6 +26,8 @@ type Responder = PiResponse | ((command: Record<string, unknown>, signal?: Abort
 
 interface FakePi {
     readonly spawn: PiSpawn;
+    // What each process was started with, in spawn order.
+    readonly launches: PiLaunch[];
     // Every command the adapter sent (requests and fire-and-forget alike), in order.
     readonly sent: Record<string, unknown>[];
     readonly emit: (event: PiEvent) => void;
@@ -33,8 +37,15 @@ interface FakePi {
 
 // `prompts` scripts the event burst after each accepted prompt, one entry per prompt in send order (the last repeats:
 // plan revisions loop); `responses` overrides the defaults per command type.
-const fakePi = (prompts: PiEvent[][] = [[{ type: "agent_settled" }]], responses: Record<string, Responder> = {}): FakePi => {
+const fakePi = (
+    prompts: PiEvent[][] = [[{ type: "agent_settled" }]],
+    responses: Record<string, Responder> = {},
+    started: Partial<PiStarted> = {},
+    // Whether the daemon's extension loads and says its hooks are in place, as it does on any Pi that takes `-e`.
+    extension: "loaded" | "silent" = "loaded",
+): FakePi => {
     const sent: Record<string, unknown>[] = [];
+    const launches: PiLaunch[] = [];
     let handlers: PiProcessHandlers | undefined;
     let killed = false;
     let exited = false;
@@ -56,9 +67,14 @@ const fakePi = (prompts: PiEvent[][] = [[{ type: "agent_settled" }]], responses:
     const emit = (event: PiEvent): void => handlers?.onEvent(event);
 
     return {
-        spawn: (_config, _cwd, spawnedHandlers) => {
+        spawn: async (_config, launch, spawnedHandlers) => {
             handlers = spawnedHandlers;
+            launches.push(launch);
+            if (extension === "loaded") {
+                await launch.hooks?.["/ready"]?.answer({});
+            }
             return {
+                ...started,
                 request: async (command, signal) => {
                     // The production transport's contract (pi-rpc): a request whose signal has already aborted is never
                     // written.
@@ -92,6 +108,7 @@ const fakePi = (prompts: PiEvent[][] = [[{ type: "agent_settled" }]], responses:
             };
         },
         sent,
+        launches,
         emit,
         exit: (code) => {
             exited = true;
@@ -487,4 +504,115 @@ test("a turn stopped while setup is still asking Pi never sends its prompt, and 
     expect(pi.sent.filter((command) => command["type"] === "prompt")).toEqual([]);
     expect(events.some((event) => event.kind === "error")).toBe(false);
     expect(events.at(-1)).toEqual({ kind: "done" });
+});
+
+// The daemon's instructions, skills and MCP servers reach Pi as its own launch flags (pi-rpc.ts), not the message.
+test("a turn starts Pi with its instructions, skills and MCP servers", async () => {
+    const pi = fakePi([[{ type: "agent_settled" }]], {}, { mcpMounted: true });
+    const turn = request({ spec: {} });
+    const tools = [{ name: "omen", url: "http://127.0.0.1:1/mcp/omen" }];
+    await collect(
+        createPiAgent(pi.spawn)(
+            CONFIG,
+            { ...turn, spec: { ...turn.spec, systemPrompt: "Mine.", systemAppend: "And this.", conversationId: "c1" }, tools: { remote: tools } },
+            { skills: ["/skills/github"] },
+        ),
+    );
+    expect(pi.launches).toEqual([
+        {
+            cwd: WORKSPACE_ROOT,
+            owner: "c1",
+            instructions: { replace: "Mine.", append: "And this." },
+            skills: ["/skills/github"],
+            tools,
+            // The turn's hook socket's endpoints (pi-hooks.ts), which pi-rpc.ts opens beside the process.
+            hooks: expect.objectContaining({ "/ready": expect.anything(), "/tool-call": expect.anything(), "/tool-result": expect.anything() }),
+        },
+    ]);
+});
+
+test("a Pi that could not mount the turn's MCP servers says so in the turn", async () => {
+    const pi = fakePi([[{ type: "agent_settled" }]], {}, { version: "0.84.4", mcpMounted: false });
+    const turn = request();
+    const events = await collect(createPiAgent(pi.spawn)(CONFIG, { ...turn, tools: { remote: [{ name: "omen", url: "http://127.0.0.1:1/mcp" }] } }));
+    expect(events).toContainEqual(expect.objectContaining({ kind: "agent_notice", level: "warning", text: expect.stringContaining("(0.84.4) has no built-in MCP") }));
+});
+
+test("a turn with no MCP servers says nothing about them", async () => {
+    const pi = fakePi([[{ type: "agent_settled" }]], {}, { mcpMounted: false });
+    const events = await collect(createPiAgent(pi.spawn)(CONFIG, request()));
+    expect(events.some((event) => event.kind === "agent_notice")).toBe(false);
+});
+
+// The daemon's extension says its hooks are in place as Pi loads it (pi-extension.ts); a Pi that never does would run its
+// tools past the owner's rules, so no prompt is sent to it.
+test("a Pi whose extension never says its hooks are in place gets no prompt, and the turn says why", async () => {
+    jest.useFakeTimers();
+    try {
+        const { promise: asked, resolve: noteAsked } = Promise.withResolvers<void>();
+        const pi = fakePi([[{ type: "agent_settled" }]], {
+            get_state: () => {
+                noteAsked();
+                return { success: true, data: { sessionFile: SESSION_FILE } };
+            },
+        }, {}, "silent");
+        const turn = collect(createPiAgent(pi.spawn)(CONFIG, request()));
+        await asked;
+        await advanceTimersByTimeAsync(10_000);
+        jest.useRealTimers();
+        const events = await turn;
+        expect(events.find((event) => event.kind === "error")).toMatchObject({ message: expect.stringContaining("did not load the sandbox's extension") });
+        expect(pi.sent.some((command) => command["type"] === "prompt")).toBe(false);
+        expect(events.at(-1)).toEqual({ kind: "done" });
+    } finally {
+        jest.useRealTimers();
+    }
+});
+
+// The loop's half of the turn's hooks and of the daemon's own tools: its gate answers the extension's calls, and a frame a
+// door tool raises lands in the turn's stream.
+test("while a prompt runs, the extension's calls meet the turn's tool list, and a daemon tool's frame reaches the stream", async () => {
+    const relay = createTurnRelay();
+    let answered: unknown;
+    const pi = fakePi([[{ type: "agent_settled" }]], {
+        prompt: async () => {
+            relay.push({ kind: "agent_notice", level: "info", text: "from a door tool" });
+            answered = await pi.launches[0]?.hooks?.["/tool-call"]?.answer({ tool: "bash", input: { command: "ls" } });
+            return { success: true };
+        },
+    });
+    const turn = { ...request(), policy: { allowedTools: ["Read"] }, hooks: { cards, relay } };
+    const events = await collect(createPiAgent(pi.spawn)(CONFIG, turn));
+    expect(answered).toMatchObject({ block: true, reason: expect.stringContaining("not on this turn's tool list") });
+    expect(events).toContainEqual({ kind: "agent_notice", level: "info", text: "from a door tool" });
+    // Detached with the turn: a frame after it has nowhere to go but the relay's own buffer.
+    expect(await pi.launches[0]?.hooks?.["/tool-call"]?.answer({ tool: "read", input: { path: "a" } })).toMatchObject({ block: true });
+});
+
+// The repositories' `turn` checks run once as the turn is about to end, and what they found is one more prompt.
+test("what the repositories' turn checks find goes back to Pi once, as one more prompt", async () => {
+    const [rule] = rulesOf(declarationOf("intentic", [{ when: "turn", run: "pnpm lint", label: "Lint" }]));
+    const ran: string[] = [];
+    const pi = fakePi([[{ type: "agent_settled" }]]);
+    const turn = {
+        ...request(),
+        hooks: {
+            cards,
+            turnChecks: {
+                rules: rule === undefined ? [] : [rule],
+                change: async () => ({ paths: ["a.ts"], repos: ["intentic"] }),
+                run: async (command: string) => {
+                    ran.push(command);
+                    return { status: "failed" as const, output: "a.ts: 1 lint error" };
+                },
+                onFired: () => {},
+                logger: { warn: () => {} },
+            },
+        },
+    };
+    await collect(createPiAgent(pi.spawn)(CONFIG, turn));
+    const prompts = pi.sent.filter((command) => command["type"] === "prompt").map((command) => String(command["message"]));
+    expect(prompts).toHaveLength(2);
+    expect(prompts[1]).toContain("a.ts: 1 lint error");
+    expect(ran).toEqual(["pnpm lint"]);
 });

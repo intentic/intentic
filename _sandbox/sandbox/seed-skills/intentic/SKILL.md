@@ -34,7 +34,8 @@ What the daemon does around you:
   share the machine. A failure in code you did not touch may be main's own, and it is not yours to chase
   unless your task is about it. Your card records whether a check passed after your last edit.
 - **Runtimes.** A turn runs on Claude Code (this loop), native Codex, OpenCode (Grok, Gemini), Pi, Cursor or
-  an ACP agent, chosen per conversation. Which model actually ran is recorded (`mcp__diagnostics__turns`).
+  an ACP agent, chosen per conversation; Codex and OpenCode also host other providers' models (Kimi, Z.ai, a model
+  endpoint, Grok on Codex, ChatGPT on OpenCode) where the picker offers that loop. Which model actually ran is recorded (`mcp__diagnostics__turns`).
 - **Capabilities** are the connections the owner made: connectors (GitHub, Notion, databases…), browser
   accounts and identities, their own devices (computers, and Android phones through the Intentic Device app), Docker,
   MCP servers, a wallet. Each connected one ships a skill and its tools. A missing one is asked for with the `capabilities` skill, never set up by hand.

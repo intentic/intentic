@@ -5,7 +5,8 @@
 import "@intentic/testing/dom";
 import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { receivePreferenceChange } from "@intentic/ui/preference";
-import { rememberedProviderFor, turnDefaults } from "./turnDefaults";
+import { rememberedHarnessFor, rememberedProviderFor, rememberHarness, turnDefaults } from "./turnDefaults";
+import { advertisedLoops } from "../models/offeredLoops";
 import { accountsLoaded, providerAccounts, translatorAccounts } from "../accounts/providerAccounts";
 import { acpProviders, endpointProviders, endpointsLoaded, perProvider, trialStatus } from "../accounts/providerCatalog";
 
@@ -77,4 +78,19 @@ it(`points an unchosen chat at a floor without recording a choice`, () => {
 
     expect(rememberedProviderFor()).toBe(`claude`);
     expect(turnDefaults.provider.value).toBeUndefined();
+});
+
+// A loop is remembered per provider, and read back only while this sandbox's daemon still offers it.
+it(`reopens a provider on its remembered loop, and on its default once that loop is no longer offered`, () => {
+    rememberHarness(`codex`, `claude-code`);
+    expect(rememberedHarnessFor(`codex`)).toBe(`claude-code`);
+    // Grok's pick is its own.
+    expect(rememberedHarnessFor(`grok`)).toBe(`native`);
+
+    advertisedLoops.value = { codex: [`codex`] };
+    try {
+        expect(rememberedHarnessFor(`codex`)).toBe(`native`);
+    } finally {
+        advertisedLoops.value = undefined;
+    }
 });

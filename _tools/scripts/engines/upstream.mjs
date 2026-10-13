@@ -81,11 +81,43 @@ const githubVersions = async (repo, tagPrefix) => {
         .filter((release) => release.version !== undefined && isStable(release.version));
 };
 
+// A vendor CDN that names only its newest version (xAI's https://x.ai/cli/stable): that version, published when its
+// build's file was last modified, which is what the soak window needs. One version, since the pointer lists no others.
+const pointerVersions = async (url, artifact) => {
+    try {
+        const pointed = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+        const version = pointed.ok ? (await pointed.text()).trim().split(/\s/)[0] : undefined;
+        if (version === undefined || !isStable(version)) {
+            return undefined;
+        }
+        const build = await fetch(artifact(version), { method: "HEAD", signal: AbortSignal.timeout(TIMEOUT_MS) });
+        const at = Date.parse(build.headers.get("last-modified") ?? "");
+        return build.ok && Number.isFinite(at) ? [{ version, at }] : undefined;
+    } catch {
+        // allow(silent-catch): an unreachable CDN must read as "could not ask", which leaves the pin where it is
+        return undefined;
+    }
+};
+
+const primaryVersions = (upstream) => {
+    switch (upstream.kind) {
+        case "npm": {
+            return npmVersions(upstream.package);
+        }
+        case "pointer": {
+            return pointerVersions(upstream.url, upstream.artifact);
+        }
+        default: {
+            return githubVersions(upstream.repo, upstream.tagPrefix);
+        }
+    }
+};
+
 // Every stable version upstream publishes for one engine, newest last, or undefined when upstream could not be asked.
 // `alsoPublished` intersects: a version only one of a pair of packages released is not a version this repo can pin,
 // because the pack and the catalog have to name the same one.
 export const publishedVersions = async (upstream) => {
-    const primary = upstream.kind === "npm" ? await npmVersions(upstream.package) : await githubVersions(upstream.repo, upstream.tagPrefix);
+    const primary = await primaryVersions(upstream);
     if (primary === undefined) {
         return undefined;
     }

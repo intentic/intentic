@@ -76,6 +76,9 @@ export interface PickWorld {
     // Where a pick of a provider lands in this browser, and what a fresh chat starts on. No account: a fresh chat's is
     // the daemon's to pick (auto), never this browser's memory of an earlier one.
     readonly rememberedModel: (provider: AgentProvider) => string;
+    // The loop a pick of a provider lands on: that provider's own last pick, so Codex's Claude Code loop never follows the
+    // chat onto Grok, whose Claude Code loop needs a login of its own.
+    readonly rememberedHarness: (provider: AgentProvider) => AgentHarness;
     readonly defaults: () => SeedDefaults;
 }
 
@@ -123,7 +126,13 @@ export interface PickEffects {
     readonly kept?: true;
     // The next new chat's defaults: the provider/model pair, the settings a pick writes through, the account per provider.
     readonly remember?: TurnPick;
-    readonly defaults?: { readonly effort?: string; readonly thinking?: boolean; readonly auto?: boolean; readonly harness?: AgentHarness };
+    readonly defaults?: {
+        readonly effort?: string;
+        readonly thinking?: boolean;
+        readonly auto?: boolean;
+        // A loop is remembered for the provider it was picked on, never for every provider.
+        readonly harness?: { readonly provider: AgentProvider; readonly harness: AgentHarness };
+    };
     // Move the conversation the daemon holds to this account (switchAccount); a chat it does not hold yet takes the pick
     // on its first turn instead.
     readonly switchAccount?: string;
@@ -180,6 +189,7 @@ const pointAt = (selection: Selection, next: AgentProvider, world: PickWorld): S
         account: next === world.session?.provider ? world.session.account : undefined,
         accountPicked: false,
         model: world.rememberedModel(next),
+        harness: world.rememberedHarness(next),
         displacedModel: undefined,
         sentModel: undefined,
     };
@@ -323,13 +333,14 @@ const REDUCERS: Reducers = {
     // The pick is honoured once a turn naming it runs; a pick made since (another account) still waits for its own.
     accountTaken: (selection, { account }) =>
         selection.accountPicked && selection.account === account ? { selection: { ...selection, accountPicked: false }, effects: {} } : unchanged(selection),
-    // Meaningful for codex/grok only. A retired session takes its prompt cache with it, as a provider switch does.
+    // Meaningful only where the provider offers a choice of loop (harnessChoosable). A retired session takes its prompt
+    // cache with it, as a provider switch does.
     selectHarness: (selection, { harness }, world) =>
         world.streaming || harness === selection.harness
             ? unchanged(selection)
             : {
                   selection: { ...selection, harness, sentModel: undefined },
-                  effects: { kept: true, defaults: { harness }, segmentCut: true, divider: `refresh` },
+                  effects: { kept: true, defaults: { harness: { provider: selection.provider, harness } }, segmentCut: true, divider: `refresh` },
               },
     // The daemon's word on where the conversation runs, shown: how a move the daemon made by itself (a limit move, a
     // turn moved off an account that can no longer serve) reaches the composer. It decides nothing: a turn names no

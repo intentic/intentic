@@ -1,7 +1,8 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { gzipSync } from "node:zlib";
 import * as childProcessOriginal from "node:child_process";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 
@@ -28,8 +29,8 @@ jest.mock("node:child_process", async () => {
     };
 });
 
-const { releaseInstall } = await import("./engine-install.js");
-const { engineDescriptor } = await import("./engine-descriptors.js");
+const { downloadInstall, releaseInstall } = await import("./engine-install.js");
+const { engineDescriptor, grokArch } = await import("./engine-descriptors.js");
 
 let prefix = "";
 
@@ -50,4 +51,24 @@ test("a release asset unpacks as the daemon's own files, never as the archive's 
     expect(calls).toEqual([
         { file: "tar", args: ["-xzf", join(prefix, "asset.tar.gz"), "--no-same-owner", "-C", join(prefix, ".unpack")] },
     ]);
+});
+
+// Grok Build ships as one gzipped binary at a URL of its own; the install fetches that very file for this machine's
+// architecture and leaves an executable, decompressed, under the binary's own name.
+test("a download engine's build is fetched for this machine and unpacked as an executable", async () => {
+    const asked: string[] = [];
+    const binary = "#!/bin/sh\necho grok 9.9.9\n";
+    stubGlobal("fetch", async (url: string) => {
+        asked.push(url);
+        return new Response(gzipSync(Buffer.from(binary)));
+    });
+    await downloadInstall(engineDescriptor("grok-build"), "9.9.9", prefix);
+    expect(asked).toEqual([`https://x.ai/cli/grok-9.9.9-linux-${grokArch()}.gz`]);
+    expect(await readFile(join(prefix, "grok"), "utf8")).toBe(binary);
+    expect((await stat(join(prefix, "grok"))).mode & 0o777).toBe(0o755);
+});
+
+test("a download engine whose build is missing fails the install rather than leaving an empty binary", async () => {
+    stubGlobal("fetch", async () => new Response("not found", { status: 404 }));
+    await expect(downloadInstall(engineDescriptor("grok-build"), "0.0.1", prefix)).rejects.toThrow(/answered 404/);
 });

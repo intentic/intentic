@@ -7,7 +7,7 @@ import { z } from "zod";
 import { discoveredCatalog } from "../../agent/models/model-catalog.js";
 import { idCatalog } from "../../agent/models/model-discovery.js";
 import { cacheFile } from "../../store/open-document.js";
-import { discoverXaiModels, isChatModel, SEED_XAI_MODELS } from "./xai-models.js";
+import { discoverXaiModels, isChatModel, SEED_XAI_MODELS, xaiEffortsOf } from "./xai-models.js";
 
 // What OpenCode holds for a provider's sign-in, read where OpenCode keeps it, without asking its server: whether Grok is
 // connected is asked by health checks and the provider list all day, and a question must not boot a 300 MB runtime, nor
@@ -136,7 +136,17 @@ export const createXaiCatalog = (
     });
     return {
         persisted: modelStore.read,
-        models: models.models,
+        // Each model names the reasoning tiers xAI takes for it, where it takes any.
+        models: async () => {
+            const catalog = await models.models();
+            return {
+                ...catalog,
+                models: catalog.models.map((model) => {
+                    const efforts = xaiEffortsOf(model.id);
+                    return efforts.length === 0 ? model : { ...model, efforts: [...efforts] };
+                }),
+            };
+        },
         record: async (ids: string[]): Promise<void> => {
             // A vendor's suggestions can name media endpoints; an empty result must not replace the known-good list.
             const valid = [...new Set(ids.filter(isChatModel))];

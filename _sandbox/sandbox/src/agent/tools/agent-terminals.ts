@@ -62,7 +62,7 @@ export const agentShellBusy = async (sessionId: string): Promise<boolean> => {
 
 // Window name from the Bash tool's `description`; same safe charset as session names since it lands unquoted in the
 // shell line.
-const windowSlug = (description: unknown): string => {
+export const windowSlug = (description: unknown): string => {
     if (typeof description !== "string") {
         return "run";
     }
@@ -76,7 +76,7 @@ const windowSlug = (description: unknown): string => {
 
 // Env var NAMES as `-e NAME` flags; tmux-run resolves each value itself, since the pane otherwise inherits the tmux
 // server's stale env. Only valid identifiers pass through: unquoted in the shell line, values never appear in it.
-const envKeyFlags = (envKeys: readonly string[]): string =>
+export const envKeyFlags = (envKeys: readonly string[]): string =>
     [...envKeys]
         .filter((key) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key))
         .toSorted()
@@ -86,7 +86,7 @@ const envKeyFlags = (envKeys: readonly string[]): string =>
 // Puts every agent command in the `command` class (workload-class.ts): demoted, and ranked for the OOM killer above every
 // runtime; `bash` runs the command's file since `nice` execs a binary, not a keyword. Panes hang off the tmux server, so
 // no runtime's class reaches them by fork.
-const POLITE_PREFIX = shellPrefix({ class: "command" });
+export const POLITE_PREFIX = shellPrefix({ class: "command" });
 
 // Two prompts that, reproduced in an agent's pane on 2026-10-04, wait there for good, turned off at the source. The pane's
 // terminal is the command's stdin, so npx asks "Ok to proceed? (y)" before installing a package the project lacks, and
@@ -309,7 +309,7 @@ const taskStopHooks = (jobs: BackgroundJobSeed): TaskStopHooks => ({
 
 // Where a Bash call's command files are written: a fenced turn's sandbox and an agent domain each see only their own temp
 // dir, at the same path the daemon writes it (handoffDirOf); every other turn reads the daemon's.
-const runRootFor = (isolation: TurnPlacement | undefined): string => handoffDirOf(isolation?.anchor) ?? tmpdir();
+export const runRootFor = (isolation: TurnPlacement | undefined): string => handoffDirOf(isolation?.anchor) ?? tmpdir();
 
 // A background job's seed, with its dir made where the turn can see it (runRootFor).
 const jobSeedFor = (jobs: BackgroundJobSeed, isolation: TurnPlacement | undefined): BackgroundJobSeed => {
@@ -320,7 +320,7 @@ const jobSeedFor = (jobs: BackgroundJobSeed, isolation: TurnPlacement | undefine
 // What a pane's line runs through before the command: the hop into an anchored turn's namespace, since the shared tmux
 // server forks panes in the daemon's. A fenced turn's panes need none: their tmux server runs inside its sandbox. Nor
 // does an agent domain's: the daemon starts its whole pane inside the domain (terminal/pane-door.ts).
-const paneHop = (isolation: TurnPlacement | undefined): string => {
+export const paneHop = (isolation: TurnPlacement | undefined): string => {
     const anchor = isolation?.anchor;
     return anchor === undefined || anchor.sandbox !== undefined || anchor.domain !== undefined ? "" : nsenterPrefix(namespaceTargetOf(anchor), anchor.cwd);
 };

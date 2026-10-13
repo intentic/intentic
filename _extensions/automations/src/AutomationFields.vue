@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { FireOn, ModelPin, SenderSeen, WatchCheckResult } from "@intentic/sandbox-contract";
-import { WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
+import { canonicalHarness, loopLabel, WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
 import {
     Button,
     ui,
@@ -300,9 +300,16 @@ const rungs = computed(() =>
             ...(pin.harness !== undefined ? { harness: pin.harness } : {}),
             ...(pin.effort !== undefined ? { effort: pin.effort } : {}),
         });
-        return [described.label, described.accountLabel].filter((part) => part !== undefined && part !== ``).join(` · `);
+        return [described.label, loopWord(pin), described.accountLabel].filter((part) => part !== undefined && part !== ``).join(` · `);
     }),
 );
+
+// A rung's loop is chosen in the shell's picker with the rest of the pick; the row names it only where it isn't the
+// provider's default, since the same model through another loop is another run.
+const loopWord = (pin: ModelPin): string | undefined => {
+    const harness = canonicalHarness(pin.provider, pin.harness);
+    return harness === `native` ? undefined : loopLabel(pin.provider, harness);
+};
 
 // An account id only means something beside its own provider, so it can only be pinned while every rung agrees on one;
 // crossing providers clears it, falling back to the connected account with the most headroom, same as the scheduler.

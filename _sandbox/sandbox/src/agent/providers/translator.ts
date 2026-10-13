@@ -30,9 +30,11 @@ import type { HeadroomSource } from "../../usage/headroom.js";
 import { authFileCooling, fetchTranslatorUsage, type TranslatorAuthFile } from "../../usage/translator-usage.js";
 import { superviseTranslator } from "./translator-supervisor.js";
 
-// CLIProxyAPI: a bundled Go proxy that lets the Claude Code harness (Anthropic Messages only) drive
-// Codex/Grok/Kimi/Gemini on the user's subscription, behind an Anthropic-compatible endpoint keyed by model id. Config
-// is static; accounts are added/removed at runtime via the Management API, no restart needed.
+// CLIProxyAPI: a bundled Go proxy holding the user's Codex/Grok/Kimi/Gemini subscriptions and re-serving them keyed by
+// model id, on every wire a loop here speaks: Anthropic Messages (the Claude Code harness), OpenAI Responses (native
+// Codex), OpenAI Chat Completions (OpenCode's Gemini provider) and Gemini's own (the Gemini catalog). Any loop that
+// speaks one of those can reach any subscription it holds. Config is static; accounts are added/removed at runtime via
+// the Management API, no restart needed.
 
 // Our provider ids to CLIProxyAPI's (grok/xai, gemini/antigravity), derived from each provider's spec row.
 const CLIPROXY_PROVIDER: Record<KeyedProvider, string> = Object.fromEntries(

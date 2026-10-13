@@ -1,4 +1,4 @@
-import { withRuntimeDefaults } from "@intentic/sandbox-contract";
+import { capabilitiesOf, withRuntimeDefaults } from "@intentic/sandbox-contract";
 import type { Services } from "../../../composition.js";
 import { opt } from "../../../opt.js";
 import type { JournalledTurn } from "./turn-journal.js";
@@ -22,6 +22,7 @@ export const recordInterrupted = (services: Pick<Services, "usage" | "logger">, 
     const row = {
         provider: turn.agent,
         harness: turn.harness,
+        runtime: capabilitiesOf(turn.agent, turn.harness).runtime,
         ...opt("account", turn.account),
         // What was asked for: what actually ran is not on the journal.
         ...(turn.model !== undefined && turn.model !== "" ? { modelRequested: turn.model } : {}),

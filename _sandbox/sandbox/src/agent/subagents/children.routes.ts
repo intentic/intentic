@@ -1,4 +1,5 @@
 import type { Context } from "hono";
+import { AgentHarnessSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { listSubagentSessions, type SubagentWaitUntil } from "./subagents.js";
 import { waitForWork, workWaitAnswer } from "./work-wait.js";
@@ -24,7 +25,7 @@ const SpawnBodySchema = z.object({
     // Both required: a child may not be pointed nowhere.
     provider: z.string().min(1),
     model: z.string().min(1),
-    harness: z.enum(["native", "claude-code"]).optional(),
+    harness: AgentHarnessSchema.optional(),
     effort: z.string().min(1).optional(),
     // Which machine runs it: a runner's name, or "here" for this sandbox; absent lets the fleet scheduler pick.
     on: z.string().min(1).optional(),

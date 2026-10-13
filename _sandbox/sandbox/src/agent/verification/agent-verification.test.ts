@@ -75,6 +75,41 @@ describe("command classification", () => {
     });
 });
 
+// Codex hands over every command as `/bin/bash -lc '…'`; read as the word `bash`, none of its checks ever counted.
+describe("checks behind a shell wrapper", () => {
+    test.each([
+        ["/bin/bash -lc 'pnpm --filter @intentic/sandbox test agent-verification'", "pnpm --filter @intentic/sandbox test agent-verification"],
+        [`bash -lc "cd /work/intentic && pnpm typecheck"`, "cd /work/intentic && pnpm typecheck"],
+        ["zsh -lc 'tsc --noEmit -p tsconfig.json'", "tsc --noEmit -p tsconfig.json"],
+        [`sh -c 'eval "pnpm test"'`, "pnpm test"],
+    ])("%s is a check, named by the script it runs", (command, check) => {
+        const ledger = createVerificationLedger();
+        ledger.noteEdit(`${WORKSPACE_ROOT}/src/a.ts`);
+        ledger.noteCommand(command, true, "");
+        expect(ledger.standing()).toEqual({ state: "verified", paths: ["/work/src/a.ts"], check });
+    });
+
+    test.each([
+        "/bin/bash -lc 'cat package.json'",
+        `bash -lc 'echo "pnpm test"'`,
+        `bash -lc 'grep -n "pnpm test|tsc" notes.txt'`,
+        "/bin/bash -lc 'pnpm test --help'",
+    ])("%s proves nothing", (command) => {
+        const ledger = createVerificationLedger();
+        ledger.noteEdit(`${WORKSPACE_ROOT}/src/a.ts`);
+        ledger.noteCommand(command, true, "");
+        expect(ledger.standing().state).toBe("unproven");
+    });
+
+    // A wrapper around several commands is named whole: no single script inside it is the check.
+    test("a wrapped command alongside another keeps its whole line as the name", () => {
+        const ledger = createVerificationLedger();
+        ledger.noteEdit(`${WORKSPACE_ROOT}/src/a.ts`);
+        ledger.noteCommand("cd /work && bash -lc 'pnpm test'", true, "");
+        expect(ledger.standing().check).toBe("cd /work && bash -lc 'pnpm test'");
+    });
+});
+
 describe("the ledger", () => {
     test("a passing check after the last edit clears the verdict", () => {
         const ledger = createVerificationLedger();
@@ -182,6 +217,19 @@ describe("the frame-fed ledger", () => {
         ledger.note(shellCall("2", "pnpm test src/a.test.ts"));
         ledger.note(shellResult("2", "1 passed\n--- [exit 0, 2s]"));
         expect(ledger.standing()).toEqual({ state: "verified", paths: ["/work/src/a.ts"], check: "pnpm test src/a.test.ts" });
+    });
+
+    // Codex's shape: no exit footer, a wrapped command, and the call's own status carrying the exit code.
+    test("a Codex command verifies by its status, named by the script it ran", () => {
+        const ledger = createFrameLedger();
+        ledger.note(editCall("1", `${WORKSPACE_ROOT}/src/a.ts`));
+        ledger.note(shellCall("2", "/bin/bash -lc 'pnpm test src/a.test.ts'"));
+        ledger.note(shellResult("2", "1 passed"));
+        expect(ledger.standing()).toEqual({ state: "verified", paths: ["/work/src/a.ts"], check: "pnpm test src/a.test.ts" });
+        ledger.note(editCall("3", `${WORKSPACE_ROOT}/src/a.ts`));
+        ledger.note(shellCall("4", "/bin/bash -lc 'pnpm test src/a.test.ts'"));
+        ledger.note(shellResult("4", "1 failed", "failed"));
+        expect(ledger.standing()).toEqual({ state: "failing", paths: ["/work/src/a.ts"], check: "pnpm test src/a.test.ts" });
     });
 
     // Order matters, and the frame stream is the only place that still preserves it across tool calls.

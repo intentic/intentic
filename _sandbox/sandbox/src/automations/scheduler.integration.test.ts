@@ -505,7 +505,7 @@ test("the automation's own ladder resolves onto the wake, tier and all, with no 
 });
 
 // A fire held to a tool list runs only on a rung whose runtime checks every call against it (AgentCapabilities
-// .toolAllowlist): codex's own loop cannot, the Claude Code loop running codex can.
+// .toolAllowlist): grok's own loop (OpenCode) cannot, the Claude Code loop running grok can.
 test("a fire held to a tool list passes over rungs that cannot keep it, and records why when none can", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
     const inputs: AgentTurn[] = [];
@@ -517,16 +517,16 @@ test("a fire held to a tool list passes over rungs that cannot keep it, and reco
         automationConfig("listed", {
             allowedTools: ["Read"],
             models: [
-                { provider: "codex", model: "gpt-5-codex" },
-                { provider: "codex", model: "gpt-5-codex", harness: "claude-code" },
+                { provider: "grok", model: "grok-code-fast-1" },
+                { provider: "grok", model: "grok-code-fast-1", harness: "claude-code" },
             ],
         }),
     );
     await fireAutomation(drivenBy(services, capture), (await services.automations.get("listed")) as AutomationRecord);
     expect(inputs).toHaveLength(1);
-    expect(inputs[0]).toMatchObject({ agent: "codex", harness: "claude-code", allowedTools: ["Read"] });
+    expect(inputs[0]).toMatchObject({ agent: "grok", harness: "claude-code", allowedTools: ["Read"] });
 
-    await services.automations.upsert(automationConfig("unkept", { allowedTools: ["Read"], models: [{ provider: "codex", model: "gpt-5-codex" }] }));
+    await services.automations.upsert(automationConfig("unkept", { allowedTools: ["Read"], models: [{ provider: "grok", model: "grok-code-fast-1" }] }));
     await fireAutomation(drivenBy(services, capture), (await services.automations.get("unkept")) as AutomationRecord);
     expect(inputs).toHaveLength(1);
     expect((await services.automations.get("unkept"))?.runs[0]).toMatchObject({ outcome: "error", detail: expect.stringContaining("tool") });

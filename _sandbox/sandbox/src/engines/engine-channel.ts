@@ -4,7 +4,7 @@ import { z } from "zod";
 import { ENGINE_DESCRIPTORS, engineDescriptor } from "./engine-descriptors.js";
 import { type EngineState, isQuarantined } from "./engine-store.js";
 
-// What upstream publishes is read straight from its registry (npm or GitHub releases); what this project has blessed is
+// What upstream publishes is read straight from its registry (npm, GitHub releases, a vendor CDN's channel); what this project has blessed is
 // a JSON file in the intentic repo, fetched raw and overridable by env. Neither read may throw: failure keeps the last
 // good value or answers "nothing on offer", never breaking a running sandbox.
 
@@ -135,6 +135,38 @@ const githubReleases = async (repo: string): Promise<{ latest?: string; versions
     }
 };
 
+// A vendor CDN's channel answers one line, its newest version; it lists no others, so that one is all it offers.
+const channelVersion = async (url: string): Promise<{ latest?: string; versions: string[] } | undefined> => {
+    try {
+        const response = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+        if (!response.ok) {
+            return undefined;
+        }
+        const latest = (await response.text()).trim().split(/\s/)[0] ?? "";
+        return /^\d+\.\d+\.\d+(?:-[A-Za-z0-9._]+)?$/.test(latest) ? { latest, versions: [latest] } : undefined;
+    } catch {
+        // allow(silent-catch): an unreachable CDN is "could not ask", which every caller already reads as no offer
+        return undefined;
+    }
+};
+
+// Meta's release channel names one version, its newest; older builds stay downloadable but are not listed anywhere.
+const MetaChannelSchema = z.object({ version: z.string().min(1) });
+
+const metaChannel = async (channelUrl: string): Promise<{ latest?: string; versions: string[] } | undefined> => {
+    try {
+        const response = await fetch(channelUrl, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS), headers: { accept: "application/json" } });
+        if (!response.ok) {
+            return undefined;
+        }
+        const channel = MetaChannelSchema.safeParse(await response.json());
+        return channel.success ? { latest: channel.data.version, versions: [channel.data.version] } : undefined;
+    } catch {
+        // allow(silent-catch): an unreachable channel reads as "could not ask", the same undefined npm and GitHub answer.
+        return undefined;
+    }
+};
+
 type Published = { latest?: string; versions: string[] } | undefined;
 
 // Concurrent readers share one request; an unreachable answer is not held, so the next read asks again.
@@ -147,7 +179,16 @@ const publishedVersions = (id: EngineId, fresh = false): Promise<Published> =>
         id,
         async () => {
             const { source } = engineDescriptor(id);
-            return source.kind === "npm" ? npmMetadata(source.package) : githubReleases(source.repo);
+            switch (source.kind) {
+                case "npm":
+                    return npmMetadata(source.package);
+                case "github-release":
+                    return githubReleases(source.repo);
+                case "download":
+                    return channelVersion(source.channel);
+                case "meta-release":
+                    return metaChannel(source.channelUrl);
+            }
         },
         { fresh },
     );

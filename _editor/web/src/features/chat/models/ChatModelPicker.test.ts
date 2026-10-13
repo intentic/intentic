@@ -26,12 +26,14 @@ jest.mock(`../accounts/pickerAccounts`, () => ({ usePickerAccounts: () => ({ has
 const { default: ChatModelPicker } = await import("./ChatModelPicker.vue");
 const { providerModels } = await import("../accounts/providerCatalog");
 const { effortsFor } = await import("./run-settings/effortScale");
+const { advertisedLoops } = await import("./offeredLoops");
 
 // Grok native, the weakest runtime (something to disclose); Claude Code, the ceiling; both from the contract.
 const ROUTED = { provider: `grok`, harness: `native` } as const satisfies { provider: AgentProvider; harness: AgentHarness };
 const CEILING = { provider: `claude`, harness: `claude-code` } as const satisfies { provider: AgentProvider; harness: AgentHarness };
-// The same ceiling under a provider with no Claude knobs: nothing to disclose, no thinking, no fast speed.
-const BARE = { provider: `codex`, harness: `claude-code` } as const satisfies { provider: AgentProvider; harness: AgentHarness };
+// The same ceiling under a provider with no Claude knobs: nothing to disclose (no limit, no vendor-terms note), no
+// thinking, no fast speed. Codex under Claude Code would carry a terms note, which is something to disclose.
+const BARE = { provider: `kimi`, harness: `claude-code` } as const satisfies { provider: AgentProvider; harness: AgentHarness };
 const limitsOf = (pair: { provider: AgentProvider; harness: AgentHarness }): string[] => limitationsOf(capabilitiesOf(pair.provider, pair.harness));
 
 // The model every mount stands on, so a badge can be published against it.
@@ -130,6 +132,29 @@ it(`hands over every limitation the contract declares, on hover, and takes it ba
     hint(element).dispatchEvent(new MouseEvent(`mouseleave`));
     await nextTick();
     expect(document.body.textContent).not.toContain(limits[0]);
+});
+
+// A limit list with a way out says which: another loop the daemon offers this provider that has none of them.
+it(`names the offered loop that lifts every limit, and none the daemon does not offer`, async () => {
+    const { element } = mount();
+
+    hint(element).dispatchEvent(new MouseEvent(`mouseenter`));
+    await nextTick();
+    expect(document.body.textContent).toContain(`Run it through Claude Code to lift these.`);
+    hint(element).dispatchEvent(new MouseEvent(`mouseleave`));
+    app?.unmount();
+    document.body.innerHTML = ``;
+
+    advertisedLoops.value = { grok: [`opencode`] };
+    try {
+        const narrowed = mount().element;
+        hint(narrowed).dispatchEvent(new MouseEvent(`mouseenter`));
+        await nextTick();
+        expect(document.body.textContent).toContain(limitsOf(ROUTED)[0]!);
+        expect(document.body.textContent).not.toContain(`to lift these`);
+    } finally {
+        advertisedLoops.value = undefined;
+    }
 });
 
 // The ceiling has nothing to disclose; a row reading 0 would invent a caveat the record doesn't have. The
@@ -232,4 +257,18 @@ it(`says what Auto will do and withholds every control over the model underneath
     expect(element.textContent).toContain(`Choose which model does the reading`);
     expect(element.textContent).not.toContain(`Not available here`);
     expect(chips(element)).toEqual({});
+});
+
+/* THE VENDOR'S TERMS RIDE QUIETLY: a row and a hover card in the footer, only where the vendor has said something. */
+
+it(`notes a loop its vendor does not list, in the footer and nowhere louder`, () => {
+    const { element } = mount({ provider: `codex`, harness: `claude-code` });
+
+    expect(element.textContent).toContain(`Vendor terms`);
+});
+
+it(`says nothing about terms where the vendor sanctions the loop`, () => {
+    const { element } = mount(CEILING);
+
+    expect(element.textContent).not.toContain(`Vendor terms`);
 });

@@ -135,6 +135,13 @@ describe(`reading a tab snapshot`, () => {
         });
     });
 
+    // A newer build widens the loop enum; its stored value must not cost the tab, only the loop it names.
+    it(`reads a loop this build has no name for as the provider's own, keeping the tab`, () => {
+        session.set(KEY, blob(`a`, [{ ...tab(`a`, `Chat`), provider: `codex`, harness: `hermes` }]));
+
+        expect(readTabSnapshot(`sb1`)?.tabs[0]).toMatchObject({ conversationId: `a`, title: `Chat`, provider: `codex`, harness: `native` });
+    });
+
     it(`restores a fork's linkage whole, and drops one that reads back partial`, () => {
         session.set(
             KEY,

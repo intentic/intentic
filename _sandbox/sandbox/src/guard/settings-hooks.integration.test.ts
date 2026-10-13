@@ -244,7 +244,7 @@ describe("settingsHookSet over plugins", () => {
         const dir = await writePlugin(join(place.home, "plugins", "modded"), {
             "hooks/hooks.json": MODULE_HOOKS,
             "hooks/stop.sh": "echo stop\n",
-            "hooks/register.ts": `import { helper } from "../lib/helper.ts";\nexport const register = () => helper;\n`,
+            "hooks/register.ts": `import { helper } from "../lib/helper.js";\nexport const register = () => helper;\n`,
             "lib/helper.ts": "export const helper = 1;\n",
             "README.md": "not code\n",
         });

@@ -24,6 +24,7 @@ export type RpcEndpoint<T> = (target: T, message: RpcMessage, call: MountCall) =
 
 export interface MountEndpoints {
     readonly browser: RpcEndpoint<TargetOf<"browser">>;
+    readonly daemon: RpcEndpoint<TargetOf<"daemon">>;
     readonly device: RpcEndpoint<TargetOf<"device">>;
     readonly webext: RpcEndpoint<TargetOf<"webext">>;
     readonly phone: RpcEndpoint<TargetOf<"phone">>;
@@ -32,11 +33,16 @@ export interface MountEndpoints {
     readonly extension: (target: TargetOf<"extension">, c: Context<AppEnv>, call: MountCall) => Promise<Response>;
 }
 
+// A daemon tool server answers in this process, with the request's own signal: nothing to reach but the object itself.
+export const daemonEndpoint: RpcEndpoint<TargetOf<"daemon">> = (target, message, call) => target.server.handle(message, call.signal);
+
 // The endpoint that answers a resolved target's messages, chosen by the target's kind alone.
 const rpcOf = (endpoints: MountEndpoints, target: Exclude<MountTarget, TargetOf<"extension">>, call: MountCall) => {
     switch (target.kind) {
         case "browser":
             return (message: RpcMessage) => endpoints.browser(target, message, call);
+        case "daemon":
+            return (message: RpcMessage) => endpoints.daemon(target, message, call);
         case "device":
             return (message: RpcMessage) => endpoints.device(target, message, call);
         case "webext":

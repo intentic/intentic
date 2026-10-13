@@ -1,8 +1,10 @@
+import { z } from "zod";
 import { discoveredCatalog } from "../../agent/models/model-catalog.js";
 import { unrankedCatalog } from "../../agent/models/model-discovery.js";
 import type { Config } from "../../env.config.js";
 import { cacheFile } from "../../store/open-document.js";
-import { discoverGeminiModels, type GeminiModel, SEED_GEMINI_MODELS } from "./gemini-models.js";
+import type { CliProxyClient } from "../../agent/providers/translator.js";
+import { discoverGeminiModels, type GeminiEffortSource, type GeminiModel, SEED_GEMINI_MODELS } from "./gemini-models.js";
 
 // Google-channel model catalog on the shared ladder; account-only, no API-key fallback, so the SEED_GEMINI_MODELS floor
 // Persist model metadata and treat missing modalities as undiscovered.
@@ -15,22 +17,37 @@ export interface GeminiCatalog {
 
 const MODELS_TTL_MS = 60_000;
 
+// A row stored before efforts were read has none, which is a row with no effort choice, not a damaged one.
+const StoredEffortsSchema = z.object({ efforts: z.array(z.string()).optional() });
+
 const isGeminiModel = (entry: unknown): entry is GeminiModel => {
     const model = entry as { id?: unknown; label?: unknown; inputModalities?: unknown };
     return (
         typeof model.id === "string" &&
         typeof model.label === "string" &&
         Array.isArray(model.inputModalities) &&
-        model.inputModalities.every((modality) => typeof modality === "string")
+        model.inputModalities.every((modality) => typeof modality === "string") &&
+        StoredEffortsSchema.safeParse(entry).success
     );
 };
 
-export const createGeminiCatalog = (config: Config, persistPath: string, fetchImpl: typeof fetch = fetch): GeminiCatalog => {
+// Each model's thinking scale off the translator's management catalog, the one place it publishes one.
+const translatorEfforts =
+    (cliProxy: Pick<CliProxyClient, "models"> | undefined): GeminiEffortSource =>
+    async () =>
+        new Map(cliProxy === undefined ? [] : (await cliProxy.models("gemini")).flatMap((model) => (model.efforts === undefined ? [] : [[model.id, model.efforts] as const])));
+
+export const createGeminiCatalog = (
+    config: Config,
+    persistPath: string,
+    fetchImpl: typeof fetch = fetch,
+    cliProxy?: Pick<CliProxyClient, "models">,
+): GeminiCatalog => {
     const catalog = discoveredCatalog({
         ttlMs: MODELS_TTL_MS,
         discover: () =>
             config.translator.url !== ""
-                ? discoverGeminiModels(config.translator.url, config.translator.token, fetchImpl).then(
+                ? discoverGeminiModels(config.translator.url, config.translator.token, fetchImpl, translatorEfforts(cliProxy)).then(
                       (models) => models ?? [],
                       (): GeminiModel[] => [],
                   )

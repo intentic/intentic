@@ -74,6 +74,7 @@
         "whatYoullPickMessage": "What you'll pick from the message box. Short enough to read on a button."
     },
     "stepInspector": {
+        "vendorTerms": "Vendor terms",
         "acrossEveryRoundStep": "Across every round of this step. Empty leaves it uncapped.",
         "acts": "Acts as",
         "addField": "Add field",

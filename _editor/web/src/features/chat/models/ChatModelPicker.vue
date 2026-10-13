@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { limitationsOf } from "@intentic/sandbox-contract";
-import { InfoHint } from "@intentic/ui";
+import { termsOf } from "@intentic/sandbox-contract";
 import type { Conversation } from "../session/conversation";
 import { AUTO_KEY, autoEntry, type PickerEntry } from "./modelPickerState";
 import { usePickerAccounts } from "../accounts/pickerAccounts";
@@ -9,6 +8,9 @@ import { type RunSettingsPatch, usePickerRunSettings } from "./run-settings/pick
 import ModelPicker from "./ModelPicker.vue";
 import PickerAccounts from "../accounts/PickerAccounts.vue";
 import PickerRunSettings from "./run-settings/PickerRunSettings.vue";
+import LoopTermsRow from "./LoopTermsRow.vue";
+import LoopLimitsRow from "./LoopLimitsRow.vue";
+import { limitationsOn, offeredLoops, selectedLoop } from "./offeredLoops";
 import { useT } from "@intentic/ui/i18n";
 
 // Chat's binding of the shared model picker: the list, the who-serves-the-turn block, and per-conversation footer
@@ -21,7 +23,7 @@ const emit = defineEmits<{ selected: [] }>();
 const { conversation } = defineProps<{ conversation: Conversation }>();
 
 // Destructured once; every host remounts this component (v-if) rather than swapping the prop in place.
-const { provider, harness, model, thinking, fast, effort, account, accountNamed, capabilities, auto } = conversation.selection;
+const { provider, harness, model, thinking, fast, effort, account, accountNamed, auto } = conversation.selection;
 const { fastMode, box } = conversation;
 const { streaming, generating } = conversation.turn;
 const { messages } = conversation.transcript;
@@ -69,8 +71,11 @@ const pick = (entry: PickerEntry): void => {
     emit(`selected`);
 };
 
-// What the selected provider/harness pair can't do, from its declared record; empty for the ceiling (Claude Code loop).
-const limitations = computed(() => limitationsOf(capabilities.value));
+// What the selected provider/harness pair can't do here; empty for the ceiling (Claude Code loop).
+const limitations = computed(() => limitationsOn(provider.value, offeredLoops(provider.value), harness.value));
+
+// What the vendor's own terms say about this loop, when they say anything worth a quiet note.
+const terms = computed(() => termsOf(provider.value, selectedLoop(offeredLoops(provider.value), harness.value)));
 
 // Sentence per reason the harness can give; an unrecognized one still shows the raw word verbatim.
 // Built when read, so a switched language reaches it.
@@ -109,7 +114,9 @@ const fastSpeedNotice = computed<string | undefined>(() => {
 // Whether the footer earns its own border and padding; prevents a rule drawn above an otherwise-empty footer.
 // Under Auto everything below the explanation describes the model the chat would fall back to, not the one it will
 // run: drawing accounts, effort and this runtime's limits there would be answering questions about the wrong model.
-const footerVisible = computed(() => (auto.value ? true : accountsShown.value || runSettingsShown.value || limitations.value.length > 0));
+const footerVisible = computed(() =>
+    auto.value ? true : accountsShown.value || runSettingsShown.value || limitations.value.length > 0 || terms.value !== undefined,
+);
 </script>
 
 <template>
@@ -168,19 +175,9 @@ const footerVisible = computed(() => (auto.value ? true : accountsShown.value ||
                 </div>
 
                 <!-- One row (label-left/control-right), the list itself behind a hover card. -->
-                <div v-if="limitations.length > 0 && !auto" class="flex items-center justify-between gap-2">
-                    <span class="text-2xs font-medium uppercase tracking-wide text-muted">{{ t(`chat.words.notAvailableHere`) }}</span>
-                    <InfoHint :label="t(`chat.words.whatIsntAvailableHere`)" :text="`${limitations.length}`" class="shrink-0">
-                        <!-- States its own heading, since the card teleports to the tooltip tier and may land clear of the row that raised it. -->
-                        <span class="block text-xs font-medium text-content">{{ t(`chat.words.notAvailableHere`) }}</span>
-                        <ul class="mt-1 flex flex-col gap-1 text-xs">
-                            <li v-for="limit in limitations" :key="limit" class="flex items-start gap-1.5">
-                                <span class="mt-[0.4rem] h-1 w-1 shrink-0 rounded-full bg-line-strong" aria-hidden="true"></span>
-                                <span class="text-muted">{{ limit }}</span>
-                            </li>
-                        </ul>
-                    </InfoHint>
-                </div>
+                <LoopLimitsRow v-if="!auto" :provider="provider" :harness="harness" />
+
+                <LoopTermsRow v-if="terms !== undefined && !auto" :terms="terms" />
             </div>
         </template>
     </ModelPicker>

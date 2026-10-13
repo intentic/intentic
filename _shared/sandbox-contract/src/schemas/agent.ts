@@ -1,6 +1,7 @@
 import { TurnErrandSchema } from "./speaker.js";
 import { z } from "zod";
 import { CONVERSATION_ID } from "../ids/conversation-ids.js";
+import { canonicalHarness } from "../models/agent-catalog.js";
 import { ModelRoleSchema } from "../models/model-roles.js";
 import { NATIVE_PROVIDERS } from "../models/provider-specs.js";
 import { AgentPlacementSchema } from "../protocol/doors/runner-protocol.js";
@@ -14,9 +15,14 @@ export type AgentProvider = z.infer<typeof AgentProviderSchema>;
 // Provider naming a catalog in providers.contract.ts; an enum, not the open string above, since only native providers
 // have a daemon-held catalog to look up. An unknown id is a 400 here, not an empty list.
 export const NativeProviderParamSchema = z.object({ provider: z.enum(NATIVE_PROVIDERS) });
-// The harness (agentic loop) a turn runs on, orthogonal to the provider.
-export const AgentHarnessSchema = z.enum(["native", "claude-code"]);
+// The harness (agentic loop) a turn runs on, orthogonal to the provider. `native` is an alias for whichever loop the
+// provider runs by default; every other value names a loop outright. `vendor` is the provider's own agent where that is
+// none of the named host loops (Cursor's SDK, the Devin CLI, an installed ACP agent). Which loops a provider offers is
+// its row's `loops` (models/provider-specs.ts); values are only ever appended, since stored turns and pins carry them.
+export const AgentHarnessSchema = z.enum(["native", "claude-code", "codex", "opencode", "pi", "muse", "vendor"]);
 export type AgentHarness = z.infer<typeof AgentHarnessSchema>;
+// A loop named outright, as a provider row offers it; `native` only ever resolves to one of these (loopOf).
+export type AgentLoop = Exclude<AgentHarness, "native">;
 // One repo at one immutable commit; used both as the checkout instruction and as handoffs' comparison base, so a
 // multi-repo run has one provenance record instead of a hard-coded branch name.
 export const RepoBaseSchema = z.object({ repo: z.string(), base: z.string().min(1) });
@@ -169,8 +175,8 @@ const AgentTurnFieldsSchema = z.object({
         ),
     // Which provider serves the turn, absent = claude; a sessionId resumes only on the provider that minted it.
     agent: AgentProviderSchema.optional().describe("Which model provider serves this turn. Leave it out for Claude."),
-    // Which agentic loop runs the turn, absent = provider's own; "claude-code" forces the SDK loop for any
-    // provider.
+    // Which agentic loop runs the turn, absent = provider's own; a loop the provider doesn't offer runs its own too
+    // (withRuntimeDefaults), rather than refusing a turn a stale composer setting named.
     harness: AgentHarnessSchema.optional().describe("Which agentic loop runs the turn. Leave it out to use each provider's own."),
     // Intent, not a guess: absent continues on the conversation's own account, or picks by serviceability where there is
     // none on this provider yet (agent/providers/accounts/routing.ts).
@@ -376,13 +382,17 @@ export const AgentRunSchema = AgentTurnSchema.safeExtend({
 export type RoutedAgentTurn = AgentTurn & { readonly agent: AgentProvider; readonly harness: AgentHarness };
 export const DEFAULT_PROVIDER: AgentProvider = "claude";
 export const DEFAULT_HARNESS: AgentHarness = "native";
+// A loop the provider does not offer is not the loop that runs (capabilitiesOf answers its own runtime either way), so the
+// turn is named for the one that does: one composer setting left on Claude Code must not stamp "claude-code" on a Cursor,
+// Google or Devin turn's profile, transcript and ledger row.
+// Naming the provider's default loop outright is the same turn as naming none, so it is stamped `native` too: one turn,
+// one spelling, whichever way the request put it.
 export const withRuntimeDefaults = <T extends { readonly agent?: AgentProvider | undefined; readonly harness?: AgentHarness | undefined }>(
     turn: T,
-): T & { readonly agent: AgentProvider; readonly harness: AgentHarness } => ({
-    ...turn,
-    agent: turn.agent ?? DEFAULT_PROVIDER,
-    harness: turn.harness ?? DEFAULT_HARNESS,
-});
+): T & { readonly agent: AgentProvider; readonly harness: AgentHarness } => {
+    const agent = turn.agent ?? DEFAULT_PROVIDER;
+    return { ...turn, agent, harness: canonicalHarness(agent, turn.harness) };
+};
 // Which turn this is, as opposed to what it says: who serves it and how (agent, harness, account, model and its knobs),
 // as whom (actsAs), where (isolated), whether anyone watches (unattended) and for which job (runRole). A turn that
 // continues another (a resume, a wake, a nudge, a child's follow-up) carries this whole, never a hand-picked part.

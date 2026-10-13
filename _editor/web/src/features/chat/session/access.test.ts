@@ -4,6 +4,7 @@ import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { accessKnown, firstReadyProvider, providerReady, providerReadyOn, trialExhausted, trialPhase } from "./access";
 import { accountsLoaded, providerAccounts, translatorAccounts } from "../accounts/providerAccounts";
 import { acpProviders, endpointProviders, endpointsLoaded, perProvider, trialStatus } from "../accounts/providerCatalog";
+import { advertisedLoops } from "../models/offeredLoops";
 
 const OLLAMA = `endpoint/ollama`;
 
@@ -89,4 +90,36 @@ it(`reads the trial's day as one phase: fresh up to half spent, low past it, spe
     expect(trialExhausted(TRIAL_PROVIDER)).toBe(true);
     // Another provider is never on the trial.
     expect(trialPhase(`claude`)).toBe(`none`);
+});
+
+// A provider whose own CLI loop signs in through a door of its own (Kimi CLI, Grok Build) is ready per loop: the CLI's
+// sign-ins serve its loop alone, and the translator's subscription the Claude Code loop.
+describe(`a provider with a CLI loop of its own`, () => {
+    beforeEach(() => {
+        advertisedLoops.value = { kimi: [`claude-code`, `vendor`], grok: [`opencode`, `claude-code`, `vendor`] };
+    });
+    afterEach(() => {
+        advertisedLoops.value = undefined;
+    });
+
+    it(`is ready on the CLI's loop only with the CLI's own sign-in, and under Claude Code only with the subscription`, () => {
+        providerAccounts.value = { ...perProvider(() => []), kimi: [{ id: `k1`, label: `Kimi CLI`, connectedAt: 1, variant: `kimi-cli` }] };
+        expect(providerReadyOn(`kimi`, `vendor`)).toBe(true);
+        expect(providerReadyOn(`kimi`, `native`)).toBe(false);
+
+        translatorAccounts.value = { codex: [], grok: [], kimi: [{ name: `kimi-1`, label: `Kimi Code session` }], gemini: [] };
+        providerAccounts.value = perProvider(() => []);
+        expect(providerReadyOn(`kimi`, `native`)).toBe(true);
+        expect(providerReadyOn(`kimi`, `vendor`)).toBe(false);
+    });
+
+    it(`keeps Grok's xAI account on OpenCode and Grok Build's sign-in on its own loop`, () => {
+        providerAccounts.value = { ...perProvider(() => []), grok: [{ id: `xai`, label: `Grok`, connectedAt: 1 }] };
+        expect(providerReadyOn(`grok`, `native`)).toBe(true);
+        expect(providerReadyOn(`grok`, `vendor`)).toBe(false);
+
+        providerAccounts.value = { ...perProvider(() => []), grok: [{ id: `g1`, label: `Grok Build`, connectedAt: 1, variant: `grok-build` }] };
+        expect(providerReadyOn(`grok`, `vendor`)).toBe(true);
+        expect(providerReadyOn(`grok`, `native`)).toBe(false);
+    });
 });

@@ -5,6 +5,7 @@ import type { ConversationActors } from "../../conversations/actor/conversation-
 import { createEndpointCatalog, type EndpointCatalog } from "../../endpoints/endpoint-catalog.js";
 import { syncEndpointCompat } from "../../endpoints/endpoint-translator.js";
 import type { AcpTurnOptions } from "../../runtimes/acp/acp-agent.js";
+import type { PiTurnOptions } from "../../runtimes/pi/pi-agent.js";
 import type { AcpConnections } from "../../runtimes/acp/acp-connection.js";
 import type { AcpLaunch } from "../../runtimes/acp/acp-spawn.js";
 import type { OpenCodeService } from "../../runtimes/opencode/opencode.js";
@@ -67,7 +68,7 @@ export interface ProvidersSlice {
     ) => AsyncGenerator<AgentEvent>;
     readonly acpConnections: AcpConnections;
     // Pi adapter for the reserved pi agent-kind capability over Pi's RPC; one process per turn, sessions as files.
-    readonly piAgent: (config: AcpAgentConfig, request: AgentRequest<ContainerCredential>) => AsyncGenerator<AgentEvent>;
+    readonly piAgent: (config: AcpAgentConfig, request: AgentRequest<ContainerCredential>, options?: PiTurnOptions) => AsyncGenerator<AgentEvent>;
     // Durable spend ledger, outside the agent's reach, one row per attributed turn, never pruned unlike activity.
     readonly usage: UsageStore;
     // Latest plan-limit snapshot per account of any provider; every account surface merges it from one place.

@@ -7,6 +7,7 @@ import {
     type AgentProvider,
     type KeyedProvider,
     type LoginFlow,
+    loopDoors,
     type NativeProvider,
     type OauthAccount,
     providerLabel,
@@ -394,10 +395,11 @@ export const startConnect = async (variant?: string): Promise<void> => {
             catchers: body.catchers ?? [],
             redeemed: false,
         };
-        // A watched sign-in can finish with nobody touching this tab, so it polls the attempt itself. Otherwise
-        // paste-back never polls, and every other shape watches the account list. Both until the daemon's own
-        // `expiresAt`, not a local deadline, since that's the attempt that actually expires.
-        if ((body.catchers ?? []).length > 0) {
+        // A watched sign-in can finish with nobody touching this tab, so it polls the attempt itself, and so does a loop's
+        // own CLI sign-in (Grok Build, Kimi CLI), whose CLI can be turned away by the vendor after the code was shown:
+        // only the attempt says so. Otherwise paste-back never polls, and every other shape watches the account list.
+        // All until the daemon's own `expiresAt`, not a local deadline, since that's the attempt that actually expires.
+        if ((body.catchers ?? []).length > 0 || loopDoors(target).some((door) => door.door === body.variant)) {
             void pollNativeStatus(target, body.handshake, body.expiresAt);
         } else if (body.flow !== `paste`) {
             void pollNativeList(target, body.expiresAt, before);

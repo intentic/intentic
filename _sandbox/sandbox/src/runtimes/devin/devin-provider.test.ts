@@ -1,4 +1,4 @@
-import type { AgentEvent, AgentTurn, RoutedAgentTurn } from "@intentic/sandbox-contract";
+import { type AgentEvent, type AgentTurn, type RoutedAgentTurn, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import type { TurnContext } from "../../agent/providers/adapter.js";
 import type { AgentRequest } from "../../agent/providers/agent-request.js";
@@ -36,6 +36,12 @@ const harness = (accounts: StoredDevinAccount[], replies: AgentEvent[] = [{ kind
         ...testTurnMounts(),
         capabilities: unstubbed("capabilities", { list: async () => [] }),
         workspace: unstubbed("workspace", { root: ROOT }),
+        // What the daemon's own servers read as they are built (daemon-servers.ts); none is called by a plan.
+        conversations: unstubbed("conversations", {}),
+        usage: unstubbed("usage", { turns: async () => [] }),
+        dependencies: unstubbed("dependencies", {}),
+        agents: unstubbed("agents", { entry: () => undefined }),
+        logger: createLogger(testConfig),
         devinStore: unstubbed("devinStore", {
             credentials: async () => accounts,
             read: async (id: string) => accounts.find((entry) => entry.id === id),
@@ -79,6 +85,7 @@ const context: TurnContext = {
     effectiveCwd: ROOT,
     cliEnv: {},
     steering: undefined,
+    settings: SandboxSettingsSchema.parse({}),
 };
 
 const turn = (over: Partial<AgentTurn> = {}): RoutedAgentTurn =>
@@ -144,4 +151,15 @@ test("a turn refused as signed out marks the account for a new sign-in and says 
 test("every key refused: the turn is refused before spawning, naming the reconnect", async () => {
     const plan = await planDevinTurn(harness([account("a", { refusedAt: 1 })]).services, turn(), context, []);
     expect(plan).toEqual({ ok: false, message: expect.stringContaining("Connect your Devin account again") });
+});
+
+// The daemon's own servers ride the same door lease as the floor's mounts (daemon-servers.ts), and the loop gets the relay
+// they reach the running turn through.
+test("the daemon's own servers ride the turn's remote list, with the relay the loop attaches", async () => {
+    const plan = await planDevinTurn(harness([account("a")]).services, turn(), context, []);
+    if (!plan.ok) {
+        throw new Error(plan.message);
+    }
+    expect(plan.request.tools.remote?.map((tool) => tool.name)).toEqual(expect.arrayContaining(["ui", "watch", "deps"]));
+    expect(plan.request.hooks.relay).toMatchObject({ attach: expect.any(Function), push: expect.any(Function) });
 });

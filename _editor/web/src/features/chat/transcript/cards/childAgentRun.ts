@@ -1,9 +1,10 @@
-import { type ChildAgentAsk, type ChildRun, childRunOf, harnessChoosable, sameChildRun } from "@intentic/sandbox-contract";
+import { type ChildAgentAsk, type ChildRun, childRunOf, loopLabel, sameChildRun } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
 import { modelLabelFor } from "../../accounts/providerCatalog";
 import { accountsOf } from "../../accounts/useChat-accounts";
 import type { ModelChoice } from "../../models/host/hostModelPicker";
 import { effortLabelOf } from "../../models/run-settings/effortScale";
+import { offeredLoops, selectedLoop } from "../../models/offeredLoops";
 import { defaultPinRunSettings } from "../../models/run-settings/pickerRunSettings";
 
 // How the child-agent card reads the run a child would start on, and turns the shell picker's answer back into one.
@@ -34,12 +35,19 @@ const accountFact = (run: ChildRun): string | undefined => {
     return others.length === 0 ? t(`chat.chatChildAgentAsk.account`, { account: only.label }) : t(`chat.chatChildAgentAsk.anyAccount`);
 };
 
+// The loop is worth a word only where it isn't the provider's default; Claude's own IS Claude Code. A loop this daemon
+// doesn't offer the provider on runs as the default, so it is not named either.
+const loopFact = (run: ChildRun): string | undefined => {
+    const offered = offeredLoops(run.provider);
+    const loop = selectedLoop(offered, run.harness ?? `native`);
+    return loop === offered[0] ? undefined : t(`chat.chatChildAgentAsk.through`, { harness: loopLabel(run.provider, loop) });
+};
+
 /** What the run line leaves out, each only where it says something: who pays, which loop, which machine. */
 export const childRunFacts = (ask: ChildAgentAsk, run: ChildRun): readonly string[] =>
     [
         accountFact(run),
-        // The loop is worth a word only where the provider has two that differ; Claude's own IS Claude Code.
-        run.harness === `claude-code` && harnessChoosable(run.provider) ? t(`chat.chatChildAgentAsk.through`, { harness: t(`shared.claudeCode`) }) : undefined,
+        loopFact(run),
         ask.on === undefined ? undefined : ask.on === `here` ? t(`chat.chatChildAgentAsk.onHere`) : t(`chat.chatChildAgentAsk.onRunner`, { runner: ask.on }),
     ].filter((fact) => fact !== undefined);
 

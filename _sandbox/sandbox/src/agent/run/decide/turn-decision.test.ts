@@ -1,5 +1,7 @@
 import {
+    type AgentCapabilities,
     type Capability,
+    capabilitiesOf,
     type CredentialGate,
     type Persona,
     PersonaPowersSchema,
@@ -17,13 +19,13 @@ import { WORKSPACE_MAP_NOTE_TITLE } from "@intentic/agent-context/workspace-map"
 import { MAP_COMPARISON } from "./experiments.js";
 import { opt } from "../../../opt.js";
 import type { ChildSupervisor } from "../../subagents/children.js";
-import { SPAWN_NOTE_TITLE } from "../../subagents/spawn-note.js";
+import { SPAWN_NOTE_HEADER, SPAWN_NOTE_TITLE } from "../../subagents/spawn-note.js";
 import type { TurnContext } from "../../providers/adapter.js";
 import { experimentArm } from "@intentic/agent-context/experiments";
 import { conversationAfter } from "../../../testing.js";
 import { LANDING_CHECKS_NOTE_TITLE, LANDING_CHECKS_NOTE } from "../../prompt/checks-note.js";
 import { base, budgetOn, context, memoryReading, ROOT, turn } from "../turn/turn-plan.testing.js";
-import { decideTurn, type TurnDecision } from "./turn-decision.js";
+import { decideTurn, spawnNoteFor, type TurnDecision } from "./turn-decision.js";
 import type { AdmittedTurnFacts, TurnFacts } from "./turn-facts.js";
 
 // decideTurn over facts stated as values: no services, no disk, no clock. Which reads a turn pays for is
@@ -381,16 +383,20 @@ test("a window that cannot hold the loop refuses, and the log says how short it 
 // A tool list is kept only by a runtime that checks every call against it; any other would run the turn with its whole
 // toolbox, so the turn is turned away before anything spawns.
 test("a turn held to a tool list is turned away on a runtime that cannot keep one, and runs on one that can", () => {
-    const refused = decideTurn(FACTS, turn({ agent: "codex", allowedTools: ["Read", "Grep"] }), context);
+    const refused = decideTurn(FACTS, turn({ agent: "devin", allowedTools: ["Read", "Grep"] }), context);
     expect(refused).toMatchObject({ ok: false, code: "tools-unenforced", message: expect.stringContaining("Read, Grep"), spawn: false });
     expect(refused.warnings).toEqual([
         {
-            fields: { provider: "codex", harness: "native", tools: 2 },
+            fields: { provider: "devin", harness: "native", tools: 2 },
             message: "tools: the turn carries a tool list its runtime cannot keep, refused before sending",
         },
     ]);
-    expect(decideTurn(FACTS, turn({ agent: "codex", harness: "claude-code", allowedTools: ["Read"] }), context)).not.toMatchObject({ code: "tools-unenforced" });
-    expect(decideTurn(FACTS, turn({ agent: "codex" }), context)).not.toMatchObject({ code: "tools-unenforced" });
+    expect(decideTurn(FACTS, turn({ agent: "devin" }), context)).not.toMatchObject({ code: "tools-unenforced" });
+    // OpenCode keeps one too: the turn's session rules deny every action off the list (runtimes/opencode/allowlist).
+    expect(decideTurn(FACTS, turn({ agent: "grok", allowedTools: ["Read"] }), context)).not.toMatchObject({ code: "tools-unenforced" });
+    expect(decideTurn(FACTS, turn({ agent: "grok", harness: "claude-code", allowedTools: ["Read"] }), context)).not.toMatchObject({ code: "tools-unenforced" });
+    // Codex's own loop keeps a list: its PreToolUse hook puts every call to the door's gate (codex-hooks.ts).
+    expect(decideTurn(FACTS, turn({ agent: "codex", allowedTools: ["Read"] }), context)).not.toMatchObject({ code: "tools-unenforced" });
 });
 
 // The privacy shield's refusal is a fact gathered before the decision; deciding on it sends nothing and holds the words.
@@ -535,13 +541,26 @@ test.each([
 });
 
 test.each([
-    ["native Codex, whose only door is its shell", "codex", undefined, true],
+    ["native Grok, which reaches the daemon's subagents server over the door", "grok", undefined, false],
     ["the Claude Code loop, which carries the tools in-prompt", "claude", undefined, false],
     ["Cursor, which does too", "cursor", undefined, false],
-    ["a follow-up, whose session already carries the teaching", "codex", conversationAfter(2), false],
+    ["native Codex, which reaches the daemon's subagents server over the door", "codex", undefined, false],
+    ["a follow-up, whose session already carries the teaching", "devin", conversationAfter(2), false],
 ] as const)("the spawn teaching for %s", (_case, agent, entry, taught) => {
     const decision = decided({ ...FACTS, entry }, turn({ agent, conversationId: "c-spawn" }), withChildren);
 
     expect(decision.spawn).toBe(true);
     expect(titles(decision).includes(SPAWN_NOTE_TITLE)).toBe(taught);
+});
+
+// No loop today lacks the door, so the teaching is pinned on its rule: a runtime whose MCP reach stops short of the
+// daemon's own tools is taught the CLI once, on the opening turn; one the tools reach never is.
+test("the spawn teaching goes only to a loop the daemon's tools cannot reach, and only on its first turn", () => {
+    const withMcp = (mcp: AgentCapabilities["mcp"]) => ({ ...capabilitiesOf("claude", "native"), mcp });
+    expect(spawnNoteFor(true, { capabilities: withMcp("http"), conversationTurns: 0 })).toContain(SPAWN_NOTE_HEADER);
+    expect(spawnNoteFor(true, { capabilities: withMcp("none"), conversationTurns: 0 })).toContain(SPAWN_NOTE_HEADER);
+    expect(spawnNoteFor(true, { capabilities: withMcp("http"), conversationTurns: 2 })).toBeUndefined();
+    expect(spawnNoteFor(false, { capabilities: withMcp("http"), conversationTurns: 0 })).toBeUndefined();
+    expect(spawnNoteFor(true, { capabilities: withMcp("tools"), conversationTurns: 0 })).toBeUndefined();
+    expect(spawnNoteFor(true, { capabilities: withMcp("full"), conversationTurns: 0 })).toBeUndefined();
 });

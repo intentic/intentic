@@ -2,7 +2,7 @@
 import { browserOwnsClick, SearchBar, type Tip, useDevice, useListNavigation } from "@intentic/ui";
 import { computed, nextTick, onMounted, ref } from "vue";
 import { RouterLink } from "vue-router";
-import { type AgentProvider, capabilitiesOf, PROVIDERS } from "@intentic/sandbox-contract";
+import { type AgentProvider, capabilitiesOf, PROVIDERS, termsOf } from "@intentic/sandbox-contract";
 import { accessBadge, accessStateFor, providerReady, trialBadge } from "../session/access";
 import { formatReset } from "../session/usageStatus";
 import { badgeMeta } from "./catalog";
@@ -285,10 +285,17 @@ const rowAriaLabel = (entry: PickerEntry): string => {
 // healthy one.
 const providerNeedsReauth = (target: AgentProvider): boolean => accessStateFor(target).needsReauth;
 
+// The vendor's note on a provider whose own loop its terms forbid (the owner keeps such routes by choice); only that
+// status earns the list header, since a merely unlisted loop is a choice made later, in the footer.
+const forbiddenNote = (target: AgentProvider): string | undefined => {
+    const terms = termsOf(target, `native`);
+    return terms?.status === `against-terms` ? terms.note : undefined;
+};
+
 // Whether this provider's runtime can serve a turn, from the daemon's background probe; distinct from the credential
 // badges above. Silent unless sure; asked against the native harness, the axis a row would run on by default.
-const { runtimeIssue } = useSandboxVersion();
-const providerRuntimeIssue = (target: AgentProvider): string | undefined => runtimeIssue(capabilitiesOf(target, `native`).runtime);
+const { pairIssue } = useSandboxVersion();
+const providerRuntimeIssue = (target: AgentProvider): string | undefined => pairIssue(capabilitiesOf(target, `native`).runtime, target);
 
 // What a lane stands on: its first provider; every other rail fact is an account fact.
 const railLead = (lane: PickerLane): AgentProvider => lane.providers[0]!;
@@ -446,6 +453,13 @@ onMounted(() => {
                                 name="exclamation-triangle"
                                 class="text-2xs text-warning"
                                 v-tooltip.top="t(`chat.words.reconnectNeeded`)"
+                            />
+                            <!-- A provider whose own loop its vendor forbids, said quietly: the full note sits in the picker footer once picked. -->
+                            <Icon
+                                v-if="forbiddenNote(section.provider) !== undefined"
+                                name="exclamation-circle"
+                                class="text-2xs text-subtle"
+                                v-tooltip.top="forbiddenNote(section.provider)"
                             />
                             <template v-if="section.badge !== undefined">
                                 <span

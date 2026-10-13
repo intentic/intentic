@@ -37,6 +37,10 @@ export type MountTarget =
     // A server living in this daemon (a turn's own browser router, or the sandbox desktop's); closed with the lease
     // that opened it.
     | { readonly kind: "browser"; readonly router: InProcessServer }
+    // One of the daemon's own tool servers (watch, subagents, ui, the policy gate…), built for this turn and served
+    // through the door so a runtime that cannot hold a live in-process object reaches it over HTTP (sdk-door.ts);
+    // closed with the lease like a router.
+    | { readonly kind: "daemon"; readonly server: InProcessServer }
     // A connected machine (device card), one of the owner's own browsers (webext card) or phones (phone card), through
     // its peer socket.
     | { readonly kind: "device"; readonly id: string }
@@ -113,6 +117,9 @@ const digestOf = (token: string): string => createHash("sha256").update(token).d
 const closeTarget = (target: MountTarget): void => {
     if (target.kind === "browser") {
         target.router.close();
+    }
+    if (target.kind === "daemon") {
+        target.server.close();
     }
 };
 

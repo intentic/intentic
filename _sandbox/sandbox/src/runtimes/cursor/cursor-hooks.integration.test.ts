@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import type { CommandGuard } from "../../guard/command-guard.js";
+import { AMBIGUOUS_TURN } from "../daemon-tools/policy-gate.js";
 import { createLogger } from "../../logger.js";
 import { createCursorHookService, type CursorHookService, type CursorHookShield } from "./cursor-hooks.js";
 import { unshieldedCommand } from "./cursor-hook-script.js";
@@ -41,7 +42,7 @@ const started = async (): Promise<{ service: CursorHookService; dir: string }> =
 };
 
 // Runs the generated script as Cursor would: a child process, payload on stdin, answer on stdout.
-const askHook = async (dir: string, mode: "gate" | "session-env" | "prompt" | "pre-tool" | "read", payload: unknown): Promise<unknown> => {
+const askHook = async (dir: string, mode: "gate" | "session-env" | "prompt" | "pre-tool" | "mcp" | "read", payload: unknown): Promise<unknown> => {
     const child = execFile("node", [join(dir, "intentic-command-guard.mjs"), mode]);
     child.stdin?.end(JSON.stringify(payload));
     const stdout = await new Promise<string>((settle) => {
@@ -178,7 +179,8 @@ test("a turn with nothing to add sends no context key at all", async () => {
     expect(await askPrompt(dir, { conversation_id: "agent-2" })).toEqual({ continue: true });
 });
 
-test("a consult from no known turn is allowed rather than refused", async () => {
+// No turn live at all: a Cursor process this daemon never started (the owner's own), which no turn's rules govern.
+test("a consult while no turn is running is allowed rather than refused", async () => {
     const { dir } = await started();
     expect(await askGate(dir, { command: "rm -rf /", conversation_id: "someone-elses-agent" })).toEqual({ permission: "allow" });
 });
@@ -189,11 +191,15 @@ test("an unlabelled consult is answered by the only turn running", async () => {
     expect(await askGate(dir, { command: "rm -rf build" })).toMatchObject({ permission: "deny" });
 });
 
-test("with two turns running there is nothing to reason from, so it allows", async () => {
+// The policy gate fails closed (runtimes/daemon-tools/policy-gate.ts): a command nothing can place in a turn does not run unchecked.
+test("with two turns running and none named, nothing tells whose rules apply, so it refuses", async () => {
     const { service: hooks, dir } = await started();
-    hooks.register({ conversationId: "agent-1", gate: denying("no"), push: () => {} });
-    hooks.register({ conversationId: "agent-2", gate: denying("no"), push: () => {} });
-    expect(await askGate(dir, { command: "rm -rf build" })).toEqual({ permission: "allow" });
+    hooks.register({ conversationId: "agent-1", gate: allowing(), push: () => {} });
+    hooks.register({ conversationId: "agent-2", gate: allowing(), push: () => {} });
+    expect(await askGate(dir, { command: "rm -rf build" })).toEqual({ permission: "deny", agent_message: AMBIGUOUS_TURN, user_message: AMBIGUOUS_TURN });
+    expect(await askGate(dir, { command: "rm -rf build", conversation_id: "someone-elses-agent" })).toMatchObject({ permission: "deny" });
+    // A named turn is still its own.
+    expect(await askGate(dir, { command: "ls", conversation_id: "agent-2" })).toEqual({ permission: "allow" });
 });
 
 test("a turn whose gate enforces nothing short-circuits to allow", async () => {
@@ -263,7 +269,15 @@ test("the hooks file promises exactly the shape Cursor is documented to read", a
     const installed = readFileSync(hooksFile, "utf8").trim();
     const parsed = JSON.parse(installed) as { version: number; hooks: Record<string, { command: string; failClosed?: boolean }[]> };
     expect(parsed.version).toBe(1);
-    expect(Object.keys(parsed.hooks)).toEqual(["sessionStart", "beforeSubmitPrompt", "beforeShellExecution", "preToolUse", "beforeReadFile", "afterFileEdit"]);
+    expect(Object.keys(parsed.hooks)).toEqual([
+        "sessionStart",
+        "beforeSubmitPrompt",
+        "beforeShellExecution",
+        "preToolUse",
+        "beforeMCPExecution",
+        "beforeReadFile",
+        "afterFileEdit",
+    ]);
     expect(parsed.hooks["sessionStart"]?.[0]?.failClosed).toBe(false);
     expect(parsed.hooks["sessionStart"]?.[0]?.command).toBe(`node ${JSON.stringify(script)} session-env`);
     expect(parsed.hooks["beforeSubmitPrompt"]?.[0]?.failClosed).toBe(false);
@@ -272,8 +286,9 @@ test("the hooks file promises exactly the shape Cursor is documented to read", a
     // to stop, while a turn missing its environment or its instructions is merely degraded.
     expect(parsed.hooks["beforeShellExecution"]?.[0]?.failClosed).toBe(true);
     expect(parsed.hooks["beforeShellExecution"]?.[0]?.command).toBe(`node ${JSON.stringify(script)} gate`);
-    // The privacy shield's two gates fail closed too: a tool call or a file read nobody checked is what they stop.
+    // Every other gate fails closed too: a tool call, an MCP call or a file read nobody checked is what they stop.
     expect(parsed.hooks["preToolUse"]?.[0]).toEqual({ command: `node ${JSON.stringify(script)} pre-tool`, failClosed: true });
+    expect(parsed.hooks["beforeMCPExecution"]?.[0]).toEqual({ command: `node ${JSON.stringify(script)} mcp`, failClosed: true });
     expect(parsed.hooks["beforeReadFile"]?.[0]).toEqual({ command: `node ${JSON.stringify(script)} read`, failClosed: true });
     expect(parsed.hooks["afterFileEdit"]?.[0]).toEqual({ command: `node ${JSON.stringify(script)} edited`, failClosed: false });
 });
@@ -357,11 +372,17 @@ const runScript = async (args: readonly string[], stdin?: string): Promise<{ std
 };
 
 describe("the privacy shield's hooks", () => {
-    test("a turn the shield does not read lets every read and tool call through untouched", async () => {
+    // Its shell still runs through the script: that is where every turn's secrets resolve and its output is masked.
+    test("a turn the shield does not read lets every read and other tool call through untouched", async () => {
         const { service: hooks, dir } = await started();
         hooks.register({ conversationId: "agent-1", gate: allowing(), push: () => {} });
         expect(await askHook(dir, "read", { conversation_id: "agent-1", file_path: "/work/a.txt", content: SECRET })).toEqual({ permission: "allow" });
-        expect(await askHook(dir, "pre-tool", { conversation_id: "agent-1", tool_name: "Shell", tool_input: { command: "ls" } })).toEqual({});
+        expect(await askHook(dir, "pre-tool", { conversation_id: "agent-1", tool_name: "Read", tool_input: { file_path: "/work/a.txt" } })).toEqual({});
+        // SAFETY: preToolUse answers a turn's shell call with its input rewritten, and the expect below reads it so.
+        const shell = (await askHook(dir, "pre-tool", { conversation_id: "agent-1", tool_name: "Shell", tool_input: { command: "ls" } })) as {
+            updated_input: { command: string };
+        };
+        expect(unshieldedCommand(shell.updated_input.command)).toBe("ls");
     });
 
     test("a file holding personal data is refused with the shield's sentence; a clean one goes", async () => {

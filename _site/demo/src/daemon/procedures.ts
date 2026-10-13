@@ -2,6 +2,8 @@ import {
     capabilitiesOf,
     DEFAULT_PRIVACY_SHIELD,
     type Info,
+    loopsOf,
+    NATIVE_PROVIDERS,
     PROVIDER_SPECS,
     type GettingStarted,
     TRANSLATOR_PROVIDERS,
@@ -310,10 +312,13 @@ export const procedures = {
         // as much as on the accounts above it.
         // The recording is a box with Claude connected, which is what its chats are addressed to; `native` is how a
         // reader who cannot open /accounts learns that.
-        list: () =>
-            freshEdition
+        // Every loop the catalog offers, as a daemon of this build would advertise them.
+        list: () => ({
+            ...(freshEdition
                 ? { native: [], agents: [], endpoints: [{ id: TRIAL_PROVIDER, label: TRIAL_LABEL, kind: `endpoint` as const }] }
-                : { native: [`claude`], agents: [], endpoints: [] },
+                : { native: [`claude`], agents: [], endpoints: [] }),
+            loops: Object.fromEntries(NATIVE_PROVIDERS.map((provider) => [provider, [...loopsOf(provider)]])),
+        }),
     },
     endpoints: {
         trial: () => DEMO_TRIAL,
@@ -373,7 +378,7 @@ export const procedures = {
             providers: PROVIDER_SPECS.map((spec) => ({
                 id: spec.id,
                 label: spec.label,
-                shieldable: capabilitiesOf(spec.id, `native`).privacy === `gateway` || capabilitiesOf(spec.id, `claude-code`).privacy === `gateway`,
+                shieldable: loopsOf(spec.id).some((loop) => capabilitiesOf(spec.id, loop).privacy === `gateway`),
                 local: false,
             })),
         }),

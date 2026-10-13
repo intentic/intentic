@@ -36,6 +36,19 @@ const codexCliOf = async (sdkVersion, fetchManifest) => {
     return pinned;
 };
 
+// Meta versions Muse Code's SDK in lockstep with the program (@muse-code/sdk X.Y.Z pairs with Muse Code X.Y.Z), but
+// the program's own version carries a build suffix only Meta's release channel names (1.4.6-R6000.1). The SDK is what
+// this repo tracks; the build blessed is the one the channel serves for that same X.Y.Z, refused if it has moved on.
+const MUSE_CHANNEL = "https://api.meta.ai/muse-code/channels/muse-stable";
+const museBuildOf = async (sdkVersion) => {
+    const response = await fetch(MUSE_CHANNEL, { headers: { accept: "application/json" } });
+    const version = String((response.ok ? await response.json() : undefined)?.version ?? "");
+    if (!version.startsWith(`${sdkVersion}-`)) {
+        throw new Error(`Meta's Muse Code channel serves "${version}", not a build of ${sdkVersion}; bless them together once both are out`);
+    }
+    return version;
+};
+
 export const ENGINE_PINS = [
     {
         id: "claude",
@@ -71,6 +84,35 @@ export const ENGINE_PINS = [
         // own machine once a Devin account is connected. The pack is the only pin: the daemon spawns it, never imports it.
         upstream: { kind: "npm", package: "devin" },
         sites: [site(pack("devin"), / devin@(\S+) /g, 1)],
+    },
+    {
+        id: "grok-build",
+        label: "Grok Build",
+        // xAI publishes neither to npm nor as GitHub releases: its installer reads the stable channel's version from a
+        // pointer and fetches that version's binary, and the bumper reads the same two addresses.
+        upstream: { kind: "pointer", url: "https://x.ai/cli/stable", artifact: (version) => `https://x.ai/cli/grok-${version}-linux-x86_64.gz` },
+        sites: [site(pack("grok-build"), /version=(\S+)/g, 1)],
+    },
+    {
+        id: "kimi",
+        label: "Kimi Code CLI",
+        // The daemon spawns it, never imports it, so the pack is the only pin.
+        upstream: { kind: "npm", package: "@moonshot-ai/kimi-code" },
+        sites: [site(pack("kimi"), /@moonshot-ai\/kimi-code@(\S+) /g, 1)],
+    },
+    {
+        id: "muse",
+        label: "Muse Code",
+        // Closed source and never baked into a published image; its pack installs the binary on the owner's own machine
+        // once a Meta account is connected. The daemon imports the SDK and spawns the program, so both are pins.
+        upstream: { kind: "npm", package: "@muse-code/sdk" },
+        blessedOf: museBuildOf,
+        sites: [
+            site(WORKSPACE, /^ {2}"@muse-code\/sdk": (\S+)$/gm, 1, "tracked"),
+            // The SDK excused from pnpm's release-age hold by exact name@version, as the other freshly pinned SDKs are.
+            site(WORKSPACE, /^ {2}- "@muse-code\/sdk@(\S+)"$/gm, 1, "tracked"),
+            site(pack("muse"), /\bversion=([0-9][^;\s]*);/g, 1),
+        ],
     },
     {
         id: "opencode",

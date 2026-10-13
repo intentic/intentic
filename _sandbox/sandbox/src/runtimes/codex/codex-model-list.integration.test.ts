@@ -102,3 +102,22 @@ test("stays empty when the runtime cannot answer, so a catalog never fails over 
 
     expect([absent, garbled]).toEqual([[], []]);
 });
+
+// As codex-cli 0.162 publishes it: the tier by id (priority, which it names Fast), and the older speed list beside it.
+test("a model that publishes Codex's fast tier carries the fast badge; one that does not, none", async () => {
+    const binary = await fakeCodex(
+        answering({
+            data: [
+                row("gpt-6-sol", { serviceTiers: [{ id: "priority", name: "Fast", description: "1.5x speed" }], additionalSpeedTiers: ["fast"] }),
+                row("gpt-5.6-luna", { additionalSpeedTiers: ["fast"] }),
+                row("gpt-5.4-mini", { serviceTiers: [], additionalSpeedTiers: [] }),
+            ],
+        }),
+    );
+
+    expect((await codexModelList("/codex-home", async () => binary)()).map((model) => [model.id, model.badges])).toEqual([
+        ["gpt-6-sol", ["fast"]],
+        ["gpt-5.6-luna", ["fast"]],
+        ["gpt-5.4-mini", undefined],
+    ]);
+});

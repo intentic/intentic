@@ -1,5 +1,6 @@
 import {
     type AgentHarness,
+    AgentHarnessSchema,
     type AgentProvider,
     isEndpointProvider,
     NATIVE_PROVIDERS,
@@ -10,6 +11,7 @@ import { definePreference } from "@intentic/ui/preference";
 import { accessKnown, firstReadyProvider, providerReady } from "../session/access";
 import { DEFAULT_EFFORT, DEFAULT_THINKING } from "../models/run-settings/pickerRunSettings";
 import { defaultModelFor, perProvider, providerModels, providerModelsState } from "../accounts/providerCatalog";
+import { offeredHarness, offeredLoops } from "../models/offeredLoops";
 
 // What a new conversation starts on: the composer's last deliberate pick (model, provider, effort), never a fallback or
 // a thin catalog read — those resolve at read time instead, so bad luck can't overwrite a real choice. Each field is a
@@ -28,6 +30,28 @@ const readModels = (raw: string | null): Record<AgentProvider, string> => {
     return perProvider((provider) => (typeof entries[provider] === `string` ? (entries[provider] as string) : defaultModelFor(provider)));
 };
 
+// Which loop each provider was last picked on; a provider absent from it opens on its default loop.
+export type HarnessPicks = Readonly<Partial<Record<AgentProvider, AgentHarness>>>;
+
+// Stored as `provider=loop` pairs. The key once held one global pick that every provider then ran under; that pick was
+// made on Codex's chip, so it is kept for Codex alone rather than imposed on Grok, whose Claude Code loop needs a sign-in
+// of its own. A pair naming no loop this build knows is dropped, not guessed.
+const readHarnesses = (raw: string | null): HarnessPicks => {
+    const stored = raw === `claude-code` ? `codex=claude-code` : (raw ?? ``);
+    const pairs = stored.split(`,`).map((pair) => pair.split(`=`));
+    return Object.fromEntries(
+        pairs.flatMap(([provider, harness]) => {
+            const loop = AgentHarnessSchema.safeParse(harness);
+            return provider !== undefined && provider !== `` && loop.success ? [[provider, loop.data] as const] : [];
+        }),
+    );
+};
+
+const writeHarnesses = (picks: HarnessPicks): string =>
+    Object.entries(picks)
+        .map(([provider, harness]) => `${provider}=${harness}`)
+        .join(`,`);
+
 // Turn prefs a new conversation seeds from; permission mode is not one of them (see startingMode, per conversation).
 export const turnDefaults = {
     provider: definePreference<AgentProvider | undefined>({
@@ -40,10 +64,12 @@ export const turnDefaults = {
             raw !== null && (NATIVE_PROVIDERS.includes(raw as NativeProvider) || isEndpointProvider(raw)) ? (raw as AgentProvider) : undefined,
         write: (provider) => provider ?? null,
     }),
-    harness: definePreference<AgentHarness>({
+    // The loop picked per provider: a Claude Code pick on Codex says nothing about Grok, whose Claude Code loop needs a
+    // sign-in of its own. A provider offered one loop never reads it (rememberedHarnessFor).
+    harnesses: definePreference<HarnessPicks>({
         key: `ui-chat-harness`,
-        read: (raw) => (raw === `claude-code` ? `claude-code` : `native`),
-        write: (harness) => harness,
+        read: readHarnesses,
+        write: writeHarnesses,
     }),
     models: definePreference<Record<AgentProvider, string>>({
         key: `ui-chat-models`,
@@ -120,6 +146,15 @@ export const rememberedModelFor = (provider: AgentProvider): string => {
     }
     const catalog = providerModels.value[provider] ?? [];
     return catalog.some((option) => option.value === picked) ? picked : defaultModelFor(provider);
+};
+
+// The loop a chat on this provider opens on: its own remembered pick, while this sandbox's daemon still offers it.
+export const rememberedHarnessFor = (provider: AgentProvider): AgentHarness =>
+    offeredHarness(offeredLoops(provider), turnDefaults.harnesses.value[provider] ?? `native`);
+
+// Records a loop pick for its provider alone.
+export const rememberHarness = (provider: AgentProvider, harness: AgentHarness): void => {
+    turnDefaults.harnesses.value = { ...turnDefaults.harnesses.value, [provider]: harness };
 };
 
 // An isolated conversation (its own throwaway worktree) runs unattended; a main-tree one proposes a plan first. Not

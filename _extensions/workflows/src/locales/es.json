@@ -62,6 +62,7 @@
         "whatYoullPickMessage": "Lo que elegirás desde la caja de mensajes. Lo bastante corto para leerse en un botón."
     },
     "stepInspector": {
+        "vendorTerms": "Términos del proveedor",
         "acrossEveryRoundStep": "A lo largo de todas las rondas de este paso. Vacío lo deja sin tope.",
         "acts": "Actúa como",
         "addField": "Añadir un campo",

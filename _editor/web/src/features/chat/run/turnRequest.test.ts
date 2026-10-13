@@ -1,4 +1,5 @@
 import { turnRequestBody } from "./turnRequest";
+import { advertisedLoops } from "../models/offeredLoops";
 
 // Baseline turn settings reused across the request-shape tests below.
 const settings = {
@@ -47,9 +48,26 @@ describe(`turnRequestBody`, () => {
         expect(wire(turnRequestBody(base))).toMatchObject({ messageId: `m-1`, prompt: `do the thing` });
     });
 
-    it(`sends the harness only for claude-code, since native is the daemon's own default`, () => {
+    // Native is the daemon's own default, and a loop the provider does not offer would run its own anyway.
+    it(`sends the harness only where the provider has a choice of loop, and never its default`, () => {
         expect(wire(turnRequestBody(base))).not.toHaveProperty(`harness`);
-        expect(wire(turnRequestBody({ ...base, settings: { ...settings, harness: `claude-code` } }))).toMatchObject({ harness: `claude-code` });
+        expect(wire(turnRequestBody({ ...base, settings: { ...settings, harness: `claude-code` } }))).not.toHaveProperty(`harness`);
+        expect(wire(turnRequestBody({ ...base, settings: { ...settings, agent: `codex`, harness: `claude-code` } }))).toMatchObject({ harness: `claude-code` });
+        // The default named outright is the same turn as naming none, and an older daemon has no word for it.
+        expect(wire(turnRequestBody({ ...base, settings: { ...settings, agent: `codex`, harness: `codex` } }))).not.toHaveProperty(`harness`);
+    });
+
+    // An editor must not name a loop the daemon behind it never advertised: it would refuse it, or run the default.
+    it(`sends only a loop the daemon advertised for the provider`, () => {
+        advertisedLoops.value = { codex: [`codex`, `opencode`] };
+        try {
+            const codex = (harness: `opencode` | `claude-code`) =>
+                wire(turnRequestBody({ ...base, settings: { ...settings, agent: `codex`, harness } }));
+            expect(codex(`opencode`)).toMatchObject({ harness: `opencode` });
+            expect(codex(`claude-code`)).not.toHaveProperty(`harness`);
+        } finally {
+            advertisedLoops.value = undefined;
+        }
     });
 
     it(`sends a placement only when the conversation was pointed at a runner`, () => {
@@ -70,7 +88,11 @@ describe(`turnRequestBody`, () => {
         expect(wire(turnRequestBody({ ...base, registered: true, session }))).not.toHaveProperty(`sessionId`);
 
         expect(wire(turnRequestBody(base))).not.toHaveProperty(`sessionId`);
-        expect(wire(turnRequestBody({ ...base, session, settings: { ...settings, harness: `claude-code` } }))).not.toHaveProperty(`sessionId`);
+        // Two names for Claude's one loop are the same loop; Codex's two are not.
+        expect(wire(turnRequestBody({ ...base, session, settings: { ...settings, harness: `claude-code` } }))).toMatchObject({ sessionId: `s-1` });
+        const onCodex = { ...session, provider: `codex` } as const;
+        const codexSettings = { ...settings, agent: `codex`, harness: `claude-code` } as const;
+        expect(wire(turnRequestBody({ ...base, session: onCodex, settings: codexSettings }))).not.toHaveProperty(`sessionId`);
         expect(wire(turnRequestBody({ ...base, session, settings: { ...settings, agent: `codex` } }))).not.toHaveProperty(`sessionId`);
     });
 

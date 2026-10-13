@@ -3,6 +3,10 @@
 // the service that answers them (cursor-hooks.ts) because this is text another process runs, not code this one does.
 
 export const GATE_SCRIPT_NAME = "intentic-command-guard.mjs";
+// Beside the script: the ids of the turns live in the daemon, rewritten as each starts and retires (cursor-hooks.ts). A
+// hook the daemon cannot answer is refused for a call one of them makes, where the harmless answer would let it past
+// the rules, the tool list and the shield; any other caller (the owner's own Cursor) still gets the harmless answer.
+export const LIVE_TURNS_NAME = "intentic-live-turns.json";
 
 // The mode a wrapped shell command runs the script in, and the form the command takes. A command the shield wraps runs
 // through the script, which runs the real command and hands what it prints to the daemon to mask before Cursor (and so
@@ -28,10 +32,12 @@ export const wrappedCommand = (command: string): { readonly id: string; readonly
 export const unshieldedCommand = (command: string): string => wrappedCommand(command)?.shown ?? command;
 
 // Every failure path answers the harmless verdict silently, since an unregistered call is usually the owner's own manual
-// run: no environment, no added context, an allowed command, an untouched tool call. A shielded command is the
-// exception: the daemon not answering means its output cannot be masked, so it is withheld rather than sent.
+// run: no environment, no added context, an allowed command, an untouched tool call. Two exceptions: a call from a turn
+// the daemon lists as live is refused where a refusal exists (the gate, a tool call, an MCP call, a read), since that
+// turn's rules, tool list and shield would otherwise be skipped; and a wrapped command, whose output cannot be masked
+// without the daemon, is withheld rather than sent.
 // The script is plain JavaScript with no template literals, so nothing in it can be read as this file's interpolation.
-export const gateScript = (socketPath: string): string =>
+export const gateScript = (socketPath: string, livePath: string): string =>
     [
         `// managed by intentic: overwritten on daemon boot (src/runtimes/cursor/cursor-hook-script.ts).`,
         `// Asks the daemon for the current turn's environment, its standing instructions, a command-guard verdict, and the`,
@@ -45,12 +51,16 @@ export const gateScript = (socketPath: string): string =>
         `import { StringDecoder } from "node:string_decoder";`,
         ``,
         `const SOCKET = ${JSON.stringify(socketPath)};`,
+        `const LIVE = ${JSON.stringify(livePath)};`,
+        `const UNCHECKED = "The sandbox's daemon could not be reached to check this call against this turn's rules, so it was refused. Do not retry it: say plainly what you could not do.";`,
+        `const REFUSED = { permission: "deny", user_message: UNCHECKED, agent_message: UNCHECKED };`,
         `const MODES = {`,
         `    "session-env": { path: "/session-env", fallback: {} },`,
         `    prompt: { path: "/prompt", fallback: { continue: true } },`,
-        `    gate: { path: "/gate", fallback: { permission: "allow" } },`,
-        `    "pre-tool": { path: "/pre-tool", fallback: {} },`,
-        `    read: { path: "/read", fallback: { permission: "allow" } },`,
+        `    gate: { path: "/gate", fallback: { permission: "allow" }, refused: REFUSED },`,
+        `    "pre-tool": { path: "/pre-tool", fallback: {}, refused: REFUSED },`,
+        `    mcp: { path: "/mcp", fallback: { permission: "allow" }, refused: REFUSED },`,
+        `    read: { path: "/read", fallback: { permission: "allow" }, refused: { permission: "deny", user_message: UNCHECKED } },`,
         `};`,
         `const TOKEN = /\\u27e6[A-Z][A-Z_]*?_\\d{1,7}\\u27e7|\\[\\[[A-Z][A-Z_]*?_\\d{1,7}\\]\\]/u;`,
         `const IMAGE = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tif", ".tiff"]);`,
@@ -145,6 +155,15 @@ export const gateScript = (socketPath: string): string =>
         `        payload.opaque = true;`,
         `    }`,
         `};`,
+        `// Whether the daemon lists this payload's turn as live: read only when the daemon did not answer.`,
+        `const live = (payload) => {`,
+        `    try {`,
+        `        const ids = JSON.parse(readFileSync(LIVE, "utf8"));`,
+        `        return Array.isArray(ids) && typeof payload.conversation_id === "string" && ids.includes(payload.conversation_id);`,
+        `    } catch {`,
+        `        return false;`,
+        `    }`,
+        `};`,
         `const textOf = (path) => {`,
         `    const size = sizeOf(path);`,
         `    return size === undefined || size > MAX_TEXT ? undefined : readFileSync(path, "utf8");`,
@@ -188,7 +207,7 @@ export const gateScript = (socketPath: string): string =>
         `    try {`,
         `        process.stdout.write(JSON.stringify(await ask(spec.path, payload)));`,
         `    } catch {`,
-        `        process.stdout.write(JSON.stringify(spec.fallback));`,
+        `        process.stdout.write(JSON.stringify(spec.refused !== undefined && live(payload) ? spec.refused : spec.fallback));`,
         `    }`,
         `};`,
         ``,
@@ -262,6 +281,8 @@ export const gateScript = (socketPath: string): string =>
         `        process.exit(1);`,
         `    }`,
         `    const command = fetched.command;`,
+        `    // A command naming credential material has its output masked by shape too; the daemon said so with the command.`,
+        `    const aimed = fetched.aimed === true;`,
         `    // bash first, as every agent writes its commands for it; the owner's own shell only where there is no bash.`,
         `    const shell = ["/bin/bash", "/usr/bin/bash", process.env.SHELL, "/bin/sh"].find((path) => typeof path === "string" && path !== "" && existsSync(path)) ?? "/bin/sh";`,
         `    const options = { stdio: ["inherit", "pipe", "inherit"], ...(typeof fetched.cwd === "string" ? { cwd: fetched.cwd } : {}) };`,
@@ -278,7 +299,7 @@ export const gateScript = (socketPath: string): string =>
         `                return;`,
         `            }`,
         `            try {`,
-        `                const reply = await ask("/shell-output", { conversation_id: turn, output: text });`,
+        `                const reply = await ask("/shell-output", { conversation_id: turn, output: text, aimed });`,
         `                if (typeof reply.output !== "string") {`,
         `                    throw new Error("no output");`,
         `                }`,
@@ -357,11 +378,16 @@ export const gateScript = (socketPath: string): string =>
     ].join("\n");
 
 // sessionStart projects the turn's env; beforeSubmitPrompt folds the daemon's instructions onto Cursor's base;
-// beforeShellExecution enforces the rulebook; preToolUse, beforeReadFile and afterFileEdit are the privacy shield's
-// (cursor-shield.ts), and pass everything through for a turn it is not reading. The rulebook and the shield's two
-// gates fail closed: a command that outran its rules and a file read nobody checked are what they exist to stop, while a
-// turn without its environment, its instructions or an edit's tokens read back is merely degraded.
-// afterShellExecution is skipped, its return value is discarded upstream, which is why the secrets axis reads "none".
+// beforeShellExecution enforces the rulebook (and resolves a command's secrets once it may run); preToolUse checks every
+// call Cursor's own executors run against the turn's tool list and puts it to a person in `default` mode, and wraps
+// every shell command so this script runs it; beforeMCPExecution does the same for an MCP server's tools, the one hook
+// that names the server; beforeReadFile and afterFileEdit are the privacy shield's and the secrets' (cursor-shield.ts,
+// cursor-secrets.ts). Every hook that can refuse fails closed: a command that outran its rules, a call off the list and
+// a file read nobody checked are what they exist to stop, while a turn without its environment, its instructions or an
+// edit's tokens read back is merely degraded.
+// afterShellExecution is skipped, its return value is discarded upstream: output is masked before Cursor reads it the
+// other way round, by preToolUse wrapping the shell command so this script runs it and the daemon masks what it prints
+// (cursor-hooks.ts).
 export const hooksJson = (scriptPath: string): string =>
     `${JSON.stringify(
         {
@@ -371,6 +397,7 @@ export const hooksJson = (scriptPath: string): string =>
                 beforeSubmitPrompt: [{ command: `node ${JSON.stringify(scriptPath)} prompt`, failClosed: false }],
                 beforeShellExecution: [{ command: `node ${JSON.stringify(scriptPath)} gate`, failClosed: true }],
                 preToolUse: [{ command: `node ${JSON.stringify(scriptPath)} pre-tool`, failClosed: true }],
+                beforeMCPExecution: [{ command: `node ${JSON.stringify(scriptPath)} mcp`, failClosed: true }],
                 beforeReadFile: [{ command: `node ${JSON.stringify(scriptPath)} read`, failClosed: true }],
                 afterFileEdit: [{ command: `node ${JSON.stringify(scriptPath)} edited`, failClosed: false }],
             },

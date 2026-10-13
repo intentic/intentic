@@ -81,7 +81,7 @@ const joined = (parts: readonly (string | undefined)[]): string => parts.filter(
 const titled = (entries: readonly (readonly [string, string | undefined])[]): TurnNote[] =>
     entries.flatMap(([title, text]) => (text === undefined ? [] : [{ title, text }]));
 
-// A runtime with no system seam at all (Pi, ACP): the owner's prompt is not applied and the composer discloses that
+// A runtime with no system seam at all (ACP): the owner's prompt is not applied and the composer discloses that
 // (limitationsOf), rather than quietly pasting it into the user message. The persona note and the workspace's standing
 // instructions still have to arrive, so they go through the user message instead.
 const messageNotes = (personaNote: string | undefined, fieldNotes: string | undefined, memoryNote: string | undefined): TurnPromptPlacement => {

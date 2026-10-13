@@ -42,6 +42,18 @@
             "blessed": "3000.11.3",
             "notes": "npm devin, Cognition's Devin CLI, spawned as `devin acp` for Devin turns. Never baked into a published image: its licence grants no redistribution."
         },
+        "grok-build": {
+            "blessed": "1.0.52",
+            "notes": "xAI's Grok Build CLI (`grok`), Apache-2.0 source, fetched as xAI's own build from https://x.ai/cli; spawned as `grok agent stdio` for Grok turns on its own loop."
+        },
+        "kimi": {
+            "blessed": "2.1.1",
+            "notes": "npm @moonshot-ai/kimi-code, Moonshot's Kimi Code CLI (MIT); spawned as `kimi acp` for Kimi turns on its own loop."
+        },
+        "muse": {
+            "blessed": "1.4.6-R6000.1",
+            "notes": "Meta's Muse Code CLI from its own download host, spawned as `muse serve` for Muse turns; its build number pairs with @muse-code/sdk 1.4.6. Never baked into a published image: Meta grants no redistribution."
+        },
         "opencode": {
             "blessed": "1.18.35",
             "frozen": "Read only by daemons released before OpenCode 2, which drive OpenCode 1; their last 1.x. Newer daemons read opencode-v2.",

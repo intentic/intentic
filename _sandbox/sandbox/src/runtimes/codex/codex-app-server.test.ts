@@ -1,3 +1,4 @@
+import type { AgentEvent } from "@intentic/sandbox-contract";
 import { SteeringQueue } from "../../agent/checkpoints/agent-steering.js";
 import { createCodexAgent } from "./codex-agent.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
@@ -7,6 +8,7 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import { forgetNamespaceEntry, registerMountEntry } from "../../workload/namespace-entry.js";
 import { rootExecution } from "../../workload/agent-execution.testing.js";
 import {
+    requiredMcpMissing,
     type AppServerNotification,
     type CodexAppServerConnector,
     type CodexEvent,
@@ -31,6 +33,8 @@ interface FakeAppServerOptions {
     readonly refuseSteers?: boolean;
     // The turn id turn/steer reports the message landed on. Defaults to the turn already running.
     readonly steeredTurnId?: string;
+    // What mcpServerStatus/list reports for the server asked about, one answer per ask, the last repeating.
+    readonly mcpStatus?: readonly string[];
 }
 
 const fakeAppServer = (incoming: readonly Incoming[], options: FakeAppServerOptions = {}) => {
@@ -59,6 +63,11 @@ const fakeAppServer = (incoming: readonly Incoming[], options: FakeAppServerOpti
             if (method === "turn/start") {
                 starts += 1;
                 return { turn: { id: `turn-${starts}` } };
+            }
+            if (method === "mcpServerStatus/list") {
+                const asked = requests.filter((call) => call.method === method).length;
+                const status = options.mcpStatus?.[Math.min(asked, options.mcpStatus.length) - 1];
+                return { data: [{ name: "gate", runtimeStatus: status ?? null }] };
             }
             if (method === "turn/steer") {
                 if (options.refuseSteers || (options.refuseBeforeStarted && !active)) {
@@ -359,7 +368,7 @@ test("normalizes image generation and latest-turn token usage", async () => {
     ]);
 });
 
-test("normalizes app-server's structured file-change kind", async () => {
+test("normalizes app-server's structured file-change kind, and keeps each change's diff", async () => {
     const appServer = fakeAppServer([
         {
             method: "item/completed",
@@ -379,7 +388,7 @@ test("normalizes app-server's structured file-change kind", async () => {
 
     expect(await collect(createCodexAppServerRunner(appServer.connector)(turn()))).toContainEqual({
         type: "item.completed",
-        item: { id: "patch-1", type: "file_change", changes: [{ path: "/workspace/src/app.ts", kind: "update" }], status: "completed" },
+        item: { id: "patch-1", type: "file_change", changes: [{ path: "/workspace/src/app.ts", kind: "update", diff: "@@ -1 +1 @@" }], status: "completed" },
     });
 });
 
@@ -946,4 +955,235 @@ test("subagent usage separates cached and cache-written input from uncached inpu
     expect(events.filter((event) => event.type === "subagent.usage")).toEqual([
         { type: "subagent.usage", parent: "spawn-1", input: 100, output: 50, cacheRead: 300, cacheCreation: 100 },
     ]);
+});
+
+const COMPLETED = { method: "turn/completed", params: { threadId: "thr-new", turn: { id: "turn-1", status: "completed", error: null } } } as const;
+const LAST_USAGE = { totalTokens: 41_000, inputTokens: 40_000, cachedInputTokens: 30_000, cacheWriteInputTokens: 0, outputTokens: 1_000, reasoningOutputTokens: 200 };
+
+test("a failure keeps Codex's type, its retry flag, and what the turn spent", async () => {
+    const appServer = fakeAppServer([
+        {
+            method: "error",
+            params: {
+                threadId: "thr-new",
+                turnId: "turn-1",
+                willRetry: true,
+                error: { message: "Reconnecting... 1/5", codexErrorInfo: { responseStreamDisconnected: { httpStatusCode: 502 } }, additionalDetails: null },
+            },
+        },
+        { method: "thread/tokenUsage/updated", params: { threadId: "thr-new", turnId: "turn-1", tokenUsage: { total: LAST_USAGE, last: LAST_USAGE, modelContextWindow: null } } },
+        {
+            method: "turn/completed",
+            params: {
+                threadId: "thr-new",
+                turn: { id: "turn-1", status: "failed", error: { message: "usage limit reached", codexErrorInfo: "usageLimitExceeded", additionalDetails: null } },
+            },
+        },
+    ]);
+    const events = await collect(createCodexAppServerRunner(appServer.connector)(turn()));
+    expect(events).toContainEqual({ type: "error", message: "Reconnecting... 1/5", willRetry: true, info: { kind: "responseStreamDisconnected", httpStatus: 502 } });
+    expect(events).toContainEqual({
+        type: "turn.failed",
+        error: { message: "usage limit reached", info: { kind: "usageLimitExceeded" } },
+        usage: { input_tokens: 40_000, cached_input_tokens: 30_000, cache_write_input_tokens: 0, output_tokens: 1_000, reasoning_output_tokens: 200 },
+    });
+    // No window published, so no context reading either.
+    expect(events.some((event) => event.type === "context")).toBe(false);
+});
+
+test("live text, context fill and a reroute are read for this turn only", async () => {
+    const delta = (method: string, turnId: string, extra: object = {}) => ({ method, params: { threadId: "thr-new", turnId, itemId: "i1", delta: "hi", ...extra } });
+    const appServer = fakeAppServer([
+        delta("item/agentMessage/delta", "turn-1"),
+        delta("item/reasoning/summaryTextDelta", "turn-1", { summaryIndex: 1 }),
+        delta("item/commandExecution/outputDelta", "turn-1"),
+        delta("item/agentMessage/delta", "turn-other"),
+        // Raw reasoning is left out: the completed item shows the summary only.
+        delta("item/reasoning/textDelta", "turn-1", { contentIndex: 0 }),
+        { method: "thread/tokenUsage/updated", params: { threadId: "thr-new", turnId: "turn-1", tokenUsage: { total: LAST_USAGE, last: LAST_USAGE, modelContextWindow: 272_000 } } },
+        { method: "model/rerouted", params: { threadId: "thr-new", turnId: "turn-1", fromModel: "gpt-6-sol", toModel: "gpt-5.5", reason: "highRiskCyberActivity" } },
+        COMPLETED,
+    ]);
+    const events = await collect(createCodexAppServerRunner(appServer.connector)(turn()));
+    expect(events.filter((event) => event.type === "item.delta")).toEqual([
+        { type: "item.delta", item_id: "i1", channel: "message", text: "hi" },
+        { type: "item.delta", item_id: "i1", channel: "reasoning", text: "hi", part: 1 },
+        { type: "item.delta", item_id: "i1", channel: "output", text: "hi" },
+    ]);
+    expect(events).toContainEqual({ type: "context", tokens: 41_000, window: 272_000 });
+    expect(events).toContainEqual({ type: "model.rerouted", from: "gpt-6-sol", to: "gpt-5.5", reason: "highRiskCyberActivity" });
+});
+
+test("instructions, a fast tier and a collaboration mode ride the thread and turn requests", async () => {
+    const appServer = fakeAppServer([COMPLETED]);
+    await collect(
+        createCodexAppServerRunner(appServer.connector)({
+            ...turn(),
+            instructions: { base: "You write release notes.", developer: "Be brief." },
+            options: { ...turn().options, serviceTier: "priority", collaborationMode: "plan" },
+        }),
+    );
+    expect(appServer.requests.find((call) => call.method === "thread/start")?.params).toMatchObject({
+        baseInstructions: "You write release notes.",
+        developerInstructions: "Be brief.",
+        serviceTier: "priority",
+    });
+    expect(appServer.requests.find((call) => call.method === "turn/start")?.params).toMatchObject({
+        serviceTier: "priority",
+        // The mode's settings outrank the turn's own model and effort, so both ride inside it as picked.
+        collaborationMode: { mode: "plan", settings: { model: "gpt-5.6-sol", reasoning_effort: "low", developer_instructions: null } },
+    });
+});
+
+test("an ordinary turn names no tier, no mode and no instructions", async () => {
+    const appServer = fakeAppServer([COMPLETED]);
+    await collect(createCodexAppServerRunner(appServer.connector)(turn()));
+    for (const method of ["thread/start", "turn/start"]) {
+        const params = appServer.requests.find((call) => call.method === method)?.params;
+        expect(params).not.toHaveProperty("serviceTier");
+        expect(params).not.toHaveProperty("collaborationMode");
+        expect(params).not.toHaveProperty("baseInstructions");
+    }
+});
+
+test("a patch's approval is handed over by its item, and the answer travels back as Codex's decision", async () => {
+    const appServer = fakeAppServer([
+        { request: "item/fileChange/requestApproval", params: { threadId: "thr-new", turnId: "turn-1", itemId: "f1", startedAtMs: 1, reason: "writes outside the root" } },
+        { request: "item/fileChange/requestApproval", params: { threadId: "thr-new", turnId: "turn-other", itemId: "f2", startedAtMs: 1 } },
+        COMPLETED,
+    ]);
+    for await (const event of createCodexAppServerRunner(appServer.connector)(turn())) {
+        if (event.type === "file_change_approval.requested") {
+            expect(event).toMatchObject({ item_id: "f1", reason: "writes outside the root" });
+            event.respond(true, true);
+        }
+    }
+    // This turn's patch gets the remembered yes it was given; another turn's, the standing one.
+    expect(appServer.answered).toEqual([{ decision: "acceptForSession" }, { decision: "accept" }]);
+});
+
+test("a command's remembered yes is sent only where the request offers it", async () => {
+    const asking = (availableDecisions: unknown) => ({
+        request: "item/commandExecution/requestApproval",
+        params: { threadId: "thr-new", turnId: "turn-1", itemId: "c1", startedAtMs: 1, command: "pnpm build", availableDecisions },
+    });
+    const appServer = fakeAppServer([asking(["accept", "decline"]), asking(null), COMPLETED]);
+    for await (const event of createCodexAppServerRunner(appServer.connector)(turn())) {
+        if (event.type === "command_approval.requested") {
+            event.respond(true, true);
+        }
+    }
+    expect(appServer.answered).toEqual([{ decision: "accept" }, { decision: "acceptForSession" }]);
+});
+
+test("a widening of the sandbox is granted whole, by its network half, or not at all, for the turn only", async () => {
+    const permissions = { network: { enabled: true }, fileSystem: { write: ["/tmp"] } };
+    const asking = { request: "item/permissions/requestApproval", params: { threadId: "thr-new", turnId: "turn-1", itemId: "p1", startedAtMs: 1, cwd: "/w", reason: null, environmentId: null, permissions } };
+    const appServer = fakeAppServer([asking, asking, asking, COMPLETED]);
+    const grants = ["all", "network", "none"] as const;
+    let index = 0;
+    for await (const event of createCodexAppServerRunner(appServer.connector)(turn())) {
+        if (event.type === "permissions_approval.requested") {
+            expect(event.writes).toBe(true);
+            event.respond(grants[index]!);
+            index += 1;
+        }
+    }
+    expect(appServer.answered).toEqual([
+        { permissions, scope: "turn" },
+        { permissions: { network: { enabled: true } }, scope: "turn" },
+        { permissions: {}, scope: "turn" },
+    ]);
+});
+
+test("a proposed plan is its own item", async () => {
+    const appServer = fakeAppServer([
+        { method: "item/completed", params: { threadId: "thr-new", turnId: "turn-1", item: { type: "plan", id: "p1", text: "1. Add the route." } } },
+        COMPLETED,
+    ]);
+    expect(await collect(createCodexAppServerRunner(appServer.connector)(turn()))).toContainEqual({
+        type: "item.completed",
+        item: { id: "p1", type: "plan", text: "1. Add the route." },
+    });
+});
+
+// The hooks' gate (codex-hooks.ts): Codex calls a hook's server without waiting for it, so the turn waits instead.
+test("a turn waits for a required server to connect before it starts, and does not start without it", async () => {
+    const ready = fakeAppServer([COMPLETED], { mcpStatus: ["starting", "connected"] });
+    await collect(createCodexAppServerRunner(ready.connector)({ ...turn(), requiredMcp: ["gate"] }));
+    const methods = ready.requests.map((call) => call.method);
+    expect(methods.filter((method) => method === "mcpServerStatus/list")).toHaveLength(2);
+    expect(methods.indexOf("mcpServerStatus/list")).toBeLessThan(methods.indexOf("turn/start"));
+
+    const failed = fakeAppServer([COMPLETED], { mcpStatus: ["failed"] });
+    await expect(collect(createCodexAppServerRunner(failed.connector)({ ...turn(), requiredMcp: ["gate"] }))).rejects.toThrow(requiredMcpMissing("gate", "failed"));
+    expect(failed.requests.map((call) => call.method)).not.toContain("turn/start");
+});
+
+test("a hook of the turn's own that failed is reported with the call it was about; a subagent's or a finished one is not", async () => {
+    const hook = (threadId: string, status: string) => ({
+        method: "hook/completed",
+        params: {
+            threadId,
+            turnId: "turn-1",
+            run: { id: "pre-tool-use:0:/<session-flags>/config.toml:call_A", eventName: "preToolUse", status, entries: [{ kind: "error", text: "MCP server 'gate' is not connected" }] },
+        },
+    });
+    const appServer = fakeAppServer([hook("thr-new", "failed"), hook("thr-new", "completed"), hook("thr-other", "failed"), COMPLETED]);
+    const events = await collect(createCodexAppServerRunner(appServer.connector)(turn()));
+    expect(events.filter((event) => event.type === "hook.failed")).toEqual([
+        { type: "hook.failed", event: "preToolUse", id: "call_A", message: "MCP server 'gate' is not connected" },
+    ]);
+});
+
+test("a command's approval names its item, and one a subagent's thread asks is marked as such", async () => {
+    const asking = (threadId: string, itemId: string) => ({
+        request: "item/commandExecution/requestApproval",
+        params: { threadId, turnId: "turn-1", itemId, startedAtMs: 1, command: "pnpm build" },
+    });
+    const appServer = fakeAppServer([asking("thr-new", "c1"), asking("thr-child", "c2"), COMPLETED]);
+    const asked: unknown[] = [];
+    for await (const event of createCodexAppServerRunner(appServer.connector)(turn())) {
+        if (event.type === "command_approval.requested") {
+            asked.push({ item: event.item_id, subagent: event.subagent });
+            event.respond(true);
+        }
+    }
+    expect(asked).toEqual([
+        { item: "c1", subagent: undefined },
+        { item: "c2", subagent: true },
+    ]);
+});
+
+test("frames the daemon's tools raise reach the stream while the turn runs", async () => {
+    let wake: (() => void) | undefined;
+    const held: AgentEvent[] = [{ kind: "terminal", session: "agent-x" }];
+    const release = Promise.withResolvers<undefined>();
+    const started = { method: "turn/started", params: { threadId: "thr-new", turn: { id: "turn-1" } } };
+    const appServer = fakeAppServer([started, { await: release.promise }, COMPLETED]);
+    const events: CodexEvent[] = [];
+    for await (const event of createCodexAppServerRunner(appServer.connector)({
+        ...turn(),
+        frames: {
+            take: () => held.splice(0),
+            watch: (next) => {
+                wake = next;
+                return () => {
+                    wake = undefined;
+                };
+            },
+        },
+    })) {
+        events.push(event);
+        if (event.type === "turn.started") {
+            held.push({ kind: "terminal", session: "agent-y" });
+            wake?.();
+            setTimeout(() => release.resolve(undefined), 0);
+        }
+    }
+    expect(events.filter((event) => event.type === "frame")).toEqual([
+        { type: "frame", frame: { kind: "terminal", session: "agent-x" } },
+        { type: "frame", frame: { kind: "terminal", session: "agent-y" } },
+    ]);
+    expect(wake).toBeUndefined();
 });

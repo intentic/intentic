@@ -263,7 +263,12 @@ describe("xAI's model catalog", () => {
         const { fetchImpl, requests } = recordingFetch(listing(["grok-4-latest", "grok-imagine-video", "grok-3-mini"]));
         const catalog = xaiCatalog(dir, fetchImpl);
 
-        expect(await catalog.models()).toEqual(catalogOf("grok-4-latest", "grok-3-mini"));
+        // Grok 3 Mini is the one line xAI takes a reasoning effort for, so it alone names its tiers.
+        const live = catalogOf("grok-4-latest", "grok-3-mini");
+        expect(await catalog.models()).toEqual({
+            ...live,
+            models: live.models.map((model) => (model.id === "grok-3-mini" ? { ...model, efforts: ["low", "high"] } : model)),
+        });
         expect(requests).toEqual([{ url: "https://api.x.ai/v1/models", authorization: "Bearer live-tok" }]);
         // Persisted, so a later boot or an expired-token read still serves the real catalog.
         expect(JSON.parse(await readFile(join(dir, "xai-models.json"), "utf8"))).toEqual(["grok-4-latest", "grok-3-mini"]);

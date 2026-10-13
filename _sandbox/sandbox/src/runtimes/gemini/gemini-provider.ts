@@ -13,7 +13,7 @@ import {
 import type { AgentRequest, ContainerCredential } from "../../agent/providers/agent-request.js";
 import { withAttachments } from "../../agent/prompt/attachment-note.js";
 import { releasingMounts } from "../../agent/tools/turn-mounts.js";
-import { turnToolsOf, type TurnToolsDeps } from "../../agent/tools/turn-tools.js";
+import { doorToolsOf, type DoorToolsDeps } from "../daemon-tools/door-tools.js";
 import {
     engineMissing,
     enginesReady,
@@ -23,8 +23,10 @@ import {
 } from "../../agent/providers/provider-module.js";
 import type { Services } from "../../composition.js";
 import type { Config } from "../../env.config.js";
+import type { CliProxyClient } from "../../agent/providers/translator.js";
 import { createGeminiCatalog, type GeminiCatalog } from "./gemini-catalog.js";
 import { sharedServerRefusal } from "../../privacy/harness-route.js";
+import { opt } from "../../opt.js";
 import { requireRootAgentExecution } from "../../workload/agent-execution.js";
 
 // Everything Gemini contributes, listed in runtimes/runtime-table.ts: the OpenCode loop Grok runs on, on its own backend.
@@ -42,8 +44,10 @@ export const createGeminiSlice = (input: {
     readonly config: Config;
     readonly authRoot: string;
     readonly geminiAgent: GeminiSlice["geminiAgent"];
+    // Where each model's thinking scale is read, the translator's management catalog; absent offers no effort.
+    readonly cliProxy?: Pick<CliProxyClient, "models">;
 }): GeminiSlice => ({
-    geminiModels: createGeminiCatalog(input.config, join(input.authRoot, "gemini", "models.json")),
+    geminiModels: createGeminiCatalog(input.config, join(input.authRoot, "gemini", "models.json"), fetch, input.cliProxy),
     geminiAgent: input.geminiAgent,
 });
 
@@ -51,7 +55,7 @@ export const createGeminiSlice = (input: {
 // credential, CLIProxyAPI does, the same as a routed turn. Exists because the Claude Code loop's baked-in identity line
 // gets every Google account refused as a false quota error.
 // What a Gemini turn is planned from: the translator's accounts, the Google catalog it serves, and the turn's MCP mounts.
-export type GeminiPlanDeps = TurnToolsDeps & Pick<Services, "cliProxy" | "config" | "geminiAgent" | "geminiModels" | "openCode" | "privacyShield">;
+export type GeminiPlanDeps = DoorToolsDeps & Pick<Services, "cliProxy" | "config" | "geminiAgent" | "geminiModels" | "openCode" | "privacyShield">;
 
 export const planGeminiTurn = async (
     services: GeminiPlanDeps,
@@ -103,21 +107,18 @@ export const planGeminiTurn = async (
     if (context.base.policy.sealed === true) {
         return armPlan(services.geminiAgent, { ...context.base, spec: { ...context.base.spec, model }, credential: { kind: "container" } });
     }
-    // The turn's remote MCP servers, as Grok's and Codex's; leased last, once nothing can refuse the turn, since only the
-    // loop it arms releases it.
-    const mounted = await turnToolsOf(services, granted, {
-        conversationId: input.conversationId,
-        anonymousBrowser: context.persona?.powers.browser ?? true,
-        shell: context.persona?.powers.shell ?? true,
-        extensions: context.persona?.powers.extensions,
-    });
+    // The turn's remote MCP servers and the daemon's own, as Grok's (daemon-tools/door-tools.ts, no gate server); leased
+    // last, once nothing can refuse the turn, since only the loop it arms releases it.
+    const { mounted, tools, hooks } = await doorToolsOf(services, input, context, granted, false);
     return armPlan(
         releasingMounts(services.geminiAgent, mounted),
         withAttachments(
             {
                 ...context.base,
-                spec: { ...context.base.spec, model },
-                tools: mounted.tools.length > 0 ? { ...context.base.tools, remote: mounted.tools } : context.base.tools,
+                // The turn's steering queue, which the OpenCode loop sends on as steers (capabilities.steering).
+                spec: { ...context.base.spec, model, ...opt("steering", context.steering) },
+                tools,
+                hooks,
                 credential: { kind: "container" },
             },
             context.attachmentPaths,

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { JS_SERVER_NAME, JS_TOOL_NAME } from "../seams/js-tool-names.js";
 import { resolveCommandSecrets, type SecretAccess } from "../secrets/secret-access.js";
 import type { TurnPlacement } from "../conversations/worktrees/isolation.js";
+import type { GuardOutcome } from "../guard/command-guard.js";
 import { JS_TIMEOUT_DEFAULT_S, JS_TIMEOUT_MAX_S, type JsExecutionPlan, type JsRunResult, runJs } from "./js-runtime.js";
 
 // One tool, a peer of Bash, mounted by agent.ts from the request's own `jsExecution` field; the SDK server is only the
@@ -18,6 +19,10 @@ export interface JsToolDeps {
     readonly signal: AbortSignal;
     // Secret-reference resolution, when this sandbox stores any; absent, references pass through as literal text.
     readonly secrets?: SecretAccess;
+    // The owner's command rules, asked about the script before it runs, where no hook sits in front of the tool to ask
+    // (a runtime that reaches this server through the MCP door: daemon-servers.ts). Absent, the Claude loop's PreToolUse
+    // gate already asked.
+    readonly consult?: (code: string) => Promise<GuardOutcome>;
 }
 
 // What the run looked like, to a model that has to act on it: output first, status last, nothing wrapped in JSON to
@@ -85,6 +90,12 @@ export const runJsTool = async (deps: JsToolDeps, args: { code: string; timeoutS
     const timeoutSeconds = Math.min(args.timeoutSeconds ?? JS_TIMEOUT_DEFAULT_S, JS_TIMEOUT_MAX_S);
     // The secret exit lives in the handler, not a hook: Bash must compose its resolution inside the tmux rewrite since
     // two hooks order themselves, but a JS run has only this one pipeline, after the command gate has read the script.
+    if (deps.consult !== undefined) {
+        const verdict = await deps.consult(args.code);
+        if (!verdict.allow) {
+            return verdict.reason;
+        }
+    }
     let code = args.code;
     if (deps.secrets !== undefined) {
         const resolved = await resolveCommandSecrets(args.code, deps.secrets, "code", JS_TOOL_NAME);

@@ -21,6 +21,7 @@ const { loadActiveProviderModels, loadRunnableProviders, loadProviderModels, rea
 const { NATIVE_PROVIDERS } = await import("@intentic/sandbox-contract");
 const { acpProviders, endpointProviders, endpointsLoaded, nativeReady } = await import("../accounts/providerCatalog");
 const { setConversations } = await import("../tabs/useChat-tabs");
+const { advertisedLoops, offeredLoops } = await import("./offeredLoops");
 const { Conversation } = await import("../session/conversation");
 
 const OPUS = `claude-opus-4-6-thinking`;
@@ -86,6 +87,19 @@ test(`takes the providers this box adds from the daemon's own answer`, async () 
     // An endpoint's catalog is its own route, addressed by the capability behind the `endpoint/` prefix.
     expect(endpointModels).toHaveBeenCalledWith({ id: `trial` });
     expect(endpointsLoaded.value).toBe(true);
+});
+
+// The loops a chat may name are the daemon's to say; an older one says nothing, and the editor keeps to what every daemon ran.
+test(`keeps the loops the daemon advertised, and none from a daemon older than the field`, async () => {
+    serves([OPUS]);
+    answers({ native: [`claude`], agents: [], endpoints: [], loops: { codex: [`codex`, `claude-code`, `opencode`] } });
+    await loadRunnableProviders().settled;
+    expect(offeredLoops(`codex`)).toEqual([`codex`, `claude-code`, `opencode`]);
+
+    answers({ native: [`claude`], agents: [], endpoints: [] });
+    await loadRunnableProviders().settled;
+    expect(advertisedLoops.value).toBeUndefined();
+    expect(offeredLoops(`codex`)).toEqual([`codex`, `claude-code`]);
 });
 
 // The bug this guards: an invited member whose tier can drive turns but not read the box's connections was left with

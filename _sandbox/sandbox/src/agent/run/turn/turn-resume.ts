@@ -33,7 +33,7 @@ import { openingRows, openTurnTranscript, recordInterruptedTurn, recordTurnTrans
 import { POST_PLAN_MODE } from "../agent.js";
 import { formatAnswers } from "../../tools/question-answers.js";
 import { outageRetryDue, outageRetryFired } from "../../providers/provider-health.js";
-import { type Routing, routingFor, sessionFor } from "../../providers/accounts/routing.js";
+import { type Routing, routingFor, sameLoop, sessionFor } from "../../providers/accounts/routing.js";
 import { consumeEntry, type JournalEntry, type JournalledTurn, parkedRestoreSpent, resumeBars, spendAttempt } from "./turn-journal.js";
 import type { StartedRun, StartOptions, TurnInput, TurnStarter } from "../../../seams/turn-starter.js";
 import { refusedBegin } from "../placement/turn-placement.js";
@@ -107,11 +107,12 @@ const pressed = (held: AgentTurn, routing: ResumeRouting): Routing => {
     return routingFor({ provider, harness, account }, routing);
 };
 
-// Whether the press keeps the held turn's runtime (provider and loop), whatever it does to the account.
+// Whether the press keeps the held turn's runtime (provider and loop), whatever it does to the account. Compared as loops,
+// so a press naming the other name of the same runtime keeps the session.
 const sameRuntime = (input: AgentTurn, routing: ResumeRouting): boolean => {
     const where = pressed(input, routing);
     const held = withRuntimeDefaults(input);
-    return where.provider === held.agent && where.harness === held.harness;
+    return where.provider === held.agent && sameLoop({ provider: held.agent, harness: held.harness }, where.harness);
 };
 
 // The turn's own fields come from the held copy; routing (agent/harness/account/model) comes from the press when named.

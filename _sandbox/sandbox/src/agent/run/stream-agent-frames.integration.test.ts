@@ -173,6 +173,7 @@ test("a clean turn streams every frame once, stamps the ones that name an accoun
             provider: "claude",
             ...stamp,
             harness: "native",
+            runtime: "claude-code",
             outcome: "ok",
             conversationId: "frames-clean",
             // The ledger row joins the turn's activity and its session.
@@ -334,6 +335,7 @@ test("a spent allowance naming its reset is held whole, filed as a limit, and re
             model: "opus",
             modelRequested: "opus",
             harness: "native",
+            runtime: "claude-code",
             outcome: "error",
             errorCode: "rate_limit",
             errorMessage: "Claude usage limit reached.",
@@ -549,8 +551,9 @@ test("a routed runtime's readings are re-measured, the cache clock dropped, and 
 
     const stamp = { account: "codex-subscription" };
     expect(frames).toStrictEqual([
-        // Planning's own notes, disclosed before the runtime says anything: how to spawn, and what runs after it lands.
-        { kind: "preamble", notes: [{ title: "Spawning subagents", text: expect.any(String) }, LANDING_CHECKS_NOTE] },
+        // Planning's own notes, disclosed before the runtime says anything: what runs after it lands. No spawning note:
+        // Codex reaches the daemon's subagents server over the door, which carries its own words.
+        { kind: "preamble", notes: [LANDING_CHECKS_NOTE] },
         { kind: "session", sessionId: "thread-1", ...stamp },
         { kind: "delta", text: "on it" },
         edit,

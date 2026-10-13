@@ -43,6 +43,8 @@ const geminiServices = (
             live: async () => served.live,
         }),
         async *geminiAgent() {},
+        // The daemon's own servers ride every planned turn (daemon-tools/door-tools.ts); the deps server names its conversation.
+        agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),
     });
 
 test("sends the pinned model the channel offers", async () => {
@@ -86,9 +88,9 @@ test("refuses a turn the translator has no Google model to serve, instead of sen
     });
 });
 
-// Gemini rides OpenCode, which now takes the turn's remote MCP servers as Codex does: the browser the persona may drive
-// is one of them.
-test("hands the turn its remote MCP servers, the browser among them", async () => {
+// Gemini rides OpenCode, which takes the turn's remote MCP servers as Codex does (the browser the persona may drive is one
+// of them), and the daemon's own servers after them on the same lease, with the relay its loop attaches to.
+test("hands the turn its remote MCP servers, the browser first and the daemon's own after", async () => {
     const web = { name: "web", url: "http://127.0.0.1:1/mcp/web", token: "turn-bearer", timeoutMs: 120_000 };
     browserServers.mockResolvedValue({ servers: [web], accounts: {}, ports: { web: 41_000 }, passkeys: {} });
 
@@ -97,7 +99,10 @@ test("hands the turn its remote MCP servers, the browser among them", async () =
         throw new Error(`planning refused the turn: ${plan.message}`);
     }
 
-    expect(plan.request.tools.remote).toEqual([web]);
+    const remote = plan.request.tools.remote ?? [];
+    expect(remote[0]).toEqual(web);
+    expect(remote.map((tool) => tool.name)).toEqual(expect.arrayContaining(["ui", "subagents", "watch"]));
+    expect(plan.request.hooks.relay).toMatchObject({ attach: expect.any(Function), push: expect.any(Function) });
 });
 
 // A helper's request reads nothing past its prompt, so the browser the persona could drive is not mounted for it.

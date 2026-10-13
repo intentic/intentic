@@ -1,10 +1,25 @@
 import type { CreateTerminalRequest, TerminalExitStatus, TerminalOutputResponse } from "@agentclientprotocol/sdk";
+import { basename } from "node:path";
 import type { TerminalRunner } from "../../terminal/terminal-run.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 
 // ACP terminal/* over tmux: create runs the command in the agent-<id> session; the runner's promise later fills in
 // output and exit code. terminal/output is empty mid-run, since the live view is the terminal panel. kill aborts the
 // runner (SIGTERM); release of a still-running command kills it too.
+
+// The shells an agent wraps a command line in (`bash -lc "…"`); the line itself is what the rulebook reads.
+const SHELLS = new Set(["sh", "bash", "zsh", "dash"]);
+const SCRIPT_FLAG = /^-[a-z]*c$/;
+
+// What a terminal/create runs, as the rulebook reads a command: the script a shell is handed, else the argv as one line.
+export const terminalProgram = (request: Pick<CreateTerminalRequest, "command" | "args">): string => {
+    const args = request.args ?? [];
+    const [flag, script] = args;
+    if (SHELLS.has(basename(request.command)) && flag !== undefined && SCRIPT_FLAG.test(flag) && script !== undefined) {
+        return script;
+    }
+    return [request.command, ...args].join(" ");
+};
 
 interface Handle {
     output: string;

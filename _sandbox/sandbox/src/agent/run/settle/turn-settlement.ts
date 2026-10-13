@@ -1,4 +1,4 @@
-import { type AgentProvider, KeyedProviderSchema, type TurnProof } from "@intentic/sandbox-contract";
+import { type AgentProvider, capabilitiesOf, KeyedProviderSchema, type TurnProof } from "@intentic/sandbox-contract";
 import type { Services } from "../../../composition.js";
 import type { TurnPlacement } from "../../../conversations/worktrees/isolation.js";
 import type { RefreshOptions } from "../../../usage/headroom.js";
@@ -176,6 +176,8 @@ const usageOf = (end: TurnEnd, outcome: TurnOutcome, now: number): UsageRow => {
         ...end.attribution,
         ...modelsOf(end),
         harness: input.harness,
+        // The loop that served it, which a reader can no longer work out from old rows' requested harness.
+        runtime: capabilitiesOf(end.provider, input.harness).runtime,
         outcome,
         ...failureOf(failure),
         ...opt("conversationId", input.conversationId),

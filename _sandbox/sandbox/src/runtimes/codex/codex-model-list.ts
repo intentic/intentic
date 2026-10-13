@@ -1,11 +1,11 @@
 import { spawn } from "node:child_process";
-import type { Model } from "@intentic/sandbox-contract";
+import type { Model, ModelBadge } from "@intentic/sandbox-contract";
 import { containerKeyEnv } from "../../seams/sealed-env.js";
 import { jsonLines } from "../stdio/child-output.js";
 import { codexBinary } from "./codex-path.js";
 
 // The Codex runtime's own catalog, read from the CLI that will run the turn (app-server `model/list`): display names,
-// descriptions and the reasoning rungs each model accepts. Nothing here is curated — a rung Codex publishes is a rung
+// descriptions, the reasoning rungs each model accepts, and whether it offers a fast tier. Nothing here is curated — a rung Codex publishes is a rung
 // the picker offers, including the ones only the newest models carry (max, ultra).
 // /v1/models answers ids alone, so this is the only source that knows a model's scale; it is metadata, not
 // availability, and never decides on its own which models an account may drive.
@@ -18,7 +18,14 @@ interface PublishedModel {
     readonly hidden?: boolean;
     readonly isDefault?: boolean;
     readonly supportedReasoningEfforts?: readonly { readonly reasoningEffort?: string }[];
+    readonly serviceTiers?: readonly { readonly id?: string }[];
+    // The older spelling of the same list, by name rather than id; still published beside it.
+    readonly additionalSpeedTiers?: readonly string[];
 }
+
+// The service tier Codex names Fast, by the id a turn asks for it with: what Codex's own fast mode sends (its
+// ServiceTier::Fast request value), the id every fast-capable model publishes in serviceTiers.
+export const CODEX_FAST_TIER = "priority";
 
 // Spawn-to-answer budget for one `model/list`. The CLI answers in ~100ms from its own cache; past this the catalog
 // falls to the id-only sources rather than holding a picker open.
@@ -32,14 +39,21 @@ const asRecord = (value: unknown): Record<string, unknown> | undefined =>
 const effortsOf = (row: PublishedModel): string[] =>
     (row.supportedReasoningEfforts ?? []).map((entry) => entry.reasoningEffort).filter((effort): effort is string => typeof effort === "string");
 
+// Fast where the model publishes the tier, as Codex itself decides it (ModelPreset::supports_fast_mode): the tier's id
+// among serviceTiers, or "fast" among the older speed tiers.
+const badgesOf = (row: PublishedModel): ModelBadge[] =>
+    (row.serviceTiers ?? []).some((tier) => tier.id === CODEX_FAST_TIER) || (row.additionalSpeedTiers ?? []).includes("fast") ? ["fast"] : [];
+
 // One published row as a catalog Model. Label falls back to the id: a row with no display name still has to be
 // pickable.
 const toModel = (row: PublishedModel): Model => {
     const efforts = effortsOf(row);
+    const badges = badgesOf(row);
     return {
         id: row.id,
         label: row.displayName ?? row.id,
         ...(efforts.length > 0 ? { efforts } : {}),
+        ...(badges.length > 0 ? { badges } : {}),
         ...(row.description !== undefined ? { description: row.description } : {}),
     };
 };

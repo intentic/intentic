@@ -11,6 +11,8 @@ const WORLD: PickWorld = {
     session: undefined,
     local: true,
     rememberedModel: (provider) => `${provider}-model`,
+    // Codex was last picked on the Claude Code loop; every other provider on its own.
+    rememberedHarness: (provider) => (provider === `codex` ? `claude-code` : `native`),
     defaults: () => ({ provider: `claude`, picked: undefined, harness: `native`, effort: `high`, thinking: true, auto: false }),
 };
 const LIVE: PickWorld = { ...WORLD, streaming: true, generating: true };
@@ -55,6 +57,8 @@ describe(`the provider`, () => {
                 // Another provider starts on auto: an account never crosses providers, and no pick is remembered.
                 account: undefined,
                 model: `codex-model`,
+                // Codex's own last loop, not the one this chat ran Claude on.
+                harness: `claude-code`,
                 displacedModel: undefined,
                 sentModel: undefined,
             },
@@ -81,6 +85,7 @@ describe(`the provider`, () => {
                 provider: `codex`,
                 account: undefined,
                 model: `codex-model`,
+                harness: `claude-code`,
                 movedFrom: { provider: `claude`, value: `claude-model` },
             },
             effects: { segmentCut: true, divider: `refresh` },
@@ -124,6 +129,7 @@ describe(`the model`, () => {
             provider: `codex`,
             account: undefined,
             model: `gpt-5`,
+            harness: `claude-code`,
             sentModel: undefined,
         });
         expect(reduceSelection(SENT, { kind: `selectModel`, pick: { provider: `claude`, value: `haiku` } }, LIVE).selection.model).toBe(`haiku`);
@@ -196,7 +202,7 @@ describe(`the settings`, () => {
     it(`switches the harness as a segment cut, remembered`, () => {
         expect(reduceSelection(SENT, { kind: `selectHarness`, harness: `claude-code` }, WORLD)).toEqual({
             selection: { ...SENT, harness: `claude-code`, sentModel: undefined },
-            effects: { kept: true, defaults: { harness: `claude-code` }, segmentCut: true, divider: `refresh` },
+            effects: { kept: true, defaults: { harness: { provider: SENT.provider, harness: `claude-code` } }, segmentCut: true, divider: `refresh` },
         });
     });
 });

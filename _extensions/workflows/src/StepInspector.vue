@@ -1,6 +1,16 @@
 <script setup lang="ts">
 import { Button, Checkbox, ui, Icon, Picker, type PickerOption, ProseField, SegmentedControl, vAction } from "@intentic/extension-ui";
-import { HARNESSES, type OutputField, providerLabel, type WorkflowStep } from "@intentic/sandbox-contract";
+import {
+    type AgentHarness,
+    canonicalHarness,
+    HARNESSES,
+    loopLabel,
+    loopsOf,
+    type OutputField,
+    providerLabel,
+    termsOf,
+    type WorkflowStep,
+} from "@intentic/sandbox-contract";
 import { computed, ref } from "vue";
 import { host } from "./host";
 import { usePersonas } from "./usePersonas";
@@ -94,8 +104,35 @@ const rubric = computed({
 // Model pin: unpinned by default so a workflow keeps working if the user switches providers. The chip opens the shell's
 // own `api.models.pick`, not a local provider/model dropdown pair.
 
-// Only codex and grok have both a native and routed runtime to choose between.
-const harnessChoosable = computed(() => step.value.agent === `codex` || step.value.agent === `grok`);
+// One chip per loop the provider offers, its default first and stored as `native`, the spelling every daemon reads.
+// Read off the contract's table, not the daemon's listing (the shell's picker reads that): the step runs on the daemon
+// that serves this view, and an extension has no read of what it advertises.
+interface LoopOption {
+    readonly label: string;
+    readonly value: AgentHarness;
+    icon?: "info-circle";
+    title?: { readonly title: string; readonly note: string };
+}
+const loopOptions = computed((): LoopOption[] => {
+    const agent = step.value.agent;
+    if (agent === undefined) {
+        return [];
+    }
+    return loopsOf(agent).map((loop, index) => {
+        const option: LoopOption = { label: loopLabel(agent, loop), value: index === 0 ? `native` : loop };
+        const terms = termsOf(agent, loop);
+        // The vendor's own terms for this loop, said quietly: a mark and a hover card, never a banner.
+        if (terms !== undefined) {
+            option.icon = `info-circle`;
+            option.title = { title: t(`stepInspector.vendorTerms`), note: terms.note };
+        }
+        return option;
+    });
+});
+const loopChoosable = computed(() => loopOptions.value.length > 1);
+// The chip a stored harness lights: the default for `native`, for the default named outright, and for a loop the
+// provider no longer offers (which runs its default anyway).
+const loopSelected = computed(() => (step.value.agent === undefined ? `native` : canonicalHarness(step.value.agent, step.value.harness)));
 
 // Provider with no version pins to that family; a pinned version shows its raw id, not a cached label.
 const described = computed(() => {
@@ -349,9 +386,9 @@ const advancedSummary = computed(() => {
                     </div>
                     <!-- Harness choice is orthogonal to the provider, shown only where more than one is possible. -->
                     <SegmentedControl
-                        v-if="harnessChoosable"
-                        :model-value="step.harness ?? `native`"
-                        :options="HARNESSES"
+                        v-if="loopChoosable"
+                        :model-value="loopSelected"
+                        :options="loopOptions"
                         @update:model-value="patch({ harness: $event })"
                     />
                     <span class="text-2xs text-subtle">

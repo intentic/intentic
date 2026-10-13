@@ -755,19 +755,18 @@ describe(`Conversation`, () => {
         const conversation = new Conversation(`c-modes`);
         conversation.selection.apply({ kind: `set`, picks: { modePick: `default` } });
 
-        conversation.selection.apply({ kind: `selectProvider`, provider: `codex` });
+        // Pi's own loop holds no approval modes: the ask-each-tool pick reads as the posture it runs.
+        conversation.selection.apply({ kind: `selectProvider`, provider: `pi` });
         expect(conversation.selection.mode.value).toBe(`bypassPermissions`);
 
         // Claude Code honours modes directly; the pick was never overwritten, so it returns untouched.
-        conversation.selection.apply({ kind: `selectHarness`, harness: `claude-code` });
+        conversation.selection.apply({ kind: `selectProvider`, provider: `claude` });
         expect(conversation.selection.mode.value).toBe(`default`);
         expect(conversation.selection.capabilities.value.permissions).toBe(`modes`);
 
-        // Native reads as autonomous again; `plan`, which every runtime has (emulated or not), rides through unchanged.
-        conversation.selection.apply({ kind: `selectHarness`, harness: `native` });
-        expect(conversation.selection.mode.value).toBe(`bypassPermissions`);
+        // `plan`, which every runtime has (emulated or not), rides through unchanged.
         conversation.selection.apply({ kind: `set`, picks: { modePick: `plan` } });
-        conversation.selection.apply({ kind: `selectProvider`, provider: `grok` });
+        conversation.selection.apply({ kind: `selectProvider`, provider: `pi` });
         expect(conversation.selection.mode.value).toBe(`plan`);
     });
 

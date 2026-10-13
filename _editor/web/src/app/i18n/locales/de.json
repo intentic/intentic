@@ -1858,6 +1858,9 @@
             "cantHelpNow": "Kann gerade nicht helfen",
             "notAvailableHere": "Hier nicht verfügbar",
             "whatIsntAvailableHere": "Was hier nicht verfügbar ist",
+            "liftThroughLoop": "Über {loop} ausgeführt, entfallen diese Einschränkungen.",
+            "vendorTerms": "Bedingungen des Anbieters",
+            "whatTheVendorAllows": "Was der Anbieter erlaubt",
             "agentNeedsHelp": "Der Agent braucht Ihre Hilfe:",
             "optionalNoteBackTo": "Optionale Notiz zurück an den Agenten",
             "doneHandBack": "Fertig: zurückgeben"
@@ -2433,7 +2436,10 @@
             "underClaudeCode": "Grok unter Claude Code",
             "verify": "Bestätigen",
             "verifyThisAccount": "Google verlangt, dass der Inhaber dieses Konto bestätigt, bevor es wieder Züge übernimmt: Drücken Sie „Bestätigen“, melden Sie sich als {label} an, und es kommt beim nächsten Versuch zurück in die Rotation.",
-            "viaClaudeCode": "über Claude Code"
+            "viaClaudeCode": "über Claude Code",
+            "viaLoop": "über {loop}",
+            "loopSignIn": "{loop}-Anmeldung",
+            "accountViaLoop": "{managedLabel}-Konto über {loop}"
         },
         "arrivalPanel": {
             "alreadyHere": "schon hier",

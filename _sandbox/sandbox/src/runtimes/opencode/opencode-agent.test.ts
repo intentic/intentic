@@ -16,15 +16,19 @@ import {
 import type { EventOf } from "./opencode-frames.js";
 import { type CommandGuard, consultWith, type GuardOutcome, vendorSubject } from "../../guard/command-guard.js";
 import { opt } from "../../opt.js";
+import { WORKLOAD_ENV } from "../../seams/workload-stamp.js";
 import type { OpenCodeListener, OpenCodeService, SessionJudge } from "./opencode.js";
 import { OPENCODE_GEMINI_PROVIDER } from "../gemini/gemini-models.js";
 import { mcpServersOf, type OpenCodeMcpServer, openCodeMounts } from "./opencode-mcp.js";
 import type { AgentRequest, ContainerCredential } from "../../agent/providers/agent-request.js";
 import { DEFAULT_TURN_TIMEOUTS } from "../decorators/turn-watchdog.js";
+import type { TurnTokens } from "../decorators/vendor-events.js";
 import { EXECUTE_PROMPT, PLAN_PREAMBLE } from "../decorators/plan-mode.js";
 import { planRevision } from "../../agent/prompt/plan-revision.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../../testing.js";
+import { createTurnRelay } from "../daemon-tools/turn-relay.js";
+import { createTurnTaint } from "../../guard/turn-taint.js";
 
 // The OpenCode 2 turn: the adapter's events-to-frames mapping over a faked runner, and the runner's session setup, event
 // reading and cleanup over a faked shared server. Event shapes follow what opencode 2.0.26 sends.
@@ -170,9 +174,16 @@ const userQueued = (sessionID: string, text: string): EventOf<"session.inbox.enq
 const shellExited = (id: string): EventOf<"shell.exited"> => ({ ...stamp(), type: "shell.exited", data: { id, exit: 0, status: "exited" } });
 const shellDeleted = (id: string): EventOf<"shell.deleted"> => ({ ...stamp(), type: "shell.deleted", data: { id } });
 
-// What the runner says besides OpenCode's own events: the session the turn runs on, and a card its judge raised.
-const session = (sessionId: string, created = true): TurnSession => ({ type: "intentic.session", sessionId, created });
+// What the runner says besides OpenCode's own events: the session the turn runs on (with what it had spent before the
+// turn, where the runner read it), a card its judge raised, and a failure it handed to the daemon.
+const session = (sessionId: string, created = true, spent?: TurnTokens): TurnSession => ({ type: "intentic.session", sessionId, created, ...opt("spent", spent) });
 const raised = (frame: AgentEvent): RaisedFrame => ({ type: "intentic.frame", frame });
+const timedOut = (message: string): OpenCodeTurnEvent => ({ type: "intentic.failed", frame: { kind: "error", code: "provider-outage", message } });
+
+// The running total of a session nothing has spent on yet, as the fake server reports every session it holds.
+const NOTHING_SPENT: TurnTokens = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, costUsd: 0 };
+// The session a runner turn over the fake server says it runs on.
+const ran = (sessionId: string, created = true): TurnSession => session(sessionId, created, NOTHING_SPENT);
 
 // ---------------------------------------------------------------------------------------------------------------------
 // The adapter over a faked runner.
@@ -215,6 +226,17 @@ const collect = async (
     }
     return events;
 };
+// A turn as the runner gets it, its functions read for whether they are there and its environment (the daemon's own,
+// whole) for the conversation's stamp in it.
+const turnAsHanded = ({ gate, taint: _taint, relay, shell, ask, approve, env, ...turn }: OpenCodeTurn) => ({
+    gated: gate !== undefined,
+    relayed: relay !== undefined,
+    shelled: shell !== undefined,
+    asks: ask !== undefined,
+    approves: approve !== undefined,
+    stamp: env === undefined ? "no environment" : (env[WORKLOAD_ENV] ?? "unstamped"),
+    ...turn,
+});
 const planIds = (events: readonly AgentEvent[]): string[] => events.flatMap((event) => (event.kind === "plan" ? [event.requestId] : []));
 
 test("a turn maps OpenCode's events onto session, thinking, tool cards, deltas, usage summed per step, and done", async () => {
@@ -358,21 +380,31 @@ test("a build turn resumes the session on the xai provider, passes the model, an
     await collect(createOpenCodeAgent(runner), {
         ...request,
         spec: { ...request.spec, conversationId: "chat-1", sessionId: "s9", model: "grok-4.20-0309-non-reasoning", attachments: [pdf] },
+        // The daemon's own servers' relay, which the runner attaches once the message's queue and watchdog exist.
+        hooks: { cards, relay: createTurnRelay() },
     });
 
-    expect(calls.map(({ gate, ...turn }) => ({ gated: gate !== undefined, ...turn }))).toEqual([
+    expect(calls.map(turnAsHanded)).toEqual([
         {
             gated: true,
+            relayed: true,
+            shelled: true,
+            asks: true,
+            approves: false,
+            stamp: "chat-1",
             prompt: `add a /ping route\n\nThe user attached these files: read them as needed:\n- ${pdf}`,
             sessionId: "s9",
             cwd: WORKSPACE_ROOT,
             model: "grok-4.20-0309-non-reasoning",
             provider: "xai",
             agent: "build",
+            commands: true,
             mounts: openCodeMounts("chat-1", []),
             signal: request.signal,
         },
     ]);
+    // OpenCode replaces the session's environment outright, so the turn's is the daemon's own whole.
+    expect(calls[0]?.env?.["PATH"]).toBe(process.env["PATH"]);
 });
 
 test("a sealed request runs as one build message carrying its own system prompt, not a turn's standing instructions", async () => {
@@ -388,16 +420,25 @@ test("a sealed request runs as one build message carrying its own system prompt,
             systemAppend: "## Delegating",
         },
         policy: { sealed: true },
+        hooks: { cards, relay: createTurnRelay() },
     });
 
-    expect(calls.map(({ gate, ...turn }) => ({ gated: gate !== undefined, ...turn }))).toEqual([
+    // Nothing to ask a person, no shell to set up, no daemon servers and no commands to offer: a sealed request runs no tool.
+    expect(calls.map(turnAsHanded)).toEqual([
         {
             gated: true,
+            relayed: false,
+            shelled: false,
+            asks: false,
+            approves: false,
+            stamp: "no environment",
             prompt: "add a /ping route",
             cwd: WORKSPACE_ROOT,
             model: "gemini-3-flash",
             provider: OPENCODE_GEMINI_PROVIDER,
             agent: "build",
+            replacesBase: true,
+            commands: false,
             mounts: openCodeMounts("chat-1", []),
             system: "Answer exactly.",
             sealed: true,
@@ -768,10 +809,12 @@ type Reply = readonly (OpenCodeEvent | Error)[];
 
 interface FakeOptions {
     readonly replies?: readonly Reply[];
+    // The variant the server's config declares for a turn's effort; none by default.
+    readonly variant?: OpenCodeService["variant"];
     // What the server says when the turn interrupts its session.
     readonly onInterrupt?: Reply;
     // Steps that fail, with the error each fails with.
-    readonly fails?: Partial<Record<"create" | "put" | "removeEntry" | "mount" | "prompt", Error>>;
+    readonly fails?: Partial<Record<"create" | "get" | "put" | "removeEntry" | "mount" | "prompt", Error>>;
     // How the turn's servers are let go; at once by default.
     readonly unmount?: () => Promise<void>;
     // Runs as a prompt reaches the server, before the server takes it.
@@ -783,11 +826,19 @@ interface FakeOptions {
 const fakeOpenCode = (options: FakeOptions = {}) => {
     const log: string[] = [];
     const leases = { selections: [] as Parameters<OpenCodeService["acquire"]>[0][], active: 0, released: 0 };
+    const get: Parameters<SessionApi["get"]>[0][] = [];
+    const environment: Parameters<SessionApi["environment"]>[0][] = [];
+    const commands: Parameters<OpenCodeClient["command"]["list"]>[0][] = [];
+    const variant: Parameters<OpenCodeService["variant"]>[] = [];
     const calls = {
         create: [] as Parameters<SessionApi["create"]>[0][],
         update: [] as Parameters<SessionApi["update"]>[0][],
         switchAgent: [] as Parameters<SessionApi["switchAgent"]>[0][],
         switchModel: [] as Parameters<SessionApi["switchModel"]>[0][],
+        get,
+        environment,
+        commands,
+        variant,
         put: [] as Parameters<EntryApi["put"]>[0][],
         removeEntry: [] as Parameters<EntryApi["remove"]>[0][],
         prompt: [] as Parameters<SessionApi["prompt"]>[0][],
@@ -828,19 +879,30 @@ const fakeOpenCode = (options: FakeOptions = {}) => {
             step("removeEntry", "removeEntry");
         },
     });
+    // Every session the server holds, as it reports one: nothing spent on it yet.
+    const info = (id: string, directory: string) => ({
+        id,
+        projectID: "p1",
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        time: { created: 0, updated: 0 },
+        location: { directory },
+    });
     const client = unstubbed<OpenCodeClient>("client", {
         session: unstubbed<SessionApi>("client.session", {
             create: async (input) => {
                 calls.create.push(input);
                 step("create", "create");
-                return {
-                    id: "s1",
-                    projectID: "p1",
-                    cost: 0,
-                    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-                    time: { created: 0, updated: 0 },
-                    location: { directory: input?.location?.directory ?? WORKSPACE_ROOT },
-                };
+                return info("s1", input?.location?.directory ?? WORKSPACE_ROOT);
+            },
+            get: async (input) => {
+                calls.get.push(input);
+                step("get", "get");
+                return info(input.sessionID, WORKSPACE_ROOT);
+            },
+            environment: async (input) => {
+                calls.environment.push(input);
+                step("environment");
             },
             update: async (input) => {
                 calls.update.push(input);
@@ -880,6 +942,14 @@ const fakeOpenCode = (options: FakeOptions = {}) => {
             },
             instructions: unstubbed<SessionApi["instructions"]>("client.session.instructions", { entry }),
         }),
+        // OpenCode's own slash commands offer nothing here; a turn that asks still reads the list.
+        command: unstubbed<OpenCodeClient["command"]>("client.command", {
+            list: async (input) => {
+                calls.commands.push(input);
+                step("commands");
+                return { location: { directory: input?.location?.directory ?? WORKSPACE_ROOT }, data: [] };
+            },
+        }),
         shell: unstubbed<OpenCodeClient["shell"]>("client.shell", {
             remove: async (input) => {
                 calls.removeShell.push(input);
@@ -918,6 +988,10 @@ const fakeOpenCode = (options: FakeOptions = {}) => {
             };
         },
         recordModels: async (ids) => void calls.recorded.push(ids),
+        variant: (providerID, modelID, effort) => {
+            calls.variant.push([providerID, modelID, effort]);
+            return options.variant?.(providerID, modelID, effort);
+        },
         judges: {
             register: (member, judge) => void judges.set(member, judge),
             release: (member) => void judges.delete(member),
@@ -956,7 +1030,7 @@ test("a new turn creates its session where it runs, listens before it prompts, e
     const end = succeeded("s1");
     const fake = fakeOpenCode({ replies: [[...own, started("someone-else"), textDelta("someone-else", "Not this turn's."), end]] });
 
-    expect(await drain(createOpenCodeRunner(fake.openCode)({ ...runnerTurn, cwd: worktree }))).toEqual([session("s1", true), ...own, end]);
+    expect(await drain(createOpenCodeRunner(fake.openCode)({ ...runnerTurn, cwd: worktree }))).toEqual([ran("s1"), ...own, end]);
     expect(fake.log).toEqual(["acquire", "create", "listen", "mount", "prompt", "unlisten", "unmount", "release"]);
     expect(fake.calls.create).toEqual([{ location: { directory: worktree }, title: "intentic conversation", agent: "build", permissions: NO_OTHERS }]);
     expect(fake.calls.mount).toEqual([{ directory: worktree, servers: [] }]);
@@ -970,7 +1044,7 @@ test("a runner lets its subagents' sessions through, not a stranger's, and ends 
     const endings = [succeeded("child-1"), succeeded("s1")];
     const fake = fakeOpenCode({ replies: [[...family, ...stranger, ...endings]] });
 
-    expect(await drain(createOpenCodeRunner(fake.openCode)(runnerTurn))).toEqual([session("s1", true), ...family, ...endings]);
+    expect(await drain(createOpenCodeRunner(fake.openCode)(runnerTurn))).toEqual([ran("s1"), ...family, ...endings]);
 });
 
 // A session keeps its rules, agent and model; each message sets the ones it runs with, and clears the instructions an
@@ -980,7 +1054,7 @@ test("a resumed session is set up for this message without creating one, and its
     const fake = fakeOpenCode({ replies: [reply], fails: { removeEntry: new Error("no such entry") } });
 
     expect(await drain(createOpenCodeRunner(fake.openCode)({ ...runnerTurn, sessionId: "s9", model: "grok-4" }))).toEqual([
-        session("s9", false),
+        ran("s9", false),
         ...reply,
     ]);
     expect(fake.log).toEqual([
@@ -988,6 +1062,7 @@ test("a resumed session is set up for this message without creating one, and its
         "update",
         "switchAgent",
         "switchModel",
+        "get",
         "removeEntry",
         "listen",
         "mount",
@@ -999,6 +1074,8 @@ test("a resumed session is set up for this message without creating one, and its
     expect(fake.calls.update).toEqual([{ sessionID: "s9", permissions: NO_OTHERS }]);
     expect(fake.calls.switchAgent).toEqual([{ sessionID: "s9", agent: "build" }]);
     expect(fake.calls.switchModel).toEqual([{ sessionID: "s9", model: { providerID: "xai", id: "grok-4" } }]);
+    // What the session had spent before this message, so what OpenCode spends for it beyond the turn's steps is counted.
+    expect(fake.calls.get).toEqual([{ sessionID: "s9" }]);
     expect(fake.calls.removeEntry).toEqual([{ sessionID: "s9", key: "intentic" }]);
     expect(fake.calls.prompt).toEqual([{ sessionID: "s9", text: "hi" }]);
     expect(fake.leases).toEqual({ selections: [{ providerID: "xai", modelID: "grok-4" }], active: 0, released: 1 });
@@ -1009,7 +1086,8 @@ test("the turn's standing instructions go into the session's own instruction ent
     await collect(createOpenCodeAgent(createOpenCodeRunner(fake.openCode)), { ...request, spec: { ...request.spec, systemAppend: "House rules: be brief." } });
 
     expect(fake.calls.put).toEqual([{ sessionID: "s1", key: "intentic", value: "House rules: be brief." }]);
-    expect(fake.log).toEqual(["acquire", "create", "put", "listen", "mount", "prompt", "unlisten", "unmount", "release"]);
+    // The adapter's turn also sets the session's shell environment and reads the commands OpenCode offers there.
+    expect(fake.log).toEqual(["acquire", "create", "put", "environment", "listen", "mount", "commands", "prompt", "unlisten", "unmount", "release"]);
 });
 
 // An empty instruction entry is not the same session as none; OpenCode's own prompt should stand.
@@ -1025,19 +1103,21 @@ test("nothing to say sets no instruction entry on a new session", async () => {
 test("a sealed request asks with every tool denied, mounts nothing, and leaves no session behind", async () => {
     const fake = fakeOpenCode({ replies: [[started("s1"), textDelta("s1", "42"), succeeded("s1")]] });
     const mounts = openCodeMounts("chat-1", [{ name: "web", url: "http://127.0.0.1:7000/mcp/web" }]);
-    await drain(createOpenCodeRunner(fake.openCode)({ ...runnerTurn, system: "Answer exactly.", sealed: true, mounts }));
+    // As the adapter sends one: its system prompt is the whole system text, so it runs on the daemon's blank-based agent.
+    await drain(createOpenCodeRunner(fake.openCode)({ ...runnerTurn, system: "Answer exactly.", replacesBase: true, sealed: true, mounts }));
 
     expect(fake.calls.create).toEqual([
         {
             location: { directory: WORKSPACE_ROOT },
             title: "intentic conversation",
-            agent: "build",
+            agent: "intentic-build",
             permissions: [{ action: "*", resource: "*", effect: "deny" }],
         },
     ]);
     expect(fake.calls.put).toEqual([{ sessionID: "s1", key: "intentic", value: "Answer exactly." }]);
     expect(fake.calls.mount).toEqual([{ directory: WORKSPACE_ROOT, servers: [] }]);
     expect(fake.calls.remove).toEqual([{ sessionID: "s1" }]);
+    // The session goes last, once its (empty) mount is let go, as it always has.
     expect(fake.log.slice(-4)).toEqual(["unlisten", "unmount", "remove", "release"]);
 });
 
@@ -1058,17 +1138,57 @@ test("a runner mounts the turn's servers where it runs, shows its session only t
     expect(fake.log).toEqual(["acquire", "create", "listen", "mount", "prompt", "unlisten", "unmount", "release"]);
 });
 
-test("an ungated Google turn leases its exact requested model and releases it on completion", async () => {
+// The daemon's own servers reach an OpenCode turn over the door; what they need of the running turn arrives through its
+// relay: a card a tool raised before the loop ran lands in the turn's stream, a call holds the watchdog, a script is
+// checked against the turn's gate, and all of it is let go with the message, so nothing a tool does later reaches a
+// phase that ended.
+test("a runner attaches the turn's relay for the message: buffered cards stream, the gate is lent, and all is let go", async () => {
+    const relay = createTurnRelay();
+    const card: AgentEvent = { kind: "question", requestId: "card-9", questions: [] };
+    // A door tool that ran while the turn was still being planned.
+    relay.push(card);
+    const gate = unstubbed<CommandGuard>("gate", {});
+    const taint = createTurnTaint();
     const fake = fakeOpenCode({ replies: [[started("s1"), succeeded("s1")]] });
+    const seen: OpenCodeTurnEvent[] = [];
+    const lent: unknown[] = [];
+    await drainInto(
+        createOpenCodeRunner(fake.openCode)({
+            ...runnerTurn,
+            relay: {
+                ...relay,
+                attach: (sink) => {
+                    lent.push(sink.guard);
+                    return relay.attach(sink);
+                },
+            },
+            gate,
+            taint,
+        }),
+        seen,
+    );
+
+    expect(seen.filter((event) => event.type === "intentic.frame")).toEqual([raised(card)]);
+    expect(lent).toEqual([{ gate, taint }]);
+    // Detached with the message: a script now has no gate to be checked against, and is refused.
+    expect(relay.guard()).toBeUndefined();
+    await expect(relay.consult("echo hi", vendorSubject("shell"))).resolves.toMatchObject({ allow: false });
+});
+
+test("an ungated Google turn leases its exact requested model and releases it on completion", async () => {
+    // The server's config declares the turn's tier on this model, so the session runs on it as the model's variant.
+    const fake = fakeOpenCode({ replies: [[started("s1"), succeeded("s1")]], variant: (_provider, _model, effort) => effort });
     const active: number[] = [];
-    for await (const event of createOpenCodeRunner(fake.openCode)({ ...runnerTurn, provider: OPENCODE_GEMINI_PROVIDER, model: "claude-opus-5-5-high" })) {
+    const turn = { ...runnerTurn, provider: OPENCODE_GEMINI_PROVIDER, model: "claude-opus-5-5-high", effort: "high" };
+    for await (const event of createOpenCodeRunner(fake.openCode)(turn)) {
         void event;
         active.push(fake.leases.active);
     }
 
     expect(active).toEqual([1, 1, 1]);
     expect(fake.leases).toEqual({ selections: [{ providerID: OPENCODE_GEMINI_PROVIDER, modelID: "claude-opus-5-5-high" }], active: 0, released: 1 });
-    expect(fake.calls.create.map((input) => input?.model)).toEqual([{ providerID: OPENCODE_GEMINI_PROVIDER, id: "claude-opus-5-5-high" }]);
+    expect(fake.calls.variant).toEqual([[OPENCODE_GEMINI_PROVIDER, "claude-opus-5-5-high", "high"]]);
+    expect(fake.calls.create.map((input) => input?.model)).toEqual([{ providerID: OPENCODE_GEMINI_PROVIDER, id: "claude-opus-5-5-high", variant: "high" }]);
 });
 
 // A step that fails before the turn's loop starts still lets go of everything the turn took up to there.
@@ -1126,7 +1246,7 @@ test("closing the consumer mid-turn stops listening, lets go of the servers, and
     const fake = fakeOpenCode({ replies: [[opened]] });
     const turn = createOpenCodeRunner(fake.openCode)(runnerTurn)[Symbol.asyncIterator]();
 
-    expect(await turn.next()).toEqual({ done: false, value: session("s1", true) });
+    expect(await turn.next()).toEqual({ done: false, value: ran("s1") });
     expect(await turn.next()).toEqual({ done: false, value: opened });
     expect(fake.leases.active).toBe(1);
     expect(await turn.return?.()).toEqual({ done: true, value: undefined });
@@ -1135,27 +1255,47 @@ test("closing the consumer mid-turn stops listening, lets go of the servers, and
 });
 
 // The runtime is shared: `intentic-gemini` is the same adapter serving Google, so a failure must name the backend the
-// user actually picked.
+// user actually picked. Silence is a provider that stopped answering mid-turn, handed to the daemon coded as an outage
+// so it re-runs the turn on backoff.
 test("a stalled turn is interrupted, and reported against the backend the user actually picked", async () => {
     jest.useFakeTimers();
     const stalled = async (provider: string | undefined) => {
         const fake = fakeOpenCode({ replies: [[started("s1")]] });
-        const failure = failureOf(drain(createOpenCodeRunner(fake.openCode)({ ...runnerTurn, ...opt("provider", provider) })));
+        const events = drain(createOpenCodeRunner(fake.openCode)({ ...runnerTurn, ...opt("provider", provider) }));
         await advanceTimersByTimeAsync(DEFAULT_TURN_TIMEOUTS.inactivityMs);
-        return { message: await failure, interrupts: fake.calls.interrupt, released: fake.leases.released };
+        return { last: (await events).at(-1), interrupts: fake.calls.interrupt, released: fake.leases.released };
     };
     const silence = "nothing arrived for 2m 0s, past the 2m 0s silence limit, 2m 0s into the turn.";
 
     expect(await stalled(undefined)).toEqual({
-        message: `Grok turn on the OpenCode loop timed out: ${silence}`,
+        last: timedOut(`Grok turn on the OpenCode loop timed out: ${silence}`),
         interrupts: [{ sessionID: "s1" }],
         released: 1,
     });
     expect(await stalled(OPENCODE_GEMINI_PROVIDER)).toEqual({
-        message: `Google turn on the OpenCode loop timed out: ${silence}`,
+        last: timedOut(`Google turn on the OpenCode loop timed out: ${silence}`),
         interrupts: [{ sessionID: "s1" }],
         released: 1,
     });
+});
+
+// The handed-over frame is the turn's last: the chat sees the coded failure, then done, and nothing after it.
+test("a stalled turn reaches the chat as a coded outage", async () => {
+    jest.useFakeTimers();
+    const fake = fakeOpenCode({ replies: [[started("s1"), textDelta("s1", "Working.")]] });
+    const events = collect(createOpenCodeAgent(createOpenCodeRunner(fake.openCode, { ...DEFAULT_TURN_TIMEOUTS, inactivityMs: 1_000 })), request);
+    await advanceTimersByTimeAsync(1_000);
+
+    expect(await events).toEqual([
+        { kind: "session", sessionId: "s1" },
+        { kind: "delta", text: "Working." },
+        {
+            kind: "error",
+            code: "provider-outage",
+            message: "Grok turn on the OpenCode loop timed out: nothing arrived for 1s, past the 1s silence limit, 1s into the turn.",
+        },
+        { kind: "done" },
+    ]);
 });
 
 // OpenCode 2 sends no status heartbeat: what keeps a turn alive is its family actually doing something.
@@ -1164,7 +1304,7 @@ test("every event of the session family keeps the watchdog fed, a subagent's inc
     const reply = [started("s1"), sessionCreated("child-1", "s1"), started("child-1")];
     const fake = fakeOpenCode({ replies: [reply] });
     const seen: OpenCodeTurnEvent[] = [];
-    const failure = failureOf(drainInto(createOpenCodeRunner(fake.openCode, { ...DEFAULT_TURN_TIMEOUTS, inactivityMs: 1_000 })(runnerTurn), seen));
+    const finished = drainInto(createOpenCodeRunner(fake.openCode, { ...DEFAULT_TURN_TIMEOUTS, inactivityMs: 1_000 })(runnerTurn), seen);
     const working = [textDelta("child-1", "Still looking."), textDelta("child-1", "Almost there.")];
     for (const event of working) {
         await advanceTimersByTimeAsync(900);
@@ -1173,9 +1313,14 @@ test("every event of the session family keeps the watchdog fed, a subagent's inc
     await advanceTimersByTimeAsync(900);
     fake.emit(textDelta("stranger", "Busy elsewhere."));
     await advanceTimersByTimeAsync(100);
+    await finished;
 
-    expect(await failure).toBe("Grok turn on the OpenCode loop timed out: nothing arrived for 1s, past the 1s silence limit, 3s into the turn.");
-    expect(seen).toEqual([session("s1", true), ...reply, ...working]);
+    expect(seen).toEqual([
+        ran("s1"),
+        ...reply,
+        ...working,
+        timedOut("Grok turn on the OpenCode loop timed out: nothing arrived for 1s, past the 1s silence limit, 3s into the turn."),
+    ]);
 });
 
 // The shared server's stream ending means it went away, not that the turn finished; only the turn's own stop explains it.
@@ -1199,7 +1344,7 @@ test("a stopped turn ends quietly, its session told to stop, whatever the stream
     const fake = fakeOpenCode({ replies: [[opened]], onInterrupt: [interruption, new Error("socket closed")] });
     const controller = new AbortController();
     const turn = createOpenCodeRunner(fake.openCode)({ ...runnerTurn, signal: controller.signal })[Symbol.asyncIterator]();
-    expect(await turn.next()).toEqual({ done: false, value: session("s1", true) });
+    expect(await turn.next()).toEqual({ done: false, value: ran("s1") });
     expect(await turn.next()).toEqual({ done: false, value: opened });
 
     controller.abort();
@@ -1226,7 +1371,7 @@ test("a turn stopped before its session existed still tells OpenCode to stop it,
     const controller = new AbortController();
     controller.abort();
 
-    expect(await drain(createOpenCodeRunner(fake.openCode)({ ...runnerTurn, signal: controller.signal }))).toEqual([session("s1", true)]);
+    expect(await drain(createOpenCodeRunner(fake.openCode)({ ...runnerTurn, signal: controller.signal }))).toEqual([ran("s1")]);
     expect(fake.calls.interrupt).toEqual([{ sessionID: "s1" }]);
     expect(fake.leases).toEqual({ selections: [{ providerID: "xai" }], active: 0, released: 1 });
 });
@@ -1249,25 +1394,29 @@ test("a turn stopped while its prompt is on its way interrupts the execution the
     const controller = new AbortController();
     const fake = fakeOpenCode({ beforePrompt: () => controller.abort() });
 
-    expect(await drain(createOpenCodeRunner(fake.openCode)({ ...runnerTurn, signal: controller.signal }))).toEqual([session("s1", true)]);
+    expect(await drain(createOpenCodeRunner(fake.openCode)({ ...runnerTurn, signal: controller.signal }))).toEqual([ran("s1")]);
     expect(fake.log.filter((step) => step === "prompt" || step === "interrupt")).toEqual(["interrupt", "prompt", "interrupt"]);
     expect(fake.leases).toEqual({ selections: [{ providerID: "xai" }], active: 0, released: 1 });
 });
 
+// A rate limit a minute away is within what OpenCode is left to wait out in-turn (opencode-failures.ts retryHandover),
+// so the turn waits for the attempt rather than handing the wait to the daemon.
 test("a retry's announced next attempt pushes the inactivity deadline past it", async () => {
     jest.useFakeTimers();
-    const retry = retryScheduled("s1", 1, Date.now() + 5_000, { type: "provider.rate-limit", message: "429", status: 429 });
+    const retry = retryScheduled("s1", 2, Date.now() + 60_000, { type: "provider.rate-limit", message: "429", status: 429 });
     const fake = fakeOpenCode({ replies: [[started("s1"), retry]] });
     let ended = false;
-    const failure = failureOf(drain(createOpenCodeRunner(fake.openCode, { ...DEFAULT_TURN_TIMEOUTS, inactivityMs: 1_000 })(runnerTurn))).finally(() => {
+    const events = drain(createOpenCodeRunner(fake.openCode, { ...DEFAULT_TURN_TIMEOUTS, inactivityMs: 1_000 })(runnerTurn)).finally(() => {
         ended = true;
     });
 
-    await advanceTimersByTimeAsync(5_999);
+    await advanceTimersByTimeAsync(60_999);
     expect(ended).toBe(false);
     await advanceTimersByTimeAsync(1);
     // The deadline moved; the sentence still names the configured silence limit it was measured against.
-    expect(await failure).toBe("Grok turn on the OpenCode loop timed out: nothing arrived for 6s, past the 1s silence limit, 6s into the turn.");
+    expect((await events).at(-1)).toEqual(
+        timedOut("Grok turn on the OpenCode loop timed out: nothing arrived for 1m 1s, past the 1s silence limit, 1m 1s into the turn."),
+    );
 });
 
 // The detached permission watcher answers asks, but the card it raises is this turn's: it goes out on the turn's own
@@ -1286,7 +1435,7 @@ test("a card the turn's judge raises goes out in order, and the turn waits on it
     };
     const answer: AgentEvent = { kind: "resolved", requestId: "card-1" };
     const turn = createOpenCodeRunner(fake.openCode, { ...DEFAULT_TURN_TIMEOUTS, inactivityMs: 1_000 })({ ...runnerTurn, gate })[Symbol.asyncIterator]();
-    expect(await turn.next()).toEqual({ done: false, value: session("s1", true) });
+    expect(await turn.next()).toEqual({ done: false, value: ran("s1") });
     expect(await turn.next()).toEqual({ done: false, value: opened });
     const judge = fake.judges.get("s1");
     if (judge === undefined) {
@@ -1308,9 +1457,12 @@ test("a card the turn's judge raises goes out in order, and the turn waits on it
     release();
     expect(await waiting).toEqual({ done: false, value: raised(answer) });
     // Answered, the turn is back on the clock: silence from here is a stall again.
-    const stalled = failureOf(turn.next());
+    const stalled = turn.next();
     await advanceTimersByTimeAsync(1_000);
-    expect(await stalled).toBe("Grok turn on the OpenCode loop timed out: nothing arrived for 1s, past the 1s silence limit, 11s into the turn.");
+    expect(await stalled).toEqual({
+        done: false,
+        value: timedOut("Grok turn on the OpenCode loop timed out: nothing arrived for 1s, past the 1s silence limit, 11s into the turn."),
+    });
 });
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -1334,15 +1486,16 @@ test("a turn waits past its success while a background shell runs, then takes in
         ended = true;
     });
 
-    // Five silence windows with nothing heard, and the turn is still waiting on its shell.
-    await advanceTimersByTimeAsync(5 * DEFAULT_TURN_TIMEOUTS.inactivityMs);
+    // Four silence windows with nothing heard, and the turn is still waiting on its shell (within the ten minutes a turn
+    // waits on one at most).
+    await advanceTimersByTimeAsync(4 * DEFAULT_TURN_TIMEOUTS.inactivityMs);
     expect(ended).toBe(false);
     const woken = [started("s1"), textDelta("s1", "The shell printed done."), succeeded("s1")];
     fake.emit(shellExited("sh1"), ...woken);
     await finished;
 
     // The shell's own ending is no frame of the turn's.
-    expect(seen).toEqual([session("s1", true), ...reply, ...woken]);
+    expect(seen).toEqual([ran("s1"), ...reply, ...woken]);
     expect(fake.calls.removeShell).toEqual([]);
 });
 
@@ -1381,7 +1534,7 @@ test("a subagent still running when the turn's own work ends is waited for, then
     expect(ended).toBe(false);
     await advanceTimersByTimeAsync(1);
     await finished;
-    expect(seen).toEqual([session("s1", true), ...reply, ...report]);
+    expect(seen).toEqual([ran("s1"), ...reply, ...report]);
 });
 
 // A turn waiting on a background shell has no execution for OpenCode to say it interrupted; the Stop itself ends the wait,
@@ -1395,7 +1548,7 @@ test("stopping a turn that waits on a background shell ends it, and the shell is
     for (let count = 0; count < 4; count += 1) {
         heard.push((await turn.next()).value);
     }
-    expect(heard).toEqual([session("s1", true), ...reply]);
+    expect(heard).toEqual([ran("s1"), ...reply]);
 
     const waiting = turn.next();
     controller.abort();
@@ -1420,7 +1573,7 @@ test("a model-not-found naming alternatives self-heals: records the chat models,
     const fake = fakeOpenCode({ replies: [[opened, failed("s1", STALE)], second] });
 
     // The failure the heal answered is not the turn's.
-    expect(await drain(createOpenCodeRunner(fake.openCode)({ ...runnerTurn, model: "grok-4-stale" }))).toEqual([session("s1", true), opened, ...second]);
+    expect(await drain(createOpenCodeRunner(fake.openCode)({ ...runnerTurn, model: "grok-4-stale" }))).toEqual([ran("s1"), opened, ...second]);
     expect(fake.calls.recorded).toEqual([["grok-4-latest"]]);
     expect(fake.calls.switchModel).toEqual([{ sessionID: "s1", model: { providerID: "xai", id: "grok-4-latest" } }]);
     expect(fake.calls.prompt).toEqual([
@@ -1445,7 +1598,7 @@ test("a model error naming no alternative surfaces as it came, recording nothing
     const reply = [started("s1"), failed("s1", { type: "provider.not-found", message: "Model not found: xai/grok-x" })];
     const fake = fakeOpenCode({ replies: [reply] });
 
-    expect(await drain(createOpenCodeRunner(fake.openCode)({ ...runnerTurn, model: "grok-x" }))).toEqual([session("s1", true), ...reply]);
+    expect(await drain(createOpenCodeRunner(fake.openCode)({ ...runnerTurn, model: "grok-x" }))).toEqual([ran("s1"), ...reply]);
     expect({ recorded: fake.calls.recorded, switchModel: fake.calls.switchModel, prompts: fake.calls.prompt.length }).toEqual({
         recorded: [],
         switchModel: [],
@@ -1459,7 +1612,7 @@ test("a Google turn never self-heals, even when the failure names alternatives",
     const fake = fakeOpenCode({ replies: [reply] });
 
     expect(await drain(createOpenCodeRunner(fake.openCode)({ ...runnerTurn, provider: OPENCODE_GEMINI_PROVIDER, model: "gemini-3-flash" }))).toEqual([
-        session("s1", true),
+        ran("s1"),
         ...reply,
     ]);
     expect({ recorded: fake.calls.recorded, prompts: fake.calls.prompt.length }).toEqual({ recorded: [], prompts: 1 });

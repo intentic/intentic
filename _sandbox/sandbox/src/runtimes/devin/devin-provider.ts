@@ -17,8 +17,11 @@ import { authStateRelPath, type ProviderModule, providerAccountEntry } from "../
 import { releasingMounts } from "../../agent/tools/turn-mounts.js";
 import { turnToolsOf, type TurnToolsDeps } from "../../agent/tools/turn-tools.js";
 import type { Services } from "../../composition.js";
+import { opt } from "../../opt.js";
 import { assertAgentExecutionContext } from "../../workload/agent-execution.js";
+import { turnPersona } from "../../personas/personas.js";
 import type { AcpConnections } from "../acp/acp-connection.js";
+import { type DaemonServersDeps, daemonServersFor } from "../daemon-tools/daemon-servers.js";
 import { type DevinAccountDeps, devinAccountDoor } from "./accounts/devin-accounts.js";
 import { type DevinStore, fileDevinStore, liveDevinAccounts, readDevinCredentials } from "./accounts/devin-credentials.js";
 import { DEVIN_CLI_MISSING, devinAgentId, devinCli, devinLaunch } from "./devin-cli.js";
@@ -90,7 +93,8 @@ async function* refusedSignIn(store: DevinStore, accountId: string, events: Asyn
 // What a Devin turn is planned from: the account store and catalog, the ACP runtime that serves it, and the seams its
 // MCP tools and browser stack are mounted from.
 export type DevinPlanDeps = TurnToolsDeps &
-    Pick<Services, "acpAgent" | "capabilities" | "config" | "devinModels" | "devinStore" | "files" | "workspace">;
+    DaemonServersDeps &
+    Pick<Services, "acpAgent" | "capabilities" | "config" | "devinModels" | "devinStore" | "files" | "workspace" | "sandboxSettings">;
 
 export const planDevinTurn = async (
     services: DevinPlanDeps,
@@ -120,9 +124,13 @@ export const planDevinTurn = async (
         extensions: context.persona?.powers.extensions,
         warmSession: true,
     });
+    // The daemon's own servers on the same lease, as the ACP floor mounts them (acp-adapter.ts).
+    const persona = context.persona ?? turnPersona({ personas: [], actsAs: undefined, unattended: false });
+    const settings = context.settings ?? (await services.sandboxSettings.get());
+    const daemon = daemonServersFor(services, { input, context, persona, granted, settings, mounted, gate: false });
     const launch = devinLaunch(readiness.binary, account.apiKey);
     const options = model === DEVIN_OWN_PICK ? {} : { model };
-    const tools = mounted.tools;
+    const tools = [...mounted.tools, ...daemon.tools];
     return armPlan(
         releasingMounts(
             (request) => refusedSignIn(services.devinStore, account.id, services.acpAgent(devinAgentId(account.id), launch, request, options)),
@@ -132,7 +140,8 @@ export const planDevinTurn = async (
             {
                 ...context.base,
                 spec: { ...context.base.spec, model },
-                tools: tools.length > 0 ? { ...context.base.tools, remote: tools } : context.base.tools,
+                tools: { ...context.base.tools, ...opt("remote", tools.length > 0 ? tools : undefined), diagnostics: daemon.diagnostics },
+                hooks: { ...context.base.hooks, relay: daemon.relay },
                 credential: { kind: "container" },
             },
             context.attachmentPaths,

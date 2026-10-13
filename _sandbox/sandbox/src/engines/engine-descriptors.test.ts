@@ -1,5 +1,5 @@
 import { ENGINE_IDS } from "@intentic/sandbox-contract";
-import { ENGINE_DESCRIPTORS, engineDescriptor, releaseArch } from "./engine-descriptors.js";
+import { ENGINE_DESCRIPTORS, engineDescriptor, grokArch, releaseArch } from "./engine-descriptors.js";
 
 // Guards the descriptor table by discovery, not a second list: every contract engine must have a descriptor, and each
 // floor must be the version the image actually carries.
@@ -60,4 +60,15 @@ test("OpenCode refuses a major its runtime cannot drive, and only that", () => {
     expect(opencode.incompatible?.("1.18.35")).toEqual(expect.stringContaining("1.18.35"));
     expect(opencode.incompatible?.("2.0.26")).toBeUndefined();
     expect(opencode.incompatible?.("3.1.0")).toBeUndefined();
+});
+
+// xAI names its Linux builds in the kernel's words (`uname -m`), the opposite of CLIProxyAPI's choice for x86.
+test("Grok Build asks for the architecture word xAI publishes", () => {
+    expect(grokArch("x64")).toBe("x86_64");
+    expect(grokArch("arm64")).toBe("aarch64");
+    const { source } = engineDescriptor("grok-build");
+    expect(source.kind === "download" ? [source.channel, source.artifact("1.0.52")] : undefined).toEqual([
+        "https://x.ai/cli/stable",
+        `https://x.ai/cli/grok-1.0.52-linux-${grokArch()}.gz`,
+    ]);
 });

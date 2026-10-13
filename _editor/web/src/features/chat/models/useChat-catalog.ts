@@ -23,6 +23,7 @@ import {
     readCatalogsWith,
     trialStatus,
 } from "../accounts/providerCatalog";
+import { advertisedLoops } from "./offeredLoops";
 import { active, conversations } from "../tabs/useChat-tabs";
 import { withConcurrency } from "../../../lib/concurrency";
 import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
@@ -208,6 +209,8 @@ const readRunnableProviders = async (): Promise<RunnableProviders["endpoints"] |
     // Ids arrive already prefixed `endpoint/`, and `kind` rides along: it's the only way to tell a local model from a
     // remote server once both are `endpoint/<id>`.
     endpointProviders.value = listing.endpoints;
+    // Absent from a daemon older than the field, which offeredLoops answers with the loops every daemon ran.
+    advertisedLoops.value = listing.loops;
     return listing.endpoints;
 };
 

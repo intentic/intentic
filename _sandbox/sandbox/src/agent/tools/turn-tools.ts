@@ -6,6 +6,7 @@ import { extensionMcpToolsOf } from "../../extensions/backend/extension-mcp.js";
 import type { ExtensionHost } from "../../extensions/installed-extensions.js";
 import { peerToolsOf } from "../../peers/peer-tools.js";
 import type { AgentTool } from "./agent-tools.js";
+import type { TurnLease } from "./turn-mounts.js";
 
 // A turn's remote MCP servers, the browser stack's facts the prompt and the session observer read, and the release its
 // loop calls when the turn ends: the turn's bearer stops reaching its mounts then, and its browser routers close.
@@ -14,6 +15,8 @@ export interface TurnRemoteTools {
     readonly browser: BrowserTurnTools;
     // Whether the sandbox's own desktop (desktop/desktop-tools.ts) is mounted, so the prompt names it only then.
     readonly desktop: boolean;
+    // The turn's lease, so the daemon's own servers (daemon-servers.ts) ride the same bearer and end with the same release.
+    readonly lease: Pick<TurnLease, "open">;
     readonly release: () => void;
 }
 
@@ -64,6 +67,7 @@ export const turnToolsOf = async (
             ],
             browser,
             desktop: desktop.length > 0,
+            lease: { open: lease.open },
             release: lease.release,
         };
     } catch (error) {

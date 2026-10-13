@@ -20,7 +20,7 @@ export const OauthAccountSchema = z.object({
         .string()
         .optional()
         .describe(
-            "Which of the provider's estates it signs in to, for a provider selling more than one (Z.ai's international or mainland plan). With the email and organisation, it is who the account is: a sign-in matching all three lands on this account again, same id.",
+            "Which of the provider's sign-ins it came from: the estate, for a provider selling more than one (Z.ai's international or mainland plan), or the loop's own door, for a loop that signs in with a program of its own (Grok Build's CLI beside Grok's OpenCode sign-in). With the email and organisation, it is who the account is: a sign-in matching all three lands on this account again, same id.",
         ),
     scope: z.string().optional().describe("What the credential is permitted to do, in the provider's terms."),
     connectedAt: z.number().describe("When it was connected, in milliseconds."),

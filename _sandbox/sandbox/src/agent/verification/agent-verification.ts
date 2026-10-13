@@ -1,5 +1,6 @@
 import { extname } from "node:path";
 import type { AgentEvent, ToolCallContent, ToolCallStatus } from "@intentic/sandbox-contract";
+import { agentCommand, commandWords, shellScriptOf } from "../providers/agent-installs.js";
 
 // Ledger over the turn: which code files changed and whether a passing check followed the last edit. Edits and evidence
 // share one counter so order is exact; per-turn, in-memory only, and it never runs a command itself.
@@ -65,9 +66,6 @@ const isProsePath = (path: string): boolean => {
     const name = (path.split("/").pop() ?? "").toLowerCase();
     return PROSE_EXTENSIONS.has(extname(name)) || PROSE_FILENAMES.has(name.replace(extname(name), ""));
 };
-
-// Shell separators that start a new command, each segment classified on its own.
-const SEGMENTS = /(?:&&|\|\||;|\|)/;
 
 // Wrappers/prefixes in front of the real command, dropped so classification looks at the token after them.
 const RUNNERS = new Set(["pnpm", "npm", "npx", "yarn", "bun", "bunx", "run", "exec", "time", "sudo", "env"]);
@@ -174,8 +172,27 @@ export const classifyCommand = (segment: string): VerificationKind | undefined =
     return undefined;
 };
 
-// A command proves the strongest thing any of its segments proves: `pnpm lint && pnpm test` is a test run.
-const commandKind = (command: string): VerificationKind | undefined => strongest(command.split(SEGMENTS).map(classifyCommand));
+// How deep shell wrappers are read; a script that wraps itself is not followed forever.
+const WRAPPER_DEPTH = 4;
+
+// A command proves the strongest thing any of its invocations proves: `pnpm lint && pnpm test` is a test run. A shell
+// wrapper (`bash -lc '…'`, `eval '…'`) proves what its script proves: Codex hands over every command that way, and read as
+// the word `bash` none of its checks ever counted. Split by the quote-aware tokenizer, so a quoted `|` splits nothing.
+const commandKind = (command: string, depth = 0): VerificationKind | undefined =>
+    strongest(
+        commandWords(agentCommand(command)).map((words) => {
+            const script = depth < WRAPPER_DEPTH ? shellScriptOf(words) : undefined;
+            return script === undefined ? classifyCommand(words.join(" ")) : commandKind(script, depth + 1);
+        }),
+    );
+
+// The command a card names as the check: the script inside a lone shell wrapper rather than the wrapper, so a Codex turn
+// reads "verified by `pnpm test`", not by `/bin/bash -lc 'pnpm test'`.
+const checkNameOf = (command: string, depth = 0): string => {
+    const invocations = commandWords(agentCommand(command));
+    const script = invocations.length === 1 && depth < WRAPPER_DEPTH ? shellScriptOf(invocations[0] ?? []) : undefined;
+    return script === undefined ? command.trim() : checkNameOf(script, depth + 1);
+};
 
 export const createVerificationLedger = (): VerificationLedger => {
     // Every edit is recorded, prose included; the prose filter is applied where it's read (`verdict`), not here.
@@ -206,7 +223,7 @@ export const createVerificationLedger = (): VerificationLedger => {
         },
         noteCommand: (command, passed, detail) => {
             if (commandKind(command) !== undefined) {
-                note(command, passed, detail);
+                note(checkNameOf(command), passed, detail);
             }
         },
         edited: () => [...new Set(edits.map((edit) => edit.path))],

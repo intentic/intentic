@@ -28,6 +28,9 @@ export interface TurnWatchdog {
     // Milliseconds until the nearer deadline, or `until` (epoch ms) if that comes first; zero or less means one passed.
     // Infinite while the clock is held and no `until` is given.
     readonly remaining: (until?: number) => number;
+    // Milliseconds until the hard cap alone, whatever the silence window says: what a wait the vendor announced (a
+    // retry's next attempt) must fit inside for the turn to still be running when it comes.
+    readonly capRemaining: () => number;
     // Why the loop stopped waiting, read once it did: the sentence a timeout error is built around.
     readonly expiry: () => string;
 }
@@ -80,6 +83,7 @@ export const turnWatchdog = (timeouts: TurnTimeouts): TurnWatchdog => {
             };
         },
         remaining: (until = Number.POSITIVE_INFINITY) => (holds > 0 ? until : Math.min(inactivityDeadline, turnDeadline, until)) - Date.now(),
+        capRemaining: () => (holds > 0 ? Number.POSITIVE_INFINITY : turnDeadline - Date.now()),
         expiry: () => {
             const now = Date.now();
             const silent = `the last event came ${duration(now - lastActivity)} ago`;

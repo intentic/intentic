@@ -1,10 +1,13 @@
 import {
     accessFor,
+    accountServesLoop,
     type AccessKind,
     type AgentHarness,
     type AgentProvider,
     isTrialProvider,
     type KeyedProvider,
+    KeyedProviderSchema,
+    loopDoors,
     NATIVE_PROVIDERS,
     type ProviderAccess,
     providerSpec,
@@ -15,6 +18,7 @@ import { computed, type ComputedRef } from "vue";
 import { accountsLoaded, providerAccounts, translatorAccounts } from "../accounts/providerAccounts";
 import { requirementWords, runsWords } from "../accounts/providerWords";
 import { acpProviders, endpointProviders, endpointsLoaded, nativeReady, trialStatus } from "../accounts/providerCatalog";
+import { offeredLoops, selectedLoop } from "../models/offeredLoops";
 
 // Whether a provider can actually run, and what unlocks it: one rule, read by every surface that offers a
 // provider (picker, connect gate, account panel). A catalog always has rows (every provider seeds a floor
@@ -52,11 +56,18 @@ export const providerReady = (provider: AgentProvider): boolean => {
     return accountsOf(provider).length > 0 || nativeReady.value.includes(provider) || isAcp(provider) || isEndpoint(provider);
 };
 
-// Narrows providerReady to one harness: only Grok's credential depends on it (native xAI account vs. the translator's
-// SuperGrok subscription). Named rather than derived, since every other provider's two harnesses share one credential.
+// Narrows providerReady to one harness, for the providers whose credential depends on it: Grok (its xAI account under
+// OpenCode, Grok Build's own sign-in on its CLI loop, the translator's SuperGrok subscription under Claude Code) and any
+// whose CLI loop signs in through a door of its own (Kimi CLI beside the translator's Kimi Code subscription). Every
+// other provider's loops share one credential. Read off the loop that would run, which a pick the daemon no longer
+// offers is not.
 export const providerReadyOn = (provider: AgentProvider, harness: AgentHarness): boolean => {
-    if (provider === `grok`) {
-        return harness === `claude-code` ? translatorAccounts.value.grok.length > 0 : accountsOf(provider).length > 0;
+    if (provider === `grok` || (providerSpec(provider)?.auth.kind === `translator` && loopDoors(provider).length > 0)) {
+        const loop = selectedLoop(offeredLoops(provider), harness);
+        const keyed = KeyedProviderSchema.safeParse(provider);
+        return loop === `claude-code`
+            ? keyed.success && translatorAccounts.value[keyed.data].length > 0
+            : accountsOf(provider).some((account) => accountServesLoop(provider, loop, account));
     }
     return providerReady(provider);
 };
@@ -103,7 +114,9 @@ export const connectPitch = (provider: AgentProvider, harness: AgentHarness): { 
         return undefined;
     }
     const runs =
-        provider === `grok` && harness === `claude-code` ? t(`chat.access.runsUnderClaudeCode`, { runs: runsWords(access) }) : runsWords(access);
+        provider === `grok` && selectedLoop(offeredLoops(provider), harness) === `claude-code`
+            ? t(`chat.access.runsUnderClaudeCode`, { runs: runsWords(access) })
+            : runsWords(access);
     const requirement = requirementWords(access, `object`);
     return {
         copy: t(`chat.access.connectPitch`, { requirement, runs }),

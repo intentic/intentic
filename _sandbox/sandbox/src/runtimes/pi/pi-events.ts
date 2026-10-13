@@ -1,6 +1,8 @@
 import type { AgentEvent, ToolCallContent } from "@intentic/sandbox-contract";
 import { displayNameOf, toolTarget } from "@intentic/agent-context/tool-calls";
 import { diffContent, resultText, toolLocations, workspacePath } from "../../agent/tools/tool-calls.js";
+import { isContextOverflowText } from "../../agent/providers/failure-sentences.js";
+import { isRateLimited, vendorFailureFrame, type VendorRule } from "../decorators/vendor-errors.js";
 import { toolCallOpened, type TurnCapture, usageTotals, type VendorEventMapper } from "../decorators/vendor-events.js";
 
 // Pure mapping of Pi RPC events onto AgentEvent frames (the opencode-agent streamTurn shape, rebuilt for a pull-per-event
@@ -43,6 +45,16 @@ const piEditDiffs = (name: string, args: unknown, cwd: string): ToolCallContent[
     }
     return undefined;
 };
+
+// How Pi's failure sentences are coded, in this order: a spent allowance first, so the client shows a reset countdown and
+// holds the turn rather than offering a Continue that would re-fail, then a session past the model's window, which the
+// daemon re-runs in a fresh one. The sentence is the provider's, as Pi's own client passes it on.
+export const PI_FAILURES: readonly VendorRule[] = [
+    [isRateLimited, "rate_limit"],
+    [isContextOverflowText, "context-overflow"],
+];
+
+const failureFrame = (message: string): AgentEvent => vendorFailureFrame({ kind: "error", message }, PI_FAILURES);
 
 // `holdText` ⇒ plan phase: the assistant's text is accumulated into the capture instead of streamed, since that text is
 // the plan.
@@ -98,7 +110,7 @@ export const createPiEventMapper = (cwd: string, holdText = false): VendorEventM
                 }
                 if (message["stopReason"] === "error") {
                     capture.errored = true;
-                    return [{ kind: "error", message: str(message["errorMessage"]) ?? "The model call failed." }];
+                    return [failureFrame(str(message["errorMessage"]) ?? "The model call failed.")];
                 }
                 return [];
             }
@@ -160,7 +172,8 @@ export const createPiEventMapper = (cwd: string, holdText = false): VendorEventM
                     return [];
                 }
                 capture.errored = true;
-                return [{ kind: "error", message: str(event["finalError"]) ?? "The provider kept failing and Pi gave up retrying." }];
+                // Pi rode the provider's errors out until its retries ran out; the last of them says why.
+                return [failureFrame(str(event["finalError"]) ?? "The provider kept failing and Pi gave up retrying.")];
             }
             case "compaction_end": {
                 const result = event["result"] as Record<string, unknown> | null | undefined;

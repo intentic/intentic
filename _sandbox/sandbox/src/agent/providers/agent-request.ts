@@ -31,6 +31,7 @@ import type { ChildSupervisor } from "../subagents/children.js";
 import type { SecretAccess } from "../../secrets/secret-access.js";
 import type { DirtyFiles } from "../tools/agent-shell-edits.js";
 import type { AgentTool } from "../tools/agent-tools.js";
+import type { TurnRelay } from "../../runtimes/daemon-tools/turn-relay.js";
 import type { BackgroundJobSeed } from "../tools/jobs/background-jobs.js";
 import type { EditReviewer } from "../verification/agent-diagnostics.js";
 import type { TurnChecks } from "../run/turn-checks.js";
@@ -211,16 +212,43 @@ export type TurnCredential =
     | ({ readonly kind: "routed"; readonly baseUrl: string; readonly authToken: string; readonly allowance?: TurnAllowance } & ShieldedRoute)
     // The platform's free trial: the translator's endpoint, with bounded retries and the trial's own failure frames.
     | ({ readonly kind: "trial"; readonly baseUrl: string; readonly authToken: string } & ShieldedRoute)
-    // A native Codex turn on the subscription, via the translator; absent, Codex falls back to the container's key.
-    | { readonly kind: "codex-endpoint"; readonly baseUrl: string; readonly authToken: string }
+    // A Codex turn on a URL the daemon names: the ChatGPT subscription via the translator, or another provider's route
+    // (`hosted`); absent, Codex falls back to the container's key.
+    | { readonly kind: "codex-endpoint"; readonly baseUrl: string; readonly authToken: string; readonly hosted?: CodexHostedProvider }
+    // An OpenCode turn on one of the providers the daemon writes into the shared server's config from a route
+    // (runtimes/opencode/hosted/opencode-routes.ts), named by its id there; the key is in that config, not here.
+    | { readonly kind: "opencode-route"; readonly providerID: string }
     // The selected Cursor account's key, passed per request since Cursor runs in-process with no child env to set.
-    | { readonly kind: "cursor-key"; readonly apiKey: string };
+    | { readonly kind: "cursor-key"; readonly apiKey: string }
+    // A Muse Code turn: the key its host sends (META_API_KEY), and for a model API other than Meta's, the Responses root
+    // and model its settings aim Muse's provider at (runtimes/muse/muse-settings.ts).
+    | {
+          readonly kind: "muse";
+          readonly apiKey: string;
+          readonly endpoint?: { readonly baseUrl: string; readonly model: string; readonly label?: string; readonly contextLimit?: number };
+      };
+
+// Another provider's route on Codex (agent/providers/routes/model-routes.ts), as the per-thread provider block names it:
+// its own `model_providers` entry rather than the translator's, the version path after `baseUrl`, and what Codex cannot
+// know of a model outside OpenAI's catalog.
+export interface CodexHostedProvider {
+    // The `model_providers` key and name; one per provider, so a thread's rollout says whose model answered.
+    readonly id: string;
+    // The wire's version path after the base (`/v1`), which the gateway does not stand in for.
+    readonly path: string;
+    // The model's window where its catalog publishes one; absent leaves Codex's own fallback for an unknown model.
+    readonly contextWindow?: number;
+    // Headers the owner declared on an endpoint card.
+    readonly headers?: Readonly<Record<string, string>>;
+}
 
 // The credentials each loop can spend; a runtime's loop takes a request of its own kind, so a foreign one does not type.
 export type ContainerCredential = Extract<TurnCredential, { readonly kind: "container" }>;
 export type HarnessCredential = Extract<TurnCredential, { readonly kind: "container" | "claude-oauth" | "routed" | "trial" }>;
 export type CodexCredential = Extract<TurnCredential, { readonly kind: "container" | "codex-endpoint" }>;
+export type OpenCodeCredential = Extract<TurnCredential, { readonly kind: "container" | "opencode-route" }>;
 export type CursorCredential = Extract<TurnCredential, { readonly kind: "cursor-key" }>;
+export type MuseCredential = Extract<TurnCredential, { readonly kind: "muse" }>;
 
 // What the daemon answers while the turn runs: attendance and restored grants, the per-edit reviewers, the repositories'
 // `turn` checks, the safety judge and its log, and the child-agent and background-job seams. Two things are said at the
@@ -242,8 +270,8 @@ export interface TurnHooks {
     // Told how long each hook callback took (run/hook-timing.ts), for the perf log; absent times nothing.
     readonly hookTimed?: HookTimer;
     // The repositories' own `turn` checks bound to this turn's tree, run once when it is about to stop. Absent for a
-    // turn in the shared tree, one no adopted repository declares a `turn` check for, and every runtime but the Claude
-    // Code loop, which alone has a Stop the daemon can answer.
+    // turn in the shared tree, one no adopted repository declares a `turn` check for, and a runtime with no moment the
+    // daemon can answer as the turn ends (the Claude Code loop's Stop hook; Pi's last prompt settling, pi-agent.ts).
     readonly turnChecks?: TurnChecks;
     // Every classified image-scoped install this turn attempts, for the install ledger; nothing reaches the model.
     readonly onImageInstall?: (installs: readonly ClassifiedInstall[], command: string) => void;
@@ -261,6 +289,9 @@ export interface TurnHooks {
     readonly resync?: () => Promise<AgentEvent | undefined>;
     // Supervision surface for runtimes that mount child-agent tools as their own, not through the harness's SDK.
     readonly children?: ChildSupervisor;
+    // The late half of the daemon's own tools served through the MCP door (runtimes/daemon-tools/daemon-servers.ts): the loop
+    // attaches its event push, watchdog hold and command gate here when it starts. Absent where none were mounted.
+    readonly relay?: TurnRelay;
     // Where a `run_in_background` job's completion is delivered once this turn is gone; absent, it dies with the turn.
     readonly backgroundJobs?: BackgroundJobSeed;
     // The privacy shield reading this turn channel by channel, on a runtime the gateway can't stand in front of but

@@ -298,6 +298,12 @@ test("a tool missing inside a shell wrapper is still named", async () => {
     expect(told).toContain("`lsof`");
 });
 
+// Combined flags are still the script flag: `-lc` is how Codex wraps every command it runs.
+test("a tool missing inside a login-shell wrapper is still named", async () => {
+    const told = context(await firePost(installSteeringHooks(), "/bin/bash -lc 'lsof -i :3000'", "bash: line 1: lsof: command not found"));
+    expect(told).toContain("`lsof`");
+});
+
 // Backticks inside a double-quoted argument are command substitution; the pattern never reaches the tool it names.
 test("a substituted backtick is answered with the quoting fix, not an install", async () => {
     const told = context(

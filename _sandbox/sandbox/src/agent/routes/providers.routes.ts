@@ -1,4 +1,4 @@
-import { endpointProvider, isTrialProvider, NATIVE_PROVIDERS, providersContract, TRIAL_LABEL } from "@intentic/sandbox-contract";
+import { endpointProvider, isTrialProvider, loopsOf, NATIVE_PROVIDERS, providersContract, TRIAL_LABEL } from "@intentic/sandbox-contract";
 import { implement } from "@orpc/server";
 import type { Services } from "../../composition.js";
 import type { OrpcContext } from "../../app-env.js";
@@ -21,21 +21,31 @@ export const createProvidersRoutes = (services: ProvidersRoutesDeps) => {
         // a provider reads this, including the tiers that may drive a turn but not see what this box connects to.
         list: i.list.handler(async () => {
             const [capabilities, readiness] = await Promise.all([services.capabilities.list(), services.providerReadiness()]);
+            const agents = capabilities.flatMap((capability) =>
+                capability.kind === "agent" ? [{ id: capability.id, label: capability.config.name ?? capability.id }] : [],
+            );
+            const endpoints = capabilities.flatMap((capability) => {
+                if (capability.kind !== "endpoint" && capability.kind !== "localmodel") {
+                    return [];
+                }
+                const id = endpointProvider(capability.id);
+                // The trial is the one endpoint the user didn't name, so it is the one whose label isn't its id.
+                return [{ id, label: isTrialProvider(id) ? TRIAL_LABEL : capability.id, kind: capability.kind }];
+            });
             return {
                 // The same gate a turn itself passes through, so a chat is never offered a provider the run would
                 // refuse, nor told to connect one already connected.
                 native: NATIVE_PROVIDERS.filter((provider) => readiness[provider]),
-                agents: capabilities.flatMap((capability) =>
-                    capability.kind === "agent" ? [{ id: capability.id, label: capability.config.name ?? capability.id }] : [],
+                agents,
+                endpoints,
+                // Every native provider, connected or not (the picker offers unconnected ones too), and each one this
+                // listing adds: what this build can run each on, so an editor offers no loop this daemon lacks.
+                loops: Object.fromEntries(
+                    [...NATIVE_PROVIDERS, ...agents.map((agent) => agent.id), ...endpoints.map((endpoint) => endpoint.id)].map((provider) => [
+                        provider,
+                        [...loopsOf(provider)],
+                    ]),
                 ),
-                endpoints: capabilities.flatMap((capability) => {
-                    if (capability.kind !== "endpoint" && capability.kind !== "localmodel") {
-                        return [];
-                    }
-                    const id = endpointProvider(capability.id);
-                    // The trial is the one endpoint the user didn't name, so it is the one whose label isn't its id.
-                    return [{ id, label: isTrialProvider(id) ? TRIAL_LABEL : capability.id, kind: capability.kind }];
-                }),
             };
         }),
         models: i.models.handler(({ input }) => services.providerCatalogs[input.provider].models()),

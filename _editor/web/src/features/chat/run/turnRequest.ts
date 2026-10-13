@@ -1,6 +1,14 @@
-import type { AgentHarness, AgentProvider, EditorContext, PermissionMode, TurnErrand } from "@intentic/sandbox-contract";
+import {
+    type AgentHarness,
+    type AgentProvider,
+    capabilitiesOf,
+    type EditorContext,
+    type PermissionMode,
+    type TurnErrand,
+} from "@intentic/sandbox-contract";
 import type { ProcedureInput } from "../../../client/sandbox/sandboxRpc";
 import type { TurnBooking } from "../composer/later/sendLater";
+import { offeredHarness, offeredLoops } from "../models/offeredLoops";
 
 // The turn body the daemon receives: what a send carries and the shape that states it on the wire. Which session a turn
 // goes on in is the daemon's to decide (routing.ts); a session id rides only for a conversation it has no record of.
@@ -65,7 +73,8 @@ export const readsAsContinuing = (
     session !== undefined &&
     session.provider === selection.agent &&
     (selection.account === undefined || session.account === selection.account) &&
-    session.harness === selection.harness;
+    // Two names for one loop are one loop, as the daemon's sameLoop reads it.
+    capabilitiesOf(session.provider, session.harness).runtime === capabilitiesOf(selection.agent, selection.harness).runtime;
 
 // The session a turn names: only on a conversation the daemon has no record of, which is a past session resumed from the
 // history menu, and only while the selection still reads as continuing it. On a conversation it holds the daemon picks
@@ -110,6 +119,12 @@ const filePaths = (attachments: string[], mentions: string[]): Pick<ProcedureInp
     ...(attachments.length > 0 ? { attachments } : {}),
     ...(mentions.length > 0 ? { mentions } : {}),
 });
+
+// The harness field a turn carries: absent wherever the turn runs on the provider's default loop.
+const sentHarness = (settings: Pick<TurnSettings, "agent" | "harness">): { readonly harness?: AgentHarness } => {
+    const harness = offeredHarness(offeredLoops(settings.agent), settings.harness);
+    return harness === `native` ? {} : { harness };
+};
 
 // Builds the turn request body. An omitted `model`/`harness`/`sessionId` each resolve to the daemon's own
 // default; `isolated` picks the conversation's worktree over /work.
@@ -168,8 +183,9 @@ export const turnRequestBody = (input: {
         ...(input.isolated ? { isolated: true } : {}),
         // Omitted for this sandbox; a runner is paired to one box, so it never rides another box's body.
         ...(here && input.runner !== undefined ? { placement: { kind: `runner` as const, id: input.runner } } : {}),
-        // `native` is the daemon's default and stays unsent; only `claude-code` rides the wire.
-        ...(input.settings.harness === `claude-code` ? { harness: input.settings.harness } : {}),
+        // `native` is the daemon's default and stays unsent, as does the default named outright and any loop the daemon
+        // does not offer the provider on: it would run its own loop anyway, and the request should not claim otherwise.
+        ...sentHarness(input.settings),
         // Omitted when this body targets another box, since that daemon holds no such selection, and wherever the turn
         // continues the conversation on the account it already runs on (accountIntent).
         account: here ? accountIntent(input.settings, input) : undefined,

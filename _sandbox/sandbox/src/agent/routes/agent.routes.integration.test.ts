@@ -196,8 +196,9 @@ test("a message the record already holds is answered from its row, after a resta
     expect(asked).toEqual([]);
 });
 
-// A runtime that takes no words mid-turn (the opencode loop behind Grok): each turn held open until released or stopped,
-// and every prompt it was handed kept, in order.
+// A turn that takes no words mid-turn: it closes its steering at once, as a turn past taking words does, so every message
+// sent while it runs waits in the conversation's queue. Each turn is held open until released or stopped, and every
+// prompt it was handed kept, in order.
 const unsteerableTurns = (): { readonly gates: (() => void)[]; readonly prompts: string[]; readonly services: ReturnType<typeof services> } => {
     const gates: (() => void)[] = [];
     const prompts: string[] = [];
@@ -208,6 +209,7 @@ const unsteerableTurns = (): { readonly gates: (() => void)[]; readonly prompts:
         services: services({
             openCode: { ...openCode, connected: async () => true },
             async *grokAgent(request) {
+                request.spec.steering?.close();
                 prompts.push(request.spec.prompt);
                 await new Promise<void>((release) => {
                     gates.push(release);

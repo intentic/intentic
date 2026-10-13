@@ -1,5 +1,5 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { capabilitiesOf, HARNESSES, MINTED_PROVIDERS, NATIVE_PROVIDERS, PROVIDERS } from "@intentic/sandbox-contract";
+import { capabilitiesOf, HARNESSES, loopsOf, MINTED_PROVIDERS, NATIVE_PROVIDERS, PROVIDERS } from "@intentic/sandbox-contract";
 import * as onPathOriginal from "../image/on-path.js";
 import * as engineResolveOriginal from "../engines/engine-resolve.js";
 import * as filesystemOriginal from "node:fs/promises";
@@ -114,9 +114,14 @@ test("each runtime is asked about a resume by its own session store", async () =
         cursor: false,
         opencode: false,
         "opencode-gemini": false,
-        // ACP's store is the agent's own, asked at resume time by the warm process; Devin's CLI is an ACP agent.
+        // ACP's store is the agent's own, asked at resume time by the warm process; Devin's, Kimi's and Grok Build's CLIs
+        // are ACP agents.
         acp: true,
         devin: true,
+        "kimi-cli": true,
+        "grok-build": true,
+        // Muse's sessions live in Muse's own store, asked by the turn's host at resume time (muse-agent.ts openSession).
+        muse: true,
         pi: false,
     });
 });
@@ -156,7 +161,7 @@ test("unplaced session stores and process-capable probes stay closed to issued u
     const shared = unstubbed<RuntimeDeps>("services", { sessions: unstubbed<RuntimeDeps["sessions"]>("sessions", { exists }) });
     try {
         for (const adapter of ADAPTERS) {
-            if (adapter.runtime === "acp" || adapter.runtime === "devin") {
+            if (["acp", "devin", "kimi-cli", "grok-build", "muse"].includes(adapter.runtime)) {
                 // A constant resume hint asks no daemon store/process; its later loop still owns resume placement.
                 await expect(adapter.holdsSession(unavailable, "s-1", execution.context)).resolves.toBe(true);
             } else if (adapter.runtime === "claude-code") {
@@ -278,19 +283,20 @@ test("exactly one module per native provider", () => {
 
 test("each module's adapters serve runtimes the contract routes to its provider", () => {
     for (const module of PROVIDER_MODULES) {
-        const runtimes = new Set([capabilitiesOf(module.id, "native").runtime, capabilitiesOf(module.id, "claude-code").runtime]);
+        const runtimes = new Set(loopsOf(module.id).map((loop) => capabilitiesOf(module.id, loop).runtime));
         for (const adapter of module.adapters) {
             expect(runtimes.has(adapter.runtime), `${module.id} contributes ${adapter.runtime}, which never serves it`).toBe(true);
         }
     }
 });
 
-test("a module with no adapter is one another module's runtime serves", () => {
-    const provided = new Set(PROVIDER_MODULES.flatMap((module) => module.adapters.map((adapter) => adapter.runtime)));
+test("a module with no adapter is one another module's runtime serves, or one the table serves for every provider", () => {
+    // Muse Code serves Meta and any endpoint, so its adapter sits in the table beside ACP's and Pi's, not in a module.
+    const provided = new Set(ADAPTERS.map((adapter) => adapter.runtime));
     for (const module of PROVIDER_MODULES.filter((entry) => entry.adapters.length === 0)) {
-        for (const harness of ["native", "claude-code"] as const) {
-            const runtime = capabilitiesOf(module.id, harness).runtime;
-            expect(provided.has(runtime), `${module.id}/${harness} needs ${runtime}, which no module provides`).toBe(true);
+        for (const loop of loopsOf(module.id)) {
+            const runtime = capabilitiesOf(module.id, loop).runtime;
+            expect(provided.has(runtime), `${module.id}/${loop} needs ${runtime}, which no module provides`).toBe(true);
         }
     }
 });

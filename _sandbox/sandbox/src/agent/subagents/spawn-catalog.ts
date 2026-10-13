@@ -1,4 +1,6 @@
 import {
+    type AgentLoop,
+    loopsOf,
     type AgentProvider,
     bindingWindow,
     type Model,
@@ -49,6 +51,8 @@ export interface SpawnableProvider {
     readonly spent: number;
     // Epoch seconds when the soonest one reopens, where the provider said; meaningful only with `spent > 0`.
     readonly reopensAt?: number;
+    // The loops a spawn may name as its harness, the default first; absent or one long means there is no choice.
+    readonly loops?: readonly AgentLoop[];
 }
 
 // Every connected account as the serviceability rule reads it, per provider, in as few round trips as there are
@@ -130,6 +134,7 @@ const spendable = (provider: NativeProvider, catalog: { models: Model[] }, readi
         models: rows,
         spent: out.length,
         ...(reopensAt === undefined ? {} : { reopensAt }),
+        loops: loopsOf(provider),
     };
 };
 
@@ -195,6 +200,10 @@ const modelText = (model: SpawnableModel, now: number): string => {
     return `${model.id} (${pool}${headroom.percentLeft}% left${whose}${read}${stale})`;
 };
 
+// Named only where there is a choice: the harness values a spawn may pass, so an agent never has to guess one.
+const loopsText = (loops: readonly AgentLoop[] | undefined): string =>
+    loops === undefined || loops.length < 2 ? `` : `; harness: ${loops.map((loop, index) => (index === 0 ? `${loop} (default)` : loop)).join(`, `)}`;
+
 const providerText = (provider: SpawnableProvider, now: number): string => {
     if (provider.models.length === 0) {
         const renews = provider.reopensAt === undefined ? `` : `, renews ${inWords(provider.reopensAt, now)}`;
@@ -203,7 +212,7 @@ const providerText = (provider: SpawnableProvider, now: number): string => {
         return `${provider.id}: ${reason}`;
     }
     const held = provider.spent === 0 ? `` : ` — ${provider.spent} more out of allowance`;
-    return `${provider.id}: ${provider.models.map((model) => modelText(model, now)).join(`, `)}${held}`;
+    return `${provider.id}: ${provider.models.map((model) => modelText(model, now)).join(`, `)}${held}${loopsText(provider.loops)}`;
 };
 
 // The listing as the agent reads it, written once and shared by the `agents providers` CLI verb, the `providers` MCP

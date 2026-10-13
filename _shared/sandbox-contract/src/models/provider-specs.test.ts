@@ -1,5 +1,5 @@
 import { PROVIDER_BRAND_PATHS } from "@intentic/constants";
-import { accessFor, capabilitiesOf, harnessChoosable, PROVIDER_ACCESS, PROVIDER_VENDOR, PROVIDERS, providerLabel } from "./agent-catalog.js";
+import { accessFor, capabilitiesOf, harnessChoosable, limitationsOf, PROVIDER_ACCESS, PROVIDER_VENDOR, PROVIDERS, providerLabel } from "./agent-catalog.js";
 import {
     ACCESS_COST,
     cliProxyIdOf,
@@ -102,18 +102,21 @@ test("no provider id can be mistaken for an endpoint or a pinned selection", () 
     }
 });
 
-test("the harness chip is offered exactly where the two harnesses run different loops", () => {
+test("every provider offers its own default loop, and each offered loop runs a different runtime", () => {
     for (const spec of PROVIDER_SPECS) {
-        const native = capabilitiesOf(spec.id, "native");
-        const claudeCode = capabilitiesOf(spec.id, "claude-code");
-        expect(harnessChoosable(spec.id), `${spec.id}`).toBe(native.runtime !== claudeCode.runtime);
+        const offered = Object.entries(spec.loops.offered);
+        expect(Object.keys(spec.loops.offered), `${spec.id}'s default loop is not offered`).toContain(spec.loops.default);
+        // Two loops on one runtime would be a chip whose positions run the same thing.
+        const runtimes = offered.map(([, offer]) => offer?.capabilities.runtime);
+        expect(new Set(runtimes).size, `${spec.id} offers two loops on one runtime`).toBe(runtimes.length);
+        expect(harnessChoosable(spec.id), spec.id).toBe(offered.length > 1);
     }
 });
 
-test("a minted provider runs the Claude Code loop on both harnesses", () => {
+test("a minted provider runs Claude Code where asked, and Meta's key its own Muse Code by default", () => {
     for (const provider of MINTED_PROVIDERS) {
-        expect(capabilitiesOf(provider, "native").runtime, provider).toBe("claude-code");
         expect(capabilitiesOf(provider, "claude-code").runtime, provider).toBe("claude-code");
+        expect(capabilitiesOf(provider, "native").runtime, provider).toBe(provider === "meta" ? "muse" : "claude-code");
     }
 });
 
@@ -135,4 +138,36 @@ test("a list of ids names known providers once each, in its own order", () => {
     expect(nativeProvidersIn(["codex", null, "cursor"])).toEqual(["codex", "cursor"]);
     expect(nativeProvidersIn(null)).toEqual([]);
     expect(nativeProvidersIn(undefined)).toEqual([]);
+});
+
+// Cursor's own runtime: its project commands are read and published by the daemon, and the owner's replacement prompt
+// replaces Cursor's base where the account is entitled to (the fallback for one that is not is the append).
+test("cursor publishes its commands and replaces its base prompt", () => {
+    const cursor = capabilitiesOf("cursor", "native");
+    expect(cursor.runtime).toBe("cursor");
+    expect(cursor.commands).toBe(true);
+    expect(cursor.instructions).toBe("replace");
+});
+
+// What the hook script and the SDK's own seams carry on Cursor's runtime: per-tool cards in `default` mode, the shell in
+// the terminal panel, its own skill loader, and a tool list nothing gets past (runtimes/cursor/).
+test("cursor holds every mode, a tool list, the terminal panel and its own skills", () => {
+    const cursor = capabilitiesOf("cursor", "native");
+    expect(cursor.permissions).toBe("modes");
+    expect(cursor.terminals).toBe(true);
+    expect(cursor.skillDiscovery).toBe("native");
+    expect(cursor.toolAllowlist).toBe(true);
+    expect(limitationsOf(cursor)).toEqual(["no plugins", "secrets masked in shell output only, not in files the agent reads"]);
+});
+
+// Devin runs the ACP floor under its own name: what the floor gained (approvals, questions) it has too, and the effort
+// scale it does not advertise stays off.
+test("devin is the ACP floor under its own name", () => {
+    const devin = capabilitiesOf("devin", "native");
+    const floor = capabilitiesOf("some-installed-agent", "native");
+    expect(devin.runtime).toBe("devin");
+    expect({ ...devin, runtime: floor.runtime }).toEqual(floor);
+    expect(devin.permissions).toBe("modes");
+    expect(devin.questions).toBe(true);
+    expect(devin.effort).toBe(false);
 });

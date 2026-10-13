@@ -1,7 +1,9 @@
-import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
+import type { HookCallbackMatcher, HookEvent, PostToolUseHookInput } from "@anthropic-ai/claude-agent-sdk";
 import { classifyCommand, CONTROL_MCP_SERVERS } from "@intentic/sandbox-contract";
 import { JS_TOOL_NAME } from "../seams/js-tool-names.js";
 import { wrapOutsideContent } from "@intentic/base/outside-text";
+import { z } from "zod";
+import type { InProcessServer } from "../agent/tools/turn-mounts.js";
 
 // Wraps tool results that pull outside content into the turn mid-run, the counterpart to automations/scheduler.ts's
 // turn-birth wrap. Runs on PostToolUse, which fires for every tool including ones not yet written, so the default is
@@ -111,8 +113,37 @@ const classifiedSource = (toolName: string, toolInput: unknown): string | undefi
     }
 };
 
-// `onWrapped` marks the turn's taint bit (guard/turn-taint.ts), fired when a result was actually rewritten, not merely
-// eligible, or when an eligible one could not be sealed.
+// A call's input and its result as a PostToolUse hook hands them over, whatever tool made them: the classifier and the
+// sealer read them field by field, and the door hands over the same two from an MCP call.
+type ToolInput = PostToolUseHookInput["tool_input"];
+type ToolResult = PostToolUseHookInput["tool_response"];
+
+/**
+ * One tool result as it enters the turn: wrapped where it carries outside content, the same reference where it does not.
+ * `onWrapped` marks the turn's taint bit (guard/turn-taint.ts), fired when a result was actually rewritten, not merely
+ * eligible, or when an eligible one could not be sealed. The one rule both the Claude loop's PostToolUse hook and the
+ * daemon's MCP door (sealedDoor below) apply, so a server answers the same whichever runtime called it.
+ */
+export const sealOutside = (toolName: string, toolInput: ToolInput, result: ToolResult, onWrapped: (source: string) => void): ToolResult => {
+    const source = classifiedSource(toolName, toolInput);
+    if (source === undefined) {
+        return result;
+    }
+    let wrapped: ToolResult;
+    try {
+        wrapped = sealResult(toolName, result, source);
+    } catch {
+        // An unexpected result shape is left unwrapped rather than failing its tool call, but its outside content still
+        // entered the turn, so the taint bit is set all the same.
+        onWrapped(source);
+        return result;
+    }
+    if (wrapped !== result) {
+        onWrapped(source);
+    }
+    return wrapped;
+};
+
 export const outsideResultHooks = (onWrapped: (source: string) => void): Partial<Record<HookEvent, HookCallbackMatcher[]>> => ({
     PostToolUse: [
         {
@@ -122,26 +153,34 @@ export const outsideResultHooks = (onWrapped: (source: string) => void): Partial
                     if (input.hook_event_name !== "PostToolUse") {
                         return {};
                     }
-                    const source = classifiedSource(input.tool_name, input.tool_input);
-                    if (source === undefined) {
-                        return {};
-                    }
-                    let wrapped: unknown;
-                    try {
-                        wrapped = sealResult(input.tool_name, input.tool_response, source);
-                    } catch {
-                        // An unexpected result shape is left unwrapped rather than failing its tool call, but its outside
-                        // content still entered the turn, so the taint bit is set all the same.
-                        onWrapped(source);
-                        return {};
-                    }
+                    const wrapped = sealOutside(input.tool_name, input.tool_input, input.tool_response, onWrapped);
                     if (wrapped === input.tool_response) {
                         return {};
                     }
-                    onWrapped(source);
                     return { hookSpecificOutput: { hookEventName: "PostToolUse" as const, updatedToolOutput: wrapped } };
                 },
             ],
         },
     ],
+});
+
+// What a door call names: the tool, and the arguments its classification reads.
+const CallParamsSchema = z.object({ name: z.string(), arguments: z.unknown().optional() });
+
+/**
+ * A daemon server served through the MCP door (runtimes/daemon-tools/sdk-door.ts), its tool results classified and sealed exactly
+ * as the Claude loop's PostToolUse hook seals them, under the name the model calls it by (`mcp__<server>__<tool>`):
+ * the conformance in outside-results.test.ts holds this path to the same provenance table.
+ */
+export const sealedDoor = (server: InProcessServer, serverName: string, onWrapped: (source: string) => void): InProcessServer => ({
+    handle: async (message, signal) => {
+        const answer = await server.handle(message, signal);
+        const call = message.method === "tools/call" ? CallParamsSchema.safeParse(message.params) : undefined;
+        if (call?.success !== true || answer?.result === undefined) {
+            return answer;
+        }
+        const result = sealOutside(`mcp__${serverName}__${call.data.name}`, call.data.arguments, answer.result, onWrapped);
+        return result === answer.result ? answer : { ...answer, result };
+    },
+    close: server.close,
 });

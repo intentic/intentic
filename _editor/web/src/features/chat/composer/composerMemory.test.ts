@@ -110,6 +110,29 @@ describe(`the composer's remembered picks`, () => {
         expect([board.turn.rememberedProviderFor(), board.turn.rememberedModelFor(`cursor`)]).toEqual([`cursor`, `composer-2.5-fast`]);
     });
 
+    // A loop is picked per provider: Codex on Claude Code says nothing about Grok, whose Claude Code loop needs a login
+    // of its own, nor about a provider with only one loop.
+    it(`remembers the loop per provider, and only where the provider has a choice`, async () => {
+        const here = await openWindow();
+        here.turn.rememberHarness(`codex`, `claude-code`);
+        here.turn.rememberHarness(`claude`, `claude-code`);
+
+        const board = await openWindow();
+        expect([`codex`, `grok`, `claude`, `cursor`].map((provider) => board.turn.rememberedHarnessFor(provider))).toEqual([
+            `claude-code`,
+            `native`,
+            `native`,
+            `native`,
+        ]);
+    });
+
+    // The key once held one global pick, made on Codex's chip and then imposed on every provider.
+    it(`reads the old global loop pick as Codex's alone`, async () => {
+        local.set(`ui-chat-harness`, `claude-code`);
+        const board = await openWindow();
+        expect([board.turn.rememberedHarnessFor(`codex`), board.turn.rememberedHarnessFor(`grok`)]).toEqual([`claude-code`, `native`]);
+    });
+
     it(`keeps a pick a thin catalog read does not carry, and honours it when the catalog does`, async () => {
         useChat().selectModel({ provider: `claude`, value: `claude-opus-4-6` });
         // A pick fires its own catalog read; it has to land before the thin one replaces it, or the reads collapse.

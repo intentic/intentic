@@ -7,9 +7,9 @@ import { conditionHolds } from "../../rules/rules.js";
 /* WHAT A REPOSITORY'S OWN `turn` CHECKS FOUND IN A TURN'S CHANGE, said back to it once at Stop. */
 
 // Nothing here holds the turn, its land, a commit or a push: the model reads what was found once, and fixes it or says
-// why not. The Claude Code loop alone, since the SDK's Stop hook is the one place a runtime lets the daemon answer a
-// model that is about to stop; a Codex, Cursor or ACP turn ends without these checks, as every turn did while the
-// moment ran nothing.
+// why not. The Claude Code loop says it from the SDK's Stop hook; Pi, whose turn the daemon drives prompt by prompt,
+// hears it as one more prompt once its last one settles (runtimes/pi/pi-agent.ts). A Cursor or ACP turn ends without
+// these checks, as every turn did while the moment ran nothing.
 
 // The longest a Stop waits on one check, whatever the check allows itself: past this the turn has sat at its last word
 // long enough, and the check is reported as one that could not run.

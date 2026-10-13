@@ -1,14 +1,16 @@
 import {
     type AccountState,
+    accountServesLoop,
     type AgentHarness,
     type AgentProvider,
-    harnessChoosable as contractHarnessChoosable,
     type KeyedProvider,
+    KeyedProviderSchema,
     type ModelRef,
+    providerSpec,
     reportsPlanLimits,
 } from "@intentic/sandbox-contract";
 import { computed, type Ref } from "vue";
-import { providerDisplayLabel } from "./providerCatalog";
+import { offeredLoops, selectedLoop } from "../models/offeredLoops";
 import { providerRefusals, translatorAccounts } from "./providerAccounts";
 import {
     accountFacts,
@@ -116,17 +118,16 @@ export const useRemeasure = () => {
 };
 
 export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<AgentHarness>, model?: Ref<string | undefined>) => {
-    const accounts = computed(() => accountsOf(provider.value));
+    // The provider's own accounts that can serve the loop the chip names: a CLI loop's sign-ins (Grok Build, Kimi CLI) on
+    // that loop alone, the provider's other credential everywhere else.
+    const accounts = computed(() =>
+        accountsOf(provider.value).filter((entry) => accountServesLoop(provider.value, selectedLoop(offeredLoops(provider.value), harness.value), entry)),
+    );
     // The model the rings measure against; with none given, the ring falls back to the account's tightest pool.
     const modelRef = computed<ModelRef | undefined>(() => (model?.value === undefined || model.value === `` ? undefined : { id: model.value }));
 
-    // Harness chips for codex/grok; each names the runtime it selects (e.g. "ChatGPT"), never "Default".
-    const harnessOptions = computed<readonly { label: string; value: AgentHarness }[]>(() => [
-        { label: providerDisplayLabel(provider.value), value: `native` },
-        { label: t(`shared.claudeCode`), value: `claude-code` },
-    ]);
-    // Read from the contract: choosable only where the provider's two harnesses point at different runtimes.
-    const harnessChoosable = computed(() => contractHarnessChoosable(provider.value));
+    // Choosable only where this sandbox's daemon offers the provider more than one loop (LoopChips draws them).
+    const harnessChoosable = computed(() => offeredLoops(provider.value).length > 1);
 
     // The read-only subscriptions this selection runs on instead, for providers with no account of their own.
     const routedProvider = computed<KeyedProvider | undefined>(() => {
@@ -134,8 +135,11 @@ export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<Age
         if (subscriptionOnly(target)) {
             return target;
         }
-        // Grok is served both ways; which one shows follows the harness chip below.
-        return target === `grok` && harness.value === `claude-code` ? `grok` : undefined;
+        // Grok and Kimi are served both ways; which one shows follows the loop chip below.
+        const keyed = KeyedProviderSchema.safeParse(target);
+        return keyed.success && providerSpec(target)?.auth.kind === `translator` && selectedLoop(offeredLoops(target), harness.value) === `claude-code`
+            ? keyed.data
+            : undefined;
     });
 
     const routedRows = computed(() =>
@@ -240,8 +244,6 @@ export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<Age
         routedRows,
         routedCapacity,
         unplacedRefusal,
-        harnessOptions,
-        harnessChoosable,
         measuredAt,
         measuring,
         remeasureLabel,

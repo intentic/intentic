@@ -19,6 +19,13 @@ const PROBE_MODEL = "intentic-model-probe";
 // seed self-heals via the first turn's "Did you mean" rejection.
 export const SEED_XAI_MODELS: readonly string[] = ["grok-4", "grok-3"];
 
+// The reasoning tiers xAI takes per model, in the shared vocabulary (EFFORT_TIERS): only the Grok 3 Mini line accepts a
+// reasoning effort, and every other model refuses the parameter outright (xAI's reasoning guide, matched by OpenCode's
+// own catalog), so a model off this list offers no effort rather than a refusal.
+const XAI_EFFORTS: readonly (readonly [pattern: RegExp, efforts: readonly string[]])[] = [[/^grok-3-mini\b/i, ["low", "high"]]];
+
+export const xaiEffortsOf = (id: string): readonly string[] => XAI_EFFORTS.find(([pattern]) => pattern.test(id))?.[1] ?? [];
+
 // Excludes xAI's media-generation models (image/video), which 400 on the chat endpoint; vision chat models (image
 // input, text output) aren't matched, so they're kept.
 export const isChatModel = (id: string): boolean => !/imagine|image|video/i.test(id);

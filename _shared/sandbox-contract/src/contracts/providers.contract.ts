@@ -26,6 +26,15 @@ export const RunnableProvidersSchema = z.object({
             }),
         )
         .describe("Model endpoints, already prefixed `endpoint/`, including the daemon-provisioned free trial."),
+    // What this daemon can run each provider on, so an editor offers only loops the daemon behind it has: a newer
+    // editor reading an older daemon finds no field and keeps to the loops every daemon had. Strings, not the harness
+    // enum, so a newer daemon's loop reaches an older editor as one it skips rather than a listing it refuses.
+    loops: z
+        .record(z.string(), z.array(z.string()))
+        .optional()
+        .describe(
+            "The agentic loops each provider can run on here, by provider id: the harness values a turn may name for it, its default loop first. A provider with one loop offers no choice.",
+        ),
 });
 export type RunnableProviders = z.infer<typeof RunnableProvidersSchema>;
 

@@ -1,13 +1,19 @@
 import { getEventListeners } from "node:events";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { WORKSPACE_ROOT } from "@intentic/constants";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { piSpawner, type PiProcess } from "./pi-rpc.js";
+import { type PiLaunch, piSpawner, type PiProcess, type PiStarted, versionAtLeast } from "./pi-rpc.js";
 
 // The transport over a real child speaking Pi's JSONL protocol: a script that answers every command at once, except a
 // `hold`, which it answers only once a `release` arrives, and a `seen`, which answers with every command type it was sent.
 
 const FAKE_PI = `
+if (process.argv.includes("--version")) {
+    process.stdout.write(process.env.FAKE_PI_VERSION ?? "");
+    process.exit(0);
+}
 const held = [];
 const seen = [];
 let buffer = "";
@@ -28,21 +34,28 @@ process.stdin.on("data", (chunk) => {
                 answer(id, "late");
             }
         }
-        answer(command.id, command.type === "seen" ? seen : undefined);
+        answer(command.id, command.type === "seen" ? seen : command.type === "argv" ? process.argv.slice(2) : command.type === "env" ? process.env[command.name] : undefined);
     }
 });
 `;
 
 let dir: string;
-let proc: PiProcess;
+let proc: PiProcess & Partial<PiStarted>;
 let exited: Promise<void>;
 
-beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "pi-rpc-"));
-    writeFileSync(join(dir, "fake-pi.mjs"), FAKE_PI);
+const start = async (launch: Omit<PiLaunch, "cwd"> = {}, env = ""): Promise<void> => {
     const { promise, resolve } = Promise.withResolvers<void>();
     exited = promise;
-    proc = piSpawner(join(dir, "sessions"))({ command: `${process.execPath} ${join(dir, "fake-pi.mjs")}` }, dir, { onEvent: () => {}, onExit: () => resolve() });
+    proc = await piSpawner(join(dir, "sessions"))({ command: `${process.execPath} ${join(dir, "fake-pi.mjs")}`, env }, { cwd: dir, ...launch }, {
+        onEvent: () => {},
+        onExit: () => resolve(),
+    });
+};
+
+beforeEach(async () => {
+    dir = mkdtempSync(join(tmpdir(), "pi-rpc-"));
+    writeFileSync(join(dir, "fake-pi.mjs"), FAKE_PI);
+    await start();
 });
 
 afterEach(async () => {
@@ -70,4 +83,77 @@ test("an answered request leaves no listener on its signal", async () => {
     const controller = new AbortController();
     expect(await proc.request({ type: "seen" }, controller.signal)).toEqual({ success: true, data: ["seen"] });
     expect(getEventListeners(controller.signal, "abort")).toEqual([]);
+});
+
+// The argv entry after a flag, read off what the process was started with.
+const after = (argv: readonly string[], flag: string): string | undefined => argv[argv.indexOf(flag) + 1];
+
+test("a turn's Pi reads the daemon's instructions and skills from its flags, its own discovery off", async () => {
+    proc.kill();
+    await exited;
+    await start({ instructions: { replace: "You are terse.", append: "Be brief." }, skills: [join(WORKSPACE_ROOT, ".agents", "skills", "github")] });
+    // SAFETY: the fake answers `argv` with its own process.argv tail, an array of strings.
+    const argv = (await proc.request({ type: "argv" })).data as string[];
+    expect(argv).toEqual(expect.arrayContaining(["--mode", "rpc", "--no-context-files", "--no-skills"]));
+    expect(readFileSync(after(argv, "--system-prompt") ?? "", "utf8")).toBe("You are terse.");
+    expect(readFileSync(after(argv, "--append-system-prompt") ?? "", "utf8")).toBe("Be brief.");
+    expect(after(argv, "--skill")).toBe(join(WORKSPACE_ROOT, ".agents", "skills", "github"));
+    expect(readFileSync(after(argv, "-e") ?? "", "utf8")).toContain("registerTool");
+});
+
+const TOOLS = [{ name: "omen", url: "http://127.0.0.1:4000/mcp/omen", token: "lease" }];
+
+test("a Pi too old for built-in MCP is handed no servers, and says so", async () => {
+    proc.kill();
+    await exited;
+    await start({ tools: TOOLS }, "FAKE_PI_VERSION=0.84.4");
+    expect(proc).toMatchObject({ version: "0.84.4", mcpMounted: false });
+    // SAFETY: the fake answers `env` with the variable's value, which the spawner always sets.
+    const file = (await proc.request({ type: "env", name: "INTENTIC_PI_TURN" })).data as string;
+    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({ mcp: [] });
+});
+
+test("a Pi with built-in MCP gets the turn's servers through the per-turn file", async () => {
+    proc.kill();
+    await exited;
+    await start({ tools: TOOLS }, "FAKE_PI_VERSION=1.2.0");
+    expect(proc.mcpMounted).toBe(true);
+    // SAFETY: the fake answers `env` with the variable's value, which the spawner always sets.
+    const file = (await proc.request({ type: "env", name: "INTENTIC_PI_TURN" })).data as string;
+    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({ mcp: TOOLS });
+});
+
+// What the extension does with the socket the turn file names: one POST, one JSON answer back.
+const post = (socketPath: string, path: string, body: object): Promise<object> =>
+    new Promise((resolve, reject) => {
+        const sent = httpRequest({ socketPath, path, method: "POST" }, (response) => {
+            const chunks: Buffer[] = [];
+            response.on("data", (chunk: Buffer) => chunks.push(chunk));
+            // SAFETY: every hook endpoint answers a JSON object (hook-socket.ts HookAnswer).
+            response.on("end", () => resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")) as object));
+        });
+        sent.on("error", reject);
+        sent.end(JSON.stringify(body));
+    });
+
+test("the turn's hook socket is open before Pi starts, named in the per-turn file, and closed with the process", async () => {
+    proc.kill();
+    await exited;
+    await start({ hooks: { "/tool-call": { answer: () => ({ block: true, reason: "no" }), unreadable: { block: true } } } });
+    // SAFETY: the fake answers `env` with the variable's value, which the spawner always sets.
+    const file = (await proc.request({ type: "env", name: "INTENTIC_PI_TURN" })).data as string;
+    // SAFETY: the spawner writes the turn file as a PiTurnFile.
+    const socket = (JSON.parse(readFileSync(file, "utf8")) as { hooks?: string }).hooks ?? "";
+    expect(await post(socket, "/tool-call", { tool: "bash" })).toEqual({ block: true, reason: "no" });
+    proc.kill();
+    await exited;
+    await expect(post(socket, "/tool-call", { tool: "bash" })).rejects.toThrow();
+    await start();
+});
+
+test("versions compare part by part", () => {
+    expect(versionAtLeast("0.99.0", [0, 99, 0])).toBe(true);
+    expect(versionAtLeast("pi 1.0.3", [0, 99, 0])).toBe(true);
+    expect(versionAtLeast("0.98.12", [0, 99, 0])).toBe(false);
+    expect(versionAtLeast(undefined, [0, 99, 0])).toBe(false);
 });

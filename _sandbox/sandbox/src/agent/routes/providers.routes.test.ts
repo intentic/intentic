@@ -38,7 +38,7 @@ test("names the ACP agents and endpoints, and nothing else the box connects to",
         { id: "monorepo", kind: "monorepo", config: {} },
     ]);
 
-    expect(await providers.list()).toEqual({
+    expect(await providers.list()).toMatchObject({
         // Nothing named a native credential in this case, so the fixed list contributes nothing runnable.
         native: [],
         // An agent's label is its own name where it declared one, its id otherwise.
@@ -61,7 +61,25 @@ test("the trial is the one endpoint the user did not name, so it carries the sha
 });
 
 test("a box that adds no provider of its own answers empty, which is an answer", async () => {
-    expect(await client([]).list()).toEqual({ native: [], agents: [], endpoints: [] });
+    expect(await client([]).list()).toMatchObject({ native: [], agents: [], endpoints: [] });
+});
+
+// An editor offers a loop only where the daemon behind it says it runs one, so a newer editor never sends an older
+// daemon a harness it would refuse.
+test("advertises the loops each provider runs on here, its default first", async () => {
+    const { loops } = await client([
+        { id: "goose", kind: "agent", config: { command: "goose acp", name: "Goose" } },
+        { id: "together", kind: "endpoint", config: { baseUrl: "https://api.together.xyz/v1", protocol: "openai" } },
+    ]).list();
+
+    // Every native provider, connected or not: the picker offers unconnected ones too.
+    expect(Object.keys(loops ?? {})).toEqual([...NATIVE_PROVIDERS, "goose", "endpoint/together"]);
+    expect(loops?.["codex"]).toEqual(["codex", "claude-code", "opencode"]);
+    expect(loops?.["grok"]).toEqual(["opencode", "claude-code", "codex", "vendor"]);
+    expect(loops?.["meta"]).toEqual(["muse", "claude-code"]);
+    expect(loops?.["claude"]).toEqual(["claude-code"]);
+    expect(loops?.["goose"]).toEqual(["vendor"]);
+    expect(loops?.["endpoint/together"]).toEqual(["claude-code", "codex", "opencode", "muse"]);
 });
 
 // The whole reason this route names the fixed list at all: a tier that drives turns cannot read /accounts, so without

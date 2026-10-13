@@ -65,6 +65,10 @@ export const sessionToolRules = (mounts: OpenCodeMounts): PermissionRule[] => [
     ...(mounts.tools.length > 0 ? [{ action: `${mounts.prefix}*`, resource: "*", effect: "allow" } as const] : []),
 ];
 
+// One mounted tool's key, the permission action its calls are checked as; with an empty tool, the prefix every key of
+// that server starts with.
+export const mcpToolKey = (mounts: OpenCodeMounts, server: string, tool: string): string => `${mounts.prefix}${sanitized(server)}_${sanitized(tool)}`;
+
 // A mounted tool's key as the rest of the daemon spells an MCP call, `mcp__<server>__<tool>`, so its card reads the way
 // Claude's and Cursor's do (a browser call as "Browser navigate"); any other name passes through as it came.
 export const mcpToolNameOf = (mounts: OpenCodeMounts): ((raw: string) => string) => {

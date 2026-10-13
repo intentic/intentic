@@ -1,18 +1,10 @@
-import {
-    type AgentCapabilities,
-    client,
-    type ClientConnection,
-    methods,
-    PROTOCOL_VERSION,
-    type RequestPermissionRequest,
-    type RequestPermissionResponse,
-    type SessionNotification,
-} from "@agentclientprotocol/sdk";
+import { type AgentCapabilities, client, type ClientConnection, methods, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
 import { withTimeout } from "@intentic/base/async";
 import type { Services } from "../../composition.js";
 import type { TerminalRunner } from "../../terminal/terminal-run.js";
-import { decidePermission } from "./acp-permissions.js";
-import { recordModels, type SessionModels } from "./acp-model.js";
+import type { SessionModels } from "./acp-model.js";
+import type { SessionModes } from "./acp-modes.js";
+import { routeSessions, type SessionRouting, type TurnHooks } from "./acp-routing.js";
 import { createAcpTerminals } from "./acp-terminal.js";
 import { type AcpLaunch, spawnAcpProcess } from "./acp-spawn.js";
 
@@ -20,21 +12,11 @@ import { type AcpLaunch, spawnAcpProcess } from "./acp-spawn.js";
 // reaped when idle, respawned after an exit or config change. Turn-scoped hooks bind per session id, so concurrent
 // conversations on one agent never cross.
 
+export type { TurnHooks } from "./acp-routing.js";
+
 // A dead connection respawns on next acquire; its sessions die with it and recover via session/load.
 const INIT_TIMEOUT_MS = 15_000;
 const IDLE_REAP_MS = 15 * 60_000;
-
-export interface TurnHooks {
-    readonly onUpdate: (notification: SessionNotification) => void;
-    // Can park: the owner's rulebook may hold this call for approval while the agent waits on the response.
-    readonly permission: (request: RequestPermissionRequest) => Promise<RequestPermissionResponse>;
-    // Turn's tmux session, cwd and first-create signal for terminal requests; absent refuses them.
-    readonly terminal?: {
-        readonly session: string;
-        readonly cwd: string;
-        readonly onCreate: () => void;
-    };
-}
 
 export interface AcpConnection {
     readonly agent: ClientConnection["agent"];
@@ -46,6 +28,10 @@ export interface AcpConnection {
     // Each session's model option as the agent last stated it (acp-model.ts): set from what session/new, session/load
     // and session/set_config_option answer, and kept current by config_option_update. Absent: the agent offers none.
     readonly models: Map<string, SessionModels>;
+    // Each session's reasoning-depth option (`thought_level`), kept the same way. Absent: the agent offers none.
+    readonly thoughts: Map<string, SessionModels>;
+    // Each session's modes (acp-modes.ts), from session/new and session/load, kept current by current_mode_update.
+    readonly modes: Map<string, SessionModes>;
     // Routes one session's updates/permissions to a turn and returns the unbind; marks the connection busy.
     readonly bindTurn: (sessionId: string, hooks: TurnHooks) => () => void;
     // Gives up on a session whose turn stopped answering, once that turn has cancelled and unbound it. The process is
@@ -86,20 +72,21 @@ export const createAcpConnections = (logger: Services["logger"], terminalRun: Te
 
     const connect = async (id: string, launch: AcpLaunch, cwd: string): Promise<AcpConnection> => {
         const proc = spawnAcpProcess(launch, cwd);
-        const turns = new Map<string, TurnHooks>();
+        const routing: SessionRouting = { turns: new Map(), abandoned: new Set(), models: new Map(), thoughts: new Map(), modes: new Map() };
+        const { turns, abandoned } = routing;
         const sessions = new Set<string>();
-        const models = new Map<string, SessionModels>();
-        const abandoned = new Set<string>();
         const terminals = createAcpTerminals(terminalRun);
         let dead = false;
         let idleTimer: ReturnType<typeof setTimeout> | undefined;
+        // Set once initialize has answered; a process that dies or is killed before then was never pooled.
+        let published: AcpConnection | undefined;
 
         const kill = (): void => {
             dead = true;
             clearTimeout(idleTimer);
             terminals.disposeAll();
             proc.child.kill();
-            if (pool.get(id)?.connection === connection) {
+            if (published !== undefined && pool.get(id)?.connection === published) {
                 pool.delete(id);
             }
         };
@@ -117,7 +104,7 @@ export const createAcpConnections = (logger: Services["logger"], terminalRun: Te
         proc.child.on("exit", (code) => {
             dead = true;
             clearTimeout(idleTimer);
-            if (pool.get(id)?.connection === connection) {
+            if (published !== undefined && pool.get(id)?.connection === published) {
                 pool.delete(id);
             }
             logger.info({ agent: id, code }, "acp: agent process exited");
@@ -131,22 +118,10 @@ export const createAcpConnections = (logger: Services["logger"], terminalRun: Te
             }
             return context;
         };
-        const app = client({ name: "intentic" })
-            .onRequest(methods.client.session.requestPermission, ({ params }) => {
-                const hooks = turns.get(params.sessionId);
-                // A late request with no bound turn falls back to the standing auto-allow policy, unless the session was
-                // abandoned mid-turn.
-                return hooks !== undefined ? hooks.permission(params) : decidePermission(params, "execute", abandoned.has(params.sessionId));
-            })
-            .onNotification(methods.client.session.update, ({ params }) => {
-                // Kept here rather than in a turn: an agent may restate its options between turns, with none bound.
-                if (params.update.sessionUpdate === "config_option_update") {
-                    recordModels(models, params.sessionId, params.update.configOptions);
-                }
-                turns.get(params.sessionId)?.onUpdate(params);
-            })
-            .onRequest(methods.client.terminal.create, ({ params }) => {
+        const app = routeSessions(client({ name: "intentic" }), routing)
+            .onRequest(methods.client.terminal.create, async ({ params }) => {
                 const context = terminalContext(params.sessionId);
+                await context.admit(params);
                 context.onCreate();
                 return { terminalId: terminals.create(context.session, context.cwd, params) };
             })
@@ -181,8 +156,13 @@ export const createAcpConnections = (logger: Services["logger"], terminalRun: Te
             conn.agent.request(methods.agent.initialize, {
                 protocolVersion: PROTOCOL_VERSION,
                 // fs declined: no unsaved editor buffers here. terminal is advertised only where the tmux wrapper
-                // exists.
-                clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: terminalRun.visible },
+                // exists. Form elicitation parks on the question card (acp-elicitation.ts); URL elicitation would send
+                // a person off to a page no card can follow, so it is not offered.
+                clientCapabilities: {
+                    fs: { readTextFile: false, writeTextFile: false },
+                    terminal: terminalRun.visible,
+                    elicitation: { form: {} },
+                },
             }),
             INIT_TIMEOUT_MS,
         ).catch((error: unknown) => {
@@ -204,7 +184,9 @@ export const createAcpConnections = (logger: Services["logger"], terminalRun: Te
             alive: () => !dead,
             stderrTail: proc.stderrTail,
             sessions,
-            models,
+            models: routing.models,
+            thoughts: routing.thoughts,
+            modes: routing.modes,
             bindTurn: (sessionId, hooks) => {
                 abandoned.delete(sessionId);
                 turns.set(sessionId, hooks);
@@ -228,6 +210,7 @@ export const createAcpConnections = (logger: Services["logger"], terminalRun: Te
             },
             kill,
         };
+        published = connection;
         armIdleReap();
         return connection;
     };
@@ -235,7 +218,7 @@ export const createAcpConnections = (logger: Services["logger"], terminalRun: Te
     return {
         acquire: async (id, launch, cwd) => {
             // Command/env/credential changes take effect on the next turn: a stale pooled process is killed and respawned.
-            const configKey = JSON.stringify([launch.argv, launch.env, launch.authenticate ?? null]);
+            const configKey = JSON.stringify([launch.argv, launch.env, launch.authenticate ?? null, launch.sessionMeta ?? null]);
             const pooled = pool.get(id);
             if (pooled !== undefined && pooled.connection.alive() && pooled.configKey === configKey) {
                 return pooled.connection;

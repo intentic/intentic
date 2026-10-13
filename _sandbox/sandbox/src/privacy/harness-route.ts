@@ -27,7 +27,7 @@ export const shieldHarnessCredential = async (
 };
 
 // OpenCode's one shared server fixes its providers' base URLs at spawn, so a shield turned on while it serves other
-// conversations reaches it only once they finish. Asked before every Grok or Gemini turn, which is also what restarts
+// conversations reaches it only once they finish. Asked before every turn on it, which is also what restarts
 // an idle server booted the old way; a refusal sentence only while it would run an untrusted provider unshielded.
 export const sharedServerRefusal = async (
     shield: Pick<PrivacyShield, "policy" | "trusted">,
@@ -41,5 +41,5 @@ export const sharedServerRefusal = async (
     if (policy.mode !== "on" || (await shield.trusted(policy, provider))) {
         return undefined;
     }
-    return "The privacy shield was turned on while other Grok or Gemini conversations were running on the shared OpenCode server, which was started before it. Send again once they finish, and this one runs behind the shield.";
+    return "The privacy shield was turned on while other conversations were running on the shared OpenCode server, which was started before it. Send again once they finish, and this one runs behind the shield.";
 };

@@ -1,8 +1,22 @@
+import type { errorMessage } from "@intentic/base/errors";
 import type { MintedProvider } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import { forgetAccountState, signInIdentity } from "../../agent/providers/accounts/account-identity.js";
 import type { AccountDoor } from "../../agent/providers/provider-module.js";
 import { cancelMintedLogin, cancelMintedLoginsFor, completeMintedLogin, mintedLoginStatus, startMintedLogin } from "./minted-login.js";
+import { ensureMuseCli } from "../muse/muse-cli.js";
+
+// Whatever an install threw, as errorMessage reads it.
+type Thrown = Parameters<typeof errorMessage>[0];
+
+// What a fresh account brings down with it: a Meta key is a Muse Code key, so Meta's own loop's program is fetched as the
+// account lands rather than on its first turn. Best-effort: a turn installs it on demand anyway (muse-adapter.ts).
+const fetchLoopProgram = (provider: MintedProvider, logger: Services["logger"]): void => {
+    if (provider !== "meta") {
+        return;
+    }
+    ensureMuseCli().catch((error: Thrown) => logger.warn({ err: error, provider }, "minted: the Muse Code CLI could not be installed"));
+};
 
 // A minted provider's account door (agent/provider-module.ts): sign-in ends with the daemon minting the vendor's own
 // key, by device poll (Meta) or address-bar redirect (Z.ai). The catalog is forgotten on every write, since it's cached
@@ -22,7 +36,10 @@ export const mintedAccountDoor =
                     driver: slice.login,
                     store: slice.store,
                     logger: services.logger,
-                    onConnected: () => slice.catalog.forget(),
+                    onConnected: () => {
+                        slice.catalog.forget();
+                        fetchLoopProgram(provider, services.logger);
+                    },
                     bridge: services,
                 }),
             // Only the redirect shape brings anything back; the mint that follows lands as a row in the list on its

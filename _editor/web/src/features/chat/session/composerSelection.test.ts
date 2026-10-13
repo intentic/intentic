@@ -45,7 +45,7 @@ const selectionOf = () => {
 const seedTurnDefaults = (): void => {
     turnDefaults.provider.value = `claude`;
     turnDefaults.models.value = { claude: `opus`, codex: `gpt-5-codex`, grok: `` };
-    turnDefaults.harness.value = `native`;
+    turnDefaults.harnesses.value = {};
     turnDefaults.effort.value = `high`;
     turnDefaults.thinking.value = true;
     turnDefaults.auto.value = false;

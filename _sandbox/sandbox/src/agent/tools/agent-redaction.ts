@@ -57,7 +57,7 @@ const maskString = (text: string, targets: readonly MaskTarget[]): string =>
 // inference on arbitrary text). An oversized field drops rather than truncates, read as ordinary.
 const FIELD_MAX = 4096;
 
-const namesCredentialMaterial = (toolInput: unknown): boolean => {
+export const namesCredentialMaterial = (toolInput: unknown): boolean => {
     try {
         const asked = JSON.stringify(toolInput, (_key, value: unknown) => (typeof value === "string" && value.length > FIELD_MAX ? "" : value));
         // Locus is required by the classifier but changes nothing here: this is about a path, not a machine.

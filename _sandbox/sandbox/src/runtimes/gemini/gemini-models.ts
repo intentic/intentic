@@ -3,9 +3,10 @@
 // Gemini (Claude Opus/Sonnet, GPT-OSS too), so membership is decided by `owned_by`, not an id prefix. That list is the
 // translator's built-in catalog, not what each account may call: a row Google refuses is learned from the refusal
 // (gemini-catalog.ts `refused`), never predicted from Google's own metadata, whose ids differ from the translator's.
-import { humanizeModelId } from "@intentic/sandbox-contract";
+import { EFFORT_TIERS, humanizeModelId } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { getJson } from "../../agent/models/model-discovery.js";
+import { opt } from "../../opt.js";
 
 // A model the user can chat with, not one of the image/audio/embedding endpoints Google ships alongside it.
 export const isChatModel = (id: string): boolean => !/(image|embedding|imagen|tts|audio|veo|moderation)/i.test(id);
@@ -17,6 +18,9 @@ export interface GeminiModel {
     readonly id: string;
     readonly label: string;
     readonly inputModalities: readonly InputModality[];
+    // The reasoning tiers the translator takes for this model, in the shared vocabulary (EFFORT_TIERS); absent where it
+    // publishes none, which offers no effort rather than a guessed one.
+    readonly efforts?: string[];
 }
 
 // OpenCode's id for Gemini through the translator; not "google", OpenCode's own API-key provider, which bypasses the fleet.
@@ -88,10 +92,22 @@ const publishedModels = async (
 // Undefined is an unreadable or stalled advertisement, not an authoritative empty list.
 const DISCOVERY_DEADLINE_MS = 8_000;
 
+// The tiers a published thinking scale names that the shared vocabulary knows, weakest first; the translator's own
+// spellings outside it (a budget, `auto`) are dropped rather than guessed at.
+export const effortsOf = (levels: readonly string[] | undefined): string[] | undefined => {
+    const known = EFFORT_TIERS.filter((tier) => levels?.includes(tier) === true);
+    return known.length === 0 ? undefined : known;
+};
+
+// Each model's thinking scale as the translator's management catalog publishes it (CliProxyClient.models), keyed by id;
+// a failed read is an empty map, which costs the picker its effort choice and nothing else.
+export type GeminiEffortSource = () => Promise<ReadonlyMap<string, readonly string[]>>;
+
 export const discoverGeminiModels = async (
     translatorUrl: string,
     translatorToken: string,
     fetchImpl: typeof fetch = fetch,
+    efforts: GeminiEffortSource = async () => new Map(),
 ): Promise<GeminiModel[] | undefined> => {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), DISCOVERY_DEADLINE_MS);
@@ -100,9 +116,11 @@ export const discoverGeminiModels = async (
         fetchImpl,
     );
     try {
-        const [catalog, published] = await Promise.all([
+        const [catalog, published, scales] = await Promise.all([
             getJson<unknown>(`${base(translatorUrl)}/v1/models`, translatorToken, boundedFetch),
             publishedModels(translatorUrl, translatorToken, boundedFetch),
+            // allow(silent-catch): an unread thinking scale offers no effort; the catalog itself still stands
+            efforts().catch((): ReadonlyMap<string, readonly string[]> => new Map()),
         ]);
         const parsed = AdvertisedCatalog.safeParse(catalog);
         if (!parsed.success) {
@@ -110,11 +128,15 @@ export const discoverGeminiModels = async (
         }
         return parsed.data.data
             .filter((model) => model.owned_by === CHANNEL && isChatModel(model.id))
-            .map((model) => ({
-                id: model.id,
-                label: published.get(model.id)?.label ?? humanizeModelId(model.id),
-                inputModalities: published.get(model.id)?.inputModalities ?? ASSUMED_MODALITIES,
-            }));
+            .map((model) => {
+                const tiers = effortsOf(scales.get(model.id));
+                return {
+                    id: model.id,
+                    label: published.get(model.id)?.label ?? humanizeModelId(model.id),
+                    inputModalities: published.get(model.id)?.inputModalities ?? ASSUMED_MODALITIES,
+                    ...opt("efforts", tiers),
+                };
+            });
     } finally {
         clearTimeout(timeout);
     }

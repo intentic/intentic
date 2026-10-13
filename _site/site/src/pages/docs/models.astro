@@ -12,7 +12,7 @@ const providers = [
     },
     { name: `Codex`, connect: `A ChatGPT subscription`, note: `Runs on your ChatGPT plan through the bundled translator.` },
     { name: `Grok`, connect: `A SuperGrok subscription`, note: `Signs in with xAI's device-code flow; there is no key to paste.` },
-    { name: `Kimi Code`, connect: `A Kimi Code subscription`, note: `Served under the Claude Code loop.` },
+    { name: `Kimi Code`, connect: `A Kimi Code subscription`, note: `Served under Claude Code by default, and under Codex, OpenCode or Kimi's own CLI where you pick them.` },
     {
         name: `Google`,
         connect: `A Google sign-in: no subscription`,
@@ -26,7 +26,7 @@ const providers = [
     {
         name: `Meta`,
         connect: `A Muse Code subscription`,
-        note: `Sign in with a code on Meta's page and the sandbox mints the key. Muse Spark, through Meta's own Anthropic-compatible endpoint.`,
+        note: `Sign in with a code on Meta's page and the sandbox mints the key. Muse Spark, in Meta's own Muse Code agent by default, which the sandbox installs when you connect.`,
     },
     {
         name: "Cursor",
@@ -38,6 +38,46 @@ const providers = [
         connect: "A Devin account, free or paid",
         note: "Runs Devin's own agent through its CLI, which the sandbox installs when you connect. You sign in on Devin's page, and the sign-in finishes on its own wherever Intentic runs on your computer or browser; elsewhere you paste back what the page gives you. The picker lists the models your Devin plan offers: SWE, Claude, GPT, Gemini and the rest on a paid plan, fewer on the free one.",
     },
+];
+
+// One row per provider, the loops it runs on today, default first: the provider table's `loops` in words.
+const loops: { provider: string; loops: string; note?: string }[] = [
+    { provider: `Claude Code`, loops: `Claude Code.` },
+    {
+        provider: `Codex`,
+        loops: `Codex (its app-server), Claude Code, OpenCode.`,
+        note: `Claude Code is outside the apps OpenAI lists for a ChatGPT plan. OpenCode is listed, but through its own sign-in; here it reaches the plan through the translator.`,
+    },
+    {
+        provider: `Grok`,
+        loops: `OpenCode, Claude Code, Codex, Grok Build.`,
+        note: `Claude Code and Codex need a second sign-in of their own, since OpenCode holds the first, and are outside the apps xAI lists for SuperGrok. Grok Build is xAI's own CLI, with its own device sign-in.`,
+    },
+    {
+        provider: `Kimi Code`,
+        loops: `Claude Code, Codex, OpenCode, Kimi CLI.`,
+        note: `Kimi documents Codex and OpenCode with a Kimi Code API key; here they reach your plan through the translator's sign-in instead. Kimi CLI is Kimi's own client, with its own device sign-in.`,
+    },
+    { provider: `Google`, loops: `OpenCode.`, note: `Google refuses any request announcing Claude Code, and its terms don't allow OpenCode either.` },
+    { provider: `Cursor`, loops: `Cursor's own agent, through its SDK.` },
+    { provider: `Devin`, loops: `Devin's own agent, through its CLI.` },
+    {
+        provider: `Meta`,
+        loops: `Muse Code, Claude Code.`,
+        note: `Muse Code is the agent Meta's subscription is for. Claude Code stays on offer, outside Meta's terms, which keep a Muse Code key for Muse Code.`,
+    },
+    {
+        provider: `Z.ai`,
+        loops: `Claude Code, Codex, OpenCode.`,
+        note: `Each on the plan's own key, aimed at Z.ai's own endpoint for that loop (Anthropic Messages, Responses, Chat Completions), as the GLM Coding Plan documents.`,
+    },
+    {
+        provider: `A model endpoint`,
+        loops: `Claude Code, Codex, OpenCode, Muse Code.`,
+        note: `OpenCode calls the endpoint itself in its own protocol. Codex and Muse Code speak OpenAI's Responses API, which the translator serves for an OpenAI-compatible endpoint; an Anthropic one can't run on either. The free trial runs on Claude Code only.`,
+    },
+    { provider: `Pi`, loops: `Pi's own loop.` },
+    { provider: `An ACP agent`, loops: `The agent's own loop.` },
 ];
 
 const others = [
@@ -129,20 +169,59 @@ const others = [
     <h2>The harness</h2>
     <p>
         The harness is the <strong>agentic loop</strong> that serves the turn, and it is a different axis from the provider: the same model
-        behaves differently under each, which is why the picker asks separately.
+        behaves differently under each, which is why the picker asks separately. Each provider runs on the loops below, its default first;
+        where there is more than one, the picker shows one chip per loop.
+    </p>
+    <table>
+        <thead>
+            <tr><th>Provider</th><th>Loops</th></tr>
+        </thead>
+        <tbody>
+            {
+                loops.map((row) => (
+                    <tr>
+                        <td><strong>{row.provider}</strong></td>
+                        <td>
+                            {row.loops}
+                            {row.note === undefined ? null : <span class="text-subtle"> {row.note}</span>}
+                        </td>
+                    </tr>
+                ))
+            }
+        </tbody>
+    </table>
+    <p>
+        The picker remembers the loop per provider, so choosing Claude Code for Codex says nothing about Grok. A request naming a loop
+        the provider doesn't offer runs the provider's own, and is recorded that way: the conversation, its transcript and the usage
+        ledger name the loop that actually served the turn.
+    </p>
+    <p>
+        The choice matters because the loops support different features, and the app tells you before you find out mid-turn. A runtime lacking mid-turn steering, clarifying questions, per-tool approvals, MCP tools or reasoning-effort control lists those limits, names another loop of the same provider that lifts them where there is one, and the composer hides the controls it would ignore. The composer's model pill names the loop whenever it isn't the provider's default.
+    </p>
+
+    <h2>What each vendor allows</h2>
+    <p>
+        Some routes work but sit outside what the vendor allows. They stay available, and the picker marks them quietly: a small
+        icon beside the provider and on that loop's chip, and a <em>Vendor terms</em> row whose hover card says what the vendor allows.
     </p>
     <ul>
-        <li><strong>Native</strong> runs each provider on its own runtime, with its own subscription sign-in.</li>
-        <li><strong>Claude Code</strong> runs any provider's model through the Claude Code loop instead.</li>
+        <li>
+            <strong>Google</strong>: the
+            <a href="https://antigravity.google/terms/">Antigravity terms</a> don't allow its sign-in in third-party clients such as
+            OpenCode, and Google has suspended accounts for it.
+        </li>
+        <li>
+            <strong>Meta</strong>: a Muse Code subscription key is
+            <a href="https://dev.meta.ai/docs/muse-code/subscriptions">for use with Muse Code only</a>. Muse Code is Meta's default loop
+            here; choosing Claude Code instead runs the key outside those terms.
+        </li>
+        <li>
+            <strong>Codex and Grok under Claude Code</strong>: OpenAI and xAI
+            <a href="https://help.openai.com/en/articles/20001542">list</a> the
+            <a href="https://x.ai/news/grok-opencode">apps</a> a plan may run in, and Claude Code, reached through the bundled
+            translator, isn't one of them. Nothing on record forbids it.
+        </li>
     </ul>
-    <p>
-        For most providers there is nothing to choose: Claude and Kimi always use the Claude Code loop, Google always uses its native
-        OpenCode-based loop, and Cursor always uses Cursor's runtime. Only <strong>Codex and Grok</strong> have both Native and Claude Code
-        available.
-    </p>
-    <p>
-        The choice matters because the loops support different features, and the app tells you before you find out mid-turn. A runtime lacking mid-turn steering, clarifying questions, per-tool approvals, MCP tools or reasoning-effort control lists those limits, and the composer hides the controls it would ignore.
-    </p>
 
     <h2>Per-turn controls</h2>
     <p>

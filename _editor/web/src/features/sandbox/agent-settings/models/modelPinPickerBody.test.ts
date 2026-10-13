@@ -44,6 +44,7 @@ jest.mock(`../../../chat/accounts/providerCatalog`, () => ({
 }));
 
 const { default: ModelPinPickerBody } = await import("./ModelPinPickerBody.vue");
+const { advertisedLoops } = await import("../../../chat/models/offeredLoops");
 
 let app: App | undefined;
 const written: unknown[] = [];
@@ -192,6 +193,33 @@ test("a codex entry is offered the harness axis, and picking a chip writes it", 
     expect(written).toEqual([{ provider: `codex`, model: `gpt-5.6`, harness: `claude-code` }]);
 });
 
+// One chip per loop, each named for itself; the default's stores `native`, which every daemon reads, never its own name.
+test("the loop chips are the offered loops, the default's lit for native and storing native", async () => {
+    const host = mount({ pin: { provider: `codex`, model: `gpt-5.6`, harness: `claude-code` }, knobs: true });
+    await nextTick();
+
+    const loops = [...(row(host, `Harness`)?.querySelectorAll<HTMLButtonElement>(`button`) ?? [])];
+    expect(loops.map((button) => [button.textContent?.trim(), button.getAttribute(`aria-pressed`)])).toEqual([
+        [`Codex`, `false`],
+        [`Claude Code`, `true`],
+    ]);
+    // The vendor's own terms ride beside the chip they are about, as a hint and nothing louder.
+    expect(row(host, `Harness`)?.querySelectorAll(`[tabindex="0"]`)).toHaveLength(1);
+    segment(host, `Harness`, `Codex`).click();
+    expect(written).toEqual([{ provider: `codex`, model: `gpt-5.6`, harness: `native` }]);
+});
+
+test("a daemon that offers the provider one loop draws no loop axis at all", async () => {
+    advertisedLoops.value = { codex: [`codex`] };
+    try {
+        const host = mount({ pin: { provider: `codex`, model: `gpt-5.6`, harness: `claude-code` }, knobs: true });
+        await nextTick();
+        expect(knobRows(host)).not.toContain(`Harness`);
+    } finally {
+        advertisedLoops.value = undefined;
+    }
+});
+
 /* RE-POINTING within the provider keeps every setting; across providers it keeps only the tier. */
 test("re-pointing within the provider keeps every knob; across providers it keeps only the tier", async () => {
     const host = mount({ pin: { provider: `codex`, model: `gpt-5.6`, effort: `high`, harness: `claude-code` }, knobs: true });
@@ -205,12 +233,13 @@ test("re-pointing within the provider keeps every knob; across providers it keep
     expect(picked).toEqual([{ provider: `claude`, model: `claude-opus-5`, effort: `high`, thinking: true }]);
 });
 
-test("a Google entry stores no effort or thinking knobs the channel cannot honor", async () => {
+// OpenCode carries an effort tier as a model variant, so the tier rides along; it has no thinking switch, so that does not.
+test("a Google entry keeps the effort tier its loop honours, and no thinking knob it cannot", async () => {
     const host = mount({ pin: { provider: `claude`, model: `claude-haiku-4-5`, effort: `high`, thinking: false }, knobs: true });
     await nextTick();
 
     host.querySelector<HTMLButtonElement>(`.pick-gemini`)!.click();
-    expect(picked).toEqual([{ provider: `gemini`, model: `gemini-3-flash-lite` }]);
+    expect(picked).toEqual([{ provider: `gemini`, model: `gemini-3-flash-lite`, effort: `high` }]);
 });
 
 test("a model another entry already holds cannot be pinned twice, but the entry's own can be re-picked", async () => {

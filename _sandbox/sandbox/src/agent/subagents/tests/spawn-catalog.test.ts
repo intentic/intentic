@@ -107,6 +107,15 @@ test("renders each of the three states in its own words", () => {
     expect(text).toContain("codex: every model is out of allowance, renews in about 3h");
 });
 
+// The harness values a spawn may name, said only where there is a choice of loop.
+test("names a provider's loops where it offers more than one", () => {
+    const text = spawnCatalogText([
+        { id: "codex", label: "Codex", models: [{ id: "gpt-5.5", label: "GPT-5.5" }], spent: 0, loops: ["codex", "claude-code"] },
+        { id: "claude", label: "Claude", models: [{ id: "opus", label: "Opus" }], spent: 0, loops: ["claude-code"] },
+    ]);
+    expect(text).toBe("codex: gpt-5.5 (not metered); harness: codex (default), claude-code\nclaude: opus (not metered)");
+});
+
 // Codex once listed at 100% left minutes before every turn failed "You've hit your usage limit… try again at 3:38 PM":
 // its usage endpoint kept reading room. The refusal the failed turn files is what the next listing believes.
 describe("a provider's refusal, read in the very next listing", () => {

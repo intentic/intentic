@@ -16,7 +16,7 @@ test("profiles name real packs, and placement/overlayability inference matches e
     for (const name of profiles["standard"] ?? []) {
         expect(byName.has(name), `standard profile names unknown pack "${name}"`).toBe(true);
     }
-    for (const name of ["docker", "browser", "codex", "cursor", "devin", "opencode", "translator"]) {
+    for (const name of ["docker", "browser", "codex", "cursor", "devin", "grok-build", "kimi", "opencode", "translator"]) {
         expect(byName.get(name)?.overlayable, `${name} must be overlay-installable`).toBe(true);
         expect(byName.get(name)?.postTrees, `${name} must splice above the tree COPYs`).toBe(false);
     }

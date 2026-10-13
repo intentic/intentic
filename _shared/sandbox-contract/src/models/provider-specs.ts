@@ -1,5 +1,6 @@
 import type { ProviderBrand } from "@intentic/constants";
-import { type AgentCapabilities, CLAUDE_CODE, CODEX, CURSOR, DEVIN, OPENCODE, OPENCODE_GEMINI } from "./agent-runtimes.js";
+import type { AgentLoop } from "../schemas/agent.js";
+import { type AgentCapabilities, CLAUDE_CODE, CODEX, CURSOR, DEVIN, GROK_BUILD, KIMI_CLI, MUSE, OPENCODE, OPENCODE_GEMINI } from "./agent-runtimes.js";
 
 // Every fact about a provider more than one surface needs, one row each, replacing lists that drifted out of sync.
 // `access` (cost) and `auth` (connection) stay separate: conflating them mis-describes Z.ai, a prepaid plan spent
@@ -43,8 +44,47 @@ export interface MintedVariant {
     readonly flow: "device" | "redirect";
     // ANTHROPIC_BASE_URL for a turn minted here; no version segment, the harness appends /v1/messages itself.
     readonly anthropicBase: string;
-    // Where this estate's catalog is read from: an OpenAI-compatible root, with its version segment.
+    // Where this estate's catalog is read from: an OpenAI-compatible root, with its version segment. Also the Chat
+    // Completions root a loop speaking that wire (OpenCode) sends its turns to.
     readonly catalogBase: string;
+    // The estate's OpenAI Responses root, with its version segment, for a loop that speaks only that wire (Codex); absent
+    // where the vendor publishes none, which keeps such a loop off this estate.
+    readonly responsesBase?: string;
+}
+
+// What a vendor's own terms say about one loop serving its subscription, when there is something worth saying. Shown
+// quietly (an icon and its hover card, never a banner): the owner keeps these routes by choice, and the note is there so
+// nobody runs one without being able to find out.
+// - unlisted: the vendor names the clients it supports and this loop is not among them; nothing on record forbids it.
+// - against-terms: the vendor's terms forbid it, and have been enforced against accounts.
+export interface LoopTerms {
+    readonly status: "unlisted" | "against-terms";
+    // The vendor's position in one sentence, for the hover card.
+    readonly note: string;
+    // Where the vendor says it.
+    readonly source: string;
+}
+
+// One loop a provider can run on: what that pair can do, and what the vendor says about it when there is anything to say.
+export interface LoopOffer {
+    readonly capabilities: AgentCapabilities;
+    // Absent where the vendor sanctions this loop or says nothing about it.
+    readonly terms?: LoopTerms;
+    // What a chip calls this loop when the provider's own name would not say which program runs it: the `vendor` loop of
+    // a provider whose other loops also carry its name (Grok Build beside Grok on OpenCode). Absent: loopLabel's own.
+    readonly label?: string;
+    // The variant the provider's own account door (/accounts/{provider}) signs this loop in under, for a loop whose
+    // credential is a sign-in of its own rather than the one the provider's other loops spend: a vendor CLI's login. An
+    // account the door lists carries the same word as its `variant`, which is how a picker knows which loop it serves.
+    // Absent: the loop spends the provider's default credential.
+    readonly door?: string;
+}
+
+// The loops a provider runs on. `default` is what `native` (and a turn naming no loop) resolves to, and must be one of
+// `offered`; offering a provider a new loop is one more entry in `offered`, plus the adapter that runs it.
+export interface ProviderLoops {
+    readonly default: AgentLoop;
+    readonly offered: Partial<Record<AgentLoop, LoopOffer>>;
 }
 
 export interface ProviderSpec {
@@ -63,9 +103,16 @@ export interface ProviderSpec {
     readonly auth: ProviderAuth;
     // Whether a plan-limit reading is obtainable, so a blank meter is told apart from a plan that publishes none.
     readonly planLimits: boolean;
-    // The two runtimes this provider runs on; equal records here mean the harness is not a real choice for it.
-    readonly runtimes: { readonly native: AgentCapabilities; readonly claudeCode: AgentCapabilities };
+    // The loops it runs on; one offered loop means the loop is not a choice for it.
+    readonly loops: ProviderLoops;
 }
+
+// Kimi's word on the two loops it documents for an API key, reached here on the translator's sign-in.
+const KIMI_TRANSLATED: LoopTerms = {
+    status: "unlisted",
+    note: "Kimi documents OpenCode and Codex with a Kimi Code API key. Here they reach your plan through a translator's sign-in instead, which Kimi doesn't list.",
+    source: "https://www.kimi.com/en/help/kimi-code/third-party-agents",
+};
 
 // satisfies checks each row's shape; as const keeps ids/auth kinds literal, so NativeProvider stays a union.
 export const PROVIDER_SPECS = [
@@ -79,8 +126,7 @@ export const PROVIDER_SPECS = [
         access: { kind: "subscription", requirement: "Claude subscription", runs: "Claude Code" },
         auth: { kind: "oauth" },
         planLimits: true,
-        // Claude has no second runtime: the harness axis is not a choice here.
-        runtimes: { native: CLAUDE_CODE, claudeCode: CLAUDE_CODE },
+        loops: { default: "claude-code", offered: { "claude-code": { capabilities: CLAUDE_CODE } } },
     },
     {
         id: "codex",
@@ -92,7 +138,29 @@ export const PROVIDER_SPECS = [
         access: { kind: "subscription", requirement: "ChatGPT subscription", runs: "Codex" },
         auth: { kind: "translator", cliProxy: "codex" },
         planLimits: true,
-        runtimes: { native: CODEX, claudeCode: CLAUDE_CODE },
+        loops: {
+            default: "codex",
+            offered: {
+                codex: { capabilities: CODEX },
+                "claude-code": {
+                    capabilities: CLAUDE_CODE,
+                    terms: {
+                        status: "unlisted",
+                        note: "OpenAI lets a ChatGPT plan run in Codex and in the apps it lists for Sign in with ChatGPT (OpenCode, Pi, T3 and others). Claude Code, reached here through a translator, isn't among them.",
+                        source: "https://help.openai.com/en/articles/20001542",
+                    },
+                },
+                // The plan through the bundled translator's Responses surface, not OpenCode's own sign-in.
+                opencode: {
+                    capabilities: OPENCODE,
+                    terms: {
+                        status: "unlisted",
+                        note: "OpenAI lists OpenCode among the apps a ChatGPT plan may sign in to, through OpenCode's own sign-in. Here OpenCode reaches the plan through a translator instead, which OpenAI doesn't list.",
+                        source: "https://help.openai.com/en/articles/20001542",
+                    },
+                },
+            },
+        },
     },
     {
         id: "grok",
@@ -105,7 +173,32 @@ export const PROVIDER_SPECS = [
         // The app says grok, CLIProxyAPI says xai; Grok alone also runs natively, not just through the translator.
         auth: { kind: "translator", cliProxy: "xai" },
         planLimits: false,
-        runtimes: { native: OPENCODE, claudeCode: CLAUDE_CODE },
+        loops: {
+            default: "opencode",
+            offered: {
+                opencode: { capabilities: OPENCODE },
+                // xAI's own CLI, signed in through its own device login (not OpenCode's), and free to run on a SuperGrok
+                // or X Premium plan: it is the client xAI ships for that subscription.
+                vendor: { capabilities: GROK_BUILD, label: "Grok Build", door: "grok-build" },
+                "claude-code": {
+                    capabilities: CLAUDE_CODE,
+                    terms: {
+                        status: "unlisted",
+                        note: "xAI turns SuperGrok sign-in on for OpenCode, Hermes, OpenClaw and Kilo Code. Claude Code, reached here through a translator, isn't among them.",
+                        source: "https://x.ai/news/grok-opencode",
+                    },
+                },
+                // The translator's xAI sign-in on its Responses surface, a sign-in of its own beside OpenCode's.
+                codex: {
+                    capabilities: CODEX,
+                    terms: {
+                        status: "unlisted",
+                        note: "xAI turns SuperGrok sign-in on for OpenCode, Hermes, OpenClaw and Kilo Code. Codex, reached here through a translator, isn't among them.",
+                        source: "https://x.ai/news/grok-opencode",
+                    },
+                },
+            },
+        },
     },
     {
         id: "kimi",
@@ -117,8 +210,19 @@ export const PROVIDER_SPECS = [
         access: { kind: "subscription", requirement: "Kimi Code subscription", runs: "Kimi Code" },
         auth: { kind: "translator", cliProxy: "kimi" },
         planLimits: true,
-        // Kimi has no native runtime: it exists only under the Claude Code loop, on both harnesses.
-        runtimes: { native: CLAUDE_CODE, claudeCode: CLAUDE_CODE },
+        // Claude Code stays the default: the translator's subscription is what most sandboxes already hold. Kimi's own CLI signs
+        // in with its own device login, Kimi's sanctioned client for the plan. Kimi documents Claude Code, OpenCode and Codex
+        // with a Kimi Code API key; Codex and OpenCode here reach the plan through the translator's sign-in instead, which
+        // Kimi doesn't list, hence their note. Claude Code predates the note and stays as it was.
+        loops: {
+            default: "claude-code",
+            offered: {
+                "claude-code": { capabilities: CLAUDE_CODE },
+                vendor: { capabilities: KIMI_CLI, label: "Kimi CLI", door: "kimi-cli" },
+                codex: { capabilities: CODEX, terms: KIMI_TRANSLATED },
+                opencode: { capabilities: OPENCODE, terms: KIMI_TRANSLATED },
+            },
+        },
     },
     {
         // Labelled for the account (Google), not the model family: this channel vends Claude and GPT-OSS beside Gemini.
@@ -132,8 +236,20 @@ export const PROVIDER_SPECS = [
         // antigravity is Google's own agent product, the name CLIProxyAPI files this credential under.
         auth: { kind: "translator", cliProxy: "antigravity" },
         planLimits: true,
-        // The only routed provider that ignores harness: Google refuses any request announcing the Claude Code loop.
-        runtimes: { native: OPENCODE_GEMINI, claudeCode: OPENCODE_GEMINI },
+        // The only routed provider without Claude Code: Google refuses any request announcing that loop.
+        loops: {
+            default: "opencode",
+            offered: {
+                opencode: {
+                    capabilities: OPENCODE_GEMINI,
+                    terms: {
+                        status: "against-terms",
+                        note: "Google's Antigravity terms don't allow its sign-in in third-party clients such as OpenCode, and Google has suspended accounts for it.",
+                        source: "https://antigravity.google/terms/",
+                    },
+                },
+            },
+        },
     },
     {
         // Cursor's own runtime via Anysphere's SDK; labelled for the account since it vends several vendors' models.
@@ -147,8 +263,8 @@ export const PROVIDER_SPECS = [
         access: { kind: "subscription", requirement: "Cursor Pro subscription", runs: "Cursor Agent" },
         auth: { kind: "oauth" },
         planLimits: false,
-        // Cursor ignores harness too: there is no route to it but its own SDK.
-        runtimes: { native: CURSOR, claudeCode: CURSOR },
+        // There is no route to Cursor but its own SDK.
+        loops: { default: "vendor", offered: { vendor: { capabilities: CURSOR } } },
     },
     {
         // Cognition's Devin through its own CLI (`devin acp`); labelled for the account, since it vends many vendors'
@@ -165,10 +281,11 @@ export const PROVIDER_SPECS = [
         auth: { kind: "oauth" },
         // Devin publishes its quota only on its own pages and in its CLI's interactive view, nothing a key can read.
         planLimits: false,
-        // The CLI is the only door, so harness is not a choice: both axes are Devin's own runtime.
-        runtimes: { native: DEVIN, claudeCode: DEVIN },
+        // The CLI is the only door, so the loop is not a choice.
+        loops: { default: "vendor", offered: { vendor: { capabilities: DEVIN } } },
     },
-    // The two minted providers need no new runtime or translator hop: each has its own Anthropic Messages endpoint.
+    // The two minted providers need no translator hop: each has its own endpoint for the minted key. Meta's key is a Muse
+    // Code key, so its own loop is Muse Code; Z.ai's runs under Claude Code against its Anthropic Messages endpoint.
     {
         id: "meta",
         label: "Meta",
@@ -177,7 +294,7 @@ export const PROVIDER_SPECS = [
         destination: "Meta",
         brand: "meta",
         // A subscription like the rest: the device sign-in mints a plan key, and the plan is what a turn spends.
-        access: { kind: "subscription", requirement: "Muse Code subscription", runs: "Muse Spark under Claude Code" },
+        access: { kind: "subscription", requirement: "Muse Code subscription", runs: "Muse Spark in Muse Code" },
         auth: {
             kind: "minted",
             // Preserve the minted variant id because stored accounts reference it.
@@ -197,7 +314,21 @@ export const PROVIDER_SPECS = [
         },
         // No quota surface a minted key can read: the row shows no meter and says so, not an empty one reading as zero.
         planLimits: false,
-        runtimes: { native: CLAUDE_CODE, claudeCode: CLAUDE_CODE },
+        // Muse Code is the use Meta's terms sanction for the key, so it says nothing; Claude Code stays on offer, quietly noted.
+        loops: {
+            default: "muse",
+            offered: {
+                muse: { capabilities: MUSE },
+                "claude-code": {
+                    capabilities: CLAUDE_CODE,
+                    terms: {
+                        status: "against-terms",
+                        note: "Meta's terms say a Muse Code subscription key is for use with Muse Code only. Here it runs under Claude Code.",
+                        source: "https://dev.meta.ai/docs/muse-code/subscriptions",
+                    },
+                },
+            },
+        },
     },
     {
         id: "zai",
@@ -221,6 +352,8 @@ export const PROVIDER_SPECS = [
                     flow: "device",
                     anthropicBase: "https://api.z.ai/api/anthropic",
                     catalogBase: "https://api.z.ai/api/coding/paas/v4",
+                    // Z.ai's dedicated Responses endpoint for Codex (docs.z.ai/devpack/tool/codex).
+                    responsesBase: "https://api.z.ai/api/v1",
                 },
                 {
                     id: "bigmodel",
@@ -230,11 +363,18 @@ export const PROVIDER_SPECS = [
                     flow: "redirect",
                     anthropicBase: "https://open.bigmodel.cn/api/anthropic",
                     catalogBase: "https://open.bigmodel.cn/api/coding/paas/v4",
+                    // BigModel's equivalent (docs.bigmodel.cn/cn/coding-plan/tool/codex).
+                    responsesBase: "https://open.bigmodel.cn/api/v1",
                 },
             ],
         },
         planLimits: false,
-        runtimes: { native: CLAUDE_CODE, claudeCode: CLAUDE_CODE },
+        // The GLM Coding Plan lists Claude Code, Codex and OpenCode among its tools, each on the minted key aimed at the
+        // estate's own endpoints: Anthropic Messages, Responses and Chat Completions respectively.
+        loops: {
+            default: "claude-code",
+            offered: { "claude-code": { capabilities: CLAUDE_CODE }, codex: { capabilities: CODEX }, opencode: { capabilities: OPENCODE } },
+        },
     },
 ] as const satisfies readonly ProviderSpec[];
 

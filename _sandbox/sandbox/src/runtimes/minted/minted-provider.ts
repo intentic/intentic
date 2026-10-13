@@ -7,6 +7,7 @@ import {
     mintedVariants,
     providerSpec,
 } from "@intentic/sandbox-contract";
+import type { errorMessage } from "@intentic/base/errors";
 import type { Logger } from "pino";
 import { z } from "zod";
 import { authStateRelPath, type ProviderModule, providerAccountEntry } from "../../agent/providers/provider-module.js";
@@ -14,10 +15,11 @@ import type { Services } from "../../composition.js";
 import { cacheFile } from "../../store/open-document.js";
 import { metaLoginDriver } from "./meta-login.js";
 import { createMintedCatalog, type MintedCatalog } from "./minted-catalog.js";
-import { fileMintedStore, type MintedStore } from "./minted-credentials.js";
+import { fileMintedStore, type MintedStore, readMintedCredentials } from "./minted-credentials.js";
 import type { MintedLoginDriver } from "./minted-login.js";
 import { zaiLoginDriver } from "./zai-login.js";
 import { mintedAccountDoor } from "./minted-accounts.js";
+import { ensureMuseCli } from "../muse/muse-cli.js";
 
 // Everything a minted provider contributes to the daemon, written once and instantiated per provider: the Kimi shape
 // (no adapter, both harnesses ride the Claude Code loop) plus a credential of their own, since nothing else holds it. A
@@ -134,24 +136,49 @@ export const createMintedSlice = (input: { readonly authRoot: string; readonly l
 // ordering rule would actually seat first.
 export const seedModelsOf = (provider: MintedProvider): readonly Model[] => SEED_MODELS[provider];
 
-// No adapter (see the header), no boot (nothing to start), no pack (these providers add nothing to the image). What's
-// left is what every provider owes: a catalog, a readiness rung, and its secrets-inventory rows.
+// No adapter of its own: Z.ai rides the Claude Code loop, and Meta's own loop is Muse Code (runtimes/muse), an adapter
+// that also serves endpoints, so it sits in the runtime table beside ACP's. What's left is what every provider owes: a
+// catalog, a readiness rung, and its secrets-inventory rows; Meta adds the program its own loop runs.
 // What a minted module reads: its own slice, and the logger its sign-in reports through.
-export type MintedProviderDeps = Pick<Services, "logger" | "minted" | "headroom" | "observedLimits" | "providerRefusals" | "hostHub" | "webextHub">;
+export type MintedProviderDeps = Pick<Services, "authRoot" | "logger" | "minted" | "headroom" | "observedLimits" | "providerRefusals" | "hostHub" | "webextHub">;
 
-export const mintedProviderModule = (provider: MintedProvider): ProviderModule<MintedProviderDeps> => ({
-    id: provider,
-    accounts: mintedAccountDoor(provider),
-    adapters: [],
-    catalog: (services) => services.minted[provider].catalog.models(),
-    // A stored credential is the whole of it: one directory listing, never a probe that spends a call against the
-    // user's plan to check if the key still works.
-    ready: async (services) => (await services.minted[provider].store.list()).length > 0,
-    secretEntries: async (services) =>
-        (await services.minted[provider].store.list()).map((account) =>
-            providerAccountEntry(provider, providerSpec(provider)?.label ?? provider, account.id, account.label, authStateRelPath(provider)),
-        ),
+// Whatever an install threw, as errorMessage reads it.
+type Thrown = Parameters<typeof errorMessage>[0];
+
+// Meta's key is a Muse Code key, so Muse Code is what a connected Meta account wants on this machine. Its licence grants
+// no redistribution: the engine store takes it on demand (a turn, a connect, this boot), and an account on disk asks the
+// owner's next rebuild to bake the same pin into their own image. Read from the file-backed store, never a live probe.
+const metaExtras = (): Pick<ProviderModule<MintedProviderDeps>, "engines" | "packs" | "boot"> => ({
+    engines: ["muse"],
+    packs: async (services) => ((await readMintedCredentials(join(services.authRoot, "meta"))).length > 0 ? ["muse"] : []),
+    boot: (services, role, logger) => {
+        if (!role.container) {
+            return;
+        }
+        void (async () => {
+            if ((await services.minted.meta.store.list()).length > 0) {
+                await ensureMuseCli();
+            }
+        })().catch((error: Thrown) => logger.warn({ err: error }, "muse: the Muse Code CLI could not be installed at boot"));
+    },
 });
+
+export const mintedProviderModule = (provider: MintedProvider): ProviderModule<MintedProviderDeps> => {
+    const module: ProviderModule<MintedProviderDeps> = {
+        id: provider,
+        accounts: mintedAccountDoor(provider),
+        adapters: [],
+        catalog: (services) => services.minted[provider].catalog.models(),
+        // A stored credential is the whole of it: one directory listing, never a probe that spends a call against the
+        // user's plan to check if the key still works.
+        ready: async (services) => (await services.minted[provider].store.list()).length > 0,
+        secretEntries: async (services) =>
+            (await services.minted[provider].store.list()).map((account) =>
+                providerAccountEntry(provider, providerSpec(provider)?.label ?? provider, account.id, account.label, authStateRelPath(provider)),
+            ),
+    };
+    return provider === "meta" ? { ...module, ...metaExtras() } : module;
+};
 
 // Every minted provider's module, in spec order, so the runtime table's list stays one line however many of these
 // there are.

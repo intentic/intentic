@@ -117,6 +117,7 @@ test("OpenCode 2's shell ask is read as its id, its session, its action and the 
             id: "per_11d5850fe001RJv7cMyKNP9WVc",
             sessionID: "ses_ee2a7b0b7ffeRFM9FFPcb0yOv8",
             kind: "shell",
+            resources: ["git push origin main --dry-run"],
             program: "git push origin main --dry-run",
             cwd: WORKSPACE_ROOT,
         },
@@ -134,6 +135,7 @@ test("an ask about several resources is read as all of them; one about none has 
         id: "per_1",
         sessionID: "ses_1",
         kind: "edit",
+        resources: ["src/a.ts", "src/b.ts"],
         program: "src/a.ts src/b.ts",
     });
     expect(permissionAskOf(asked({ resources: [] }))?.program).toBeUndefined();
@@ -162,6 +164,7 @@ test("an unregistered session keeps the standing yes, for this call only", async
     expect(replies).toEqual([{ sessionID: "ses_unknown", requestID: "per_4", decision: "once" }]);
 });
 
+// The rulebook reads commands: an edit's resources are paths, which it would judge as nonsense.
 test("a gate that does not enforce, or an ask with nothing to judge, is answered yes without a consult or a hold", async () => {
     const { client, replies } = server();
     const lax = judgeOf(unconsulted(false));
@@ -169,13 +172,38 @@ test("a gate that does not enforce, or an ask with nothing to judge, is answered
 
     await answerPermission(client, lax.judge, askOf(shellAsked("per_5", "ses_lax", "git push --force origin main")));
     await answerPermission(client, strict.judge, askOf(asked({ id: "per_6", sessionID: "ses_strict", resources: [] })));
+    await answerPermission(client, strict.judge, askOf(asked({ id: "per_11", sessionID: "ses_strict", action: "edit", resources: ["rm -rf /"] })));
 
     expect(replies).toEqual([
         { sessionID: "ses_lax", requestID: "per_5", decision: "once" },
         { sessionID: "ses_strict", requestID: "per_6", decision: "once" },
+        { sessionID: "ses_strict", requestID: "per_11", decision: "once" },
     ]);
     expect(lax.holds).toEqual([]);
     expect(strict.holds).toEqual([]);
+});
+
+// A turn's tool list reaches OpenCode as session rules, which can allow the shell only whole; the command each call runs
+// is checked against the list's shell entries here, before the rulebook is asked anything.
+test("a command off the turn's tool list is refused with the list's words, before the rulebook is consulted", async () => {
+    const { client, replies } = server();
+    const listed = { ...judgeOf(unconsulted(false)).judge, allowedTools: ["Read", "Bash(git log:*)"] };
+
+    await answerPermission(client, listed, askOf(shellAsked("per_20", "ses_listed", "git log --oneline")));
+    await answerPermission(client, { ...listed, gate: unconsulted(true) }, askOf(shellAsked("per_21", "ses_listed", "git push origin main")));
+    await answerPermission(client, { ...listed, gate: unconsulted(true) }, askOf(asked({ id: "per_22", sessionID: "ses_listed", resources: [] })));
+
+    expect(replies).toEqual([
+        { sessionID: "ses_listed", requestID: "per_20", decision: "once" },
+        {
+            sessionID: "ses_listed",
+            requestID: "per_21",
+            decision: "reject",
+            message: expect.stringContaining("is not on this turn's tool list (Read, Bash(git log:*))"),
+        },
+        // A shell ask with no command to read cannot be checked against the list, so it is refused too.
+        { sessionID: "ses_listed", requestID: "per_22", decision: "reject", message: expect.stringContaining("is not on this turn's tool list") },
+    ]);
 });
 
 // The reason is what OpenCode hands the model as the call's failure; a reply with one keeps the session going.
@@ -313,4 +341,49 @@ test("the directory an ask runs in reaches the check", async () => {
 
     expect(where).toEqual([{ cwd: WORKSPACE_ROOT }]);
     expect(replies).toEqual([{ sessionID: "ses_cwd", requestID: "per_10", decision: "once" }]);
+});
+
+// A turn in `default` mode: what the rulebook let through quietly still goes to a person on a per-tool card, as the
+// Claude loop's default mode asks; what the rulebook already put in front of a person is not asked twice.
+describe("a default-mode turn", () => {
+    const approving = (verdict: { allow: true } | { allow: false; reason: string }) => {
+        const approved: PermissionAsk[] = [];
+        const approve = async (ask: PermissionAsk) => {
+            approved.push(ask);
+            return verdict;
+        };
+        return { approved, approve };
+    };
+
+    test("puts an edit the rulebook does not read, and a command it let through, on a per-tool card", async () => {
+        const { client, replies } = server();
+        const { judge } = judgeOf(approvalGate(async () => ({ decision: "allow", sentence: "Builds the project." })));
+        const { approved, approve } = approving({ allow: false, reason: "Not that file." });
+
+        await answerPermission(client, { ...judge, approve }, askOf(asked({ id: "per_20", sessionID: "ses_d", action: "edit", resources: ["src/a.ts"] })));
+        await answerPermission(client, { ...judge, approve: approving({ allow: true }).approve }, askOf(shellAsked("per_21", "ses_d", "pnpm build")));
+
+        expect(approved.map((ask) => [ask.kind, ask.resources])).toEqual([["edit", ["src/a.ts"]]]);
+        expect(replies).toEqual([
+            { sessionID: "ses_d", requestID: "per_20", decision: "reject", message: "Not that file." },
+            { sessionID: "ses_d", requestID: "per_21", decision: "once" },
+        ]);
+    });
+
+    test("does not ask again about a command its rulebook already held for a person", async () => {
+        const { client, replies } = server();
+        const { judge, carded } = judgeOf(approvalGate(async () => ({ decision: "ask", sentence: "Pushes straight to the shared main branch." })));
+        const { approved, approve } = approving({ allow: false, reason: "asked twice" });
+
+        const answering = answerPermission(client, { ...judge, approve }, askOf(shellAsked("per_22", "ses_d", "git push --force origin main")));
+        const card = await carded;
+        if (card.kind !== "permission") {
+            throw new Error(`a ${card.kind} frame came first, not the card`);
+        }
+        cards.resolve({ kind: "permission", requestId: card.requestId, decision: "once" });
+        await answering;
+
+        expect(approved).toEqual([]);
+        expect(replies).toEqual([{ sessionID: "ses_d", requestID: "per_22", decision: "once" }]);
+    });
 });

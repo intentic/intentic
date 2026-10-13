@@ -12,13 +12,12 @@ import type {
     SpawnOptions,
 } from "@anthropic-ai/claude-agent-sdk";
 import { whenAborted } from "@intentic/base/async";
-import { refreshClaudeSdk, sdk } from "../../engines/claude-sdk.js";
+import { refreshClaudeSdk } from "../../engines/claude-sdk.js";
 import { spawnAs } from "../../workload/workload-class.js";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import {
     type AgentEvent,
-    type AskQuestion,
     type RequestDocument,
     DEFAULT_SAFETY_POLICY,
     documentOf,
@@ -28,10 +27,8 @@ import {
     sendableThinking,
     type UsageWindow,
 } from "@intentic/sandbox-contract";
-import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { join, normalize } from "node:path";
 import { claudeStatePath } from "../../sessions/session-store.js";
-import { z } from "zod";
 import { daemonMountNs, handoffDirOf, type IsolationAnchor, ownWorktree, TMUX_NS_ENV } from "../../conversations/worktrees/isolation.js";
 import { PANE_DOOR_PATH } from "../../workload/domain/agent-domain-view.js";
 import { namespaceTargetOf, nsenterArgv } from "../../workload/namespace-entry.js";
@@ -78,11 +75,10 @@ import { promptInputOf, sdkSystemPrompt, terminalMounted } from "../prompt/syste
 import { storedPromptTitle } from "../prompt/turn-preamble.js";
 import { noteChildWork } from "../subagents/child-verification.js";
 import { closeSubagents, subagentInParentTree, subagentHooks, type SubagentTurn } from "../subagents/subagents.js";
-import { ASK_TOOL_NAMES, answerFiles, formatAnswers } from "../tools/question-answers.js";
+import { ASK_TOOL_NAMES } from "../tools/question-answers.js";
+import { uiServer } from "../pages/ui-server.js";
 import { PAGE_TOOL_NAMES } from "../pages/page-names.js";
-import { pageTools } from "../pages/page-tools.js";
 import { McpAppHost } from "../pages/mcp-apps.js";
-import { imageBlock, loadAttachments } from "../prompt/attachment-images.js";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 import { CLAUDE_INSTRUCTION_FILES } from "../../runtimes/claude/claude-builtins.js";
 
@@ -655,9 +651,6 @@ const appHooks = (request: HarnessRequest, push: (event: AgentEvent) => void): P
     }).hooks();
 };
 
-// The API's own ceiling on one picture, base64; a bigger one stays a path for the Read tool, which downsizes.
-const MAX_ANSWER_IMAGE_BASE64 = 5 * 1024 * 1024;
-
 // A custom MCP tool, not the built-in, since the built-in's picker UI has nowhere to render headless; aliased onto the
 // built-in's name so the model's trained call site still works. alwaysLoad keeps it out of tool search.
 const askServer = (
@@ -667,15 +660,12 @@ const askServer = (
     shell: { sessionId: string | undefined },
     documents: TurnDocuments,
 ): McpSdkServerConfigWithInstance =>
-    sdk().createSdkMcpServer({
-        name: "ui",
-        alwaysLoad: true,
-        tools: [
-            // The page tools beside `ask` (agent/pages/page-tools.ts), only where the owner leaves them on: off, the turn
-            // is not offered them at all.
-            ...(request.tools.pages === undefined
-                ? []
-                : pageTools({
+    uiServer({
+        // Only where the owner leaves the pages on: off, the turn is not offered them at all.
+        pages:
+            request.tools.pages === undefined
+                ? undefined
+                : {
                       workspaceRoot: request.tools.pages.workspaceRoot,
                       cwd: request.spec.cwd,
                       placement: request.spec.isolation?.plan,
@@ -684,54 +674,16 @@ const askServer = (
                       cards: request.hooks.cards,
                       signal: request.signal,
                       answered: (answered) => syncOnAnswer(conversations, request, push, shell, answered),
-                  })),
-            sdk().tool(
-                "ask",
-                'Ask the user 1-4 clarifying multiple-choice questions and wait for their answers. Use this whenever you need the user to choose between options before proceeding. Each question has 2-4 options; do NOT add an "Other" option: a free-text choice is provided automatically. Set multiSelect when several options may be picked together.',
-                {
-                    questions: z
-                        .array(
-                            z.object({
-                                question: z.string(),
-                                header: z.string(),
-                                // Defaulted as in the built-in AskUserQuestion, whose call site the model was trained on.
-                                multiSelect: z.boolean().default(false),
-                                options: z
-                                    .array(z.object({ label: z.string(), description: z.string(), preview: z.string().optional() }))
-                                    .min(2)
-                                    .max(4),
-                            }),
-                        )
-                        .min(1)
-                        .max(4),
-                },
-                async (args) => {
-                    const questions = args.questions as AskQuestion[];
-                    // Named with its conversation: dismissing this ends the turn immediately, not on a second request.
-                    const { id, wait } = request.hooks.cards.create(
-                        "question",
-                        { kind: "question", requestId: "", cancelled: true },
-                        request.spec.conversationId,
-                    );
-                    // The turn's latest write-up rides along, already in hand, since a question about it needs it.
-                    push({ kind: "question", requestId: id, questions, ...(documents.latest === undefined ? {} : { document: documents.latest }) });
-                    const { reply, resolved } = await wait(request.signal);
-                    // Picks belong in the frame log too, not just the tool result: a replayed transcript freezes the
-                    // card with them.
-                    push(resolved);
-                    // Rebase happens before the model acts on the answer, announced to the transcript, not folded into
-                    // what it reads.
-                    await syncOnAnswer(conversations, request, push, shell, !reply.cancelled && reply.answers !== undefined);
-                    // Pictures attached to the answer ride the result natively, so the model sees them without a
-                    // Read; the text names every file either way, and an unreadable or oversized one only by path.
-                    const { images } = await loadAttachments({ attachments: answerFiles(questions, reply, request.spec.cwd) }, true);
-                    const seen = images.filter((image) => image.data.length <= MAX_ANSWER_IMAGE_BASE64).map(imageBlock);
-                    return { content: [{ type: "text", text: formatAnswers(questions, reply, request.spec.cwd) }, ...seen] };
-                },
-                // An answer rebases the conversation's tree (syncOnAnswer), so it must not run beside reads.
-                { annotations: toolAnnotations("write") },
-            ),
-        ],
+                  },
+        ask: {
+            cards: request.hooks.cards,
+            conversationId: request.spec.conversationId,
+            signal: request.signal,
+            cwd: request.spec.cwd,
+            push,
+            document: () => documents.latest,
+            answered: (answered) => syncOnAnswer(conversations, request, push, shell, answered),
+        },
     });
 
 // Tools that must never raise a permission card: asking a question and entering plan mode are both deferring to the

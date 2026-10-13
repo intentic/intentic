@@ -13,9 +13,10 @@ export interface SecretNeedDeps {
     readonly keep: (name: string, value: string) => Promise<void>;
 }
 
-// How the agent spends it, honestly per runtime: only the Claude Code loop fills a reference in at execution.
+// How the agent spends it, honestly per runtime: a loop whose shell fills a reference in at execution (the Claude Code
+// loop; Codex, Cursor and Pi through their hooks) is told to write one; any other is told it won't be filled.
 const useOf = (name: string, context: Pick<AskContext, "standing"> | undefined): string[] =>
-    context?.standing !== undefined && context.standing.secrets !== "masked"
+    context?.standing !== undefined && context.standing.secrets === "none"
         ? [`This conversation's runtime does not fill in {{secret:…}} references, so the value is there for a Claude Code turn and for connections that read it, not for this shell.`]
         : [`Write {{secret:${name}}} where the value goes (a command, a header, an env assignment): the sandbox fills it in at execution, and it never appears in what you read.`];
 

@@ -13,7 +13,10 @@ import { withAttachments } from "../../agent/prompt/attachment-note.js";
 import { releasingMounts } from "../../agent/tools/turn-mounts.js";
 import { turnToolsOf, type TurnToolsDeps } from "../../agent/tools/turn-tools.js";
 import type { Services } from "../../composition.js";
+import { turnPersona } from "../../personas/personas.js";
+import { opt } from "../../opt.js";
 import { assertAgentExecutionContext } from "../../workload/agent-execution.js";
+import { type DaemonServersDeps, daemonServersFor } from "../daemon-tools/daemon-servers.js";
 import { acpLaunchOf } from "./acp-spawn.js";
 
 // Any provider id outside the native ones is an installed `agent`-kind capability served over the Agent Client Protocol.
@@ -21,10 +24,13 @@ import { acpLaunchOf } from "./acp-spawn.js";
 // catalog, credentials and packs are the capability system's business.
 
 // What the ACP adapter reads: the installed manifest, the daemon's tools it passes through, and the warm connection pool.
-export type AcpAdapterDeps = TurnToolsDeps & Pick<Services, "acpAgent" | "capabilities" | "config" | "files" | "workspace">;
+export type AcpAdapterDeps = TurnToolsDeps &
+    DaemonServersDeps &
+    Pick<Services, "acpAgent" | "capabilities" | "config" | "files" | "workspace" | "sandboxSettings">;
 
 // Harness doesn't apply here, the agent is its own loop, and neither do the Claude-only request fields; the turn's MCP
-// servers, browsers included, pass through when the agent advertises http MCP.
+// servers, browsers included, and the daemon's own (daemon-servers.ts) reach the agent over http where it advertises
+// http MCP, else through the daemon's stdio proxy (acp-mcp-proxy.ts).
 export const planAcpTurn = async (
     services: AcpAdapterDeps,
     input: RoutedAgentTurn,
@@ -46,7 +52,13 @@ export const planAcpTurn = async (
         extensions: context.persona?.powers.extensions,
         warmSession: true,
     });
-    const tools = mounted.tools;
+    // The daemon's own servers ride the same lease, so the warm session's bearer reaches them on every turn it serves; a
+    // server a later turn adds (a persona change) is not seen until a new session opens. The agent's own permission asks
+    // already reach the gate in-process (acp-agent.ts), so no gate server.
+    const persona = context.persona ?? turnPersona({ personas: [], actsAs: undefined, unattended: false });
+    const settings = context.settings ?? (await services.sandboxSettings.get());
+    const daemon = daemonServersFor(services, { input, context, persona, granted, settings, mounted, gate: false });
+    const tools = [...mounted.tools, ...daemon.tools];
     return armPlan(
         // The agent's warm session keeps the conversation's bearer and each server's URL across turns; the release only
         // empties what the bearer reaches until the next turn leases it again.
@@ -56,7 +68,8 @@ export const planAcpTurn = async (
                 ...context.base,
                 // The browser stack's facts (ports, output dir) feed the Claude Code hooks and observer, which an ACP agent
                 // has none of: its browsers are servers in `remote` like everything else.
-                tools: tools.length > 0 ? { ...context.base.tools, remote: tools } : context.base.tools,
+                tools: { ...context.base.tools, ...opt("remote", tools.length > 0 ? tools : undefined), diagnostics: daemon.diagnostics },
+                hooks: { ...context.base.hooks, relay: daemon.relay },
                 credential: { kind: "container" },
             },
             context.attachmentPaths,

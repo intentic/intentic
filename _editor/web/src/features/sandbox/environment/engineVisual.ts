@@ -13,6 +13,10 @@ const VISUALS: Record<EngineId, EngineVisual> = {
     codex: { icon: `terminal` },
     cursor: { logo: `cursor`, icon: `cpu` },
     devin: { logo: `devin`, icon: `robot` },
+    // Simple Icons has Moonshot's mark; it has none for xAI, so Grok Build wears the terminal it runs in.
+    "grok-build": { icon: `terminal` },
+    kimi: { logo: `moonshotai`, icon: `terminal` },
+    muse: { logo: `meta`, icon: `sparkles` },
     opencode: { icon: `code` },
     translator: { icon: `repeat` },
 };

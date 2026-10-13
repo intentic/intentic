@@ -74,6 +74,7 @@
         "whatYoullPickMessage": "To, co wybierzesz z pola wiadomości. Na tyle krótkie, żeby dało się przeczytać na przycisku."
     },
     "stepInspector": {
+        "vendorTerms": "Warunki dostawcy",
         "acrossEveryRoundStep": "W poprzek wszystkich rund tego kroku. Puste zostawia to bez limitu.",
         "acts": "Działa jako",
         "addField": "Dodaj pole",

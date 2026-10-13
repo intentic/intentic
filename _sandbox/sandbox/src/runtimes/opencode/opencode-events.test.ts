@@ -282,3 +282,76 @@ test("close lets the stream go quietly: nobody is told it was lost, the service 
     events.listen(late.listener);
     expect(late.lost).toEqual([new Error("OpenCode's event stream ended.")]);
 });
+
+describe("a stream that drops while its server runs", () => {
+    // Opened as the service opens it: told whether the server still runs, and told when the stream came back.
+    const reopening = async (alive: () => boolean) => {
+        const server = fakeServer();
+        const ended: Error[] = [];
+        let resumes = 0;
+        const opened = openEventStream(server.client, {
+            ended: (reason) => void ended.push(reason),
+            alive,
+            onResume: () => {
+                resumes += 1;
+            },
+        });
+        server.send(CONNECTED);
+        const events = await opened;
+        opens.push(events);
+        return { server, ended, events, resumes: () => resumes };
+    };
+
+    test("is opened again, and every listener told it resumed once the server confirms it, then hears what follows", async () => {
+        jest.useFakeTimers();
+        const { server, ended, events, resumes } = await reopening(() => true);
+        const heard = recorder();
+        let resumed = 0;
+        events.listen({ ...heard.listener, resumed: () => void (resumed += 1) });
+
+        server.end();
+        await advanceTimersByTimeAsync(250);
+        expect(server.signals).toHaveLength(2);
+        server.send(CONNECTED);
+        server.send(IDLE);
+        await drain();
+
+        expect(resumed).toBe(1);
+        expect(resumes()).toBe(1);
+        expect(heard.events).toEqual([IDLE]);
+        expect(heard.lost).toEqual([]);
+        expect(ended).toEqual([]);
+    });
+
+    // A server that exited cannot answer a new stream: the drop is its going away, said at once as before.
+    test("is lost at once when the server no longer runs", async () => {
+        const { server, ended, events } = await reopening(() => false);
+        const heard = recorder();
+        events.listen(heard.listener);
+
+        server.end();
+        await drain();
+
+        expect(heard.lost).toEqual([new Error("OpenCode's event stream ended.")]);
+        expect(ended).toHaveLength(1);
+        expect(server.signals).toHaveLength(1);
+    });
+
+    test("is given up on after three tries that never connect, with the last try's own reason", async () => {
+        jest.useFakeTimers();
+        const { server, ended, events } = await reopening(() => true);
+        const heard = recorder();
+        events.listen(heard.listener);
+
+        server.end();
+        for (const backoff of [250, 500, 750]) {
+            await advanceTimersByTimeAsync(backoff);
+            server.fail(new Error("connect ECONNREFUSED"));
+            await drain();
+        }
+
+        expect(server.signals).toHaveLength(4);
+        expect(heard.lost).toEqual([new Error("connect ECONNREFUSED")]);
+        expect(ended).toHaveLength(1);
+    });
+});

@@ -1,4 +1,4 @@
-import { type AgentHarness, type AgentProvider, DEFAULT_HARNESS, DEFAULT_PROVIDER } from "@intentic/sandbox-contract";
+import { type AgentHarness, type AgentProvider, capabilitiesOf, withRuntimeDefaults } from "@intentic/sandbox-contract";
 import type { Services } from "../../../composition.js";
 
 // Which account a conversation's turn runs on, in one place. The conversation's profile (`provider`, `harness`,
@@ -42,17 +42,21 @@ export interface Routing {
  * the provider, not to the loop.
  */
 export const routingFor = (profile: RoutingProfile | undefined, intent: RoutingIntent): Routing => {
-    const provider = intent.agent ?? DEFAULT_PROVIDER;
-    const harness = intent.harness ?? DEFAULT_HARNESS;
+    const { agent: provider, harness } = withRuntimeDefaults({ agent: intent.agent, harness: intent.harness });
     const held = profile?.provider === provider ? profile.account : undefined;
     const account = intent.account ?? held;
     return {
         provider,
         harness,
         account,
-        continues: profile !== undefined && profile.provider === provider && profile.harness === harness && account === profile.account,
+        continues: profile !== undefined && profile.provider === provider && sameLoop(profile, harness) && account === profile.account,
     };
 };
+
+// Whether a harness names the loop the profile's session was minted on. Two names for one runtime are one loop: a Kimi or
+// Cursor conversation recorded under "claude-code" (before requests were normalized) keeps its session on "native".
+export const sameLoop = (profile: RoutingProfile, harness: AgentHarness): boolean =>
+    capabilitiesOf(profile.provider, profile.harness).runtime === capabilitiesOf(profile.provider, harness).runtime;
 
 /**
  * The provider session a turn continues, decided here and nowhere else: on a conversation the daemon holds, its own

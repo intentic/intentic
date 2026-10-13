@@ -5,6 +5,7 @@ import "@intentic/testing/dom";
 import { composerModelReading, stillRunningOn } from "./composerModelLabel";
 import { accountsLoaded, providerAccounts, translatorAccounts } from "../accounts/providerAccounts";
 import { acpProviders, endpointProviders, endpointsLoaded, perProvider, providerModels, trialStatus } from "../accounts/providerCatalog";
+import { advertisedLoops } from "../models/offeredLoops";
 
 const CHAT = { provider: `claude`, harness: `native`, model: `claude-opus-5`, auto: false } as const;
 
@@ -69,4 +70,23 @@ it(`says nothing once the reply has ended, or while it runs on the model picked`
     expect(stillRunningOn(CHAT, { streaming: false, sentModel: `claude-haiku-4-5` })).toBeUndefined();
     expect(stillRunningOn(CHAT, { streaming: true, sentModel: `claude-opus-5` })).toBeUndefined();
     expect(stillRunningOn(CHAT, { streaming: true, sentModel: undefined })).toBeUndefined();
+});
+
+// The same model through another loop is another run, so the pill says which; the default loop goes unsaid.
+it(`names the loop after the model where it isn't the provider's default`, () => {
+    providerModels.value = { ...perProvider(() => []), codex: [{ value: `gpt-5.6`, label: `GPT-5.6` }] };
+    const codex = { provider: `codex`, harness: `claude-code`, model: `gpt-5.6`, auto: false } as const;
+
+    expect(composerModelReading(codex)).toEqual({ label: `GPT-5.6 · Claude Code`, unset: false });
+    expect(composerModelReading({ ...codex, harness: `native` })).toEqual({ label: `GPT-5.6`, unset: false });
+    // Claude's own loop IS Claude Code: naming it would be naming the default.
+    expect(composerModelReading({ ...CHAT, harness: `claude-code` })).toEqual({ label: `Claude Opus 5`, unset: false });
+});
+
+it(`says nothing of a loop the daemon no longer offers the provider on, which runs as the default`, () => {
+    providerModels.value = { ...perProvider(() => []), codex: [{ value: `gpt-5.6`, label: `GPT-5.6` }] };
+    advertisedLoops.value = { codex: [`codex`] };
+
+    expect(composerModelReading({ provider: `codex`, harness: `claude-code`, model: `gpt-5.6`, auto: false }).label).toBe(`GPT-5.6`);
+    advertisedLoops.value = undefined;
 });

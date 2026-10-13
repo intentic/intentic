@@ -1,7 +1,7 @@
-import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
+import type { McpSdkServerConfigWithInstance, McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 import { type AgentTurn, type Capability, type CredentialGateKind, profileOf } from "@intentic/sandbox-contract";
 import { ownWorktree, type TurnPlacement } from "../../../conversations/worktrees/isolation.js";
-import { accountsServer } from "../../../browser/tools/accounts-tools.js";
+import { type AccountsServerFactory, accountsServer } from "../../../browser/tools/accounts-tools.js";
 import { ANONYMOUS_BROWSER_SERVER, type BrowserTurnTools } from "../../../browser/tools/browser-tools.js";
 import { fetchEmailCode } from "../../../browser/tools/email-codes.js";
 import { secretsServer } from "../../../browser/tools/secrets-tools.js";
@@ -125,7 +125,7 @@ export const turnSecretAccess = (deps: HarnessServersDeps, input: AgentTurn, sig
 
 // The browser exit for stored secrets: types a named value into a live page's focused field, scoped to exactly the
 // turn's own browser list.
-const browserSecretsServer = (browser: BrowserTurnTools, secrets: SecretAccess): McpServerConfig =>
+const browserSecretsServer = (browser: BrowserTurnTools, secrets: SecretAccess): McpSdkServerConfigWithInstance =>
     secretsServer({
         secrets,
         accounts: { ...browser.accounts, ...(browser.servers.some((server) => server.name === ANONYMOUS_BROWSER_SERVER) ? { web: "web" } : {}) },
@@ -144,7 +144,7 @@ const watchPlacementOf = (isolation: TurnPlacement | undefined): { readonly plac
 
 // The condition watch: the agent names an outside check command the daemon polls, waking the conversation when it exits
 // 0; a replacement for hand-rolled sleep loops, which can't fire once the turn's process is gone.
-const conditionWatchServer = (deps: HarnessServersDeps, conversationId: string, input: AgentTurn, context: TurnContext): McpServerConfig =>
+const conditionWatchServer = (deps: HarnessServersDeps, conversationId: string, input: AgentTurn, context: TurnContext): McpSdkServerConfigWithInstance =>
     watchServer({
         conversations: deps.conversations,
         conversationId,
@@ -159,7 +159,7 @@ const conditionWatchServer = (deps: HarnessServersDeps, conversationId: string, 
 // Dependency readiness asked of the main checkout: an isolated turn reads the main tree's dependencies through its own
 // layer, so /work's answer is the turn's answer until the turn installs something itself. The worktree is named for
 // what only it holds: a project the conversation's branch created, and where an install of its own would write.
-const dependencyServer = (deps: HarnessServersDeps, input: AgentTurn, context: TurnContext, persona: TurnPersona): McpServerConfig => {
+const dependencyServer = (deps: HarnessServersDeps, input: AgentTurn, context: TurnContext, persona: TurnPersona): McpSdkServerConfigWithInstance => {
     const title = input.conversationId === undefined ? input.title : deps.agents.entry(input.conversationId)?.social.title?.text;
     return createDepsServer({
         dependencies: deps.dependencies,
@@ -169,6 +169,41 @@ const dependencyServer = (deps: HarnessServersDeps, input: AgentTurn, context: T
         signal: context.base.signal,
     });
 };
+
+// Each daemon server a turn may get, with the decision whether it gets it: one place for every loop that mounts them, the
+// Claude Code loop in-process (harnessServers below) and every other runtime through the MCP door (daemon-servers.ts),
+// so a persona's powers withhold the same server whichever runtime serves the turn. Undefined is withheld.
+export interface DaemonServerTurn {
+    readonly input: AgentTurn;
+    readonly context: TurnContext;
+    readonly persona: TurnPersona;
+}
+
+// The secret typist: only when this turn drives a browser at all; the browsers themselves ride the turn's remote mounts.
+export const secretsServerFor = (browser: BrowserTurnTools, secrets: SecretAccess): McpSdkServerConfigWithInstance | undefined =>
+    browser.servers.length > 0 ? browserSecretsServer(browser, secrets) : undefined;
+
+// `wait` parks until a child of this turn settles, `keep` leaves a background command running for the person, and
+// `spawn` (same server) starts a full agent on any connected provider; `wait` and `keep` are always offered, the rest
+// withheld without the delegate shelf and full agency.
+export const subagentsServerFor = (deps: HarnessServersDeps, { context, persona }: DaemonServerTurn): McpSdkServerConfigWithInstance =>
+    subagentWaitServer({
+        conversationId: context.base.spec.conversationId,
+        conversations: deps.conversations,
+        signal: context.base.signal,
+        ...(context.children !== undefined && mayDelegate(persona) ? { children: context.children } : {}),
+    });
+
+// Withheld without shell power or a conversation to wake.
+export const watchServerFor = (deps: HarnessServersDeps, { input, context, persona }: DaemonServerTurn): McpSdkServerConfigWithInstance | undefined =>
+    persona.powers.shell && input.conversationId !== undefined ? conditionWatchServer(deps, input.conversationId, input, context) : undefined;
+
+export const depsServerFor = (deps: HarnessServersDeps, { input, context, persona }: DaemonServerTurn): McpSdkServerConfigWithInstance =>
+    dependencyServer(deps, input, context, persona);
+
+// The daemon's own records, read-only; gated on `files` rather than its own power, and withheld from a `none` card.
+export const diagnosticsServerFor = (deps: HarnessServersDeps, { persona }: DaemonServerTurn): McpSdkServerConfigWithInstance | undefined =>
+    persona.powers.files === "none" ? undefined : createDiagnosticsServer({ historyRoot: deps.config.historyRoot, usage: deps.usage });
 
 // The in-process servers of a harness turn, every one named in this one literal: outside-results.test.ts reads it to
 // hold each to its classification, so a server mounted anywhere else would ship unchecked.
@@ -183,71 +218,66 @@ export const harnessServers = (
         readonly hashlineEdits: boolean;
     },
 ): Record<string, McpServerConfig> => {
-    const { input, context, persona } = turn;
+    const typist = secretsServerFor(turn.browser, turn.secrets);
+    const watcher = watchServerFor(deps, turn);
+    const records = diagnosticsServerFor(deps, turn);
     return {
-        // Mounted only when this turn drives a browser at all; the browsers themselves ride the turn's remote mounts.
-        ...(turn.browser.servers.length > 0 ? { secrets: browserSecretsServer(turn.browser, turn.secrets) } : {}),
+        ...(typist === undefined ? {} : { secrets: typist }),
         // hashlineEdits swaps the native Edit/Write (disabled in the policy) for hash-anchored file tools.
-        ...(turn.hashlineEdits ? { hashline: createHashlineServer(context.localCwd) } : {}),
-        // `wait` parks until a child of this turn settles, `keep` leaves a background command running for the person, and
-        // `spawn` (same server) starts a full agent on any connected provider; `wait` and `keep` are always offered, the
-        // rest withheld without the delegate shelf and full agency.
-        subagents: subagentWaitServer({
-            conversationId: context.base.spec.conversationId,
-            conversations: deps.conversations,
-            signal: context.base.signal,
-            ...(context.children !== undefined && mayDelegate(persona) ? { children: context.children } : {}),
-        }),
-        // Withheld without shell power or a conversation to wake.
-        ...(persona.powers.shell && input.conversationId !== undefined
-            ? { watch: conditionWatchServer(deps, input.conversationId, input, context) }
-            : {}),
-        deps: dependencyServer(deps, input, context, persona),
-        // The daemon's own records, read-only; gated on `files` rather than its own power, and withheld from a `none` card.
-        ...(persona.powers.files === "none"
-            ? {}
-            : { diagnostics: createDiagnosticsServer({ historyRoot: deps.config.historyRoot, usage: deps.usage }) }),
+        ...(turn.hashlineEdits ? { hashline: createHashlineServer(turn.context.localCwd) } : {}),
+        subagents: subagentsServerFor(deps, turn),
+        ...(watcher === undefined ? {} : { watch: watcher }),
+        deps: depsServerFor(deps, turn),
+        ...(records === undefined ? {} : { diagnostics: records }),
     };
 };
 
 // The accounts tools ride whenever this turn has browser accounts: the very set whose servers were just mounted is the
 // scope those tools enforce, so a tool can never reach an account the browser was refused.
+export const accountsFactoryFor = (
+    deps: HarnessServersDeps,
+    input: AgentTurn,
+    context: TurnContext,
+    granted: readonly Capability[],
+): AccountsServerFactory | undefined => {
+    const accounts = granted
+        .filter((capability) => capability.kind === "browser" || capability.kind === "identity")
+        .map((capability) => capability.id);
+    if (accounts.length === 0) {
+        return undefined;
+    }
+    return accountsServer({
+        capabilities: deps.capabilities,
+        root: deps.workspace.root,
+        accounts,
+        ...opt("conversationId", input.conversationId),
+        cards: deps.cards,
+        attended: input.unattended !== true,
+        // The two verbs past the narrow deps (filing a new account, reading a mailbox code), injected as closures so
+        // the tools stay testable without Services or a network.
+        openAccount: (request) => deps.openBrowserAccount(request),
+        signInUrls: (capability) => deps.accountSignInUrls(capability),
+        fetchCode: fetchEmailCode,
+        release: async (account, lane, detail) => {
+            const verdict = await deps.credentialGate.check({
+                subject: account,
+                kind: "capability",
+                lane,
+                detail,
+                conversationId: input.conversationId,
+                signal: context.base.signal,
+            });
+            return verdict.allow ? { ok: true } : { refusal: verdict.reason };
+        },
+    });
+};
+
 export const harnessAccounts = (
     deps: HarnessServersDeps,
     input: AgentTurn,
     context: TurnContext,
     granted: readonly Capability[],
 ): Pick<TurnTools, "accountsServer"> => {
-    const accounts = granted
-        .filter((capability) => capability.kind === "browser" || capability.kind === "identity")
-        .map((capability) => capability.id);
-    if (accounts.length === 0) {
-        return {};
-    }
-    return {
-        accountsServer: accountsServer({
-            capabilities: deps.capabilities,
-            root: deps.workspace.root,
-            accounts,
-            ...opt("conversationId", input.conversationId),
-            cards: deps.cards,
-            attended: input.unattended !== true,
-            // The two verbs past the narrow deps (filing a new account, reading a mailbox code), injected as closures so
-            // the tools stay testable without Services or a network.
-            openAccount: (request) => deps.openBrowserAccount(request),
-            signInUrls: (capability) => deps.accountSignInUrls(capability),
-            fetchCode: fetchEmailCode,
-            release: async (account, lane, detail) => {
-                const verdict = await deps.credentialGate.check({
-                    subject: account,
-                    kind: "capability",
-                    lane,
-                    detail,
-                    conversationId: input.conversationId,
-                    signal: context.base.signal,
-                });
-                return verdict.allow ? { ok: true } : { refusal: verdict.reason };
-            },
-        }),
-    };
+    const factory = accountsFactoryFor(deps, input, context, granted);
+    return factory === undefined ? {} : { accountsServer: factory };
 };

@@ -58,6 +58,7 @@
         "whatYoullPickMessage": "Ce que vous choisirez depuis la zone de message. Assez court pour tenir sur un bouton."
     },
     "stepInspector": {
+        "vendorTerms": "Conditions du fournisseur",
         "acrossEveryRoundStep": "Sur toutes les rondes de cette étape. Vide la laisse sans plafond.",
         "acts": "Agit en tant que",
         "addField": "Ajouter un champ",

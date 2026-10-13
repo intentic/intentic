@@ -222,6 +222,9 @@ catalogs:
     '@huggingface/transformers':
       specifier: 4.3.0
       version: 4.3.0
+    '@muse-code/sdk':
+      specifier: 1.4.6
+      version: 1.4.6
     '@openai/codex-sdk':
       specifier: 0.162.0
       version: 0.162.0
@@ -2706,6 +2709,9 @@ importers:
       '@intentic/workspace-setup':
         specifier: workspace:*
         version: link:../../_shared/workspace-setup
+      '@muse-code/sdk':
+        specifier: 'catalog:'
+        version: 1.4.6(@types/node@24.19.1)
       '@openai/codex-sdk':
         specifier: 'catalog:'
         version: 0.162.0
@@ -5775,6 +5781,15 @@ packages:
     resolution: {integrity: sha512-CmCXPQrkbwExx3j946/PtHWHbYJiCRBRDl4BlkRQcJB/YOwQxJRTpoo7aTsortjgoJ1x7opzTSxn7C+ASSLVjQ==}
     cpu: [x64]
     os: [win32]
+
+  '@muse-code/sdk@1.4.6':
+    resolution: {integrity: sha512-pUENCnmn9q4e2xMXicdRbzbSMdH1fiyTIh5fVBXuxNdNP2ZKA0kwQz5fWMxIB8wzxS2ZyH0v27dvfbZuGuoUjg==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      '@types/node': '>=20'
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
 
   '@napi-rs/wasm-runtime@1.2.4':
     resolution: {integrity: sha512-AJxoUD2/15ESHbvpcyjU274nsAPLuOtPHCk0vKJM5pj//Fg/B1FXNWjPnXTT9PymCYYiHo4zPj0ZomXBKhoy7g==}
@@ -14645,6 +14660,10 @@ snapshots:
 
   '@msgpackr-extract/msgpackr-extract-win32-x64@3.0.4':
     optional: true
+
+  '@muse-code/sdk@1.4.6(@types/node@24.19.1)':
+    optionalDependencies:
+      '@types/node': 24.19.1
 
   '@napi-rs/wasm-runtime@1.2.4(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)':
     dependencies:

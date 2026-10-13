@@ -1,14 +1,15 @@
 import { HISTORY_ROOT, STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { unstubbed } from "@intentic/testing";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent, ToolCallContent } from "@intentic/sandbox-contract";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import type { AgentRequest, CodexCredential, TurnHooks } from "../../agent/providers/agent-request.js";
 import { SteeringQueue } from "../../agent/checkpoints/agent-steering.js";
 import { WORKLOAD_ENV } from "../../seams/workload-stamp.js";
 import { forgetNamespaceEntry, registerMountEntry } from "../../workload/namespace-entry.js";
 import { fakeCodexRunner, memoryFleet } from "../../testing.js";
-import type { CodexEvent, CodexItem, CodexRunner } from "./codex-app-server.js";
-import { createCodexAgent } from "./codex-agent.js";
+import type { CodexEvent, CodexFailureInfo, CodexItem, CodexRunner, CodexTurn } from "./codex-app-server.js";
+import { createCodexAgent, UNGATED_CALL, UNGATED_LIST } from "./codex-agent.js";
+import { createTurnRelay, type TurnRelay } from "../daemon-tools/turn-relay.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 
 // Where a turn here parks its cards: one fleet's actors.
@@ -234,6 +235,40 @@ test("a subscription turn uses the translator bearer and the actor marker that u
             supports_websockets: false,
         },
         "tools.experimental_request_user_input.enabled": true,
+        project_doc_max_bytes: 0,
+    });
+});
+
+// Another provider's route rides its own provider block: the route's versioned root, its bearer in the same env seam,
+// the window Codex cannot know of a model outside OpenAI's catalog, and OpenAI's hosted tools off.
+test("a hosted route names its own provider block, its window, and no OpenAI-only tools", async () => {
+    const { runner, calls } = fakeCodexRunner([]);
+    await collect(createTestAgent(runner), {
+        ...request,
+        spec: { ...request.spec, model: "glm-5.3" },
+        credential: {
+            kind: "codex-endpoint",
+            baseUrl: "https://api.z.ai/api",
+            authToken: "zai-key",
+            hosted: { id: "intentic-zai", path: "/v1", contextWindow: 1_048_576 },
+        },
+    });
+    const turn = calls[0]!;
+    expect(turn.env["CODEX_API_KEY"]).toBe("zai-key");
+    expect(turn.modelProvider).toBe("intentic-zai");
+    expect(turn.config).toEqual({
+        "model_providers.intentic-zai": {
+            name: "intentic-zai",
+            base_url: "https://api.z.ai/api/v1",
+            wire_api: "responses",
+            env_key: "CODEX_API_KEY",
+            supports_websockets: false,
+        },
+        web_search: "disabled",
+        "features.image_generation": false,
+        model_context_window: 1_048_576,
+        "tools.experimental_request_user_input.enabled": true,
+        project_doc_max_bytes: 0,
     });
 });
 
@@ -243,8 +278,9 @@ test("a native (account) turn carries no provider config: Codex uses its own cre
         ...request,
         spec: { ...request.spec, model: "gpt-5-codex" },
     });
-    // The question tool is the one key every turn carries; nothing here names a provider or a credential.
-    expect(calls[0]!.config).toEqual({ "tools.experimental_request_user_input.enabled": true });
+    // The question tool and the AGENTS.md budget are the keys every turn carries; nothing here names a provider or a
+    // credential.
+    expect(calls[0]!.config).toEqual({ "tools.experimental_request_user_input.enabled": true, project_doc_max_bytes: 0 });
     expect(calls[0]!.env["CODEX_API_KEY"]).toBeUndefined();
 });
 
@@ -266,6 +302,7 @@ test("the turn's remote MCP servers ride Codex's per-thread config as http serve
         "mcp_servers.browser": { url: "http://127.0.0.1:8787/mcp/browser", http_headers: { Authorization: "Bearer bearer" }, tool_timeout_sec: 120 },
         "mcp_servers.saldeo": { url: "https://saldeo.example/mcp" },
         "tools.experimental_request_user_input.enabled": true,
+        project_doc_max_bytes: 0,
     });
 });
 
@@ -345,6 +382,8 @@ test("a plan turn proposes read-only, then executes full-access on the same thre
             requestId: expect.any(String) as string,
             reply: { kind: "plan", requestId: expect.any(String) as string, approve: true },
         },
+        // An approved plan moves the conversation out of planning, as the Claude loop's approval does.
+        { kind: "mode", mode: "bypassPermissions" },
         { kind: "delta", text: "Done." },
         { kind: "text_end" },
         { kind: "done" },
@@ -429,6 +468,26 @@ test("a non-fatal advisory is tagged rather than surfaced as a failure, and the 
     ]);
 });
 
+// Every hosted model is outside OpenAI's catalog, so the notice would come every turn; the route already said the window.
+test("a hosted route's turn drops the fallback-metadata advisory its model always earns", async () => {
+    const { runner } = fakeCodexRunner([
+        { type: "thread.started", thread_id: "thr-9" },
+        { type: "error", message: ADVISORY },
+        { type: "turn.started" },
+        { type: "item.completed", item: { id: "m1", type: "agent_message", text: "ok" } },
+    ]);
+    const hosted: AgentRequest<CodexCredential> = {
+        ...request,
+        credential: { kind: "codex-endpoint", baseUrl: "http://127.0.0.1:8788", authToken: "local", hosted: { id: "intentic-kimi", path: "/v1" } },
+    };
+    expect(await collect(createTestAgent(runner), hosted)).toEqual([
+        { kind: "session", sessionId: "thr-9" },
+        { kind: "delta", text: "ok" },
+        { kind: "text_end" },
+        { kind: "done" },
+    ]);
+});
+
 test("a plan turn survives an advisory and still proposes its plan", async () => {
     // An advisory must not mark the planning phase errored, or plan-emulation would abandon a turn that produced a
     // plan.
@@ -453,6 +512,8 @@ test("a plan turn survives an advisory and still proposes its plan", async () =>
             requestId: expect.any(String) as string,
             reply: { kind: "plan", requestId: expect.any(String) as string, approve: true },
         },
+        // An approved plan moves the conversation out of planning, as the Claude loop's approval does.
+        { kind: "mode", mode: "bypassPermissions" },
         { kind: "delta", text: "Done." },
         { kind: "text_end" },
         { kind: "done" },
@@ -510,6 +571,8 @@ test("an unrecognized warning is muted rather than reddening the turn, and a pla
             requestId: expect.any(String) as string,
             reply: { kind: "plan", requestId: expect.any(String) as string, approve: true },
         },
+        // An approved plan moves the conversation out of planning, as the Claude loop's approval does.
+        { kind: "mode", mode: "bypassPermissions" },
         { kind: "delta", text: "Done." },
         { kind: "text_end" },
         { kind: "done" },
@@ -517,14 +580,14 @@ test("an unrecognized warning is muted rather than reddening the turn, and a pla
     expect(calls).toHaveLength(2);
 });
 
-// Codex's stream retry arrives as an error notification with retry counters and the reason in parens.
+// Codex's stream retry arrives as an error notification marked willRetry, its sentence carrying the counters.
 const STREAM_RETRY = "Reconnecting... 1/5 (stream disconnected before completion: stream closed before response.completed)";
 const PROCESS_EXIT = "Codex app-server exited (1): connection closed";
 
 test("an in-turn stream retry is a wait, not a failure: the turn's answer still lands", async () => {
     const { runner } = fakeCodexRunner([
         { type: "thread.started", thread_id: "thr-11" },
-        { type: "error", message: STREAM_RETRY },
+        { type: "error", message: STREAM_RETRY, willRetry: true },
         { type: "item.completed", item: { id: "m1", type: "agent_message", text: "back" } },
     ]);
     expect(await collect(createTestAgent(runner), request)).toEqual([
@@ -542,7 +605,7 @@ test("a plan turn survives a stream retry and still proposes its plan", async ()
     const { runner, calls } = fakeCodexRunner(
         [
             { type: "thread.started", thread_id: "thr-12" },
-            { type: "error", message: STREAM_RETRY },
+            { type: "error", message: STREAM_RETRY, willRetry: true },
             { type: "item.completed", item: { id: "m1", type: "agent_message", text: "Plan: add the route." } },
         ],
         [{ type: "item.completed", item: { id: "m2", type: "agent_message", text: "Done." } }],
@@ -560,6 +623,8 @@ test("a plan turn survives a stream retry and still proposes its plan", async ()
             requestId: expect.any(String) as string,
             reply: { kind: "plan", requestId: expect.any(String) as string, approve: true },
         },
+        // An approved plan moves the conversation out of planning, as the Claude loop's approval does.
+        { kind: "mode", mode: "bypassPermissions" },
         { kind: "delta", text: "Done." },
         { kind: "text_end" },
         { kind: "done" },
@@ -570,7 +635,7 @@ test("a plan turn survives a stream retry and still proposes its plan", async ()
 test("a stream retry doesn't stand in for the real failure when the retries run out", async () => {
     // Retry notices must not count as this turn's surfaced error, or the real failure that follows would arrive silent.
     const runner: CodexRunner = async function* () {
-        yield { type: "error", message: STREAM_RETRY } as CodexEvent;
+        yield { type: "error", message: STREAM_RETRY, willRetry: true } as CodexEvent;
         throw new Error(PROCESS_EXIT);
     };
     expect(await collect(createTestAgent(runner), request)).toEqual([
@@ -673,6 +738,8 @@ test("a plan turn survives a compaction and still proposes its plan", async () =
             requestId: expect.any(String) as string,
             reply: { kind: "plan", requestId: expect.any(String) as string, approve: true },
         },
+        // An approved plan moves the conversation out of planning, as the Claude loop's approval does.
+        { kind: "mode", mode: "bypassPermissions" },
         { kind: "delta", text: "Done." },
         { kind: "text_end" },
         { kind: "done" },
@@ -948,7 +1015,7 @@ test("an unattended turn can still ask: its question waits for the owner", async
     const { runner, calls } = fakeCodexRunner([]);
     await collect(createTestAgent(runner), { ...request, policy: { ...request.policy, unattended: true } });
     // Turned on by name, not by omission: Codex registers the tool when the table is absent, and names it here.
-    expect(calls[0]!.config).toEqual({ "tools.experimental_request_user_input.enabled": true });
+    expect(calls[0]!.config).toMatchObject({ "tools.experimental_request_user_input.enabled": true });
 });
 
 test("a question for a secret is refused without a card, because a card's answers are recorded", async () => {
@@ -1182,4 +1249,448 @@ test("a steering follow-up counts each subagent's cumulative spend once", async 
         { kind: "usage", inputTokens: 106, outputTokens: 55, cacheReadTokens: 303, cacheCreationTokens: 101 },
         { kind: "usage", inputTokens: 6, outputTokens: 5, cacheReadTokens: 3, cacheCreationTokens: 1 },
     ]);
+});
+
+// Narrows a frame list to one kind, for the tests that read a field off it.
+const isKind =
+    <K extends AgentEvent["kind"]>(kind: K) =>
+    (event: AgentEvent): event is Extract<AgentEvent, { kind: K }> =>
+        event.kind === kind;
+
+// Codex types its failures (codexErrorInfo); the type decides the code before any sentence is read, so a provider that
+// fell over is counted by the outage breaker and resumed once it is back, whatever words this release chose.
+describe("a typed failure is coded by its type", () => {
+    const failing = (info: CodexFailureInfo) => fakeCodexRunner([{ type: "turn.failed", error: { message: "The model could not be reached.", info } }]);
+    const codeOf = async (info: CodexFailureInfo): Promise<string | undefined> =>
+        (await collect(createTestAgent(failing(info).runner), request)).find(isKind("error"))?.code;
+
+    test("a transport or capacity failure is an outage", async () => {
+        expect(await codeOf({ kind: "httpConnectionFailed", httpStatus: 502 })).toBe("provider-outage");
+        expect(await codeOf({ kind: "responseStreamDisconnected" })).toBe("provider-outage");
+        expect(await codeOf({ kind: "serverOverloaded" })).toBe("provider-outage");
+    });
+
+    test("a spent allowance or a 429 is a rate limit, a full window a context overflow", async () => {
+        expect(await codeOf({ kind: "usageLimitExceeded" })).toBe("rate_limit");
+        expect(await codeOf({ kind: "responseStreamConnectionFailed", httpStatus: 429 })).toBe("rate_limit");
+        expect(await codeOf({ kind: "contextWindowExceeded" })).toBe("context-overflow");
+    });
+
+    // A 4xx behind a broken connection is the provider refusing, which a re-run would only repeat.
+    test("a refusal the type cannot place is left to the sentence rules", async () => {
+        expect(await codeOf({ kind: "httpConnectionFailed", httpStatus: 401 })).toBeUndefined();
+        expect(await codeOf({ kind: "badRequest" })).toBeUndefined();
+    });
+
+    test("the error channel is typed the same way", async () => {
+        const { runner } = fakeCodexRunner([{ type: "error", message: "The model could not be reached.", willRetry: false, info: { kind: "internalServerError" } }]);
+        expect(await collect(createTestAgent(runner), request)).toEqual([
+            { kind: "error", code: "provider-outage", message: "The model could not be reached." },
+            { kind: "done" },
+        ]);
+    });
+});
+
+// willRetry, not the sentence, says Codex is retrying; a notice with no counters still counts its own attempts.
+test("a retry Codex marks willRetry is a wait whatever it says, with the status behind it", async () => {
+    const { runner } = fakeCodexRunner([
+        // As codex-cli 0.162 words it when the network is down: no counters, so the old sentence match failed the turn.
+        { type: "error", message: "Reconnecting... waiting for network", willRetry: true, info: { kind: "responseStreamDisconnected", httpStatus: 503 } },
+        { type: "error", message: "Reconnecting... waiting for network", willRetry: true },
+        { type: "item.completed", item: { id: "m1", type: "agent_message", text: "back" } },
+    ]);
+    expect(await collect(createTestAgent(runner), request)).toEqual([
+        { kind: "provider_retry", attempt: 1, status: 503 },
+        { kind: "provider_retry", attempt: 2 },
+        { kind: "delta", text: "back" },
+        { kind: "text_end" },
+        { kind: "done" },
+    ]);
+});
+
+test("a failed or interrupted turn still reports what it spent, before its failure", async () => {
+    const usage = { input_tokens: 10, cached_input_tokens: 3, cache_write_input_tokens: 1, output_tokens: 5, reasoning_output_tokens: 0 };
+    const { runner } = fakeCodexRunner([{ type: "turn.failed", error: { message: "Codex turn was interrupted" }, usage }]);
+    expect(await collect(createTestAgent(runner), request)).toEqual([
+        { kind: "usage", inputTokens: 6, outputTokens: 5, cacheReadTokens: 3, cacheCreationTokens: 1 },
+        { kind: "error", message: "Codex turn was interrupted" },
+        { kind: "done" },
+    ]);
+});
+
+test("prose and reasoning stream as Codex writes them, and their completion adds only what was not yet said", async () => {
+    const { runner } = fakeCodexRunner([
+        { type: "item.delta", item_id: "r1", channel: "reasoning", text: "Reading", part: 0 },
+        { type: "item.delta", item_id: "r1", channel: "reasoning", text: " the route.", part: 0 },
+        { type: "item.delta", item_id: "r1", channel: "reasoning", text: "Then the test.", part: 1 },
+        { type: "item.completed", item: { id: "r1", type: "reasoning", text: "Reading the route.\nThen the test." } },
+        { type: "item.delta", item_id: "m1", channel: "message", text: "Added " },
+        { type: "item.delta", item_id: "m1", channel: "message", text: "the route" },
+        { type: "item.completed", item: { id: "m1", type: "agent_message", text: "Added the route." } },
+    ]);
+    expect(await collect(createTestAgent(runner), request)).toEqual([
+        { kind: "thinking", text: "Reading" },
+        { kind: "thinking", text: " the route." },
+        // A new summary part is a new paragraph, as the completed item joins them.
+        { kind: "thinking", text: "\nThen the test." },
+        { kind: "delta", text: "Added " },
+        { kind: "delta", text: "the route" },
+        { kind: "delta", text: "." },
+        { kind: "text_end" },
+        { kind: "done" },
+    ]);
+});
+
+test("a planning phase holds its prose back while its reasoning still streams", async () => {
+    const { runner } = fakeCodexRunner(
+        [
+            { type: "thread.started", thread_id: "thr-p" },
+            { type: "item.delta", item_id: "r1", channel: "reasoning", text: "Thinking." },
+            { type: "item.delta", item_id: "m1", channel: "message", text: "Plan: add" },
+            { type: "item.completed", item: { id: "m1", type: "agent_message", text: "Plan: add the route." } },
+        ],
+        [],
+    );
+    const events = await collect(createTestAgent(runner), { ...request, policy: { ...request.policy, permissionMode: "plan" as const } }, () => ({ approve: false }));
+    expect(events.slice(0, 3)).toMatchObject([
+        { kind: "session", sessionId: "thr-p" },
+        { kind: "thinking", text: "Thinking." },
+        { kind: "plan", text: "Plan: add the route." },
+    ]);
+    expect(events.some((event) => event.kind === "delta")).toBe(false);
+});
+
+// The update frame replaces the card's content, so each one carries the output so far, and not one per line of it.
+test("a running command's output streams onto its card, at most a few times a second", async () => {
+    const { runner } = fakeCodexRunner([
+        { type: "item.started", item: { id: "c1", type: "command_execution", command: "pnpm test", aggregated_output: "", status: "in_progress" } },
+        { type: "item.delta", item_id: "c1", channel: "output", text: "1 passed\n" },
+        { type: "item.delta", item_id: "c1", channel: "output", text: "2 passed\n" },
+        { type: "item.completed", item: { id: "c1", type: "command_execution", command: "pnpm test", aggregated_output: "1 passed\n2 passed\n", exit_code: 0, status: "completed" } },
+    ]);
+    expect(await collect(createTestAgent(runner), request)).toEqual([
+        { kind: "tool_call", id: "c1", name: "Bash", category: "execute", status: "in_progress", target: "pnpm test" },
+        { kind: "tool_call_update", id: "c1", content: [{ type: "text", text: "1 passed\n" }] },
+        { kind: "tool_call_update", id: "c1", status: "completed", content: [{ type: "text", text: "1 passed\n2 passed\n" }] },
+        { kind: "done" },
+    ]);
+});
+
+test("a patch's card opens with each file's change and settles as it lands", async () => {
+    const changes = [
+        { path: `${WORKSPACE_ROOT}/src/new.ts`, kind: "add" as const, diff: "export const ping = 1;\n" },
+        { path: "src/app.ts", kind: "update" as const, diff: "@@ -1 +1 @@\n-old\n+new\n" },
+        { path: "src/gone.ts", kind: "delete" as const, diff: "bye\n" },
+    ];
+    const { runner } = fakeCodexRunner([
+        { type: "item.started", item: { id: "f1", type: "file_change", changes, status: "in_progress" } },
+        { type: "item.completed", item: { id: "f1", type: "file_change", changes, status: "completed" } },
+    ]);
+    const content: ToolCallContent[] = [
+        { type: "diff", path: "src/new.ts", newText: "export const ping = 1;\n" },
+        { type: "text", text: "src/app.ts\n@@ -1 +1 @@\n-old\n+new\n" },
+        { type: "diff", path: "src/gone.ts", oldText: "bye\n", newText: "" },
+    ];
+    expect(await collect(createTestAgent(runner), request)).toEqual([
+        {
+            kind: "tool_call",
+            id: "f1",
+            name: "Edit",
+            category: "edit",
+            status: "in_progress",
+            target: `add ${WORKSPACE_ROOT}/src/new.ts, update src/app.ts, delete src/gone.ts`,
+            locations: [{ path: "src/new.ts" }, { path: "src/app.ts" }, { path: "src/gone.ts" }],
+            content,
+        },
+        { kind: "tool_call_update", id: "f1", status: "completed", content },
+        { kind: "done" },
+    ]);
+});
+
+test("the thread's context fill becomes the context frame", async () => {
+    const { runner } = fakeCodexRunner([{ type: "context", tokens: 41_000, window: 272_000 }]);
+    expect(await collect(createTestAgent(runner), request)).toEqual([{ kind: "context_usage", tokens: 41_000, contextWindow: 272_000 }, { kind: "done" }]);
+});
+
+test("a turn Codex moved to another model names the model that served it, and says why", async () => {
+    const { runner } = fakeCodexRunner([{ type: "model.rerouted", from: "gpt-6-sol", to: "gpt-5.5", reason: "highRiskCyberActivity" }]);
+    expect(await collect(createTestAgent(runner), request)).toEqual([
+        { kind: "init", model: "gpt-5.5" },
+        { kind: "error", code: "codex-advisory", message: "Codex moved this turn from gpt-6-sol to gpt-5.5 because it read as high-risk security work." },
+        { kind: "done" },
+    ]);
+});
+
+test("a turn that asked for fast speed asks Codex for its fast tier; any other asks for none", async () => {
+    const { runner, calls } = fakeCodexRunner([]);
+    await collect(createTestAgent(runner), { ...request, spec: { ...request.spec, model: "gpt-5.5", fast: true } });
+    await collect(createTestAgent(runner), { ...request, spec: { ...request.spec, model: "gpt-5.5" } });
+    expect(calls[0]!.options.serviceTier).toBe("priority");
+    expect(calls[1]!.options).not.toHaveProperty("serviceTier");
+});
+
+test("the owner's instructions ride thread/start's own fields", async () => {
+    const { runner, calls } = fakeCodexRunner([]);
+    await collect(createTestAgent(runner), { ...request, spec: { ...request.spec, systemPrompt: "You write release notes.", systemAppend: "Be brief." } });
+    expect(calls[0]!.instructions).toEqual({ base: "You write release notes.", developer: "Be brief." });
+    expect(calls[0]!.config).not.toHaveProperty("developer_instructions");
+    expect(calls[0]!.config).not.toHaveProperty("model_instructions_file");
+});
+
+// With a model to name, the planning turn runs in Codex's own plan mode: no preamble, and the plan card shows the plan it
+// proposed rather than whatever message came last.
+test("a plan turn plans in Codex's own plan mode and executes back in its default mode", async () => {
+    const { runner, calls } = fakeCodexRunner(
+        [
+            { type: "thread.started", thread_id: "thr-n" },
+            { type: "item.completed", item: { id: "m1", type: "agent_message", text: "I read the router first." } },
+            { type: "item.completed", item: { id: "p1", type: "plan", text: "1. Add the route.\n2. Test it." } },
+            { type: "item.completed", item: { id: "m2", type: "agent_message", text: "Say the word." } },
+        ],
+        [{ type: "item.completed", item: { id: "m3", type: "agent_message", text: "Done." } }],
+    );
+    const events = await collect(
+        createTestAgent(runner),
+        { ...request, spec: { ...request.spec, model: "gpt-5.5" }, policy: { ...request.policy, permissionMode: "plan" as const } },
+        () => ({ approve: true }),
+    );
+    expect(events.filter(isKind("delta")).map((event) => event.text)).toEqual([
+        "I read the router first.",
+        "Say the word.",
+        "Done.",
+    ]);
+    expect(events.find((event) => event.kind === "plan")).toMatchObject({ text: "1. Add the route.\n2. Test it." });
+    expect(calls[0]!.prompt).toBe("add a /ping route");
+    expect(calls[0]!.options).toMatchObject({ sandboxMode: "read-only", collaborationMode: "plan" });
+    expect(calls[1]!.options).toMatchObject({ sandboxMode: "danger-full-access", collaborationMode: "default" });
+});
+
+describe("approvals by permission mode", () => {
+    type Answer = readonly [allow: boolean, remember: boolean | undefined];
+    const twoCommands = (answers: Answer[]): CodexRunner =>
+        async function* () {
+            yield { type: "command_approval.requested", command: "pnpm build", respond: (allow, remember) => answers.push([allow, remember]) };
+            yield { type: "command_approval.requested", command: "pnpm build", respond: (allow, remember) => answers.push([allow, remember]) };
+        };
+    const answering = async (runner: CodexRunner, turnRequest: AgentRequest<CodexCredential>, decision: "once" | "always" | "deny"): Promise<AgentEvent[]> => {
+        const events: AgentEvent[] = [];
+        for await (const event of createTestAgent(runner)(turnRequest)) {
+            events.push(event);
+            if (event.kind === "permission") {
+                setTimeout(() => cards.resolve({ kind: "permission", requestId: event.requestId, decision }), 0);
+            }
+        }
+        return events;
+    };
+    const manual = { ...request, policy: { ...request.policy, permissionMode: "default" as const }, hooks: { ...request.hooks, judge: judging("allow") } };
+
+    test("default mode puts each command the gate lets through to a person", async () => {
+        const answers: Answer[] = [];
+        const events = await answering(twoCommands(answers), manual, "once");
+        expect(events.filter((event) => event.kind === "permission")).toHaveLength(2);
+        expect(events.find((event) => event.kind === "permission")).toMatchObject({
+            toolName: "Bash",
+            program: { text: "pnpm build", language: "bash" },
+            alwaysLabel: "Don't ask again for Run command",
+        });
+        expect(answers).toEqual([
+            [true, false],
+            [true, false],
+        ]);
+    });
+
+    test("an always is remembered for the run and for Codex's thread", async () => {
+        const answers: Answer[] = [];
+        const events = await answering(twoCommands(answers), manual, "always");
+        expect(events.filter((event) => event.kind === "permission")).toHaveLength(1);
+        expect(answers).toEqual([
+            [true, true],
+            [true, true],
+        ]);
+    });
+
+    test("a no declines the command", async () => {
+        const answers: Answer[] = [];
+        await answering(twoCommands(answers), manual, "deny");
+        expect(answers[0]).toEqual([false, false]);
+    });
+
+    test("every other mode asks nobody", async () => {
+        const answers: Answer[] = [];
+        const events = await answering(twoCommands(answers), { ...manual, policy: { ...request.policy, permissionMode: "bypassPermissions" as const } }, "deny");
+        expect(events.some((event) => event.kind === "permission")).toBe(false);
+        expect(answers).toEqual([
+            [true, undefined],
+            [true, undefined],
+        ]);
+    });
+
+    test("a patch is put to the person by the files it touches", async () => {
+        const answers: Answer[] = [];
+        const runner: CodexRunner = async function* () {
+            yield { type: "item.started", item: { id: "f1", type: "file_change", changes: [{ path: "src/app.ts", kind: "update" }], status: "in_progress" } };
+            yield { type: "file_change_approval.requested", item_id: "f1", respond: (allow, remember) => answers.push([allow, remember]) };
+        };
+        const events = await answering(runner, manual, "once");
+        expect(events.find((event) => event.kind === "permission")).toMatchObject({ toolName: "Edit", title: "Apply this patch to src/app.ts?", path: "src/app.ts" });
+        expect(answers).toEqual([[true, false]]);
+    });
+
+    test("a planning phase declines a patch and keeps only the network half of a widening", async () => {
+        const patches: boolean[] = [];
+        const grants: string[] = [];
+        const { runner } = fakeCodexRunner(
+            [
+                { type: "file_change_approval.requested", item_id: "f1", respond: (allow) => patches.push(allow) },
+                { type: "permissions_approval.requested", writes: true, respond: (grant) => grants.push(grant) },
+                { type: "item.completed", item: { id: "m1", type: "agent_message", text: "Plan: build it." } },
+            ],
+            [{ type: "permissions_approval.requested", writes: true, respond: (grant) => grants.push(grant) }],
+        );
+        await collect(createTestAgent(runner), { ...request, policy: { ...request.policy, permissionMode: "plan" as const } }, () => ({ approve: true }));
+        expect(patches).toEqual([false]);
+        // Planning keeps the network; the approved execution runs as everything-allowed and takes the whole ask.
+        expect(grants).toEqual(["network", "all"]);
+    });
+});
+
+// Codex's question request carries up to three questions; they share one card, and a secret among them is refused
+// without reaching it.
+test("every question of a request rides one card, and each answer goes back under its own id", async () => {
+    const answered: Record<string, readonly string[]>[] = [];
+    const { runner } = fakeCodexRunner([
+        {
+            type: "user_input.requested",
+            questions: [
+                { id: "q1", header: "Auth", question: "Which sign-in?", options: [{ label: "Google", description: "SSO" }], secret: false },
+                { id: "q2", header: "Store", question: "Where do sessions live?", options: [], secret: false },
+                { id: "q3", header: "Key", question: "Paste the key", options: [], secret: true },
+            ],
+            respond: (answers) => answered.push(answers),
+        },
+    ]);
+    const events = await collect(createTestAgent(runner), request, undefined, () => ({
+        answers: { "Which sign-in?": ["Google"], "Where do sessions live?": ["Redis"] },
+    }));
+    expect(events.find(isKind("question"))?.questions).toHaveLength(2);
+    expect(answered[0]?.["q1"]).toEqual(["Google"]);
+    expect(answered[0]?.["q2"]).toEqual(["Redis"]);
+    expect(answered[0]?.["q3"]?.[0]).toContain("does not collect secrets");
+});
+
+// The turn's per-thread hooks on the door's gate (codex-hooks.ts): a request that mounted the gate carries the relay its
+// servers wait on and a `gate` mount among its remote servers.
+describe("hooks on the door's gate", () => {
+    const GATE_MOUNT = { name: "gate", url: "http://127.0.0.1:8787/mcp/gate", token: "t", timeoutMs: 86_400_000 };
+    const gatedRequest = (relay: TurnRelay, overrides: Partial<AgentRequest<CodexCredential>> = {}): AgentRequest<CodexCredential> => ({
+        ...request,
+        tools: { ...request.tools, remote: [GATE_MOUNT] },
+        hooks: { ...request.hooks, relay },
+        ...overrides,
+    });
+
+    test("every phase writes the hooks onto its thread, waits for the gate to connect, and drops the trust notice", async () => {
+        const relay = createTurnRelay();
+        const calls: CodexTurn[] = [];
+        let key: string | undefined;
+        const runner: CodexRunner = async function* (turn) {
+            calls.push(turn);
+            // The key the gate holds the hooks to while the run is attached.
+            key = relay.gateHooks()?.key;
+            yield { type: "thread.started", thread_id: "thr-h" };
+            yield { type: "warning", message: "`--dangerously-bypass-hook-trust` is enabled. Enabled hooks may run without review for this invocation." };
+            yield { type: "item.completed", item: { id: "m1", type: "agent_message", text: "done" } };
+        };
+        const events = await collect(createTestAgent(runner), gatedRequest(relay));
+
+        const config = calls[0]!.config ?? {};
+        expect(key).toEqual(expect.any(String));
+        expect(JSON.stringify(config["hooks.PreToolUse"])).toContain(`"key":"${key ?? ""}"`);
+        // Detached with the run: the gate refuses whatever comes after.
+        expect(relay.gateHooks()).toBeUndefined();
+        expect(config["bypass_hook_trust"]).toBe(true);
+        expect(JSON.stringify(config["hooks.PreToolUse"])).toContain('"server":"gate","tool":"pre_tool_use"');
+        expect(JSON.stringify(config["hooks.PostToolUse"])).toContain('"tool":"post_tool_use"');
+        expect(JSON.stringify(config["hooks.Stop"])).toContain('"tool":"stop"');
+        expect(config["mcp_servers.gate"]).toEqual({ url: GATE_MOUNT.url, http_headers: { Authorization: "Bearer t" }, tool_timeout_sec: 86_400 });
+        expect(calls[0]!.requiredMcp).toEqual(["gate"]);
+        expect(events.some((event) => event.kind === "error")).toBe(false);
+    });
+
+    test("a call that starts with no answer from the gate stops the turn, as does a PreToolUse hook that failed", async () => {
+        for (const stray of [
+            { type: "item.started", item: { id: "c9", type: "command_execution", command: "cat .env", aggregated_output: "", status: "in_progress" } },
+            { type: "hook.failed", event: "preToolUse", id: "c9", message: "MCP server 'gate' is not connected" },
+        ] satisfies CodexEvent[]) {
+            const relay = createTurnRelay();
+            let aborted = false;
+            const runner: CodexRunner = async function* (turn) {
+                yield { type: "thread.started", thread_id: "thr-h" };
+                yield stray;
+                aborted = turn.signal.aborted;
+                yield { type: "turn.failed", error: { message: "Codex turn was interrupted" } };
+            };
+            const events = await collect(createTestAgent(runner), gatedRequest(relay));
+            expect(aborted).toBe(true);
+            expect(events.filter((event) => event.kind === "error").map((event) => (event.kind === "error" ? event.message : ""))).toEqual([UNGATED_CALL]);
+        }
+    });
+
+    test("an approval for a call the gate allowed is not asked again; one the gate never answered is refused", async () => {
+        const relay = createTurnRelay();
+        const decisions: [string, boolean][] = [];
+        const runner: CodexRunner = async function* () {
+            yield { type: "thread.started", thread_id: "thr-h" };
+            const hooks = relay.gateHooks();
+            await hooks?.settle?.({ tool: "Bash", input: { command: "rm -rf build" }, id: "c1" }, { decision: "allow" }, false);
+            yield { type: "item.started", item: { id: "c1", type: "command_execution", command: "rm -rf build", aggregated_output: "", status: "in_progress" } };
+            yield { type: "command_approval.requested", command: "rm -rf build", item_id: "c1", respond: (allow) => decisions.push(["c1", allow]) };
+            yield { type: "command_approval.requested", command: "rm -rf dist", item_id: "c2", respond: (allow) => decisions.push(["c2", allow]) };
+            // A subagent's thread has no gate connected: its ask is judged as it always was.
+            yield { type: "command_approval.requested", command: "pnpm test", item_id: "s1", subagent: true, respond: (allow) => decisions.push(["s1", allow]) };
+            yield { type: "item.completed", item: { id: "m1", type: "agent_message", text: "done" } };
+        };
+        // A judge that refuses everything: the gate's earlier answer is what lets c1 through.
+        await collect(createTestAgent(runner), gatedRequest(relay, { hooks: { ...request.hooks, relay, judge: judging("refuse") } }));
+        expect(decisions).toEqual([
+            ["c1", true],
+            ["c2", false],
+            ["s1", true],
+        ]);
+    });
+
+    test("frames the door's tools push reach the running phase's inbox", async () => {
+        const relay = createTurnRelay();
+        const { runner, calls } = fakeCodexRunner([{ type: "thread.started", thread_id: "thr-h" }]);
+        await collect(createTestAgent(runner), gatedRequest(relay));
+        // Detached once the run ends: a push now is buffered by the relay, not delivered to a dead inbox.
+        relay.push({ kind: "terminal", session: "agent-x" });
+        expect(calls[0]!.frames?.take()).toEqual([]);
+    });
+
+    test("a turn held to a tool list does not run where no gate was mounted to hold it", async () => {
+        const { runner, calls } = fakeCodexRunner([]);
+        const events = await collect(createTestAgent(runner), { ...request, policy: { ...request.policy, allowedTools: ["Read"] } });
+        expect(calls).toHaveLength(0);
+        expect(events).toEqual([{ kind: "error", message: UNGATED_LIST }, { kind: "done" }]);
+    });
+
+    test("a tool list turns off what no hook sees and cuts each server to its listed tools", async () => {
+        const relay = createTurnRelay();
+        const { runner, calls } = fakeCodexRunner([]);
+        await collect(
+            createTestAgent(runner),
+            gatedRequest(relay, {
+                policy: { ...request.policy, allowedTools: ["Bash(git log:*)", "mcp__browser__browser_snapshot"] },
+                tools: { ...request.tools, remote: [GATE_MOUNT, { name: "browser", url: "http://127.0.0.1:8787/mcp/browser" }] },
+            }),
+        );
+        const config = calls[0]!.config ?? {};
+        expect(config["web_search"]).toBe("disabled");
+        expect(config["features.multi_agent"]).toBe(false);
+        expect(config["tools.experimental_request_user_input.enabled"]).toBe(false);
+        expect(config["features.shell_tool"]).toBeUndefined();
+        expect(config["mcp_servers.browser.enabled_tools"]).toEqual(["browser_snapshot"]);
+        expect(config["mcp_servers.gate.enabled_tools"]).toBeUndefined();
+    });
 });

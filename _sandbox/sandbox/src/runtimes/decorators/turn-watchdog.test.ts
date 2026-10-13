@@ -314,3 +314,20 @@ test("a pull on a held clock parks without expiring, and expires a whole window 
     await pulled;
     expect(answers).toEqual([EXPIRED]);
 });
+
+// What a vendor's announced wait has to fit inside: the cap alone, however far the silence window was moved.
+test("the cap's own remainder ignores the silence window, and a held clock has none to run out", () => {
+    jest.setSystemTime(START);
+    const clock = turnWatchdog({ inactivityMs: 100, maxTurnMs: 1_000 });
+    clock.extendPast(START + 5_000);
+
+    jest.setSystemTime(START + 400);
+    expect(clock.capRemaining()).toBe(600);
+
+    const release = clock.hold();
+    expect(clock.capRemaining()).toBe(Number.POSITIVE_INFINITY);
+    jest.setSystemTime(START + 900);
+    release();
+    // The time held moved the cap out by as much.
+    expect(clock.capRemaining()).toBe(600);
+});

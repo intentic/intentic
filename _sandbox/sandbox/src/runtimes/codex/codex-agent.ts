@@ -1,11 +1,12 @@
 import { sleep } from "@intentic/base/async";
 import { vendorShellEnv } from "../../agent/run/vendor-shell-env.js";
-import { type AgentEvent, type AgentReply, type AskQuestion, CODEX, type ToolCallContent, type ToolCallLocation } from "@intentic/sandbox-contract";
+import type { AgentEvent, AgentReply, AskQuestion, ToolCallContent, ToolCallLocation } from "@intentic/sandbox-contract";
 import { type SteeringChannel, steeringRelay } from "../../agent/checkpoints/agent-steering.js";
-import type { AgentRequest, CodexCredential, TurnTools } from "../../agent/providers/agent-request.js";
+import type { AgentRequest, CodexCredential, CodexHostedProvider, TurnTools } from "../../agent/providers/agent-request.js";
 import { splitAttachments, withFileNote } from "../../agent/prompt/attachment-note.js";
 import { opt } from "../../opt.js";
 import { type EmulatedPlan, EXECUTE_PROMPT, planMode } from "../decorators/plan-mode.js";
+import { POST_PLAN_MODE } from "../../agent/run/agent.js";
 import { isRateLimited, vendorFailureFrame, type VendorRule } from "../decorators/vendor-errors.js";
 import { isContextOverflowText } from "../../agent/providers/failure-sentences.js";
 import { transientUpstream } from "../../agent/providers/routed-refusal.js";
@@ -14,12 +15,15 @@ import { resultContent, workspacePath } from "../../agent/tools/tool-calls.js";
 import { openBrowserSession } from "../../browser/sessions/browser-sessions.js";
 import { workloadStamp } from "../../seams/workload-stamp.js";
 import { ROUTED_BROWSER_SERVER } from "../../browser/tools/browser-tools.js";
-import { type CommandGuard, vendorSubject } from "../../guard/command-guard.js";
+import type { CommandGuard } from "../../guard/command-guard.js";
 import { planPhaseOf, type TurnCapture } from "../decorators/vendor-events.js";
 import { vendorTurnGate } from "../decorators/vendor-gate.js";
 import { codexUsageFromRateLimits } from "../../usage/translator-usage.js";
 import {
     type CodexEvent,
+    type CodexFailureInfo,
+    type CodexFileChange,
+    type CodexFrameInbox,
     type CodexItem,
     type CodexQuestion,
     type CodexReasoningEffort,
@@ -32,15 +36,20 @@ import {
 } from "./codex-app-server.js";
 import { persistCodexImageArtifact } from "./codex-image-artifacts.js";
 import { aboutSubagent, codexSubagentFrames, codexSubagents, subagentSpend } from "./codex-subagent-frames.js";
-import { codexInstructionConfig } from "./codex-instructions.js";
+import { codexInstructions, PROJECT_DOC_CONFIG } from "./codex-instructions.js";
+import { answerCommand, answerFileChange, answerPermissions, codexPosture, type CodexPosture, type OwnerApprovals } from "./codex-approvals.js";
+import { codexAllowlistConfig, codexHooksConfig, type CodexHookSession, createCodexHookSession, HOOK_TRUST_WARNING } from "./codex-hooks.js";
+import { GATE_SERVER } from "../daemon-tools/policy-gate-server.js";
+import type { TurnTaint } from "../../guard/turn-taint.js";
+import { CODEX_FAST_TIER } from "./codex-model-list.js";
 import { CODEX_ADVISORY, CODEX_MODEL_INVALID, CODEX_MODEL_RESUMED_ELSEWHERE } from "./codex-models.js";
 import type { ParkedCards } from "../../conversations/actor/parked-cards.js";
 import { containerKeyEnv } from "../../seams/sealed-env.js";
 
 // Codex provider adapter: same seam as agent.ts's runAgent (AgentRequest in, AgentEvent frames out), backed by the
-// Codex CLI's app-server instead of the Claude Agent SDK. App-server publishes whole item completions plus lifecycle,
-// usage, image-generation and compaction events. Approval requests stay disabled: the container is the isolation
-// boundary, as with the Claude path's bypassPermissions.
+// Codex CLI's app-server instead of the Claude Agent SDK. App-server publishes item lifecycles with their live text
+// (prose, reasoning summaries, command output), patches with their diffs, usage and context fill, image-generation and
+// compaction events, and the approvals each turn's posture answers (codex-approvals.ts).
 
 // Codex names every rung of the shared scale, so a pick travels as picked; a level this build doesn't know is dropped
 // rather than guessed at, leaving the model's own default to answer.
@@ -71,7 +80,7 @@ const withRuntimeConfig = (
 
 // What every turn of one run shares: environment, provider block, and namespace. Only the prompt, sandbox mode and
 // session id differ between turns.
-type CodexTurnBase = Pick<CodexTurn, "env" | "modelProvider" | "config" | "namespace" | "spawnDepth">;
+type CodexTurnBase = Pick<CodexTurn, "env" | "modelProvider" | "config" | "namespace" | "spawnDepth" | "instructions">;
 
 // Projects the turn's MCP servers into Codex's per-thread config: every remote mount (the daemon's MCP door's browsers,
 // machines and extension tools, and the mcp-kind cards) as a Streamable HTTP server, the one list every runtime reads.
@@ -102,13 +111,41 @@ const translatorProvider = (baseUrl: string): Pick<CodexTurn, "modelProvider" | 
     },
 });
 
+// Another provider's route as its own provider block (codex-endpoint `hosted`): the same Responses wire and bearer seam as
+// the translator's, with what Codex can't know of a model outside OpenAI's catalog said per thread. Its window, where
+// the route's catalog publishes one (else Codex assumes 272k, and compacts by that); hosted web search and image
+// generation off, since only OpenAI serves those tools and every other provider refuses a request naming them. A custom
+// provider is never OpenAI's own, so Codex compacts a long thread locally rather than through OpenAI's endpoint.
+const hostedProvider = (baseUrl: string, hosted: CodexHostedProvider): Pick<CodexTurn, "modelProvider" | "config"> => ({
+    modelProvider: hosted.id,
+    config: {
+        [`model_providers.${hosted.id}`]: {
+            name: hosted.id,
+            base_url: `${baseUrl.replace(/\/$/, "")}${hosted.path}`,
+            wire_api: "responses",
+            env_key: "CODEX_API_KEY",
+            ...opt("http_headers", hosted.headers === undefined ? undefined : { ...hosted.headers }),
+            supports_websockets: false,
+        },
+        web_search: "disabled",
+        "features.image_generation": false,
+        ...opt("model_context_window", hosted.contextWindow),
+    },
+});
+
+// The provider block a turn on a URL the daemon names rides: the translator's for the ChatGPT plan, else the route's own.
+const endpointProvider = (credential: Extract<CodexCredential, { kind: "codex-endpoint" }>): Pick<CodexTurn, "modelProvider" | "config"> =>
+    credential.hosted === undefined ? translatorProvider(credential.baseUrl) : hostedProvider(credential.baseUrl, credential.hosted);
+
+const hostedTurn = (credential: CodexCredential): true | undefined => (credential.kind === "codex-endpoint" && credential.hosted !== undefined ? true : undefined);
+
 // Codex registers this tool whenever the config table is absent, so it's set explicitly every turn: on for every turn,
 // the adapter answering the resulting card. An unattended turn's question waits for the owner like any other card.
 const QUESTION_TOOL_CONFIG = { "tools.experimental_request_user_input.enabled": true } as const satisfies Readonly<Record<string, JsonValue>>;
 
-// Always single-pick: Codex has no multi-select flag, and free-text answers already cover `isOther`. A secret is never
-// put on a card, since a card's answers are recorded in the frame log and journal; the refusal points to the credential
-// already in the turn's environment instead.
+// Every question of a request rides one card. Always single-pick: Codex's request (0.162) carries no multi-select flag,
+// and the card's free-text answer already covers `isOther`. A secret is never put on a card, since a card's answers are
+// recorded in the frame log and journal; the refusal points to the credential already in the turn's environment instead.
 const askQuestion = (question: CodexQuestion): AskQuestion => ({
     question: question.question,
     header: question.header,
@@ -138,15 +175,19 @@ const codexAnswers = (questions: readonly CodexQuestion[], reply: Extract<AgentR
         }),
     );
 
-const threadOptions = (request: Pick<AgentRequest, "spec">, sandboxMode: CodexSandboxMode, gated: boolean): CodexThreadOptions => {
+const threadOptions = (request: Pick<AgentRequest, "spec">, phase: Pick<CodexPhase, "sandboxMode" | "collaborationMode">, gated: boolean): CodexThreadOptions => {
     const effort = request.spec.effort !== undefined ? reasoningEffort(request.spec.effort) : undefined;
     return {
         workingDirectory: request.spec.cwd,
-        sandboxMode,
-        // No approvals by default; `gated` flips it when the owner's rulebook has something it could refuse.
+        sandboxMode: phase.sandboxMode,
+        // `gated` is always true today (the command gate always enforces), so Codex asks about every command off its
+        // known-safe list and every patch; `never` remains for a gate that could refuse nothing.
         approvalPolicy: gated ? "untrusted" : "never",
         ...(request.spec.model !== undefined ? { model: request.spec.model } : {}),
         ...(effort !== undefined ? { modelReasoningEffort: effort } : {}),
+        // Only a turn that asked for it, and only where the route let it through (honoured.ts drops it otherwise).
+        ...opt("serviceTier", request.spec.fast === true ? CODEX_FAST_TIER : undefined),
+        ...opt("collaborationMode", phase.collaborationMode),
     };
 };
 
@@ -156,8 +197,10 @@ const mcpResultContent = (item: Extract<CodexItem, { type: "mcp_tool_call" }>, n
         ? resultContent(item.result?.content, context.cwd, context.browserOutputDir, item.status === "failed" ? undefined : { name, input: undefined })
         : [{ type: "text", text: item.error.message }];
 
-// Matches Codex's in-turn stream-retry notice; not a real failure, and no backoff instant is reported.
-const CODEX_STREAM_RETRY = /^Reconnecting\.\.\.\s*(\d+)\s*\/\s*(\d+)/;
+// Codex's in-turn retry notice when it counts ("Reconnecting... 2/5 (...)"); 0.162 also says "Reconnecting... waiting
+// for network", with no counters at all. Read only for its counters once willRetry has said the error is a retry: the
+// sentence decides nothing.
+const CODEX_RETRY_COUNTERS = /^Reconnecting\.\.\.\s*(\d+)\s*\/\s*(\d+)/;
 
 // Codex's heads-up after every auto-compaction. The context_compaction item already carries the lifecycle frame, so
 // repeating it here would show the reader two compaction notices for one compaction.
@@ -165,43 +208,89 @@ const CODEX_COMPACTED = /long threads and multiple compactions/i;
 
 // Codex messages this chat swallows on any channel: each reports something already framed elsewhere, so neither an
 // error nor a muted line may come of them.
-const codexDropped = (message: string): boolean => CODEX_COMPACTED.test(message) || CODEX_MODEL_RESUMED_ELSEWHERE.test(message);
-
-// Classifies a Codex error message that is not actually a failure; both of Codex's error channels run through here so a
-// notice reads the same either way. Undefined means a real failure.
-const codexNotice = (message: string): AgentEvent | undefined => {
-    const retry = CODEX_STREAM_RETRY.exec(message);
-    if (retry !== null) {
-        return { kind: "provider_retry", attempt: Number(retry[1]), maxAttempts: Number(retry[2]) };
-    }
-    // An advisory isn't a failure: the turn still answers normally, so it must not mark the phase errored.
-    return CODEX_ADVISORY.test(message) ? { kind: "error", code: "codex-advisory", message } : undefined;
-};
+// The hook-trust notice is about the daemon's own per-thread hooks (codex-hooks.ts), which nobody reading can act on.
+const codexDropped = (message: string): boolean =>
+    CODEX_COMPACTED.test(message) || CODEX_MODEL_RESUMED_ELSEWHERE.test(message) || HOOK_TRUST_WARNING.test(message);
 
 // Codex's warning channel, which by construction carries advisories rather than failures: whatever it says, the turn
 // runs on. So nothing here may redden the turn or offer to pick it back up; the worst case is a muted line. Undefined
 // drops the warning entirely.
-const codexWarning = (message: string): AgentEvent | undefined => {
-    if (codexDropped(message)) {
+const codexWarning = (message: string): AgentEvent | undefined => (codexDropped(message) ? undefined : { kind: "error", code: "codex-advisory", message });
+
+type ErrorFrame = Extract<AgentEvent, { kind: "error" }>;
+
+// The typed failures that are the provider's transport or capacity giving way: what the outage breaker counts and
+// auto-resume re-runs once the provider is back (stream-agent.ts).
+const OUTAGE_KINDS = new Set([
+    "httpConnectionFailed",
+    "responseStreamConnectionFailed",
+    "responseStreamDisconnected",
+    "responseTooManyFailedAttempts",
+    "serverOverloaded",
+    "internalServerError",
+]);
+const RATE_LIMIT_KINDS = new Set(["usageLimitExceeded", "rateLimitExceeded"]);
+const HTTP_TOO_MANY_REQUESTS = 429;
+const HTTP_SERVER_ERROR = 500;
+
+// How Codex's typed failure is coded, ahead of any sentence: a spent allowance or a 429 first, so the client shows a
+// muted reset countdown and holds the turn; a thread past the window, which the daemon re-runs in a fresh one; then a
+// transport or capacity failure, an outage only when no status says otherwise (a 4xx from a broken connection is a
+// refusal, not the provider being down). Undefined leaves the sentence rules to speak.
+const codexFailureCode = (info: CodexFailureInfo | undefined): ErrorFrame["code"] => {
+    if (info === undefined) {
         return undefined;
     }
-    // Shapes with a frame of their own (stream retry) keep it; the rest become the muted line.
-    return codexNotice(message) ?? { kind: "error", code: "codex-advisory", message };
+    if (RATE_LIMIT_KINDS.has(info.kind) || info.httpStatus === HTTP_TOO_MANY_REQUESTS) {
+        return "rate_limit";
+    }
+    if (info.kind === "contextWindowExceeded") {
+        return "context-overflow";
+    }
+    return OUTAGE_KINDS.has(info.kind) && (info.httpStatus === undefined || info.httpStatus >= HTTP_SERVER_ERROR) ? "provider-outage" : undefined;
 };
 
-// Codex's error channel, classified whole: the frames to emit, and whether the turn really died. A dropped message
-// yields nothing at all, and only a message that classifies as neither notice nor advisory counts as a failure.
-const codexError = (message: string): { frames: AgentEvent[]; errored: boolean } => {
-    if (codexDropped(message)) {
+// A failure as its frame, coded by type where Codex typed it.
+const failureFrame = (message: string, info: CodexFailureInfo | undefined): ErrorFrame => ({ kind: "error", message, ...opt("code", codexFailureCode(info)) });
+
+// Codex retrying inside the turn: the counters its sentence carries where it carries them, else this turn's own count.
+const retryFrame = (event: Extract<CodexEvent, { type: "error" }>, retries: { count: number }): AgentEvent => {
+    retries.count += 1;
+    const counters = CODEX_RETRY_COUNTERS.exec(event.message);
+    return {
+        kind: "provider_retry",
+        attempt: counters === null ? retries.count : Number(counters[1]),
+        ...opt("maxAttempts", counters === null ? undefined : Number(counters[2])),
+        ...opt("status", event.info?.httpStatus),
+    };
+};
+
+// Codex's error channel, classified whole: the frames to emit, and whether the turn really died. willRetry is Codex
+// saying it is retrying in the turn, a wait; a dropped message yields nothing at all; an advisory is a muted line. Only
+// what is none of those counts as a failure.
+interface CodexErrorReading {
+    readonly frames: AgentEvent[];
+    readonly errored: boolean;
+}
+
+// `hosted`: another provider's model, whose fallback-metadata advisory is expected and says nothing (CodexStreamContext).
+const codexError = (event: Extract<CodexEvent, { type: "error" }>, retries: { count: number }, hosted = false): CodexErrorReading => {
+    if (codexDropped(event.message) || (hosted && CODEX_ADVISORY.test(event.message))) {
         return { frames: [], errored: false };
     }
-    const notice = codexNotice(message);
-    return notice !== undefined ? { frames: [notice], errored: false } : { frames: [{ kind: "error", message }], errored: true };
+    if (event.willRetry === true) {
+        return { frames: [retryFrame(event, retries)], errored: false };
+    }
+    // An advisory isn't a failure: the turn still answers normally, so it must not mark the phase errored.
+    if (CODEX_ADVISORY.test(event.message)) {
+        return { frames: [{ kind: "error", code: "codex-advisory", message: event.message }], errored: false };
+    }
+    return { frames: [failureFrame(event.message, event.info)], errored: true };
 };
 
-// How Codex's failure sentences are coded, in this order: a spent allowance first, so the client shows a muted reset
-// countdown and holds the turn, then an unusable model, so it reloads the catalog and drops the bad pin, then a thread
-// past the model's window, which the daemon re-runs in a fresh one.
+// How Codex's failure sentences are coded when Codex gave no type, in this order: a spent allowance first, so the client
+// shows a muted reset countdown and holds the turn, then an unusable model, so it reloads the catalog and drops the bad
+// pin, then a thread past the model's window, which the daemon re-runs in a fresh one.
 const CODEX_FAILURES: readonly VendorRule[] = [
     [isRateLimited, "rate_limit"],
     [(message) => CODEX_MODEL_INVALID.test(message), "codex-model-invalid"],
@@ -217,8 +306,8 @@ const UPSTREAM_ATTEMPTS = UPSTREAM_WAITS_MS.length + 1;
 // earns a re-run: the proxy files its credential away for one of those and then refuses in the words of a plan that
 // excludes the model, so the sentence alone would end a turn the next call would serve. A spent allowance is ruled out
 // first, since it belongs in a countdown the user waits out, not in a ladder that spends attempts on the same refusal.
-const upstreamWaitMs = (attempt: number, message: string): number | undefined =>
-    !isRateLimited(message) && transientUpstream(message) ? UPSTREAM_WAITS_MS[attempt - 1] : undefined;
+const upstreamWaitMs = (attempt: number, event: ErrorFrame): number | undefined =>
+    event.code !== "rate_limit" && !isRateLimited(event.message) && transientUpstream(event.message) ? UPSTREAM_WAITS_MS[attempt - 1] : undefined;
 
 // Frames a turn emits before it does any work: its thread id, its skill list, its usage and limit snapshots. Anything
 // else means a re-run would repeat work the user has already seen.
@@ -248,7 +337,7 @@ const attemptOutcome = (surfaced: string | undefined, waitMs?: number): AttemptO
 
 // An advisory rides the same channel as a failure without being one: it must never count as the surfaced error, or the
 // real failure that follows arrives silent.
-const isCodexFailure = (event: AgentEvent): event is Extract<AgentEvent, { kind: "error" }> =>
+const isCodexFailure = (event: AgentEvent): event is ErrorFrame =>
     event.kind === "error" && event.code !== "codex-advisory";
 
 const thrownMessage = (error: unknown): string => (error instanceof Error ? error.message : "codex agent failed");
@@ -268,13 +357,15 @@ async function* consumeAttempt(
                 yield event;
                 continue;
             }
-            const waitMs = produced ? undefined : upstreamWaitMs(attempt, event.message);
+            // The ladder first: a turn the translator never got to the model is re-run whatever its type says.
+            const waitMs = produced ? undefined : upstreamWaitMs(attempt, event);
             if (waitMs !== undefined) {
                 return attemptOutcome(shown, waitMs);
             }
             if (shown === undefined) {
                 shown = event.message;
-                yield vendorFailureFrame(event, CODEX_FAILURES);
+                // A failure Codex typed is already coded; only an untyped one is read by its sentence.
+                yield event.code === undefined ? vendorFailureFrame(event, CODEX_FAILURES) : event;
             }
         }
     } catch (error) {
@@ -329,7 +420,8 @@ const attachBrowserSession = (
 };
 
 // Context one Codex turn's stream normalizes against: cwd, where generated images land, the question-card signal and
-// dismissal target. `holdMessages` is the plan phase's one behavioral difference.
+// dismissal target. `holdMessages` is the plan phase's one behavioral difference in what it shows; `posture` is how it
+// answers approvals.
 interface CodexStreamContext {
     readonly cwd: string;
     // Where a question card is parked, so the reply finds it.
@@ -343,6 +435,20 @@ interface CodexStreamContext {
     readonly browser?: CodexBrowserContext;
     // One gate for the whole turn, so an "always" from planning still holds while executing.
     readonly gate?: CommandGuard;
+    // How this phase answers Codex's approval requests, and the run's per-tool cards they may raise.
+    readonly posture: CodexPosture;
+    readonly owner: OwnerApprovals;
+    // The run's side of its per-thread hooks (codex-hooks.ts): what the gate answered each call. Absent where the turn
+    // has no gate mounted (a bench run, a test), which leaves the approval channel judging as it always did.
+    readonly hooks?: CodexHookSession;
+    // The turn's outside-content bit, marked by results no hook sees (Codex's hosted web search).
+    readonly taint?: TurnTaint;
+    // Stops the running phase: a call ran that the gate never answered.
+    readonly halt?: () => void;
+    // The turn runs another provider's model on its route (codex-endpoint `hosted`), whose window the route already
+    // gave Codex: Codex's every-turn notice that it fell back to default metadata for an id outside OpenAI's catalog
+    // tells the reader nothing, so it is dropped.
+    readonly hosted?: true;
 }
 
 // Same card, registry and dismissal the `ask` tool uses, so a question reads the same across runtimes. The stream parks
@@ -364,34 +470,83 @@ async function* codexQuestionCard(
     request.respond(codexAnswers(request.questions, reply));
 }
 
-// Same parking trick as codexQuestionCard: app-server is blocked on this request too. A refusal declines rather than
-// cancels, since Codex's `cancel` interrupts the whole turn, and a refused command should just make the agent try
-// something else.
-async function* codexCommandApproval(
-    request: Extract<CodexEvent, { type: "command_approval.requested" }>,
-    context: CodexStreamContext,
-): AsyncGenerator<AgentEvent> {
-    if (context.gate === undefined) {
-        request.respond(true);
-        return;
-    }
-    // Codex's reply has room for a yes or a no only, so an allowed install's note reaches the chat as its notice alone.
-    const outcome = yield* context.gate.consult(request.command, vendorSubject("Bash"), { cwd: request.cwd });
-    request.respond(outcome.allow);
-}
-
 type CodexItemEvent = Extract<CodexEvent, { type: "item.started" | "item.updated" | "item.completed" }>;
 type ItemOf<T extends CodexItem["type"]> = Extract<CodexItem, { type: T }>;
 
-// An agent message: whole blocks only (item.completed), text_end following at once, so later tool calls render under
-// this bubble. A plan phase holds messages one deep, flushing each the instant a newer one arrives, so only the last
-// stays held as the plan.
-function* messageFrames(event: CodexItemEvent, item: ItemOf<"agent_message">, context: CodexStreamContext, capture: TurnCapture): Generator<AgentEvent> {
+// What one stream has shown of the items still running, so each item's completion adds only what was not yet said.
+interface StreamState {
+    // Text each running message or reasoning item has streamed so far.
+    readonly streamed: Map<string, string>;
+    // The summary part each reasoning item streamed last, so a new part starts a new paragraph.
+    readonly parts: Map<string, number>;
+    // Each running command's output so far, and when it last went out.
+    readonly output: Map<string, { text: string; at: number }>;
+    // Each patch Codex opened, by item id: the files it touches, for its approval card.
+    readonly patches: Map<string, readonly CodexFileChange[]>;
+    // Retries Codex has reported in this turn, for a notice that carries no counters of its own.
+    readonly retries: { count: number };
+    // Whether a planning phase has proposed its plan, after which its messages are prose again.
+    planned: boolean;
+}
+
+const streamState = (): StreamState => ({ streamed: new Map(), parts: new Map(), output: new Map(), patches: new Map(), retries: { count: 0 }, planned: false });
+
+// What an item's whole text adds to what its deltas already showed. Should the two disagree, the deltas stand, since
+// the reader has them already and a second copy would read as the agent repeating itself.
+const unsaid = (state: StreamState, id: string, whole: string): string => {
+    const said = state.streamed.get(id);
+    state.streamed.delete(id);
+    state.parts.delete(id);
+    if (said === undefined) {
+        return whole;
+    }
+    return whole.startsWith(said) ? whole.slice(said.length) : "";
+};
+
+// How often a running command's output goes out, in ms: each frame carries the whole output so far (the update frame
+// replaces), so one per delta would send a long log once per line.
+const OUTPUT_EVERY_MS = 250;
+
+// Live text of a running item: a message's prose, a reasoning summary, a command's output. A planning phase holds its
+// prose back (it may be the plan), so only its reasoning and output stream.
+function* deltaFrames(event: Extract<CodexEvent, { type: "item.delta" }>, context: CodexStreamContext, state: StreamState): Generator<AgentEvent> {
+    if (event.channel === "output") {
+        const running = state.output.get(event.item_id) ?? { text: "", at: 0 };
+        running.text += event.text;
+        state.output.set(event.item_id, running);
+        const now = Date.now();
+        if (now - running.at >= OUTPUT_EVERY_MS) {
+            running.at = now;
+            yield { kind: "tool_call_update", id: event.item_id, content: [{ type: "text", text: running.text }] };
+        }
+        return;
+    }
+    if (event.channel === "message" && context.holdMessages === true && !state.planned) {
+        return;
+    }
+    const said = state.streamed.get(event.item_id) ?? "";
+    const part = state.parts.get(event.item_id);
+    const text = event.part !== undefined && part !== undefined && event.part !== part && said !== "" ? `\n${event.text}` : event.text;
+    if (event.part !== undefined) {
+        state.parts.set(event.item_id, event.part);
+    }
+    state.streamed.set(event.item_id, said + text);
+    yield event.channel === "message" ? { kind: "delta", text } : { kind: "thinking", text };
+}
+
+// An agent message: its deltas already streamed, so its completion adds what they missed, then text_end, so later tool
+// calls render under this bubble. A plan phase holds messages one deep, flushing each the instant a newer one arrives,
+// so only the last stays held as the plan, unless Codex proposed the plan as an item of its own, after which prose is
+// prose again.
+function* messageFrames(event: CodexItemEvent, item: ItemOf<"agent_message">, context: CodexStreamContext, capture: TurnCapture, state: StreamState): Generator<AgentEvent> {
     if (event.type !== "item.completed") {
         return;
     }
-    if (context.holdMessages !== true) {
-        yield { kind: "delta", text: item.text };
+    if (context.holdMessages !== true || state.planned) {
+        const rest = unsaid(state, item.id, item.text);
+        if (rest !== "") {
+            yield { kind: "delta", text: rest };
+        }
         yield { kind: "text_end" };
         return;
     }
@@ -402,43 +557,96 @@ function* messageFrames(event: CodexItemEvent, item: ItemOf<"agent_message">, co
     capture.planText = item.text;
 }
 
-// A command, its card opening as it starts and its output replacing as it runs (item.updated carries the full output
-// so far, matching the update frame's replace semantics).
-function* commandFrames(event: CodexItemEvent, item: ItemOf<"command_execution">): Generator<AgentEvent> {
-    if (event.type === "item.started") {
-        yield { kind: "tool_call", id: item.id, name: "Bash", category: "execute", status: "in_progress", target: item.command };
-        return;
-    }
-    const content: ToolCallContent[] = [{ type: "text", text: item.aggregated_output }];
-    if (event.type === "item.updated") {
-        yield { kind: "tool_call_update", id: item.id, content };
-        return;
-    }
-    const failed = item.status === "failed" || (item.exit_code !== undefined && item.exit_code !== 0);
-    yield { kind: "tool_call_update", id: item.id, status: failed ? "failed" : "completed", content };
-}
-
-// A patch, emitted once, success or failure; the item has paths but no diff text, so the card shows locations only.
-function* fileChangeFrames(event: CodexItemEvent, item: ItemOf<"file_change">, cwd: string): Generator<AgentEvent> {
+// The plan Codex's plan mode proposed: the plan card's text, whatever prose came around it. Outside a planning phase it
+// is just more of the answer.
+function* planFrames(event: CodexItemEvent, item: ItemOf<"plan">, context: CodexStreamContext, capture: TurnCapture, state: StreamState): Generator<AgentEvent> {
     if (event.type !== "item.completed") {
         return;
     }
+    if (context.holdMessages !== true) {
+        yield { kind: "delta", text: item.text };
+        yield { kind: "text_end" };
+        return;
+    }
+    // Whatever was held is the lead-in to the plan, not the plan.
+    if (capture.planText !== undefined && !state.planned) {
+        yield { kind: "delta", text: capture.planText };
+        yield { kind: "text_end" };
+    }
+    capture.planText = item.text;
+    state.planned = true;
+}
+
+// A command, its card opening as it starts; its output streams through deltaFrames and its completion settles it whole.
+function* commandFrames(event: CodexItemEvent, item: ItemOf<"command_execution">, state: StreamState, context: CodexStreamContext): Generator<AgentEvent> {
+    if (event.type === "item.started") {
+        // The command as the model wrote it, where the one Codex runs is the hooks' wrapper around it.
+        const said = context.hooks?.record(item.id)?.said ?? item.command;
+        yield { kind: "tool_call", id: item.id, name: "Bash", category: "execute", status: "in_progress", target: said };
+        return;
+    }
+    if (event.type !== "item.completed") {
+        return;
+    }
+    state.output.delete(item.id);
+    const failed = item.status === "failed" || (item.exit_code !== undefined && item.exit_code !== 0);
+    yield { kind: "tool_call_update", id: item.id, status: failed ? "failed" : "completed", content: [{ type: "text", text: item.aggregated_output }] };
+}
+
+// How much of one file's change a card carries; past it the card says it was clipped.
+const DIFF_CHARS = 32_000;
+
+// One file's change as card content, from the text app-server sends for it: an added file's content is the new side
+// whole, a deleted file's the old side whole, and an update's unified diff is shown as Codex rendered it, since
+// rebuilding both sides from hunks would claim a whole file it does not have.
+const changeContent = (change: CodexFileChange, cwd: string): ToolCallContent | undefined => {
+    if (change.diff === undefined || change.diff === "") {
+        return undefined;
+    }
+    const path = workspacePath(change.path, cwd);
+    const clipped = change.diff.length > DIFF_CHARS;
+    const text = change.diff.slice(0, DIFF_CHARS);
+    if (path !== undefined && change.kind === "add") {
+        return { type: "diff", path, newText: text, ...opt("truncated", clipped ? true : undefined) };
+    }
+    if (path !== undefined && change.kind === "delete") {
+        return { type: "diff", path, oldText: text, newText: "", ...opt("truncated", clipped ? true : undefined) };
+    }
+    return { type: "text", text: `${path ?? change.path}\n${text}${clipped ? "\n[… diff clipped …]" : ""}` };
+};
+
+const patchContent = (item: ItemOf<"file_change">, cwd: string): ToolCallContent[] =>
+    item.changes.map((change) => changeContent(change, cwd)).filter((content): content is ToolCallContent => content !== undefined);
+
+// A patch: its card opens as Codex proposes it (before any approval it waits on), carrying the files and each one's
+// change, and settles as it lands or fails. A patch only ever seen complete opens and settles in one frame.
+function* fileChangeFrames(event: CodexItemEvent, item: ItemOf<"file_change">, cwd: string, state: StreamState): Generator<AgentEvent> {
     const locations = item.changes
         .map((change) => workspacePath(change.path, cwd))
         .filter((path): path is string => path !== undefined)
         .map((path): ToolCallLocation => ({ path }));
-    const allDeletes = item.changes.length > 0 && item.changes.every((change) => change.kind === "delete");
-    const failed = item.status === "failed";
-    yield {
-        kind: "tool_call",
+    const diffs = patchContent(item, cwd);
+    const opening = {
+        kind: "tool_call" as const,
         id: item.id,
         name: "Edit",
-        category: allDeletes ? "delete" : "edit",
-        status: failed ? "failed" : "completed",
+        category: item.changes.length > 0 && item.changes.every((change) => change.kind === "delete") ? ("delete" as const) : ("edit" as const),
         target: item.changes.map((change) => `${change.kind} ${change.path}`).join(", "),
         ...opt("locations", locations.length > 0 ? locations : undefined),
-        ...opt("content", failed ? [{ type: "text" as const, text: "patch failed" }] : undefined),
     };
+    if (event.type === "item.started") {
+        state.patches.set(item.id, item.changes);
+        yield { ...opening, status: "in_progress", ...opt("content", diffs.length > 0 ? diffs : undefined) };
+        return;
+    }
+    if (event.type !== "item.completed") {
+        return;
+    }
+    const opened = state.patches.delete(item.id);
+    const failed = item.status === "failed";
+    const content = failed ? [{ type: "text" as const, text: "patch failed" }] : diffs;
+    const settled = { status: failed ? ("failed" as const) : ("completed" as const), ...opt("content", content.length > 0 ? content : undefined) };
+    yield opened ? { kind: "tool_call_update", id: item.id, ...settled } : { ...opening, ...settled };
 }
 
 function* mcpFrames(event: CodexItemEvent, item: ItemOf<"mcp_tool_call">, context: CodexStreamContext, capture: TurnCapture): Generator<AgentEvent> {
@@ -477,9 +685,14 @@ async function* imageFrames(event: CodexItemEvent, item: ItemOf<"image_generatio
     }
 }
 
-// Items that settle in one frame, emitted as they complete: reasoning, a web search, a compaction; a checklist on every
-// report of it.
-function* settledFrames(event: CodexItemEvent, item: ItemOf<"reasoning" | "web_search" | "todo_list" | "context_compaction">): Generator<AgentEvent> {
+// Items that settle in one frame, emitted as they complete: the rest of a reasoning summary, a web search, a compaction;
+// a checklist on every report of it.
+function* settledFrames(
+    event: CodexItemEvent,
+    item: ItemOf<"reasoning" | "web_search" | "todo_list" | "context_compaction">,
+    state: StreamState,
+    taint: TurnTaint | undefined,
+): Generator<AgentEvent> {
     if (item.type === "todo_list") {
         yield { kind: "todos", items: item.items.map((todo) => ({ content: todo.text, status: todo.completed ? ("completed" as const) : ("pending" as const) })) };
         return;
@@ -488,28 +701,37 @@ function* settledFrames(event: CodexItemEvent, item: ItemOf<"reasoning" | "web_s
         return;
     }
     if (item.type === "reasoning") {
-        yield { kind: "thinking", text: item.text };
+        const streamed = state.streamed.has(item.id);
+        const rest = unsaid(state, item.id, item.text);
+        if (!streamed || rest !== "") {
+            yield { kind: "thinking", text: rest };
+        }
     } else if (item.type === "web_search") {
+        // Hosted: no hook sees its results, so the item itself marks the turn as having read the outside.
+        taint?.mark("WebSearch");
         yield { kind: "tool_call", id: item.id, name: "WebSearch", category: "search", status: "completed", target: item.query };
     } else {
         yield { kind: "compact", trigger: "auto" };
     }
 }
 
-// One item of a thread, as frames: its prose, reasoning, commands, edits, tool calls, checklist, pictures and
+// One item of a thread, as frames: its prose, reasoning, commands, edits, tool calls, checklist, pictures, plan and
 // compactions. A subagent's items come through here too (codex-subagent-frames.ts), tagged with its spawn call after;
 // its multi-agent calls are that module's alone.
-async function* itemFrames(event: CodexItemEvent, context: CodexStreamContext, capture: TurnCapture): AsyncGenerator<AgentEvent> {
+async function* itemFrames(event: CodexItemEvent, context: CodexStreamContext, capture: TurnCapture, state: StreamState): AsyncGenerator<AgentEvent> {
     const item = event.item;
     switch (item.type) {
         case "agent_message":
-            yield* messageFrames(event, item, context, capture);
+            yield* messageFrames(event, item, context, capture, state);
+            return;
+        case "plan":
+            yield* planFrames(event, item, context, capture, state);
             return;
         case "command_execution":
-            yield* commandFrames(event, item);
+            yield* commandFrames(event, item, state, context);
             return;
         case "file_change":
-            yield* fileChangeFrames(event, item, context.cwd);
+            yield* fileChangeFrames(event, item, context.cwd, state);
             return;
         case "mcp_tool_call":
             yield* mcpFrames(event, item, context, capture);
@@ -520,77 +742,174 @@ async function* itemFrames(event: CodexItemEvent, context: CodexStreamContext, c
         case "collab_agent_tool_call":
             return;
         default:
-            yield* settledFrames(event, item);
+            yield* settledFrames(event, item, state, context.taint);
     }
 }
+
+type CodexSpend = ReturnType<typeof subagentSpend>;
+
+// What the turn's own thread spent and what its subagents' threads did since the last report: the account paid for
+// both, and a refused steer can start another turn whose subagent reports stay cumulative across it.
+const usageFrame = (usage: CodexUsageOf, delegated: CodexSpend, charged: CodexSpend): AgentEvent => ({
+    kind: "usage",
+    inputTokens: Math.max(0, usage.input_tokens - usage.cached_input_tokens - usage.cache_write_input_tokens) + delegated.input - charged.input,
+    outputTokens: usage.output_tokens + delegated.output - charged.output,
+    cacheReadTokens: usage.cached_input_tokens + delegated.cacheRead - charged.cacheRead,
+    cacheCreationTokens: usage.cache_write_input_tokens + delegated.cacheCreation - charged.cacheCreation,
+});
+type CodexUsageOf = NonNullable<Extract<CodexEvent, { type: "turn.completed" }>["usage"]>;
+
+// Why Codex moved a turn to another model, in a reader's words; a reason it adds later is shown as it names it.
+const REROUTE_REASONS = { highRiskCyberActivity: "it read as high-risk security work" } as const satisfies Readonly<Record<string, string>>;
+
+const isRerouteReason = (reason: string): reason is keyof typeof REROUTE_REASONS => Object.hasOwn(REROUTE_REASONS, reason);
+
+// Codex served the turn on another model: the init frame names the one that actually ran, and a muted line says so.
+const reroutedFrames = (event: Extract<CodexEvent, { type: "model.rerouted" }>): AgentEvent[] => {
+    const reason = isRerouteReason(event.reason) ? REROUTE_REASONS[event.reason] : event.reason;
+    return [
+        { kind: "init", model: event.to },
+        { kind: "error", code: "codex-advisory", message: `Codex moved this turn from ${event.from} to ${event.to}${reason === "" ? "" : ` because ${reason}`}.` },
+    ];
+};
+
+// An approval request, answered by this phase's posture; app-server stays parked until it is.
+async function* approvalFrames(
+    event: Extract<CodexEvent, { type: "command_approval.requested" | "file_change_approval.requested" | "permissions_approval.requested" }>,
+    context: CodexStreamContext,
+    state: StreamState,
+): AsyncGenerator<AgentEvent> {
+    const records = context.hooks?.record;
+    if (event.type === "command_approval.requested") {
+        yield* answerCommand(event, context.posture, context.gate, context.owner, records);
+    } else if (event.type === "file_change_approval.requested") {
+        yield* answerFileChange(event, context.posture, state.patches.get(event.item_id), context.owner, records);
+    } else {
+        yield* answerPermissions(event, context.posture, context.owner);
+    }
+}
+
+// Events that only report, settling nothing the turn holds: its skills, its context fill, a reroute, its headroom, a
+// warning. turn.started has no UI mapping and is dropped, like the Claude path's unmapped SDK messages.
+function* reportFrames(event: CodexEvent): Generator<AgentEvent> {
+    if (event.type === "commands") {
+        // Thread's skills for the `/` popover; republished every turn so an unused conversation still shows them.
+        yield { kind: "commands", items: event.skills.map((skill) => ({ name: skill.name, description: skill.description })) };
+    } else if (event.type === "context") {
+        yield { kind: "context_usage", tokens: event.tokens, contextWindow: event.window };
+    } else if (event.type === "model.rerouted") {
+        yield* reroutedFrames(event);
+    } else if (event.type === "rate_limits") {
+        // Headroom pushed as the turn spends it; a snapshot with no window yields no frame, not a false "no limits".
+        const usage = codexUsageFromRateLimits(event.snapshot);
+        if (usage !== undefined) {
+            yield { kind: "account_usage", windows: usage.windows };
+        }
+    } else if (event.type === "warning") {
+        // Never sets `errored`: a warned turn still answers, and a plan phase that holds its message must still hand
+        // it over.
+        const notice = codexWarning(event.message);
+        if (notice !== undefined) {
+            yield notice;
+        }
+    }
+}
+
+// The items a PreToolUse hook stands in front of: a call of one of these on the turn's own thread with no answer from the
+// gate ran past a hook that failed, or past hooks Codex never loaded.
+const HOOKED_ITEMS = new Set<CodexItem["type"]>(["command_execution", "file_change", "mcp_tool_call"]);
+
+export const UNGATED_CALL =
+    "A Codex tool call started without the sandbox's safety policy having answered for it (its hook did not reach the policy gate), so the turn was stopped there. Send the message again; if it keeps happening, the daemon's log says why.";
+
+// Whether this event shows the gate was bypassed: a failed PreToolUse hook of the turn's own, or an own call that started
+// with no answer recorded. A failed PostToolUse costs the turn its taint reading, so it marks the bit instead.
+const bypassed = (event: CodexEvent, context: CodexStreamContext): boolean => {
+    const hooks = context.hooks;
+    if (hooks === undefined) {
+        return false;
+    }
+    if (event.type === "hook.failed") {
+        if (event.event === "postToolUse") {
+            context.taint?.mark("a PostToolUse hook that failed");
+        }
+        return event.event === "preToolUse";
+    }
+    return event.type === "item.started" && event.parent === undefined && HOOKED_ITEMS.has(event.item.type) && hooks.record(event.item.id) === undefined;
+};
 
 // Normalizes one Codex turn onto AgentEvents and returns what it captured (read via `yield*` by the plan phase,
 // discarded by an ordinary turn). `holdMessages` holds agent messages one-deep, flushing each as the next arrives, so
 // whatever remains at the end is the plan text.
 async function* streamTurn(events: AsyncIterable<CodexEvent>, context: CodexStreamContext): AsyncGenerator<AgentEvent, TurnCapture> {
     const capture: TurnCapture = {};
+    const state = streamState();
     // The subagents this turn's multi-agent calls start; their items read as the turn's own do, under their spawn call.
     const subagents = codexSubagents();
     let charged = subagentSpend(subagents);
-    const subagentItems = (event: Extract<CodexEvent, { type: "item.started" | "item.updated" | "item.completed" }>): AsyncIterable<AgentEvent> =>
-        itemFrames(event, { ...context, holdMessages: false }, {});
+    const subagentItems = (event: CodexItemEvent): AsyncIterable<AgentEvent> => itemFrames(event, { ...context, holdMessages: false }, {}, state);
+    const spent = (usage: CodexUsageOf | undefined): AgentEvent[] => {
+        if (usage === undefined) {
+            return [];
+        }
+        const delegated = subagentSpend(subagents);
+        const frame = usageFrame(usage, delegated, charged);
+        charged = delegated;
+        return [frame];
+    };
     for await (const event of events) {
+        if (bypassed(event, context)) {
+            context.halt?.();
+            capture.errored = true;
+            yield { kind: "error", message: UNGATED_CALL };
+            continue;
+        }
         if (aboutSubagent(event)) {
             yield* codexSubagentFrames(event, subagents, subagentItems);
             continue;
         }
-        if (event.type === "thread.started") {
-            capture.sessionId = event.thread_id;
-            yield { kind: "session", sessionId: event.thread_id };
-        } else if (event.type === "item.started" || event.type === "item.updated" || event.type === "item.completed") {
-            yield* itemFrames(event, context, capture);
-        } else if (event.type === "commands") {
-            // Thread's skills for the `/` popover; republished every turn so an unused conversation still shows them.
-            yield { kind: "commands", items: event.skills.map((skill) => ({ name: skill.name, description: skill.description })) };
-        } else if (event.type === "user_input.requested") {
-            yield* codexQuestionCard(event, context);
-        } else if (event.type === "command_approval.requested") {
-            yield* codexCommandApproval(event, context);
-        } else if (event.type === "turn.completed") {
-            // What the turn's own thread spent and what its subagents' threads did: the account paid for both.
-            const delegated = subagentSpend(subagents);
-            if (event.usage !== undefined) {
-                yield {
-                    kind: "usage",
-                    inputTokens:
-                        Math.max(0, event.usage.input_tokens - event.usage.cached_input_tokens - event.usage.cache_write_input_tokens) +
-                        delegated.input -
-                        charged.input,
-                    outputTokens: event.usage.output_tokens + delegated.output - charged.output,
-                    cacheReadTokens: event.usage.cached_input_tokens + delegated.cacheRead - charged.cacheRead,
-                    cacheCreationTokens: event.usage.cache_write_input_tokens + delegated.cacheCreation - charged.cacheCreation,
-                };
-                // A refused steer can start another turn; subagent reports remain cumulative across it.
-                charged = delegated;
+        switch (event.type) {
+            case "frame":
+                yield event.frame;
+                break;
+            case "thread.started":
+                capture.sessionId = event.thread_id;
+                yield { kind: "session", sessionId: event.thread_id };
+                break;
+            case "item.started":
+            case "item.updated":
+            case "item.completed":
+                yield* itemFrames(event, context, capture, state);
+                break;
+            case "item.delta":
+                yield* deltaFrames(event, context, state);
+                break;
+            case "user_input.requested":
+                yield* codexQuestionCard(event, context);
+                break;
+            case "command_approval.requested":
+            case "file_change_approval.requested":
+            case "permissions_approval.requested":
+                yield* approvalFrames(event, context, state);
+                break;
+            case "turn.completed":
+                yield* spent(event.usage);
+                break;
+            case "turn.failed":
+                // A failed or interrupted turn still spent what it spent.
+                yield* spent(event.usage);
+                yield failureFrame(event.error.message, event.error.info);
+                capture.errored = true;
+                break;
+            case "error": {
+                const failure = codexError(event, state.retries, context.hosted === true);
+                yield* failure.frames;
+                capture.errored ||= failure.errored;
+                break;
             }
-        } else if (event.type === "rate_limits") {
-            // Headroom pushed as the turn spends it; a snapshot with no window yields no frame, not a false "no
-            // limits".
-            const usage = codexUsageFromRateLimits(event.snapshot);
-            if (usage !== undefined) {
-                yield { kind: "account_usage", windows: usage.windows };
-            }
-        } else if (event.type === "turn.failed") {
-            yield { kind: "error", message: event.error.message };
-            capture.errored = true;
-        } else if (event.type === "error") {
-            const failure = codexError(event.message);
-            yield* failure.frames;
-            capture.errored ||= failure.errored;
-        } else if (event.type === "warning") {
-            // Never sets `errored`: a warned turn still answers, and a plan phase that holds its message must still
-            // hand it over.
-            const notice = codexWarning(event.message);
-            if (notice !== undefined) {
-                yield notice;
-            }
+            default:
+                yield* reportFrames(event);
         }
-        // turn.started has no UI mapping and is dropped, like the Claude path's unmapped SDK messages.
     }
     return capture;
 }
@@ -598,23 +917,35 @@ async function* streamTurn(events: AsyncIterable<CodexEvent>, context: CodexStre
 // The request a Codex loop runs: the subscription through the translator, or the container's own OPENAI_API_KEY.
 type CodexRequest = AgentRequest<CodexCredential>;
 
-// One app-server run of a phase: its prompt and pictures, the thread it resumes, and the sandbox it runs in. It borrows
-// its own steering channel and closes it on end, so a pause between phases keeps queued messages.
+// One app-server run of a phase: its prompt and pictures, the thread it resumes, the sandbox it runs in, Codex's own
+// collaboration mode, and how it answers approvals. It borrows its own steering channel and closes it on end, so a pause
+// between phases keeps queued messages.
 interface CodexPhase {
     readonly prompt: string;
     readonly images: readonly string[];
     readonly sessionId: string | undefined;
     readonly sandboxMode: CodexSandboxMode;
     readonly holdMessages: boolean;
+    readonly collaborationMode?: "plan" | "default";
+    readonly posture: CodexPosture;
+}
+
+// What a run's phases share of its gate: the hook configuration each phase writes (no Stop hook while planning), the
+// inbox the door's frames arrive in, and the switch that stops a phase whose call ran past the gate.
+interface CodexPhaseGate {
+    readonly config: (planning: boolean) => Readonly<Record<string, JsonValue>>;
+    readonly frames: CodexFrameInbox;
+    readonly halted: AbortSignal;
 }
 
 const codexPhase = (
     request: CodexRequest,
     runner: CodexRunner,
     turnBase: CodexTurnBase,
-    context: Omit<CodexStreamContext, "holdMessages" | "browser">,
+    context: Omit<CodexStreamContext, "holdMessages" | "browser" | "posture">,
     browser: Omit<CodexBrowserContext, "sessionId"> | undefined,
     channel: (() => SteeringChannel) | undefined,
+    gated: CodexPhaseGate | undefined,
 ) =>
     async function* (phase: CodexPhase): AsyncGenerator<AgentEvent, TurnCapture> {
         const steering = channel?.();
@@ -625,6 +956,9 @@ const codexPhase = (
                     ...(phase.images.length > 0 ? { images: phase.images } : {}),
                     ...(phase.sessionId !== undefined ? { sessionId: phase.sessionId } : {}),
                     ...turnBase,
+                    ...(gated === undefined
+                        ? {}
+                        : { config: { ...turnBase.config, ...gated.config(phase.holdMessages) }, requiredMcp: [GATE_SERVER], frames: gated.frames }),
                     ...(steering !== undefined
                         ? {
                               steering: steering.steering,
@@ -638,12 +972,13 @@ const codexPhase = (
                               },
                           }
                         : {}),
-                    options: threadOptions(request, phase.sandboxMode, context.gate?.enforcing === true),
-                    signal: request.signal,
+                    options: threadOptions(request, phase, context.gate?.enforcing === true),
+                    signal: gated === undefined ? request.signal : AbortSignal.any([request.signal, gated.halted]),
                 }),
                 {
                     ...context,
                     holdMessages: phase.holdMessages,
+                    posture: phase.posture,
                     ...(browser === undefined
                         ? {}
                         : { browser: { ...browser, ...(phase.sessionId === undefined ? {} : { sessionId: phase.sessionId }) } }),
@@ -655,36 +990,131 @@ const codexPhase = (
         }
     };
 
-// Adds Codex's read-only planning truth to the shared plan-preamble wording.
+// The planning preamble for a turn Codex's own plan mode cannot take (no model to name in its settings): the shared
+// wording plus Codex's read-only truth.
 const CODEX_PLAN_PREAMBLE =
     "Before making any changes, propose a clear, concise plan for the request below and stop: do not execute it yet. " +
     "You are in a read-only sandbox for this turn; end your reply with the plan itself.\n\n";
 
-// Plan flow over the shared skeleton: a read-only planning turn whose trailing message becomes the plan, then a
-// full-access execution turn resumed on the same thread. Pictures ride only the first planning turn; later turns resume
-// the thread that already holds them.
+// Codex honours every permission mode itself (codex-approvals.ts) except the approval card between a plan and its
+// execution, which the shared plan loop owns: this is that loop's view of Codex, not its capability row.
+const PLAN_LOOP = { permissions: "plan" } as const;
+
+// Plan flow over the shared skeleton: a read-only planning turn in Codex's own plan mode, whose proposed plan becomes the
+// plan card, then a full-access execution turn back in its default mode, resumed on the same thread in the mode an
+// approved plan moves the conversation to. Without a model to name, plan mode cannot be set, so the planning turn falls
+// back to the preamble and its trailing message. Pictures ride only the first planning turn; later turns resume the
+// thread that already holds them.
 const codexPlan = (request: CodexRequest, phase: ReturnType<typeof codexPhase>): EmulatedPlan => {
     const { images: firstImages, others } = splitAttachments(request.spec.attachments);
+    const native = request.spec.model !== undefined && request.spec.model !== "";
     let images: readonly string[] = firstImages;
     return {
-        prompt: CODEX_PLAN_PREAMBLE + withFileNote(request.spec.prompt, others),
+        prompt: (native ? "" : CODEX_PLAN_PREAMBLE) + withFileNote(request.spec.prompt, others),
         async *plan(prompt, sessionId) {
-            const capture = yield* phase({ prompt, images, sessionId, sandboxMode: "read-only", holdMessages: true });
+            const capture = yield* phase({
+                prompt,
+                images,
+                sessionId,
+                sandboxMode: "read-only",
+                holdMessages: true,
+                ...opt("collaborationMode", native ? ("plan" as const) : undefined),
+                posture: "plan",
+            });
             images = [];
             return planPhaseOf(capture);
         },
-        execute: (sessionId) => phase({ prompt: EXECUTE_PROMPT, images, sessionId, sandboxMode: "danger-full-access", holdMessages: false }),
+        async *execute(sessionId) {
+            // Moves the mode as the Claude loop's approval does, so the composer's chip follows the turn out of planning.
+            yield { kind: "mode", mode: POST_PLAN_MODE };
+            return yield* phase({
+                prompt: EXECUTE_PROMPT,
+                images,
+                sessionId,
+                sandboxMode: "danger-full-access",
+                holdMessages: false,
+                ...opt("collaborationMode", native ? ("default" as const) : undefined),
+                posture: codexPosture(POST_PLAN_MODE, false),
+            });
+        },
     };
 };
+
+// Frames the door's daemon tools push while the turn runs, held until the running phase's app-server loop reads them.
+const frameInbox = (): CodexFrameInbox & { readonly push: (event: AgentEvent) => void } => {
+    const frames: AgentEvent[] = [];
+    let wake: (() => void) | undefined;
+    return {
+        push: (event) => {
+            frames.push(event);
+            wake?.();
+        },
+        take: () => frames.splice(0),
+        watch: (next) => {
+            wake = next;
+            return () => {
+                if (wake === next) {
+                    wake = undefined;
+                }
+            };
+        },
+    };
+};
+
+// The run's per-thread hooks and what its phases share of them, where the turn mounted the door's gate.
+interface CodexRunGate {
+    readonly session: CodexHookSession;
+    readonly phase: CodexPhaseGate;
+    readonly halt: () => void;
+    readonly close: () => Promise<void>;
+}
+
+// Attaches the loop to the door's daemon tools (turn-relay.ts): their frames into the stream, the command gate and taint
+// bit their consults read, and this run's side of the gate's hooks. No watchdog hold: a Codex turn has none, so a card
+// or a child's wait is bounded by the per-server tool timeout and the hook timeout instead (codex-hooks.ts).
+const codexRunGate = (request: CodexRequest, guard: { readonly gate: CommandGuard; readonly taint: TurnTaint }): CodexRunGate | undefined => {
+    const relay = request.hooks.relay;
+    const remote = request.tools.remote ?? [];
+    if (relay === undefined || !remote.some((tool) => tool.name === GATE_SERVER)) {
+        return undefined;
+    }
+    const inbox = frameInbox();
+    const session = createCodexHookSession({
+        cwd: request.spec.cwd,
+        isolation: request.spec.isolation,
+        conversationId: request.spec.conversationId,
+        tools: request.tools,
+        editReviewers: request.hooks.editReviewers,
+        push: inbox.push,
+    });
+    const detach = relay.attach({ push: inbox.push, guard, gateHooks: session.gateHooks });
+    const halted = new AbortController();
+    const allowlist = codexAllowlistConfig(
+        request.policy.allowedTools,
+        remote.map((tool) => tool.name),
+    );
+    return {
+        session,
+        phase: { config: (planning) => ({ ...allowlist, ...codexHooksConfig(session.key, planning) }), frames: inbox, halted: halted.signal },
+        halt: () => halted.abort(),
+        close: async () => {
+            detach();
+            await session.dispose();
+        },
+    };
+};
+
+// A turn held to a tool list with no gate to hold it there (a request built without the door's servers) does not run.
+export const UNGATED_LIST =
+    "This turn carries a tool list, and nothing could hold Codex to it here (the sandbox's policy gate was not mounted), so it was not run.";
 
 interface CodexAgentOptions {
     readonly codexHome: string;
     readonly runner?: CodexRunner;
 }
 
-// Codex provider for the Services seam: AgentRequest in, AgentEvent frames out. Browser MCP, steering, question cards
-// and the skill list all come from app-server; daemon-side SDK servers, plugins and server-initiated approvals stay
-// absent.
+// Codex provider for the Services seam: AgentRequest in, AgentEvent frames out. Browser MCP, steering, question cards,
+// approvals and the skill list all come from app-server; daemon-side SDK servers and plugins stay absent.
 export const createCodexAgent = (options: CodexAgentOptions) => {
     const runner = options.runner ?? createCodexAppServerRunner();
     return async function* runCodexAgent(request: CodexRequest): AsyncGenerator<AgentEvent> {
@@ -693,17 +1123,16 @@ export const createCodexAgent = (options: CodexAgentOptions) => {
         const inherited = codexEnv(activeCodexHome, request.tools.cliEnv, request.spec.conversationId);
         // Its shell's programs judged by the heavy table, as a Claude Code turn's are, installs in the install lane.
         const env = { ...inherited, ...(await vendorShellEnv(request.tools, inherited)) };
-        // Owner's system prompt and the daemon's additions, as the two config keys Codex reads them from. Merged under
-        // the translator provider block, not over, so a future key added to either side can't silently win.
-        const instructions = await codexInstructionConfig(request.spec, activeCodexHome);
-        const runtimeConfig = { ...instructions, ...QUESTION_TOOL_CONFIG, ...codexMcpConfig(request.tools) };
+        // The question tool, Codex's own AGENTS.md loader switched off, and the turn's MCP servers, merged under the
+        // translator provider block, not over, so a future key added to either side can't silently win.
+        const runtimeConfig = { ...QUESTION_TOOL_CONFIG, ...PROJECT_DOC_CONFIG, ...codexMcpConfig(request.tools) };
         const credential = request.credential;
         const anchor = request.spec.isolation?.anchor;
         const turnBase: CodexTurnBase = {
             ...(credential.kind === "codex-endpoint"
                 ? {
                       env: { ...env, CODEX_API_KEY: credential.authToken },
-                      ...withRuntimeConfig(translatorProvider(credential.baseUrl), runtimeConfig),
+                      ...withRuntimeConfig(endpointProvider(credential), runtimeConfig),
                   }
                 : // The container's own key, handed over by name: the daemon's environment no longer holds it (sealed-env.ts).
                   { env: { ...env, ...containerKeyEnv("codex") }, config: runtimeConfig }),
@@ -711,6 +1140,8 @@ export const createCodexAgent = (options: CodexAgentOptions) => {
             // cwd'd.
             ...(anchor === undefined ? {} : { namespace: { pid: anchor.pid, cwd: anchor.cwd, ...opt("namespace", anchor.namespace) } }),
             ...opt("spawnDepth", request.spec.spawnDepth),
+            // Owner's system prompt and the daemon's additions, as thread/start's own two fields.
+            instructions: codexInstructions(request.spec),
         };
         // request.spec.cwd is this conversation's own checkout; the shared root would misplace an isolated turn's image.
         const imageArtifacts = { workspaceRoot: request.spec.cwd, codexHome: activeCodexHome };
@@ -726,23 +1157,43 @@ export const createCodexAgent = (options: CodexAgentOptions) => {
         // This run's one consumer of the steering queue; absent for a bench or benchmark run with no queue.
         const channel = request.spec.steering === undefined ? undefined : steeringRelay(request.spec.steering);
         // One gate for the whole run, so an "always" from planning still holds while executing.
-        const { gate, release } = vendorTurnGate(request);
-        const context: Omit<CodexStreamContext, "holdMessages" | "browser"> = {
+        const { gate, taint, release } = vendorTurnGate(request);
+        const runGate = codexRunGate(request, { gate, taint });
+        if (runGate === undefined && request.policy.allowedTools !== undefined) {
+            release();
+            yield { kind: "error", message: UNGATED_LIST };
+            yield { kind: "done" };
+            return;
+        }
+        // The run's per-tool cards: one set of "don't ask again" answers for every phase of it.
+        const owner: OwnerApprovals = {
+            cards: request.hooks.cards,
+            ...opt("conversationId", request.spec.conversationId),
+            signal: request.signal,
+            ...opt("restoredGrant", request.hooks.restoredGrant),
+            always: new Set(),
+        };
+        const context: Omit<CodexStreamContext, "holdMessages" | "browser" | "posture"> = {
             cwd: request.spec.cwd,
             cards: request.hooks.cards,
             imageArtifacts,
             ...opt("browserOutputDir", request.tools.browserOutputDir),
             signal: request.signal,
             gate,
-            ...(request.spec.conversationId === undefined ? {} : { conversationId: request.spec.conversationId }),
+            owner,
+            taint,
+            ...opt("hooks", runGate?.session),
+            ...opt("halt", runGate?.halt),
+            ...opt("conversationId", request.spec.conversationId),
+            ...opt("hosted", hostedTurn(credential)),
         };
         const { images, others } = splitAttachments(request.spec.attachments);
-        const phase = codexPhase(request, runner, turnBase, context, browser, channel);
+        const phase = codexPhase(request, runner, turnBase, context, browser, channel, runGate?.phase);
         // One whole attempt at the turn: a retry runs a new app-server, and the steering channel each phase borrows dies
         // with the process it was borrowed for.
         const runAttempt = (): AsyncGenerator<AgentEvent> =>
             planMode(
-                CODEX,
+                PLAN_LOOP,
                 request,
                 () => codexPlan(request, phase),
                 () =>
@@ -752,6 +1203,7 @@ export const createCodexAgent = (options: CodexAgentOptions) => {
                         sessionId: request.spec.sessionId,
                         sandboxMode: "danger-full-access",
                         holdMessages: false,
+                        posture: codexPosture(request.policy.permissionMode, false),
                     }),
             );
         // The failure this run has already put in front of the user, carried across attempts: Codex reports one failure
@@ -776,6 +1228,7 @@ export const createCodexAgent = (options: CodexAgentOptions) => {
         } finally {
             // This turn's outside-content bit dies with it, so the next turn starts clean unless it takes something in
             // too, and a card an approval request left open (the app-server died, or moved on) is settled.
+            await runGate?.close();
             release();
         }
         yield { kind: "done" };

@@ -1,14 +1,9 @@
-import {
-    type AgentHarness,
-    type AgentProvider,
-    type ModelPin,
-    capabilitiesOf,
-    fastAllowed,
-} from "@intentic/sandbox-contract";
+import { type AgentHarness, type AgentProvider, type ModelPin, capabilitiesOf, fastAllowed, loopLabel } from "@intentic/sandbox-contract";
 import { computed, type Ref } from "vue";
 import { t } from "@intentic/ui/i18n";
 import { clampEffort, effortLabelOf, effortsFor } from "./effortScale";
 import { providerModels } from "../../accounts/providerCatalog";
+import { offeredLoops, selectedLoop } from "../offeredLoops";
 
 /* HOW THE MODEL ITSELF IS RUN — the tier it thinks at, whether it reasons first, whether the work is bought at the faster rate. */
 
@@ -84,6 +79,13 @@ export const honoredPinKnobs = (pin: ModelPin): ModelPin => {
 // One-line summary beside a pin row; omits knobs the run would not read. Effort is always named where the model takes
 // one: a pin storing none (a preset's, one written before pins carried knobs) runs at the model's own default, and a
 // row saying nothing about it read as "no effort" rather than "whatever the model defaults to".
+// A pin's loop, named only where it isn't the provider's default, as the composer pill names it.
+const pinLoopWord = (pin: ModelPin): readonly string[] => {
+    const offered = offeredLoops(pin.provider);
+    const loop = selectedLoop(offered, pin.harness ?? `native`);
+    return loop === offered[0] ? [] : [loopLabel(pin.provider, loop)];
+};
+
 export const pinKnobSummary = (pin: ModelPin): string | undefined => {
     const honored = honoredPinKnobs(pin);
     const takesEffort =
@@ -98,7 +100,7 @@ export const pinKnobSummary = (pin: ModelPin): string | undefined => {
                 ? []
                 : [honored.thinking ? t(`chat.pickerRunSettings.thinking`) : t(`chat.pickerRunSettings.noThinking`)]),
             ...(honored.fast === true ? [t(`chat.pickerRunSettings.fast`)] : []),
-            ...(honored.harness === `claude-code` ? [`Claude Code`] : []),
+            ...pinLoopWord(honored),
         ].join(` · `) || undefined
     );
 };

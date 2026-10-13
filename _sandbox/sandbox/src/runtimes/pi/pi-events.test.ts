@@ -182,3 +182,14 @@ test("compaction reports its trigger and token movement; user echoes and lifecyc
         expect(mapper.map({ type }), type).toEqual([]);
     }
 });
+
+// Pi's own client passes the provider's sentence on; the shared rules code it for auto-resume.
+test("a provider's spent allowance, as Pi reports it, is coded so the turn waits for the reset", () => {
+    const mapper = createPiEventMapper(WORKSPACE_ROOT);
+    expect(mapper.map({ type: "auto_retry_end", success: false, finalError: "429 rate_limit_error: Too many requests" })).toEqual([
+        { kind: "error", message: "429 rate_limit_error: Too many requests", code: "rate_limit" },
+    ]);
+    expect(
+        mapper.map({ type: "message_end", message: { role: "assistant", stopReason: "error", errorMessage: "prompt is too long: maximum context length is 200000 tokens" } }),
+    ).toEqual([expect.objectContaining({ kind: "error", code: "context-overflow" })]);
+});

@@ -106,6 +106,7 @@ describe("a finished turn", () => {
             model: "opus",
             modelRequested: "opus-4-6",
             harness: "native",
+            runtime: "claude-code",
             outcome: "ok",
             conversationId: "c-1",
             // The ids it is followed by elsewhere: the activity log's turn, the transcript's run, the provider's session.
@@ -149,6 +150,7 @@ describe("a finished turn", () => {
             provider: "claude",
             account: "acct",
             harness: "native",
+            runtime: "claude-code",
             outcome: "error",
             errorCode: "claude-not-entitled",
             errorMessage: `not enabled ${"y".repeat(388)}`,

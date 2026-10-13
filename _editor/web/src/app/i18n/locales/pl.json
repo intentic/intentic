@@ -3437,6 +3437,9 @@
             "cantHelpNow": "Teraz nie pomogę",
             "notAvailableHere": "Tutaj niedostępne",
             "whatIsntAvailableHere": "Co jest tu niedostępne",
+            "liftThroughLoop": "Uruchom przez {loop}, aby znieść te ograniczenia.",
+            "vendorTerms": "Warunki dostawcy",
+            "whatTheVendorAllows": "Na co pozwala dostawca",
             "agentNeedsHelp": "Agent potrzebuje Twojej pomocy:",
             "optionalNoteBackTo": "Opcjonalna notatka z powrotem do agenta",
             "doneHandBack": "Gotowe: oddaj"
@@ -3778,7 +3781,7 @@
                 "requirement": "Subskrypcja Muse Code",
                 "requirementNeeded": "subskrypcji Muse Code",
                 "requirementObject": "subskrypcję Muse Code",
-                "runs": "Muse Spark w Claude Code"
+                "runs": "Muse Spark w Muse Code"
             },
             "zai": {
                 "runs": "GLM w Claude Code"
@@ -4838,7 +4841,10 @@
             "underClaudeCode": "Grok w Claude Code",
             "verify": "Zweryfikuj",
             "verifyThisAccount": "Google chce, żeby właściciel potwierdził to konto, zanim znów przyjmie tury: naciśnij Zweryfikuj, zaloguj się jako {label}, a konto wróci do rotacji przy następnej próbie.",
-            "viaClaudeCode": "przez Claude Code"
+            "viaClaudeCode": "przez Claude Code",
+            "viaLoop": "przez {loop}",
+            "loopSignIn": "logowanie do {loop}",
+            "accountViaLoop": "konto {managedLabel} przez {loop}"
         },
         "arrivalPanel": {
             "alreadyHere": "już tutaj",
@@ -8407,7 +8413,6 @@
         "category": "Kategoria",
         "changes": "Zmiany",
         "chat": "Czat",
-        "claudeCode": "Claude Code",
         "connected": "Podłączone",
         "connections": "Twoje połączenia",
         "domain": "Domena",

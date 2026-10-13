@@ -981,6 +981,72 @@ test("agent.run sends a Grok turn an explicit live-valid model, replacing an inv
     expect(seen).toEqual(["grok-4.20-0309-reasoning", "grok-4.20-0309-reasoning", "grok-4.20-0309-reasoning"]);
 });
 
+// A provider hosted by another loop is planned from its route: Kimi on Codex rides its own provider block at the
+// translator's versioned root, and on OpenCode the shared server's entry for it, named by the credential.
+test("agent.run serves Kimi on Codex through its own provider block on the translator", async () => {
+    let seen: AgentRequest | undefined;
+    const client = clientFor(
+        createApp(
+            services({
+                config: withTranslator,
+                cliProxy: { accounts: async () => ({ codex: [], grok: [], kimi: [{ name: "kimi.json", label: "kimi" }], gemini: [] }) },
+                async *codexAgent(request) {
+                    seen = request;
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+    const { facts } = await runAgentTurn(client, { prompt: "hi", agent: "kimi", harness: "codex" });
+    expect(facts.some((fact) => fact.kind === "error")).toBe(false);
+    expect(seen?.spec.model).toBe("kimi-k3");
+    expect(seen?.credential).toEqual({
+        kind: "codex-endpoint",
+        baseUrl: "http://127.0.0.1:8788",
+        authToken: "local-bearer",
+        hosted: { id: "intentic-kimi", path: "/v1" },
+    });
+});
+
+test("agent.run serves Kimi on OpenCode on the shared server's entry for its route", async () => {
+    let seen: AgentRequest | undefined;
+    const client = clientFor(
+        createApp(
+            services({
+                config: withTranslator,
+                cliProxy: { accounts: async () => ({ codex: [], grok: [], kimi: [{ name: "kimi.json", label: "kimi" }], gemini: [] }) },
+                openCode: unstubbed<OpenCodeService>("openCode", { connected: async () => false, sessionExists: async () => true, shielded: async () => true }),
+                async *grokAgent(request) {
+                    seen = request;
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+    const { facts } = await runAgentTurn(client, { prompt: "hi", agent: "kimi", harness: "opencode" });
+    expect(facts.some((fact) => fact.kind === "error")).toBe(false);
+    expect(seen?.spec.model).toBe("kimi-k3");
+    expect(seen?.credential).toEqual({ kind: "opencode-route", providerID: "intentic-route-kimi" });
+});
+
+test("agent.run refuses Grok on Codex in words naming the translator sign-in it lacks, without starting Codex", async () => {
+    let started = false;
+    const client = clientFor(
+        createApp(
+            services({
+                config: withTranslator,
+                async *codexAgent() {
+                    started = true;
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+    const { facts } = await runAgentTurn(client, { prompt: "hi", agent: "grok", harness: "codex" });
+    expect(started).toBe(false);
+    expect(facts.some((fact) => fact.kind === "error" && fact.code === "subscription-required" && fact.message.includes("Grok on Codex"))).toBe(true);
+});
+
 test("agent.run merges internal (env) tools with the mcp-kind capabilities for the turn", async () => {
     let seen: AgentRequest | undefined;
     const client = clientFor(

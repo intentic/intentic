@@ -1,4 +1,4 @@
-import type { AgentCapabilities, AgentEvent, Capability, RoutedAgentTurn, SandboxSettings } from "@intentic/sandbox-contract";
+import type { AgentCapabilities, AgentEvent, AgentProvider, Capability, RoutedAgentTurn, SandboxSettings } from "@intentic/sandbox-contract";
 import type { TurnPersona } from "../../personas/personas.js";
 import type { SteeringQueue } from "../checkpoints/agent-steering.js";
 import type { TurnTrim } from "../prompt/window/context-trim.js";
@@ -123,6 +123,10 @@ export interface AgentAdapter<R extends AgentCapabilities["runtime"], D> {
     readonly preflight: (deps: D, input: RoutedAgentTurn, context: TurnContext, granted: readonly Capability[]) => Promise<TurnArmPlan>;
     // Cheap and cached; never on the turn's path.
     readonly health: (deps: D) => Promise<AdapterHealth>;
+    // The same answer for one provider this runtime serves, where providers on it can differ (a loop hosting other
+    // providers' routes): filed under pairHealthKey(runtime, provider) beside `health`. Absent, `health` speaks for every
+    // provider the runtime serves.
+    readonly hostHealth?: (deps: D, provider: AgentProvider) => Promise<AdapterHealth>;
     // Whether this runtime still holds `sessionId` in the admitted execution view, from the store rather than the id's
     // existence. Process-capable probes must enter that view or refuse; a string cwd is not execution authority.
     readonly holdsSession: (deps: D, sessionId: string, execution: AgentExecutionContext) => Promise<boolean>;

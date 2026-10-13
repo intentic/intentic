@@ -21,9 +21,9 @@ settings.json):
   and browser tools, the field notes and the note naming the persona a turn acts as. The owner's `AGENTS.md`
   still rides with it.
 
-Runtimes take it differently: Claude Code and Codex replace their base prompt with it; OpenCode and Cursor can only
-add, so it is appended to theirs; Pi and ACP have no system prompt seam, so a custom prompt is not applied there,
-and the persona note and `AGENTS.md` go with the message instead.
+Runtimes take it differently: Claude Code, Codex and OpenCode (Grok, Gemini) replace their base prompt with it;
+Cursor can only add, so it is appended to its own; Pi and ACP have no system prompt seam, so a custom prompt is not
+applied there, and the persona note and `AGENTS.md` go with the message instead.
 
 **A persona's own prompt**: `.intentic/config/personas/<id>/PROMPT.md`, used when the persona's **What it is told**
 is **Its own** (`systemPromptMode: "custom"` on its card). It replaces the sandbox's prompt on that persona's turns,

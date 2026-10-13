@@ -10,6 +10,7 @@ import { type GeminiAdapterDeps, geminiProvider } from "./gemini/gemini-provider
 import { grokProvider, type GrokProviderDeps } from "./grok/grok-provider.js";
 import { kimiProvider, type KimiProviderDeps } from "./kimi/kimi-provider.js";
 import { MINTED_PROVIDER_MODULES, type MintedProviderDeps } from "./minted/minted-provider.js";
+import { MUSE_ADAPTER, type MuseAdapterDeps } from "./muse/muse-adapter.js";
 import { PI_ADAPTER, type PiAdapterDeps } from "./pi/pi-adapter.js";
 
 // Every native provider's module and every runtime's adapter, as the two tables composition wires into Services. The one
@@ -45,13 +46,15 @@ if (new Set(ids).size !== ids.length || NATIVE_PROVIDERS.some((provider) => !ids
     throw new Error(`provider registry drift: modules [${ids.join(", ")}] must be exactly the native providers [${NATIVE_PROVIDERS.join(", ")}]`);
 }
 
-// Everything any adapter reads: the provider modules' deps plus the two installed-capability runtimes'.
-export type RuntimeDeps = ProviderDeps & AcpAdapterDeps & PiAdapterDeps;
+// Everything any adapter reads: the provider modules' deps plus the runtimes no one provider owns (the two
+// installed-capability runtimes, and Muse Code, which serves Meta and any endpoint).
+export type RuntimeDeps = ProviderDeps & AcpAdapterDeps & PiAdapterDeps & MuseAdapterDeps;
 
 type RuntimeAdapter = AgentAdapter<AgentCapabilities["runtime"], RuntimeDeps>;
 
 // Runtime → adapter dispatch, keyed by runtime rather than provider, since that is what serves a turn: capabilitiesOf
-// resolves which runtime a (provider, harness) pair uses. ACP and Pi serve installed capabilities, not native providers.
+// resolves which runtime a (provider, harness) pair uses. ACP and Pi serve installed capabilities, not native providers;
+// Muse serves Meta's minted key and any configured endpoint, so it belongs to no one provider module either.
 export interface RuntimeAdapters {
     // Total by construction: `runtime` is a closed union, and runtime-table.test.ts walks every pair and demands one.
     readonly for: (provider: AgentProvider, harness: AgentHarness) => RuntimeAdapter;
@@ -59,7 +62,7 @@ export interface RuntimeAdapters {
     readonly all: readonly RuntimeAdapter[];
 }
 
-const ADAPTERS: readonly RuntimeAdapter[] = [...PROVIDER_MODULES.flatMap((module) => module.adapters), ACP_ADAPTER, PI_ADAPTER];
+const ADAPTERS: readonly RuntimeAdapter[] = [...PROVIDER_MODULES.flatMap((module) => module.adapters), ACP_ADAPTER, PI_ADAPTER, MUSE_ADAPTER];
 const BY_RUNTIME = new Map(ADAPTERS.map((adapter) => [adapter.runtime, adapter]));
 
 export const RUNTIME_ADAPTERS: RuntimeAdapters = {

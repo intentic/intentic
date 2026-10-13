@@ -29,7 +29,19 @@ export interface EnginePaths {
 export type EngineSource =
     | { readonly kind: "npm"; readonly package: string }
     // Translator only: a GitHub release asset instead of npm; same store and channels, different fetch.
-    | { readonly kind: "github-release"; readonly repo: string; readonly asset: (version: string) => string; readonly binary: string };
+    | { readonly kind: "github-release"; readonly repo: string; readonly asset: (version: string) => string; readonly binary: string }
+    // A vendor that publishes neither (xAI's Grok Build): its newest version is the text a channel URL answers, and each
+    // version is one gzipped binary at a URL of its own.
+    | { readonly kind: "download"; readonly channel: string; readonly artifact: (version: string) => string; readonly binary: string }
+    // Muse Code only: Meta publishes the program on its own download host, one native binary per platform listed with its
+    // sha256 in a per-version manifest, and names the newest version on a release channel. npm carries only its SDK.
+    | {
+          readonly kind: "meta-release";
+          readonly channelUrl: string;
+          readonly manifestUrl: (version: string) => string;
+          readonly platform: string;
+          readonly binary: string;
+      };
 
 export interface EngineDescriptor {
     readonly id: EngineId;
@@ -262,6 +274,34 @@ const devinDescriptor: EngineDescriptor = {
     },
 };
 
+// Meta's download host and release channel for Muse Code, as its own installer (dev.meta.ai/install.sh and the launcher
+// it fetches) reads them: the channel names the newest version, a manifest per version names each platform's binary.
+const MUSE_DOWNLOAD = "https://lookaside.facebook.com/lookaside/muse/download/";
+export const MUSE_CHANNEL_URL = "https://api.meta.ai/muse-code/channels/muse-stable";
+export const museManifestUrl = (version: string): string =>
+    `${MUSE_DOWNLOAD}?channel=muse&version=${encodeURIComponent(version)}&file=manifest.json`;
+
+// The manifest's own key for a platform (`x86_linux`, `aarch64_macos`, …), in Meta's vocabulary rather than Node's.
+export const musePlatform = (os: string = platform(), cpu: string = arch()): string => {
+    const machine = cpu === "x64" ? "x86" : cpu === "arm64" ? "aarch64" : cpu;
+    const system = os === "darwin" ? "macos" : os === "win32" ? "windows" : os;
+    return `${machine}_${system}`;
+};
+
+const museDescriptor: EngineDescriptor = {
+    id: "muse",
+    label: "Muse Code",
+    source: { kind: "meta-release", channelUrl: MUSE_CHANNEL_URL, manifestUrl: museManifestUrl, platform: musePlatform(), binary: "muse" },
+    command: "muse",
+    paths: async (prefix) => ({ binPath: join(prefix, "muse") }),
+    // The pack's pin, which only an owner's own overlay bakes; never a published image (image-packs/muse.Dockerfile).
+    baked: () => packPin("muse", /\bversion=([0-9][^;\s]*);/g),
+    verify: async (prefix) => {
+        const { binPath } = await museDescriptor.paths(prefix);
+        return binPath === undefined || !(await pathExists(binPath)) ? "the download has no Muse Code binary for this machine" : answersVersion(binPath);
+    },
+};
+
 const OPENCODE_PACKAGE = "@opencode/cli";
 // The OpenCode major the runtime in runtimes/opencode speaks. V2 changed the server API, its events, its config and its
 // credential store; a 1.x copy left on the volume by an older daemon is ignored rather than spawned under a V2 client.
@@ -321,11 +361,56 @@ const translatorDescriptor: EngineDescriptor = {
     },
 };
 
+const KIMI_PACKAGE = "@moonshot-ai/kimi-code";
+
+const kimiDescriptor: EngineDescriptor = {
+    id: "kimi",
+    label: "Kimi Code CLI",
+    source: { kind: "npm", package: KIMI_PACKAGE },
+    command: "kimi",
+    // npm's link to the package's own bin, a Node script this machine's Node runs (it asks for 22.19 or newer).
+    paths: async (prefix) => ({ binPath: join(prefix, "node_modules", ".bin", "kimi") }),
+    // The pack's pin, which only an owner's own overlay bakes (image-packs/kimi.Dockerfile).
+    baked: () => packPin("kimi", /@moonshot-ai\/kimi-code@(\S+)/g),
+    verify: async (prefix) => {
+        const { binPath } = await kimiDescriptor.paths(prefix);
+        return binPath === undefined || !(await pathExists(binPath)) ? "the downloaded package has no kimi command" : answersVersion(binPath);
+    },
+};
+
+// xAI's own words for the two architectures it builds, which are the kernel's (`uname -m`), not Node's.
+export const grokArch = (nodeArch: string = arch()): string => (nodeArch === "arm64" ? "aarch64" : nodeArch === "x64" ? "x86_64" : nodeArch);
+
+// Where xAI's installer (https://x.ai/cli/install.sh) reads the stable channel's version and each build; the same two
+// addresses, so this daemon fetches exactly what the installer would.
+const GROK_CDN = "https://x.ai/cli";
+
+const grokBuildDescriptor: EngineDescriptor = {
+    id: "grok-build",
+    label: "Grok Build",
+    source: {
+        kind: "download",
+        channel: `${GROK_CDN}/stable`,
+        artifact: (version) => `${GROK_CDN}/grok-${version}-linux-${grokArch()}.gz`,
+        binary: "grok",
+    },
+    command: "grok",
+    paths: async (prefix) => ({ binPath: join(prefix, "grok") }),
+    baked: () => packPin("grok-build", /version=(\S+)/g),
+    verify: async (prefix) => {
+        const { binPath } = await grokBuildDescriptor.paths(prefix);
+        return binPath === undefined || !(await pathExists(binPath)) ? "the download has no grok binary" : answersVersion(binPath);
+    },
+};
+
 export const ENGINE_DESCRIPTORS: readonly EngineDescriptor[] = [
     claudeDescriptor,
     codexDescriptor,
     cursorDescriptor,
     devinDescriptor,
+    grokBuildDescriptor,
+    kimiDescriptor,
+    museDescriptor,
     opencodeDescriptor,
     translatorDescriptor,
 ];

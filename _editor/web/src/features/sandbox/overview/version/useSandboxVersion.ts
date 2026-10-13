@@ -8,6 +8,7 @@ import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
 import { useEnvironment } from "../../environment/useEnvironment";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { t } from "@intentic/ui/i18n";
+import { type AgentCapabilities, type AgentProvider, pairHealthKey } from "@intentic/sandbox-contract";
 
 // Sandbox daemon's self-report (`system.info`): running `version`, and once checked, `latest` and `updateAvailable`. One shared
 // query feeds both the hub card and the chip's attention list. The update itself runs on the host (HostRecreate), never
@@ -53,6 +54,13 @@ export function useSandboxVersion(poll?: Ref<number | false>) {
         const health = info.value?.runtimes?.[runtime];
         return health?.state === `unavailable` ? (health.detail ?? t(`sandbox.useSandboxVersion.runtimeCantServeTurn`)) : undefined;
     };
+    // The same for one provider on one runtime, where the daemon answers per pair (a loop hosting other providers'
+    // routes: Codex ready on ChatGPT says nothing of Grok on Codex). A daemon older than the pair keys answers per
+    // runtime alone, which is then the best word there is.
+    const pairIssue = (runtime: AgentCapabilities[`runtime`], provider: AgentProvider): string | undefined => {
+        const key = pairHealthKey(runtime, provider);
+        return info.value?.runtimes?.[key] === undefined ? runtimeIssue(runtime) : runtimeIssue(key);
+    };
 
     // Container name a recreate would target, from /environment; HostRecreate turns it into a button or command. A name
     // that is not a sandbox container's gives no slug, rather than the whole name aimed at as if it were one.
@@ -79,6 +87,7 @@ export function useSandboxVersion(poll?: Ref<number | false>) {
         stagedPlan,
         preparing,
         runtimeIssue,
+        pairIssue,
         serverManaged,
         slug,
         skipServed,

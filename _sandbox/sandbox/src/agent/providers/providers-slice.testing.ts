@@ -75,6 +75,8 @@ const idleOpenCode = () =>
         mount: async () => async () => {},
         judges: { register: () => {}, release: () => {} },
         shielded: async () => true,
+        // No server runs, so no model declares a tier to name.
+        variant: () => undefined,
     }) satisfies ProvidersSlice["openCode"];
 
 export const providersSliceFake = (context: SliceFakeContext, { usage, cliProxy }: ProvidersFakeOverrides) =>

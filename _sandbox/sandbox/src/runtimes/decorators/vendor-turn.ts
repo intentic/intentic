@@ -2,6 +2,7 @@ import type { AgentCapabilities, AgentEvent } from "@intentic/sandbox-contract";
 import type { AgentRequest } from "../../agent/providers/agent-request.js";
 import { withFileNote } from "../../agent/prompt/attachment-note.js";
 import type { CommandGuard } from "../../guard/command-guard.js";
+import type { TurnTaint } from "../../guard/turn-taint.js";
 import { type AttachedImage, loadAttachments } from "../../agent/prompt/attachment-images.js";
 import { EXECUTE_PROMPT, PLAN_PREAMBLE, type PlanPhaseResult, planMode } from "./plan-mode.js";
 import { vendorTurnGate } from "./vendor-gate.js";
@@ -11,8 +12,9 @@ export interface VendorTurn<S> {
     // A throw ends the turn with its message, or `unopened` when it carries none.
     readonly open: () => Promise<S> | S;
     readonly unopened: string;
-    // The turn itself, under the one rulebook gate minted for it.
-    readonly serve: (handle: S, gate: CommandGuard) => AsyncGenerator<AgentEvent>;
+    // The turn itself, under the one rulebook gate minted for it, and the taint bit that gate reads: what the loop hands
+    // the daemon's own tools (turn-relay.ts) so a result that brought the outside in marks the turn.
+    readonly serve: (handle: S, gate: CommandGuard, taint: TurnTaint) => AsyncGenerator<AgentEvent>;
     // A throw from `serve` as the sentence its error frame carries; a throwing turn surfaces, never swallows.
     readonly failure: (error: unknown, handle: S) => string;
     // Runs once the turn is over, before its gate is released.
@@ -33,9 +35,9 @@ export async function* vendorTurn<S>(
         return;
     }
     // Released as the turn ends, which settles any card its asks left open.
-    const { gate, release } = vendorTurnGate(request);
+    const { gate, taint, release } = vendorTurnGate(request);
     try {
-        yield* turn.serve(handle, gate);
+        yield* turn.serve(handle, gate, taint);
     } catch (error) {
         yield { kind: "error", message: turn.failure(error, handle) };
     } finally {

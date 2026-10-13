@@ -54,6 +54,7 @@ import { redeemCodes } from "./peers/redeem-codes.js";
 import type { Config } from "./env.config.js";
 import { keepCodeCounts } from "./git/changes/code-counts.js";
 import { createOpenCodeService } from "./runtimes/opencode/opencode.js";
+import { openCodeRouteEntries } from "./runtimes/opencode/hosted/opencode-routes.js";
 import { createOpenCodeAgent, createOpenCodeRunner } from "./runtimes/opencode/opencode-agent.js";
 import { type ClaudeSlice, createClaudeSlice } from "./runtimes/claude/claude-provider.js";
 import { type CodexSlice, createCodexSlice } from "./runtimes/codex/codex-provider.js";
@@ -64,6 +65,8 @@ import { createGeminiSlice, type GeminiSlice } from "./runtimes/gemini/gemini-pr
 import type { GrokSlice } from "./runtimes/grok/grok-provider.js";
 import { createMintedSlice, type MintedSlice } from "./runtimes/minted/minted-provider.js";
 import { createKimiSlice, type KimiSlice } from "./runtimes/kimi/kimi-provider.js";
+import { GROK_BUILD } from "./runtimes/grok-build/grok-build-cli.js";
+import { createCliParts } from "./runtimes/vendor-cli/vendor-cli-slice.js";
 import { createWorkspaceHistory, type WorkspaceHistory } from "./history/history.js";
 import { type IntenticRun, runIntentic } from "./intentic/intentic-runner.js";
 import { createPanelUpstreamResolver, type PanelUpstreamResolver } from "./panels/panel-upstream.js";
@@ -319,18 +322,22 @@ const createProviderAreas = (config: Config, logger: Logger, authRoot: string, w
         workspaceRoot: config.workspaceRoot,
         // Read at each server boot: the privacy shield's gateway for each provider, while the shield is not off.
         route: (provider, upstream) => whole().privacyShield.baseUrlFor({ provider, upstream }),
+        // Every other provider's route OpenCode could host now, written into the server's config at spawn.
+        routes: () => openCodeRouteEntries(whole()),
+        // OpenCode's shell runs through the daemon's script, its socket beside it (runtimes/opencode/shell/opencode-shell.ts).
+        shellDir: join(authRoot, "opencode-shell"),
         ...(config.translator.url === ""
             ? {}
             : {
                   gemini: {
                       baseUrl: config.translator.url,
                       token: config.translator.token,
-                      models: async () =>
-                          (await gemini.geminiModels.models()).models.map((model) => ({ id: model.id, inputModalities: model.inputModalities })),
+                      // Each row's id, input modalities and reasoning tiers: what the server registers per model.
+                      models: async () => (await gemini.geminiModels.models()).models,
                   },
               }),
     });
-    gemini = createGeminiSlice({ config, authRoot, geminiAgent: createOpenCodeAgent(createOpenCodeRunner(openCode), OPENCODE_GEMINI_PROVIDER) });
+    gemini = createGeminiSlice({ config, authRoot, cliProxy, geminiAgent: createOpenCodeAgent(createOpenCodeRunner(openCode), OPENCODE_GEMINI_PROVIDER) });
     const claude = createClaudeSlice({
         config,
         logger,
@@ -353,7 +360,11 @@ const createProviderAreas = (config: Config, logger: Logger, authRoot: string, w
         ],
         logger,
     });
-    const grok: GrokSlice = { grokAgent: createOpenCodeAgent(createOpenCodeRunner(openCode)) };
+    const grok: GrokSlice = {
+        grokAgent: createOpenCodeAgent(createOpenCodeRunner(openCode)),
+        // The ACP pool serves Grok Build's turns and its model list, read when first asked as Devin's is.
+        grokBuild: createCliParts(GROK_BUILD, { authRoot, logger, acpConnections: () => whole().acpConnections }),
+    };
     return {
         shared: { accountUsage, cliProxy, openCode, authRoot, observedLimits, headroom },
         // Spread whole into Services; their members' docs live on the area interfaces, beside the code.
@@ -365,7 +376,7 @@ const createProviderAreas = (config: Config, logger: Logger, authRoot: string, w
             ...createDevinSlice({ authRoot, logger, acpConnections: () => whole().acpConnections }),
             ...grok,
             ...gemini,
-            ...createKimiSlice(cliProxy),
+            ...createKimiSlice({ cliProxy, authRoot, logger, acpConnections: () => whole().acpConnections }),
             // One area for every minted provider, built from a spec table so adding one is a contract row, not code here.
             ...createMintedSlice({ authRoot, logger }),
         },

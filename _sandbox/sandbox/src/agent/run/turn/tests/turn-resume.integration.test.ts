@@ -27,6 +27,7 @@ import type { Services } from "../../../../composition.js";
 import { unstubbed } from "@intentic/testing";
 import type { TranscriptAgent } from "../../../../sessions/agent-transcript.js";
 import { testMintedSlices } from "../../../../runtimes/minted/minted-provider.testing.js";
+import { cliPartsFake } from "../../../../runtimes/vendor-cli/vendor-cli.testing.js";
 import { beginTurn, conversationEntry, drivenBy, fleetStoreOver, memoryFleet, notedFleet } from "../../../../testing.js";
 import { automationConfig } from "../../../../harness/route-stores.testing.js";
 import { fileTranscriptRecord } from "../../../../sessions/transcript-record.js";
@@ -192,6 +193,9 @@ const withProviders = (services: Services, connected: readonly string[]): Servic
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [] }),
         // Present with nobody signed in: the sweep iterates every provider module, so a missing slice throws.
         minted: testMintedSlices(),
+        // The CLI loops' account stores, empty: Kimi's and Grok's readiness reads them beside the translator's.
+        kimiCli: cliPartsFake("Kimi CLI's default"),
+        grokBuild: cliPartsFake("Grok Build's default"),
     };
     return wired;
 };

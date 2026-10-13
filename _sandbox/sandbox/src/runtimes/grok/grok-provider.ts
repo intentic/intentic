@@ -9,10 +9,9 @@ import {
     type TurnArmPlan,
     type TurnContext,
 } from "../../agent/providers/adapter.js";
-import type { AgentRequest, ContainerCredential } from "../../agent/providers/agent-request.js";
+import type { AgentRequest, OpenCodeCredential } from "../../agent/providers/agent-request.js";
 import { withAttachments } from "../../agent/prompt/attachment-note.js";
 import { releasingMounts } from "../../agent/tools/turn-mounts.js";
-import { turnToolsOf, type TurnToolsDeps } from "../../agent/tools/turn-tools.js";
 import {
     authStateRelPath,
     engineMissing,
@@ -24,20 +23,34 @@ import {
 import type { Services } from "../../composition.js";
 import { type GrokAccountDeps, grokAccountDoor } from "./grok-accounts.js";
 import { OPENCODE_XAI_PROVIDER } from "../opencode/xai-models.js";
+import { type OpenCodeHostedDeps, openCodeRouteHealth, planOpenCodeRouteTurn } from "../opencode/hosted/opencode-hosted.js";
+import { doorToolsOf, type DoorToolsDeps } from "../daemon-tools/door-tools.js";
 import { sharedServerRefusal } from "../../privacy/harness-route.js";
+import { opt } from "../../opt.js";
 import { requireRootAgentExecution } from "../../workload/agent-execution.js";
+import { GROK_BUILD } from "../grok-build/grok-build-cli.js";
+import { grokDoors } from "../grok-build/grok-build-door.js";
+import { type CliDoorDeps, cliAccountDoor } from "../vendor-cli/vendor-cli-door.js";
+import { type CliParts, cliPacks, cliReady, cliSecretEntries } from "../vendor-cli/vendor-cli-slice.js";
+import { cliAdapter, type CliTurnDeps } from "../vendor-cli/vendor-cli-turn.js";
 
-// Everything Grok contributes, listed in runtimes/runtime-table.ts; its loop and credential are OpenCode's (runtimes/opencode).
+// Everything Grok contributes, listed in runtimes/runtime-table.ts. Its default loop and credential are OpenCode's
+// (runtimes/opencode); its `vendor` loop is xAI's own Grok Build CLI with a sign-in of its own (runtimes/grok-build).
 
 export interface GrokSlice {
-    readonly grokAgent: (request: AgentRequest<ContainerCredential>) => AsyncGenerator<AgentEvent>;
+    // The shared OpenCode loop: Grok's turns on OpenCode's own xAI entry, and every hosted route's on the entry its
+    // credential names (opencode-hosted.ts).
+    readonly grokAgent: (request: AgentRequest<OpenCodeCredential>) => AsyncGenerator<AgentEvent>;
+    // Grok Build's accounts and the models the first one offers, for the `vendor` loop (runtimes/grok-build).
+    readonly grokBuild: CliParts;
 }
 
 // Grok rides OpenCode with xAI subscription OAuth; gated on OpenCode's own connection view. The turn's remote MCP servers
-// ride along as Codex's do; Claude-only fields (plugins, the daemon's in-process servers, thinking) don't apply.
-// What a Grok turn is planned from, and all its adapter reads: OpenCode holds the credential, the catalog and sessions,
-// and the turn's mounts are leased from the daemon's MCP door.
-export type GrokAdapterDeps = TurnToolsDeps & Pick<Services, "grokAgent" | "openCode" | "privacyShield">;
+// and the daemon's own servers ride along over the MCP door (daemon-tools/door-tools.ts), with no gate server, since
+// OpenCode asks the daemon over its own permission channel; Claude-only fields (plugins, thinking) don't apply. What a
+// Grok turn is planned from, and all its adapter reads: OpenCode holds the credential, the catalog and sessions, and the
+// turn's mounts are leased from the daemon's MCP door.
+export type GrokAdapterDeps = DoorToolsDeps & Pick<Services, "grokAgent" | "openCode" | "privacyShield">;
 
 export const planGrokTurn = async (
     services: GrokAdapterDeps,
@@ -64,12 +77,7 @@ export const planGrokTurn = async (
     const valid = new Set(catalog.models.map((entry) => entry.id));
     const model = input.model !== undefined && valid.has(input.model) ? input.model : catalog.default;
     // Leased last, once nothing can refuse the turn: only the loop it arms releases it.
-    const mounted = await turnToolsOf(services, granted, {
-        conversationId: input.conversationId,
-        anonymousBrowser: context.persona?.powers.browser ?? true,
-        shell: context.persona?.powers.shell ?? true,
-        extensions: context.persona?.powers.extensions,
-    });
+    const { mounted, tools, hooks } = await doorToolsOf(services, input, context, granted, false);
     // Overrides base's input.model with the validated id; the adapter folds attachment paths into the prompt. OpenCode
     // holds one xAI auth, so the single Grok account is OpenCode's xAI provider id (see grok-accounts.ts).
     return armPlan(
@@ -77,8 +85,10 @@ export const planGrokTurn = async (
         withAttachments(
             {
                 ...context.base,
-                spec: { ...context.base.spec, model },
-                tools: mounted.tools.length > 0 ? { ...context.base.tools, remote: mounted.tools } : context.base.tools,
+                // The turn's steering queue, which the OpenCode loop sends on as steers (capabilities.steering).
+                spec: { ...context.base.spec, model, ...opt("steering", context.steering) },
+                tools,
+                hooks,
                 credential: { kind: "container" },
             },
             context.attachmentPaths,
@@ -87,9 +97,13 @@ export const planGrokTurn = async (
     );
 };
 
-const OPENCODE_ADAPTER: AgentAdapter<"opencode", GrokAdapterDeps> = {
+// One adapter for the OpenCode runtime: Grok on OpenCode's own xAI sign-in, and every other provider OpenCode hosts on
+// its route. Health keys off the runtime, so the runtime's own answer is Grok's and each hosted provider has its own.
+const OPENCODE_ADAPTER: AgentAdapter<"opencode", GrokAdapterDeps & OpenCodeHostedDeps> = {
     runtime: "opencode",
-    preflight: (services, input, context, granted) => planGrokTurn(services, input, context, granted),
+    preflight: (services, input, context, granted) =>
+        input.agent === "grok" ? planGrokTurn(services, input, context, granted) : planOpenCodeRouteTurn(services, input, context, granted),
+    hostHealth: (services, provider) => (provider === "grok" ? OPENCODE_ADAPTER.health(services) : openCodeRouteHealth(services, provider)),
     health: async (services) => {
         const connected = await attemptProbe(() => services.openCode.connected(OPENCODE_XAI_PROVIDER));
         if (connected === undefined) {
@@ -108,18 +122,29 @@ const OPENCODE_ADAPTER: AgentAdapter<"opencode", GrokAdapterDeps> = {
     },
 };
 
-// What the Grok module reads beyond its adapter: the translator's answer for the routed pickers.
-export type GrokProviderDeps = GrokAdapterDeps & GrokAccountDeps & Pick<Services, "config">;
+export type GrokBuildAdapterDeps = CliTurnDeps & Pick<Services, "grokBuild">;
+
+const GROK_BUILD_ADAPTER = cliAdapter<"grok-build", GrokBuildAdapterDeps>({ ...GROK_BUILD, runtime: "grok-build" }, (services) => services.grokBuild);
+
+// What the Grok module reads beyond its adapters: the translator's answer for the routed pickers, what the hosted routes
+// on its OpenCode runtime are planned from, and both sign-in doors' seams.
+export type GrokProviderDeps = GrokAdapterDeps & OpenCodeHostedDeps & GrokBuildAdapterDeps & GrokAccountDeps & CliDoorDeps & Pick<Services, "config">;
 
 export const grokProvider: ProviderModule<GrokProviderDeps> = {
     id: "grok",
+    // OpenCode's alone: the OpenCode loop's health reads it, and Grok Build's adapter checks its own engine.
     engines: ["opencode"],
-    accounts: grokAccountDoor,
-    adapters: [OPENCODE_ADAPTER],
+    accounts: (services) =>
+        grokDoors(
+            grokAccountDoor(services),
+            cliAccountDoor(GROK_BUILD, services.grokBuild.store, services.grokBuild.models, services),
+            async (id) => (await services.grokBuild.store.read(id)) !== undefined,
+        ),
+    adapters: [OPENCODE_ADAPTER, GROK_BUILD_ADAPTER],
     catalog: (services) => services.openCode.xaiModels(),
     // Feeds the routed pickers (Grok under the Claude Code harness); the translator's question, not OpenCode's (native
     // account health is above).
-    ready: translatorReady("grok"),
+    ready: async (services, shared) => (await translatorReady("grok")(services, shared)) || (await cliReady(services.grokBuild)),
     // Warms the OpenCode server at boot: a cold spawn can stall the /events heartbeat past the browser's watchdog. Runs
     // only if xAI is already connected; ensure() is idempotent, so the first interactive call reuses this client.
     boot: (services, _role, logger) => {
@@ -136,10 +161,15 @@ export const grokProvider: ProviderModule<GrokProviderDeps> = {
     },
     // OpenCode is Grok's credential store too: `connected` reads the credential a device sign-in stored, on disk whether
     // or not a server is up.
-    packs: async (services) => ((await services.openCode.connected(OPENCODE_XAI_PROVIDER)) ? ["opencode"] : []),
+    packs: async (services) => [
+        ...((await services.openCode.connected(OPENCODE_XAI_PROVIDER)) ? ["opencode"] : []),
+        ...(await cliPacks(GROK_BUILD, services.authRoot)),
+    ],
     // OpenCode holds one xAI auth per data dir, so Grok is a single fixed row rather than a list.
-    secretEntries: async (services) =>
-        (await services.openCode.connected(OPENCODE_XAI_PROVIDER))
+    secretEntries: async (services) => [
+        ...((await services.openCode.connected(OPENCODE_XAI_PROVIDER))
             ? [providerAccountEntry("grok", "Grok", OPENCODE_XAI_PROVIDER, "Grok", authStateRelPath("opencode"))]
-            : [],
+            : []),
+        ...(await cliSecretEntries(GROK_BUILD, services.grokBuild)),
+    ],
 };

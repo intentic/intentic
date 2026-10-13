@@ -55,7 +55,7 @@ const underRoots = (file: string, roots: readonly string[]): string | undefined 
 // sandbox runs (installed-copy.ts), then each repository's own edit checks, run in the turn's own tree and named
 // as the agent sees it. Firings stamp the settings list only, so a per-edit check
 // doesn't spam a feed row per save.
-const editReviewersOf = (deps: HarnessHooksDeps, context: TurnContext, rules: readonly Rule[]): Pick<TurnHooks, "editReviewers"> => {
+export const editReviewersOf = (deps: HarnessHooksDeps, context: TurnContext, rules: readonly Rule[]): Pick<TurnHooks, "editReviewers"> => {
     const isolation = context.base.spec.isolation;
     const roots = [context.localCwd, isolation?.plan?.root, deps.workspace.root].filter((root): root is string => root !== undefined);
     // Read by the daemon itself, so an isolated turn's file is its worktree's copy whether or not a namespace is entered.
@@ -102,7 +102,7 @@ const turnChangeOf = async (deps: HarnessHooksDeps, conversationId: string, name
 // The `turn.ending` moment: each repository's own `turn` checks, run once as an isolated turn is about to stop, in the
 // repository they name in the turn's own tree and through its namespace, as the edit checks are. Isolated turns only: a
 // main-tree turn's working tree carries everyone's uncommitted work, and a check of it would charge the turn with theirs.
-const turnChecksOf = (deps: HarnessHooksDeps, context: TurnContext, rules: readonly Rule[]): Pick<TurnHooks, "turnChecks"> => {
+export const turnChecksOf = (deps: HarnessHooksDeps, context: TurnContext, rules: readonly Rule[]): Pick<TurnHooks, "turnChecks"> => {
     const isolation = context.base.spec.isolation;
     const conversationId = context.base.spec.conversationId;
     if (rules.length === 0 || !ownWorktree(isolation) || conversationId === undefined) {

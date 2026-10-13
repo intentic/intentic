@@ -1,4 +1,4 @@
-import { discoverXaiModels, parseModelSuggestions } from "./xai-models.js";
+import { discoverXaiModels, parseModelSuggestions, xaiEffortsOf } from "./xai-models.js";
 
 const jsonResponse = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status });
 
@@ -73,4 +73,12 @@ test("discoverXaiModels returns [] when nothing yields models", async () => {
         return jsonResponse({ data: [] });
     }) as unknown as typeof fetch;
     expect(await discoverXaiModels("tok", fake)).toEqual([]);
+});
+
+// Only the Grok 3 Mini line takes a reasoning effort; every other xAI model refuses the parameter, so it offers none.
+test("xAI's reasoning tiers are the Grok 3 Mini line's, and no other model's", () => {
+    expect(xaiEffortsOf("grok-3-mini")).toEqual(["low", "high"]);
+    expect(xaiEffortsOf("grok-3-mini-fast")).toEqual(["low", "high"]);
+    expect(xaiEffortsOf("grok-4")).toEqual([]);
+    expect(xaiEffortsOf("grok-3")).toEqual([]);
 });

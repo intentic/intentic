@@ -27,7 +27,7 @@ export interface StoredTab {
     readonly provider?: AgentProvider;
     // Pick the app moved this tab to because it couldn't send; outlives the window that made it.
     readonly movedFrom?: TurnPick;
-    // The tab's harness selection (native vs the Claude Code loop); absent means the current default on restore.
+    // The tab's loop selection (`native` for the provider's default); absent means the current default on restore.
     readonly harness?: AgentHarness;
     // Per-tab account pick; applying the remembered default to open tabs would silently move them.
     readonly account?: string;
@@ -143,7 +143,9 @@ const StoredTabSchema: z.ZodType<StoredTab> = z.object({
     box: text,
     provider: maybe(AgentProviderSchema),
     movedFrom: maybe(z.object({ provider: AgentProviderSchema, value: z.string() })),
-    harness: maybe(AgentHarnessSchema),
+    // A loop a newer build stored, one this build has no name for, reads as the provider's own rather than costing the
+    // tab its other fields or taking the remembered pick, which was made for another chat.
+    harness: AgentHarnessSchema.optional().catch(`native`),
     account: text,
     model: text,
     displacedModel: text,

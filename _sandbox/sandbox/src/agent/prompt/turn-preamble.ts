@@ -90,10 +90,10 @@ export const INJECTED: readonly { readonly header: string; readonly title: strin
     { header: SPAWN_NOTE_HEADER, title: SPAWN_NOTE_TITLE },
     // Retitled once a spawned agent became a subagent like any other; the prompts records hold still open with it.
     { header: LEGACY_SPAWN_NOTE_HEADER, title: LEGACY_SPAWN_NOTE_TITLE },
-    // Reaches the user message only on a runtime with no system prompt (Pi, ACP); the one note whose absence would hide
+    // Reaches the user message only on a runtime with no system prompt (ACP); the one note whose absence would hide
     // WHY a turn refused to touch something.
     { header: PERSONA_NOTE_HEADER, title: "Who this turn is acting as" },
-    // The same two runtimes: the owner's standing instructions have no system seam to ride there.
+    // The same runtime: the owner's standing instructions have no system seam to ride there.
     { header: MEMORY_NOTE_HEADER, title: MEMORY_NOTE_TITLE },
     { header: SETUP_NOTICE_HEADER, title: "Dependencies aren't installed yet" },
     // Separate opening: a stale-only notice can appear alone, without SETUP_NOTICE_HEADER ahead of it.

@@ -123,7 +123,7 @@ const turnNotes = (facts: AdmittedTurnFacts, premise: TurnPremise, spawn: string
 
 // The posture the route folded into the request, kept only where this runtime's record honours it; anything else
 // travels as the absence that already meant its default.
-const honouredPolicy = (base: TurnBase, capabilities: AgentCapabilities): Pick<TurnPolicy, "permissionMode"> =>
+export const honouredPolicy = (base: Pick<TurnBase, "policy">, capabilities: Pick<AgentCapabilities, "permissions">): Pick<TurnPolicy, "permissionMode"> =>
     // A "plan" runtime knows only propose-then-approve or run, and every other mode means the second.
     base.policy.permissionMode !== undefined && (capabilities.permissions === "modes" || base.policy.permissionMode === "plan")
         ? { permissionMode: base.policy.permissionMode }
@@ -131,7 +131,8 @@ const honouredPolicy = (base: TurnBase, capabilities: AgentCapabilities): Pick<T
 
 const honouredReasoning = (base: TurnBase, capabilities: AgentCapabilities): Pick<TurnSpec, "effort" | "fast"> => ({
     ...(base.spec.effort !== undefined && capabilities.effort ? { effort: base.spec.effort } : {}),
-    // Only the Claude Code loop can ask for it; planHarnessTurn withholds it again from a non-first-party endpoint.
+    // Only a loop that can ask for it (Claude Code, Codex); planHarnessTurn withholds it again from a Claude Code turn on a
+    // non-first-party endpoint.
     ...(base.spec.fast === true && capabilities.fastMode ? { fast: base.spec.fast } : {}),
 });
 

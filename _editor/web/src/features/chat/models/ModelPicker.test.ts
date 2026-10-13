@@ -16,7 +16,7 @@ jest.mock(`./useChat-catalog`, () => ({
 }));
 jest.mock(`../accounts/useChat-accounts`, () => ({ refreshConnections: () => Promise.resolve() }));
 // The runtime-health probe is the daemon's; silent here, which is its own "not probed yet" state.
-jest.mock(`../../sandbox/overview/version/useSandboxVersion`, () => ({ useSandboxVersion: () => ({ runtimeIssue: () => undefined }) }));
+jest.mock(`../../sandbox/overview/version/useSandboxVersion`, () => ({ useSandboxVersion: () => ({ runtimeIssue: () => undefined, pairIssue: () => undefined }) }));
 jest.mock(`vue-router`, () => ({
     ...vueRouterOriginal,
     useRouter: () => ({ push: jest.fn() }) as never,

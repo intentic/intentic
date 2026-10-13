@@ -1,8 +1,16 @@
 import { opt } from "../opt.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { AgentEvent, AgentTurn, RoutedAgentTurn, RunnerSync, RunnerSyncLine, RunnerTurn } from "@intentic/sandbox-contract";
-import { runnerIncomingRef } from "@intentic/sandbox-contract";
+import {
+    type AgentEvent,
+    type AgentTurn,
+    canonicalHarness,
+    type RoutedAgentTurn,
+    type RunnerSync,
+    type RunnerSyncLine,
+    type RunnerTurn,
+    runnerIncomingRef,
+} from "@intentic/sandbox-contract";
 import { defaultGit } from "@intentic/base/git";
 import { whenAborted } from "@intentic/base/async";
 import { mainBranchOf } from "../git/agent-refs.js";
@@ -123,7 +131,10 @@ export async function* dispatchRemoteTurn(
             branch,
             prompt: input.prompt,
             provider: input.agent,
-            harness: input.harness,
+            // Spelled canonically, so a turn on its provider's default loop reads `native` to the runner. Only Claude
+            // Code turns travel unasked (credentialsTravel), and those spell `native` or `claude-code`, which every
+            // runner build knows; a newer loop named on a runner placed by hand is refused there as one to update for.
+            harness: canonicalHarness(input.agent, input.harness),
             ...opt("model", input.model),
             ...opt("effort", input.effort),
             ...opt("thinking", input.thinking),

@@ -557,8 +557,9 @@ const uvInstalls = (words: readonly string[]): boolean => {
     return verb === "sync" || verb === "add" || verb === "remove";
 };
 
-// The script a shell wrapper runs (`bash -c '…'`, `sh -lc '…'`, `eval '…'`), which is a command line of its own.
-const scriptOf = (words: readonly string[]): string | undefined => {
+// The script a shell wrapper runs (`bash -c '…'`, `sh -lc '…'`, `eval '…'`), which is a command line of its own; already
+// unquoted off the tokenizer. Combined flags count (`-lc`), since that is the spelling Codex wraps every command in.
+export const shellScriptOf = (words: readonly string[]): string | undefined => {
     const executable = executableOf(words);
     if (executable === "eval") {
         return words.slice(1).join(" ");
@@ -600,7 +601,7 @@ const installsIn = (command: string, cwd: string, venvScoped: boolean, wrapped: 
             current = pushed.pop() ?? current;
             continue;
         }
-        const script = scriptOf(words);
+        const script = shellScriptOf(words);
         if (script !== undefined) {
             // Its own shell: what it `cd`s into is not where this one stands afterwards.
             found.push(...(wrapped < SCRIPT_DEPTH ? installsIn(agentCommand(script), current, venvScoped || VENV_SCOPED.test(script), wrapped + 1) : []));
@@ -655,15 +656,6 @@ const notFoundBinaries = (output: string): string[] => {
     return names;
 };
 
-// The script a shell wrapper carries, or nothing when this invocation is not one; already unquoted off the tokenizer.
-const nestedScript = (words: readonly string[]): string | undefined => {
-    if (!SHELLS.has(executableOf(words) ?? "")) {
-        return undefined;
-    }
-    const flag = words.indexOf("-c");
-    return flag === -1 ? undefined : words[flag + 1];
-};
-
 // Every binary this command runs in command position, plus one level into `sh -c '…'`, since that wrapper carries the
 // real command. Depth-capped rather than trusted to shrink.
 const invokedBinaries = (command: string, depth = 0): Set<string> => {
@@ -674,7 +666,7 @@ const invokedBinaries = (command: string, depth = 0): Set<string> => {
             continue;
         }
         names.add(executable);
-        const script = depth < 2 ? nestedScript(words) : undefined;
+        const script = depth < 2 ? shellScriptOf(words) : undefined;
         for (const nested of script === undefined ? [] : invokedBinaries(script, depth + 1)) {
             names.add(nested);
         }

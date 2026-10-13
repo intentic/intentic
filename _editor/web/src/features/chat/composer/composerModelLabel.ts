@@ -1,6 +1,7 @@
-import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract";
+import { type AgentHarness, type AgentProvider, loopLabel } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
 import { modelLabelFor } from "../accounts/providerCatalog";
+import { offeredLoops, selectedLoop } from "../models/offeredLoops";
 import { accessKnown, providerReadyOn } from "../session/access";
 
 // What a composer's model control reads as: one rule for the pill's own face and for the accessible name the pane
@@ -30,7 +31,14 @@ export const composerModelReading = (chat: ComposerModelChoice): ComposerModelRe
     }
     // On Auto the control says Auto, not the model underneath: that model is only the fallback if the reading never
     // lands, and naming it would read as though pressing the Auto row had done nothing.
-    return { label: chat.auto ? t(`chat.words.autoLabel`) : modelLabelFor(chat.provider, chat.model), unset: false };
+    return { label: chat.auto ? t(`chat.words.autoLabel`) : [modelLabelFor(chat.provider, chat.model), ...loopWord(chat)].join(` · `), unset: false };
+};
+
+// The loop, named only where it isn't the provider's default: the same model through another loop is another run.
+const loopWord = (chat: ComposerModelChoice): readonly string[] => {
+    const offered = offeredLoops(chat.provider);
+    const loop = selectedLoop(offered, chat.harness);
+    return loop === offered[0] ? [] : [loopLabel(chat.provider, loop)];
 };
 
 /** A reply still running on the model it was sent with, while the pill already names the one picked for the next. */

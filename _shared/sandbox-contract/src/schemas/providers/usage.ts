@@ -23,6 +23,12 @@ export const UsageTurnSchema = z.object({
         .optional()
         .describe("The model that was asked for, when one was named. Differs from `model` when something resolved it."),
     harness: z.string().describe("Which agentic loop it ran on."),
+    // The runtime that served it, resolved from provider and harness: `harness` is what was asked for, and rows written
+    // before requests were normalized carry "claude-code" for providers that only ever run their own loop.
+    runtime: z
+        .string()
+        .optional()
+        .describe("The runtime that actually served it (claude-code, codex, opencode, cursor, acp, pi…). Absent on rows written before it was recorded."),
     // cancelled: stopped before it finished, not a failure: the user pressed Stop, or a daemon restart cut it (then
     // `errorCode` is `interrupted` and `errorMessage` says what became of it).
     // error: the provider or request killed the turn.

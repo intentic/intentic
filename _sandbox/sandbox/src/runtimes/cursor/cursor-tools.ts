@@ -12,6 +12,7 @@ import type { TurnTaint } from "../../guard/turn-taint.js";
 import { JS_TIMEOUT_DEFAULT_S, JS_TIMEOUT_MAX_S } from "../../execution/js-runtime.js";
 import { jsToolDescription, runJsTool } from "../../execution/js-tool.js";
 import { JS_TOOL_NAME } from "../../seams/js-tool-names.js";
+import type { CursorOwner, CursorToolAsk } from "./turn/cursor-approvals.js";
 
 // What the turn's gate answers with and what it marks, the two halves a tool needs to run a program safely. Carried
 // together because a runtime that consults without marking would launder outside content past the judge.
@@ -304,11 +305,14 @@ const waitTool = (request: AgentRequest, children: NonNullable<TurnHooks["childr
 // otherwise both run with the owner's command rules unread and bring the web back into the turn unwrapped. Same
 // subject, same consult and same envelope the Claude loop's PreToolUse and PostToolUse matchers raise, so one rule and
 // one judge cover both.
+//
+// In `default` mode the person is asked after the rules, unless the rules already put this script on a card of their own.
 const codeTool = (
     request: AgentRequest,
     plan: NonNullable<TurnTools["jsExecution"]>,
     guard: CursorGuard,
     push: (event: AgentEvent) => void,
+    owner: CursorOwner | undefined,
 ): SDKCustomTool => ({
     description: jsToolDescription(plan),
     inputSchema: {
@@ -329,9 +333,17 @@ const codeTool = (
         if (code === "") {
             return "No code was supplied, so nothing ran.";
         }
-        const verdict = await consultWith(guard.gate, code, JS_SUBJECT, push);
+        let carded = false;
+        const verdict = await consultWith(guard.gate, code, JS_SUBJECT, (event) => {
+            carded ||= event.kind === "permission";
+            push(event);
+        });
         if (!verdict.allow) {
             return verdict.reason;
+        }
+        const answer = owner === undefined || carded ? undefined : await owner.approve({ toolName: JS_TOOL_NAME, displayName: "Run code", title: "Run this script?", program: { text: code, language: "javascript" } });
+        if (answer?.allow === false) {
+            return answer.reason;
         }
         const output = await runJsTool(
             {
@@ -353,21 +365,42 @@ const codeTool = (
     },
 });
 
+// A custom tool that changes something, put to the person first in `default` mode: Cursor runs custom tools past every
+// hook and never asks about one itself (options.d.ts), so its handler is the one place a card can stand.
+const asked = (tool: SDKCustomTool, ask: CursorToolAsk, owner: CursorOwner | undefined): SDKCustomTool =>
+    owner === undefined
+        ? tool
+        : {
+              ...tool,
+              execute: async (args, context) => {
+                  const answer = await owner.approve(ask);
+                  return answer.allow ? tool.execute(args, context) : answer.reason;
+              },
+          };
+
+const childAsk = (verb: string, title: string): CursorToolAsk => ({ toolName: `mcp__subagents__${verb}`, displayName: `${verb[0]?.toUpperCase() ?? ""}${verb.slice(1)} subagent`, title });
+
 // `ask` is mounted on every turn: an unattended turn's question waits for the owner like any other card. The
-// supervision set isn't card-shaped and rides every turn too; a child settles on its own clock.
-export const cursorCustomTools = (request: AgentRequest, guard: CursorGuard, push: (event: AgentEvent) => void): Record<string, SDKCustomTool> => ({
+// supervision set isn't card-shaped and rides every turn too; a child settles on its own clock. `owner` is the person a
+// `default`-mode turn puts each call that changes something to; the ones that only read (ask, providers, wait) never are.
+export const cursorCustomTools = (
+    request: AgentRequest,
+    guard: CursorGuard,
+    push: (event: AgentEvent) => void,
+    owner?: CursorOwner,
+): Record<string, SDKCustomTool> => ({
     ask: askTool(request, push),
     // Absent, not refused, when the persona's card withheld the backend: jsExecutionPlanOf answers undefined there.
-    ...(request.tools.jsExecution === undefined ? {} : { code: codeTool(request, request.tools.jsExecution, guard, push) }),
+    ...(request.tools.jsExecution === undefined ? {} : { code: codeTool(request, request.tools.jsExecution, guard, push, owner) }),
     ...(request.hooks.children !== undefined
         ? {
-              spawn: spawnTool(request.hooks.children),
+              spawn: asked(spawnTool(request.hooks.children), childAsk("spawn", "Spawn this subagent?"), owner),
               providers: providersTool(request.hooks.children),
               wait: waitTool(request, request.hooks.children),
-              send: sendTool(request.hooks.children),
-              answer: answerTool(request.hooks.children),
-              cancel: cancelTool(request.hooks.children),
-              merge: mergeTool(request.hooks.children),
+              send: asked(sendTool(request.hooks.children), childAsk("send", "Send this subagent a message?"), owner),
+              answer: asked(answerTool(request.hooks.children), childAsk("answer", "Answer this subagent's question?"), owner),
+              cancel: asked(cancelTool(request.hooks.children), childAsk("cancel", "Stop this subagent?"), owner),
+              merge: asked(mergeTool(request.hooks.children), childAsk("merge", "Merge this subagent's work?"), owner),
           }
         : {}),
 });

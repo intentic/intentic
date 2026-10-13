@@ -47,7 +47,9 @@ const LEDGER: Record<keyof AgentCapabilities, Backing> = {
     commands: "descriptive",
     terminals: "descriptive",
     recovery: "descriptive",
-    // descriptive: only the Claude Code loop can mask a secret before the model reads it, via its PostToolUse hook.
+    // descriptive: where masking happens is each runtime's own wiring (the Claude Code loop's PostToolUse hook, Pi's
+    // extension, the shell wrappers of Codex and Cursor, OpenCode's daemon-run shell script); nothing gates a turn on it,
+    // and each answer short of the ceiling reaches the user as its own limitationsOf sentence.
     secrets: "descriptive",
 };
 
@@ -84,6 +86,15 @@ describe("a descriptive claim reaches the user", () => {
 
         expect(limitationsOf(lacking)).toHaveLength(1);
     });
+});
+
+// A middle answer has words of its own, distinct from the floor's: a runtime that masks only its shell says so.
+it("secrets' middle answer is disclosed apart from its floor", () => {
+    const shell = limitationsOf({ ...CEILING, secrets: "shell" });
+    const none = limitationsOf({ ...CEILING, secrets: "none" });
+    expect(shell).toHaveLength(1);
+    expect(none).toHaveLength(1);
+    expect(shell).not.toEqual(none);
 });
 
 it("is a real split: neither side is empty", () => {

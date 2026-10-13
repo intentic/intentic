@@ -111,6 +111,39 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         }
     });
 
+    // Another provider's model on Codex (routes/model-routes.ts): an id outside OpenAI's catalog, on its own provider
+    // block at the route's versioned root and bearer, with OpenAI's hosted tools left out of what the model is offered.
+    test("a hosted route's model is reached on its own provider block, offered no OpenAI-only tool", async () => {
+        const { cwd, codexHome } = await scratch();
+        const model = await startFakeModel({ script: [{ text: "hosted answer" }], requireKey: "hosted-key" });
+        const controller = new AbortController();
+        const lease = rootExecution({ localCwd: cwd });
+        const events: AgentEvent[] = [];
+        try {
+            for await (const event of createCodexAgent({ codexHome })({
+                execution: lease.context,
+                spec: { prompt: "do the thing", cwd, model: "glm-5.3" },
+                policy: {},
+                tools: {},
+                credential: { kind: "codex-endpoint", baseUrl: model.baseUrl, authToken: "hosted-key", hosted: { id: "intentic-zai", path: "/v1", contextWindow: 200_000 } },
+                hooks: { cards },
+                signal: controller.signal,
+            })) {
+                events.push(event);
+            }
+            expect(errorsIn(events)).toEqual([]);
+            expect(proseIn(events)).toContain("hosted answer");
+            expect(model.requests[0]?.model).toBe("glm-5.3");
+            expect(new Set(model.bearers)).toEqual(new Set(["hosted-key"]));
+            expect(hasTool(model.requests[0]!, "web_search")).toBe(false);
+            expect(hasTool(model.requests[0]!, "image_generation")).toBe(false);
+        } finally {
+            controller.abort();
+            lease.release();
+            await model.close();
+        }
+    });
+
     describe.each([...MODELS])("$id ($surface)", ({ id: MODEL }) => {
         test("a plain turn reaches the model, streams prose back, and ends once", async () => {
             const { events, requests } = await runTurn(MODEL, [{ text: "the answer is 42" }]);
