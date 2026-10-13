@@ -135,19 +135,19 @@ minimumReleaseAgeStrict: false
 minimumReleaseAgeExcludePrune: true
 
 minimumReleaseAgeExclude:
-  - '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.295'
-  - '@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.295'
-  - '@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.3.295'
-  - '@anthropic-ai/claude-agent-sdk-linux-arm64@0.3.295'
-  - '@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.3.295'
-  - '@anthropic-ai/claude-agent-sdk-linux-x64@0.3.295'
-  - '@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.295'
-  - '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.295'
-  - '@anthropic-ai/claude-agent-sdk@0.3.295'
+  - '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.296'
+  - '@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.296'
+  - '@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.3.296'
+  - '@anthropic-ai/claude-agent-sdk-linux-arm64@0.3.296'
+  - '@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.3.296'
+  - '@anthropic-ai/claude-agent-sdk-linux-x64@0.3.296'
+  - '@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.296'
+  - '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.296'
+  - '@anthropic-ai/claude-agent-sdk@0.3.296'
   - image-size@2.0.4
-  - "@opencode/client@2.0.26"
-  - "@opencode/protocol@2.0.26"
-  - "@opencode/schema@2.0.26"
+  - "@opencode/client@2.0.27"
+  - "@opencode/protocol@2.0.27"
+  - "@opencode/schema@2.0.27"
   - undici@6.29.0
   - monaco-editor-core@0.57.0
   - "@oxlint/binding-android-arm-eabi@1.87.0"
@@ -171,13 +171,11 @@ minimumReleaseAgeExclude:
   - "@oxlint/binding-win32-x64-msvc@1.87.0"
   - "@oxlint/plugins@1.87.0"
   - "@posthog/core@1.56.0"
-  - "@muse-code/sdk@1.4.6"
+  - "@muse-code/sdk@1.4.7"
   - mailparser@3.9.36
   - marked@18.1.0
   - oxlint@1.87.0
   - posthog-js@1.436.1
-  - "@openai/codex-sdk@0.162.0"
-  - "@openai/codex@0.162.0-darwin-arm64 || 0.162.0-darwin-x64 || 0.162.0-linux-arm64 || 0.162.0-linux-x64 || 0.162.0-win32-arm64 || 0.162.0-win32-x64 || 0.162.0"
   - "@oven/bun-darwin-aarch64@1.4.3"
   - "@oven/bun-darwin-x64@1.4.3"
   - "@oven/bun-freebsd-aarch64@1.4.3"
@@ -236,7 +234,7 @@ catalogPrune: true
 # what lets the overrides above dedupe rather than add.
 catalog:
   "@agentclientprotocol/sdk": 1.7.0
-  "@anthropic-ai/claude-agent-sdk": 0.3.295
+  "@anthropic-ai/claude-agent-sdk": 0.3.296
   "@astrojs/check": 0.9.10
   "@astrojs/sitemap": 3.7.4
   "@commitlint/cli": 21.2.3
@@ -259,9 +257,9 @@ catalog:
   # Meta's MSP client for Muse Code (runtimes/muse in the daemon). MIT, zero runtime deps, and versioned in lockstep
   # with the Muse Code release it speaks to: engines.json blesses the matching CLI build (1.4.6-R…), and
   # _tools/scripts/engines/engine-pins.mjs reads this line as the version it tracks.
-  "@muse-code/sdk": 1.4.6
-  "@openai/codex-sdk": 0.162.0
-  "@opencode/client": 2.0.26
+  "@muse-code/sdk": 1.4.7
+  "@openai/codex-sdk": 0.162.1
+  "@opencode/client": 2.0.27
   "@opentelemetry/api": 1.9.1
   "@opentelemetry/context-async-hooks": 2.11.0
   "@opentelemetry/core": 2.11.0
