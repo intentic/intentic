@@ -267,7 +267,12 @@ flowchart LR
   inside the distro, copies client material to `%USERPROFILE%\.intentic\engine\tls\`, installs `docker.exe` under
   `%USERPROFILE%\.intentic\engine\bin\`, writes `%USERPROFILE%\.intentic\engine\engine.json`, registers
   `HKCU\…\Run\IntenticEngine` to run `ic engine start --quiet` at sign-in, and starts a hidden keeper
-  (`wsl.exe -d intentic-engine --exec /usr/local/bin/intentic-engine <port>`). Every `ic` run calls `engine::adopt()`
+  (`wsl.exe -d intentic-engine --exec /usr/local/bin/intentic-engine <port>`). Nothing of either is a window
+  (2026-10-13): the keeper gets a console of its own with no window rather than none, since the Store WSL's `wsl.exe`
+  that System32's hands it to was given a new console by Windows, which Windows Terminal showed as a tab running the
+  engine; and the Run value starts ic under `conhost.exe --headless`, since a console program Explorer starts at sign-in
+  gets a window for as long as it runs. Not the machine agent's `intentic-launch.exe`, which a PC with ic alone does
+  not have. Every start rewrites a Run value an older ic registered. Every `ic` run calls `engine::adopt()`
   first so `DOCKER_HOST`, `DOCKER_TLS_VERIFY`, `DOCKER_CERT_PATH`, and the bundled `docker.exe` apply to this process
   only — nothing is added to the user's PATH. `ic engine status --json` answers for the desktop app; `ic sandbox fix`
   can start a stopped intentic engine automatically. Build: [engine/](engine/); implementation: [src/engine/](src/engine/).

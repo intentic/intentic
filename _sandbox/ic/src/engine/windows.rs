@@ -195,6 +195,7 @@ fn start_internal(quiet: bool) -> Result<(), String> {
     }
     // A start asked for is the end of any hold.
     record::release();
+    refresh_autostart(&record.distro);
     if engine_answers(&record) {
         keep_relay(&mut record, quiet);
         super::wsl_integration::apply_all(&record, quiet);
@@ -864,39 +865,47 @@ fn autostart_value(distro: &str) -> String {
     }
 }
 
-fn register_autostart(distro: &str) -> Result<(), String> {
-    if std::env::var("IC_ENGINE_AUTOSTART").as_deref() == Ok("0") {
-        return Ok(());
+const RUN_KEY: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
+
+/// The Run value's command: `ic engine start --quiet` in a console nobody sees. Explorer gives a console program it
+/// starts at sign-in a console of its own, and that console is a window (a Windows Terminal tab) for as long as the start
+/// takes (radarsu-rog, 2026-10-13). `conhost.exe --headless` hosts it with no window, and ships with every Windows that
+/// runs WSL 2; the machine agent's windowless `intentic-launch.exe` is not on a PC that has ic alone. Without a
+/// SystemRoot to find conhost by, ic is started as it is.
+fn autostart_command(system_root: Option<&str>, ic: &Path) -> String {
+    let start = format!("\"{}\" engine start --quiet", ic.display());
+    match system_root {
+        Some(root) => format!("\"{root}\\System32\\conhost.exe\" --headless {start}"),
+        None => start,
     }
-    let ic = paths::ic_exe().filter(|path| path.is_file());
-    let ic = ic.or_else(|| {
+}
+
+/// Pure: the data of the Run value `value` in what `reg query` printed, or None when it names no such value.
+fn run_value_data<'a>(listing: &'a str, value: &str) -> Option<&'a str> {
+    listing.lines().find_map(|line| {
+        let rest = line.trim_start().strip_prefix(value)?;
+        let data = rest.trim_start().strip_prefix("REG_SZ")?;
+        Some(data.trim())
+    })
+}
+
+/// The ic the sign-in start runs: the installed one, else this one when it is an ic.exe.
+fn autostart_ic() -> Option<PathBuf> {
+    paths::ic_exe().filter(|path| path.is_file()).or_else(|| {
         std::env::current_exe()
             .ok()
             .filter(|path| path.file_name().is_some_and(|name| name == "ic.exe"))
-    });
-    let Some(ic) = ic else {
-        ui::note(&format!(
-            "could not register intentic engine autostart — neither {} nor the running ic.exe exists.",
-            paths::ic_exe()
-                .map(|path| path.display().to_string())
-                .unwrap_or_else(|| "~/.intentic/ic/bin/ic.exe".to_string())
-        ));
-        return Ok(());
-    };
-    let command = format!("\"{}\" engine start --quiet", ic.display());
+    })
+}
+
+fn write_autostart(distro: &str, ic: &Path) -> Result<(), String> {
+    let system_root = std::env::var("SystemRoot").ok();
+    let command = autostart_command(system_root.as_deref(), ic);
     let value = autostart_value(distro);
     let (code, _, stderr) = docker::run_bounded(
         "reg",
         &[
-            "add",
-            r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run",
-            "/v",
-            &value,
-            "/t",
-            "REG_SZ",
-            "/d",
-            &command,
-            "/f",
+            "add", RUN_KEY, "/v", &value, "/t", "REG_SZ", "/d", &command, "/f",
         ],
         Duration::from_secs(15),
     )
@@ -905,6 +914,23 @@ fn register_autostart(distro: &str) -> Result<(), String> {
     if code != 0 {
         return Err(stderr);
     }
+    Ok(())
+}
+
+fn register_autostart(distro: &str) -> Result<(), String> {
+    if std::env::var("IC_ENGINE_AUTOSTART").as_deref() == Ok("0") {
+        return Ok(());
+    }
+    let Some(ic) = autostart_ic() else {
+        ui::note(&format!(
+            "could not register intentic engine autostart — neither {} nor the running ic.exe exists.",
+            paths::ic_exe()
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|| "~/.intentic/ic/bin/ic.exe".to_string())
+        ));
+        return Ok(());
+    };
+    write_autostart(distro, &ic)?;
     ui::detail(&format!(
         "registered intentic engine autostart at sign-in: {}",
         ic.display()
@@ -912,17 +938,35 @@ fn register_autostart(distro: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// A sign-in start an older ic registered, rewritten to this one's command, so a PC set up before the windowless one
+/// stops opening a window at sign-in without being set up again. A value that is not there was never registered or was
+/// taken away on purpose, and stays away.
+fn refresh_autostart(distro: &str) {
+    let value = autostart_value(distro);
+    let Ok(ran) = docker::run_bounded(
+        "reg",
+        &["query", RUN_KEY, "/v", &value],
+        Duration::from_secs(15),
+    ) else {
+        return;
+    };
+    let Some(registered) = run_value_data(&ran.stdout, &value) else {
+        return;
+    };
+    let Some(ic) = autostart_ic() else {
+        return;
+    };
+    let system_root = std::env::var("SystemRoot").ok();
+    if registered != autostart_command(system_root.as_deref(), &ic) {
+        let _ = write_autostart(distro, &ic);
+    }
+}
+
 fn unregister_autostart(distro: &str) -> Result<(), String> {
     let value = autostart_value(distro);
     let _ = docker::run_bounded(
         "reg",
-        &[
-            "delete",
-            r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run",
-            "/v",
-            &value,
-            "/f",
-        ],
+        &["delete", RUN_KEY, "/v", &value, "/f"],
         Duration::from_secs(15),
     );
     Ok(())
@@ -1010,5 +1054,35 @@ mod tests {
             autostart_value("intentic-engine-ci"),
             "IntenticEngine-intentic-engine-ci"
         );
+    }
+
+    #[test]
+    fn the_sign_in_start_runs_in_a_console_with_no_window() {
+        let ic = Path::new(r"C:\Users\a b\.intentic\ic\bin\ic.exe");
+        assert_eq!(
+            autostart_command(Some(r"C:\WINDOWS"), ic),
+            r#""C:\WINDOWS\System32\conhost.exe" --headless "C:\Users\a b\.intentic\ic\bin\ic.exe" engine start --quiet"#
+        );
+        assert_eq!(
+            autostart_command(None, ic),
+            r#""C:\Users\a b\.intentic\ic\bin\ic.exe" engine start --quiet"#
+        );
+    }
+
+    #[test]
+    fn a_run_value_is_read_off_reg_query_and_only_under_its_own_name() {
+        // As reg.exe printed it on radarsu-rog, 2026-10-13.
+        let listing = "\r\nHKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\r\n    IntenticEngine    REG_SZ    \"C:\\Users\\radar\\.intentic\\ic\\bin\\ic.exe\" engine start --quiet\r\n\r\n";
+        assert_eq!(
+            run_value_data(listing, "IntenticEngine"),
+            Some(r#""C:\Users\radar\.intentic\ic\bin\ic.exe" engine start --quiet"#)
+        );
+        assert_eq!(
+            run_value_data(listing, "IntenticEngine-intentic-engine-ci"),
+            None
+        );
+        let ci = "    IntenticEngine-intentic-engine-ci    REG_SZ    x\r\n";
+        assert_eq!(run_value_data(ci, "IntenticEngine"), None);
+        assert_eq!(run_value_data("", "IntenticEngine"), None);
     }
 }
