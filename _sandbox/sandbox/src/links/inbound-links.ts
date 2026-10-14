@@ -20,7 +20,7 @@ import { opt } from "../opt.js";
 // rest like a control token's and shown once.
 //
 // A link reaches only the conversations it opened: each one is filed on the link as a task, and the link doors answer
-// for nothing else (link-door.routes.ts). That list is the whole of a link's reach, which is why it lives with the
+// for nothing else (links.routes.ts). That list is the whole of a link's reach, which is why it lives with the
 // credential rather than in the conversation registry.
 
 // What a stored task remembers. `held` and the settled states are written here; whether a running task is parked on a card

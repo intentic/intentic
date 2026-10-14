@@ -525,6 +525,5 @@ export const pageWakeDeps = (): WakeDeps => ({
 });
 
 // One listener per window, made by the first surface that asks (the shell's WakeListener.vue).
-// allow(module-state): this window's one microphone for the wake word
 let shared: WakeListener | undefined;
 export const useWakeListener = (): WakeListener => (shared ??= createWakeListener(pageWakeDeps()));

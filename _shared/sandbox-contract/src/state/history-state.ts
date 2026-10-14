@@ -22,6 +22,9 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     // conversation's own runtime session store (what `.intentic/records/sessions/claude/` holds for every other).
     // Carried whole, like the conversation it is.
     { path: "conversations/", portability: "carry" },
+    // The tasks this sandbox's conversations handed to linked sandboxes (links/linked-children.ts), followed until they
+    // settle: part of the conversations' own record, so it goes where they go.
+    { path: "links/linked-children.json", portability: "carry" },
     // The long tool outputs those transcripts name rather than hold, stored once by content for every record naming
     // them; a transcript without them keeps only each output's start.
     { path: "blobs/", portability: "carry" },
@@ -180,6 +183,14 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
         note: "Re-invite collaborators from the Access tab, a grant is the platform's record, and the target enforces its own copy.",
     },
     { path: "identity/control-tokens.json", portability: "identity", note: "Mint fresh control tokens, the old ones authenticate against the source sandbox." },
+    // The links other sandboxes hand this one tasks through (links/inbound-links.ts): hashed tokens like the control
+    // tokens, each minted here, and the tasks filed under them; elsewhere they would let the paired sandboxes reach the
+    // target in this one's name.
+    {
+        path: "identity/links.json",
+        portability: "identity",
+        note: "Pair the sandboxes that hand this one tasks again from its Access tab: their links name the source sandbox.",
+    },
     // Public keys, the owner's require-a-passkey switch and the hashes of their recovery codes, moved from
     // `.intentic/identity/passkeys.json` the same way (the passkeys-off-workspace step), since a passkey sign-in trusts
     // the row it finds: a copy that traveled would let a source sandbox's passkeys open the target.

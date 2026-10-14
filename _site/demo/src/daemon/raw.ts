@@ -143,6 +143,8 @@ export const raw = {
     // No phone is paired in the demo, but adding the Android card mints a pairing, so its QR code can be seen; nothing
     // can ever redeem this one.
     "GET /system/phones": () => json({ phones: [] }),
+    // No other sandbox is linked to hand the demo tasks: the Access tab's linked sandboxes section shows none.
+    "GET /system/links": () => json({ links: [] }),
     "GET /speech/voices": () => json(DEMO_VOICES),
     "POST /system/phones/pair": () => json({ token: `demo-pairing-never-redeemable`, expiresIn: 600_000 }),
     // intentic-netd's own answer in a real sandbox: a daemon that is up, idle and never restarted.

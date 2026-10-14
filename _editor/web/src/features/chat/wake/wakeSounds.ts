@@ -19,7 +19,6 @@ const NOTE_MS = 110;
 export const wakeSoundMs = (sound: WakeSound): number => NOTES[sound].length * NOTE_MS + 60;
 
 // One context for every sound, made at the first: a page may hold only a few.
-// allow(module-state): the page's one context for these sounds
 let context: AudioContext | undefined;
 
 export const playWakeSound = (sound: WakeSound): void => {
