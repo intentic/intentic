@@ -51,6 +51,13 @@ export const HelloSchema = z.object({
     workspaceId: z.string(),
     routes: z.array(z.string()).optional(),
     shapes: z.record(z.string(), z.string()).optional(),
+    // The same two for the hand-written routes (`POST /workspace/upload-diff`), which are half the daemon's surface and
+    // used to be advertised nowhere: a call onto a raw route an older daemon predates could only come back as a bare
+    // 404. Their own fields rather than more entries in `routes`, which an older browser reads as proof that it is
+    // itself the stale side. Absent means a daemon from before this field, and no evidence either way.
+    // `rawFingerprints` is what `shapes` is for a procedure, under the name the rest of the code gives it.
+    rawRoutes: z.array(z.string()).optional(),
+    rawFingerprints: z.record(z.string(), z.string()).optional(),
     build: z.string().optional(),
     boot: BootProgressSchema.optional(),
     // A project sandbox's folder, workspace-relative (`my-app` for /work/my-app): the owner's own folder, synced live

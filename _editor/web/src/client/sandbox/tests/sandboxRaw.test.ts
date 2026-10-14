@@ -1,5 +1,6 @@
 // The one door to the daemon's plain-JSON routes: a call is its contract key, so the path, the body and the answer's
 // schema all come from the route table, and a route that needs a value in its path cannot be called without it.
+import { resetSandboxScope } from "@intentic/extension-api";
 import { ZodError } from "zod";
 
 const sandboxJson = jest.fn<(path: string, init?: RequestInit) => Promise<object>>();
@@ -11,6 +12,7 @@ jest.mock(`../sandboxClient`, () => ({
 
 const { sandboxRaw } = await import(`../sandboxRaw`);
 const { sandboxRawUpload } = await import(`../sandboxRawUpload`);
+const { setDaemonRoutes } = await import(`../useDaemonRoutes`);
 
 // The call as the client received it: its path, and the init when there was one.
 const sent = (): readonly [string, RequestInit | undefined] => {
@@ -21,6 +23,8 @@ const sent = (): readonly [string, RequestInit | undefined] => {
 beforeEach(() => {
     sandboxJson.mockReset();
     sandboxUpload.mockReset();
+    // What one test said the daemon serves is not evidence for the next: an unknown surface is every route assumed.
+    resetSandboxScope();
 });
 
 describe(`sandboxRaw`, () => {
@@ -73,6 +77,25 @@ describe(`sandboxRaw`, () => {
     it(`refuses an answer the route's own schema does not accept, so a shape drift is an error and not a cast`, async () => {
         sandboxJson.mockResolvedValue({ runners: `none` });
         await expect(sandboxRaw(`GET /system/runners`)).rejects.toBeInstanceOf(ZodError);
+    });
+
+    // What a daemon older than this page used to answer here was a bare 404, which reached the reader as "the request
+    // failed (404)" over a card that looked broken. The hello says which of these routes it serves, so the call is
+    // refused here with the gap named, in the words a missing procedure gets.
+    it(`refuses a route the daemon has said it doesn't serve, naming the gap instead of 404ing`, async () => {
+        const { RAW_ROUTE_NAMES } = await import(`@intentic/sandbox-contract`);
+        setDaemonRoutes(undefined, undefined, undefined, { rawRoutes: RAW_ROUTE_NAMES.filter((name) => name !== `GET /system/links`) });
+        await expect(sandboxRaw(`GET /system/links`)).rejects.toThrow(`This sandbox's daemon doesn't provide 'GET /system/links'.`);
+        expect(sandboxJson).not.toHaveBeenCalled();
+    });
+
+    it(`calls a route the daemon serves, and one it has said nothing about`, async () => {
+        sandboxJson.mockResolvedValue({ links: [] });
+        setDaemonRoutes(undefined, undefined, undefined, { rawRoutes: [`GET /system/links`] });
+        await expect(sandboxRaw(`GET /system/links`)).resolves.toEqual({ links: [] });
+        // A daemon from before the field is assumed to answer, as it is for a procedure: silence is not evidence.
+        setDaemonRoutes(undefined);
+        await expect(sandboxRaw(`GET /system/links`)).resolves.toEqual({ links: [] });
     });
 
     it(`cannot name a route with a {param} without its value`, async () => {

@@ -7376,6 +7376,7 @@
                 }
             },
             "unknownWhere": "coś nowszego niż ta strona",
+            "unnamedWhere": "część Twojego sandboxa, dla której ta strona nie ma prostej nazwy",
             "impact": {
                 "missing": "Twój sandbox jeszcze tego nie ma, więc nic, co tego tutaj potrzebuje, nie zadziała, dopóki sandbox nie nadrobi zaległości.",
                 "drifted": "Obie strony oczekują tu trochę innych rzeczy. Coś może się pokazać puste albo zmiana może się nie zapisać.",

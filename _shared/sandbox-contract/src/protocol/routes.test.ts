@@ -1,6 +1,6 @@
 import { eventIterator, oc } from "@orpc/contract";
 import { z } from "zod";
-import { SANDBOX_ROUTE_NAMES, SANDBOX_ROUTES, sandboxRouteName, sandboxRouteFingerprints } from "../index.js";
+import { RAW_JSON_ROUTES, RAW_ROUTE_NAMES, rawRouteFingerprints, SANDBOX_ROUTE_NAMES, SANDBOX_ROUTES, sandboxRouteName, sandboxRouteFingerprints } from "../index.js";
 import { procedure } from "./route-meta.js";
 import { contractRoutes, routeNameForRequest, routeShapes, servedRoute, streamOf } from "./routes.js";
 
@@ -271,6 +271,37 @@ describe(`the real sandbox contract`, () => {
     it(`fingerprints every route exactly once`, () => {
         expect(Object.keys(sandboxRouteFingerprints()).every((name) => SANDBOX_ROUTE_NAMES.includes(name))).toBe(true);
         expect(Object.keys(sandboxRouteFingerprints()).length).toBe(SANDBOX_ROUTE_NAMES.length);
+    });
+
+    // The other half of the surface. Unfingerprinted and unnamed, these were the routes no version check could see:
+    // a browser calling one an older daemon predates got a bare 404 and nothing to say about it.
+    it(`names every hand-written route beside the procedures, and keeps the two sets apart`, () => {
+        expect(RAW_ROUTE_NAMES).toContain(`GET /system/links`);
+        expect(RAW_ROUTE_NAMES.filter((name) => SANDBOX_ROUTE_NAMES.includes(name))).toEqual([]);
+        expect(new Set(RAW_ROUTE_NAMES).size).toBe(RAW_ROUTE_NAMES.length);
+    });
+
+    it(`fingerprints every hand-written route whose schemas can be expressed`, () => {
+        const prints = rawRouteFingerprints();
+        // The two exceptions are `z.custom()` (schemas/system.ts: the WebAuthn options the browser's own parser reads,
+        // checked here for a challenge and nothing else), which has no JSON Schema to hash. They are still advertised
+        // by name, so a daemon that lacks them is caught; only a change in their fields passes unnoticed. A third name
+        // here is a schema that quietly stopped being comparable, not a licence to add one.
+        expect(Object.keys(RAW_JSON_ROUTES).filter((name) => !(name in prints))).toEqual([
+            `POST /system/passkeys/register/options`,
+            `POST /system/passkeys/assert/options`,
+        ]);
+        // Only those: a WebSocket upgrade or a byte stream declares nothing to compare, and an unfingerprinted route
+        // is compared on nothing rather than read as a disagreement.
+        expect(Object.keys(prints).every((name) => name in RAW_JSON_ROUTES)).toBe(true);
+    });
+
+    it(`fingerprints a route by what it carries, so a changed field is a different print`, () => {
+        const prints = rawRouteFingerprints();
+        expect(prints[`GET /system/links`]).toEqual(expect.any(String));
+        expect(prints[`GET /system/links`]).not.toBe(prints[`GET /members`]);
+        // A body of bytes has no input schema, and the answer alone decides its print.
+        expect(prints[`POST /workspace/upload`]).toBe(prints[`POST /workspace/upload-archive`]);
     });
 
     it(`derives a route table with no duplicate names`, () => {

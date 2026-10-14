@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { stubEnv } from "@intentic/testing/bun";
 
-import { type Hello, projectRemoteDir, type SandboxMetrics } from "@intentic/sandbox-contract";
+import { type Hello, projectRemoteDir, RAW_ROUTE_NAMES, type SandboxMetrics } from "@intentic/sandbox-contract";
 import { createApp } from "../app.js";
 
 import { createLogger } from "../logger.js";
@@ -289,6 +289,18 @@ test("events: the first frame is the workspace-identity hello, stable across con
     expect(await firstFrame()).toBe(minted);
 });
 
+// The hand-written routes are half of what this daemon serves, and used to ride on no field of this frame at all: a
+// browser calling one an older daemon predates could only read the 404 it came back as.
+test("events: the hello names the hand-written routes and their shapes, beside the procedures'", async () => {
+    const hello = await helloFrom(clientFor(createApp(services())));
+    expect(hello.rawRoutes).toContain("GET /system/links");
+    expect(hello.rawRoutes).toEqual([...RAW_ROUTE_NAMES]);
+    // Named and fingerprinted are separate: a route whose schemas can't be expressed is still advertised, and a
+    // fingerprint is only ever published for a route that has one.
+    expect(hello.rawFingerprints?.["GET /system/links"]).toEqual(expect.any(String));
+    expect(Object.keys(hello.rawFingerprints ?? {}).every((name) => hello.rawRoutes?.includes(name))).toBe(true);
+});
+
 test("events: the hello names the daemon's build and where its boot is, then streams every step", async () => {
     const boot = createBootTracker(createLogger(testConfig));
     boot.declare([{ key: "registry", label: "Loading conversations" }]);
@@ -345,7 +357,16 @@ const projectConfig = { ...testConfig, sandbox: { ...testConfig.sandbox, project
 // The browser opens a project sandbox on the owner's folder from its first frame, before any route answers.
 test("events: a project sandbox's hello names its folder, workspace-relative, and any other sandbox's names none", async () => {
     expect(await helloFrom(clientFor(createApp(services({ config: projectConfig }))))).toMatchObject({ kind: "hello", projectDir: "my-app" });
-    expect(Object.keys(await helloFrom(clientFor(createApp(services()))))).toEqual(["kind", "workspaceId", "routes", "shapes", "build", "boot"]);
+    expect(Object.keys(await helloFrom(clientFor(createApp(services()))))).toEqual([
+        "kind",
+        "workspaceId",
+        "routes",
+        "shapes",
+        "rawRoutes",
+        "rawFingerprints",
+        "build",
+        "boot",
+    ]);
 });
 
 // A fence withholds a folder it does not reach, as it withholds any repository's name; one on the way down to a held

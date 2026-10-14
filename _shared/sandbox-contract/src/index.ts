@@ -1,8 +1,9 @@
 import { getEventIteratorSchemaDetails, isContractProcedure } from "@orpc/contract";
 import type { z } from "zod";
+import { RAW_JSON_ROUTES } from "./protocol/raw/raw-json-routes.js";
 import { RAW_ROUTE_LIST } from "./protocol/raw/raw-routes.js";
 import type { ContractRoute } from "./protocol/routes.js";
-import { contractRoutes, requestPathFor, routeForProcedure, routeNameForRequest, routeShapes, servedRoute } from "./protocol/routes.js";
+import { contractRoutes, rawRouteFingerprintsOf, requestPathFor, routeForProcedure, routeNameForRequest, routeShapes, servedRoute } from "./protocol/routes.js";
 import { accountsContract } from "./contracts/accounts.contract.js";
 import { activityContract } from "./contracts/activity.contract.js";
 import { agentContract } from "./contracts/agent.contract.js";
@@ -373,6 +374,19 @@ export const SANDBOX_ROUTE_NAMES: readonly string[] = SANDBOX_ROUTES.map((route)
 // asks on its first hello.
 let fingerprints: Readonly<Record<string, string>> | undefined;
 export const sandboxRouteFingerprints = (): Readonly<Record<string, string>> => (fingerprints ??= routeShapes(sandboxContract));
+
+// The hand-written routes beside the procedures, advertised on their own field of the hello frame rather than mixed
+// into `routes`: a browser older than this build reads an unknown name in `routes` as evidence that IT is the stale
+// side, and every raw name arriving there at once would have had it say so on every connection. Absent, as from every
+// daemon before the field, means no evidence — the same "assume it answers" an unknown route surface gets.
+export const RAW_ROUTE_NAMES: readonly string[] = RAW_ROUTE_LIST.map((route) => route.name);
+
+// Each raw JSON route's shape, memoised like the procedures' for the same reason: the walk turns every schema into JSON
+// Schema, which is startup time a browser should only spend when it has a disagreement to explain. The routes that
+// carry no schemas at all (a WebSocket upgrade, a byte stream) are named above but fingerprinted nowhere, and an
+// unfingerprinted route is compared on nothing.
+let rawFingerprints: Readonly<Record<string, string>> | undefined;
+export const rawRouteFingerprints = (): Readonly<Record<string, string>> => (rawFingerprints ??= rawRouteFingerprintsOf(RAW_JSON_ROUTES));
 
 // The contract route a concrete browser request belongs to, bound to this build's route table.
 export const sandboxRouteName = (method: string, pathWithQuery: string): string | undefined =>

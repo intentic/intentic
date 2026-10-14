@@ -1,5 +1,5 @@
 import { resetSandboxScope } from "@intentic/extension-api";
-import { SANDBOX_ROUTE_NAMES, sandboxRouteFingerprints } from "@intentic/sandbox-contract";
+import { RAW_ROUTE_NAMES, rawRouteFingerprints, SANDBOX_ROUTE_NAMES, sandboxRouteFingerprints } from "@intentic/sandbox-contract";
 import {
     appBehind,
     comparedRouteCount,
@@ -233,6 +233,68 @@ describe(`staleDaemonReason`, () => {
     });
 });
 
+// The daemon's hand-written routes (`POST /workspace/upload-diff`), which used to be advertised nowhere: a call onto
+// one an older daemon predates could only come back as a bare 404, and a feature gated on one was hidden against every
+// daemon there is, since none of them named it.
+describe(`the hand-written routes`, () => {
+    const RAW = [...RAW_ROUTE_NAMES];
+    const RAW_PRINTS = { ...rawRouteFingerprints() };
+    const LINKS = `GET /system/links`;
+    const withoutLinks = RAW.filter((name) => name !== LINKS);
+    const sandbox = (raw: readonly string[] | undefined, prints?: Record<string, string>): void =>
+        setDaemonRoutes(LEVEL, SHAPES, undefined, { rawRoutes: raw === undefined ? undefined : [...raw], rawFingerprints: prints });
+
+    beforeEach(() => resetSandboxScope());
+
+    it(`assumes a daemon from before the field answers them, as it does for an unknown procedure surface`, () => {
+        sandbox(undefined);
+        expect([supportsRoute(LINKS), daemonBehind.value, missingRoutes.value]).toEqual([true, false, []]);
+    });
+
+    it(`gates on them once a daemon says which it serves`, () => {
+        sandbox(RAW);
+        expect(supportsRoute(LINKS)).toBe(true);
+        sandbox(withoutLinks);
+        expect(supportsRoute(LINKS)).toBe(false);
+    });
+
+    // The whole point: the gap reaches the reader as a gap, in the same words a missing procedure gets, rather than as
+    // the 404 the call would otherwise come back as.
+    it(`names the one a daemon predates, and says to update the sandbox`, () => {
+        sandbox(withoutLinks);
+        expect(missingRoutes.value).toEqual([LINKS]);
+        expect(daemonBehind.value).toBe(true);
+        expect(staleDaemonReason(LINKS)).toMatch(/^This sandbox's daemon doesn't provide 'GET \/system\/links'\./);
+        // The remedy is the sandbox's, never this page's: a missing route proves which of the two is behind. (In a dev
+        // build that remedy is the restart script; in a shipped one, updating the image.)
+        expect(staleDaemonReason(LINKS)).not.toMatch(/reload this page/i);
+    });
+
+    it(`keeps the two kinds on their own evidence: procedures level, raw routes behind`, () => {
+        sandbox(withoutLinks);
+        expect(supportsRoute(`vpn.list`)).toBe(true);
+        setDaemonRoutes(withoutVpn, SHAPES, undefined, { rawRoutes: RAW });
+        expect([supportsRoute(LINKS), supportsRoute(`vpn.list`)]).toEqual([true, false]);
+    });
+
+    it(`reads one only the daemon has as the page being the older side`, () => {
+        sandbox([...RAW, `GET /teleport`]);
+        expect(unknownDaemonRoutes.value).toEqual([`GET /teleport`]);
+        expect([appBehind.value, daemonBehind.value]).toEqual([true, false]);
+    });
+
+    it(`reports a raw route whose fields moved as drift, beside the procedures'`, () => {
+        sandbox(RAW, { ...RAW_PRINTS, [LINKS]: `different` });
+        expect(driftedRoutes.value).toEqual([LINKS]);
+        expect(daemonDrifted.value).toBe(true);
+    });
+
+    it(`compares them only where both sides published a fingerprint`, () => {
+        sandbox(RAW);
+        expect([driftedRoutes.value, comparedRouteCount.value]).toEqual([[], Object.keys(SHAPES).length]);
+    });
+});
+
 // The desktop app's sidecar serving a folder on this computer: it lists the few routes it has, and every other one is
 // missing by nature, not because anything is out of date.
 describe(`a folder on this computer`, () => {
@@ -243,6 +305,14 @@ describe(`a folder on this computer`, () => {
         setDaemonRoutes(FOLDER, undefined, `folder`);
         expect([folderSurface.value, supportsRoute(`workspace.tree`), supportsRoute(`workspace.mkdir`)]).toEqual([true, true, false]);
         expect([missingRoutes.value, daemonBehind.value, unknownDaemonRoutes.value, appBehind.value]).toEqual([[], false, [], false]);
+    });
+
+    // A sidecar ships in one build with this page and lists its raw routes among the rest, so they are read from the
+    // same field rather than from the one a daemon advertises them on.
+    it(`gates its hand-written routes off the one list it sends`, () => {
+        setDaemonRoutes(FOLDER, undefined, `folder`);
+        expect([supportsRoute(`POST /workspace/upload`), supportsRoute(`POST /workspace/upload-diff`)]).toEqual([true, false]);
+        expect([missingRoutes.value, daemonBehind.value]).toEqual([[], false]);
     });
 
     it(`says a missing route is not there for a folder, and never to update a sandbox`, () => {

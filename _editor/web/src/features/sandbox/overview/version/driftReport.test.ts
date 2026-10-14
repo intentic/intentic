@@ -20,9 +20,33 @@ it(`names an area as the product names it, not as the contract does`, () => {
 it(`has a name for every group in the shipped contract`, () => {
     const groups = [...new Set(SANDBOX_ROUTE_NAMES.map((name) => name.split(`.`)[0] ?? name))];
     const unnamed = driftAreas({ missing: groups.map((group) => `${group}.probe`), drifted: [], extra: [] })
-        .filter((area) => area.where === `something newer than this page`)
+        // A group of ours with no entry in the table falls back to this line, not to the one about a newer sandbox.
+        .filter((area) => area.where === `a part of your sandbox this page has no plain name for`)
         .map((area) => area.key);
     expect(unnamed).toEqual([]);
+});
+
+// The hand-written routes are keyed `METHOD /path`, and splitting those on a dot put every one of them in a row of its
+// own named after the verb. They belong in the row a reader would look for: the one their path's first segment names.
+it(`folds a hand-written route into the area its path names`, () => {
+    const [area] = driftAreas({ missing: [`GET /system/links`], drifted: [`system.terminals`], extra: [] });
+    expect(area).toMatchObject({
+        key: `system`,
+        label: `Terminals and devices`,
+        kind: `missing`,
+        missing: [`GET /system/links`],
+        drifted: [`system.terminals`],
+        count: 2,
+    });
+});
+
+// Two different unnamed cases, and telling the reader the wrong one sends them to update a sandbox that is already
+// current: a group only the DAEMON named is newer than this page, one of our own is merely unlabelled here.
+it(`tells an unlabelled area of our own from a feature this page predates`, () => {
+    const [ours] = driftAreas({ missing: [`POST /intake/scan`], drifted: [], extra: [] });
+    expect(ours).toMatchObject({ key: `intake`, label: `Intake`, where: `a part of your sandbox this page has no plain name for` });
+    const [theirs] = driftAreas({ missing: [], drifted: [], extra: [`GET /teleport/status`] });
+    expect(theirs).toMatchObject({ key: `teleport`, where: `something newer than this page` });
 });
 
 // A group only the daemon has is a feature this build predates, so there is no honest label for it — and inventing

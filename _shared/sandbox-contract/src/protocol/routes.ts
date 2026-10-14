@@ -150,6 +150,24 @@ export const routeShapes = (contract: Record<string, unknown>): Record<string, s
     return shapes;
 };
 
+// The same, for the hand-written routes that answer plain JSON (raw-json-routes.ts). They carry their schemas directly
+// rather than through oRPC, so they need their own walk — and without one they were the half of the surface no version
+// check could see: a browser calling a raw route an older daemon predates got a bare 404 with nothing to say about it.
+// The table is passed in rather than imported, so this file stays free of the raw tables that read its types.
+export const rawRouteFingerprintsOf = (table: Record<string, { readonly input?: unknown; readonly output?: unknown }>) => {
+    const prints: Record<string, string> = {};
+    for (const [name, route] of Object.entries(table)) {
+        try {
+            // A `text` or `bytes` route declares no input schema; its body is the document or the bytes, and the
+            // fingerprint is its answer alone.
+            prints[name] = fingerprint({ in: wireShape(route.input, "input"), out: wireShape(route.output, "output") });
+        } catch {
+            continue;
+        }
+    }
+    return prints;
+};
+
 // A template split once: a literal segment, or undefined for a `{param}`; `tail` for a raw route's trailing `/*`.
 interface Pattern {
     readonly route: ContractRoute;

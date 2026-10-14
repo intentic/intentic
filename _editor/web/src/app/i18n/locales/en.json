@@ -7780,6 +7780,7 @@
                 }
             },
             "unknownWhere": "something newer than this page",
+            "unnamedWhere": "a part of your sandbox this page has no plain name for",
             "impact": {
                 "missing": "Your sandbox doesn't have this part yet, so anything here that needs it won't work until the sandbox catches up.",
                 "drifted": "The two sides expect slightly different things here. You might see something come up empty, or a change that won't save.",

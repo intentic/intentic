@@ -94,11 +94,23 @@ const AREAS: Readonly<Record<string, () => AreaName>> = {
     workspace: () => ({ label: t(`sandbox.driftReport.areas.workspace.label`), where: t(`sandbox.driftReport.areas.workspace.where`) }),
 };
 
-// A route name with no dot is its own group, not a hole in the list.
-const groupOf = (route: string): string => route.split(`.`)[0] ?? route;
+// Which part of the product a route belongs to. A procedure carries it as its first dotted segment (`system.info`); a
+// hand-written one carries it as the first segment of its path (`GET /system/links`), so both land in the row a reader
+// would look for rather than one row per verb. A name with neither is its own group, not a hole in the list.
+const groupOf = (route: string): string => {
+    const path = route.includes(` `) ? route.slice(route.indexOf(` `) + 1) : undefined;
+    return path === undefined ? (route.split(`.`)[0] ?? route) : (path.split(`/`).find((segment) => segment.length > 0) ?? route);
+};
 
-const nameOf = (key: string): AreaName =>
-    AREAS[key]?.() ?? { label: key.charAt(0).toUpperCase() + key.slice(1), where: t(`sandbox.driftReport.unknownWhere`) };
+// A group with no entry above is one of two different things, and saying the wrong one misleads: a group only the
+// DAEMON named is a feature this build predates, while one of our own (every missing or drifted route is a call this
+// build makes) is simply an area the table has no plain name for — which the hand-written routes, grouped by their
+// path, bring more of.
+const nameOf = (key: string, theirsOnly: boolean): AreaName =>
+    AREAS[key]?.() ?? {
+        label: key.charAt(0).toUpperCase() + key.slice(1),
+        where: theirsOnly ? t(`sandbox.driftReport.unknownWhere`) : t(`sandbox.driftReport.unnamedWhere`),
+    };
 
 // Folds three flat route lists into one row per area of the product. Pure, so the whole table above is testable
 // without a daemon.
@@ -125,7 +137,7 @@ export const driftAreas = (lists: {
             const kind: DriftKind = found.missing.length > 0 ? `missing` : found.drifted.length > 0 ? `drifted` : `extra`;
             return {
                 key,
-                ...nameOf(key),
+                ...nameOf(key, found.missing.length === 0 && found.drifted.length === 0),
                 missing: found.missing.toSorted(),
                 drifted: found.drifted.toSorted(),
                 extra: found.extra.toSorted(),

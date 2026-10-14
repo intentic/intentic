@@ -9,6 +9,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { jsonBody } from "./jsonBody";
 import { sandboxJson } from "./sandboxClient";
+import { staleDaemonReason } from "./useDaemonRoutes";
 
 // One of the daemon's plain-JSON raw routes, called by its contract key: the path from the route table (its `{param}`
 // segments filled and encoded), the body from the route's input (JSON, the document a `text` route takes, or the
@@ -77,6 +78,13 @@ const requestInit = (call: Resolved): RequestInit | undefined => {
 export function sandboxRaw<Key extends Fixed>(key: Key, call?: SandboxRawCall<Key>): Promise<RawJsonOutput<Key>>;
 export function sandboxRaw<Key extends Parameterised>(key: Key, call: SandboxRawCall<Key> & { readonly params: RawRouteParams<Key> }): Promise<RawJsonOutput<Key>>;
 export async function sandboxRaw<Key extends RawJsonRouteKey>(key: Key, call?: SandboxRawCall<Key>): Promise<RawJsonOutput<Key>> {
+    // A daemon that predates this route answers 404, which on its own reaches the reader as "the request failed (404)"
+    // and sends them looking for a fault in their own sandbox. The hello says which raw routes this one serves, so the
+    // gap is named here instead, in the same words a missing procedure gets.
+    const stale = staleDaemonReason(key);
+    if (stale !== undefined) {
+        throw new Error(stale);
+    }
     const route: { readonly text?: true; readonly bytes?: true; readonly output: (typeof RAW_JSON_ROUTES)[RawJsonRouteKey][`output`] } = RAW_JSON_ROUTES[key];
     const query = call?.query === undefined ? `` : `?${new URLSearchParams(call.query).toString()}`;
     const path = fillRoutePath(rawRoutePath(key), call?.params);

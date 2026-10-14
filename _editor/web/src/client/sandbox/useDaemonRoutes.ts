@@ -1,5 +1,5 @@
 import { sandboxRef } from "@intentic/extension-api";
-import { type Hello, SANDBOX_ROUTE_NAMES, sandboxRouteFingerprints } from "@intentic/sandbox-contract";
+import { type Hello, RAW_ROUTE_NAMES, rawRouteFingerprints, SANDBOX_ROUTE_NAMES, sandboxRouteFingerprints } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { z } from "zod";
@@ -20,6 +20,10 @@ export type DaemonSurface = NonNullable<Hello["surface"]>;
 // another machine of another age, so nothing of its hello is carried across a switch.
 let sidecarHello: { readonly routes: ReadonlySet<string> | undefined; readonly shapes: Readonly<Record<string, string>> | undefined } | undefined;
 
+// A raw route is keyed `METHOD /path` and a procedure `group.name`; the space is the whole difference, and the two are
+// advertised on fields of their own, so every check below has to know which of the two it is holding.
+const isRawRoute = (name: string): boolean => name.includes(` `);
+
 // Route names the daemon advertises; undefined means unknown (not connected yet, no hello read) and is read as fully
 // supported. Sandbox-scoped, not dropped with a connection, so one sandbox's surface isn't attributed to
 // another.
@@ -29,13 +33,27 @@ const advertised = sandboxRef<ReadonlySet<string> | undefined>(() => sidecarHell
 // mismatch.
 const advertisedShapes = sandboxRef<Readonly<Record<string, string>> | undefined>(() => sidecarHello?.shapes);
 
+// The daemon's hand-written routes and their fingerprints, advertised on fields of their own since a browser older
+// than the daemon reads an unfamiliar name in `routes` as evidence about which side is stale. Undefined is a daemon
+// from before those fields, and reads as assume-supported exactly like an unknown procedure surface. A folder's
+// sidecar sends neither: it lists what few raw routes it serves among `routes`, and ships in one build with this page.
+const advertisedRaw = sandboxRef<ReadonlySet<string> | undefined>(() => undefined);
+const advertisedRawPrints = sandboxRef<Readonly<Record<string, string>> | undefined>(() => undefined);
+
 const advertisedSurface = sandboxRef<DaemonSurface>(() => (sidecarHello === undefined ? `sandbox` : `folder`));
 
 // Called on every hello frame; nothing advertised leaves the assume-supported state. A hello that names no surface is
 // a daemon's, from before the field.
-export const setDaemonRoutes = (routes: readonly string[] | undefined, shapes?: Readonly<Record<string, string>>, surface?: DaemonSurface): void => {
+export const setDaemonRoutes = (
+    routes: readonly string[] | undefined,
+    shapes?: Readonly<Record<string, string>>,
+    surface?: DaemonSurface,
+    raw?: Pick<Hello, `rawRoutes` | `rawFingerprints`>,
+): void => {
     advertised.value = routes === undefined ? undefined : new Set(routes);
     advertisedShapes.value = shapes;
+    advertisedRaw.value = raw?.rawRoutes === undefined ? undefined : new Set(raw.rawRoutes);
+    advertisedRawPrints.value = raw?.rawFingerprints;
     advertisedSurface.value = surface ?? `sandbox`;
     sidecarHello = surface === `folder` ? { routes: advertised.value, shapes } : undefined;
 };
@@ -43,24 +61,41 @@ export const setDaemonRoutes = (routes: readonly string[] | undefined, shapes?: 
 // True for a window on a folder of this computer (the desktop app's local face).
 export const folderSurface = computed(() => advertisedSurface.value === `folder`);
 
+// Which set names routes of this one's kind: a folder lists the few raw routes it serves among `routes`, a daemon
+// advertises them apart. Undefined either way means the surface was never stated.
+const advertisedFor = (name: string): ReadonlySet<string> | undefined =>
+    isRawRoute(name) && !folderSurface.value ? advertisedRaw.value : advertised.value;
+
 // An unknown daemon or route answers true; a feature only hides on positive evidence it's missing.
-export const supportsRoute = (name: string): boolean => advertised.value === undefined || advertised.value.has(name);
+export const supportsRoute = (name: string): boolean => {
+    const known = advertisedFor(name);
+    return known === undefined || known.has(name);
+};
 
 // How many calls each side names, which is what makes a drift count mean anything: "7 disagree" out of a surface
 // neither side's size is stated for is a number with no scale. Undefined for a daemon that never said.
-export const advertisedRouteCount = computed<number | undefined>(() => advertised.value?.size);
-export const ourRouteCount = SANDBOX_ROUTE_NAMES.length;
+export const advertisedRouteCount = computed<number | undefined>(() =>
+    advertised.value === undefined ? undefined : advertised.value.size + (advertisedRaw.value?.size ?? 0),
+);
+export const ourRouteCount = SANDBOX_ROUTE_NAMES.length + RAW_ROUTE_NAMES.length;
 
-// This build's own route names, as a set, for the two directions of comparison below.
+// This build's own route names, as sets, for the two directions of comparison below.
 const OURS: ReadonlySet<string> = new Set(SANDBOX_ROUTE_NAMES);
+const OURS_RAW: ReadonlySet<string> = new Set(RAW_ROUTE_NAMES);
 
 // How far behind the sandbox is; empty when the daemon is level or newer (extra daemon routes are never asked about).
+// Each kind is read off its own field, so a daemon that advertises procedures and not raw routes is checked on
+// procedures and assumed level on the rest, rather than reading as missing every raw route there is.
 export const missingRoutes = computed<string[]>(() => {
-    const known = advertised.value;
-    if (known === undefined || folderSurface.value) {
+    if (folderSurface.value) {
         return [];
     }
-    return SANDBOX_ROUTE_NAMES.filter((name) => !known.has(name));
+    const known = advertised.value;
+    const knownRaw = advertisedRaw.value;
+    return [
+        ...(known === undefined ? [] : SANDBOX_ROUTE_NAMES.filter((name) => !known.has(name))),
+        ...(knownRaw === undefined ? [] : RAW_ROUTE_NAMES.filter((name) => !knownRaw.has(name))),
+    ];
 });
 
 // True when the daemon is demonstrably older; informational in production, actionable (rebuild) in dev.
@@ -70,17 +105,33 @@ export const daemonBehind = computed(() => missingRoutes.value.length > 0);
 // on its own — a tab left open across a sandbox update is exactly this — so it never raises a warning by itself. It
 // only says which way a disagreement leans once something else has already proved there is one.
 export const unknownDaemonRoutes = computed<string[]>(() => {
+    if (folderSurface.value) {
+        return [];
+    }
     const known = advertised.value;
-    return known === undefined || folderSurface.value ? [] : [...known].filter((name) => !OURS.has(name)).toSorted();
+    const knownRaw = advertisedRaw.value;
+    return [
+        ...(known === undefined ? [] : [...known].filter((name) => !OURS.has(name))),
+        ...(knownRaw === undefined ? [] : [...knownRaw].filter((name) => !OURS_RAW.has(name))),
+    ].toSorted();
 });
 
 export const appBehind = computed(() => unknownDaemonRoutes.value.length > 0);
 
+// Both kinds of route under one name → fingerprint map, which is what the comparison below reads: the kinds disagree
+// the same way and are read off the same evidence, so only the two hellos' fields keep them apart.
+const ourFingerprints = () => ({ ...sandboxRouteFingerprints(), ...rawRouteFingerprints() });
+const theirFingerprints = computed<Readonly<Record<string, string>> | undefined>(() =>
+    advertisedShapes.value === undefined && advertisedRawPrints.value === undefined
+        ? undefined
+        : { ...advertisedShapes.value, ...advertisedRawPrints.value },
+);
+
 // Routes both sides published a fingerprint for: the only ones a disagreement can be read off. An unexpressed or
 // unpublished shape is no evidence, not a match.
 const comparableRoutes = computed<string[]>(() => {
-    const theirs = advertisedShapes.value;
-    return theirs === undefined ? [] : Object.keys(sandboxRouteFingerprints()).filter((name) => theirs[name] !== undefined);
+    const theirs = theirFingerprints.value;
+    return theirs === undefined ? [] : Object.keys(ourFingerprints()).filter((name) => theirs[name] !== undefined);
 });
 
 // The denominator a drift count is only meaningful against: "3 routes disagree" says nothing without how many were
@@ -88,8 +139,8 @@ const comparableRoutes = computed<string[]>(() => {
 export const comparedRouteCount = computed(() => comparableRoutes.value.length);
 
 export const driftedRoutes = computed<string[]>(() => {
-    const theirs = advertisedShapes.value;
-    const ours = sandboxRouteFingerprints();
+    const theirs = theirFingerprints.value;
+    const ours = ourFingerprints();
     return theirs === undefined ? [] : comparableRoutes.value.filter((name) => theirs[name] !== ours[name]).toSorted();
 });
 
