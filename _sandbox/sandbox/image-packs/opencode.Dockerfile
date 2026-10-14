@@ -9,7 +9,7 @@
 # reach the image.
 # ponytail: bump together with @opencode/client.
 RUN --mount=type=cache,target=/root/.npm \
-    npm install -g @opencode/cli@2.0.27 \
+    npm install -g @opencode/cli@2.0.28 \
     && test -x "$(npm root -g)/@opencode/cli/bin/opencode.exe" \
     && rm -rf "$(npm root -g)"/@opencode/cli/node_modules/@opencode/cli-* "$(npm root -g)"/@opencode/cli-* \
     && opencode --version
