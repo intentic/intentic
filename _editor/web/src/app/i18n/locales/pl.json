@@ -1985,7 +1985,7 @@
             "link": {
                 "name": "Połączony sandbox",
                 "description": "Przekazuj zadania innemu ze swoich sandboxów.",
-                "hint": "Agent przekazuje zadanie przez `delegate` i czeka na nie jak na podagenta. Zadanie działa i ląduje w tamtym sandboxie, pod jego własną personą, zatwierdzeniami i limitami, które ustawia tylko jego właściciel.",
+                "hint": "Agent przekazuje zadanie własnym narzędziem `delegate` tamtego sandboxa i czeka na nie jak na podagenta. Zadanie działa i ląduje w tamtym sandboxie, pod jego własną personą, zatwierdzeniami i limitami, które ustawia tylko jego właściciel.",
                 "guide": {
                     "scopes": "Uruchamia przekazane zadania, dopisuje do nich, zatrzymuje je i czyta ich raporty. Nic więcej z tamtego sandboxa: ani plików, ani innych rozmów, ani ustawień",
                     "steps": {

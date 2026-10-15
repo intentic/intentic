@@ -79,6 +79,8 @@ describe(`POST /setup/claim`, () => {
         expect(values[`HOST_PAIR_TOKEN`]).toMatch(/^[\w-]{20,}$/);
         // Two one-shot credentials must never share bytes: one enrolls file-sync, the other a machine agent.
         expect(values[`HOST_PAIR_TOKEN`]).not.toBe(values[`SYNC_PAIR_TOKEN`]);
+        // The editor this platform serves, which the sandbox's CORS allowlist must name.
+        expect(values[`WEB_ORIGIN`]).toBe(`https://app.test`);
         // The claim's one write clears the prior setupReport too, so a re-run never shows last time's failure.
         expect(update).toHaveBeenCalledTimes(1);
         expect(update).toHaveBeenCalledWith({

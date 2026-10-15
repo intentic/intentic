@@ -2027,7 +2027,7 @@
             "link": {
                 "name": "Linked sandbox",
                 "description": "Hand tasks to another of your sandboxes.",
-                "hint": "The agent hands a task over with `delegate` and waits on it like a subagent. It runs and lands in the other sandbox, under that sandbox's own persona, approvals and limits, which only its owner sets.",
+                "hint": "The agent hands a task over with that sandbox's own `delegate` tool and waits on it like a subagent. It runs and lands in the other sandbox, under that sandbox's own persona, approvals and limits, which only its owner sets.",
                 "guide": {
                     "scopes": "Starts, follows up on and stops the tasks it hands over, and reads what they report. Nothing else of that sandbox: not its files, its other conversations or its settings",
                     "steps": {

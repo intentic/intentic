@@ -201,6 +201,10 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         lines.push(`SYNC_PAIR_TOKEN=${randomBytes(32).toString(`base64url`)}`);
         // Same, for the connected-computer agent installed beside it; unconditional and inert when unused.
         lines.push(`HOST_PAIR_TOKEN=${randomBytes(32).toString(`base64url`)}`);
+        // The editor this platform serves, so the sandbox answers it (its CORS allowlist and passkey origin). Without it
+        // `ic` assumes the hosted app's origin, and a sandbox set up from any other platform, a dev or a staging one,
+        // refuses the editor that made it: a fleet-created sandbox could not be paired from it (2026-10-15).
+        lines.push(`WEB_ORIGIN=${config.webOrigin}`);
         lines.push(...Object.entries(payload).map(([key, value]) => `${key}=${value}`));
         // Re-claimable: overwrites the stamp and clears the prior setupReport, so a re-run hides last run's failure. The
         // first machine to name itself is kept for the code's life; a later one is the same machine, or was refused above.

@@ -61,7 +61,7 @@ fn connect(
         "GOOGLE_CLIENT_ID",
         "481795963975-cq9msl6higcd91joidrfp8mjlkuq5fk3.apps.googleusercontent.com",
     );
-    let web_origin = env_or("WEB_ORIGIN", "https://app.intentic.dev");
+    let mut web_origin = env_or("WEB_ORIGIN", "https://app.intentic.dev");
     let mut sandbox_image = env_or("SANDBOX_IMAGE", "ghcr.io/intentic/sandbox:stable");
     let preview_port = env_or("PREVIEW_PORT", "5173");
     let mut sandbox_dns = env_or("SANDBOX_DNS", "1.1.1.1 1.0.0.1");
@@ -220,6 +220,12 @@ fn connect(
         host_pair_token = claim.host_pair_token.unwrap_or(host_pair_token);
         owner_email = claim.owner_email.unwrap_or(owner_email);
         definition_seed = claim.definition_seed.unwrap_or(definition_seed);
+        // The editor the claiming platform serves, unless the command named one: a sandbox set up from a dev or staging
+        // platform answers that platform's editor, not the hosted app's. A replace still keeps the old container's
+        // (CARRIED), since only an explicit WEB_ORIGIN overrides that.
+        if env("WEB_ORIGIN").is_none() {
+            web_origin = claim.web_origin.unwrap_or(web_origin);
+        }
     }
     /* Reachability is the platform's own edge now, and provisioning it is a pure function there. */
     let has_public_name = !sandbox_hostname.is_empty();

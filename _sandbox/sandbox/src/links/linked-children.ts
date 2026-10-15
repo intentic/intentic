@@ -457,7 +457,8 @@ const listLinks = async (engine: Engine, conversationId: string, only?: string):
             const { terms } = hello.value;
             return {
                 to: card.id,
-                sandbox: hello.value.sandbox,
+                // The name the owner knows it by, from pairing; what it calls itself is only its container's name.
+                sandbox: card.config.name ?? hello.value.sandbox,
                 online: true,
                 ...opt("persona", terms.persona),
                 approve: terms.approve,

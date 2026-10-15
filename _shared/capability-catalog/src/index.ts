@@ -940,7 +940,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 "Revoke the link over there; tasks stop reaching it the moment you do.",
             ],
         },
-        hint: "The agent hands a task over with `delegate` and waits on it like a subagent. It runs and lands in the other sandbox, under that sandbox's own persona, approvals and limits, which only its owner sets.",
+        hint: "The agent hands a task over with that sandbox's own `delegate` tool and waits on it like a subagent. It runs and lands in the other sandbox, under that sandbox's own persona, approvals and limits, which only its owner sets.",
     },
     {
         id: "identity",
