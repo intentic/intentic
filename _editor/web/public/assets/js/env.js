@@ -101,6 +101,8 @@
   var ONE_LINER_VERBS = Object.keys(VERBS);
 
   // ../../_tools/constants/dist/index.js
+  var STATE_DIR = ".intentic";
+  var DERIVED_SHADOWS_DIR = `${STATE_DIR}/local/cache/derived`;
   var GOOGLE_CLIENT_ID = "481795963975-cq9msl6higcd91joidrfp8mjlkuq5fk3.apps.googleusercontent.com";
   var GOOGLE_TOKEN_STORAGE_KEY = `intentic.gid.${GOOGLE_CLIENT_ID}`;
 
