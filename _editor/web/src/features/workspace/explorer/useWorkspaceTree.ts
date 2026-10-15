@@ -510,7 +510,10 @@ export function useWorkspaceTree() {
         hiddenIn,
         keepListed,
         error,
-        isLoading: query.isLoading,
+        // Waiting for the first snapshot, whatever holds it: a read in flight, or no read allowed yet because the sandbox
+        // is not answering (useSandboxQuery holds every read until it is). vue-query's `isLoading` is false for a held
+        // read, and an asleep sandbox opened at startup drew as an empty workspace for as long as it took to wake.
+        isLoading: query.isPending,
         refetch: query.refetch,
         readFile,
         readBlob,

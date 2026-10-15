@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { deliverableKindOf, type WorkspaceFileWindow, type WorkspaceTreeEntry } from "@intentic/sandbox-contract";
-import { Button, CopyButton, EmptyState, Notice, type Tip, ui, useDevice } from "@intentic/ui";
+import { Button, CopyButton, EmptyState, Notice, type Tip, ui, useDevice, useLoadingReveal } from "@intentic/ui";
 import { messageOr, useLatest } from "@intentic/ui/async";
 import { basename } from "@intentic/ui/path";
 import { extensionOf } from "@intentic/ui/file-format";
@@ -8,6 +8,7 @@ import { computed, onBeforeUnmount, ref, shallowRef, watch, type Component } fro
 import { localFace } from "../../../app/environments/local";
 import { sandboxBlob } from "../../../client/sandbox/sandboxClient";
 import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 import { isArchiveContent } from "../files/archiveEntries";
 import { sha256Hex } from "../../../lib/files/contentHash";
@@ -29,6 +30,7 @@ import { useScopeTitle } from "../health/scopeTitle";
 import BigTextView from "./BigTextView.vue";
 import CodeView from "./CodeView.vue";
 import DerivedTextView from "./DerivedTextView.vue";
+import DiffSkeleton from "./DiffSkeleton.vue";
 import { derivedIsOnlyView, mayHaveDerivedText } from "../files/derivedText";
 import FileBreadcrumb from "../explorer/FileBreadcrumb.vue";
 import FileLocked from "./FileLocked.vue";
@@ -78,6 +80,10 @@ const viewerContent = shallowRef<{ text: string } | { blob: Blob } | { src: stri
 // The extension viewer component itself, lazily imported alongside its content.
 const viewerComponent = shallowRef<Component | undefined>(undefined);
 const loading = ref(false);
+const loadingShown = useLoadingReveal(
+    loading,
+    computed(() => path),
+);
 const error = ref<string | null>(null);
 // Set when the file changed on disk with unsaved edits: buffer kept, Reload offered instead of overwriting.
 const staleOnDisk = ref(false);
@@ -275,7 +281,7 @@ const claimed = computed(() => {
     return viewer === undefined ? undefined : JSON.stringify([viewer.owner, viewer.id, viewer.fetch, viewer.edit]);
 });
 
-type Trigger = readonly [string, unknown, string | undefined, string | undefined];
+type Trigger = readonly [string, unknown, string | undefined, string | undefined, boolean];
 // Whether a refire is the same file in the same scope, claimed by the same viewer, changing on disk, rather than another
 // file or another surface taking the tab.
 const sameFileRefire = (previous: Trigger | undefined, currentPath: string): boolean =>
@@ -288,41 +294,82 @@ const keepsOwnSurface = (current: OpenFile): boolean => current.kind === `viewer
 // read over instead: reconciling would cancel the read that ends the spinner and leave it turning over the text.
 const showsText = (): boolean => (open.value.kind === `code` || open.value.kind === `markdown`) && text.value !== null;
 
+// A same-file refire (the file changed on disk, or the sandbox answers again) dealt with in place where the tab has
+// something to work from; true when it was, false when the tab is to be reset and read anew.
+const refiredInPlace = (previous: Trigger | undefined, currentPath: string): boolean => {
+    if (!sameFileRefire(previous, currentPath)) {
+        return false;
+    }
+    if (showsText()) {
+        // An editable view reconciles by content; a look has no buffer to reconcile against, so it shows what disk holds now.
+        if (readOnly) {
+            refreshLook(currentPath);
+        } else {
+            reconcileOpenFile(currentPath);
+        }
+        return true;
+    }
+    return keepsOwnSurface(open.value);
+};
+
+// Clears everything the last file left and answers how the next one opens.
+const resetFor = (currentPath: string): OpenFile => {
+    const resolution = resolveOpenFile(currentPath, meta?.size);
+    staleOnDisk.value = false;
+    textWanted.value = false;
+    lossy.value = false;
+    text.value = null;
+    viewerContent.value = undefined;
+    viewerComponent.value = undefined;
+    letGo();
+    firstWindow.value = undefined;
+    fromShared.value = false;
+    error.value = null;
+    loading.value = false;
+    open.value = resolution;
+    lang.value = resolution.kind === `code` || resolution.kind === `markdown` ? resolution.lang : undefined;
+    return resolution;
+};
+
+/* A SANDBOX THAT IS NOT ANSWERING IS NOT READ FROM, as useSandboxQuery holds every query until it answers. A read made
+   then comes back as the edge's "Request failed (502)" over a file that is fine: what a tab restored at startup said for
+   as long as an asleep sandbox took to wake, and went on saying after it woke, since nothing read it again. Now a tab
+   with nothing drawn yet waits, drawn as loading, and is read the moment the sandbox answers; a tab already showing its
+   file keeps it. */
+const { reachable } = useSandbox();
+// The surfaces that need a read; the rest (binary, too large, empty, locked) open from the tree's entry alone.
+const reads = (file: OpenFile): boolean => file.kind === `code` || file.kind === `markdown` || file.kind === `viewer`;
+// Whether the tab draws something of its file: its text, a viewer, or a surface that needed no read.
+const drawn = (): boolean => text.value !== null || viewerComponent.value !== undefined || (!loading.value && error.value === null && !reads(open.value));
+// Set while a tab waits for the sandbox having read nothing, so the answer reads it from scratch.
+const held = ref(false);
+const holdForAnswer = (currentPath: string): void => {
+    // Whatever read is still out lands nowhere: it was made to a sandbox that has stopped answering.
+    latest();
+    reading?.abort();
+    held.value = reads(resetFor(currentPath));
+    loading.value = held.value;
+};
+
 watch(
     // changeEpochOf is the complete change signal; the tree's size isn't a trigger, or a post-save refetch would
     // race markSaved. Scope is a trigger too: the same path in another copy is a different file. So is the claiming
-    // viewer: one registering (or going) re-resolves the tab.
-    (): Trigger => [path, changeEpochOf(path), viewAgent.value, claimed.value] as const,
-    ([currentPath], previous, onCleanup) => {
-        // A look has no buffer to reconcile against: it re-reads and shows what disk holds now.
-        if (readOnly && sameFileRefire(previous, currentPath) && showsText()) {
-            refreshLook(currentPath);
+    // viewer: one registering (or going) re-resolves the tab. And so is whether the sandbox answers (above).
+    (): Trigger => [path, changeEpochOf(path), viewAgent.value, claimed.value, reachable.value] as const,
+    ([currentPath, , , , answering], previous, onCleanup) => {
+        if (!answering) {
+            if (!sameFileRefire(previous, currentPath) || !drawn()) {
+                holdForAnswer(currentPath);
+            }
             return;
         }
-        // Same-path re-fire in an editable view reconciles by content; anything else resets and re-fetches below.
-        if (sameFileRefire(previous, currentPath) && showsText()) {
-            reconcileOpenFile(currentPath);
+        const resumed = held.value;
+        held.value = false;
+        if (!resumed && refiredInPlace(previous, currentPath)) {
             return;
         }
-        if (sameFileRefire(previous, currentPath) && keepsOwnSurface(open.value)) {
-            return;
-        }
-        const resolution = resolveOpenFile(currentPath, meta?.size);
+        const resolution = resetFor(currentPath);
         const isLatest = latest();
-
-        staleOnDisk.value = false;
-        textWanted.value = false;
-        lossy.value = false;
-        text.value = null;
-        viewerContent.value = undefined;
-        viewerComponent.value = undefined;
-        letGo();
-        firstWindow.value = undefined;
-        fromShared.value = false;
-        error.value = null;
-        loading.value = false;
-        open.value = resolution;
-        lang.value = resolution.kind === `code` || resolution.kind === `markdown` ? resolution.lang : undefined;
 
         onCleanup(() => {
             // Nobody is waiting for this file's text any more: stop paying for it mid-flight.
@@ -767,9 +814,14 @@ const onEditorSave = (value: string): void =>
             <!-- Ahead of every other surface, including the editor's: this is the reader's own choice for formats that have another view. -->
             <DerivedTextView v-if="showDerived" :path="path" :downloadable="derivedDownloadable" @download="download" />
             <EmptyState v-else-if="error" tone="danger" :title="error" class="h-full" />
-            <div v-else-if="loading" class="flex h-full items-center justify-center text-muted">
-                <Icon name="spinner" class="text-xl" spin />
-            </div>
+            <!-- A wait shown only past the reveal threshold, so a read that lands at once paints nothing first; text
+                 draws as the lines it will be, anything else as a spinner, since its shape is not known. -->
+            <template v-else-if="loading">
+                <DiffSkeleton v-if="loadingShown && (open.kind === 'code' || open.kind === 'markdown')" single />
+                <div v-else-if="loadingShown" class="flex h-full items-center justify-center text-muted" role="status">
+                    <Icon name="spinner" class="text-xl" spin :aria-label="t(`ui.status.loading`)" />
+                </div>
+            </template>
             <!-- The page rendered in a sealed frame, from the same text the editor below holds (HtmlPreview). -->
             <HtmlPreview v-else-if="previewing" ref="htmlView" :path="path" :source="editorSeed" :load="readAsset" @open="openLinked" />
             <CodeView

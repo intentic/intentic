@@ -124,3 +124,32 @@ describe(`this side of the connection`, () => {
         expect(present({ kind: `unreachable` }).body).toContain(`*.sbx.intentic.dev`);
     });
 });
+
+// Which waits are said the moment they are known, over a workspace that would otherwise show nothing for half a minute:
+// only those whose cause is established, never a silence the clock alone could explain.
+describe(`a wait said at once`, () => {
+    it(`is a sandbox its machine put to sleep, while waking is still the answer`, () => {
+        const slept = report({ outcome: `healthy`, checks: [], asleep: true });
+        expect(present({ kind: `asleep`, report: slept, patient: true }).sayAtOnce).toBe(true);
+        expect(present({ kind: `asleep`, report: slept, patient: false }).sayAtOnce).toBe(false);
+    });
+
+    it(`is its machine saying it is starting it`, () => {
+        const waking = report({ stage: `fixing`, checks: [], doing: `Waking it` });
+        expect(present({ kind: `machine`, report: waking, standing: `working` }).sayAtOnce).toBe(true);
+    });
+
+    it(`is a hosted machine the platform says is not running, not one the edge alone calls detached`, () => {
+        expect(present({ kind: `waking`, machine: `stopped` }, { lane: `hosted` }).sayAtOnce).toBe(true);
+        expect(present({ kind: `waking`, machine: `starting` }, { lane: `hosted` }).sayAtOnce).toBe(true);
+        expect(present({ kind: `waking`, machine: undefined }, { lane: `hosted` }).sayAtOnce).toBe(false);
+        expect(present({ kind: `waking`, machine: `started` }, { lane: `hosted` }).sayAtOnce).toBe(false);
+    });
+
+    it(`is never silence, a busy sandbox, or a cause that waiting cannot repair`, () => {
+        expect(present({ kind: `silent`, patient: true }).sayAtOnce).toBe(false);
+        expect(present({ kind: `checking` }).sayAtOnce).toBe(false);
+        expect(present({ kind: `busy`, vitals: undefined, longMs: 0 }).sayAtOnce).toBe(false);
+        expect(present({ kind: `not-dialled`, patient: false, lastReport: undefined }).sayAtOnce).toBe(false);
+    });
+});

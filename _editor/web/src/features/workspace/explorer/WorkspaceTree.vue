@@ -11,6 +11,7 @@ import {
     type Tip,
     toneWash,
     useExplorerStyle,
+    useLoadingReveal,
     vAction,
 } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
@@ -40,6 +41,7 @@ import { useTreeGestures } from "./tree/useTreeGestures";
 import { useTreeReveal } from "./tree/useTreeReveal";
 import { useTreeRows } from "./tree/useTreeRows";
 import { useTreeWindow } from "./tree/useTreeWindow";
+import TreeSkeleton from "./tree/TreeSkeleton.vue";
 import { useEmptyDirs } from "./useEmptyDirs";
 import { useFileNesting } from "./useFileNesting";
 import { type ProjectFocus, projectFocusRows } from "./projectFocus";
@@ -56,6 +58,7 @@ const {
     rootHidden = 0,
     barren = [],
     filter = ``,
+    loading = false,
     selectedPath,
     manageableDirs = new Set<string>(),
     rowActions,
@@ -72,6 +75,8 @@ const {
     // Complete for the whole workspace, unlike `tree`, which stops at the daemon's listing budget.
     barren?: readonly string[];
     filter?: string;
+    // No tree has arrived yet (a first read in flight, or a sandbox still waking): the rows are an outline, never "empty".
+    loading?: boolean;
     selectedPath?: string | null;
     // Dirs with a management surface; keyboard activation also opens the operator tab via the row's cog action.
     manageableDirs?: ReadonlySet<string>;
@@ -104,6 +109,11 @@ const { clipboard, lazyLoading } = store;
 const layout = useLayout();
 const words = useVocabulary();
 const { fileNesting } = useFileNesting();
+// The outline appears only past the reveal threshold, so a tree that arrives at once paints no placeholder first.
+const outlined = useLoadingReveal(
+    computed(() => loading),
+    computed(() => rootDir),
+);
 // Settled folders holding only empty folders; tracked by path since `tree`'s listing may not reach every branch here.
 const emptyDirs = useEmptyDirs(() => barren);
 
@@ -550,7 +560,8 @@ defineExpose({ focusTree });
                     </template>
                 </template>
             </div>
-            <p v-if="visibleRows.length === 0 && edit.kind !== 'creating'" class="px-3 py-3 text-center text-2xs text-subtle">
+            <TreeSkeleton v-if="loading && visibleRows.length === 0 && outlined" />
+            <p v-else-if="!loading && visibleRows.length === 0 && edit.kind !== 'creating'" class="px-3 py-3 text-center text-2xs text-subtle">
                 {{
                     filter.trim()
                         ? t(`workspace.workspaceTree.noMatchingFiles`)

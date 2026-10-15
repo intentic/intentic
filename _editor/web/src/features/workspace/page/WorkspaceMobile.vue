@@ -202,7 +202,8 @@ const listing = computed<readonly WorkspaceTreeEntry[]>(() => {
 });
 // Tooling entries the technical switch took out of this level, said on a chip so the list never reads as the folder.
 const technicalCount = computed(() => technicalHidden(children.value, layout.explorerFilters.value));
-const dirLoading = computed(() => dir.value !== `` && lazyLoading.value.has(dir.value));
+// The top level waits on the tree itself, which a sandbox still waking holds back: "empty" is said only of a listing.
+const dirLoading = computed(() => (dir.value === `` ? isLoading.value : lazyLoading.value.has(dir.value)));
 // Entries the daemon's cap cut from the open dir's listing; 0, the common case, shows nothing.
 const dirHidden = computed(() => hiddenIn(dir.value));
 

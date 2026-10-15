@@ -73,7 +73,7 @@ flowchart LR
   keeps whose daemon's work signal (`/run/intentic/work.json`) has said `quietSince` for that long, with nothing
   working and no `nextWakeAt` due within the window, and never one mid-update, parked, held or locked by another ic
   run. Each sleep posts a host report with `asleep: true`. `ic sandbox wakes` (polled by the agent while anything
-  sleeps, and asking docker nothing when nothing does) sends the asleep sandboxes' report keys to the platform's
+  sleeps, run by the desktop app the moment its page asks, and asking docker nothing when nothing does) sends the asleep sandboxes' report keys to the platform's
   `POST /host-report/wakes` and starts each one somebody has opened, as a person's start, reporting `fixing` then
   `done` around it; `--json` ends on `{"asleep": n}`. `start`, `restart` and every recreate clear both marks, and so
   does the fix engine when it finds the container running. The keeper's `fix --auto` reads a sandbox asleep as

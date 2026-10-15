@@ -4,7 +4,16 @@ import { stubGlobal, mocked } from "@intentic/testing/bun";
 
 stubGlobal(`localStorage`, { getItem: () => null, setItem: () => {}, removeItem: () => {} });
 jest.mock("../../../lib/useApi", () => ({
-    apiClient: { sandbox: { list: jest.fn(), delete: jest.fn(), leave: jest.fn(), hostedProvision: jest.fn(), hostedRelease: jest.fn() } },
+    apiClient: { sandbox: { list: jest.fn(), delete: jest.fn(), leave: jest.fn(), hostedProvision: jest.fn(), hostedRelease: jest.fn(), wake: jest.fn() } },
+}));
+// The desktop app as the page sees it (`__INTENTIC_DESKTOP__`), and the links handed to it.
+let desktop: { sandboxWakes?: boolean } | undefined;
+const handed: string[] = [];
+const desktopModule = { ...(await import("../../../app/environments/desktop")) };
+jest.mock("../../../app/environments/desktop", () => ({
+    ...desktopModule,
+    desktopApp: () => desktop,
+    openDesktopLink: (link: string) => handed.push(link),
 }));
 // The leave action, which a member's removal goes through (loaded when one happens): its own suite pins what it does.
 const leaveSandbox = jest.fn();
@@ -15,6 +24,7 @@ const { queryClient } = await import("../../../lib/queryPersistence");
 const { setDaemonBoot } = await import("../useDaemonBoot");
 const { signalConnection, useSandbox } = await import("../useSandbox");
 const { rememberListed, rememberedAccount } = await import("../../directory/deviceDirectory");
+const { activeSandboxId } = await import("../../../lib/activeSandbox");
 
 const summary = (id: string): SandboxSummary => ({
     id,
@@ -228,5 +238,56 @@ describe(`reachable`, () => {
         setDaemonBoot({ ready: true, startedAt: 1_000, steps: [] });
         signalConnection({ kind: `failed`, failure: { kind: `network`, message: `gone` }, at: Date.now() });
         expect(useSandbox().reachable.value).toBe(false);
+    });
+});
+
+// A sandbox found asleep is asked back from the platform; in the desktop app, one on its owner's own computer is then
+// collected on this computer at once, rather than on the keeper's next poll there.
+describe(`the wake a sleeping sandbox is asked back with`, () => {
+    const asleep = async (row: SandboxSummary): Promise<void> => {
+        listMock.mockResolvedValue({ sandboxes: [row] });
+        await useSandbox().refresh();
+        activeSandboxId.value = row.id;
+        signalConnection({ kind: `disconnect` });
+        signalConnection({ kind: `failed`, failure: { kind: `detached`, message: `no tunnel` }, at: Date.now() });
+        // The watch runs, then the platform's answer.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    };
+
+    beforeEach(() => {
+        handed.length = 0;
+        desktop = { sandboxWakes: true };
+        mocked(apiClient.sandbox.wake).mockResolvedValue({ ok: true });
+    });
+    afterEach(() => {
+        desktop = undefined;
+        activeSandboxId.value = undefined;
+    });
+
+    it(`has the desktop app collect it on this computer once the platform has it`, async () => {
+        await asleep(summary(`own-1`));
+        expect(apiClient.sandbox.wake).toHaveBeenCalledWith({ sandboxId: `own-1` });
+        expect(handed).toEqual([`intentic://sandbox-wakes`]);
+    });
+
+    it(`leaves a hosted machine to the platform, which starts it itself`, async () => {
+        await asleep({ ...summary(`hosted-1`), hosted: { region: `iad`, warm: true } });
+        expect(apiClient.sandbox.wake).toHaveBeenCalledWith({ sandboxId: `hosted-1` });
+        expect(handed).toEqual([]);
+    });
+
+    it(`hands nothing to an app that does not say it collects them, nor from a browser`, async () => {
+        desktop = {};
+        await asleep(summary(`own-2`));
+        desktop = undefined;
+        await asleep(summary(`own-3`));
+        expect(handed).toEqual([]);
+    });
+
+    it(`hands nothing when the platform refused the wake`, async () => {
+        mocked(apiClient.sandbox.wake).mockRejectedValue(new Error(`refused`));
+        await asleep(summary(`own-4`));
+        expect(handed).toEqual([]);
     });
 });

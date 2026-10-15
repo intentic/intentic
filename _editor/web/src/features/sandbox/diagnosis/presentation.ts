@@ -34,6 +34,11 @@ export interface DiagnosisNotice {
     readonly otherActions: readonly DiagnosisAction[];
     // The machine's own findings, worth listing: everything it did not find fine.
     readonly findings: readonly HostCheck[];
+    // Said the moment it is known rather than after the silence every outage is first given (availability.ts): a wait
+    // with an ESTABLISHED cause, which a reader opening the app has no way to guess. A sandbox asleep, or a machine
+    // reporting that it is starting it, explains a workspace that shows nothing yet; holding that back for half a
+    // minute left the reader looking at what read as an empty or broken workspace until it woke.
+    readonly sayAtOnce: boolean;
 }
 
 export interface PresentationInput {
@@ -52,6 +57,9 @@ const chainOf = (states: Links, machineLabel: string): ChainLink[] => [
     { id: `machine`, label: machineLabel, state: states[2] },
     { id: `sandbox`, label: t(`sandbox.diagnosis.linkSandbox`), state: states[3] },
 ];
+
+// A hosted machine whose power state says nothing about a wake: up already, or not known.
+const HOSTED_RUNNING: ReadonlySet<string> = new Set([`started`, `unknown`]);
 
 const machineName = (input: PresentationInput, report: HostReport | undefined): string =>
     input.lane === `hosted` ? t(`sandbox.diagnosis.ourMachine`) : report?.machine ?? t(`sandbox.diagnosis.itsComputer`);
@@ -88,6 +96,7 @@ const notice = (
     action: undefined,
     otherActions: [],
     findings: [],
+    sayAtOnce: false,
     ...fields,
     chain,
 });
@@ -124,6 +133,8 @@ const machineNotice = (input: PresentationInput, diagnosis: Extract<Diagnosis, {
                 body: report.doing ?? t(`sandbox.diagnosis.machineChecking`),
                 waiting: true,
                 findings,
+                // The machine's own word, current: waking it (`ic sandbox wakes`) or mending it.
+                sayAtOnce: true,
             },
             chainOf([`ok`, `ok`, `working`, `unknown`], machine),
         );
@@ -172,7 +183,12 @@ const asleepNotice = (input: PresentationInput, diagnosis: Extract<Diagnosis, { 
     const machine = machineName(input, diagnosis.report);
     if (diagnosis.patient) {
         return notice(
-            { title: t(`sandbox.diagnosis.asleepTitle`, { name: input.name }), body: t(`sandbox.diagnosis.asleepBody`, { machine }), waiting: true },
+            {
+                title: t(`sandbox.diagnosis.asleepTitle`, { name: input.name }),
+                body: t(`sandbox.diagnosis.asleepBody`, { machine }),
+                waiting: true,
+                sayAtOnce: true,
+            },
             chainOf([`ok`, `ok`, `working`, `unknown`], machine),
         );
     }
@@ -263,6 +279,9 @@ export const presentDiagnosis = (input: PresentationInput): DiagnosisNotice => {
                     title: t(`sandbox.diagnosis.wakingTitle`, { name }),
                     body: diagnosis.machine === `started` ? t(`sandbox.diagnosis.wakingBooting`) : t(`sandbox.diagnosis.wakingBody`),
                     waiting: true,
+                    // Only on the platform's word that its machine is not running: the edge's "detached" alone is also
+                    // what a container restarting for a few seconds looks like, which deserves no card.
+                    sayAtOnce: diagnosis.machine !== undefined && !HOSTED_RUNNING.has(diagnosis.machine),
                 },
                 chainOf([`ok`, `ok`, `working`, `unknown`], machine),
             );

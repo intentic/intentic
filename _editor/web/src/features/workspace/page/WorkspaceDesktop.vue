@@ -87,6 +87,7 @@ const {
     hiddenIn,
     keepListed,
     error,
+    hasSnapshot,
     isLoading,
     refetch,
     expanded,
@@ -176,8 +177,10 @@ const {
 // Mirrors the active file into the URL so a reload or shared link reopens it.
 useWorkspaceRoute();
 
-// Nothing to draw: the pane shows every way to get code in, and the home has no folder to show.
-const emptyWorkspace = computed(() => !isLoading.value && tree.value.length === 0);
+// Nothing to draw: the pane shows every way to get code in, and the home has no folder to show. Said only of a tree
+// the sandbox actually sent: before one arrives (a sandbox still waking, or a first read that failed) emptiness is
+// unknown, and "bring your code" over a workspace full of it is the wrong thing to say.
+const emptyWorkspace = computed(() => hasSnapshot.value && tree.value.length === 0);
 // The home (features/workspace/home): what is under the tabs. Showing it unsets the main pane's active tab and closes
 // nothing, so the strip is a click away from where it was.
 const { selected, pick, cover } = useHome();
@@ -1034,6 +1037,7 @@ const includeTip = computed((): Tip => ({
                         :root-hidden="scopedRootHidden"
                         :barren="scopedBarren"
                         :filter="filter"
+                        :loading="isLoading"
                         :selected-path="selected"
                         :manageable-dirs="manageableDirs"
                         :row-actions="rowActions"

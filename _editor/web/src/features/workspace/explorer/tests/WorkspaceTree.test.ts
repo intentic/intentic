@@ -9,7 +9,7 @@ import type { RowAction } from "../rowActions";
 import type { OpenMode } from "../../tabs/workspaceTabs";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick, ref } from "vue";
-import type { TooltipValue } from "@intentic/ui";
+import { REVEAL_DELAY_MS, type TooltipValue } from "@intentic/ui";
 import { IconStub } from "@intentic/ui/testing";
 import { ACTIVE_KEY, activeSandboxId } from "../../../../lib/activeSandbox";
 import { useEntryDrag } from "../transfer/useEntryDrag";
@@ -153,6 +153,8 @@ const mount = async (props: {
     // Every folder holding only empty folders (daemon's `barren`); separate from tree, which has an entry budget.
     barren?: readonly string[];
     selectedPath?: string;
+    // No tree has arrived yet: the host's own `isLoading` (useWorkspaceTree).
+    loading?: boolean;
     rowActions?: (dir: string) => readonly RowAction[];
     onOpenFile?: (path: string, mode: OpenMode) => void;
 }): Promise<HTMLElement> => {
@@ -237,6 +239,29 @@ describe(`the explorer after a reload`, () => {
         await nextTick();
 
         expect(rows(el)).toEqual([`src`, `README.md`]);
+    });
+});
+
+// Before any tree has arrived. A sandbox still waking sends none for as long as that takes, and the explorer said
+// "Empty workspace." over a workspace full of files the whole time.
+describe(`the explorer before the sandbox has sent a tree`, () => {
+    it(`draws an outline of rows past the reveal threshold, never "Empty workspace."`, async () => {
+        const el = await mount({ tree: [], loading: true });
+        expect(el.querySelector(`[aria-busy="true"]`)).toBeNull();
+        expect(el.textContent).not.toContain(`Empty workspace.`);
+
+        await new Promise((resolve) => setTimeout(resolve, REVEAL_DELAY_MS + 20));
+        await nextTick();
+
+        expect(el.querySelector(`[aria-busy="true"]`)).not.toBeNull();
+        expect(el.textContent).not.toContain(`Empty workspace.`);
+    });
+
+    it(`says the workspace is empty once an empty tree has arrived`, async () => {
+        const el = await mount({ tree: [] });
+
+        expect(el.querySelector(`[aria-busy="true"]`)).toBeNull();
+        expect(el.textContent).toContain(`Empty workspace.`);
     });
 });
 

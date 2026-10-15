@@ -701,6 +701,8 @@ The keeper now puts an unneeded sandbox to sleep and wakes it when somebody open
   for every sleeper on this side, each under its own report key), starting each one asked for through `ic sandbox
   start`. It asks every fifteen seconds while anything sleeps, and every five minutes otherwise, to catch a sleep made
   by hand. It runs whatever the keeper's switch says, so a sandbox asleep when the keeper was switched off still wakes.
+  The desktop app on the same computer runs the same command the moment its workspace page has asked
+  (`--source app`, the app's `sandbox_wakes.rs`), so a sandbox opened there need not wait for this round.
 - **The setting** is this environment's `sandboxSleepMinutes` in `machine.json`: absent means 30, `0` means never. Set
   it with `intentic-machine sandbox sleep-after <minutes|off>` and read it with `sleep-after status`.
   `intentic-machine sandbox sleep <slug>` puts one sandbox to sleep now. An `ic` without the verbs is said once and

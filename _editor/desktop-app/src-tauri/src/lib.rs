@@ -24,6 +24,7 @@ mod prefetch;
 mod project;
 mod repair;
 mod resume;
+mod sandbox_wakes;
 mod scripts;
 mod setup_link;
 mod shown;

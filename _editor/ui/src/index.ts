@@ -371,7 +371,7 @@ export { useLatest } from "./composables/useLatest.js";
 export { type SettledOptions, useSettled } from "./composables/useSettled.js";
 // Gates when a loading placeholder may appear; a fast response resolves within the reveal delay so nothing
 // flashes for a normal round trip.
-export { useLoadingReveal } from "./composables/loadingReveal.js";
+export { REVEAL_DELAY_MS, useLoadingReveal } from "./composables/loadingReveal.js";
 export { type HoverIntent, type HoverIntentOptions, useHoverIntent } from "./composables/useHoverIntent.js";
 // A menu the pointer opens and a press pins, with the corridor that keeps it up on the way to it.
 export { type HoverMenu, useHoverMenu } from "./composables/useHoverMenu.js";

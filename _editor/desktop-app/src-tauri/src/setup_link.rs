@@ -653,6 +653,10 @@ pub enum Link {
     FirstTask(FirstTaskLink),
     /// See [`RepairLink`]: Repair opened on this computer.
     Repair(RepairLink),
+    /// `intentic://sandbox-wakes`: the workspace asked the platform to wake its sandbox, which may be asleep on this
+    /// computer (sandbox_wakes.rs). App-window only, and it carries nothing: `ic` starts only what the platform says
+    /// was asked for.
+    SandboxWakes,
 }
 
 /// `intentic://first-task?do=sent|failed&id=<id>[&reason=<text>]`: the workspace saying what became of the first task
@@ -886,6 +890,7 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
             }))
         }
         "fix" => None,
+        "sandbox-wakes" => source.is_app().then_some(Link::SandboxWakes),
         "auth" => Some(Link::Auth(AuthArgs {
             handoff: get("handoff")?,
             state: get("state")?,
@@ -1116,6 +1121,25 @@ mod tests {
             assert_eq!(parse_link(link, Source::External), None, "{link}");
             assert_eq!(parse_link(link, FILES), None, "{link}");
         }
+    }
+
+    /// A collection of this computer's wake requests runs `ic` the moment it lands, so only the app's own windows may
+    /// ask for one; and it names nothing, so whatever rides along is ignored rather than handed on.
+    #[test]
+    fn a_sandbox_wakes_link_is_heard_only_from_the_apps_own_windows() {
+        assert_eq!(
+            parse_link("intentic://sandbox-wakes", APP),
+            Some(Link::SandboxWakes)
+        );
+        assert_eq!(
+            parse_link("intentic://sandbox-wakes?slug=work", APP),
+            Some(Link::SandboxWakes)
+        );
+        assert_eq!(
+            parse_link("intentic://sandbox-wakes", Source::External),
+            None
+        );
+        assert_eq!(parse_link("intentic://sandbox-wakes", FILES), None);
     }
 
     /// Both values reach `ic`'s command line, so a slug or a code that is not a plain token drops the whole link,

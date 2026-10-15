@@ -356,17 +356,19 @@ fn shown_face(app: &AppHandle) -> Option<WebviewWindow> {
 /// its icon when the page asks (`intentic://notice`, `intentic://badge`; notice.rs, badge.rs), so the page offers
 /// them in its settings and sends them only to an app that says this.
 ///
-/// `wake` is the last, and is about the WINDOW: the workspace face, and only it, has the microphone (microphone.rs), a
-/// tray that says what its listening is doing and switches it, and a page kept loaded in the tray for it (wake.rs). So
-/// only there does the page offer to listen for its wake word inside the app; a floating panel or a local window is
-/// told `false`.
+/// `wake` is about the WINDOW: the workspace face, and only it, has the microphone (microphone.rs), a tray that says
+/// what its listening is doing and switches it, and a page kept loaded in the tray for it (wake.rs). So only there does
+/// the page offer to listen for its wake word inside the app; a floating panel or a local window is told `false`.
+///
+/// `sandboxWakes` is the last, and about the build: it starts a sandbox asleep on this computer the moment the page
+/// asks (`intentic://sandbox-wakes`, sandbox_wakes.rs), so the page sends that link only to an app that says this.
 fn workspace_init_script(install_id: &str, update: Option<&str>, wake: bool) -> String {
     let update = match update {
         Some(version) => format!("\"{}\"", crate::update::escape_js(version)),
         None => "null".to_string(),
     };
     format!(
-        "(function () {{ if (!window.__INTENTIC_DESKTOP__) {{ window.__INTENTIC_DESKTOP__ = Object.freeze({{ version: \"{}\", installId: \"{install_id}\", update: {update}, loopbackUngated: true, frameless: true, projectSync: true, notices: true, nativeCopy: {}, wake: {wake} }}); }} }})();",
+        "(function () {{ if (!window.__INTENTIC_DESKTOP__) {{ window.__INTENTIC_DESKTOP__ = Object.freeze({{ version: \"{}\", installId: \"{install_id}\", update: {update}, loopbackUngated: true, frameless: true, projectSync: true, notices: true, nativeCopy: {}, wake: {wake}, sandboxWakes: true }}); }} }})();",
         crate::commands::VERSION,
         // Only where the page's message reaches drop_copy.rs: WebView2 is what says where a dropped file is.
         cfg!(windows)
@@ -2116,6 +2118,9 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
         // The recovery panel's button: `ic sandbox fix`, run and drawn on This device (fix.rs). A link while one
         // runs brings that run forward instead of starting a second.
         Some(Link::Fix(args)) => crate::fix::requested(app, args),
+        // The page asked the platform to wake its sandbox: one asleep on this computer is started now rather than on
+        // the keeper's next poll (sandbox_wakes.rs). Nothing is shown; the page draws the wake itself.
+        Some(Link::SandboxWakes) => crate::sandbox_wakes::requested(),
         // A folder of this computer becoming a project of a hosted sandbox: bound to the folder this app parked
         // for it and run here, with no screen of the app's in between (project.rs `sync_project`).
         Some(Link::Sync(args)) if args.project.is_some() => {
@@ -2357,6 +2362,14 @@ mod loopback_tests {
     fn the_page_is_told_this_build_puts_up_notifications() {
         let script = workspace_init_script("install-1", None, true);
         assert!(script.contains("notices: true"), "{script}");
+    }
+
+    /// The page sends `intentic://sandbox-wakes` only to a build that says it starts a sleeping sandbox on that link
+    /// (`desktopSandboxWakes` in the SPA): an older one would drop it, and the keeper's poll would be the only wake.
+    #[test]
+    fn the_page_is_told_this_build_wakes_a_sleeping_sandbox_at_once() {
+        let script = workspace_init_script("install-1", None, false);
+        assert!(script.contains("sandboxWakes: true"), "{script}");
     }
 
     /// The page listens for its wake word in the app only where the app gave it a microphone and a tray to say so:

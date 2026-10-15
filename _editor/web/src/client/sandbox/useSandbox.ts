@@ -3,6 +3,7 @@ import { ORPCError } from "@orpc/client";
 import { hashKey } from "@tanstack/vue-query";
 import { computed, ref, watch } from "vue";
 import { arrivingProfile } from "../../app/useProfile";
+import { DESKTOP_SANDBOX_WAKES_LINK, desktopApp, openDesktopLink } from "../../app/environments/desktop";
 import { removeStoredValue, storeValue } from "../../lib/browserStorage";
 import { ACTIVE_KEY, activeSandboxId } from "../../lib/activeSandbox";
 import { queryClient } from "../../lib/queryPersistence";
@@ -169,6 +170,14 @@ const recordWake = (sandboxId: string, outcome: unknown): void => {
         wakeRefused.value = undefined;
     }
 };
+// In the desktop app, a wake the platform took for a sandbox on its owner's own computer is collected on this computer at
+// once, in case that is where it sleeps (sandbox_wakes.rs in the app): the keeper there would collect it on its next
+// poll, up to fifteen seconds of the wait. A sandbox asleep on another computer costs the app one look at its own.
+const collectWakeHere = (box: SandboxSummary | undefined): void => {
+    if (box !== undefined && box.hosted === null && desktopApp()?.sandboxWakes === true) {
+        openDesktopLink(DESKTOP_SANDBOX_WAKES_LINK);
+    }
+};
 watch(
     () => [active.value?.id, connection.value] as const,
     ([id, state]) => {
@@ -186,9 +195,13 @@ watch(
             return;
         }
         wokeAt.set(id, Date.now());
+        const box = active.value;
         void apiClient.sandbox
             .wake({ sandboxId: id })
-            .then(() => recordWake(id, undefined))
+            .then(() => {
+                recordWake(id, undefined);
+                collectWakeHere(box);
+            })
             .catch((error: unknown) => recordWake(id, error));
     },
 );

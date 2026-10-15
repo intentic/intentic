@@ -11,8 +11,10 @@ import { type DemoHandler, json } from "./transport";
 //   fixing      the edge holds no tunnel; the machine agent is starting Docker Desktop
 //   needs-you   the edge holds no tunnel; the machine found what only its owner can fix
 //   hosted      a machine we run, which failed to start; the platform kept the image before its last update
+//   asleep      its machine put it to sleep for want of use; the edge holds no tunnel until it wakes, WAKES_AFTER_MS
+//               into the visit (the keeper's poll, a start, a boot), and from then on it answers as ever
 
-const OUTAGES = [`busy`, `restarting`, `down`, `fixing`, `needs-you`, `hosted`] as const;
+const OUTAGES = [`busy`, `restarting`, `down`, `fixing`, `needs-you`, `hosted`, `asleep`] as const;
 export type DemoOutage = (typeof OUTAGES)[number];
 
 const STORAGE_KEY = `intentic.demo.outage`;
@@ -80,8 +82,34 @@ const NEEDS_YOU: HostReport = {
     at: REPORTED_AT,
 };
 
+const ASLEEP: HostReport = {
+    source: `agent`,
+    machine: `ada-laptop`,
+    os: `windows`,
+    stage: `done`,
+    outcome: `healthy`,
+    checks: [],
+    asleep: true,
+    at: REPORTED_AT,
+};
+
+// How long the asleep outage lasts: about what a real wake takes, and long enough to look at what the page draws.
+const WAKES_AFTER_MS = 20_000;
+const WAKES_AT = Date.now() + WAKES_AFTER_MS;
+
 /** What the machine reported, on the platform's row. */
-export const outageReport = (): HostReport | null => (demoOutage === `fixing` ? FIXING : demoOutage === `needs-you` ? NEEDS_YOU : null);
+export const outageReport = (): HostReport | null => {
+    switch (demoOutage) {
+        case `fixing`:
+            return FIXING;
+        case `needs-you`:
+            return NEEDS_YOU;
+        case `asleep`:
+            return ASLEEP;
+        default:
+            return null;
+    }
+};
 
 /** The hosted machine the row names, for the one outage on a machine we run. */
 export const outageHosted = (): SandboxHosted | null => (demoOutage === `hosted` ? { region: `arn`, warm: true, canRollBack: true } : null);
@@ -116,5 +144,7 @@ export const withOutage =
             case `needs-you`:
             case `hosted`:
                 return noTunnel();
+            case `asleep`:
+                return Date.now() < WAKES_AT ? noTunnel() : daemon(request, url);
         }
     };

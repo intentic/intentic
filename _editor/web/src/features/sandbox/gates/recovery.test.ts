@@ -18,6 +18,7 @@ const wayBack: DiagnosisNotice = {
     action: `fix`,
     otherActions: [],
     findings: [],
+    sayAtOnce: false,
 };
 
 const quiet: RecoveryInput = {

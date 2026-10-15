@@ -197,6 +197,15 @@ flowchart LR
   setting the sandbox up again as the way to update it, and nothing retries. While it runs, the rail's This device
   tile spins for a reader who went back to their files. `ic` posts every run to the platform itself; the app never
   talks to the platform about it.
+- **Waking a sandbox asleep on this computer at once.** A page that finds its sandbox asleep asks the platform to
+  wake it, and the machine agent here collects such requests on its own poll, every fifteen seconds while anything
+  sleeps. The workspace page then sends `intentic://sandbox-wakes`, and the app runs `ic sandbox wakes --json
+  --source app` right away, the agent's own command, on a thread of its own with no window and a five-minute limit
+  (`src-tauri/src/sandbox_wakes.rs`). The link carries nothing and is heard only from the app's own windows: `ic`
+  starts only what the platform says somebody asked for. Links that land while one collection runs make one more after
+  it. The init script's `sandboxWakes: true` is what tells the page to send it; an older app is sent nothing, and the
+  keeper's poll wakes the sandbox as before. _(2026-10-15) Opening the app on a sleeping sandbox waited out that poll
+  on top of the start and the boot._
 - **Tray-resident.** The × of either face hides it into the tray, once the first × has asked whether that is what
   closing should do (`close-action.json`, "Keep Intentic in the tray" or "Quit Intentic"). The tray's "Open Intentic"
   opens the last face, "This computer" the main window, "Open workspace" appears once an account has been seen, then

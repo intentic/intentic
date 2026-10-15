@@ -31,6 +31,7 @@ it(`excludes hidden time and waits for a failed reconnect after wake`, async () 
         action: `fix`,
         otherActions: [],
         findings: [],
+        sayAtOnce: false,
     };
     const state = scope.run(() => {
         const outage = useVisibleOutage();

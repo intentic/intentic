@@ -4,6 +4,7 @@ import "@intentic/testing/dom";
 import type { WorkspaceFile } from "@intentic/sandbox-contract";
 import { type App, computed, createApp, defineComponent, h, nextTick, provide, ref, useSlots } from "vue";
 import { IconStub } from "@intentic/ui/testing";
+import { REVEAL_DELAY_MS } from "@intentic/ui";
 
 // The daemon's two reads, stood in for at the viewer's seams: a file's text window, and its bytes. Each text read says
 // whose copy it asked for, since a surface may read another than the Workspace's. An answer may take its time (a
@@ -62,6 +63,13 @@ const { externalDirtyPaths } = await import("../../files/externalDirty");
 const { VIEW_SCOPE, workspaceAgent } = await import("../../../../app/workspaceScope");
 const { useEditBuffers } = await import("../../files/useEditBuffers");
 const { markWorkspaceChanged } = await import("../../changes/live/useWorkspaceLive");
+const { signalConnection } = await import("../../../../client/sandbox/useSandbox");
+
+// The sandbox answering, as the connection driver says it: a frame on an open stream. Every test starts there; the ones
+// about a sandbox that does not answer take it away.
+const answering = (): void => signalConnection({ kind: `frame`, at: Date.now() });
+const silent = (): void => signalConnection({ kind: `failed`, failure: { kind: `detached`, message: `asleep` }, at: Date.now() });
+beforeEach(answering);
 
 // Where a `path` viewer said its document's unsaved edits go, kept past the viewer the way ONLYOFFICE's kept editor
 // keeps it; and how many times a viewer was set up, which is how often the tab drew it anew.
@@ -125,6 +133,13 @@ const settle = async (): Promise<void> => {
     await nextTick();
     await nextTick();
 };
+// A wait is drawn only once it has lasted past the reveal threshold (useLoadingReveal).
+const pastReveal = async (): Promise<void> => {
+    await new Promise((resolve) => setTimeout(resolve, REVEAL_DELAY_MS + 20));
+    await nextTick();
+};
+// What a drawn wait is: text's outline (DiffSkeleton) or, for anything else, a spinner, each a status region.
+const waitDrawn = (element: HTMLElement): boolean => element.querySelector(`[role="status"]`) !== null;
 
 const text = (path: string, content: string, extra: { lossy?: true } = {}): WorkspaceFile => ({
     present: true,
@@ -197,14 +212,16 @@ describe(`a change heard while the tab first reads its file`, () => {
         answer = (path) => new Promise((resolve) => (firstRead = () => resolve(text(path, ``))));
         const element = mount(`fresh.txt`);
         await settle();
-        expect(element.querySelector(`[data-icon="spinner"]`)).not.toBeNull();
+        await pastReveal();
+        expect(waitDrawn(element)).toBe(true);
 
         answer = (path) => text(path, ``);
         markWorkspaceChanged([`fresh.txt`]);
         await settle();
         firstRead?.();
         await settle();
-        expect(element.querySelector(`[data-icon="spinner"]`)).toBeNull();
+        await pastReveal();
+        expect(waitDrawn(element)).toBe(false);
         expect(element.querySelector(`.code-view`)?.getAttribute(`data-editable`)).toBe(`true`);
         expect(reads.map((read) => read.path)).toEqual([`fresh.txt`, `fresh.txt`]);
     });
@@ -418,4 +435,72 @@ it(`floats Copy over the content, not over the lines above it`, async () => {
     const copy = element.querySelector(`[aria-label="Copy file content"]`);
     expect(copy?.closest(`.min-h-0.flex-1`)?.querySelector(`.code-view`)).not.toBeNull();
     expect(copy?.closest(`.min-h-0.flex-1`)?.textContent).not.toContain(`isn't UTF-8`);
+});
+
+// A tab restored while its sandbox is asleep: the edge would answer every read with a 502, which used to stand on the
+// tab as "Request failed (502)." long after the sandbox had woken.
+describe(`a sandbox that is not answering`, () => {
+    afterEach(() => useEditBuffers().forget(`notes.txt`));
+
+    it(`reads nothing, draws the text's outline, and reads the file the moment it answers`, async () => {
+        silent();
+        answer = (path) => text(path, `hello`);
+        const element = mount(`notes.txt`);
+        await settle();
+        await pastReveal();
+        expect(reads).toEqual([]);
+        expect(element.querySelector(`[aria-busy="true"]`)).not.toBeNull();
+        expect(element.textContent).not.toContain(`failed`);
+
+        answering();
+        await settle();
+        expect(reads.map((read) => read.path)).toEqual([`notes.txt`]);
+        expect(element.querySelector(`.code-view`)?.textContent).toBe(`hello`);
+    });
+
+    it(`keeps a file already on screen, and reconciles it against disk once the sandbox is back`, async () => {
+        answer = (path) => text(path, `first`);
+        const element = mount(`notes.txt`);
+        await settle();
+        expect(element.querySelector(`.code-view`)?.textContent).toBe(`first`);
+
+        silent();
+        await settle();
+        expect(element.querySelector(`.code-view`)?.textContent).toBe(`first`);
+        expect(reads).toHaveLength(1);
+
+        answer = (path) => text(path, `second`);
+        answering();
+        await settle();
+        expect(reads).toHaveLength(2);
+        expect(element.querySelector(`.code-view`)?.textContent).toBe(`second`);
+    });
+
+    it(`takes back a failure the silence caused, and reads again when it answers`, async () => {
+        answer = () => Promise.reject(new Error(`Request failed (502).`));
+        const element = mount(`notes.txt`);
+        await settle();
+        expect(element.textContent).toContain(`Request failed (502).`);
+
+        silent();
+        await settle();
+        expect(element.textContent).not.toContain(`Request failed`);
+
+        answer = (path) => text(path, `hello`);
+        answering();
+        await settle();
+        expect(element.querySelector(`.code-view`)?.textContent).toBe(`hello`);
+    });
+
+    it(`opens a viewer that reads through its own backend once the sandbox answers`, async () => {
+        register([`docx`], `path`);
+        silent();
+        const element = mount(`brief.docx`);
+        await settle();
+        expect(element.querySelector(`.fake-viewer`)).toBeNull();
+
+        answering();
+        await settle();
+        expect(element.querySelector(`.fake-viewer`)?.textContent).toBe(`viewer of brief.docx`);
+    });
 });

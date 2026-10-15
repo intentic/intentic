@@ -31,6 +31,9 @@ interface DesktopWebview {
      * sound without a click, keeps it loaded while the window is closed to the tray, and takes `intentic://wake` links
      * (wakeDesktop.ts). An older one would leave listening to stop with the window, so the page says so there. */
     wake?: boolean;
+    /* THIS BUILD STARTS A SANDBOX ASLEEP ON THIS COMPUTER THE MOMENT THE PAGE ASKS (`intentic://sandbox-wakes`, the
+     * app's sandbox_wakes.rs). An older one drops the link, and the wake waits for the keeper's next poll as before. */
+    sandboxWakes?: boolean;
 }
 
 declare global {
@@ -509,6 +512,11 @@ export const desktopSetupStopLink = (sandboxId: string): string => `intentic://s
 // implemented by WebKitGTK). Credentials return over `intentic://auth`, and the app reopens this SPA at
 // /desktop-auth/complete.
 export const DESKTOP_SIGN_IN_LINK = `intentic://signin`;
+
+// The app collecting this computer's wake requests now (its sandbox_wakes.rs), sent right after the platform took one,
+// so a sandbox asleep here starts at once rather than on its keeper's next poll, up to fifteen seconds on. Carries
+// nothing: `ic` starts only what the platform says somebody asked for.
+export const DESKTOP_SANDBOX_WAKES_LINK = `intentic://sandbox-wakes`;
 
 // The credential going back to the app: only the parked row's id and the app's own nonce, never a token. `profile`
 // is the look this browser reads the app in (useProfile.ts), so the workspace the app opens wears it too; the

@@ -4,7 +4,7 @@ import "@intentic/testing/dom";
 import SandboxRecovery from "../../features/sandbox/gates/SandboxRecovery.vue";
 import { RESTART_PATIENCE_MS, type RestartWork } from "../../features/sandbox/live/sandboxRestart";
 import type { DiagnosisNotice } from "../../features/sandbox/diagnosis/presentation";
-import { diagnosisCard, restartCard, type UploadState, uploadHeadline, uploadPhase } from "./notificationSources";
+import { BUSY_CARD_AFTER_MS, diagnosisCard, outageCardShown, restartCard, type UploadState, uploadHeadline, uploadPhase } from "./notificationSources";
 
 // The lane's one rule about a sandbox going quiet: whether the silence was asked for decides both what is said and
 // how soon. Everything else in this file is wiring; this is the decision.
@@ -64,6 +64,7 @@ describe(`the card for a sandbox that isn't answering`, () => {
         action: undefined,
         otherActions: [],
         findings: [],
+        sayAtOnce: false,
         ...over,
     });
 
@@ -82,6 +83,19 @@ describe(`the card for a sandbox that isn't answering`, () => {
         expect(card.body).toBe(SandboxRecovery);
         card.dismiss?.();
         expect(dismissed).toBe(1);
+    });
+
+    it(`is up the moment a sleeping sandbox is known to be waking, before any silence has run out`, () => {
+        const waking = notice({ title: `Waking acme`, sayAtOnce: true });
+        expect(outageCardShown({ notice: waking, due: false, availability: `stale`, elapsedMs: 1_000 })).toBe(true);
+        expect(outageCardShown({ notice: waking, due: false, availability: `starting`, elapsedMs: 0 })).toBe(true);
+    });
+
+    it(`waits out the usual silence for a cause it could only guess at`, () => {
+        expect(outageCardShown({ notice: notice(), due: false, availability: `stale`, elapsedMs: 1_000 })).toBe(false);
+        expect(outageCardShown({ notice: notice(), due: false, availability: `unreachable`, elapsedMs: 30_000 })).toBe(true);
+        expect(outageCardShown({ notice: notice(), due: false, availability: `busy`, elapsedMs: BUSY_CARD_AFTER_MS - 1 })).toBe(false);
+        expect(outageCardShown({ notice: notice(), due: false, availability: `busy`, elapsedMs: BUSY_CARD_AFTER_MS })).toBe(true);
     });
 
     it(`opens the panel for the other options a long wait earns, without turning the wait into a warning`, () => {

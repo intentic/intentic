@@ -7,18 +7,21 @@ import { useT } from "@intentic/ui/i18n";
 // Outline of a diff whose content hasn't arrived: what a `pending` tab shows until that file's diff has been seen once
 // (its `diff:${path}` imprint stands in after that). Drawn as the eventual layout, not a spinner, since the reader
 // already knows which file; the toolbar above already gives status and ± counts. Split follows the same preference the
-// real viewer reads, so the outline never promises a layout the diff then contradicts.
+// real viewer reads, so the outline never promises a layout the diff then contradicts. `single` is a file's own text
+// on its way (FileViewer), which has one side whatever that preference says.
 
 const t = useT();
 
-const { bare = false } = defineProps<{
+const { bare = false, single = false } = defineProps<{
     /** Omit the status region when the caller already announces the review wait. */
     bare?: boolean;
+    /** One pane whatever the diff layout: a file's text, not a diff of it. */
+    single?: boolean;
 }>();
 
 const { mobile } = useDevice();
 const { diffLayout } = useLayout();
-const split = computed(() => !mobile.value && diffLayout.value === `split`);
+const split = computed(() => !single && !mobile.value && diffLayout.value === `split`);
 
 // Fixed, uneven line widths, indented like code; fixed so the outline doesn't reshuffle on re-render.
 const LINES = [

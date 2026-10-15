@@ -180,6 +180,19 @@ export const diagnosisCard = (notice: DiagnosisNotice, due: boolean, dismiss: ()
     return due || notice.otherActions.length > 0 ? { ...spinning, body: SandboxRecovery, wide: true } : spinning;
 };
 
+// Whether the outage card is up. A way back found is said, and so is a cause established and still a wait (asleep, its
+// machine starting it), at once; otherwise a sandbox alive is quiet for a minute and a half, and one not alive past the
+// half minute every surface gives a reconnect.
+export const outageCardShown = (input: {
+    readonly notice: DiagnosisNotice;
+    readonly due: boolean;
+    readonly availability: SandboxAvailability;
+    readonly elapsedMs: number;
+}): boolean =>
+    input.due ||
+    input.notice.sayAtOnce ||
+    (input.availability === `busy` ? input.elapsedMs >= BUSY_CARD_AFTER_MS : input.availability === `unreachable` || input.availability === `detached`);
+
 // Call order is stack order, growing up from the corner: most transient first (upload, seconds) to most permanent
 // last (a new build), so frequent changes never shove a fixed one.
 export const startNotificationSources = (): void => {
@@ -395,10 +408,7 @@ export const startNotificationSources = (): void => {
         if (dismissed.value === key) {
             return undefined;
         }
-        // Alive: quiet for a minute and a half. Not alive: past the half minute every surface gives a reconnect.
-        const shown =
-            due ||
-            (availability.value === `busy` ? outageClock.elapsed.value >= BUSY_CARD_AFTER_MS : availability.value === `unreachable` || availability.value === `detached`);
+        const shown = outageCardShown({ notice, due, availability: availability.value, elapsedMs: outageClock.elapsed.value });
         return shown ? diagnosisCard(notice, due, () => (dismissed.value = key)) : undefined;
     });
 
