@@ -59,8 +59,16 @@ export interface DevRebuildRun {
     detail: string | undefined;
     /** Docker's step counter, the one real fraction inside the longest stage. */
     layers: DevRebuildLayers | undefined;
-    /** How far along, 0–1, never decreasing: a tail that scrolls must not walk the bar backwards. */
+    /**
+     * How far along, 0–1, never decreasing: a tail that scrolls must not walk the bar backwards. The one way back is a
+     * restart step a log then shows was only assumed (`settleAssumption`).
+     */
     fraction: number;
+    /**
+     * The restart step taken from the daemon going quiet (`unread`) before any log showed it. The next log that lands
+     * settles it (`settleAssumption`): confirmed where it shows the swap, and otherwise the run goes back to its build.
+     */
+    swapAssumed: boolean;
 }
 
 const LIVE: ReadonlySet<DevRebuildPhase> = new Set(["starting", "building", "restarting"]);
@@ -120,6 +128,8 @@ const restartKey = (slug: string): string => `${markerKey(slug)}.restart`;
 interface RestartRecord {
     readonly heardAt: number;
     readonly stageAt: Partial<Record<DevRebuildStage, number>>;
+    /** Only assumed (DevRebuildRun.swapAssumed), so the first log a reloaded page reads can still undo it. */
+    readonly assumed: boolean;
 }
 
 // What a stored record must hold to be read at all: storage outlives every version of this page, so it is parsed
@@ -127,13 +137,14 @@ interface RestartRecord {
 const RestartRecordSchema = z.object({
     heardAt: z.number(),
     stageAt: z.object({ image: z.number().optional(), swap: z.number() }),
+    assumed: z.boolean().optional(),
 });
 
 const keepRestart = (run: DevRebuildRun, slug: string): void => {
     if (run.stage !== `swap` || run.heardAt === undefined || !rebuildRunning(run.phase)) {
         return;
     }
-    const record: RestartRecord = { heardAt: run.heardAt, stageAt: run.stageAt };
+    const record: RestartRecord = { heardAt: run.heardAt, stageAt: run.stageAt, assumed: run.swapAssumed };
     storeValue(restartKey(slug), JSON.stringify(record));
 };
 
@@ -157,7 +168,7 @@ const restartOf = (slug: string, startedAt: number): RestartRecord | undefined =
     const { image, swap } = record.stageAt;
     // An image step dated before the run began is the same stale record's, and draws no number rather than a wrong one.
     const stageAt = image !== undefined && image >= startedAt ? { compile: startedAt, image, swap } : { compile: startedAt, swap };
-    return { heardAt: record.heardAt, stageAt };
+    return { heardAt: record.heardAt, stageAt, assumed: record.assumed ?? false };
 };
 
 const idle = (): DevRebuildRun => ({
@@ -175,6 +186,7 @@ const idle = (): DevRebuildRun => ({
     detail: undefined,
     layers: undefined,
     fraction: 0,
+    swapAssumed: false,
 });
 
 const runs = new Map<string, DevRebuildRun>();
@@ -286,6 +298,36 @@ const settle = (run: DevRebuildRun, slug: string, phase: DevRebuildPhase, troubl
     unmark(slug);
 };
 
+// A DAEMON GOING QUIET IS NOT ALWAYS THE SWAP. On rog, 2026-10-15, the machine's network dropped in the middle of the
+// image build: the sandbox's tunnel went with it, `ic` restarted the sandbox to get it back, and every read failed for
+// minutes. The card took that for the swap, then called the build's failure (the image's first download, in the same
+// outage) a failure of "Restarting onto it", and drew the image step finished. The swap narrates under `intentic: `
+// before it takes the daemon down (dev-sandbox.sh, recreate.sh, ic), so the first log that lands settles it: the swap
+// is confirmed where that log shows it, and otherwise the run goes back to the step the log is on, never behind the
+// furthest one it had already shown.
+const settleAssumption = (run: DevRebuildRun, slug: string, lines: readonly string[]): void => {
+    if (!run.swapAssumed) {
+        return;
+    }
+    run.swapAssumed = false;
+    const progress = readRebuildProgress(lines);
+    if (progress?.stage === `swap`) {
+        return;
+    }
+    const shown = run.stageAt.image === undefined ? `compile` : `image`;
+    const stage = progress !== undefined && STAGE_ORDER.indexOf(progress.stage) > STAGE_ORDER.indexOf(shown) ? progress.stage : shown;
+    const { swap: _assumed, ...stageAt } = run.stageAt;
+    const onIt = progress?.stage === stage ? progress : undefined;
+    Object.assign(run, {
+        stage,
+        stageAt,
+        detail: onIt?.detail,
+        layers: onIt?.layers,
+        fraction: onIt === undefined ? stageStart(stage) : rebuildFraction(onIt),
+    });
+    removeStoredValue(restartKey(slug));
+};
+
 // What one read of the machine's log means for a run believed to be in flight. The exit mark is the only thing that
 // ends a rebuild; everything else is a build still going, however quiet.
 const absorb = (run: DevRebuildRun, slug: string, text: string): void => {
@@ -293,6 +335,7 @@ const absorb = (run: DevRebuildRun, slug: string, text: string): void => {
     run.quietFor = log.quietFor;
     if (!log.missing) {
         run.lines = log.lines;
+        settleAssumption(run, slug, log.lines);
     }
     if (log.exitCode !== undefined) {
         run.exitCode = log.exitCode;
@@ -314,8 +357,8 @@ const absorb = (run: DevRebuildRun, slug: string, text: string): void => {
 // the tunnel sulking — is worth another try in four seconds.
 const DRIFTED: ReadonlySet<number> = new Set([400, 404]);
 
-// A read that never arrived. The daemon going quiet mid-build IS the swap onto the new image — it is this container
-// being replaced — whereas an answer that says the device is away leaves the build itself unjudged.
+// A read that never arrived. The daemon going quiet mid-build is MOST OFTEN the swap onto the new image — it is this
+// container being replaced — whereas an answer that says the device is away leaves the build itself unjudged.
 const unread = (run: DevRebuildRun, slug: string, error: unknown): void => {
     if (error instanceof SandboxHttpError) {
         if (DRIFTED.has(error.status)) {
@@ -327,7 +370,11 @@ const unread = (run: DevRebuildRun, slug: string, error: unknown): void => {
     }
     run.phase = "restarting";
     run.trouble = undefined;
-    // The daemon dying IS the swap, so it dates the last stage even when the log never got to say so.
+    // Taken as the swap, so it dates the last stage even when the log never got to say so, and marked as taken, for a
+    // log that lands and says otherwise (`settleAssumption`).
+    if (run.stage !== `swap`) {
+        run.swapAssumed = true;
+    }
     reach(run, "swap");
     fill(run, stageStart("swap"));
 };
@@ -460,6 +507,7 @@ export function useDevRebuild(slug: string): DevRebuildFollower {
                 startedAt: marker,
                 heardAt: restart?.heardAt ?? Date.now(),
                 stageAt: restart?.stageAt ?? { compile: marker },
+                swapAssumed: restart?.assumed ?? false,
             });
             if (restart !== undefined) {
                 reach(run, "swap");

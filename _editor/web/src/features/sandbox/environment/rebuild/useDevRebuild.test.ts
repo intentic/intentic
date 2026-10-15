@@ -128,6 +128,73 @@ it(`reads the daemon going quiet mid-build as the restart, then picks the log ba
     expect(run.exitCode).toBe(0);
 });
 
+// rog, 2026-10-15: the machine's network dropped in the middle of the image build, the sandbox went unreachable and
+// was restarted for it, and the image's first download failed in the same outage. The card called that a failed
+// restart. The log that lands after the silence names the step the build was really on.
+it(`puts a run back on its image step when the log after a silence shows no swap, and fails it there`, async () => {
+    const slug = nextSlug();
+    runDeviceCommand.mockResolvedValueOnce(started).mockResolvedValue(log(`1`, `#31 [runtime 12/80] RUN apt-get install`));
+    const { run } = useDevRebuild(slug);
+    await useDevRebuild(slug).start(HOST);
+    await nextPoll(1);
+    expect(run.stage).toBe(`image`);
+    const imageAt = run.stageAt.image;
+
+    runDeviceCommand.mockRejectedValue(severed);
+    await nextPoll(2);
+    expect(run.phase).toBe(`restarting`);
+    expect(run.stage).toBe(`swap`);
+
+    runDeviceCommand.mockResolvedValue(
+        log(
+            `0`,
+            `#52 [runtime 49/80] RUN intentic scaffold monorepo --dir /opt --name starter`,
+            `ERROR: failed to build: failed to solve`,
+            `${DEV_REBUILD_EXIT_MARK} 1`,
+        ),
+    );
+    await nextPoll(1);
+    expect(run.phase).toBe(`failed`);
+    expect(run.stage).toBe(`image`);
+    expect(run.stageAt).toEqual({ compile: expect.any(Number), image: imageAt });
+    expect(run.layers).toEqual({ done: 49, total: 80 });
+    expect(run.fraction).toBeCloseTo(0.3 + (0.6 * 49) / 80);
+    expect(run.swapAssumed).toBe(false);
+    expect(localStorage.getItem(`intentic.devRebuild.${slug}.restart`)).toBeNull();
+});
+
+// The same silence while the build goes on: the card goes back to following the image, and a swap the log does show
+// later is taken as the swap.
+it(`goes back to the image step when the build outlives a silence, and still reaches the real swap`, async () => {
+    const slug = nextSlug();
+    runDeviceCommand.mockResolvedValueOnce(started).mockResolvedValue(log(`1`, `#31 [runtime 12/80] RUN apt-get install`));
+    const { run } = useDevRebuild(slug);
+    await useDevRebuild(slug).start(HOST);
+    await nextPoll(1);
+
+    runDeviceCommand.mockRejectedValue(severed);
+    await nextPoll(2);
+    expect(run.stage).toBe(`swap`);
+    // Kept across a reload as what it is, an assumption, so the reloaded page's first log can still undo it.
+    expect(JSON.parse(localStorage.getItem(`intentic.devRebuild.${slug}.restart`) ?? `{}`)).toMatchObject({ assumed: true });
+
+    runDeviceCommand.mockResolvedValue(log(`2`, `#40 [runtime 30/80] RUN pnpm install`));
+    await nextPoll(1);
+    expect(run.phase).toBe(`building`);
+    expect(run.stage).toBe(`image`);
+    expect(run.layers).toEqual({ done: 30, total: 80 });
+
+    runDeviceCommand.mockResolvedValue(
+        log(`1`, `#90 naming to docker.io/library/intentic-sandbox:dev done`, `intentic: swapping the sandbox onto the new image`),
+    );
+    await nextPoll(1);
+    runDeviceCommand.mockRejectedValue(severed);
+    await nextPoll(1);
+    expect(run.phase).toBe(`restarting`);
+    expect(run.stage).toBe(`swap`);
+    expect(run.swapAssumed).toBe(false);
+});
+
 // An answer FROM the daemon saying the device is away is not the swap: the container is plainly still here.
 it(`does not call an answered error a restart`, async () => {
     const slug = nextSlug();
@@ -447,6 +514,29 @@ it(`resumes a reload in the restart step on the silence it already had, not a fr
     await nextPoll(4);
     expect(after.run.phase).toBe(`lost`);
     expect(reloaded.outOfContact(after.run, Date.now())).toBe(true);
+});
+
+// The restart step a silence only assumed survives a reload as an assumption: the reloaded page's first log still
+// takes the run back to its build.
+it(`lets the first log after a reload undo a restart step it only assumed`, async () => {
+    const slug = nextSlug();
+    runDeviceCommand.mockResolvedValueOnce(started).mockResolvedValue(log(`1`, `#31 [runtime 12/80] RUN apt-get install`));
+    await useDevRebuild(slug).start(HOST);
+    await nextPoll(1);
+    runDeviceCommand.mockRejectedValue(severed);
+    await nextPoll(5);
+
+    const after = inScope(() => reloaded.useDevRebuild(slug));
+    after.adopt(HOST);
+    expect(after.run.stage).toBe(`swap`);
+    expect(after.run.swapAssumed).toBe(true);
+
+    // adopt's own first read went out while the machine was still silent; the next one lands.
+    runDeviceCommand.mockResolvedValue(log(`2`, `#40 [runtime 30/80] RUN pnpm install`));
+    await nextPoll(2);
+    expect(after.run.phase).toBe(`building`);
+    expect(after.run.stage).toBe(`image`);
+    expect(after.run.stageAt.swap).toBeUndefined();
 });
 
 // Before the restart step a tab closed mid-build says nothing about the build, so a reload there dates contact from the

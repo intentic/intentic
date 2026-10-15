@@ -25,6 +25,7 @@ const run = (over: Partial<DevRebuildRun> = {}): DevRebuildRun => ({
     detail: undefined,
     layers: undefined,
     fraction: 1,
+    swapAssumed: false,
     ...over,
 });
 
