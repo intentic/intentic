@@ -56,6 +56,11 @@ describe(`the run as the card reads it`, () => {
         expect(childRunFacts({ ...asked, account: `work`, on: `here` }, { ...asked, account: `work` })).toEqual([`Account: work`, `In this sandbox`]);
     });
 
+    // Unnamed, the account is the daemon's most-room pick when the child starts: the default, so nothing to say.
+    it(`says nothing of an account nobody named`, () => {
+        expect(childRunFacts(asked, asked)).toEqual([]);
+    });
+
     it(`names the loop only where the provider has two that differ`, () => {
         expect(childRunFacts(asked, { ...asked, harness: `claude-code` })).toEqual([]);
         expect(childRunFacts(asked, { provider: `codex`, model: `gpt-5.5`, harness: `claude-code` })).toEqual([`Through Claude Code`]);

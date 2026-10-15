@@ -1945,9 +1945,9 @@
         "chatChildAgentAsk": {
             "changeRun": "Lauf ändern",
             "modelAccountEffort": "Modell, Konto, Denkstufe",
-            "spawnTitle": "Einen Subagenten auf {provider} starten?",
-            "sendTitle": "Das an einen Subagenten auf {provider} senden?",
-            "answerTitle": "Einem Subagenten auf {provider} antworten?",
+            "spawnTitle": "Einen Subagenten starten?",
+            "sendTitle": "Einem Subagenten schreiben?",
+            "answerTitle": "Einem Subagenten antworten?",
             "spawn": "Starten",
             "send": "Senden",
             "answer": "Antworten",
@@ -1955,12 +1955,18 @@
             "useForAgent": "Für diesen Agenten verwenden",
             "fast": "Schnell",
             "account": "Konto: {account}",
-            "anyAccount": "Konto: das mit dem meisten Spielraum",
             "through": "Über {harness}",
             "onHere": "In dieser Sandbox",
             "onRunner": "Auf {runner}",
             "changedFrom": "Geändert gegenüber der Wahl des Agenten: {run}",
-            "useAgentsPick": "Wahl des Agenten verwenden"
+            "useAgentsPick": "Wahl des Agenten verwenden",
+            "showPrompt": "Prompt anzeigen",
+            "showMessage": "Nachricht anzeigen",
+            "showAnswer": "Antwort anzeigen",
+            "hide": "Ausblenden",
+            "showAll": "Alles anzeigen",
+            "showLess": "Weniger anzeigen",
+            "whyAsked": "Gefragt, weil:"
         },
         "runThrough": {
             "loop": "Schleife",

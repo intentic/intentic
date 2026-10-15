@@ -4,7 +4,6 @@ import { ContextMenu, ui } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
-import { providerDisplayLabel } from "../../accounts/providerCatalog";
 import { type CardAnswer, SKIP_CALL } from "../../session/cardReplies";
 import ChatCommandBlock from "../../tools/ChatCommandBlock.vue";
 import type { ChatMessage } from "../transcript";
@@ -25,15 +24,16 @@ const pending = computed(() => card.value.status === `pending`);
 const staged = ref<ChildRun | undefined>(undefined);
 const livePick = computed(() => (pending.value ? staged.value : undefined));
 
-// A child-agent ask names its move in the header and on the allow, as the daemon's own title does.
-const childTitle = (move: ChildMove, provider: string): string => {
+// A child-agent ask names its move in the header and on the allow. Not the provider, which the run's own logo and name
+// say one line below, and which the owner may still change there.
+const childTitle = (move: ChildMove): string => {
     switch (move) {
         case `spawn`:
-            return t(`chat.chatChildAgentAsk.spawnTitle`, { provider });
+            return t(`chat.chatChildAgentAsk.spawnTitle`);
         case `send`:
-            return t(`chat.chatChildAgentAsk.sendTitle`, { provider });
+            return t(`chat.chatChildAgentAsk.sendTitle`);
         case `answer`:
-            return t(`chat.chatChildAgentAsk.answerTitle`, { provider });
+            return t(`chat.chatChildAgentAsk.answerTitle`);
     }
 };
 const childVerb = (move: ChildMove): string => {
@@ -48,13 +48,22 @@ const childVerb = (move: ChildMove): string => {
 };
 
 // Header: the bridge's rendered prompt sentence, else a short noun phrase, else the bare tool name. A child-agent ask is
-// titled here instead, off the provider that would actually run, which the owner may just have changed.
+// titled here instead, by its move alone.
 const title = computed(() => {
     const about = child.value;
     if (about !== undefined) {
-        return childTitle(about.move, providerDisplayLabel((livePick.value ?? about).provider));
+        return childTitle(about.move);
     }
     return card.value.title ?? card.value.displayName ?? card.value.toolName;
+});
+// Why a child-agent ask was raised, said while it waits and dropped once answered, when it no longer bears on anything.
+// The gate words it as a clause for the agent ("this turn has…"); on the card it stands as a sentence of its own, behind
+// the shield that says it is the gate's reason.
+const childReason = computed(() => {
+    const reason = card.value.reason;
+    return child.value === undefined || !pending.value || reason === undefined || reason === ``
+        ? undefined
+        : `${reason.charAt(0).toUpperCase()}${reason.slice(1)}`;
 });
 const allowLabel = computed(() => (child.value === undefined ? t(`chat.chatMessageView.allowOnce`) : childVerb(child.value.move)));
 
@@ -109,7 +118,8 @@ const allowItems = computed<MenuItem[]>(() => [
 
 <template>
     <!-- The safety judge's own verdict sentence on this program, never from the gated agent's own words; wraps in full. -->
-    <ChatCard icon="shield" prose :title="title" :status="permissionStatus(card)">
+    <!-- A child-agent ask wears the subagent's own mark, the one its row carries once it runs, so the two read as one thread. -->
+    <ChatCard :icon="child ? `users` : `shield`" prose :title="title" :status="permissionStatus(card)">
         <div class="chat-card-body flex flex-col gap-2">
             <ChatChildAgentAsk
                 v-if="child"
@@ -117,8 +127,15 @@ const allowItems = computed<MenuItem[]>(() => [
                 :staged="livePick"
                 :repointable="pending && child.move === `spawn`"
                 :disabled="settling"
+                :settled="!pending"
                 @repoint="staged = $event"
             />
+            <span v-if="childReason" class="flex min-w-0 items-start gap-1.5 text-2xs leading-snug text-subtle" data-child-reason>
+                <Icon name="shield" class="mt-px shrink-0" aria-hidden="true" />
+                <span class="min-w-0"
+                    ><span class="sr-only">{{ t(`chat.chatChildAgentAsk.whyAsked`) }} </span>{{ childReason }}</span
+                >
+            </span>
 
             <!-- One line: the sentence (shown only when it adds to the title: a hard-rule consequence, a machine name) on the
                  left, the command's pill on the right. Click-to-reveal, not a hover, so the command stays reachable on touch
@@ -150,7 +167,7 @@ const allowItems = computed<MenuItem[]>(() => [
             <ChatCommandBlock v-if="card.program && commandOpen" :program="card.program" />
 
             <span v-if="card.path" class="font-mono text-2xs leading-snug text-subtle">{{ card.path }}</span>
-            <span v-if="card.reason" class="text-2xs leading-snug text-subtle">{{
+            <span v-if="card.reason && !child" class="text-2xs leading-snug text-subtle">{{
                 t(`chat.chatMessageView.requestedBecause`, { reason: card.reason })
             }}</span>
         </div>

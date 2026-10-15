@@ -922,6 +922,18 @@ const ALWAYS_LABEL = "Allow for the rest of this turn";
 // What the card quotes of the parent's words to a child: enough to judge it by, not a second transcript.
 const MESSAGE_SHOWN = 600;
 
+// The parent's words as the card quotes them: cut at MESSAGE_SHOWN, back to the last word that fits whole where one ends
+// near the cut, and marked, so a quote never stops mid-word as though that were all it said.
+const quoted = (words: string): string => {
+    const trimmed = words.trim();
+    if (trimmed.length <= MESSAGE_SHOWN) {
+        return trimmed;
+    }
+    const cut = trimmed.slice(0, MESSAGE_SHOWN);
+    const lastSpace = cut.search(/\s\S*$/u);
+    return `${(lastSpace > MESSAGE_SHOWN - 40 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`;
+};
+
 // Why a hold refuses with nowhere to ask: a detached `agents` shell, or a turn that already ended.
 const nowhereToAsk = (reason: string): string =>
     `Held for the owner: ${reason}. This call arrived outside a live turn, so there was nowhere to ask them. Ask in chat; they can also set the agents.spawn action rule.`;
@@ -1132,11 +1144,16 @@ const childAsk = (move: ChildMove, spec: ChildSpawnSpec): ChildAgentAsk => {
     return ask;
 };
 
+// A start, with the prompt it would open on: what the owner is really allowing. A start the parent did not describe is
+// already titled by that prompt's head, so it quotes nothing a second time.
+const startAsk = (spec: ChildSpawnSpec): ChildAgentAsk =>
+    spec.description === undefined ? childAsk("spawn", spec) : { ...childAsk("spawn", spec), message: quoted(spec.prompt) };
+
 // The same for a child that already exists, with the words the parent would say to it.
 const askAbout = (kid: ChildRecord, move: ChildMove, childId: string, message: string): ChildAgentAsk => ({
     ...childAsk(move, kid.spec),
     child: childId,
-    message: message.trim().slice(0, MESSAGE_SHOWN),
+    message: quoted(message),
 });
 
 // Whether the privacy shield keeps children on this machine; an unreadable policy keeps them here too.
@@ -1362,7 +1379,7 @@ export const spawnChild = async (services: Services, parent: ChildParent, asked:
         return { ok: false, message: nowhereToAsk(verdict.reason) };
     }
     holdChildStart(services, parent, start);
-    void askOwner(services, parent.conversationId, run, childAsk("spawn", asked), verdict.reason).then((admission) =>
+    void askOwner(services, parent.conversationId, run, startAsk(asked), verdict.reason).then((admission) =>
         startAllowed(services, parent, start, admission),
     );
     return { ok: true, id: start.id, held: true, note: heldStart(verdict.reason) };

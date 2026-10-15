@@ -68,7 +68,9 @@ export const ChildAgentAskSchema = ChildRunSchema.extend({
     message: z
         .string()
         .optional()
-        .describe("What the parent would say to it: the message it sends, or the answers it gives. Clipped for the request."),
+        .describe(
+            "What the parent would say to it: the prompt a described start opens on, the message it sends, or the answers it gives. Clipped for the request, with an ellipsis where it was cut.",
+        ),
     on: z.string().optional().describe('Which machine it runs on, when one is named: a runner, or "here" for this sandbox.'),
     proposed: ChildRunSchema.optional().describe(
         "What the agent asked to start it on, when the owner started it on something else instead. Present only once the request has settled that way.",

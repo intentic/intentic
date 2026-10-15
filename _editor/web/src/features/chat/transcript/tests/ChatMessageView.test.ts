@@ -754,15 +754,24 @@ describe(`ChatMessageView child-agent card`, () => {
     });
 
     it(`names the child it would start and everything it runs on`, () => {
-        const element = mount(held());
-        expect(element.querySelector(`.chat-card-title`)?.textContent).toBe(`Start a subagent on Claude Code?`);
-        expect(element.textContent).toContain(`Port the parser to zig`);
+        const element = mount(held({ message: `Port the parser to zig, keeping the tests green.` }));
+        // The move alone: the provider is the run's to say, one line below, where the owner may still change it.
+        expect(element.querySelector(`.chat-card-title`)?.textContent).toBe(`Start a subagent?`);
+        expect(element.querySelector(`[data-child-task]`)?.textContent?.trim()).toBe(`Port the parser to zig`);
+        expect(element.querySelector(`[data-child-message]`)?.textContent?.trim()).toBe(`Port the parser to zig, keeping the tests green.`);
         expect(chip(element)?.textContent).toContain(`Claude Opus 4.6`);
         expect(element.textContent).toContain(`Account: work`);
         expect(element.textContent).toContain(`On rog`);
-        expect(element.textContent).toContain(`Requested because: this turn has taken in content from outside (shell-fetch)`);
+        // The gate's reason, as a sentence of its own behind the shield, rather than a clause after a label.
+        expect(element.querySelector(`[data-child-reason]`)?.textContent).toContain(`This turn has taken in content from outside (shell-fetch)`);
+        expect(element.textContent).not.toContain(`Requested because`);
         // Skipping refuses this child alone and lets the turn go on; No ends the turn, as on every permission card.
         expect(answers(element)).toEqual([`Start it`, `Skip this, keep going`, `No`]);
+    });
+
+    it(`says nothing of an account nobody chose`, () => {
+        const element = mount(held({ account: undefined }));
+        expect(element.textContent).not.toContain(`Account`);
     });
 
     it(`opens the shell picker over the child's run, offering its knobs, and allows with the owner's pick`, async () => {
@@ -780,10 +789,11 @@ describe(`ChatMessageView child-agent card`, () => {
         settleModelPick({ provider: `codex`, model: `gpt-5.5`, label: `GPT-5.5`, effort: `high` });
         await nextTick();
         await nextTick();
-        // The card now reads the owner's pick, says what it replaced, and titles the provider that would actually run.
+        // The card now reads the owner's pick and says what it replaced; the title, naming the move alone, stands.
         expect(chip(element)?.classList.contains(`ui-chip-on`)).toBe(true);
+        expect(chip(element)?.textContent).toContain(`GPT 5.5`);
         expect(element.textContent).toContain(`Changed from the agent's pick: Claude Opus 4.6`);
-        expect(element.querySelector(`.chat-card-title`)?.textContent).not.toContain(`Claude Code`);
+        expect(element.querySelector(`.chat-card-title`)?.textContent).toBe(`Start a subagent?`);
 
         button(element, `Start it`)?.click();
         expect(reply).toHaveBeenCalledWith(`perm-child`, {
@@ -821,7 +831,7 @@ describe(`ChatMessageView child-agent card`, () => {
         const element = mount(
             held({ move: `send`, child: `sub-1`, message: `Now the lexer too.` }, { title: `Send this to a subagent on Claude Code?` }),
         );
-        expect(element.querySelector(`.chat-card-title`)?.textContent).toBe(`Send this to a subagent on Claude Code?`);
+        expect(element.querySelector(`.chat-card-title`)?.textContent).toBe(`Message a subagent?`);
         expect(element.textContent).toContain(`Now the lexer too.`);
         expect(element.textContent).toContain(`Claude Opus 4.6`);
         expect(chip(element)).toBeNull();
@@ -846,6 +856,23 @@ describe(`ChatMessageView child-agent card`, () => {
         expect(chip(element)).toBeNull();
         expect(button(element, `Use the agent's pick`)).toBeUndefined();
         expect(answers(element)).toEqual([]);
+    });
+
+    // History under the subagent's own row: what identifies it stays, the words fold away, and why it asked is moot.
+    it(`once answered, folds to the task and the run, with the words one press away`, async () => {
+        const element = mount(held({ move: `send`, child: `sub-1`, message: `Now the lexer too.` }, { status: `allowed` }));
+        expect(element.querySelector(`[data-child-task]`)?.textContent?.trim()).toBe(`Port the parser to zig`);
+        expect(element.querySelector(`[data-child-run]`)?.textContent).toContain(`Claude Opus 4.6`);
+        expect(element.querySelector(`[data-child-message]`)).toBeNull();
+        expect(element.querySelector(`[data-child-reason]`)).toBeNull();
+        expect(element.textContent).not.toContain(`shell-fetch`);
+
+        button(element, `Show message`)?.click();
+        await nextTick();
+        expect(element.querySelector(`[data-child-message]`)?.textContent?.trim()).toBe(`Now the lexer too.`);
+        button(element, `Hide`)?.click();
+        await nextTick();
+        expect(element.querySelector(`[data-child-message]`)).toBeNull();
     });
 });
 

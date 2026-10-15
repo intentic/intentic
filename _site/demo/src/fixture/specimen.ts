@@ -13,6 +13,9 @@ export const SPECIMEN_SESSION = `ses_01j9specimen`;
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 
+// A parent's message to a running child, clipped where the daemon clips one for its card.
+const CHILD_MESSAGE = `I reviewed your landed code while finishing accessibility. Please check concurrent platform mutations before finalising the ownership claims: addMember/removeMember read lastAdmin and then write outside a transaction, so two admins can concurrently demote/remove each other and leave zero admins; sandbox.delete checks orgId before trashSandbox, and eraseAccount checks bound ownership before its transaction, so a concurrent bind can race the guard. Please make these constraints atomic using the platform's existing transaction/row-lock conventions and add meaningful concurrent tests where…`;
+
 const RENDERER_BEFORE = `pub fn render(rows: &[Row]) -> String {
     let mut out = String::new();
     for row in rows {
@@ -381,6 +384,29 @@ const messages: TranscriptRow[] = [
         },
     },
     {
+        role: `assistant`,
+        text: ``,
+        permission: {
+            requestId: `perm_spec_child_send`,
+            toolName: `agents.spawn`,
+            title: `Send this to a subagent on Claude Code?`,
+            displayName: `Send it`,
+            reason: `this turn has taken in content from outside (web), and a subagent would spend the owner's accounts on its say-so`,
+            alwaysLabel: `Allow for the rest of this turn`,
+            child: {
+                move: `send`,
+                child: `sub-brisk-otter-4k2m`,
+                task: `Harden institutional governance and ownership in Intentic`,
+                message: CHILD_MESSAGE,
+                provider: `claude`,
+                model: `claude-opus-5-5`,
+                effort: `xhigh`,
+                on: `here`,
+            },
+            status: `allowed`,
+        },
+    },
+    {
         role: `notice`,
         text: `The STRIPE_SECRET_KEY secret`,
         need: {
@@ -421,6 +447,28 @@ const messages: TranscriptRow[] = [
     },
     { role: `notice`, text: `Finished: the work is on this agent's branch, ready to land from its review.` },
     { role: `user`, text: `Continue`, sentAt: Date.now() - 20 * 60_000 },
+    {
+        role: `assistant`,
+        text: ``,
+        permission: {
+            requestId: `perm_spec_child_spawn`,
+            toolName: `agents.spawn`,
+            title: `Start a subagent on Claude Code?`,
+            displayName: `Start it`,
+            reason: `this turn has taken in content from outside (web), and a subagent would spend the owner's accounts on its say-so`,
+            alwaysLabel: `Allow for the rest of this turn`,
+            child: {
+                move: `spawn`,
+                task: `Fix the ps1 kit's -Force handling`,
+                message: `Reproduce the -Force bug in scripts/install.ps1 against an existing target directory, then fix the param block so -Force reaches Remove-Item.\n\nAdd a Pester test covering both paths (target exists, target missing) and re-run the whole ps1 kit on Windows PowerShell 5.1 and pwsh 7. Do not touch the sh kit: another agent owns it. Report what you changed, the test output, and anything in the kit that looked wrong but was out of scope.`,
+                provider: `claude`,
+                model: `claude-opus-5-5`,
+                effort: `xhigh`,
+                on: `here`,
+            },
+            status: `pending`,
+        },
+    },
     {
         role: `assistant`,
         text: ``,

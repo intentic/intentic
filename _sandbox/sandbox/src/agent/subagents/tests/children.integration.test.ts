@@ -1299,7 +1299,7 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
     });
 
     // What the owner is asked to allow is on the card itself, from the call, not the agent's prose about it.
-    it("shows the child it would start: task, model, effort, account and machine", async () => {
+    it("shows the child it would start: task, prompt, model, effort, account and machine", async () => {
         const live = liveParent();
         try {
             const result = await spawnChild(heldServices(HOLD, fakeTurn([])), parent, {
@@ -1315,6 +1315,7 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
             expect(cardOf(requestId)?.child).toEqual({
                 move: "spawn",
                 task: "Port the parser",
+                message: "Port the parser to zig",
                 provider: "claude",
                 model: "claude-opus-4-6",
                 effort: "max",
@@ -1324,6 +1325,44 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
             cards.resolve({ kind: "permission", requestId, decision: "deny" });
             if (result.ok) {
                 await settled(result.id);
+            }
+        } finally {
+            live.release();
+        }
+    });
+
+    // The prompt is what a start really allows, so the card quotes it; cut long, it says so rather than stopping mid-word.
+    it("quotes a long prompt to a word, marked as cut, and nothing twice when the prompt is the task", async () => {
+        const live = liveParent();
+        try {
+            const prompt = `${"Port the parser to zig. ".repeat(30)}Then the lexer.`;
+            const described = await spawnChild(heldServices(HOLD, fakeTurn([])), parent, {
+                prompt,
+                description: "Port the parser",
+                provider: "claude",
+                model: "claude-opus-4-6",
+            });
+            const quotedCard = await cardOn();
+            const message = cardOf(quotedCard)?.child?.message ?? "";
+            expect(message.endsWith("zig.…")).toBe(true);
+            expect(prompt.startsWith(message.slice(0, -1))).toBe(true);
+            expect(message.length).toBeLessThanOrEqual(601);
+            cards.resolve({ kind: "permission", requestId: quotedCard, decision: "deny" });
+            await until(() => cardOf(quotedCard)?.status !== "pending");
+
+            const bare = await spawnChild(heldServices(HOLD, fakeTurn([])), parent, {
+                prompt: "Port the lexer",
+                provider: "claude",
+                model: "claude-opus-4-6",
+            });
+            const bareCard = await cardOn();
+            expect(cardOf(bareCard)?.child).toMatchObject({ task: "Port the lexer" });
+            expect(cardOf(bareCard)?.child?.message).toBeUndefined();
+            cards.resolve({ kind: "permission", requestId: bareCard, decision: "deny" });
+            for (const result of [described, bare]) {
+                if (result.ok) {
+                    await settled(result.id);
+                }
             }
         } finally {
             live.release();

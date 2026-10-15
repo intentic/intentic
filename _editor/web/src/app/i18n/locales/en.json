@@ -3815,9 +3815,9 @@
         "chatChildAgentAsk": {
             "changeRun": "Change run",
             "modelAccountEffort": "Model, account, effort",
-            "spawnTitle": "Start a subagent on {provider}?",
-            "sendTitle": "Send this to a subagent on {provider}?",
-            "answerTitle": "Answer a subagent on {provider}?",
+            "spawnTitle": "Start a subagent?",
+            "sendTitle": "Message a subagent?",
+            "answerTitle": "Answer a subagent?",
             "spawn": "Start it",
             "send": "Send it",
             "answer": "Answer it",
@@ -3825,12 +3825,18 @@
             "useForAgent": "Use for this agent",
             "fast": "Fast",
             "account": "Account: {account}",
-            "anyAccount": "Account: whichever has the most room",
             "through": "Through {harness}",
             "onHere": "In this sandbox",
             "onRunner": "On {runner}",
             "changedFrom": "Changed from the agent's pick: {run}",
-            "useAgentsPick": "Use the agent's pick"
+            "useAgentsPick": "Use the agent's pick",
+            "showPrompt": "Show prompt",
+            "showMessage": "Show message",
+            "showAnswer": "Show answer",
+            "hide": "Hide",
+            "showAll": "Show all",
+            "showLess": "Show less",
+            "whyAsked": "Asked because:"
         },
         "runThrough": {
             "loop": "Loop",

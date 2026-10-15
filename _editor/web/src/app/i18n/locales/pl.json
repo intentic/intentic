@@ -3767,9 +3767,9 @@
         "chatChildAgentAsk": {
             "changeRun": "Zmień przebieg",
             "modelAccountEffort": "Model, konto, wysiłek",
-            "spawnTitle": "Uruchomić podagenta na {provider}?",
-            "sendTitle": "Wysłać to podagentowi na {provider}?",
-            "answerTitle": "Odpowiedzieć podagentowi na {provider}?",
+            "spawnTitle": "Uruchomić podagenta?",
+            "sendTitle": "Napisać do podagenta?",
+            "answerTitle": "Odpowiedzieć podagentowi?",
             "spawn": "Uruchom",
             "send": "Wyślij",
             "answer": "Odpowiedz",
@@ -3777,12 +3777,18 @@
             "useForAgent": "Użyj dla tego agenta",
             "fast": "Szybko",
             "account": "Konto: {account}",
-            "anyAccount": "Konto: to z największym zapasem",
             "through": "Przez {harness}",
             "onHere": "W tym sandboksie",
             "onRunner": "Na {runner}",
             "changedFrom": "Zmieniono względem wyboru agenta: {run}",
-            "useAgentsPick": "Użyj wyboru agenta"
+            "useAgentsPick": "Użyj wyboru agenta",
+            "showPrompt": "Pokaż prompt",
+            "showMessage": "Pokaż wiadomość",
+            "showAnswer": "Pokaż odpowiedź",
+            "hide": "Ukryj",
+            "showAll": "Pokaż wszystko",
+            "showLess": "Pokaż mniej",
+            "whyAsked": "Pytam, ponieważ:"
         },
         "runThrough": {
             "loop": "Pętla",

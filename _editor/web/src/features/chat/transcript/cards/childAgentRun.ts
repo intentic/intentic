@@ -20,19 +20,14 @@ export const childRunLine = (run: ChildRun): string =>
         .filter((part) => part !== undefined)
         .join(` · `);
 
-// Who pays: the account named, by its name here; the only one there is, when nothing is named; or the daemon's
-// most-room pick among several. A provider with no accounts of its own has nothing to say here.
+// Who pays, where someone chose: the account named, by its name here. Left unnamed, the daemon takes whichever account
+// has the most room when the child starts, which is the default and so nothing worth a line; the picker shows it.
 const accountFact = (run: ChildRun): string | undefined => {
-    const accounts = accountsOf(run.provider);
-    if (run.account !== undefined) {
-        const named = accounts.find((account) => account.id === run.account);
-        return t(`chat.chatChildAgentAsk.account`, { account: named?.label ?? run.account });
-    }
-    const [only, ...others] = accounts;
-    if (only === undefined) {
+    if (run.account === undefined) {
         return undefined;
     }
-    return others.length === 0 ? t(`chat.chatChildAgentAsk.account`, { account: only.label }) : t(`chat.chatChildAgentAsk.anyAccount`);
+    const named = accountsOf(run.provider).find((account) => account.id === run.account);
+    return t(`chat.chatChildAgentAsk.account`, { account: named?.label ?? run.account });
 };
 
 // The loop is worth a word only where it isn't the provider's default; Claude's own IS Claude Code. A loop this daemon
