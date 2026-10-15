@@ -17,6 +17,8 @@
 ; page says what stays, and the agent is part of that only when it stayed. Declared here, at the top level, because
 ; Tauri includes this file there and a Var cannot be declared inside a section.
 Var IntenticAgentKept
+; Whether this uninstall is the first half of a reinstall (1): see AN UNINSTALL AN INSTALL IS ABOUT TO UNDO, below.
+Var IntenticReinstall
 
 ; WHY AN UNINSTALL HOOK AT ALL — this app is meant to be running when you uninstall it.
 ;
@@ -52,7 +54,29 @@ Var IntenticAgentKept
 ;     webview's own processes outlive the app by a moment and hold the files until they exit.
 ;   - the sandboxes, their data, `ic` and its PATH entry, and the run logs stay, and the last page says so (below):
 ;     the sandboxes are the reader's work, and `ic` is how they are removed.
+;
+; AN UNINSTALL AN INSTALL IS ABOUT TO UNDO (2026-10-15). Running a newer setup by hand over an installed copy shows
+; Tauri's reinstall page, whose preselected answer is "Uninstall before installing". That runs THIS uninstaller, without
+; `/UPDATE` (only the background updater passes it, and the updater never uninstalls at all), so every guard above read
+; it as somebody removing Intentic: it asked "Also remove the Intentic machine agent from this PC?" in the middle of an
+; upgrade. A Yes ran `intentic-machine uninstall`, which drops every sandbox link and sync pairing the PC holds; one PC
+; lost its link to the sandbox it hosted that way and sat disconnected for two days, while the app it had just updated
+; worked fine. It also signed the reader out and unpinned their shortcuts, all for a copy the install re-creates a
+; second later.
+; The installer runs the old uninstaller IN PLACE (`uninstall.exe _?=<dir>`); a real uninstall, from Settings, the
+; Start menu or winget, always runs from a copy NSIS makes in %TEMP%. So an uninstaller standing beside the app's own
+; binary is the first half of a reinstall, and it is treated as the update it is: nothing about the agent is asked,
+; nobody is signed out, and Tauri's own section keeps the shortcuts and the start-at-login value. The one exception is
+; a reader who ticked "Delete app data" on the uninstaller's page: they asked for a clean slate, and get Tauri's full
+; removal of the app's own files, but still not a question about the agent, which is no part of the app's data.
 !macro NSIS_HOOK_PREUNINSTALL
+  StrCpy $IntenticReinstall 0
+  ${If} ${FileExists} "$EXEDIR\${MAINBINARYNAME}.exe"
+    StrCpy $IntenticReinstall 1
+    ${If} $DeleteAppDataCheckboxState <> 1
+      StrCpy $UpdateMode 1
+    ${EndIf}
+  ${EndIf}
   nsis_tauri_utils::KillProcessCurrentUser "${MAINBINARYNAME}.exe"
   Pop $0
   nsis_tauri_utils::KillProcessCurrentUser "intentic-files.exe"
@@ -64,6 +88,7 @@ Var IntenticAgentKept
     ${If} ${FileExists} "$PROFILE\.intentic\machine\bin\intentic-machine.exe"
       StrCpy $IntenticAgentKept 1
       ${If} $PassiveMode <> 1
+      ${AndIf} $IntenticReinstall <> 1
         ${If} ${Cmd} `MessageBox MB_YESNO|MB_ICONQUESTION "Also remove the Intentic machine agent from this PC?$\r$\n$\r$\nIt keeps your sandboxes connected and starts Docker Desktop when you sign in. Your sandboxes and their files are not deleted either way." /SD IDNO IDYES`
           DetailPrint "Removing the Intentic machine agent..."
           nsExec::ExecToLog /TIMEOUT=120000 '"$PROFILE\.intentic\machine\bin\intentic-machine.exe" uninstall'
@@ -271,6 +296,7 @@ Var IntenticAgentKept
   Delete "$INSTDIR\intentic_explorer_menu.dll.*.old"
   ${If} $UpdateMode <> 1
   ${AndIf} $PassiveMode <> 1
+  ${AndIf} $IntenticReinstall <> 1
   ${AndIf} ${FileExists} "$PROFILE\.intentic\ic\bin\ic.exe"
     ${If} $IntenticAgentKept = 1
       MessageBox MB_OK|MB_ICONINFORMATION "Intentic is removed, and you are signed out on this PC.$\r$\n$\r$\nYour sandboxes and their files stay on this PC, in Docker. In a terminal, ic sandbox list shows them and ic sandbox remove <name> removes one (it stays recoverable for a week).$\r$\n$\r$\nThe machine agent stays too. intentic-machine uninstall removes it." /SD IDOK

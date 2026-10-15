@@ -1,5 +1,5 @@
 import type { VpnLink, CapabilitySummary, CapabilityStatus } from "@intentic/sandbox-contract";
-import { awaitingLogin, browserGrants, connectionFacts, connectionState, rebuildStep, vpnFacts } from "./connections";
+import { awaitingLogin, browserGrants, connectionFacts, connectionState, rebuildStep, sidesAwakeWithoutIt, vpnFacts } from "./connections";
 
 // Reader's question is whether they still have something to do, not the daemon's state word, and for two kinds
 // status alone isn't the truest answer. Both listing surfaces read through here, so an account can't be "needs
@@ -35,6 +35,37 @@ test(`reads a connected machine's liveness from the roster rather than its statu
     expect(connectionState(`device`, machine, false).label).toBe(`offline`);
     // Not yet in the roster reads as offline, not as an error.
     expect(connectionState(`device`, machine, undefined).label).toBe(`offline`);
+});
+
+// (2026-10-15) rog's Windows agent was gone for two days while its WSL distro stayed connected, and its card read as
+// plain offline. A PC answering only through a distro is partly connected; one answering on Windows is online whatever
+// its distros do, since a stopped test distro is the ordinary state of a PC.
+test(`reads a PC answering only through a distro as partly connected, and one answering on Windows as online`, () => {
+    const away = instance({ state: `pending`, detail: `the device is offline` });
+    const partly = connectionState(`device`, away, false, [`wsl:archlinux`]);
+    expect(partly).toMatchObject({ label: `partly connected`, tone: `warning`, note: `its Windows side is offline; WSL archlinux still answers` });
+    expect(connectionState(`device`, away, false, [`wsl:archlinux`, `wsl:ubuntu`]).note).toBe(
+        `its Windows side is offline; WSL archlinux, ubuntu still answer`,
+    );
+    expect(connectionState(`device`, instance({ state: `active` }), true, []).label).toBe(`online`);
+    // Nothing of it answers: as before.
+    expect(connectionState(`device`, away, false, []).label).toBe(`needs setup`);
+    // A card the owner switched off stays off, whatever is still connected.
+    expect(connectionState(`device`, instance({ state: `inactive` }), false, [`wsl:archlinux`]).label).toBe(`off`);
+});
+
+test(`counts a machine's other sides as awake only while its own side is not`, () => {
+    const pc = (online: boolean, distro: boolean) => ({
+        online,
+        environments: [
+            { key: `native`, online },
+            { key: `wsl:archlinux`, online: distro },
+        ],
+    });
+    expect(sidesAwakeWithoutIt(pc(false, true))).toEqual([`wsl:archlinux`]);
+    expect(sidesAwakeWithoutIt(pc(true, true))).toEqual([]);
+    expect(sidesAwakeWithoutIt(pc(false, false))).toEqual([]);
+    expect(sidesAwakeWithoutIt(undefined)).toEqual([]);
 });
 
 // Rank is the same judgement as the wording: a list that mostly works still opens on the part that doesn't.

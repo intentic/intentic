@@ -9,6 +9,7 @@ import type { Services } from "../composition.js";
 import { opt } from "../opt.js";
 import { runDeviceCommand } from "./device-commands.js";
 import { devices, manageDeviceSandbox, runDeviceAgentFlow } from "./device-reports.js";
+import { cardlessHosts } from "./host-peer.js";
 
 // The ops that end by restarting the container they name, so a `resumeTurns` ask is about their restart.
 const RESTARTING: ReadonlySet<DeviceSandboxOp> = new Set(["restart", "update", "rebuild", "rollback"]);
@@ -44,8 +45,17 @@ export const createDeviceSystemRoutes = (services: Services) => {
         });
     return {
         // The merged fleet view. No maintainer floor: this is what every devices-aware card reads to draw itself, and
-        // the doors it leads to carry their own.
-        devices: i.devices.handler(async () => ({ devices: await devices(services) })),
+        // the doors it leads to carry their own. Beside it, the device keys no card holds, which no row can show and
+        // the Devices screen lists for the owner to withdraw (DELETE /system/hosts/{id}, maintainer-gated).
+        devices: i.devices.handler(async () => {
+            // The keys are an aside: one that cannot be read never costs the fleet view it rides beside.
+            const keys = cardlessHosts(services).catch((error: Error) => {
+                services.logger.warn({ err: error }, "devices: could not read which device keys no card holds");
+                return [];
+            });
+            const [listed, cardless] = await Promise.all([devices(services), keys]);
+            return { devices: listed, ...opt("cardlessHosts", cardless.length === 0 ? undefined : cardless) };
+        }),
         // Acts on a sandbox on one of the user's devices, streaming the machine's own output; this door can also delete
         // one. Everything past the gate is the machine's call, including refusing, which arrives as the stream's own
         // terminal error.

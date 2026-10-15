@@ -32,6 +32,14 @@ flowchart LR
   under the agent's own name for this user, so it can only be an older install of it. A task that cannot be read is
   left alone. `inspect()` gives the same reading without changing anything, and `present()` says whether any
   mechanism holds an entry under a spec's names, which is what retiring an old agent's entries asks.
+- (2026-10-15) A Windows logon task runs only inside a signed-in session, so a PC that Windows Update restarted at
+  night stayed unreachable until someone signed in. `beforeSignIn` is a second task for a spec with
+  `beforeSignInArgs`: a boot trigger plus the same five-minute repetition (anchored 2½ minutes off the logon task's),
+  running as the same user with an S4U principal, so no session and no stored password. Windows refuses both to a
+  process that is not elevated, so `enable()` and `disable()` run schtasks through `Start-Process -Verb RunAs`: one
+  UAC prompt on that PC, answered there, and never registered unasked. `state()` reads it back without elevation
+  (`on`, `off`, `stale`, `unknown`). A Linux agent needs none of this: its systemd unit with lingering already starts
+  at boot.
 - Every supervisor restarts an agent that exits non-zero or is killed by a signal: the systemd unit's
   `Restart=on-failure`, the LaunchAgent's `KeepAlive { SuccessfulExit = false }`, and the logon task's restart on
   failure plus its five-minute repetition. That is what an agent's own hang watchdog relies on when it kills itself.

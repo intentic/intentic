@@ -1249,6 +1249,8 @@
             "nothingUntilSwitch": "nothing until you turn a switch on",
             "offline": "offline",
             "online": "online",
+            "partlyConnected": "partly connected",
+            "partlyConnectedNote": "its Windows side is offline; WSL {sides} still answers | its Windows side is offline; WSL {sides} still answer",
             "pausedOnPhone": "paused on the phone",
             "readFiles": "read files",
             "stateError": "error",
@@ -5708,6 +5710,14 @@
             "needsAttention": "needs attention",
             "online": "online",
             "notResponding": "not responding"
+        },
+        "cardlessKeys": {
+            "caption": "Each one still lets a computer knock on this sandbox, though no device card lists it any more, so it is refused at the door. Withdraw it unless you mean to add that card back.",
+            "couldntWithdraw": "Couldn't withdraw that key.",
+            "distroOfCard": "WSL {distro} of \"{card}\", a device card that no longer exists",
+            "ofCard": "for \"{card}\", a device card that no longer exists",
+            "title": "Keys with no device card",
+            "withdraw": "Withdraw"
         },
         "conflictAsk": {
             "conflicts": "Conflicts",

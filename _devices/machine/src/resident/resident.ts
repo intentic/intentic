@@ -29,10 +29,12 @@ import { mirrorHeartbeatPath, readState } from "../sync/config.js";
 import { runMirrorWatch } from "../sync/mirror.js";
 import { startUpkeep } from "../upkeep/reconcile.js";
 import { MACHINE_VERSION } from "../version.js";
-import { beginExitRecord, lastExitPath, reasonForCode, recordExit, recordUnexpectedExits, stampAlive, thisRun } from "./last-exit.js";
+import { beginExitRecord, lastExitPath, reasonForCode, recordExit, recordStopFor, recordUnexpectedExits, stampAlive, thisRun } from "./last-exit.js";
+import { askHandover, handoverAsked } from "./handover.js";
 import { startLogRoll } from "./log-roll.js";
 import { startWatchdog, type Watchdog } from "./watchdog.js";
 import { WINDOWS_SIDE } from "../environments/wsl.js";
+import { startedBeforeSignIn } from "../device/session.js";
 
 // This environment's one resident process; it re-reads what it serves every tick, so only a new binary or `run` restarts it.
 
@@ -132,7 +134,26 @@ export const stillKeeping = async (
     return check.kept.length > 0;
 };
 
-// A supervised distro takes over from whatever copy runs there unsupervised; anything else leaves a live holder alone.
+/* BEFORE ANYONE SIGNS IN, AND THE HANDOVER AT A SIGN-IN (2026-10-15). Windows' boot task (`intentic-machine
+   before-sign-in on`, local-agent's beforeSignIn) starts this agent with `--before-sign-in` when the PC starts, with no
+   session and no desktop, so a PC that Windows Update restarted at night answers before anyone comes to it. It serves
+   what needs no desktop: its sandbox links and, on the Windows side, the WSL distros. It leaves alone everything that
+   needs a signed-in person: the keeper (which starts Docker Desktop, a program with a window), the sandbox rounds,
+   the agent's own updates and file sync. The logon task's agent is the PC's real one: when it starts, at the sign-in,
+   it asks this one to leave (a request file this one reads every tick), waits for it to go, and takes the environment
+   over, which brings the screen tools back. The boot task's watchdog keeps firing while someone is signed in; each of
+   those starts finds an agent running and leaves without a word, so it costs one short-lived process every five
+   minutes and nothing in the log. */
+
+// What the boot task's agent stamps as its supervisor, which is how the logon task's agent knows it may take over.
+export const BEFORE_SIGN_IN = "before-sign-in";
+
+// How the boot task's agent's exit reads to the agent after it (`Before it:` in describe).
+const HANDED_OVER = "handed over at a sign-in to the agent of the signed-in session";
+
+// A supervised distro takes over from whatever copy runs there unsupervised, and the signed-in session's agent from the
+// one started before sign-in; anything else leaves a live holder alone. The boot task's agent says nothing when it
+// finds one running: it is asked every five minutes while someone is signed in.
 const claim = async (record: PidRecord, supervised: boolean, log: Log): Promise<boolean> => {
     if (supervised) {
         await autostart(MACHINE_AUTOSTART, machineLauncher(), log).unregister();
@@ -141,9 +162,24 @@ const claim = async (record: PidRecord, supervised: boolean, log: Log): Promise<
             log(`taking over from the agent already running here (pid ${holder.pid}), since the Windows side keeps this distro's agent running.`);
             await stopProcess(holder.pid, 5_000);
         }
+    } else if (record.supervisor !== BEFORE_SIGN_IN) {
+        const holder = await readResident();
+        if (holder !== undefined && holder.pid !== process.pid && holder.supervisor === BEFORE_SIGN_IN) {
+            log(`someone signed in: taking over from the agent this PC started before anyone did (pid ${holder.pid}).`);
+            const ended = await askHandover(holder.pid, {
+                holderNow: async () => (await readResident())?.pid,
+                stop: async (pid) => {
+                    recordStopFor(pid, "stopped", "replaced at a sign-in by the agent of the signed-in session");
+                    await stopProcess(pid, 5_000);
+                },
+            });
+            if (ended === "stopped") {
+                log(`the agent started before sign-in (pid ${holder.pid}) did not leave on its own: it was stopped.`);
+            }
+        }
     }
     const claimed = await claimPidFile(runPidPath, baseDir, record);
-    if (!claimed.claimed) {
+    if (!claimed.claimed && record.supervisor !== BEFORE_SIGN_IN) {
         log(`An agent is already running (pid ${claimed.holder.pid}): leaving it alone. intentic-machine run --stop stops it first.`);
     }
     return claimed.claimed;
@@ -230,6 +266,8 @@ const startSyncIfDue = (sync: SyncHalf, pairings: number, log: Log): void => {
 };
 
 interface Runtime {
+    // Started by the boot task with nobody signed in (BEFORE ANYONE SIGNS IN, above).
+    readonly beforeSignIn: boolean;
     readonly connections: Map<string, Connection>;
     readonly sync: SyncHalf;
     readonly kept: KeptCheck;
@@ -248,11 +286,8 @@ interface Runtime {
 // pull images or read the engine's disks at the same time.
 const SUPERVISED_ROUND_DELAY_MS = 30 * 60_000;
 
-const runtimeOf = (supervised: boolean, trial: Trial, kept: KeptCheck, lease: PidRecord, log: Log): Runtime => {
-    const connections = new Map<string, Connection>();
-    const children = WINDOWS_SIDE
-        ? superviseChildren(log, async (distro) => void (await updateMachineConfig((config) => withoutChild(config, distro))))
-        : undefined;
+// The rounds of an agent somebody is signed in for, or that runs where there is no sign-in to wait for (a distro, Linux).
+const sessionRounds = (supervised: boolean, connections: ReadonlyMap<string, Connection>, lease: PidRecord, log: Log): { stop: () => void }[] => {
     const watch = startProbationWatch(log, { sweeps: true });
     const keeper = startKeeper(log, {
         links: () => [...connections].map(([url, held]) => ({ url, reading: reading(held.peer) })),
@@ -262,8 +297,20 @@ const runtimeOf = (supervised: boolean, trial: Trial, kept: KeptCheck, lease: Pi
     const later = supervised ? SUPERVISED_ROUND_DELAY_MS : 0;
     // The device's own upkeep runs everywhere too: each environment holds its own leftovers and stores (upkeep/).
     const upkeep = startUpkeep(log, lease.supervisor);
-    const rounds = [watch, keeper, startAutoPrepare(log, { delayMs: later }), startAutoBackup(log, { delayMs: later }), upkeep, startLogRoll(runLogPath, log)];
-    const autoUpgrade = supervised ? undefined : startAutoUpgrade(log);
+    return [watch, keeper, startAutoPrepare(log, { delayMs: later }), startAutoBackup(log, { delayMs: later }), upkeep, startLogRoll(runLogPath, log)];
+};
+
+const runtimeOf = (supervised: boolean, trial: Trial, kept: KeptCheck, lease: PidRecord, log: Log): Runtime => {
+    const beforeSignIn = lease.supervisor === BEFORE_SIGN_IN;
+    const connections = new Map<string, Connection>();
+    const children = WINDOWS_SIDE
+        ? superviseChildren(log, async (distro) => void (await updateMachineConfig((config) => withoutChild(config, distro))))
+        : undefined;
+    // With nobody signed in, the links and the distros are all this agent serves: every round below either starts a
+    // program with a window (the keeper starts Docker Desktop), needs the engine that program runs, or changes this
+    // agent itself, and the agent of the signed-in session runs them all from the sign-in on.
+    const rounds = beforeSignIn ? [startLogRoll(runLogPath, log)] : sessionRounds(supervised, connections, lease, log);
+    const autoUpgrade = supervised || beforeSignIn ? undefined : startAutoUpgrade(log);
     const unproven = trial.prove(log);
     const finish = async (code: number): Promise<never> => {
         for (const round of rounds) {
@@ -286,15 +333,39 @@ const runtimeOf = (supervised: boolean, trial: Trial, kept: KeptCheck, lease: Pi
     for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"] as const) {
         process.on(signal, () => void finish(signalExitCode(signal)));
     }
-    return { connections, sync: { running: undefined, failures: 0, retryAt: 0 }, kept, children, autoUpgrade, finish };
+    return { beforeSignIn, connections, sync: { running: undefined, failures: 0, retryAt: 0 }, kept, children, autoUpgrade, finish };
+};
+
+// The lease, and for an agent started before sign-in a sign-in's request to hand over: either ends this agent here.
+const keepLease = async (runtime: Runtime, lease: PidRecord, log: Log): Promise<void> => {
+    if (runtime.beforeSignIn && (await handoverAsked())) {
+        log("someone signed in on this PC: handing this environment over to the agent of their session.");
+        recordStopFor(process.pid, "stopped", HANDED_OVER);
+        await runtime.finish(0);
+    }
+    if (!(await holdPidFile(runPidPath, baseDir, lease))) {
+        log("another machine agent took this environment over: leaving.");
+        if (runtime.beforeSignIn) {
+            // Not a failure for the boot task to retry: the signed-in session's agent is the one meant to run now.
+            recordStopFor(process.pid, "stopped", HANDED_OVER);
+            await runtime.finish(0);
+        }
+        await runtime.finish(EXIT_REPLACED);
+    }
+};
+
+// Whether this agent has nothing left to do here: nothing linked, paired or kept, and no sync half still winding down.
+// An agent started before sign-in keeps no sandboxes (begin says why), so nothing linked is enough for it.
+const doneServing = async (runtime: Runtime, now: Served, log: Log): Promise<boolean> => {
+    if (!nothingToServe(now)) {
+        return false;
+    }
+    return runtime.beforeSignIn || (runtime.sync.running === undefined && !(await stillKeeping(runtime.kept, log)));
 };
 
 // One pass: the lease first, since everything after it acts on this environment as its one agent.
 const tick = async (runtime: Runtime, lease: PidRecord, log: Log): Promise<void> => {
-    if (!(await holdPidFile(runPidPath, baseDir, lease))) {
-        log("another machine agent took this environment over: leaving.");
-        await runtime.finish(EXIT_REPLACED);
-    }
+    await keepLease(runtime, lease, log);
     // Every `docker` this round spawns goes to the engine the sandboxes run on now (engine-env.ts).
     syncEngineEnv();
     const now = await readServed().catch((error: unknown) => {
@@ -308,10 +379,15 @@ const tick = async (runtime: Runtime, lease: PidRecord, log: Log): Promise<void>
         if (now.children.some((distro) => !held.includes(distro))) {
             runtime.autoUpgrade?.nudge();
         }
-        startSyncIfDue(runtime.sync, now.pairings, log);
-        if (nothingToServe(now) && runtime.sync.running === undefined && !(await stillKeeping(runtime.kept, log))) {
+        if (!runtime.beforeSignIn) {
+            startSyncIfDue(runtime.sync, now.pairings, log);
+        }
+        if (await doneServing(runtime, now, log)) {
             log("nothing left to serve: agent exiting. Reconnect from a card in your sandbox.");
-            await autostart(MACHINE_AUTOSTART, machineLauncher(), log).unregister();
+            // The login entry is the signed-in session's agent to retire, never a session-less one's.
+            if (!runtime.beforeSignIn) {
+                await autostart(MACHINE_AUTOSTART, machineLauncher(), log).unregister();
+            }
             await runtime.finish(0);
         }
     }
@@ -322,9 +398,13 @@ const tick = async (runtime: Runtime, lease: PidRecord, log: Log): Promise<void>
 // Claims the environment and settles its supervisor; undefined when another agent holds it or nothing is left to serve.
 const begin = async (
     supervised: boolean,
+    beforeSignIn: boolean,
     log: Log,
 ): Promise<{ readonly served: Served; readonly lease: PidRecord; readonly kept: KeptCheck } | undefined> => {
-    const record: PidRecord = { pid: process.pid, build: MACHINE_VERSION };
+    // Stamped from the first write, so a sign-in in the very next second already knows it may take over.
+    const record: PidRecord = beforeSignIn
+        ? { pid: process.pid, build: MACHINE_VERSION, supervisor: BEFORE_SIGN_IN }
+        : { pid: process.pid, build: MACHINE_VERSION };
     if (!(await claim(record, supervised, log))) {
         return undefined;
     }
@@ -332,6 +412,12 @@ const begin = async (
         await release();
         throw error;
     });
+    // With nobody signed in there is no engine to ask (Docker Desktop starts with a session), and the sandboxes it would
+    // name are the signed-in agent's to keep: a boot agent with nothing linked has nothing to do, and leaves quietly.
+    if (beforeSignIn && nothingToServe(served)) {
+        await release();
+        return undefined;
+    }
     // Asked only of an agent with nothing else to serve, which is the one it decides for; any other has not asked yet.
     const kept: KeptCheck = nothingToServe(served) ? { at: Date.now(), kept: await keptSandboxes() } : { at: Number.NEGATIVE_INFINITY, kept: [] };
     if (nothingToServe(served) && kept.kept.length === 0) {
@@ -344,7 +430,8 @@ const begin = async (
     if (kept.kept.length > 0) {
         log(`no sandbox is linked to this device and none is paired for sync, but ${keptNote(kept.kept)}`);
     }
-    const lease: PidRecord = { ...record, supervisor: await assertSupervisor(supervised, log) };
+    // The login entry is the signed-in session's to put right: a session-less agent leaves it as it is.
+    const lease: PidRecord = { ...record, supervisor: beforeSignIn ? BEFORE_SIGN_IN : await assertSupervisor(supervised, log) };
     await holdPidFile(runPidPath, baseDir, lease);
     await sweepBin();
     await takeOverCommandLedger(log);
@@ -377,8 +464,21 @@ const serving = (served: Served): string =>
         ...(WINDOWS_SIDE ? [plural(served.children.length, "WSL distro")] : []),
     ].join(", ");
 
-// The foreground agent a supervisor runs (systemd, launchd, the logon task, or the Windows side for a distro).
-export const runForeground = async (log: Log): Promise<void> => {
+// The foreground agent a supervisor runs (systemd, launchd, the logon task, the boot task with `beforeSignIn`, or the
+// Windows side for a distro).
+export const runForeground = async (log: Log, { beforeSignIn = false }: { readonly beforeSignIn?: boolean } = {}): Promise<void> => {
+    if (beforeSignIn) {
+        if (!WINDOWS_SIDE) {
+            log("--before-sign-in is the start of Windows' boot task; anywhere else the agent's own login entry starts it at boot.");
+            return;
+        }
+        // Before the watchdog and the release's trial: the boot task's watchdog asks every five minutes, signed in or
+        // not, and an agent already running is the whole answer. Neither a log line nor a start counted toward a trial.
+        if ((await readResident()) !== undefined) {
+            return;
+        }
+        startedBeforeSignIn();
+    }
     // First of all: an agent whose loop hangs anywhere from here on is killed and restarted by its supervisor, which only
     // ever waits for an exit (watchdog.ts).
     const watchdog = startWatchdog();
@@ -393,14 +493,14 @@ export const runForeground = async (log: Log): Promise<void> => {
         process.exitCode = EXIT_ROLLED_BACK;
         return;
     }
-    const started = await begin(supervised, log);
+    const started = await begin(supervised, beforeSignIn, log);
     if (started === undefined) {
         await trial.clean();
         return;
     }
     await beginRecord(watchdog, log);
     const runtime = runtimeOf(supervised, trial, started.kept, started.lease, log);
-    log(`serving ${serving(started.served)}`);
+    log(`serving ${serving(started.served)}${beforeSignIn ? ", started by this PC before anyone signed in: the screen tools wait for a sign-in" : ""}`);
     for (;;) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- the tick loop itself, serial by definition
         await tick(runtime, started.lease, log);

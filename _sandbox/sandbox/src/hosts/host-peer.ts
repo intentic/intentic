@@ -1,4 +1,5 @@
 import {
+    type CardlessHost,
     derivedMachineId,
     HOST_HEARTBEAT_MS,
     HOST_NATIVE_ENVIRONMENT,
@@ -25,6 +26,7 @@ import { createPeerRoutes } from "../peers/peer-routes.js";
 import type { PeerStore } from "../peers/peer-store.js";
 import { bootstrapEnvironments } from "./environment-bootstrap.js";
 import { hostCallGate } from "./host-call-gate.js";
+import { hostCallRoute } from "./host-call-route.js";
 import type { HostGuardDeps } from "./host-guard-deps.js";
 
 // The user's own computer as a peer door: @intentic/machine dials in with an enrollment token and serves `deviceContract`
@@ -179,6 +181,18 @@ export const identifyMachine = async (services: Pick<Services, "hosts">, id: str
     }
 };
 
+// Every device enrollment no card holds, for the Devices screen to list beside a Withdraw button (2026-10-15): a key into
+// this sandbox that no board draws, since a machine is drawn from its card. Not withdrawn here, nor at boot: the cards
+// live in a workspace file a land can rewrite for a moment, and a key withdrawn on that is a real device unpaired.
+export const cardlessHosts = async (services: Pick<Services, "capabilities" | "hosts">): Promise<CardlessHost[]> => {
+    const enrolled = await services.hosts.list();
+    if (enrolled.length === 0) {
+        return [];
+    }
+    const cards = new Set((await services.capabilities.list()).flatMap((capability) => (capability.kind === "device" ? [capability.id] : [])));
+    return enrolled.filter((entry) => !cards.has(entry.card)).map(({ id, card, environment }) => ({ id, card, environment }));
+};
+
 // A card is the whole of a device's grant, so an enrollment outliving one is a credential nothing lists and nothing can
 // withdraw: dropped with the rest of that machine's access. A carded device is left alone, since its card owns it.
 export const revokeCardlessHost = async (services: Services, id: string): Promise<boolean> => {
@@ -210,6 +224,9 @@ export const hostPeerRoutes = (services: Services, guards: HostGuardDeps) =>
                 services.logger.warn({ err, id }, "hosts: could not bring the device's skill up to date with what it said as it connected"),
             );
         },
+        // A call naming a distro goes to that distro's own agent while the card's Windows side is down, and any other
+        // call is told which sides are up (host-call-route.ts). Asked before the gate, which judges where it runs.
+        route: hostCallRoute(services),
         // The owner's safety policy, applied here since the bridge is the last thing to see a call while someone can
         // still be asked (host-call-gate.ts). The machine's own scopes remain the floor; a refusal here only stops what
         // the machine might otherwise have run.

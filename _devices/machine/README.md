@@ -15,6 +15,17 @@ flowchart LR
 
 - One resident process per environment (`resident.ts`) serves both halves and re-reads its state every tick. A login
   entry from [local-agent](../local-agent) restarts it; inside a WSL distro the Windows side does.
+- (2026-10-15) **Before anyone signs in**, on Windows: `intentic-machine before-sign-in on` asks Windows (one UAC
+  prompt on that PC) for a boot task that starts the agent when the PC starts, with no session
+  ([`autostart/before-sign-in.ts`](src/autostart/before-sign-in.ts)). That agent serves what needs no desktop, its
+  sandbox links and the WSL distros, and refuses the screen, window, clipboard and browser tools in one sentence
+  ([`device/session.ts`](src/device/session.ts)). It leaves the keeper (which starts Docker Desktop), the sandbox
+  rounds, file sync and its own updates to the signed-in session's agent, which takes over at the next sign-in:
+  it writes a request the boot agent reads every tick and leaves on, and stops it only if it does not
+  ([`resident/handover.ts`](src/resident/handover.ts)). While someone is signed in, the boot task's repetitions find
+  an agent running and exit without a word. `uninstall` removes the task too, asking Windows again. Measured on a
+  Windows 11 laptop: the session-less agent was connected 3 s after its task fired, its distro 3 s later, and the
+  handover at the next logon-task start took 4 s.
 - **device** (`src/device/`): `device setup` redeems a one-time pairing token, then the agent keeps a WebSocket
   dialled out to the sandbox and answers MCP tools on it: `run_command`, files, windows and clipboard, `browser_*`
   through [browser](../browser), `screenshot`, `device`, `ui_elements` and `ui_act` through

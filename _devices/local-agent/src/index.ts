@@ -6,6 +6,11 @@ export { agentHome, homeDir, writeSecretFile, type AgentHome, type Log } from ".
 export { cliLauncher, quotedCommandLine, stubCommand, WINDOWS_LAUNCH_STUB, windowsLaunchStub, type CliLauncher } from "./launcher.js";
 export {
     autostart,
+    beforeSignIn,
+    BeforeSignInRefused,
+    beforeSignInTaskName,
+    type BeforeSignIn,
+    type BeforeSignInState,
     clearWindowsRunValue,
     linuxDesktopEntry,
     macLaunchAgentXml,

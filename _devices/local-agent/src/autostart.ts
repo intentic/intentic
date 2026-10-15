@@ -32,6 +32,9 @@ export interface AutostartSpec {
     // foreground: args for mechanisms that supervise the agent. detached: Windows fallback, spawns and exits.
     readonly detachedArgs: readonly string[];
     readonly foregroundArgs: readonly string[];
+    // The foreground args of a start nobody is signed in for (Windows' boot task, `beforeSignIn` below). Absent: this
+    // agent has no such start, and the task is never offered.
+    readonly beforeSignInArgs?: readonly string[];
     // What the user is told when registration fails; agent-specific, since what's lost and how to retry differs.
     readonly failureNote: (reason: string) => string;
 }
@@ -134,34 +137,62 @@ const xmlText = (value: string): string => value.replaceAll("&", "&amp;").replac
 // constraint on the CONTENT: `UseUnifiedSchedulingEngine` and `DisallowStartOnRemoteAppSession` are 1.4 nodes and a
 // 1.2 task is refused outright for carrying them ("the task XML contains an unexpected node"). Both were the default
 // anyway, so this stays at the version every supported Windows parses rather than bumping for two nodes it can lose.
-export const windowsTaskXml = (spec: AutostartSpec, launcher: CliLauncher, stub: string, account: string): string => {
+export const windowsTaskXml = (spec: AutostartSpec, launcher: CliLauncher, stub: string, account: string): string =>
+    taskXml(
+        {
+            name: spec.windowsRunValue,
+            description: spec.desktopComment,
+            firstTrigger: `    <LogonTrigger>
+      <Enabled>true</Enabled>
+      <UserId>${xmlText(account)}</UserId>
+    </LogonTrigger>`,
+            watchdogFrom: "2020-01-01T00:00:00",
+            logonType: "InteractiveToken",
+            command: [...launcher, ...spec.foregroundArgs],
+            logPath: spec.logPath,
+        },
+        stub,
+        account,
+    );
+
+// What differs between the two tasks this file writes: when the first start comes, who it runs as, and what it runs.
+interface SupervisorTask {
+    readonly name: string;
+    readonly description: string;
+    // The trigger that starts it the first time: a sign-in, or the machine starting.
+    readonly firstTrigger: string;
+    // Where the five-minute watchdog's schedule is anchored, so two tasks on one machine need not fire together.
+    readonly watchdogFrom: string;
+    readonly logonType: "InteractiveToken" | "S4U";
+    readonly command: readonly string[];
+    readonly logPath: string;
+}
+
+const taskXml = (task: SupervisorTask, stub: string, account: string): string => {
     // `--wait` is what makes the task a supervisor rather than a launcher: a task counts as RUNNING only while its
     // action process does, which is what `IgnoreNew` swallows repetitions against and what a restart is measured from.
-    const [program, ...args] = [stub, "--log", spec.logPath, "--wait", "--", ...launcher, ...spec.foregroundArgs];
+    const [program, ...args] = [stub, "--log", task.logPath, "--wait", "--", ...task.command];
     return `<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
-    <Description>${xmlText(spec.desktopComment)}</Description>
-    <URI>\\${xmlText(spec.windowsRunValue)}</URI>
+    <Description>${xmlText(task.description)}</Description>
+    <URI>\\${xmlText(task.name)}</URI>
   </RegistrationInfo>
   <Triggers>
-    <LogonTrigger>
-      <Enabled>true</Enabled>
-      <UserId>${xmlText(account)}</UserId>
-    </LogonTrigger>
+${task.firstTrigger}
     <TimeTrigger>
       <Repetition>
         <Interval>PT${WINDOWS_WATCHDOG_MINUTES}M</Interval>
         <StopAtDurationEnd>false</StopAtDurationEnd>
       </Repetition>
-      <StartBoundary>2020-01-01T00:00:00</StartBoundary>
+      <StartBoundary>${task.watchdogFrom}</StartBoundary>
       <Enabled>true</Enabled>
     </TimeTrigger>
   </Triggers>
   <Principals>
     <Principal id="Author">
       <UserId>${xmlText(account)}</UserId>
-      <LogonType>InteractiveToken</LogonType>
+      <LogonType>${task.logonType}</LogonType>
       <RunLevel>LeastPrivilege</RunLevel>
     </Principal>
   </Principals>
@@ -287,6 +318,8 @@ export const windowsTaskFacts = (xml: string): Readonly<Record<string, string>> 
         command: elementText(xml, "Command") ?? "",
         arguments: elementText(xml, "Arguments") ?? "",
         logon: String(/<LogonTrigger[\s>]/.test(xml)),
+        boot: String(/<BootTrigger[\s>]/.test(xml)),
+        logonType: (elementText(xml, "LogonType") ?? "").toLowerCase(),
         repeat: repeat === undefined ? "" : (elementText(repeat, "Interval") ?? ""),
         restart: restart === undefined ? "" : `${elementText(restart, "Interval") ?? ""}x${elementText(restart, "Count") ?? ""}`,
         ...Object.fromEntries(
@@ -311,12 +344,18 @@ export const decodeToolOutput = (bytes: Buffer): string => {
 
 // The task as Windows holds it, or undefined when it cannot be read. PowerShell's export first, asked for UTF-8 so a
 // path with a non-ASCII user name reads back as written; schtasks' own export where PowerShell is not there.
-const readWindowsTaskXml = (spec: AutostartSpec): string | undefined => {
-    const powershell = join(process.env["SystemRoot"] ?? "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
-    const script = `[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Export-ScheduledTask -TaskName '${spec.windowsRunValue.replaceAll("'", "''")}' -TaskPath '\\'`;
+const readWindowsTaskXml = (spec: AutostartSpec): string | undefined => readTaskXmlNamed(spec.windowsRunValue);
+
+const powershellExe = (): string => join(process.env["SystemRoot"] ?? "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+
+// A string inside a single-quoted PowerShell literal.
+const psQuoted = (value: string): string => `'${value.replaceAll("'", "''")}'`;
+
+const readTaskXmlNamed = (name: string): string | undefined => {
+    const script = `[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Export-ScheduledTask -TaskName ${psQuoted(name)} -TaskPath '\\'`;
     const tries: readonly (readonly [string, readonly string[]])[] = [
-        [powershell, ["-NoProfile", "-NonInteractive", "-Command", script]],
-        [schtasksExe(), windowsTaskExportArgs(spec)],
+        [powershellExe(), ["-NoProfile", "-NonInteractive", "-Command", script]],
+        [schtasksExe(), ["/query", "/tn", name, "/xml"]],
     ];
     for (const [command, args] of tries) {
         // PowerShell is the one here that can start children of its own; the blocking runner ends them with it.
@@ -356,6 +395,146 @@ const inspectWindowsTask = (spec: AutostartSpec, launcher: CliLauncher, stub: st
     }
     const drift = windowsTaskDrift(held, windowsTaskXml(spec, launcher, stub, windowsAccount()));
     return drift.length === 0 ? { kind: "task", state: "current" } : { kind: "task", state: "stale", drift };
+};
+
+/* ---- before anyone signs in: a second Windows task, started by the machine itself ---- */
+
+/* THE LOGON TASK NEEDS SOMEBODY SIGNED IN (2026-10-15). Its InteractiveToken principal is what lets it register with no
+   password and no elevation, and it is also why it can only run inside a signed-in session: the logon trigger fires at a
+   sign-in, and the watchdog's repetitions are skipped while nobody is signed in. Windows Update restarts a PC at night
+   by itself and leaves it at the sign-in screen, so a laptop used as a worker sat unreachable for 39 hours until someone
+   came to it, with nothing broken.
+   This task starts the agent when the machine starts, as the same user, with no session: the S4U principal ("whether the
+   user is signed in or not", with no stored password). Its process has no desktop, so the agent it starts serves what
+   needs none (its sandbox links and the WSL distros) and leaves the rest to the logon task's agent, which takes over at
+   the next sign-in. Its watchdog is anchored two and a half minutes off the logon task's, so the two never fire in the
+   same instant.
+   Windows refuses both halves of it to a process that is not elevated ("Access is denied" for a boot trigger, and for an
+   S4U principal, which needs the batch-logon right Task Scheduler grants as it registers one), so it is the one entry
+   here that asks: turning it on or off is one UAC prompt on that PC. It is never registered unasked. */
+
+const BEFORE_SIGN_IN_SUFFIX = "BeforeSignIn";
+export const beforeSignInTaskName = (spec: AutostartSpec): string => `${spec.windowsRunValue}${BEFORE_SIGN_IN_SUFFIX}`;
+
+// Throws for a spec with no before-sign-in start: there is nothing for the task to run.
+export const windowsBeforeSignInTaskXml = (spec: AutostartSpec, launcher: CliLauncher, stub: string, account: string): string => {
+    if (spec.beforeSignInArgs === undefined) {
+        throw new Error(`${spec.id} has no start for before anyone signs in`);
+    }
+    return taskXml(
+        {
+            name: beforeSignInTaskName(spec),
+            description: `${spec.desktopComment}, from the moment this PC starts, before anyone signs in`,
+            firstTrigger: `    <BootTrigger>
+      <Enabled>true</Enabled>
+    </BootTrigger>`,
+            watchdogFrom: "2020-01-01T00:02:30",
+            logonType: "S4U",
+            command: [...launcher, ...spec.beforeSignInArgs],
+            logPath: spec.logPath,
+        },
+        stub,
+        account,
+    );
+};
+
+// Whether the task is there and is the one this build writes: `stale` is there and different (an older build's, or a
+// moved install's), `unknown` is there and unreadable.
+export type BeforeSignInState = "on" | "off" | "stale" | "unknown";
+
+// Why turning it on or off did not happen: the person said no to Windows' prompt, or the elevated call itself failed.
+export class BeforeSignInRefused extends Error {
+    constructor(
+        message: string,
+        readonly declined: boolean,
+    ) {
+        super(message);
+    }
+}
+
+export interface BeforeSignIn {
+    readonly state: () => BeforeSignInState;
+    // Each asks Windows for elevation, which shows the person at this PC a UAC prompt and waits for their answer.
+    readonly enable: () => Promise<void>;
+    readonly disable: () => Promise<void>;
+}
+
+// A person may take a while to come to the prompt; long enough for that, short of forever.
+const ELEVATED_TIMEOUT_MS = 5 * 60_000;
+// What PowerShell exits with when the person declined (ERROR_CANCELLED), so a no reads as a no and not as a failure.
+const DECLINED_EXIT = 1223;
+
+// schtasks run elevated through Start-Process, which is what raises the UAC prompt. Its own output cannot be captured
+// across the elevation, so its exit code is the answer.
+export const elevatedSchtasksScript = (schtasks: string, args: readonly string[]): string =>
+    [
+        "try {",
+        `  $p = Start-Process -FilePath ${psQuoted(schtasks)} -ArgumentList ${psQuoted(quotedCommandLine(args))} -Verb RunAs -Wait -PassThru -WindowStyle Hidden`,
+        "  exit $p.ExitCode",
+        "} catch {",
+        "  [Console]::Error.WriteLine($_.Exception.Message)",
+        `  exit ${DECLINED_EXIT}`,
+        "}",
+    ].join("\n");
+
+const runElevatedSchtasks = (args: readonly string[], doing: string): void => {
+    const result = runBoundedSync(powershellExe(), ["-NoProfile", "-NonInteractive", "-Command", elevatedSchtasksScript(schtasksExe(), args)], {
+        timeoutMs: ELEVATED_TIMEOUT_MS,
+        output: "pipe",
+    });
+    if (result.spawnError !== undefined) {
+        throw new BeforeSignInRefused(`${doing} failed: ${reason(result.spawnError)}`, false);
+    }
+    if (result.timedOut) {
+        throw new BeforeSignInRefused(`${doing} waited ${ELEVATED_TIMEOUT_MS / 60_000} minutes for Windows' permission prompt to be answered`, true);
+    }
+    if (result.exitCode === DECLINED_EXIT) {
+        const said = result.stderr.text.trim();
+        throw new BeforeSignInRefused(`${doing} needs Windows' permission, and it was not given${said === "" ? "" : ` (${said})`}`, true);
+    }
+    if (result.exitCode !== 0) {
+        throw new BeforeSignInRefused(`${doing} failed: schtasks exited ${result.exitCode}`, false);
+    }
+};
+
+// Undefined where there is no such task to offer: not Windows, no stub to keep it silent, or an agent without the start.
+export const beforeSignIn = (spec: AutostartSpec, launcher: CliLauncher): BeforeSignIn | undefined => {
+    const stub = windowsLaunchStub(launcher);
+    if (process.platform !== "win32" || stub === undefined || spec.beforeSignInArgs === undefined) {
+        return undefined;
+    }
+    const name = beforeSignInTaskName(spec);
+    const wanted = (): string => windowsBeforeSignInTaskXml(spec, launcher, stub, windowsAccount());
+    return {
+        state: () => {
+            if (!quietly(schtasksExe(), ["/query", "/tn", name])) {
+                return "off";
+            }
+            const held = readTaskXmlNamed(name);
+            if (held === undefined) {
+                return "unknown";
+            }
+            return windowsTaskDrift(held, wanted()).length === 0 ? "on" : "stale";
+        },
+        enable: async () => {
+            if (windowsAccount() === "") {
+                throw new BeforeSignInRefused("this session names no user (USERNAME is unset), so the task has nobody to run as", false);
+            }
+            const xmlPath = join(tmpdir(), `${spec.id}-before-sign-in-${process.pid}.xml`);
+            try {
+                await writeFile(xmlPath, Buffer.from(`\uFEFF${wanted()}`, "utf16le"));
+                runElevatedSchtasks(["/create", "/tn", name, "/xml", xmlPath, "/f"], "Registering the start before sign-in");
+            } finally {
+                await rm(xmlPath, { force: true });
+            }
+        },
+        disable: async () => {
+            if (!quietly(schtasksExe(), ["/query", "/tn", name])) {
+                return;
+            }
+            runElevatedSchtasks(["/delete", "/tn", name, "/f"], "Removing the start before sign-in");
+        },
+    };
 };
 
 // States meaning a user manager exists (degraded/starting count too); some Linux setups have none.

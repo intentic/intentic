@@ -12,6 +12,7 @@ import { previousExit, thisRun } from "../../resident/last-exit.js";
 import { MACHINE_VERSION } from "../../version.js";
 import { readUpkeepSummary } from "../../upkeep/reconcile.js";
 import { readIntenticOs } from "./os/os.js";
+import { NO_DESKTOP_YET, runningBeforeSignIn } from "../session.js";
 
 // What this device IS: without it an agent guesses (apt-get on Fedora, bash on Windows, paths outside its own
 // boundary) and reports the refusal as a bug. Sent unprompted in the hello frame and on the sandbox's
@@ -186,6 +187,7 @@ export const describeText = async (scopes: DeviceScopes): Promise<string> => {
             ...intenticOsLine(facts),
             `Permissions: run commands ${scopes.shell}, run destructive commands ${scopes.destructive}, write files ${scopes.write}, see the screen ${scopes.screen}, use the mouse and keyboard ${scopes.control}, manage sandboxes ${scopes.sandboxes}, run programs this sandbox sends ${scopes.programs}`,
             ...agentLines(ic, icOverrides(process.env), { version: MACHINE_VERSION, startedAt: thisRun()?.startedAt, previous: previousExit() }),
+            ...(runningBeforeSignIn() ? [`Session: none yet. ${NO_DESKTOP_YET}`] : []),
             ...(facts.icOutOfDate === undefined ? [] : [facts.icOutOfDate]),
             // All a sandbox can use, so a reshape is asked for in numbers this engine has.
             ...(facts.engine === undefined

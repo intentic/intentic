@@ -1,7 +1,7 @@
 // jsdom because the subject is what a row puts on screen, not the derivation behind it (see deviceFacts.test.ts).
 import "@intentic/testing/dom";
 import { listedDevice } from "../../../testing/listedDevice";
-import { type Device, type MemberRole, roleAtLeast } from "@intentic/sandbox-contract";
+import { type CardlessHost, type Device, type MemberRole, roleAtLeast } from "@intentic/sandbox-contract";
 import type { RouteLocationRaw } from "vue-router";
 import PrimeVue from "primevue/config";
 import { groupNeedsAttention, groupSummary, menuVerbs, primaryVerb, sandboxGroups, tipText, type TooltipValue } from "@intentic/ui";
@@ -22,6 +22,9 @@ import * as useDevicesOriginal from "./useDevices";
 const paired = (mode: `sync` | `mirror` = `sync`, machine = `laptop`): Device[`sync`] => ({ machine, mode, seenAt: Date.now() });
 
 const devices = ref<Device[]>([]);
+// Device keys no card holds, which the daemon lists beside the rows, and the ones this page was asked to withdraw.
+const cardless = ref<CardlessHost[]>([]);
+const withdrawn: string[] = [];
 // When the list landed here: the clock every row's freshness is judged against, set by `mount` below.
 const readAt = ref(Date.now());
 // The first read, not the ten-second poll; tests below assume the list has already arrived.
@@ -56,7 +59,12 @@ jest.mock(`./useDevices`, () => {
     // loaded inside a mock factory deadlocks bun's synchronous link of the graph that named it.
     return {
         ...useDevicesOriginal,
-        useDevices: () => ({ devices, readAt, error: ref(undefined), isLoading: devicesLoading, refetch: () => {} }),
+        useDevices: () => ({ devices, cardlessHosts: cardless, readAt, error: ref(undefined), isLoading: devicesLoading, refetch: () => {} }),
+        withdrawDeviceKey: (id: string) => {
+            withdrawn.push(id);
+            cardless.value = cardless.value.filter((key) => key.id !== id);
+            return Promise.resolve();
+        },
         manageDeviceSandbox: (hostId: string, slug: string, op: string, payload?: { resources?: unknown; shape?: unknown; when?: string; to?: string }) => {
             const call: (typeof verbCalls)[number] = {
                 hostId,
@@ -270,6 +278,8 @@ afterEach(() => {
     agentCalls.length = 0;
     agentAnswer = () => Promise.resolve(AGENT_UPDATED);
     revokeCalls.length = 0;
+    cardless.value = [];
+    withdrawn.length = 0;
     pairingsAsked.length = 0;
     startedTurns.length = 0;
     mirrorAnswer = { ok: true, message: `Port mirroring OFF for: work-abc` };
@@ -1512,6 +1522,26 @@ it(`asks before unpairing, then tells the machine to do it`, async () => {
     [...document.body.querySelectorAll(`button`)].findLast((control) => (control.textContent ?? ``).trim() === `Unpair`)?.click();
     await nextTick();
     expect(mirrorCalls).toEqual([{ hostId: `host-1`, command: `sync-unpair`, sandboxId: `work-abc` }]);
+});
+
+// (2026-10-15) A key no device card holds lets a computer knock and no row stands for it: the daemon's invariant named
+// `radarsu-rog` on every boot, with nothing on screen that could withdraw it. Listed apart, with the button that does.
+it(`lists a device key no card holds, and withdraws it on the owner's word`, async () => {
+    cardless.value = [{ id: `radarsu-rog`, card: `radarsu-rog`, environment: `native` }];
+    const el = mount([mirrored(`on`)]);
+    expect(el.textContent).toContain(`Keys with no device card`);
+    expect(el.textContent).toContain(`radarsu-rog`);
+    [...el.querySelectorAll(`button`)].find((control) => (control.textContent ?? ``).trim() === `Withdraw`)?.click();
+    await nextTick();
+    expect(withdrawn).toEqual([`radarsu-rog`]);
+});
+
+// Withdrawing is the daemon's maintainer floor; below it there is nothing to press, so nothing is drawn.
+it(`does not offer a key with no card to a member below maintainer`, () => {
+    role.value = `writer`;
+    cardless.value = [{ id: `radarsu-rog`, card: `radarsu-rog`, environment: `native` }];
+    const el = mount([mirrored(`on`)]);
+    expect(el.textContent).not.toContain(`Keys with no device card`);
 });
 
 // Replaces a button that used to revoke every paired device at once.

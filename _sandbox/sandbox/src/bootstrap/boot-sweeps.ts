@@ -5,6 +5,7 @@ import { archiveVanishedWorktrees } from "../conversations/registry/vanished-wor
 import { capabilityCtx } from "../capabilities/capability.js";
 import { unloadIdleLocalModels } from "../capabilities/handlers/localmodel.handler.js";
 import { LOCAL_MODEL_IDLE_MS, LOCAL_MODEL_IDLE_SWEEP_MS } from "../endpoints/local-model-idle.js";
+import { startWindowsRevival } from "../hosts/environment-bootstrap.js";
 import { stopCursorRuntimes } from "../runtimes/cursor/cursor-host.js";
 import { QUARANTINE_MS, quarantineRoot } from "../store/conversation-units.js";
 import { createRepeatGate } from "../logs/repeat-gate.js";
@@ -126,6 +127,9 @@ const startContainerSweeps = (phase: BootPhase): void => {
             run: () => unloadIdleLocalModels(modelCtx, LOCAL_MODEL_IDLE_MS).then(sweepLog.succeeded, sweepLog.failed),
         }),
     );
+    // A PC's Windows side can drop while its WSL distro stays connected, which no connect event says; a minutes-scale
+    // look puts it back through the distro (hosts/environment-bootstrap.ts, 2026-10-15).
+    shutdown.add(startWindowsRevival(services));
 };
 
 // Root-scoped like the sweeps: a guest sharing the history root converts nothing.

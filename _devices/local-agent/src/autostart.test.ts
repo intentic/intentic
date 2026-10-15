@@ -1,7 +1,9 @@
 import { homedir } from "node:os";
 import { HOST_STATE_ROOT } from "@intentic/constants";
 import {
+    beforeSignInTaskName,
     decodeToolOutput,
+    elevatedSchtasksScript,
     entryCurrent,
     fileEntryState,
     linuxDesktopEntry,
@@ -13,6 +15,7 @@ import {
     windowsTaskCreateArgs,
     windowsTaskDeleteArgs,
     windowsTaskDrift,
+    windowsBeforeSignInTaskXml,
     windowsTaskXml,
     type AutostartSpec,
     type LaunchAgentSpec,
@@ -286,6 +289,72 @@ describe("windowsTaskDrift", () => {
         expect(decodeToolOutput(Buffer.from("\uFEFF<Task>é</Task>", "utf16le"))).toBe("<Task>é</Task>");
         expect(decodeToolOutput(Buffer.from("<Task>é</Task>", "utf16le"))).toBe("<Task>é</Task>");
         expect(decodeToolOutput(Buffer.from("<Task>é</Task>", "utf8"))).toBe("<Task>é</Task>");
+    });
+});
+
+/* Before anyone signs in (2026-10-15): a second task the machine itself starts, so a PC Windows Update restarted at night
+   answers before somebody comes to it. Registered only on request, elevated, since Windows refuses both its boot trigger
+   and its S4U principal to a process that is not. */
+describe("windowsBeforeSignInTaskXml", () => {
+    const BOOTABLE: AutostartSpec = { ...SPEC, beforeSignInArgs: ["mirror", "--watch", "--before-sign-in"] };
+    const xml = windowsBeforeSignInTaskXml(BOOTABLE, BINARY, STUB, "OMEN\\radar");
+
+    it("starts when the machine does, as this user, with no session and no stored password", () => {
+        expect(xml).toContain("<BootTrigger>");
+        expect(xml).not.toContain("<LogonTrigger>");
+        expect(xml).toContain("<UserId>OMEN\\radar</UserId>");
+        expect(xml).toContain("<LogonType>S4U</LogonType>");
+        expect(xml).toContain("<RunLevel>LeastPrivilege</RunLevel>");
+    });
+
+    it("runs the agent's own before-sign-in start, held open by the stub like the logon task", () => {
+        const escaped = /<Arguments>(.*)<\/Arguments>/.exec(xml)?.[1] ?? "";
+        expect(escaped.replaceAll("&quot;", `"`)).toBe(
+            `"--log" "${LOG}" "--wait" "--" "/home/dev/.intentic/sync/bin/intentic-sync" "mirror" "--watch" "--before-sign-in"`,
+        );
+    });
+
+    // Both tasks re-check every five minutes; anchored apart, the two never start an agent in the same instant.
+    it("keeps its watchdog off the logon task's beat", () => {
+        expect(xml).toContain("<StartBoundary>2020-01-01T00:02:30</StartBoundary>");
+        expect(windowsTaskXml(SPEC, BINARY, STUB, "OMEN\\radar")).toContain("<StartBoundary>2020-01-01T00:00:00</StartBoundary>");
+        expect(xml).toContain("<Interval>PT5M</Interval>");
+        expect(xml).toContain("<MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>");
+    });
+
+    it("lives under its own name, so neither task's repair or removal touches the other", () => {
+        expect(beforeSignInTaskName(SPEC)).toBe("IntenticSyncMirrorBeforeSignIn");
+        expect(xml).toContain("<URI>\\IntenticSyncMirrorBeforeSignIn</URI>");
+    });
+
+    // A held task is compared on who it runs as and what starts it too, so a logon task cannot pass for this one.
+    it("reads as different from the logon task", () => {
+        expect(windowsTaskDrift(windowsTaskXml(SPEC, BINARY, STUB, "OMEN\\radar"), xml)).toEqual(expect.arrayContaining(["logon", "boot", "logonType"]));
+        expect(windowsTaskDrift(xml, xml)).toEqual([]);
+    });
+
+    it("is refused for an agent with no such start", () => {
+        expect(() => windowsBeforeSignInTaskXml(SPEC, BINARY, STUB, "OMEN\\radar")).toThrow(/no start for before anyone signs in/);
+    });
+});
+
+describe("elevatedSchtasksScript", () => {
+    const script = elevatedSchtasksScript("C:\\Windows\\System32\\schtasks.exe", ["/create", "/tn", "IntenticMachineBeforeSignIn", "/xml", "C:\\Users\\O'Neil\\t.xml", "/f"]);
+
+    // Start-Process -Verb RunAs is what raises the UAC prompt; -Wait -PassThru is what hands schtasks' exit code back.
+    it("asks Windows for elevation and answers with schtasks' own exit code", () => {
+        expect(script).toContain("-Verb RunAs -Wait -PassThru");
+        expect(script).toContain("exit $p.ExitCode");
+    });
+
+    // A no to the prompt throws inside PowerShell; ERROR_CANCELLED is how the caller tells it from a failure.
+    it("answers a declined prompt as cancelled, not as a failure", () => {
+        expect(script).toContain("exit 1223");
+    });
+
+    // One command line inside one single-quoted literal: a quote in a user name must not end it.
+    it("quotes every argument once, and a quote in a path twice for PowerShell", () => {
+        expect(script).toContain(`-ArgumentList '"/create" "/tn" "IntenticMachineBeforeSignIn" "/xml" "C:\\Users\\O''Neil\\t.xml" "/f"'`);
     });
 });
 

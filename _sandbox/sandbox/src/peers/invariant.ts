@@ -6,7 +6,9 @@ import type { PeerHub } from "./peer-hub.js";
 // A live socket the enrollment store no longer holds is a peer the owner removed or renamed, still reachable under its
 // old id: revocation is two uncoordinated calls (store forgets, hub disconnects), and skipping or reordering either
 // leaves it live until its next reconnect is refused. The drift the other way is quieter and worse: an enrollment no
-// card holds is a credential no screen lists, since both screens draw machines from the manifest.
+// card holds is a credential neither board draws, since both draw machines from the manifest; the Devices screen lists
+// such keys apart, each with a Withdraw button (2026-10-15). Nothing here withdraws one: the manifest is a workspace file
+// a land can rewrite for a moment, and withdrawing on that would unpair real devices.
 
 type Roster = { readonly list: () => Promise<readonly { readonly id: string; readonly card: string }[]> };
 // The hosts door's roster, whose records also say which computer and which OS install on it each enrollment is.
@@ -105,7 +107,7 @@ export const checks = (deps: PeerRegistryDeps): readonly InvariantCheck[] => [
         deps.hosts,
         deps.capabilities,
         "device",
-        "a key into this sandbox that no screen lists and no button can withdraw",
+        "a key into this sandbox that no device row stands for: withdraw it from the Devices screen, which lists it as a key with no device card",
     ),
     grantCheck(
         "enrolled-browsers-have-cards",

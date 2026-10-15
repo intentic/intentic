@@ -16,6 +16,7 @@ import { createMcpServer, type McpAuditEntry, type McpTool, textResult, tool } f
 import { z } from "zod";
 import { audit } from "./audit.js";
 import { assertScope, ScopeError } from "./policy.js";
+import { assertDesktop } from "./session.js";
 import { describeText } from "./tools/describe.js";
 import { DEFAULT_LOG_LINES as DEFAULT_DEVICE_LOG_LINES, deviceLogs, MAX_LOG_LINES as MAX_DEVICE_LOG_LINES } from "./tools/logs/logs.js";
 import { editTextFile, listDirectory, readTextFile, trashFile, writeTextFile } from "./tools/files.js";
@@ -63,7 +64,7 @@ const NO_ARGS = z.object({});
 const shotContent = async (shot: Shot, what: string): Promise<unknown[]> => {
     frames.sent();
     // allow(silent-catch): the display layout only annotates the shot; a desktop that cannot list it still sends the picture
-    const displays = what === "the whole desktop" ? await desktop().displays().catch(() => []) : [];
+    const displays = what === "the whole desktop" ? await screenOf().displays().catch(() => []) : [];
     const placed = displays.length > 1 ? ` Displays: ${describeDisplays(displays, shot.frame)}.` : "";
     return [
         { type: "text", text: `${describeShot(shot, what)}${placed}` },
@@ -73,7 +74,7 @@ const shotContent = async (shot: Shot, what: string): Promise<unknown[]> => {
 
 const screenshotResult = async (scopes: DeviceScopes, target: ScreenshotTarget): Promise<Record<string, unknown>> => {
     assertScope(scopes, "screen");
-    const screen = desktop();
+    const screen = screenOf();
     const { region, what } = await regionFor(screen, frames, target);
     return { content: await shotContent(await shoot(screen, frames, region), what), isError: false };
 };
@@ -90,7 +91,7 @@ const confirmingLook = async (said: string, scopes: DeviceScopes): Promise<Recor
         return textResult(`${said} (No screenshot: "See the screen" is off for this device.)`);
     }
     await settle();
-    const shot = await reshoot(desktop(), frames);
+    const shot = await reshoot(screenOf(), frames);
     if (shot.unchanged && frames.unchangedStreak() <= MAX_UNCHANGED) {
         return textResult(
             `${said} The screen did not change: screenshot ${shot.frame.id} is still exactly what it shows, so its coordinates still hold. If something should have happened, it did not.`,
@@ -105,7 +106,16 @@ const callerSandbox = (): string => calling.getStore()?.sandboxUrl ?? "local";
 // One browser handle for the process's life: cheap, holds no socket until used, but remembers which tab the
 // agent is working on so a sequence of calls reads as one session.
 let webHandle: ReturnType<typeof browser> | undefined;
-const web = (): ReturnType<typeof browser> => (webHandle ??= browser());
+const web = (): ReturnType<typeof browser> => {
+    assertDesktop();
+    return (webHandle ??= browser());
+};
+
+// The desktop every screen, window, clipboard and input tool works on; refused while nobody has signed in (session.ts).
+const screenOf = (): ReturnType<typeof desktop> => {
+    assertDesktop();
+    return desktop();
+};
 
 // The Android phones attached to this machine over adb: their frames and element refs live for the process's life,
 // one set per phone, apart from the desktop's.
@@ -243,7 +253,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
             "Every window open on this device: its app, title, size, position, and which one has focus. Call this before any GUI work, it is how you find the application you were asked about, and how you know where your typing will land. Requires the 'See the screen' permission.",
         effect: "read",
         input: NO_ARGS,
-        run: async (_args, scopes) => textResult(await listWindows(desktop(), scopes, frames)),
+        run: async (_args, scopes) => textResult(await listWindows(screenOf(), scopes, frames)),
     }),
     tool({
         name: "focus_window",
@@ -251,7 +261,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
             "Bring a window to the front and give it the keyboard, by the id from list_windows. ALWAYS do this before typing: text goes to whatever window has focus, not to where the pointer is. Requires the 'Use the mouse and keyboard' permission.",
         effect: "write",
         input: z.object({ id: required }),
-        run: async ({ id }, scopes) => textResult(await focusWindow(desktop(), id, scopes)),
+        run: async ({ id }, scopes) => textResult(await focusWindow(screenOf(), id, scopes)),
     }),
     tool({
         name: "open",
@@ -260,7 +270,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         // Opening a script or an installer runs it.
         effect: "destructive",
         input: z.object({ target: required.describe("An application name, a file path, or a URL.") }),
-        run: async ({ target }, scopes) => textResult(await openTarget(desktop(), target, scopes)),
+        run: async ({ target }, scopes) => textResult(await openTarget(screenOf(), target, scopes)),
     }),
     tool({
         name: "clipboard",
@@ -282,8 +292,8 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
             }),
         run: async ({ action, text }, scopes) =>
             action === "write" && text !== undefined
-                ? textResult(await writeClipboard(desktop(), text, scopes))
-                : textResult(await readClipboard(desktop(), scopes)),
+                ? textResult(await writeClipboard(screenOf(), text, scopes))
+                : textResult(await readClipboard(screenOf(), scopes)),
     }),
     tool({
         name: "browser_open",
@@ -386,7 +396,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         // Which coordinate an action needs, and whether it's on the screen, is act()'s to answer: it's the only caller
         // that knows the screen's size.
         run: async ({ frame, ...input }, scopes) => {
-            const screen = desktop();
+            const screen = screenOf();
             await act(screen, input, scopes, undefined, pointingFor(screen, frames, frame, elementRefs));
             return await confirmingLook(describeAction(input), scopes);
         },
@@ -429,7 +439,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
             window: required.optional().describe("The window's id from list_windows. Default: the one with the keyboard."),
             query: required.optional().describe("Only elements whose role, name or value contains this (case-insensitive), labels included."),
         }),
-        run: async ({ window, query }, scopes) => textResult(await listElements(desktop(), { window, query }, scopes, elementRefs, frames)),
+        run: async ({ window, query }, scopes) => textResult(await listElements(screenOf(), { window, query }, scopes, elementRefs, frames)),
     }),
     tool({
         name: "ui_act",
@@ -443,7 +453,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
             value: z.string().optional().describe("The text set_value writes; required for set_value."),
         }),
         run: async ({ element, action, value }, scopes) =>
-            await confirmingLook(await actOnElement(desktop(), { element, action, value }, scopes, elementRefs), scopes),
+            await confirmingLook(await actOnElement(screenOf(), { element, action, value }, scopes, elementRefs), scopes),
     }),
     // An Android phone attached to this machine through adb (USB or wireless debugging), driven like the desktop.
     tool({

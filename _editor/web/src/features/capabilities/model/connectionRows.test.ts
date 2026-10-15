@@ -147,6 +147,20 @@ describe(`a connection's state`, () => {
         expect(liveState(WINDOWS, pc, sources()).label).toBe(`offline`);
     });
 
+    it(`reads a PC whose Windows side is down and whose distro answers as partly connected, saying so under the row`, () => {
+        const pc = instance(`omen`, `device`, { platform: `windows` }, { state: `pending`, detail: `the device is offline` });
+        const partly: HostSummary = {
+            ...host(`omen`, undefined, false),
+            environments: [
+                { key: `native`, online: false },
+                { key: `wsl:arch`, online: true },
+            ],
+        };
+        expect(liveState(WINDOWS, pc, sources({ hosts: [partly] })).label).toBe(`partly connected`);
+        const row = connectionRow(tileOf(WINDOWS, [pc]), pc, sources({ hosts: [partly] }));
+        expect(row).toMatchObject({ state: `partly connected`, tone: `warning`, note: `its Windows side is offline; WSL arch still answers` });
+    });
+
     it(`reads a browser by its own status, whatever the machine roster says about the same id`, () => {
         const own = instance(`chrome`, `webext`, { platform: `chrome` });
 

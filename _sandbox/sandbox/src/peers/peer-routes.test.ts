@@ -4,12 +4,12 @@ import { PairingAnswerSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { Hono } from "hono";
 import { z } from "zod";
-import { createTurnMounts } from "../agent/tools/turn-mounts.js";
+import { createTurnMounts, type RpcMessage } from "../agent/tools/turn-mounts.js";
 import { createTurnMountRoute, type MountEndpoints } from "../agent/tools/turn-mounts.routes.js";
 import type { Services } from "../composition.js";
 import type { PeerDoor } from "./peer.js";
 import type { PeerHub } from "./peer-hub.js";
-import { admitPeer, createPeerRoutes, createRefusalLog, greetPeer } from "./peer-routes.js";
+import { admitPeer, createPeerRoutes, createRefusalLog, greetPeer, type PeerCallRoute } from "./peer-routes.js";
 import { type Presented, webextEnrollmentsDocument, webextPairConsumedDocument } from "./enrollment.js";
 import type { PeerStore } from "./peer-store.js";
 import { redeemCodes } from "./redeem-codes.js";
@@ -52,6 +52,7 @@ const routeFor = (
         sealAnswer?: (id: string, tool: string, answer: unknown) => unknown;
         wake?: { send: (id: string) => Promise<boolean>; waitMs: number };
         whenOnline?: (id: string, timeoutMs: number) => Promise<boolean>;
+        route?: (id: string, message: RpcMessage) => Promise<PeerCallRoute | undefined>;
     } = {},
 ) => {
     const remembered: unknown[] = [];
@@ -71,6 +72,7 @@ const routeFor = (
         ...(overrides.beforeCall === undefined ? {} : { beforeCall: overrides.beforeCall }),
         ...(overrides.sealAnswer === undefined ? {} : { sealAnswer: overrides.sealAnswer }),
         ...(overrides.wake === undefined ? {} : { wake: overrides.wake }),
+        ...(overrides.route === undefined ? {} : { route: overrides.route }),
     });
     const mounts = createTurnMounts({ baseUrl: () => "http://127.0.0.1:1/mcp" });
     const { token } = mounts.lease("conv-1").open({ name: "laptop", target: { kind: "device", id: "laptop" } });
@@ -247,6 +249,38 @@ test("the door's judgement is told which machine and which conversation a call c
         { jsonrpc: "2.0", id: 8, method: "tools/call", params: { name: "run_command" } },
         { id: "laptop", conversationId: "conv-1" },
     );
+});
+
+// A door may send a call elsewhere (the hosts door: a distro's own agent while its Windows side is down). Everything after
+// the route is about where the call actually goes: the gate judges that connection and the call as it is sent.
+test("a call the door routes elsewhere is judged and forwarded as routed", async () => {
+    const mcp = jest.fn(async () => ({ jsonrpc: "2.0", id: 11, result: { content: [] } }));
+    const beforeCall = jest.fn(async () => undefined);
+    const routed = { jsonrpc: "2.0" as const, id: 11, method: "tools/call", params: { name: "run_command", arguments: { command: "ls" } } };
+    const route = jest.fn(async (): Promise<PeerCallRoute> => ({ id: "laptop::wsl:arch", message: routed }));
+    await post(routeFor({ mcp, beforeCall, route }), {
+        jsonrpc: "2.0",
+        id: 11,
+        method: "tools/call",
+        params: { name: "run_command", arguments: { command: "ls", in: "wsl:arch" } },
+    });
+    expect(route).toHaveBeenCalledWith("laptop", expect.objectContaining({ id: 11 }));
+    expect(beforeCall).toHaveBeenCalledWith(routed, { id: "laptop::wsl:arch", conversationId: "conv-1" });
+    expect(mcp).toHaveBeenCalledWith("laptop::wsl:arch", routed);
+});
+
+test("a call the door's route refuses is answered as a refusing tool result, asking nobody and forwarding nothing", async () => {
+    const mcp = jest.fn();
+    const beforeCall = jest.fn(async () => undefined);
+    const app = routeFor({ mcp, beforeCall, route: async () => ({ refusal: "Its WSL side arch is up." }) });
+    const response = await post(app, { jsonrpc: "2.0", id: 12, method: "tools/call", params: { name: "screenshot" } });
+    expect(await response.json()).toEqual({
+        jsonrpc: "2.0",
+        id: 12,
+        result: { content: [{ type: "text", text: "Its WSL side arch is up." }], isError: true },
+    });
+    expect(beforeCall).not.toHaveBeenCalled();
+    expect(mcp).not.toHaveBeenCalled();
 });
 
 // The hello frame resolves which peer is knocking; the card decides whether anything still grants it a machine, and its

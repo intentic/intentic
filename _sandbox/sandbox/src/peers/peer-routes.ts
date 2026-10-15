@@ -43,6 +43,22 @@ export type PeerCallGate = (
     call: { readonly id: string; readonly conversationId: string | undefined },
 ) => Promise<{ readonly refusal: string } | undefined>;
 
+// Where a call goes instead of the id its turn mounted, and the message as that connection reads it; or a refusal the
+// model reads, naming where it could go. Answered before the gate, so a call is judged against where it actually runs
+// and nobody is asked about one that cannot run at all.
+export type PeerCallRoute = { readonly id: string; readonly message: RpcMessage } | { readonly refusal: string };
+
+// A refusal said as a tool result rather than a transport error, so the model reads it and does not retry into it.
+const refusedCall = (message: RpcMessage, refusal: string): RpcMessage | undefined =>
+    message.id === undefined ? undefined : { jsonrpc: "2.0", id: message.id, result: { content: [{ type: "text", text: refusal }], isError: true } };
+
+// The connection a message goes to and the message as it goes: the mounted id, unless the door routes it elsewhere.
+const destinationOf = async (
+    route: ((id: string, message: RpcMessage) => Promise<PeerCallRoute | undefined>) | undefined,
+    id: string,
+    message: RpcMessage,
+): Promise<PeerCallRoute> => (route === undefined ? undefined : await route(id, message)) ?? { id, message };
+
 export interface PeerRouteDeps<Client extends PeerClient<Facts, Scopes>, Announced, Facts, Scopes, Extra> {
     readonly store: PeerStore<Extra>;
     readonly hub: PeerHub<Client, Announced, Facts, Scopes>;
@@ -50,6 +66,10 @@ export interface PeerRouteDeps<Client extends PeerClient<Facts, Scopes>, Announc
     readonly summaries: () => Promise<readonly unknown[]>;
     // Refusal returns as a tool result, not an error, so the model reads it; the peer's own scopes stay the floor.
     readonly beforeCall?: PeerCallGate;
+    // Which connection a message to `id` actually goes to; undefined sends it to `id` as always. Only the hosts door
+    // supplies one: a card is one computer whose sides each hold a socket of their own, and a call naming a side that
+    // is up should not wait on the side that is down (hosts/host-call-route.ts).
+    readonly route?: (id: string, message: RpcMessage) => Promise<PeerCallRoute | undefined>;
     // A peer came up and said what it is. Fire-and-forget by contract: the hosts door uses it to put an agent in the
     // rest of that computer, and a connect must not wait on a download.
     readonly onConnected?: (id: string, facts: Facts) => void;
@@ -317,13 +337,17 @@ export const createPeerRoutes = <
     // Agent's way onto a peer: one JSON-RPC message in, the peer's answer out. A door that declares no bridge (a runner's
     // contract is typed end-to-end) answers every message with that, though no turn ever mounts one.
     const mcpSpec = door.mcp;
-    const mcp = async (target: { readonly id: string }, message: RpcMessage, call: MountCall): Promise<RpcMessage | undefined> => {
-        const { id } = target;
+    const mcp = async (target: { readonly id: string }, asked: RpcMessage, call: MountCall): Promise<RpcMessage | undefined> => {
         if (mcpSpec === undefined) {
-            return message.id === undefined
-                ? undefined
-                : { jsonrpc: "2.0", id: message.id, error: { code: -32601, message: `a ${door.noun} has no MCP bridge` } };
+            return asked.id === undefined ? undefined : { jsonrpc: "2.0", id: asked.id, error: { code: -32601, message: `a ${door.noun} has no MCP bridge` } };
         }
+        // From here on `id` and `message` are where the call actually goes, which is the mounted id unless the door
+        // routes it elsewhere; everything after (enrollment, the gate, the forward) is about that connection.
+        const destination = await destinationOf(deps.route, target.id, asked);
+        if ("refusal" in destination) {
+            return refusedCall(asked, destination.refusal);
+        }
+        const { id, message } = destination;
         if (!(await store.enrolled(id))) {
             return message.id === undefined
                 ? undefined

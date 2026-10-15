@@ -619,7 +619,14 @@ export const DeviceSchema = z.object({
     gap: DeviceGapSchema.optional(),
 });
 export type Device = z.infer<typeof DeviceSchema>;
-export const DevicesListSchema = z.object({ devices: z.array(DeviceSchema) });
+// (2026-10-15) A device enrollment no capability card holds: a key into this sandbox for which no board draws a machine,
+// since a machine is drawn from its card. Listed so the owner can withdraw it (`DELETE /system/hosts/{id}`, `id` being the
+// connection key); never withdrawn by the daemon itself, since the manifest the cards live in is a workspace file a land
+// can rewrite for a moment, and withdrawing on that would unpair real devices.
+export const CardlessHostSchema = z.object({ id: z.string(), card: z.string(), environment: z.string() });
+export type CardlessHost = z.infer<typeof CardlessHostSchema>;
+// `cardlessHosts` is absent when there are none, and from a daemon older than the field.
+export const DevicesListSchema = z.object({ devices: z.array(DeviceSchema), cardlessHosts: z.array(CardlessHostSchema).optional() });
 export type DevicesList = z.infer<typeof DevicesListSchema>;
 
 // The physical computer a device is an environment of. Windows and every WSL distro on it are one machine with one

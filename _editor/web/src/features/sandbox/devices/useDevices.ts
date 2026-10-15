@@ -1,4 +1,5 @@
 import {
+    type CardlessHost,
     type Device,
     type DeviceAgentOp,
     type DeviceCommand,
@@ -34,6 +35,8 @@ const POLL_MS = 10_000;
 // Callers opt into polling; a non-polling reader still gets the shared cache, refreshed once on mount.
 export function useDevices({ poll = true }: { poll?: boolean } = {}): {
     devices: ComputedRef<Device[]>;
+    /** Device keys no capability card holds, which no row stands for; empty from a daemon older than the field. */
+    cardlessHosts: ComputedRef<CardlessHost[]>;
     /** When this list landed here: the clock every freshness verdict on a device is judged against. */
     readAt: ComputedRef<number>;
     error: ComputedRef<string | undefined>;
@@ -43,6 +46,7 @@ export function useDevices({ poll = true }: { poll?: boolean } = {}): {
     const { query, error } = useSandboxQuery({ ...rpcQuery(`system.devices`), refetchInterval: poll ? POLL_MS : false });
     return {
         devices: computed(() => query.data.value?.devices ?? []),
+        cardlessHosts: computed(() => query.data.value?.cardlessHosts ?? []),
         // Restored with the cache on reload, so a hydrated list is aged from when it was actually read, not from now.
         readAt: computed(() => query.dataUpdatedAt.value),
         error,
@@ -266,6 +270,12 @@ export async function runSeveringDeviceCommand(hostId: string, command: DeviceCo
 // authorized_keys; the device notices on its next poll and stops mirroring itself.
 export async function revokeSyncDevice(machine: string): Promise<void> {
     await sandboxRaw(`DELETE /system/authorized-key/{machine}`, { params: { machine } });
+}
+
+// (2026-10-15) Withdraws a device key no card holds: the hosts door's own revoke, which drops the enrollment and any socket
+// still on it. Maintainer and up at the daemon, as revoking any device's access is. A refusal throws.
+export async function withdrawDeviceKey(id: string): Promise<void> {
+    await sandboxRaw(`DELETE /system/hosts/{id}`, { params: { id } });
 }
 
 // The connected, online device running a given sandbox slug, if any. The rule itself is the contract's

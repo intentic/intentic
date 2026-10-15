@@ -1,5 +1,6 @@
 import { explain, type Ui } from "@intentic/local-agent";
 import { buildRouteMap, type CommandContext } from "@stricli/core";
+import { beforeSignInCommand, retireBeforeSignIn } from "./autostart/before-sign-in.js";
 import { buildCommand, machineUi } from "./cli-ui.js";
 import { runLogPath } from "./config.js";
 import { deviceCommands, deviceUninstall } from "./device/commands.js";
@@ -22,6 +23,7 @@ import { MACHINE_VERSION } from "./version.js";
 interface RunFlags {
     readonly foreground: boolean;
     readonly stop: boolean;
+    readonly beforeSignIn: boolean;
 }
 
 const run = buildCommand<RunFlags>({
@@ -30,13 +32,15 @@ const run = buildCommand<RunFlags>({
         flags: {
             foreground: { kind: "boolean", brief: "Run the agent in this terminal instead of the background" },
             stop: { kind: "boolean", brief: "Stop the background agent" },
+            // What Windows' boot task runs (autostart/before-sign-in.ts): a person never types it.
+            beforeSignIn: { kind: "boolean", brief: "Run as the agent this PC starts before anyone signs in", default: false, hidden: true },
         },
     },
     async func(this: CommandContext, flags: RunFlags) {
         if (flags.foreground) {
             // The log is long-lived: every line is timestamped since bare lines would be useless.
             // allow(terminal-output): the foreground agent's own log stream, read from a file or a supervisor, not a person's report
-            await runForeground((message) => void this.process.stdout.write(`[${new Date().toISOString()}] ${message}\n`));
+            await runForeground((message) => void this.process.stdout.write(`[${new Date().toISOString()}] ${message}\n`), { beforeSignIn: flags.beforeSignIn });
             return;
         }
         const ui = machineUi(this.process);
@@ -137,6 +141,7 @@ const uninstall = buildCommand({
         // For good: the agent goes even from a device that hosts sandboxes, which it would otherwise stay to keep.
         ui.note(await syncUninstall(ui, undefined, { forGood: true }));
         ui.note(await deviceUninstall(ui, undefined, { forGood: true }));
+        await retireBeforeSignIn(ui.note);
         const still = await readResident();
         if (still === undefined) {
             ui.done("Removed the agent. Nothing intentic stays running on this device.");
@@ -160,6 +165,7 @@ export const commands = buildRouteMap({
         sandbox: sandboxRoutes,
         environment: environmentRoutes,
         run,
+        "before-sign-in": beforeSignInCommand,
         status,
         doctor,
         version,

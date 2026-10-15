@@ -53,7 +53,10 @@ const needsRebuild = computed(() => rebuildStep(props.entry.kind, props.instance
 
 // A code the daemon holds out to be typed elsewhere (WhatsApp's link-a-device) gets its own block, easy to find and
 // copy, rather than a line inside the row. The waiting sentence shares that block, so the reader knows one is coming.
-const pendingStep = computed(() => (props.instance.status.state === `pending` && !needsRebuild.value ? props.instance.status.detail : undefined));
+// A machine the roster knows more about than its stored status (up only through a distro) says that instead.
+const pendingStep = computed(
+    () => props.state.note ?? (props.instance.status.state === `pending` && !needsRebuild.value ? props.instance.status.detail : undefined),
+);
 const pairingCode = computed(() => props.instance.status.code);
 
 // The row's one button, ordered by urgency: a connection that can't be used shows what to do, one that works shows

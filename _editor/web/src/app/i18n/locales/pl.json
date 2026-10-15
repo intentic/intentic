@@ -1246,6 +1246,8 @@
             "nothingUntilSwitch": "nic, dopóki nie włączysz któregoś przełącznika",
             "offline": "offline",
             "online": "online",
+            "partlyConnected": "połączony częściowo",
+            "partlyConnectedNote": "jego strona Windows jest offline; WSL {sides} wciąż odpowiada | jego strona Windows jest offline; WSL {sides} wciąż odpowiadają | jego strona Windows jest offline; WSL {sides} wciąż odpowiadają",
             "pausedOnPhone": "wstrzymane na telefonie",
             "readFiles": "odczytywać pliki",
             "stateError": "błąd",
@@ -5304,6 +5306,14 @@
             "needsAttention": "wymaga uwagi",
             "online": "online",
             "notResponding": "nie odpowiada"
+        },
+        "cardlessKeys": {
+            "caption": "Każdy z nich wciąż pozwala komputerowi pukać do tego sandboxa, choć żadna karta urządzenia go już nie wymienia, więc jest odrzucany przy wejściu. Wycofaj go, chyba że zamierzasz dodać tę kartę z powrotem.",
+            "couldntWithdraw": "Nie udało się wycofać tego klucza.",
+            "distroOfCard": "WSL {distro} z \"{card}\", karty urządzenia, która już nie istnieje",
+            "ofCard": "dla \"{card}\", karty urządzenia, która już nie istnieje",
+            "title": "Klucze bez karty urządzenia",
+            "withdraw": "Wycofaj"
         },
         "conflictAsk": {
             "conflicts": "Konflikty",

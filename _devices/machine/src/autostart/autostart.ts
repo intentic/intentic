@@ -14,6 +14,8 @@ export const MACHINE_AUTOSTART: AutostartSpec = {
     launchAgent: { label: "dev.intentic.machine" },
     detachedArgs: ["run"],
     foregroundArgs: ["run", "--foreground"],
+    // What Windows' boot task runs (`intentic-machine before-sign-in on`): the agent with no desktop, until a sign-in.
+    beforeSignInArgs: ["run", "--foreground", "--before-sign-in"],
     failureNote: (reason) =>
         `Couldn't register this device's agent to start at login (${reason}); it runs until this device restarts, and starts again with intentic-machine run. Its log is ${runLogPath}.`,
 };

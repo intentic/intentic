@@ -1,6 +1,7 @@
+import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
 import { createPeerHub } from "../../peers/peer-hub.js";
-import { HOST_CARD_RULE, HOST_PEER, type HostClient, hostConnections, hostSummaries } from "../host-peer.js";
+import { cardlessHosts, HOST_CARD_RULE, HOST_PEER, type HostClient, hostConnections, hostSummaries } from "../host-peer.js";
 import {
     type Device,
     environmentKeyOf,
@@ -226,6 +227,26 @@ test("lists an enrolled environment that has not connected since this daemon boo
         { key: HOST_NATIVE_ENVIRONMENT, online: false },
         { key: "wsl:archlinux", online: false },
     ]);
+});
+
+// (2026-10-15) A key no card holds is drawn on no board, since a machine is drawn from its card; the Devices screen lists
+// it apart, for the owner to withdraw. A card's own distros are the card's, and a card of another kind holds nothing.
+test("names every device key no device card holds, and none a card does", async () => {
+    const cards = [
+        { kind: "device", id: "rog", config: { platform: "windows" } },
+        { kind: "webext", id: "radarsu-rog", config: { platform: "chrome" } },
+    ];
+    const records = [
+        { id: "rog", ...HOST_CARD_RULE.pairing("rog") },
+        { id: hostConnectionKey("rog", "wsl:archlinux"), ...HOST_CARD_RULE.pairing(hostConnectionKey("rog", "wsl:archlinux")) },
+        { id: "radarsu-rog", ...HOST_CARD_RULE.pairing("radarsu-rog") },
+    ];
+    const services = {
+        // SAFETY: the two fields cardlessHosts reads (`kind`, `id`) are spelled out; nothing reads the config.
+        capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => cards as Awaited<ReturnType<Services["capabilities"]["list"]>> }),
+        hosts: unstubbed<Services["hosts"]>("hosts", { list: async () => records }),
+    };
+    expect(await cardlessHosts(services)).toEqual([{ id: "radarsu-rog", card: "radarsu-rog", environment: HOST_NATIVE_ENVIRONMENT }]);
 });
 
 // What the device list addresses: one entry per environment, under its own connection key and its own platform, since

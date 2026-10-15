@@ -11,7 +11,7 @@ import type {
     CapabilitySummary,
 } from "@intentic/sandbox-contract";
 import type { CapabilityConnection, CapabilityConnectionGroup } from "../connect/CapabilityConnections.vue";
-import { type ConnectionState, connectionFacts, connectionState, netdiskFacts, vpnFacts } from "./connections";
+import { type ConnectionState, connectionFacts, connectionState, netdiskFacts, sidesAwakeWithoutIt, vpnFacts } from "./connections";
 import { type DeviceConnection, sameMachineNote } from "./deviceConnections";
 import { categoryLabel, entryName } from "./catalogCopy";
 import type { CatalogTile } from "./slices";
@@ -36,9 +36,15 @@ export interface ConnectionSources {
 const peerOf = (kind: CapabilityKind, id: string, sources: ConnectionSources): { readonly online: boolean } | undefined =>
     kind === `webext` ? sources.browser(id) : kind === `phone` ? sources.phone(id) : sources.host(id);
 
-// A connection's state, with the machine/browser/phone roster's online answer folded in where there is one.
+// A connection's state, with the machine/browser/phone roster's online answer folded in where there is one, and for a
+// machine the other sides of it that answer while its own does not.
 export const liveState = (entry: CapabilityCatalogEntry, instance: CapabilitySummary, sources: ConnectionSources): ConnectionState =>
-    connectionState(entry.kind, instance, peerOf(entry.kind, instance.id, sources)?.online);
+    connectionState(
+        entry.kind,
+        instance,
+        peerOf(entry.kind, instance.id, sources)?.online,
+        entry.kind === `device` ? sidesAwakeWithoutIt(sources.host(instance.id)) : [],
+    );
 
 // A phone names itself and its Android release, and says when it cannot be woken yet: asleep is its usual state, so
 // "can't be woken" is the one thing worth the owner's attention.
@@ -117,8 +123,9 @@ export const connectionRow = (tile: CatalogTile, instance: CapabilitySummary, so
         detail: facts,
         state: state.label,
         tone: state.tone,
-        // Only shown where something is outstanding, so a working connection's row stays quiet.
-        note: state.rank <= 1 ? instance.status.detail : undefined,
+        // Only shown where something is outstanding, so a working connection's row stays quiet; the roster's own word
+        // first, where it knows better than the stored status (a PC up only through its distro).
+        note: state.rank <= 1 ? (state.note ?? instance.status.detail) : undefined,
         code: state.rank <= 1 ? instance.status.code : undefined,
         category: tile.entry.category,
         rank: state.rank,
