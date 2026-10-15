@@ -1,6 +1,6 @@
 import { layoutDag } from "@intentic/ui";
 import type { DagNode } from "@intentic/ui";
-import { workflowDag } from "@intentic/ext-workflows";
+import { workflowDag } from "./workflowDag";
 import type { WorkflowRun, WorkflowStepRun } from "@intentic/sandbox-contract";
 import { type RunColumn, type RunSession, sessionOf } from "./chatRun";
 

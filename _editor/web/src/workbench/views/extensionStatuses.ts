@@ -1,8 +1,9 @@
 import { shallowRef } from "vue";
 
 // What the extension host made of each installed extension, written by its loader (extension-host/loader.ts) and read
-// by the Extensions tab and by an extension view's error boundary. Kept here, below the host, so a view the host
-// mounts can read it without importing the host that mounts it.
+// by the Extensions tab, an extension view's error boundary, and the core surfaces that link to a listed extension's
+// view (listedViews.ts). Kept here in the workbench, below the host and every feature, so any of them can read it
+// without importing the host that writes it.
 
 export interface ExtensionHostStatus {
     // id is the daemon's capability-entry handle; extensionId is the manifest-derived publisher.name identity.

@@ -1528,7 +1528,19 @@
             "noStepInRun": "Aucune étape de cette exécution n'a tourné : il n'y a donc rien à ouvrir.",
             "pickStepWholeColumn": "Choisissez une étape : toute sa colonne s'ouvre à côté."
         },
+        "workflowDag": {
+            "didNotFinish": "N'a pas terminé",
+            "done": "Terminé",
+            "running": "En marche",
+            "skipped": "Sauté",
+            "stopped": "Arrêté",
+            "waiting": "En attente"
+        },
+        "workflowNodeCard": {
+            "rounds": "{count} ronde | {count} rondes"
+        },
         "chatRunThroughMenu": {
+            "installWorkflows": "Installez Workflows pour créer des boucles et des workflows",
             "handToOtherSessions": "La confier à d'autres sessions",
             "justChat": "Ce chat seulement",
             "loop": "boucle",
@@ -1537,7 +1549,8 @@
             "onPinned": "sur {pinned}",
             "repeatHereUntilDone": "La répéter ici, jusqu'à ce que ce soit fait",
             "sendOnceOrdinaryMessage": "Envoyer une fois, comme un message ordinaire.",
-            "setOneUp": "En créer un"
+            "setOneUp": "En créer un",
+            "turnOnWorkflows": "Activez Workflows pour créer des boucles et des workflows"
         },
         "chatShareDialog": {
             "addsWorkAgentDid": "Ajoute le travail de l'agent, les fichiers qu'il a lus et modifiés, ce qu'il a exécuté, et sa réflexion. Cela publie le code et la sortie des commandes qui apparaissent dans ces blocs.",

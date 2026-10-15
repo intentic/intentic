@@ -7,7 +7,7 @@ import { extensionApiVersion, satisfiesEngines } from "@intentic/extension-api";
 import { extensionIdOf } from "@intentic/extension-manifest";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import { shallowRef } from "vue";
-import { type ExtensionHostStatus, extensionsLoaded, extensionStatuses } from "../features/extensions/extensionStatuses";
+import { type ExtensionHostStatus, extensionsLoaded, extensionStatuses } from "../workbench/views/extensionStatuses";
 import { extensionSettingsStore } from "../features/extensions/useExtensionSettings";
 import { sandboxError, sandboxRequest } from "../client/sandbox/sandboxClient";
 import { sandboxRpc } from "../client/sandbox/sandboxRpc";

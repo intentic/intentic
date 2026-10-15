@@ -5,7 +5,7 @@ import { computed } from "vue";
 import { ENVIRONMENT, rpcKey } from "../../lib/queryKeys";
 import { codeRevisionOf } from "./codeRevision";
 import { extensionsLoaded, extensionsReconciling, loadedCommits, loadedListAt } from "../../extension-host/loader";
-import { extensionStatuses } from "./extensionStatuses";
+import { extensionStatuses } from "../../workbench/views/extensionStatuses";
 import { type ExtensionFacet, facetsOf, searchTextOf } from "./extensionFacets";
 import { backendState, type ExtensionState, extensionState } from "./extensionState";
 import { useCapabilities } from "../capabilities/connect/useCapabilities";

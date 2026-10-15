@@ -7,6 +7,7 @@ import { runPress } from "../../../chat/run/chatRun";
 import type { Strip } from "../../../chat/tabs/tabFacts";
 import { synthesizeSessions } from "../../fleet/synthesizeSessions";
 import { useOperations } from "../../../../workbench/operations/operations";
+import { WORKFLOWS } from "../../../../workbench/views/listedViews";
 
 // The board's presses that land on no agent card: a workflow run's row (a run is not an agent, see WorkflowRunCard), a
 // held wake's approve or reject, and the header's Synthesize.
@@ -30,6 +31,9 @@ export interface PressesHost {
         readonly notice: Ref<string | undefined>;
     };
     readonly router: Router;
+    // Whether the Workflows extension's page is here to open a run on: it is listed, not compiled in, so a sandbox
+    // may not have it, and then a run's diagram is the chat's.
+    readonly workflowsPage: Readonly<Ref<boolean>>;
     // The chat a run's row points: what it shows (the app-wide strip, the floating window's included), whether it can
     // draw a run's diagram, and the two ways a press reaches it (openRun.ts: openRunInChat, pointAtChat).
     readonly chat: {
@@ -100,9 +104,14 @@ export const useBoardPresses = (host: PressesHost) => {
             agents.notice.value = messageOr(error, t(`agents.boardPresses.couldntRestoreRun`));
         });
     };
-    // A run's design and its history live on the workflows page; this board only answers what it is doing.
+    // A run's design and its history live on the workflows page; this board only answers what it is doing. Without
+    // that page (an extension this sandbox may not have installed), the chat draws the run instead.
     const openRunGraph = (run: WorkflowRun): void => {
-        void host.router.push({ name: `extension`, params: { ext: `workflows` }, query: { run: run.runId } });
+        if (!host.workflowsPage.value) {
+            host.chat.follow(run);
+            return;
+        }
+        void host.router.push({ name: `extension`, params: { ext: WORKFLOWS.view }, query: { run: run.runId } });
     };
     // The row's own press: the run's sessions in the chat, and never nothing, which is what twenty presses on one card
     // got from a chat already showing that run. Already shown, the chat is pointed at instead; with nothing of the run

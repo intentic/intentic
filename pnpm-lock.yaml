@@ -1499,9 +1499,6 @@ importers:
       '@intentic/ext-viewers':
         specifier: workspace:*
         version: link:../../_extensions/viewers
-      '@intentic/ext-workflows':
-        specifier: workspace:*
-        version: link:../../_extensions/workflows
       '@intentic/extension-api':
         specifier: workspace:*
         version: link:../../_shared/extension-api
@@ -2330,46 +2327,6 @@ importers:
       '@typescript/native-preview':
         specifier: 'catalog:'
         version: 7.0.0-dev.20260707.2
-
-  _extensions/workflows:
-    dependencies:
-      '@intentic/base':
-        specifier: workspace:*
-        version: link:../../_tools/base
-      '@intentic/extension-api':
-        specifier: workspace:*
-        version: link:../../_shared/extension-api
-      '@intentic/extension-manifest':
-        specifier: workspace:*
-        version: link:../../_shared/extension-manifest
-      '@intentic/extension-ui':
-        specifier: workspace:*
-        version: link:../../_shared/extension-ui
-      '@intentic/sandbox-contract':
-        specifier: workspace:*
-        version: link:../../_shared/sandbox-contract
-      '@tanstack/vue-query':
-        specifier: 'catalog:'
-        version: 5.104.1(vue@3.5.43(typescript@6.0.3))
-    devDependencies:
-      '@intentic/testing':
-        specifier: workspace:*
-        version: link:../../_tools/testing
-      '@intentic/tsconfig':
-        specifier: workspace:*
-        version: link:../../_tools/tsconfig
-      '@types/bun':
-        specifier: 'catalog:'
-        version: 1.4.2
-      typescript:
-        specifier: 'catalog:'
-        version: 6.0.3
-      vue:
-        specifier: 'catalog:'
-        version: 3.5.43(typescript@6.0.3)
-      vue-tsc:
-        specifier: 'catalog:'
-        version: 3.3.12(typescript@6.0.3)
 
   _os/os-image: {}
 

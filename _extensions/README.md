@@ -18,7 +18,7 @@ flowchart LR
 - Nothing outside this area depends on an extension, apart from two hosts: the web app, which compiles the UI extensions into its bundle, and the desktop app's files sidecar ([local-files](../_devices/local-files)), which runs ONLYOFFICE's browser engine for folders on the user's own disk through the one entry the extension exports for it, `@intentic/ext-onlyoffice/local-office`. The engine stays in the extension, which also runs it in a sandbox; `CONSUMERS` in [lib/extension-deps.mjs](../_tools/checks/lib/extension-deps.mjs) holds both hosts to that, and refuses a third.
 - UI extensions compile into the web bundle ([builtins.ts](../_editor/web/src/extension-host/builtins.ts)) and bake only their manifest into the sandbox image, so the Extensions tab lists them beside every other extension with one on/off switch.
 - Data-only packs (cards, skills, Dockerfile fragments) copy into the image as they are. Gateway extensions bake their manifest everywhere and ship their runnable tree in the `messaging` image pack.
-- Optional first-party extensions live in their own repositories and install from the registry like third-party ones. The daemon ([src/extensions](../_sandbox/sandbox/src/extensions)) enumerates baked, git-installed and workspace extensions as one list.
+- Optional first-party extensions live in their own repositories and install from the registry like third-party ones: acceptance, deployments, documentation, issues, knowledge, maintenance and workflows (the workflows page; the engine that runs workflows, their release gate and the run cards on the agents board stay in the daemon and the web app). The daemon ([src/extensions](../_sandbox/sandbox/src/extensions)) enumerates baked, git-installed and workspace extensions as one list.
 
 | Package | Role |
 | --- | --- |
@@ -47,4 +47,3 @@ flowchart LR
 | [telegram](telegram) | Telegram bot card plus a long-polling gateway. |
 | [viewers](viewers) | File viewers for images, PDF, media, office formats and EPUB. |
 | [whatsapp](whatsapp) | WhatsApp linked-device card plus its gateway. |
-| [workflows](workflows) | Rail view of workflows: graphs of agent sessions with declared outputs. |

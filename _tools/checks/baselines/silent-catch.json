@@ -141,7 +141,6 @@
     "_extensions/slack/src/client.ts": 1,
     "_extensions/viewers/src/MediaViewer.vue": 3,
     "_extensions/whatsapp/src/listener.ts": 2,
-    "_extensions/workflows/src/WorkflowDesigner.vue": 2,
     "_platform/api/src/app.ts": 2,
     "_platform/api/src/desktop/desktop.routes.ts": 1,
     "_platform/api/src/mail.ts": 1,

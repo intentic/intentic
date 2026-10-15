@@ -3,7 +3,7 @@ import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import type { NoticeModel } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { extensionStatuses } from "../../extensions/extensionStatuses";
+import { extensionStatuses } from "../../../workbench/views/extensionStatuses";
 import { type Operation, operationsUnder } from "../../../workbench/operations/operations";
 import type { InstallOutcome } from "./discoverListing";
 

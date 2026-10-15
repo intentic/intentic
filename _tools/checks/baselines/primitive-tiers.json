@@ -35,7 +35,6 @@
     "_extensions/onlyoffice/src/server/document-server.ts": 1,
     "_extensions/onlyoffice/src/server/listener.ts": 1,
     "_extensions/whatsapp/src/media.ts": 1,
-    "_extensions/workflows/src/WorkflowDesigner.vue": 2,
     "_sandbox/agent-context/src/workspace-map.ts": 1,
     "_sandbox/fileq/src/lib/derive.ts": 1,
     "_sandbox/scaffold/src/inject-template.ts": 1,

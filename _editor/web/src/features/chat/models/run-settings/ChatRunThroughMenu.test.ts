@@ -15,6 +15,8 @@ jest.mock(`../../../agents/fleet/useLoopDesigns`, () => ({ useLoopDesigns: () =>
 jest.mock(`../../../agents/fleet/useWorkflowRuns`, () => ({ useWorkflowRuns: () => ({ designs: workflows }) }));
 
 const { default: ChatRunThroughMenu } = await import("./ChatRunThroughMenu.vue");
+const { extensionsLoaded, extensionStatuses } = await import("../../../../workbench/views/extensionStatuses");
+const { registerView } = await import("../../../../workbench/views/registry");
 
 let app: App | undefined;
 const picked: { loop: (string | undefined)[]; workflow: (string | undefined)[]; manage: number } = { loop: [], workflow: [], manage: 0 };
@@ -68,6 +70,8 @@ afterEach(() => {
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
+    extensionsLoaded.value = false;
+    extensionStatuses.value = [];
 });
 
 // Both kinds in one list, under headings that say what separates them: the reason the control stopped being
@@ -143,4 +147,43 @@ it(`explains the empty workspace and offers a single way in`, () => {
     expect(text(element)).toContain(`Nothing saved yet`);
     rowLabelled(element, `Set one up`)!.click();
     expect(picked.manage).toBe(1);
+});
+
+// The page that makes loops and workflows is the Workflows extension, listed rather than compiled in: a sandbox without
+// it still runs what is saved, and the last row offers the install rather than a page that isn't there.
+describe(`without the Workflows extension`, () => {
+    it(`offers the install once the extensions have loaded and no workflows page registered`, () => {
+        extensionsLoaded.value = true;
+        loops.value = [aLoop()];
+        const element = mount();
+
+        expect(text(element)).toContain(`Until it passes`);
+        expect(text(element)).not.toContain(`Manage loops and workflows`);
+        rowLabelled(element, `Install Workflows`)!.click();
+        expect(picked.manage).toBe(1);
+    });
+
+    it(`offers the switch instead when the extension is installed and off`, () => {
+        extensionsLoaded.value = true;
+        extensionStatuses.value = [{ id: `workflows`, extensionId: `intentic.workflows`, state: `disabled` }];
+        const element = mount();
+
+        expect(text(element)).not.toContain(`Install Workflows`);
+        rowLabelled(element, `Turn Workflows on`)!.click();
+        expect(picked.manage).toBe(1);
+    });
+
+    it(`keeps Manage while the extensions are still loading, and once the page registers`, () => {
+        loops.value = [aLoop()];
+        expect(text(mount())).toContain(`Manage loops and workflows`);
+        app?.unmount();
+
+        extensionsLoaded.value = true;
+        const registration = registerView(`intentic.workflows`, { id: `workflows`, label: `Workflows`, surface: `rail`, detect: () => [], view: async () => ({}) });
+        try {
+            expect(text(mount())).toContain(`Manage loops and workflows`);
+        } finally {
+            registration.dispose();
+        }
+    });
 });

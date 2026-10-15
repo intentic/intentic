@@ -3230,10 +3230,29 @@
             "noStepInRun": "No step in this run ran, so there is nothing to open.",
             "pickStepWholeColumn": "Pick a step: its whole column opens side by side."
         },
+        "workflowDag": {
+            "didNotFinish": "Did not finish",
+            "done": "Done",
+            "running": "Running",
+            "skipped": "Skipped",
+            "stopped": "Stopped",
+            "subtitle": {
+                "claim": "a claim",
+                "command": "a command",
+                "fields": "{count} field | {count} fields",
+                "noOutput": "no output",
+                "reviewer": "a reviewer"
+            },
+            "waiting": "Waiting"
+        },
+        "workflowNodeCard": {
+            "rounds": "{count} round | {count} rounds"
+        },
         "chatRunThroughMenu": {
             "branching": "{steps}, branching",
             "handToOtherSessions": "Hand it to other sessions",
             "inLine": "{steps} in a line",
+            "installWorkflows": "Install Workflows to set up loops and workflows",
             "justChat": "Just this chat",
             "loop": "loop",
             "manageLoopsWorkflows": "Manage loops and workflows",
@@ -3243,6 +3262,7 @@
             "sendOnceOrdinaryMessage": "Send once, as an ordinary message.",
             "setOneUp": "Set one up",
             "stepCount": "{count} step | {count} steps",
+            "turnOnWorkflows": "Turn Workflows on to set up loops and workflows",
             "workflow": "workflow"
         },
         "chatShareDialog": {

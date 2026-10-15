@@ -102,6 +102,22 @@ export const demoRegistry = (): Marketplace => ({
             pushedAt: PUSHED,
             checks: { sha: sha(`b41c9e75d208af36e5107cb92da4f8e3`), manifest: `ok`, bundle: `ok` },
         },
+        // First-party and optional: the page that designs workflows and loops, which a sandbox runs without. Core's own
+        // install hints (the composer's Run-through menu) open this row.
+        {
+            name: `intentic.workflows`,
+            kind: `extension`,
+            trust: `listed`,
+            admitted: true,
+            description: `Workflows, designed graphs of agent sessions that each produce a declared output, and saved loop designs: design them, run them, watch the runs, and wire a release gate into CI.`,
+            version: `1.0.0`,
+            icon: `sitemap`,
+            install: { url: `https://github.com/intentic/extension-workflows.git`, ref: `66d523def8cb5c54ecf85bc6f492bf0f1da56057` },
+            securityReview: securityReview(`intentic/extension-workflows`, `66d523def8cb5c54ecf85bc6f492bf0f1da56057`),
+            stars: 12,
+            pushedAt: PUSHED,
+            checks: { sha: `66d523def8cb5c54ecf85bc6f492bf0f1da56057`, manifest: `ok`, bundle: `ok` },
+        },
         // Pinned but never audited: installs only after the owner acknowledges that nobody checked the code.
         {
             name: `tidewater.standup`,

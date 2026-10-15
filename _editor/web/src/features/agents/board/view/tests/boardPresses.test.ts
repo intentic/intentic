@@ -8,8 +8,9 @@ import { forgetOperations } from "../../../../../workbench/operations/operations
 import { useBoardPresses } from "../boardPresses";
 
 // Pins the presses that land on no agent card: a run's stop stays marked until the ledger says it stopped, a refused
-// stop or filing says why on the notice strip rather than throwing at the row, a run's diagram is the workflows page,
-// a refused wake re-reads the board, and a synthesis that cannot start says why on the notice strip.
+// stop or filing says why on the notice strip rather than throwing at the row, a run's diagram is the workflows page
+// (or the chat, where that extension is not installed), a refused wake re-reads the board, and a synthesis that cannot
+// start says why on the notice strip.
 
 const run = (runId: string, state: WorkflowRun[`state`]): WorkflowRun =>
     ({ runId, workflow: { id: `wf`, name: `Review`, steps: [], maxParallel: 1 }, state, startedAt: 1, steps: [] }) as unknown as WorkflowRun;
@@ -41,8 +42,10 @@ const pressesOf = (runs = shallowRef<readonly WorkflowRun[]>([run(`r1`, `running
     };
     const effects = effectScope();
     running.push(effects);
-    const presses = effects.run(() => useBoardPresses({ workflows, agents, router: unstubbed<Router>(`router`, { push }), chat }))!;
-    return { runs, workflows, agents, push, presses, chat, effects };
+    // The Workflows extension installed, as most of these presses assume; the ones without it say so.
+    const workflowsPage = ref(true);
+    const presses = effects.run(() => useBoardPresses({ workflows, agents, router: unstubbed<Router>(`router`, { push }), workflowsPage, chat }))!;
+    return { runs, workflows, agents, push, presses, chat, effects, workflowsPage };
 };
 
 // A run with two steps whose sessions are `wf-<state>-a` and `wf-<state>-b`, each in the run's own state.
@@ -119,6 +122,15 @@ describe(`a workflow run's row`, () => {
         presses.openRunGraph(run(`r1`, `running`));
         expect(push.mock.calls).toEqual([[{ name: `extension`, params: { ext: `workflows` }, query: { run: `r1` } }]]);
     });
+
+    // The page is a listed extension: a sandbox without it still answers the press, in the chat, never with a 404.
+    it(`opens its diagram in the chat when the Workflows extension is not installed`, () => {
+        const { chat, push, presses, workflowsPage } = pressesOf();
+        workflowsPage.value = false;
+        presses.openRunGraph(run(`r1`, `running`));
+        expect(push).not.toHaveBeenCalled();
+        expect(chat.follow.mock.calls.map(([pressed]) => pressed.runId)).toEqual([`r1`]);
+    });
 });
 
 // The row's own press never answers with nothing: twenty presses on one card got nothing from a chat already showing it.
@@ -152,6 +164,14 @@ describe(`a press on a workflow run's row`, () => {
         presses.openRun(stepped(`r1`, `done`));
         expect(chat.follow).toHaveBeenCalledTimes(1);
         expect(push).not.toHaveBeenCalled();
+    });
+
+    it(`follows an ended run in the chat instead of leaving the board, when there is no workflows page to open`, () => {
+        const { chat, push, presses, workflowsPage } = pressesOf();
+        workflowsPage.value = false;
+        presses.openRun(stepped(`r1`, `done`));
+        expect(push).not.toHaveBeenCalled();
+        expect(chat.follow).toHaveBeenCalledTimes(1);
     });
 
     it(`opens the diagram on a phone, where no chat stands beside the board`, () => {

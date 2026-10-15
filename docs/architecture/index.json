@@ -568,11 +568,6 @@
     {
       "dev": false,
       "from": "_editor/web",
-      "to": "_extensions/workflows"
-    },
-    {
-      "dev": false,
-      "from": "_editor/web",
       "to": "_shared/api-contract"
     },
     {
@@ -1163,41 +1158,6 @@
     {
       "dev": true,
       "from": "_extensions/whatsapp",
-      "to": "_tools/tsconfig"
-    },
-    {
-      "dev": false,
-      "from": "_extensions/workflows",
-      "to": "_shared/extension-api"
-    },
-    {
-      "dev": false,
-      "from": "_extensions/workflows",
-      "to": "_shared/extension-manifest"
-    },
-    {
-      "dev": false,
-      "from": "_extensions/workflows",
-      "to": "_shared/extension-ui"
-    },
-    {
-      "dev": false,
-      "from": "_extensions/workflows",
-      "to": "_shared/sandbox-contract"
-    },
-    {
-      "dev": false,
-      "from": "_extensions/workflows",
-      "to": "_tools/base"
-    },
-    {
-      "dev": true,
-      "from": "_extensions/workflows",
-      "to": "_tools/testing"
-    },
-    {
-      "dev": true,
-      "from": "_extensions/workflows",
       "to": "_tools/tsconfig"
     },
     {
@@ -4222,46 +4182,6 @@
       "oneLiner": "Pairs the sandbox to a WhatsApp number as a linked device: a capability card, a gateway process that holds the session and wakes automations, and a whatsapp CLI for the agent.",
       "readmeRev": "5298a848b3f1fe29b7e31a8167d84b783a8357f8",
       "reason": "5 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1791278385000
-    },
-    {
-      "anchors": [
-        {
-          "path": "_extensions/workflows/src/extension.ts",
-          "what": "registers the rail view and starts the in-flight badge."
-        },
-        {
-          "path": "_extensions/workflows/src/WorkflowsView.vue",
-          "what": "the page: saved workflows, loops and recent runs."
-        },
-        {
-          "path": "_extensions/workflows/src/WorkflowDesigner.vue",
-          "what": "the graph editor, step inspector and gate panel."
-        },
-        {
-          "path": "_extensions/workflows/src/graph/workflowDag.ts",
-          "what": "a workflow, with or without a run, as a layered graph."
-        },
-        {
-          "path": "_extensions/workflows/src/workflowEdit.ts",
-          "what": "the edit operations and the invariants they hold."
-        },
-        {
-          "path": "_extensions/workflows/src/gateSnippets.ts",
-          "what": "the CI wiring text for a release gate."
-        }
-      ],
-      "behind": 6,
-      "component": "extensions",
-      "dir": "_extensions/workflows",
-      "files": 32,
-      "hasTests": true,
-      "loc": 3260,
-      "name": "@intentic/ext-workflows",
-      "oneLiner": "The Workflows rail view, where the owner designs graphs of agent sessions that each produce a declared output, runs them and watches the runs.",
-      "readmeRev": "5298a848b3f1fe29b7e31a8167d84b783a8357f8",
-      "reason": "6 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1791278385000
     },

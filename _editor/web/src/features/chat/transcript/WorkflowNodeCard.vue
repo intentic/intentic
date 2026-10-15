@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { Icon } from "@intentic/extension-ui";
-import { t } from "./i18n";
-import { stepSubtitle, toneFor, type WorkflowNode } from "./graph/workflowDag";
+import { Icon } from "@intentic/ui";
+import { useT } from "@intentic/ui/i18n";
+import { stepSubtitle, toneFor, type WorkflowNode } from "../run/workflowDag";
 
-// Interior of a workflow-step node, shared by the designer's canvas and the run view's graph so a step looks identical
-// whether it's being designed or is mid-run. `node.run` being absent means the designer context; the tone table
-// (DESIGN_TONE) reads that directly rather than the card carrying a mode flag.
+// Interior of a workflow-step node in the chat's run diagram (ChatRunGraph): what the step is, what it produces and
+// gates on, and how it is going.
+
+const t = useT();
 
 const { node } = defineProps<{ node: WorkflowNode }>();
 </script>
@@ -24,7 +25,7 @@ const { node } = defineProps<{ node: WorkflowNode }>();
         <span v-if="node.run !== undefined && node.run.state !== `pending`" class="truncate pl-4 text-2xs leading-tight" :class="toneFor(node).text">
             {{ toneFor(node).label
             }}<template v-if="node.run.iterations > 0">
-                · {{ t(`workflowNodeCard.rounds`, { count: node.run.iterations }, node.run.iterations) }}</template
+                · {{ t(`chat.workflowNodeCard.rounds`, { count: node.run.iterations }, node.run.iterations) }}</template
             >
         </span>
     </span>

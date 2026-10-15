@@ -64,8 +64,9 @@ test("an essential extension cannot be switched off, reads enabled over a stale 
     await client.extensions.setEnabled({ id: "intentic.automations", enabled: true });
 
     const essentials = rows.filter((extension) => extension.essential === true).map((extension) => extension.id);
-    // Maintenance is not here: its probe sweep follows its own switch, and the extension is listed rather than baked.
-    expect(essentials.toSorted()).toEqual(["intentic.automations", "intentic.workflows"]);
+    // Maintenance and workflows are not here: each is listed rather than baked, maintenance's probe sweep follows its own
+    // switch, and a workflow run is stopped from the agents board.
+    expect(essentials).toEqual(["intentic.automations"]);
 });
 
 test("a workspace extension waits for approval, then lists like any other and serves its bundle by content hash", async () => {
@@ -119,8 +120,8 @@ test("a workspace extension waits for approval, then lists like any other and se
 test("the extension list carries every first-party extension, compiled-in UI ones included", async () => {
     const client = clientFor(createApp(services({ workspace: workspacePaths(mkdtempSync(join(tmpdir(), "ext-list-"))) })));
     const ids = (await client.extensions.list()).extensions.map((extension) => extension.id).toSorted();
-    // The INCLUDED set only. acceptance, deployments, documentation, issues, knowledge, maintenance and logs are
-    // first-party extensions in their own repositories, listed in the registry: a sandbox is itself without them.
+    // The INCLUDED set only. acceptance, deployments, documentation, issues, knowledge, maintenance, logs and workflows
+    // are first-party extensions in their own repositories, listed in the registry: a sandbox is itself without them.
     expect(ids).toEqual([
         "intentic.acp-agents",
         "intentic.activity",
@@ -147,7 +148,6 @@ test("the extension list carries every first-party extension, compiled-in UI one
         "intentic.telegram",
         "intentic.viewers",
         "intentic.whatsapp",
-        "intentic.workflows",
     ]);
 });
 

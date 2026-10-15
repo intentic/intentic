@@ -31,6 +31,7 @@ import { useSandboxSharedAccess } from "../../sandbox/access/useSandboxSharedAcc
 import { useAgents } from "../fleet/useAgents";
 import { agentDisplayTitle, type FleetLane } from "../fleet/agentStatus";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
+import { listedViewMissing, WORKFLOWS } from "../../../workbench/views/listedViews";
 import type { FleetAgent } from "../fleet/useAgents-fleet";
 import { pendingOn } from "../fleet/useAgents-provisional";
 import { fleetScope, scopeOffered } from "../fleet/fleetScope";
@@ -217,6 +218,7 @@ const { stoppingRuns, stopRun, archiveRun, restoreRun, openRun, openRunGraph, re
     workflows,
     agents,
     router,
+    workflowsPage: computed(() => !listedViewMissing(WORKFLOWS.view)),
     chat: {
         strip: chatStrip,
         // Where ChatPanel draws a run's diagram: a wide panel, on a desktop.

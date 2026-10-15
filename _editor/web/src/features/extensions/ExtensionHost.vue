@@ -7,7 +7,7 @@ import { useCapabilities } from "../capabilities/connect/useCapabilities";
 import { useExtensions } from "./useExtensions";
 import { usePanels } from "./usePanels";
 import { detectActivations } from "../../workbench/views/registry";
-import { extensionsLoaded } from "./extensionStatuses";
+import { extensionsLoaded } from "../../workbench/views/extensionStatuses";
 import ExtensionView from "../../core-views/ExtensionView.vue";
 import { useT } from "@intentic/ui/i18n";
 

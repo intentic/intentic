@@ -1526,7 +1526,19 @@
             "noStepInRun": "In diesem Lauf ist kein Schritt gelaufen, es gibt also nichts zu öffnen.",
             "pickStepWholeColumn": "Wählen Sie einen Schritt: seine ganze Spalte öffnet sich nebeneinander."
         },
+        "workflowDag": {
+            "didNotFinish": "Nicht fertig geworden",
+            "done": "Fertig",
+            "running": "Läuft",
+            "skipped": "Übersprungen",
+            "stopped": "Gestoppt",
+            "waiting": "Wartet"
+        },
+        "workflowNodeCard": {
+            "rounds": "{count} Runde | {count} Runden"
+        },
         "chatRunThroughMenu": {
+            "installWorkflows": "Workflows installieren, um Schleifen und Workflows anzulegen",
             "handToOtherSessions": "An andere Sessions übergeben",
             "justChat": "Nur dieser Chat",
             "loop": "Schleife",
@@ -1536,6 +1548,7 @@
             "repeatHereUntilDone": "Hier wiederholen, bis es erledigt ist",
             "sendOnceOrdinaryMessage": "Einmal senden, als gewöhnliche Nachricht.",
             "setOneUp": "Einen einrichten",
+            "turnOnWorkflows": "Workflows einschalten, um Schleifen und Workflows anzulegen",
             "workflow": "Workflow"
         },
         "chatShareDialog": {

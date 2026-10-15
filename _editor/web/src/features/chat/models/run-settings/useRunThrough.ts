@@ -10,6 +10,7 @@ import { startLoop, stopLoop } from "../../../agents/fleet/useLoops";
 import { useWorkflowRuns } from "../../../agents/fleet/useWorkflowRuns";
 import { useOperations } from "../../../../workbench/operations/operations";
 import { navigateInApp } from "../../../../workbench/window/mainWindow";
+import { useListedView, WORKFLOWS } from "../../../../workbench/views/listedViews";
 import type { Conversation } from "../../session/conversation";
 import { openRunInChat } from "../../run/openRun";
 
@@ -95,6 +96,7 @@ export const useRunThrough = (
     },
 ): RunThrough => {
     const router = useRouter();
+    const workflowsPage = useListedView(WORKFLOWS);
     const { agentById } = useAgents();
     const { designs: loopDesigns } = useLoopDesigns();
     const { start: startWorkflow, designs: workflowDesigns } = useWorkflowRuns();
@@ -211,11 +213,15 @@ export const useRunThrough = (
                 conversation.value.loopId.value = undefined;
             }
         },
-        // Same errand as the persona menu's Manage; the only door left to the long loop form.
+        // Same errand as the persona menu's Manage; the only door left to the long loop form. That form is the Workflows
+        // extension's page, a listed extension: where it isn't installed or is off, the door is where to set it up.
         manage: (): void => {
             open.value = false;
             // In a popped-out chat the form opens in the app's own window, not over the conversation.
-            navigateInApp(router, { name: `extension`, params: { ext: `workflows` }, query: { loop: `list` } });
+            navigateInApp(
+                router,
+                workflowsPage.state.value === `here` ? { name: `extension`, params: { ext: WORKFLOWS.view }, query: { loop: `list` } } : workflowsPage.setUp.value,
+            );
         },
         end: async (): Promise<void> => {
             if (!composer.reachable.value) {

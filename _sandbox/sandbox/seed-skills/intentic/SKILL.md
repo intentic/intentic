@@ -49,9 +49,11 @@ What the daemon does around you:
 - **Automations** are standing instructions that start a turn on their own (a cron expression, or a
   connector's listener). One with a check (a guard command, or a ready-made npm, GitHub-release or web-page
   source) is a **watch**: the check runs with no model, and only when it passes does anything happen — a new
-  agent, an existing conversation continued, or just a push to the owner. **Workflows** are daemon-scheduled graphs of turns; **drafts** are posts held for the
-  owner's approval. **Extensions** add connectors, channels (Slack, Discord, Telegram, WhatsApp…), viewers
-  and skills, found and installed on Sandbox ▸ Extensions.
+  agent, an existing conversation continued, or just a push to the owner. **Workflows** are daemon-scheduled
+  graphs of turns: every sandbox runs them and stops them from the agents board, but the page that designs them
+  (and saved loops) is the Workflows extension, installed from Sandbox ▸ Extensions ▸ Browse. **Drafts** are
+  posts held for the owner's approval. **Extensions** add connectors, channels (Slack, Discord, Telegram,
+  WhatsApp…), viewers and skills, found and installed on Sandbox ▸ Extensions.
 - **Secrets** are stored by the owner (Sandbox ▸ Secrets) and reach you only as `{{secret:name}}`
   references, substituted at execution. You never see a value and never ask for one in chat: for one nobody
   has stored, `secrets ask NAME --why "…"` puts a masked field on a card in the chat, and the answer comes

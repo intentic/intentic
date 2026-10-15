@@ -504,7 +504,7 @@ COPY _extensions/prawo/intentic-extension.json /opt/extensions/prawo/
 # (image and web bundle built from different commits), and a module with no manifest shows as "unlisted".
 #
 # Only the INCLUDED set is here: the work loop, the windows onto engines the daemon runs regardless, and the
-# data packs above. acceptance, documentation, maintenance, knowledge, deployments and issues are first-party
+# data packs above. acceptance, documentation, maintenance, knowledge, deployments, issues and workflows are first-party
 # too, but a sandbox is itself without them, so they are listed in the registry and installed from Extensions →
 # Browse (each is its own repository, intentic/extension-<name>); nothing of theirs is baked.
 COPY _extensions/activity/intentic-extension.json /opt/extensions/activity/
@@ -522,7 +522,6 @@ COPY _extensions/viewers/intentic-extension.json /opt/extensions/viewers/
 # excludes every dist. A manifest here without the dist shows as `absent` on the Extensions tab.
 COPY _extensions/onlyoffice/intentic-extension.json /opt/extensions/onlyoffice/
 COPY --from=trees extensions/onlyoffice/dist /opt/extensions/onlyoffice/dist
-COPY _extensions/workflows/intentic-extension.json /opt/extensions/workflows/
 # e-urzad (EZD RP and e-Doręczenia for Polish public offices, and signature checks) is both as well: its rail view is
 # compiled into the web bundle, and the daemon runs its backend (dist/server.js: the EZD RP card's agent tools and the
 # view's routes) while the agent runs its CLI (contributes.bin: bin/e-urzad over dist/cli.js). Both are self-contained

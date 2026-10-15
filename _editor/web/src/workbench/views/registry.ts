@@ -38,6 +38,10 @@ const views = computed<readonly RegisteredView[]>(() => [
 // wants. Not filtered by detection: that needs panels/capabilities, which are themselves being warmed.
 export const registeredViews = (): readonly RegisteredView[] => views.value;
 
+// Whether a view with this id is registered right now: what a core surface asks before linking to a view a LISTED
+// extension contributes (its page is there only where it is installed and on). Reactive, read inside a computed.
+export const viewRegistered = (id: string): boolean => views.value.some(({ registration }) => registration.id === id);
+
 // A registration is identified by owner + view id, not object identity: re-registering the same id replaces
 // it in place (a hot-reloaded or re-activated extension), so the rail never grows a duplicate icon.
 export const registerView = (owner: string, registration: ViewRegistration): Disposable => {
@@ -106,6 +110,8 @@ const judge = (): RailGroup => ({
     items: [signal(`approvals`), signal(`acceptance`), signal(`deployments`), signal(`maintenance`)],
 });
 // Authored once, then left alone. Automations never badges: a held wake is a card on the board, counted on Agents.
+// Workflows is a LISTED first-party extension like the judge band's (installed from the registry), declared here so an
+// install lands its tile beside Automations.
 const setup = (): RailGroup => ({ id: `setup`, label: t(`views.words.setUp`), items: [signal(`workflows`), signal(`automations`)] });
 // Consulted deliberately, not summoned; Documentation badges rarely and meaningfully, the others don't at all.
 const know = (): RailGroup => ({

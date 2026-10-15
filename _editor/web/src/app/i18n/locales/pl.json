@@ -3230,10 +3230,29 @@
             "noStepInRun": "W tym przebiegu żaden krok się nie wykonał, więc nie ma czego otwierać.",
             "pickStepWholeColumn": "Wybierz krok: cała jego kolumna otworzy się obok."
         },
+        "workflowDag": {
+            "didNotFinish": "Nie skończyło się",
+            "done": "Gotowe",
+            "running": "Działa",
+            "skipped": "Pominięte",
+            "stopped": "Zatrzymane",
+            "subtitle": {
+                "claim": "twierdzenie",
+                "command": "polecenie",
+                "fields": "{count} pole | {count} pola | {count} pól",
+                "noOutput": "bez wyjścia",
+                "reviewer": "recenzent"
+            },
+            "waiting": "Czeka"
+        },
+        "workflowNodeCard": {
+            "rounds": "{count} runda | {count} rundy | {count} rund"
+        },
         "chatRunThroughMenu": {
             "branching": "{steps}, z rozgałęzieniami",
             "handToOtherSessions": "Przekaż to innym sesjom",
             "inLine": "{steps} po kolei",
+            "installWorkflows": "Zainstaluj Workflows, aby tworzyć pętle i workflow",
             "justChat": "Tylko ten czat",
             "loop": "Pętla",
             "manageLoopsWorkflows": "Zarządzaj pętlami i workflow",
@@ -3243,6 +3262,7 @@
             "sendOnceOrdinaryMessage": "Wyślij raz, jako zwykłą wiadomość.",
             "setOneUp": "Utwórz jeden",
             "stepCount": "{count} krok | {count} kroki | {count} kroków",
+            "turnOnWorkflows": "Włącz Workflows, aby tworzyć pętle i workflow",
             "workflow": "Workflow"
         },
         "chatShareDialog": {

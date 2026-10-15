@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import { DagGraph, Icon } from "@intentic/ui";
-import { workflowDag, WorkflowNodeCard } from "@intentic/ext-workflows";
 import type { WorkflowRun } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
 import type { RunSession } from "../run/chatRun";
 import { RUN_NODE_HEIGHT, RUN_NODE_WIDTH, runColumns } from "../run/runColumns";
+import { workflowDag } from "../run/workflowDag";
 import { useT } from "@intentic/ui/i18n";
+import WorkflowNodeCard from "./WorkflowNodeCard.vue";
 
-// The run's diagram in the chat panel, drawn from the same derivation and card as the workflows page (workflowDag,
-// WorkflowNodeCard), so the two never disagree about what's running. Clicking a node opens its whole column, not just
-// that node: a fanned-out run wants its parallel branches compared side by side.
+// The run's diagram in the chat panel, core's own picture of a workflow run (workflowDag, WorkflowNodeCard), so a run
+// can be read and opened whether or not the Workflows extension is installed. Clicking a node opens its whole column,
+// not just that node: a fanned-out run wants its parallel branches compared side by side.
 
 const t = useT();
 

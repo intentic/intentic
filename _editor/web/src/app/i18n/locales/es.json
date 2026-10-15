@@ -1535,7 +1535,19 @@
             "noStepInRun": "En esta ejecución no se ejecutó ningún paso, así que no hay nada que abrir.",
             "pickStepWholeColumn": "Elige un paso: su columna entera se abre al lado."
         },
+        "workflowDag": {
+            "didNotFinish": "No terminó",
+            "done": "Terminado",
+            "running": "En marcha",
+            "skipped": "Omitido",
+            "stopped": "Detenido",
+            "waiting": "Esperando"
+        },
+        "workflowNodeCard": {
+            "rounds": "{count} ronda | {count} rondas"
+        },
         "chatRunThroughMenu": {
+            "installWorkflows": "Instala Workflows para crear bucles y workflows",
             "handToOtherSessions": "Pasarlo a otras sesiones",
             "justChat": "Solo este chat",
             "loop": "bucle",
@@ -1545,6 +1557,7 @@
             "repeatHereUntilDone": "Repetirlo aquí, hasta que esté hecho",
             "sendOnceOrdinaryMessage": "Enviar una vez, como un mensaje normal.",
             "setOneUp": "Crear uno",
+            "turnOnWorkflows": "Activa Workflows para crear bucles y workflows",
             "workflow": "flujo de trabajo"
         },
         "chatShareDialog": {

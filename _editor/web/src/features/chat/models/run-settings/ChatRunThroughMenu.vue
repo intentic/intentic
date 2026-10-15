@@ -5,6 +5,7 @@ import { loopDesignWords } from "./loopDesignWords";
 import { computed } from "vue";
 import { useLoopDesigns } from "../../../agents/fleet/useLoopDesigns";
 import { useWorkflowRuns } from "../../../agents/fleet/useWorkflowRuns";
+import { useListedView, WORKFLOWS } from "../../../../workbench/views/listedViews";
 import { useT } from "@intentic/ui/i18n";
 
 // One control, one list, two headed sections: a loop and a workflow answer the same question (what happens to this
@@ -35,6 +36,10 @@ const pinned = (design: Workflow): string[] => [...new Set(design.steps.flatMap(
 
 const picked = computed(() => loop !== undefined || workflow !== undefined);
 const empty = computed(() => loops.value.length === 0 && workflows.value.length === 0);
+// Designs are made on the Workflows extension's page, a listed extension this sandbox may not have, or may have off:
+// saved ones still run from here without it, and the last row offers the install or the switch instead of a page that
+// isn't there.
+const { state: workflowsPage } = useListedView(WORKFLOWS);
 </script>
 
 <template>
@@ -111,15 +116,21 @@ const empty = computed(() => loops.value.length === 0 && workflows.value.length 
             </button>
         </template>
 
-        <!-- The one door to the page that owns both kinds (and the long loop form). -->
+        <!-- The one door to the page that owns both kinds (and the long loop form), or to installing it. -->
         <button
             type="button"
             class="ui-row-select mt-0.5 flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
             @click="emit(`manage`)"
         >
-            <Icon :name="empty ? `plus` : `cog`" class="shrink-0 text-xs text-subtle" />
+            <Icon :name="workflowsPage !== `here` ? `extensions` : empty ? `plus` : `cog`" class="shrink-0 text-xs text-subtle" />
             <span :class="empty ? `text-sm text-content md:text-xs` : `text-2xs text-subtle`">{{
-                empty ? t(`chat.chatRunThroughMenu.setOneUp`) : t(`chat.chatRunThroughMenu.manageLoopsWorkflows`)
+                workflowsPage === `absent`
+                    ? t(`chat.chatRunThroughMenu.installWorkflows`)
+                    : workflowsPage === `off`
+                      ? t(`chat.chatRunThroughMenu.turnOnWorkflows`)
+                      : empty
+                        ? t(`chat.chatRunThroughMenu.setOneUp`)
+                        : t(`chat.chatRunThroughMenu.manageLoopsWorkflows`)
             }}</span>
         </button>
     </div>

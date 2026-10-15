@@ -49,7 +49,7 @@ jest.mock(`../../app/clientDiagnostics`, () => ({
 }));
 
 const { extensionsLoaded, loadExtensions, retireExtensions } = await import("../loader");
-const { extensionStatuses } = await import("../../features/extensions/extensionStatuses");
+const { extensionStatuses } = await import("../../workbench/views/extensionStatuses");
 
 const manifest = (name: string, settings = false): ExtensionManifest =>
     ({

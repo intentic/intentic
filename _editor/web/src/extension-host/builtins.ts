@@ -11,7 +11,6 @@ import * as onlyoffice from "@intentic/ext-onlyoffice";
 import * as pipelines from "@intentic/ext-pipelines";
 import * as preview from "@intentic/ext-preview";
 import * as viewers from "@intentic/ext-viewers";
-import * as workflows from "@intentic/ext-workflows";
 
 // First-party extensions whose code is compiled into this bundle, keyed by the id the daemon lists them under. Each
 // activates through the same manifest-gated createExtensionApi path as a git-installed bundle; only its module is
@@ -19,7 +18,8 @@ import * as workflows from "@intentic/ext-workflows";
 // /extensions` lists them alongside daemon-side and git-installed ones with one on/off switch. A builtin can only touch
 // the public IntenticApi, never app internals.
 // Only the INCLUDED first-party set: a sandbox is not itself without these. The listed ones (acceptance, documentation,
-// maintenance, knowledge, deployments, issues) live in their own repositories and arrive blob-loaded like any install.
+// maintenance, knowledge, deployments, issues, workflows) live in their own repositories and arrive blob-loaded like any
+// install.
 
 // The package namespace of a compiled-in extension: an ExtensionModule that also exports the manifest the daemon lists
 // it under. Typed on the array below so a package that stops exporting one fails here.
@@ -36,7 +36,6 @@ const modules: readonly BuiltinModule[] = [
     onlyoffice,
     preview,
     viewers,
-    workflows,
 ];
 
 export const builtinModules: ReadonlyMap<string, BuiltinModule> = new Map(modules.map((module) => [extensionIdOf(module.manifest), module]));

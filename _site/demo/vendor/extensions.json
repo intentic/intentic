@@ -22,5 +22,9 @@
     "intentic.issues": {
         "repo": "intentic/extension-issues",
         "sha": "8a535124ca14c18d620300818bf3e4482d95a9ba"
+    },
+    "intentic.workflows": {
+        "repo": "intentic/extension-workflows",
+        "sha": "66d523def8cb5c54ecf85bc6f492bf0f1da56057"
     }
 }

@@ -18,6 +18,7 @@ const ALLOWED = new Set([
     `issues`,
     `knowledge`,
     `maintenance`,
+    `workflows`,
 ]);
 
 const extensionsDir = join(repoRoot(import.meta.url), `..`, `extensions`);
