@@ -29,8 +29,15 @@ const MAY_SPELL_A_ROOT = new Set([
     `_tools/extension-example/seed/src/notes.ts`,
 ]);
 
-// Committed build output: the site ships a bundled copy already flagged at its source, so skip the duplicate.
-const GENERATED = [`_site/site/public/`, `_site/site/dist/`, `_editor/web/public/ext-shims/`, `_sandbox/sandbox/operator-templates/`];
+// Committed build output: the site ships a bundled copy already flagged at its source, so skip the duplicate. The
+// editor's env.js is esbuild's bundle of its environment files (`pnpm dev`), constants inlined.
+const GENERATED = [
+    `_site/site/public/`,
+    `_site/site/dist/`,
+    `_editor/web/public/ext-shims/`,
+    `_editor/web/public/assets/js/env.js`,
+    `_sandbox/sandbox/operator-templates/`,
+];
 
 // A filesystem root spelled out; the trailing boundary excludes HTTP routes sharing the same prefix.
 const SPELLED_ROOT = /(["'`])(\/work|\/history|\/opt\/intentic)(\/[^"'`${\n]*)?\1/;

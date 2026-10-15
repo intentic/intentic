@@ -7972,6 +7972,10 @@
                     "label": "Offloaded work",
                     "where": "heavy commands sent to a runner on one of your machines"
                 },
+                "org": {
+                    "label": "Organisation",
+                    "where": "which organisation manages this sandbox, and what it holds"
+                },
                 "panels": {
                     "label": "Panels",
                     "where": "the operator panels in the sidebar"

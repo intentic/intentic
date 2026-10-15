@@ -187,4 +187,10 @@
 // bot (a mention, a reply, a direct message), as the Discord team assistant does. An older host's parse drops the key,
 // so there the template answers every message on that event. No member or top-level key was added, so the manifest
 // digest is the only grain that records it.
-export const extensionApiVersion = "2.29.0";
+// 2.30.0 lets a cli capability card carry a delegated OAuth sign-in: `refreshToken` names the secret field the refresh
+// token lives in and the fields it is bound to, so the extension's own CLI or process stores a new or rotated token
+// through the daemon's oauth-token route instead of printing it for someone to paste, and `probe.oauth` trades that
+// token for an access token before the card's connection test. An older host's parse drops both keys, so there the
+// token is pasted by hand and the test runs without the trade. No member or top-level key was added, so the manifest
+// digest is the only grain that records it.
+export const extensionApiVersion = "2.30.0";

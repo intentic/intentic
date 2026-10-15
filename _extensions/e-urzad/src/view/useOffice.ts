@@ -1,11 +1,11 @@
-import { onBeforeUnmount, ref, type Ref } from "vue";
+import { computed, ref, type ComputedRef, type Ref } from "vue";
 import type { Snapshot } from "../core/snapshot.js";
 import { host } from "../host.js";
 import type { OfficeService } from "./facts.js";
 
 // The view's three requests, all to this extension's own backend: what is saved, a live refresh, a connection test.
-// What the agent saves lands in the same records, and the manifest's `files` entry tells the view, so a sync the agent
-// ran shows up without a poll.
+// What is saved is a cached read keyed under `e-urzad`, the name the manifest's `files` entry invalidates: what the
+// agent saves lands in the same records, so a sync the agent ran refetches it without a poll.
 
 interface Answer {
     readonly snapshot?: Snapshot;
@@ -25,36 +25,39 @@ const call = async (path: string, method: `GET` | `POST`): Promise<Answer> => {
 };
 
 export interface Office {
-    readonly snapshot: Ref<Snapshot | undefined>;
-    readonly error: Ref<string | undefined>;
+    readonly snapshot: ComputedRef<Snapshot | undefined>;
+    readonly error: ComputedRef<string | undefined>;
     readonly tested: Ref<string | undefined>;
-    readonly load: () => Promise<void>;
     readonly refresh: () => Promise<void>;
     readonly test: () => Promise<void>;
 }
 
 export const useOffice = (account: () => string, service: () => OfficeService, describeTest: (detail: Readonly<Record<string, string | number>>) => string): Office => {
-    const snapshot = ref<Snapshot>();
-    const error = ref<string>();
+    const api = host();
+    const failed = ref<string>();
     const tested = ref<string>();
     const base = (): string => `accounts/${encodeURIComponent(account())}`;
 
+    // `null` for an office never synced: a cached read cannot hold undefined.
+    const { query, error: readError } = api.sandbox.query({
+        queryKey: computed(() => api.sandbox.key(`e-urzad`, account(), service())),
+        queryFn: async () => (await call(`${base()}/overview?service=${service()}`, `GET`)).snapshot ?? null,
+    });
+
     const guarded = async (run: () => Promise<void>): Promise<void> => {
-        error.value = undefined;
+        failed.value = undefined;
         try {
             await run();
         } catch (cause) {
-            error.value = cause instanceof Error ? cause.message : String(cause);
+            failed.value = cause instanceof Error ? cause.message : String(cause);
         }
     };
 
-    const load = (): Promise<void> =>
-        guarded(async () => {
-            snapshot.value = (await call(`${base()}/overview?service=${service()}`, `GET`)).snapshot;
-        });
+    // The sync writes the records, whose push refetches the read; asking again here covers a write the watcher missed.
     const refresh = (): Promise<void> =>
         guarded(async () => {
-            snapshot.value = (await call(`${base()}/sync`, `POST`)).snapshot;
+            await call(`${base()}/sync`, `POST`);
+            query.refetch();
         });
     const test = (): Promise<void> =>
         guarded(async () => {
@@ -62,11 +65,11 @@ export const useOffice = (account: () => string, service: () => OfficeService, d
             tested.value = describeTest((await call(`${base()}/test`, `POST`)).detail ?? {});
         });
 
-    const subscription = host().workspace.onDidChangeFiles(() => {
-        void load();
-    });
-    onBeforeUnmount(() => {
-        subscription.dispose();
-    });
-    return { snapshot, error, tested, load, refresh, test };
+    return {
+        snapshot: computed(() => query.data.value ?? undefined),
+        error: computed(() => failed.value ?? readError.value),
+        tested,
+        refresh,
+        test,
+    };
 };

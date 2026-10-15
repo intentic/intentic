@@ -41,6 +41,9 @@ const HAND_KEPT = [
     "agent/providers/accounts/account-files.ts",
     // The exit node's live state, rewritten on every poll; nothing reads it across a restart but the next poll.
     "exit/exit-state.ts",
+    // The organisation policy the platform hands over, kept in the auth root beside the other trust files so a restart
+    // while the platform is unreachable still enforces it; replaced whole by each newer edition the platform resends.
+    "org/org-policy.ts",
     // Boot's own marker of what a prewarm left behind, read once by the next boot.
     "system/boot/prewarm.ts",
 ];

@@ -122,7 +122,7 @@ describe(`the model a new chat opens on`, () => {
         turnDefaults.models.value = { ...turnDefaults.models.value, claude: `claude-opus-5` };
         expect(rememberedModelFor(`claude`)).toBe(`claude-opus-5-5`);
         // The pick itself is left as it was: resolved at read, never rewritten.
-        expect(turnDefaults.models.value.claude).toBe(`claude-opus-5`);
+        expect(turnDefaults.models.value[`claude`]).toBe(`claude-opus-5`);
     });
 
     it(`keeps a pick that is its family's newest, and another family's pick within its own family`, () => {

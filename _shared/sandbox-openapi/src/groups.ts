@@ -1,4 +1,4 @@
-// The 45 groups of the daemon's surface, hand-written since the contract can't state reading order or audience. Order
+// The 48 groups of the daemon's surface, hand-written since the contract can't state reading order or audience. Order
 // is editorial, not alphabetical; shelves are consecutive runs of it, enforced by spec.test.ts, which also fails a
 // contract group missing here or an entry with no routes.
 
@@ -242,6 +242,14 @@ export const SPEC_GROUPS: readonly SpecGroup[] = [
         summary: "What personal data is kept from model providers, and the record of what was masked",
         description:
             "The shield replaces names, numbers and other personal data with tokens before a request reaches a provider you have not trusted, and puts the real values back on the way out. These routes read its state and replace its policy, which only the owner may do; read the log of what it masked; look a word up in the name dictionary; and list, teach and forget the datasets of known values it masks wherever they appear.",
+    },
+    {
+        name: "org",
+        shelf: "kit",
+        label: "Organisation",
+        summary: "Which organisation manages this sandbox, and which of its settings that organisation holds",
+        description:
+            "A personal sandbox answers unbound. One an organisation manages answers with that organisation's policy as this sandbox enforces it, section by section, and when that edition arrived. The platform hands the policy over; this is the daemon's own copy, the one that decides which changes to a held section are refused, so the editor locks and hides what the daemon will refuse rather than what the platform last said. A guest may read it: it names the organisation and which sections are held, nothing about anyone.",
     },
 
     // Connected systems

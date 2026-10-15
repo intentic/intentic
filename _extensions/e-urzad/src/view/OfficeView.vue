@@ -1,7 +1,7 @@
 <!-- One connected office card: EZD RP cases and tasks, or e-Doręczenia deliveries and proofs, as last saved, with a live refresh, a connection test and the office acts the agent took. -->
 <script setup lang="ts">
 import { Button, formatDate, formatDateTime, Notice, noticeOf, Page, PageHeader, Row, RowGroup, StatusBadge, ui } from "@intentic/extension-ui";
-import { computed, onMounted } from "vue";
+import { computed } from "vue";
 import { t } from "../i18n.js";
 import { deliveryTone, instant, type OfficeService } from "./facts.js";
 import { useOffice } from "./useOffice.js";
@@ -11,14 +11,11 @@ const { account, service } = defineProps<{ account: string; service: OfficeServi
 const describeTest = (detail: Readonly<Record<string, string | number>>): string =>
     service === `ezd-rp` ? t(`testedEzd`, { user: String(detail[`user`] ?? ``) }) : t(`testedEd`, { mailbox: String(detail[`mailbox`] ?? ``), environment: String(detail[`environment`] ?? ``) });
 
-const { snapshot, error, tested, load, refresh, test } = useOffice(
+const { snapshot, error, tested, refresh, test } = useOffice(
     () => account,
     () => service,
     describeTest,
 );
-onMounted(() => {
-    void load();
-});
 
 const when = (value: string | undefined): string => {
     const at = instant(value);

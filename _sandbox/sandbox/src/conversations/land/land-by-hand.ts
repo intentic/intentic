@@ -124,7 +124,9 @@ export const landByHandLeased = async (services: LandByHandDeps, entry: Isolated
     const target = await landTargetOf(services, entry);
     const into = intoOf(target);
     const result = await underLeases(services.conversations, entry.id, into, async () => {
-        if (includeDocuments && mode !== "measure") await includeProducedFiles(services, entry);
+        if (includeDocuments && mode !== "measure") {
+            await includeProducedFiles(services, entry);
+        }
         return landByHand(services, entry, mode, rung, target);
     });
     await settleParentBooks(services, { into, landed: result.landed });

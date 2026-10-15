@@ -69,6 +69,7 @@ const AREAS: Readonly<Record<string, () => AreaName>> = {
     needs: () => ({ label: t(`sandbox.driftReport.areas.needs.label`), where: t(`sandbox.driftReport.areas.needs.where`) }),
     netdisk: () => ({ label: t(`sandbox.driftReport.areas.netdisk.label`), where: t(`sandbox.driftReport.areas.netdisk.where`) }),
     offload: () => ({ label: t(`sandbox.driftReport.areas.offload.label`), where: t(`sandbox.driftReport.areas.offload.where`) }),
+    org: () => ({ label: t(`sandbox.driftReport.areas.org.label`), where: t(`sandbox.driftReport.areas.org.where`) }),
     panels: () => ({ label: t(`sandbox.driftReport.areas.panels.label`), where: t(`sandbox.driftReport.areas.panels.where`) }),
     pages: () => ({ label: t(`sandbox.driftReport.areas.pages.label`), where: t(`sandbox.driftReport.areas.pages.where`) }),
     personas: () => ({ label: t(`sandbox.driftReport.areas.personas.label`), where: t(`sandbox.driftReport.areas.personas.where`) }),

@@ -7568,6 +7568,10 @@
                     "label": "Praca przeniesiona",
                     "where": "ciężkie polecenia wysłane do runnera na jednym z Twoich komputerów"
                 },
+                "org": {
+                    "label": "Organizacja",
+                    "where": "która organizacja zarządza tym sandboxem i czym w nim zarządza"
+                },
                 "panels": {
                     "label": "Panele",
                     "where": "panele operatora na pasku bocznym"

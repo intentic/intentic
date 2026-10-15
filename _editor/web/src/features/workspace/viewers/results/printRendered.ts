@@ -21,7 +21,6 @@ const PrintAnswerSchema = z.object({ intenticPrintHtml: z.string() });
 // The page each preview frame was handed, sealed but before any shell that writes it in (sizedFirst), set by the frame's
 // owner (HtmlPreview.vue): what prints when the frame cannot answer, rather than a shell with nothing in it once its
 // script is stripped. Keyed by the element, so a frame that is gone takes its entry with it.
-// allow(module-state): weakly held, one entry per mounted preview frame
 const handedPages = new WeakMap<HTMLIFrameElement, string>();
 
 export const recordPrintSource = (frame: HTMLIFrameElement, page: string): void => {
