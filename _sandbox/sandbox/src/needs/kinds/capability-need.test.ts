@@ -1,7 +1,7 @@
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import { type Capability, CapabilitySchema, type CapabilityStatus, type CredentialGate, type Need, PersonaPowersSchema } from "@intentic/sandbox-contract";
 import type { TurnStanding } from "../../conversations/actor/turn-standing.js";
-import type { AskContext } from "../need-kinds.js";
+import type { AskContext, Resolved } from "../need-kinds.js";
 import { capabilityNeed, hostOf, servesTarget } from "./capability-need.js";
 
 // The capability ask answered for the asking turn. Three of its answers were once all "already connected, use it"
@@ -258,5 +258,81 @@ describe("capability need", () => {
         const github = { kind: "capability" as const, entry: "website", name: "Browser session", mode: "connect" as const, target: "https://github.com" };
         expect(handler.key(github)).toBe(handler.key({ ...github, target: "github.com" }));
         expect(handler.key(github)).not.toBe(handler.key({ ...github, target: "gitlab.com" }));
+    });
+
+    // 2026-10-15: cleaning up after a link check, the agent had no way to ask for a card's removal and drove the
+    // owner's own browser to the Remove menu instead.
+    describe("a removal", () => {
+        const LINK: CapabilityCatalogEntry = {
+            id: "link",
+            name: "Linked sandbox",
+            kind: "link",
+            category: "devices",
+            description: "Hand tasks to another of your sandboxes.",
+            fields: [
+                { key: "url", label: "Its address" },
+                { key: "token", label: "Link token", secret: true },
+                { key: "name", label: "What it is called", advanced: true },
+            ],
+        };
+        const linked = (id: string): Capability =>
+            CapabilitySchema.parse({ id, kind: "link", config: { url: `https://sandbox-${id}.sbx.test`, token: "ilk_test", name: id } });
+        const withLinks = (capabilities: Capability[]) =>
+            capabilityNeed({
+                entries: async () => [WEBSITE, LINK],
+                capabilities: async () => capabilities,
+                status: async () => ({ state: "active" }),
+                gates: async () => [],
+                usableNow: async () => [],
+            });
+
+        it("asks to remove the one connection it names, by its id or as the entry's only one", async () => {
+            const handler = withLinks([linked("linktest")]);
+            const raised: Resolved = {
+                kind: "raise",
+                title: 'Remove Linked sandbox ("linktest")',
+                subject: { kind: "capability", entry: "link", name: "Linked sandbox", mode: "remove", instance: "linktest" },
+            };
+            expect(await handler.resolve({ kind: "capability", entry: "linktest", remove: true }, asked())).toEqual(raised);
+            expect(await handler.resolve({ kind: "capability", entry: "link", remove: true }, asked())).toEqual(raised);
+        });
+
+        it("is met when nothing is there to remove, and refuses to guess between several", async () => {
+            expect(await withLinks([]).resolve({ kind: "capability", entry: "link", remove: true }, asked())).toMatchObject({ kind: "met" });
+            expect(await withLinks([linked("ops"), linked("dev")]).resolve({ kind: "capability", entry: "link", remove: true }, asked())).toMatchObject({
+                kind: "refused",
+                code: "ambiguous",
+            });
+        });
+
+        it("refuses one the people this conversation works for were not given, and a removal that also changes something", async () => {
+            const handler = withLinks([linked("ops")]);
+            expect(
+                await handler.resolve({ kind: "capability", entry: "ops", remove: true }, asked({ standing: standing({ withheldByReach: ["ops"] }) })),
+            ).toMatchObject({ kind: "refused", code: "out_of_reach" });
+            expect(await handler.resolve({ kind: "capability", entry: "ops", remove: true, set: { name: "x" } }, asked())).toMatchObject({
+                kind: "refused",
+                code: "invalid",
+            });
+        });
+
+        it("is met once the connection is gone, wherever it was removed, and tells the agent at once", async () => {
+            const capabilities = [linked("ops")];
+            const handler = withLinks(capabilities);
+            const need = needOf({ kind: "capability", entry: "link", name: "Linked sandbox", mode: "remove", instance: "ops" });
+            expect(await handler.check(need)).toBeUndefined();
+            expect(await handler.answer(need, { kind: "apply" }, { email: "owner@example.com" })).toMatchObject({ refused: expect.any(String) });
+            capabilities.pop();
+            expect(await handler.check(need)).toEqual({ result: 'Linked sandbox "ops" is removed from this sandbox.', use: [] });
+            expect(await handler.answer(need, { kind: "apply" }, { email: "owner@example.com" })).toMatchObject({ status: "met" });
+            expect(handler.nextTurn(need)).toBe(false);
+        });
+
+        it("fills a linked sandbox's name, not an address, from a bare target", async () => {
+            expect(await withLinks([]).resolve({ kind: "capability", entry: "link", target: "linktest" }, asked())).toMatchObject({
+                kind: "raise",
+                subject: { mode: "connect", target: "linktest", prefill: { name: "linktest" } },
+            });
+        });
     });
 });

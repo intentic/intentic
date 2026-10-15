@@ -22,7 +22,7 @@ Every ask is one CLI call that answers in under 100 seconds, below the shell's 1
 
 | Command | Raises | Met when |
 | --- | --- | --- |
-| `capabilities request <entry> [--target T] [--set k=v] --why …` | `capability`: connect, reconnect a refused credential, or change a setting on a connected one (a device switch, a Docker engine option) | an instance of the entry (matching the target) comes live, or the change is applied |
+| `capabilities request <entry> [--target T] [--set k=v] [--remove] --why …` | `capability`: connect, reconnect a refused credential, change a setting on a connected one (a device switch, a Docker engine option), or remove one; a linked sandbox is paired in the card itself | an instance of the entry (matching the target) comes live, the change is applied, or the connection is gone |
 | `secrets ask NAME --why … [--where …] [--link URL]` | `secret`: a value the person pastes into the card | the name resolves |
 | `grants request capability\|folder\|shelf <what> --why …` | `grant`: something this conversation's persona or area withholds | the person allows it, for this conversation or on the persona |
 | `secrets request <id> --why …` | `release`: a gated account or connector for the rest of the conversation | a named approver releases it |

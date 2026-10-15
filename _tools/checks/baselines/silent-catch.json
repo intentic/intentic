@@ -325,7 +325,6 @@
     "_sandbox/sandbox/src/runtimes/pi/pi-agent.ts": 3,
     "_sandbox/sandbox/src/runtimes/pi/pi-rpc.ts": 1,
     "_sandbox/sandbox/src/sandboxes/fleet-client.ts": 1,
-    "_sandbox/sandbox/src/sandboxes/fleet-gate.ts": 1,
     "_sandbox/sandbox/src/scaffold/autostart.ts": 1,
     "_sandbox/sandbox/src/scaffold/starter-site.ts": 1,
     "_sandbox/sandbox/src/sessions/conversation-purge.ts": 1,

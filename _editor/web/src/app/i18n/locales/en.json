@@ -4868,7 +4868,11 @@
             "effectPrivileged": "Runs privileged inside the sandbox.",
             "couldNotConnect": "Could not connect it.",
             "couldNotApply": "Could not apply the change.",
-            "notWorkingYet": "It is not working yet: finish its setup, then press again."
+            "notWorkingYet": "It is not working yet: finish its setup, then press again.",
+            "removing": "Removing {id}",
+            "couldNotRemove": "Could not remove it.",
+            "removeWhat": "Removing \"{id}\" deletes this {name} connection and the credential stored with it from this sandbox. The agent loses its tools from its next turn.",
+            "remove": "Remove \"{id}\""
         },
         "secret": {
             "where": "Used for: {where}",

@@ -64,9 +64,10 @@ const stopForTrash = async (config: Config, logger: Logger, hosted: { appName: s
 // Deletes a sandbox the way the route used to, except that the provider teardown is not scheduled: the machine is
 // stopped so it stops costing anybody anything, and its app, volume and overlay are written down so a restore can
 // come back onto the same disk.
-export const trashSandbox = async (prisma: PrismaClient, config: Config, logger: Logger, sandboxId: string): Promise<void> => {
+export const trashSandbox = async (prisma: PrismaClient, config: Config, logger: Logger, sandboxId: string): Promise<{ readonly purgeAfter: Date }> => {
     const sandbox = await prisma.sandbox.findUniqueOrThrow({ where: { id: sandboxId }, include: { hosted: true } });
     const { hosted } = sandbox;
+    const purgeAfter = new Date(Date.now() + RECOVERY_WINDOW_MS);
     await prisma.$transaction(async (tx) => {
         await lockHostedSandbox(tx, sandboxId);
         if (hosted !== null) {
@@ -78,7 +79,7 @@ export const trashSandbox = async (prisma: PrismaClient, config: Config, logger:
                 name: sandbox.name,
                 image: sandbox.image,
                 ...(hosted === null ? {} : machineSnapshot(hosted)),
-                purgeAfter: new Date(Date.now() + RECOVERY_WINDOW_MS),
+                purgeAfter,
             },
         });
         // The app the dropped row named is now spoken for by the trash row above, which keeps the orphan reaper off it.
@@ -88,6 +89,7 @@ export const trashSandbox = async (prisma: PrismaClient, config: Config, logger:
     if (hosted !== null) {
         await stopForTrash(config, logger, hosted);
     }
+    return { purgeAfter };
 };
 
 export interface TrashedSummary {

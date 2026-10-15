@@ -1,5 +1,5 @@
 import type { AgentEvent, DeviceFlowLine, DeviceSandboxFlow } from "@intentic/sandbox-contract";
-import { type CreateAsk, createSandboxThroughFleet, type FleetGateDeps, slugOf } from "./fleet-gate.js";
+import { type CreateAsk, createSandboxThroughFleet, type FleetGateDeps, type RemoveAsk, removeSandboxThroughFleet, slugOf } from "./fleet-gate.js";
 import { parkedCards } from "../conversations/actor/parked-cards.js";
 import { createHeldCards } from "../guard/held-cards.js";
 import { memoryFleet } from "../testing.js";
@@ -53,6 +53,9 @@ const fake = (
         observe: () => {},
         awaiting: () => {},
         hold: { held, finished: () => turn.promise },
+        remove: async () => ok({ name: "trashed", recoverableUntil: "2026-10-22T19:00:00.000Z" }),
+        runsOn: async () => undefined,
+        selfUrl: () => "https://sandbox-82789f4106b4.sbx.test",
         ...over,
     };
     return { deps, frames, provision, flows, endTurn: () => turn.resolve() };
@@ -223,4 +226,89 @@ it("reports a failed build as a name that now exists, with ic's own lines", asyn
     // The row survives the failure, so the report has to say the name is taken rather than that nothing happened.
     expect(body.error.message).toMatch(/created on the account/);
     expect(body.lines).toEqual(["pulling ghcr.io/intentic/sandbox…", "no space left on device"]);
+});
+
+// 2026-10-15: after a link check, the two test sandboxes could only be removed by a person, in the app and on the
+// machine. A removal now goes the create's way: the owner's card first, then the machine, else the account row.
+describe("removing a sandbox", () => {
+    const ACCOUNT = {
+        sandboxes: [
+            { id: "sbx-self", name: "intentic", url: "https://sandbox-82789f4106b4.sbx.test", lastSeenAt: "2026-10-15T19:00:00.000Z" },
+            { id: "sbx-linktest", name: "linktest", url: "https://sandbox-7e8d0ffa8bed.sbx.test", lastSeenAt: "2026-10-15T19:00:00.000Z" },
+            { id: "sbx-omen", name: "linktest-omen" },
+            { id: "sbx-a", name: "twin" },
+            { id: "sbx-b", name: "Twin" },
+        ],
+    };
+    const removing = (over: Partial<RemoveAsk> = {}): RemoveAsk => ({
+        name: "linktest",
+        why: "the link check is done",
+        conversationId: "conv-1",
+        signal: new AbortController().signal,
+        ...over,
+    });
+    const listed = { list: async () => ok(ACCOUNT) };
+
+    it("asks first, then removes it on the machine that runs it, which keeps its files there", async () => {
+        const remove = jest.fn(async () => ok({}));
+        const { deps, frames, flows } = fake({ ...listed, remove, runsOn: async (slug) => (slug === "sandbox-7e8d0ffa8bed" ? "rog" : undefined) }, [
+            { kind: "result", message: "Removed sandbox-7e8d0ffa8bed." },
+        ]);
+        const pending = removeSandboxThroughFleet(deps, removing());
+        await answerCard(frames, "Remove it");
+        const answer = await pending;
+        expect(answer.status).toBe(200);
+        expect(JSON.parse(answer.body)).toMatchObject({ name: "linktest", removed: "machine", on: "rog" });
+        expect(flows).toEqual([{ op: "remove", slug: "sandbox-7e8d0ffa8bed" }]);
+        // The machine's own removal takes it off the account: the row is not trashed a second time.
+        expect(remove).not.toHaveBeenCalled();
+        const raised = frames[0];
+        expect(raised?.kind === "question" ? raised.questions[0] : undefined).toMatchObject({
+            question: 'Remove the sandbox "linktest"?',
+            options: [
+                { label: "Remove it", description: expect.stringContaining("`ic sandbox restore sandbox-7e8d0ffa8bed` there brings it back") },
+                { label: "Keep it", description: "Nothing is removed." },
+            ],
+        });
+    });
+
+    it("takes a sandbox that never came up off the account alone, saying until when it can come back", async () => {
+        const remove = jest.fn(async () => ok({ name: "linktest-omen", recoverableUntil: "2026-10-22T19:00:00.000Z" }));
+        const { deps, frames, flows } = fake({ ...listed, remove });
+        const pending = removeSandboxThroughFleet(deps, removing({ name: "linktest-omen" }));
+        await answerCard(frames, "Remove it");
+        const answer = await pending;
+        expect(JSON.parse(answer.body)).toEqual({ name: "linktest-omen", removed: "account", recoverableUntil: "2026-10-22T19:00:00.000Z" });
+        expect(remove).toHaveBeenCalledWith("itk_test", "sbx-omen");
+        expect(flows).toHaveLength(0);
+    });
+
+    it("a no removes nothing anywhere", async () => {
+        const remove = jest.fn(async () => ok({}));
+        const { deps, frames, flows } = fake({ ...listed, remove, runsOn: async () => "rog" });
+        const pending = removeSandboxThroughFleet(deps, removing());
+        await answerCard(frames, "Keep it");
+        const answer = await pending;
+        expect(JSON.parse(answer.body)).toMatchObject({ error: { type: "declined" } });
+        expect(remove).not.toHaveBeenCalled();
+        expect(flows).toHaveLength(0);
+    });
+
+    it("refuses before any card: this sandbox itself, a name nobody has, and a name two share", async () => {
+        const { deps, frames } = fake(listed);
+        const self = await removeSandboxThroughFleet(deps, removing({ name: "intentic" }));
+        expect(JSON.parse(self.body)).toMatchObject({ error: { type: "self" } });
+        const none = await removeSandboxThroughFleet(deps, removing({ name: "staging" }));
+        expect(JSON.parse(none.body)).toMatchObject({ error: { type: "no_such_sandbox" } });
+        const twins = await removeSandboxThroughFleet(deps, removing({ name: "twin" }));
+        expect(JSON.parse(twins.body)).toMatchObject({ error: { type: "ambiguous", message: expect.stringContaining("sbx-a, sbx-b") } });
+        expect(frames).toHaveLength(0);
+    });
+
+    it("refuses before the card when no account is connected", async () => {
+        const { deps, frames } = fake({ token: async () => undefined });
+        const answer = await removeSandboxThroughFleet(deps, removing());
+        expect(JSON.parse(answer.body)).toMatchObject({ error: { type: "no_fleet" } });
+        expect(frames).toHaveLength(0);
+    });
 });

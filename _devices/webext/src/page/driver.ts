@@ -26,6 +26,14 @@ export interface RefDescription {
     readonly sensitive: boolean;
 }
 
+// What an action reports back. `gone` is an element that was there when it was described and is not any more: a
+// menu or popover the page closed in between, which the caller tells apart from a ref that never resolved.
+export interface ActionResult {
+    readonly ok: boolean;
+    readonly gone?: boolean;
+    readonly message: string;
+}
+
 /* ---- the injected functions ---- */
 
 // Walks the page (piercing shadow roots), parks the ref table, and caps at 150 elements — matching the CDP
@@ -177,13 +185,18 @@ export const readPageText = (): { url: string; title: string; text: string; trun
 };
 
 // Resolves what a ref points at and whether acting on it needs confirmation. The sensitivity test is broad and
-// cheap: over-asking costs a click, under-asking costs money.
-export const describeRef = (ref: string): RefDescription => {
+// cheap: over-asking costs a click, under-asking costs money. `pin` holds on to the element itself for the action
+// that follows, since a snapshot taken while the person decides renumbers every ref, and the yes was for this
+// element, not for whatever its ref names by then. One slot: actions run one at a time.
+export const describeRef = (ref: string, pin?: string): RefDescription => {
     const refs = (window as unknown as { intenticPageRefs?: Element[] }).intenticPageRefs ?? [];
     const index = /^e(\d+)$/.exec(ref.trim());
     const el = index?.[1] === undefined ? undefined : refs[Number(index[1])];
     if (el === undefined || !el.isConnected) {
         return { ok: false, role: "", name: "", sensitive: false };
+    }
+    if (pin !== undefined) {
+        (window as unknown as { intenticPinned?: { pin: string; el: Element } }).intenticPinned = { pin, el };
     }
     const text = ((el as HTMLElement).innerText ?? el.textContent ?? el.getAttribute("value") ?? el.getAttribute("aria-label") ?? "")
         .trim()
@@ -198,44 +211,84 @@ export const describeRef = (ref: string): RefDescription => {
 };
 
 // Clicks like a person would: dispatches the pointer/mouse sequence first (some frameworks listen on pointerdown,
-// not .click()), then calls the element's own click().
-export const clickRef = (ref: string): { ok: boolean; message: string } => {
-    const refs = (window as unknown as { intenticPageRefs?: Element[] }).intenticPageRefs ?? [];
-    const index = /^e(\d+)$/.exec(ref.trim());
-    const el = index?.[1] === undefined ? undefined : refs[Number(index[1])];
+// not .click()), then calls click(). With `pin` (describeRef) it clicks the element the person was asked about.
+export const clickRef = (ref: string, pin?: string): ActionResult => {
+    const resolve = (): Element | undefined => {
+        const holder = window as unknown as { intenticPageRefs?: Element[]; intenticPinned?: { pin: string; el: Element } | undefined };
+        const pinned = holder.intenticPinned;
+        holder.intenticPinned = undefined;
+        if (pin !== undefined) {
+            return pinned?.pin === pin ? pinned.el : undefined;
+        }
+        const index = /^e(\d+)$/.exec(ref.trim());
+        return index?.[1] === undefined ? undefined : holder.intenticPageRefs?.[Number(index[1])];
+    };
+    // The events go to what a person's pointer would land on, the innermost element at the centre, so they bubble
+    // through every listener between it and the ref: PrimeVue's menus listen on a div INSIDE the li[role=menuitem]
+    // a snapshot names, and a click dispatched on the li itself never reaches it (the tool said "clicked" and the
+    // menu's command never ran). Anything else on top (an overlay, a backdrop) is not what was asked for: the ref
+    // itself gets the click, as before.
+    const landsOn = (el: Element, x: number, y: number): Element => {
+        let hit = document.elementFromPoint?.(x, y) ?? null;
+        while (hit?.shadowRoot) {
+            const inner = hit.shadowRoot.elementFromPoint(x, y);
+            if (inner === null || inner === hit) {
+                break;
+            }
+            hit = inner;
+        }
+        for (let at: Node | null = hit; at !== null; at = at.parentNode ?? (at instanceof ShadowRoot ? at.host : null)) {
+            if (at === el) {
+                return hit ?? el;
+            }
+        }
+        return el;
+    };
+    const el = resolve();
     if (el === undefined) {
         return { ok: false, message: `No element ${ref} on this page: take a fresh snapshot, the page has changed.` };
     }
-    if (!el.isConnected) {
-        return { ok: false, message: `${ref} is gone from the page: take a fresh snapshot.` };
+    // No box is gone too: a menu hidden rather than removed still holds its items, and a click on one is a click on
+    // nothing the person can see.
+    const box = el.isConnected ? el.getBoundingClientRect() : undefined;
+    if (box === undefined || box.width <= 0 || box.height <= 0) {
+        return { ok: false, gone: true, message: `${ref} is gone from the page: take a fresh snapshot.` };
     }
     el.scrollIntoView?.({ block: "center", inline: "center" });
-    const target = el as HTMLElement;
-    target.focus?.();
+    (el as HTMLElement).focus?.();
     const rect = el.getBoundingClientRect();
-    const init = {
-        bubbles: true,
-        cancelable: true,
-        composed: true,
-        clientX: rect.left + rect.width / 2,
-        clientY: rect.top + rect.height / 2,
-    };
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    const target = landsOn(el, x, y);
+    const init = { bubbles: true, cancelable: true, composed: true, clientX: x, clientY: y };
     target.dispatchEvent(new PointerEvent("pointerdown", init));
     target.dispatchEvent(new MouseEvent("mousedown", init));
     target.dispatchEvent(new PointerEvent("pointerup", init));
     target.dispatchEvent(new MouseEvent("mouseup", init));
-    target.click();
+    (target as HTMLElement).click();
     return { ok: true, message: `clicked` };
 };
 
 // Types into a field via the prototype's native value setter, not `el.value =`: frameworks like React override
 // that property, so a direct assign updates the display but not what the framework tracks.
-export const fillRef = (ref: string, text: string, submit: boolean): { ok: boolean; message: string } => {
-    const refs = (window as unknown as { intenticPageRefs?: Element[] }).intenticPageRefs ?? [];
-    const index = /^e(\d+)$/.exec(ref.trim());
-    const el = index?.[1] === undefined ? undefined : refs[Number(index[1])];
-    if (el === undefined || !el.isConnected) {
+// `pin` as in clickRef: the field the person was asked about, not whatever its ref names by now.
+export const fillRef = (ref: string, text: string, submit: boolean, pin?: string): ActionResult => {
+    const resolve = (): Element | undefined => {
+        const holder = window as unknown as { intenticPageRefs?: Element[]; intenticPinned?: { pin: string; el: Element } | undefined };
+        const pinned = holder.intenticPinned;
+        holder.intenticPinned = undefined;
+        if (pin !== undefined) {
+            return pinned?.pin === pin ? pinned.el : undefined;
+        }
+        const index = /^e(\d+)$/.exec(ref.trim());
+        return index?.[1] === undefined ? undefined : holder.intenticPageRefs?.[Number(index[1])];
+    };
+    const el = resolve();
+    if (el === undefined) {
         return { ok: false, message: `No element ${ref} on this page: take a fresh snapshot.` };
+    }
+    if (!el.isConnected) {
+        return { ok: false, gone: true, message: `${ref} is gone from the page: take a fresh snapshot.` };
     }
     const target = el as HTMLElement;
     target.scrollIntoView?.({ block: "center" });
@@ -371,14 +424,43 @@ export const flashBanner = (message: string): void => {
     setTimeout(() => host.remove(), 4000);
 };
 
-// Confirms in the page itself, not the popup or window.confirm() (which blocks the page's event agent). Resolves
-// false on timeout: an unanswered question is a no.
+// Asks in the page itself, beside what it is about, rather than in the popup or window.confirm() (which blocks the
+// page's event agent), and without becoming part of the page. A person's click on a panel in the page used to
+// reach the page too, as a click outside whatever menu or popover the agent had opened, and the page closed it
+// (PrimeVue's menus hide on any document click outside them), so the click they allowed had nothing left to land
+// on. Every event aimed at the panel is stopped at the window, ahead of the page's own listeners on the document and
+// below, and pressing a button does not move focus. The shadow root is closed and only a trusted click answers: a
+// snapshot cannot list these buttons, and neither the agent's own click nor the page's script can say yes for the
+// person. Resolves false on timeout: an unanswered question is a no.
 export const askConfirm = async (question: string, timeoutMs: number): Promise<boolean> => {
+    // Everything a pointer, a finger or a key sends; listening on the window in the capture phase runs ahead of every
+    // listener the page put on its document or elements (only one it put on the window earlier still sees these).
+    const EVENTS = [
+        "pointerdown",
+        "pointerup",
+        "pointerover",
+        "pointerout",
+        "pointermove",
+        "mousedown",
+        "mouseup",
+        "mouseover",
+        "mouseout",
+        "mousemove",
+        "click",
+        "dblclick",
+        "auxclick",
+        "contextmenu",
+        "touchstart",
+        "touchend",
+        "focusin",
+        "focusout",
+        "keydown",
+        "keyup",
+        "keypress",
+    ];
     return await new Promise<boolean>((resolve) => {
         const host = document.createElement("div");
-        host.attachShadow({ mode: "open" });
-        document.documentElement.append(host);
-        const root = host.shadowRoot as ShadowRoot;
+        const root = host.attachShadow({ mode: "closed" });
         const panel = document.createElement("div");
         panel.setAttribute(
             "style",
@@ -421,16 +503,47 @@ export const askConfirm = async (question: string, timeoutMs: number): Promise<b
         };
         const no = button("No", false);
         const yes = button("Allow", true);
+        // Which button a click chose. The listener sits outside a closed root, so the event's path stops at the host;
+        // the pointer's position says which button it was on, and a click from the keyboard (detail 0, no position)
+        // lands on the one with focus.
+        const chosen = (event: MouseEvent): boolean | undefined => {
+            const on = (element: Element): boolean => {
+                const box = element.getBoundingClientRect();
+                return event.clientX >= box.left && event.clientX <= box.right && event.clientY >= box.top && event.clientY <= box.bottom;
+            };
+            const picked = event.detail === 0 ? root.activeElement : [no, yes].find(on);
+            return picked === yes ? true : picked === no ? false : undefined;
+        };
+        const swallow = (event: Event): void => {
+            if (event.target !== host) {
+                return;
+            }
+            event.stopImmediatePropagation();
+            // A press's default is to focus what it lands on, which would take focus from the menu the agent opened.
+            if (event.type === "mousedown") {
+                event.preventDefault();
+            }
+            // SAFETY: only a "click" is read, and every click is a MouseEvent.
+            const answer = event.isTrusted && event.type === "click" ? chosen(event as MouseEvent) : undefined;
+            if (answer !== undefined) {
+                finish(answer);
+            }
+        };
         const finish = (answer: boolean): void => {
             clearTimeout(timer);
+            for (const type of EVENTS) {
+                window.removeEventListener(type, swallow, true);
+            }
             host.remove();
             resolve(answer);
         };
-        no.addEventListener("click", () => finish(false));
-        yes.addEventListener("click", () => finish(true));
+        for (const type of EVENTS) {
+            window.addEventListener(type, swallow, true);
+        }
         row.append(no, yes);
         panel.append(text, row);
         root.append(panel);
+        document.documentElement.append(host);
         const timer = setTimeout(() => finish(false), timeoutMs);
     });
 };

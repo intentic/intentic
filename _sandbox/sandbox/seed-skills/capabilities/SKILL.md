@@ -1,6 +1,6 @@
 ---
 name: capabilities
-description: Ask the owner, on a card in chat, to connect a capability the task needs (a connector, an account, Docker, a server, a device), to change a setting on one, or to replace a refused credential, via the `capabilities` CLI. Use whenever a task hits something this sandbox isn't connected to: check what's connectable, then raise the ask instead of describing manual setup steps.
+description: Ask the owner, on a card in chat, to connect a capability the task needs (a connector, an account, Docker, a server, a device, a linked sandbox), to change a setting on one, to replace a refused credential, or to remove one, via the `capabilities` CLI. Use whenever a task hits something this sandbox isn't connected to: check what's connectable, then raise the ask instead of describing manual setup steps.
 ---
 
 # Missing capabilities
@@ -24,6 +24,11 @@ capabilities request <connection> --set key=value --why "…"
                                            # change a setting on a connected one: a device switch, a Docker option
 capabilities request <connection> --reconnect --why "…"
                                            # it is connected, but its credential is being refused
+capabilities request <connection> --remove --why "…"
+                                           # take one away: the owner removes it with one press
+capabilities request link --target <sandbox> --why "…"
+                                           # link another of the owner's sandboxes: the card pairs the
+                                           # one named, by its name or address, in one press
 ```
 
 Every ask answers the same way:
@@ -57,7 +62,10 @@ What that leaves you:
 3. **"Already connected" is checked against this turn.** A connection your persona leaves out, one for a
    different host, or one whose credential is refused is not "use it": the answer says which, and the next
    step (`grants request capability <id>`, a new connection for that host, `--reconnect`).
-4. **One ask per capability.** A decline means continue without it. The daemon refuses a repeat ask for a card
+4. **Removing is an ask too.** When a task is done with a connection it made (a test link, a throwaway
+   account), `--remove` puts the Remove press in front of the owner instead of describing where it is. A name
+   several connections share is refused: ask for the one you mean by its id.
+5. **One ask per capability.** A decline means continue without it. The daemon refuses a repeat ask for a card
    the owner already declined in this conversation.
-5. **Nobody at the keyboard is not a no.** An unattended turn's ask waits in **Needs you** for the owner: finish
+6. **Nobody at the keyboard is not a no.** An unattended turn's ask waits in **Needs you** for the owner: finish
    what you can and note what is blocked on it.

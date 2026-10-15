@@ -29,8 +29,10 @@ export const isOpenNeed = (need: { readonly status: NeedStatus }): boolean => OP
 const FieldValuesSchema = z.record(z.string(), z.string());
 
 export const CapabilityNeedModeSchema = z
-    .enum(["connect", "reconnect", "change"])
-    .describe("Connect something new, give a connected one a credential that works again, or change a setting on a connected one.");
+    .enum(["connect", "reconnect", "change", "remove"])
+    .describe(
+        "Connect something new, give a connected one a credential that works again, change a setting on a connected one, or remove a connected one.",
+    );
 export type CapabilityNeedMode = z.infer<typeof CapabilityNeedModeSchema>;
 
 export const CapabilityNeedSchema = z.object({
@@ -38,7 +40,7 @@ export const CapabilityNeedSchema = z.object({
     entry: z.string().min(1).describe("The catalog entry, as the catalog names it."),
     name: z.string().describe("What the catalog calls it, never the agent's spelling."),
     mode: CapabilityNeedModeSchema,
-    instance: z.string().optional().describe("The connection a reconnect or a change is about."),
+    instance: z.string().optional().describe("The connection a reconnect, a change or a removal is about."),
     target: z.string().optional().describe("The site, host or address the connection is for, when the entry can hold several."),
     prefill: FieldValuesSchema.optional().describe(
         "Settings the agent could fill in for a new connection, never a credential: the daemon keeps only the entry's own non-secret fields.",
@@ -192,6 +194,10 @@ export const NeedAskSchema = z.discriminatedUnion("kind", [
             .boolean()
             .optional()
             .describe("It is connected, but its credential is being refused: ask for a new one rather than being told to use it."),
+        remove: z
+            .boolean()
+            .optional()
+            .describe("Take a connection away: the person removes it in one press on the card, as the Capabilities page's Remove does."),
     }),
     SecretNeedSchema,
     z.object({
@@ -239,7 +245,7 @@ export const NeedAnswerSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("decline"), note: z.string().max(500).optional().describe("Why not, passed to the agent.") }),
     // A connection's yes before its form is saved: moves the need to working, so the board keeps saying so.
     z.object({ kind: z.literal("accept") }),
-    // A change to a connected capability's settings, applied as the card showed it.
+    // A change to a connected capability's settings, or its removal, applied as the card showed it.
     z.object({ kind: z.literal("apply") }),
     z.object({ kind: z.literal("grant"), scope: GrantScopeSchema }),
     z.object({ kind: z.literal("release") }),

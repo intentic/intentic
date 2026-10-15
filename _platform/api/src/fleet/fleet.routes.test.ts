@@ -89,9 +89,23 @@ const fakePrisma = (seed: Seed = {}) => {
                 deleted.push(where.id);
                 return {};
             }),
+            // The account's own rows by id: one on a machine of the owner's, one hosted. Another account's is not found.
+            findFirst: jest.fn(async ({ where }: { where: { id: string; ownerId: string } }) => {
+                const rows: Record<string, { id: string; name: string; hosted: { appName: string } | null }> = {
+                    "sbx-2": { id: `sbx-2`, name: `never-came-up`, hosted: null },
+                    "sbx-hosted": { id: `sbx-hosted`, name: `cloud`, hosted: { appName: `fly-app` } },
+                };
+                return where.ownerId === `user-1` ? (rows[where.id] ?? null) : null;
+            }),
         },
     };
     return { prisma: prisma as unknown as PrismaClient, created, deleted, updates };
+};
+
+const trashed: string[] = [];
+const trash = async (sandboxId: string) => {
+    trashed.push(sandboxId);
+    return { purgeAfter: new Date(`2026-09-28T12:00:00Z`) };
 };
 
 const app = (prisma: PrismaClient, over: Partial<Config> = {}) => {
@@ -102,7 +116,7 @@ const app = (prisma: PrismaClient, over: Partial<Config> = {}) => {
         c.set(`logger`, logger);
         await next();
     });
-    host.route(`/`, fleetHttpRoutes({ config: { ...config, ...over }, prisma, now: () => NOW }));
+    host.route(`/`, fleetHttpRoutes({ config: { ...config, ...over }, prisma, now: () => NOW, trash }));
     return (path: string, init: { method?: string; body?: unknown; token?: string } = {}) =>
         host.request(path, {
             method: init.method ?? `GET`,
@@ -183,4 +197,22 @@ it(`refuses a body that is not a name`, async () => {
     const { prisma } = fakePrisma();
     expect((await app(prisma)(`/provision`, { method: `POST`, body: { name: `` } })).status).toBe(400);
     expect((await app(prisma)(`/provision`, { method: `POST`, body: { definition: `x` } })).status).toBe(400);
+});
+
+// 2026-10-15: a sandbox an agent created never came up, and only a person in the app could take it back off the account.
+it(`moves one of the account's own-machine sandboxes to the trash, saying until when it can come back`, async () => {
+    trashed.length = 0;
+    const response = await app(fakePrisma().prisma)(`/remove`, { method: `POST`, body: { sandboxId: `sbx-2` } });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ name: `never-came-up`, recoverableUntil: `2026-09-28T12:00:00.000Z` });
+    expect(trashed).toEqual([`sbx-2`]);
+});
+
+it(`refuses a hosted sandbox, one this account does not have, a bad body and a revoked token, trashing nothing`, async () => {
+    trashed.length = 0;
+    expect((await app(fakePrisma().prisma)(`/remove`, { method: `POST`, body: { sandboxId: `sbx-hosted` } })).status).toBe(403);
+    expect((await app(fakePrisma().prisma)(`/remove`, { method: `POST`, body: { sandboxId: `sbx-elsewhere` } })).status).toBe(404);
+    expect((await app(fakePrisma().prisma)(`/remove`, { method: `POST`, body: {} })).status).toBe(400);
+    expect((await app(fakePrisma({ revoked: true }).prisma)(`/remove`, { method: `POST`, body: { sandboxId: `sbx-2` } })).status).toBe(401);
+    expect(trashed).toEqual([]);
 });

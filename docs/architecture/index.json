@@ -533,6 +533,11 @@
     {
       "dev": false,
       "from": "_editor/web",
+      "to": "_extensions/e-urzad"
+    },
+    {
+      "dev": false,
+      "from": "_editor/web",
       "to": "_extensions/git-history"
     },
     {
@@ -766,6 +771,46 @@
       "to": "_tools/tsconfig"
     },
     {
+      "dev": true,
+      "from": "_extensions/e-urzad",
+      "to": "_shared/connector-runtime"
+    },
+    {
+      "dev": false,
+      "from": "_extensions/e-urzad",
+      "to": "_shared/extension-api"
+    },
+    {
+      "dev": false,
+      "from": "_extensions/e-urzad",
+      "to": "_shared/extension-manifest"
+    },
+    {
+      "dev": false,
+      "from": "_extensions/e-urzad",
+      "to": "_shared/extension-ui"
+    },
+    {
+      "dev": true,
+      "from": "_extensions/e-urzad",
+      "to": "_shared/sandbox-contract"
+    },
+    {
+      "dev": true,
+      "from": "_extensions/e-urzad",
+      "to": "_tools/base"
+    },
+    {
+      "dev": true,
+      "from": "_extensions/e-urzad",
+      "to": "_tools/testing"
+    },
+    {
+      "dev": true,
+      "from": "_extensions/e-urzad",
+      "to": "_tools/tsconfig"
+    },
+    {
       "dev": false,
       "from": "_extensions/git-history",
       "to": "_shared/extension-api"
@@ -847,6 +892,31 @@
     },
     {
       "dev": false,
+      "from": "_extensions/microsoft-365",
+      "to": "_shared/connector-runtime"
+    },
+    {
+      "dev": false,
+      "from": "_extensions/microsoft-365",
+      "to": "_shared/sandbox-contract"
+    },
+    {
+      "dev": false,
+      "from": "_extensions/microsoft-365",
+      "to": "_tools/base"
+    },
+    {
+      "dev": true,
+      "from": "_extensions/microsoft-365",
+      "to": "_tools/testing"
+    },
+    {
+      "dev": true,
+      "from": "_extensions/microsoft-365",
+      "to": "_tools/tsconfig"
+    },
+    {
+      "dev": false,
       "from": "_extensions/onlyoffice",
       "to": "_shared/extension-api"
     },
@@ -913,6 +983,31 @@
     {
       "dev": true,
       "from": "_extensions/pipelines",
+      "to": "_tools/tsconfig"
+    },
+    {
+      "dev": false,
+      "from": "_extensions/prawo",
+      "to": "_shared/connector-runtime"
+    },
+    {
+      "dev": false,
+      "from": "_extensions/prawo",
+      "to": "_shared/sandbox-contract"
+    },
+    {
+      "dev": false,
+      "from": "_extensions/prawo",
+      "to": "_tools/base"
+    },
+    {
+      "dev": true,
+      "from": "_extensions/prawo",
+      "to": "_tools/testing"
+    },
+    {
+      "dev": true,
+      "from": "_extensions/prawo",
       "to": "_tools/tsconfig"
     },
     {
@@ -2688,18 +2783,17 @@
           "what": "the shapes as text in, lines out; held to the layout fixture ic shares."
         }
       ],
-      "behind": 2,
+      "behind": 0,
       "component": "devices",
       "dir": "_devices/local-agent",
       "files": 14,
       "hasTests": true,
-      "loc": 3385,
+      "loc": 3638,
       "name": "@intentic/local-agent",
       "oneLiner": "The shared plumbing for intentic CLIs that run on a user's own computer: a private state directory, login autostart, re-launching itself, and one background agent found again by pidfile.",
-      "readmeRev": "ff8b4ede09f7936230e3588ea02f6d0635b7700a",
-      "reason": "2 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1791714276000
+      "readmeRev": "7dd0e1be52cb0dafeb5acdc11aeab7d227b2c4da",
+      "stale": false,
+      "updatedAt": 1792091007000
     },
     {
       "anchors": [
@@ -2791,14 +2885,14 @@
       "behind": 0,
       "component": "devices",
       "dir": "_devices/machine",
-      "files": 216,
+      "files": 220,
       "hasTests": true,
-      "loc": 42046,
+      "loc": 42485,
       "name": "@intentic/machine",
       "oneLiner": "intentic-machine, the one agent on a user's own computer: it lets a paired sandbox work on the device under scopes enforced locally, and mirrors a sandbox's folder and ports onto it.",
-      "readmeRev": "ddb5c18da80d222e9e5186f4cce93543c4761c51",
+      "readmeRev": "7dd0e1be52cb0dafeb5acdc11aeab7d227b2c4da",
       "stale": false,
-      "updatedAt": 1791897398000
+      "updatedAt": 1792091007000
     },
     {
       "anchors": [
@@ -2832,7 +2926,7 @@
       "dir": "_devices/webext",
       "files": 33,
       "hasTests": true,
-      "loc": 4015,
+      "loc": 4334,
       "name": "@intentic/webext",
       "oneLiner": "The Chrome extension that lets an intentic sandbox work in the user's own signed-in browser, on the sites they allow, over one outbound WebSocket.",
       "readmeRev": "cdd21d419cd19d83541365686f7af7c158a51021",
@@ -2920,6 +3014,10 @@
           "what": "and src-tauri/src/prefetch.rs — a Windows setup across restarts: the sign-in entry that resumes it, and the sandbox image fetched while Docker is installed."
         },
         {
+          "path": "_editor/desktop-app/src-tauri/src/wake.rs",
+          "what": ", src-tauri/src/microphone.rs and src-tauri/src/autostart.rs — the wake word with the window in the tray: what the page says and is told, the tray's rows, the microphone for the workspace alone, and the start at sign-in."
+        },
+        {
           "path": "_editor/desktop-app/src-tauri/src/found.rs",
           "what": "what this computer already uses: the subscriptions its AI tools are signed in to, by who they are for, and the folders their histories name."
         },
@@ -2964,7 +3062,7 @@
           "what": "and src/device/intenticOs/SystemCard.vue — Intentic OS: the system as ic os reports it, the changes This device makes to it, and kiosk mode."
         }
       ],
-      "behind": 3,
+      "behind": 1,
       "component": "editor",
       "dir": "_editor/desktop-app",
       "files": 99,
@@ -2972,10 +3070,10 @@
       "loc": 15073,
       "name": "@intentic/desktop-app",
       "oneLiner": "The Tauri app for Windows and Linux that opens the editor on a folder of the user's own computer from the first launch, with no account, runs sandboxes on that computer from its This device view,…",
-      "readmeRev": "4772498b7fa2d6ec6c31e487e1aba13bbebd2da4",
-      "reason": "3 commits have touched this package since its README was written",
+      "readmeRev": "d48ed455c34e8e21a99d6ecbcd2e661651f75192",
+      "reason": "1 commit has touched this package since its README was written",
       "stale": true,
-      "updatedAt": 1791898218000
+      "updatedAt": 1791928157000
     },
     {
       "anchors": [],
@@ -3016,16 +3114,16 @@
           "what": "what a local window may call, why its documents cannot, and why the workspace gets nothing."
         }
       ],
-      "behind": 19,
+      "behind": 3,
       "dir": "_editor/desktop-app/src-tauri",
-      "files": 37,
+      "files": 40,
       "hasTests": false,
-      "loc": 37605,
+      "loc": 39163,
       "oneLiner": "The Rust crate behind the desktop app, owning its windows, tray, intentic:// links, script runs and self-update.",
-      "readmeRev": "a7fe7270555d4ed6a4858417ffd9db4c63840184",
-      "reason": "19 commits have touched this package since its README was written",
+      "readmeRev": "4b4dacf7da773e8d6d9f88e96ce5f835bb0ffd9a",
+      "reason": "3 commits have touched this package since its README was written",
       "stale": true,
-      "updatedAt": 1791495459000
+      "updatedAt": 1791923849000
     },
     {
       "anchors": [
@@ -3129,16 +3227,16 @@
           "what": "the <Button> tiers and how each maps onto PrimeVue."
         }
       ],
-      "behind": 1,
+      "behind": 3,
       "component": "editor",
       "dir": "_editor/ui",
       "files": 235,
       "hasTests": false,
-      "loc": 27454,
+      "loc": 27475,
       "name": "@intentic/ui",
       "oneLiner": "The design system every editor surface mounts, holding the Vue components, composables, icons, theme tokens, translations and the product's one markdown engine.",
       "readmeRev": "b41fa9441a6038fa4c83206a05bd8d3493cb63a6",
-      "reason": "1 commit has touched this package since its README was written",
+      "reason": "3 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1791900389000
     },
@@ -3169,18 +3267,18 @@
           "what": "the persistent shell, split by form factor."
         }
       ],
-      "behind": 19,
+      "behind": 6,
       "component": "editor",
       "dir": "_editor/web",
-      "files": 2441,
+      "files": 2486,
       "hasTests": true,
-      "loc": 358736,
+      "loc": 365873,
       "name": "@intentic/web",
       "oneLiner": "The Vue app the user works in, with files, chat, terminals and agents, talking to the platform for the account and straight to the sandbox daemon for everything else.",
-      "readmeRev": "b7cd9dd7cea6b43bfe44904e58c484f25c07103a",
-      "reason": "19 commits have touched this package since its README was written",
+      "readmeRev": "a48d7cfd33628f6c9b2f97315e7e3d83dc72a91b",
+      "reason": "6 commits have touched this package since its README was written",
       "stale": true,
-      "updatedAt": 1791899338000
+      "updatedAt": 1792087577000
     },
     {
       "anchors": [
@@ -3240,9 +3338,9 @@
       "loc": 1125,
       "name": "@intentic/ext-activity",
       "oneLiner": "The Activity section of the Sandbox hub, under Oversight beside the audit log: a read-only record of what woke the agent, which provider calls it made and how each turn went.",
-      "readmeRev": "4772498b7fa2d6ec6c31e487e1aba13bbebd2da4",
+      "readmeRev": "f6dbc53e2e4f1cb4ed652709a96e6cbb8c24803a",
       "stale": false,
-      "updatedAt": 1791898218000
+      "updatedAt": 1791921254000
     },
     {
       "anchors": [
@@ -3322,14 +3420,14 @@
       "behind": 0,
       "component": "extensions",
       "dir": "_extensions/automations",
-      "files": 24,
+      "files": 25,
       "hasTests": true,
-      "loc": 6536,
+      "loc": 6609,
       "name": "@intentic/ext-automations",
       "oneLiner": "The Automations rail view, where the owner creates, edits and watches the agent's wake-ups: a trigger, an optional guard and the prompt the agent wakes with.",
-      "readmeRev": "4772498b7fa2d6ec6c31e487e1aba13bbebd2da4",
+      "readmeRev": "a48d7cfd33628f6c9b2f97315e7e3d83dc72a91b",
       "stale": false,
-      "updatedAt": 1791898218000
+      "updatedAt": 1792087577000
     },
     {
       "anchors": [
@@ -3385,9 +3483,9 @@
       "loc": 0,
       "name": "@intentic/ext-connectors",
       "oneLiner": "A data-only extension that adds the first-party connection cards for developer and business services, from GitHub and Sentry to Postgres and Stripe, each with its agent skill.",
-      "readmeRev": "4772498b7fa2d6ec6c31e487e1aba13bbebd2da4",
+      "readmeRev": "a48d7cfd33628f6c9b2f97315e7e3d83dc72a91b",
       "stale": false,
-      "updatedAt": 1791898218000
+      "updatedAt": 1792087577000
     },
     {
       "anchors": [
@@ -3459,6 +3557,44 @@
       "readmeRev": "0bcc1997bcbbcb9c32c289882c90dcd50f7383b2",
       "stale": false,
       "updatedAt": 1791888628000
+    },
+    {
+      "anchors": [
+        {
+          "path": "_extensions/e-urzad/intentic-extension.json",
+          "what": ": the two cards, the view, the bin, the per-card tools."
+        },
+        {
+          "path": "_extensions/e-urzad/src/core/guard.ts",
+          "what": ": action-rule keys, holding, and the approved run's checks."
+        },
+        {
+          "path": "_extensions/e-urzad/src/actions.ts",
+          "what": ": each office act as a proposal, and the one function that performs it."
+        },
+        {
+          "path": "_extensions/e-urzad/src/ezd/integrator.ts",
+          "what": "and src/ed/mailbox.ts: the two API clients, with the documents they follow."
+        },
+        {
+          "path": "_extensions/e-urzad/src/signatures/verify.ts",
+          "what": ": the verifier's entry; src/signatures/report.ts says why integrity, trust and qualification are kept apart."
+        },
+        {
+          "path": "_extensions/e-urzad/skills/e-urzad/SKILL.md",
+          "what": ": what the agent reads once a card is connected."
+        }
+      ],
+      "behind": 0,
+      "dir": "_extensions/e-urzad",
+      "files": 57,
+      "hasTests": true,
+      "loc": 5587,
+      "name": "@intentic/ext-e-urzad",
+      "oneLiner": "EZD RP (the government's document management system) and e-Doręczenia (registered electronic delivery) for a Polish public office, plus electronic-signature checks, as an agent CLI, per-card MCP…",
+      "readmeRev": "a48d7cfd33628f6c9b2f97315e7e3d83dc72a91b",
+      "stale": false,
+      "updatedAt": 1792087577000
     },
     {
       "anchors": [
@@ -3544,7 +3680,15 @@
         },
         {
           "path": "_extensions/imap/src/connection.ts",
-          "what": "one account's lifecycle: connect, catch up, IDLE."
+          "what": "one account's lifecycle: sign in, connect, catch up, IDLE."
+        },
+        {
+          "path": "_extensions/imap/src/oauth.ts",
+          "what": "OAuth2: minting access tokens, Exchange Online's device-code sign-in."
+        },
+        {
+          "path": "_extensions/imap/src/cli.ts",
+          "what": "the imap CLI: send, curl, login."
         },
         {
           "path": "_extensions/imap/src/normalize.ts",
@@ -3566,14 +3710,57 @@
       "behind": 0,
       "component": "extensions",
       "dir": "_extensions/imap",
-      "files": 10,
+      "files": 14,
       "hasTests": true,
-      "loc": 1121,
+      "loc": 1785,
       "name": "@intentic/ext-imap",
-      "oneLiner": "The IMAP connection: an email card whose skill reads the inbox with curl and composes SMTP mail, plus a gateway that watches the mailbox and wakes automations when mail arrives.",
-      "readmeRev": "4772498b7fa2d6ec6c31e487e1aba13bbebd2da4",
+      "oneLiner": "The IMAP connection: an email card that gives the agent imap, a small CLI for reading the inbox through curl and sending SMTP mail, plus a gateway that watches the mailbox and wakes automations when…",
+      "readmeRev": "a48d7cfd33628f6c9b2f97315e7e3d83dc72a91b",
       "stale": false,
-      "updatedAt": 1791898218000
+      "updatedAt": 1792087577000
+    },
+    {
+      "anchors": [
+        {
+          "path": "_extensions/microsoft-365/intentic-extension.json",
+          "what": "the card and its guide, the listener, the watcher process."
+        },
+        {
+          "path": "_extensions/microsoft-365/src/auth.ts",
+          "what": "device-code sign-in, token refresh and rotation, storage on the card."
+        },
+        {
+          "path": "_extensions/microsoft-365/src/commands.ts",
+          "what": "the command line: which flags each command reads, then mail,"
+        },
+        {
+          "path": "_extensions/microsoft-365/src/actions.ts",
+          "what": "action rules, the frozen approval and its single run."
+        },
+        {
+          "path": "_extensions/microsoft-365/src/graph.ts",
+          "what": "Graph calls pinned to the card's cloud, bounded pagination, read-only refusal."
+        },
+        {
+          "path": "_extensions/microsoft-365/src/watch.ts",
+          "what": "and src/gateway.ts — the inbox watcher."
+        },
+        {
+          "path": "_extensions/microsoft-365/skills/microsoft365/SKILL.md",
+          "what": "what the agent is taught, with Polish office examples."
+        }
+      ],
+      "behind": 0,
+      "component": "extensions",
+      "dir": "_extensions/microsoft-365",
+      "files": 20,
+      "hasTests": true,
+      "loc": 2311,
+      "name": "@intentic/ext-microsoft-365",
+      "oneLiner": "The Microsoft 365 connection: one card per office user that gives the agent m365, a CLI for Outlook mail, the Outlook calendar and OneDrive or SharePoint documents, plus a watcher that wakes…",
+      "readmeRev": "a48d7cfd33628f6c9b2f97315e7e3d83dc72a91b",
+      "stale": false,
+      "updatedAt": 1792087577000
     },
     {
       "anchors": [
@@ -3709,6 +3896,49 @@
     {
       "anchors": [
         {
+          "path": "_extensions/prawo/src/cli.ts",
+          "what": "the commands and their flags, errors on stdout with exit 2."
+        },
+        {
+          "path": "_extensions/prawo/src/law/law.ts",
+          "what": "status, the choice of text, amendments after it, the cache in front of the sources."
+        },
+        {
+          "path": "_extensions/prawo/src/law/citation.ts",
+          "what": "journal addresses and the Polish citation forms."
+        },
+        {
+          "path": "_extensions/prawo/src/sources/eli.ts",
+          "what": "and src/sources/saos.ts — the two APIs, with the"
+        },
+        {
+          "path": "_extensions/prawo/src/text",
+          "what": "PDF text and HTML into articles and units."
+        },
+        {
+          "path": "_extensions/prawo/skills/prawo/SKILL.md",
+          "what": "what the agent is told: find, check status, quote, cite."
+        },
+        {
+          "path": "_extensions/prawo/src/fixtures",
+          "what": "trimmed real answers of both APIs and real fileq output, for the tests."
+        }
+      ],
+      "behind": 0,
+      "component": "extensions",
+      "dir": "_extensions/prawo",
+      "files": 18,
+      "hasTests": true,
+      "loc": 2797,
+      "name": "@intentic/ext-prawo",
+      "oneLiner": "Polish law for the agent: one card that gives it prawo, a CLI that finds acts in the Sejm's database, says whether they are in force, quotes the current text article by article with the citation to…",
+      "readmeRev": "a48d7cfd33628f6c9b2f97315e7e3d83dc72a91b",
+      "stale": false,
+      "updatedAt": 1792087577000
+    },
+    {
+      "anchors": [
+        {
           "path": "_extensions/preview/src/extension.ts",
           "what": "registers the two Sandbox hub tabs."
         },
@@ -3837,7 +4067,7 @@
       "anchors": [
         {
           "path": "_extensions/social/intentic-extension.json",
-          "what": "the three cards: names, hints, login and home URLs."
+          "what": "the six cards: names, hints, login and home URLs."
         },
         {
           "path": "_extensions/social/skills/reddit/SKILL.md",
@@ -3850,6 +4080,18 @@
         {
           "path": "_extensions/social/skills/youtube/SKILL.md",
           "what": "watching, commenting and subscribing on YouTube."
+        },
+        {
+          "path": "_extensions/social/skills/facebook/SKILL.md",
+          "what": "posting, commenting, reacting and joining groups on Facebook."
+        },
+        {
+          "path": "_extensions/social/skills/instagram/SKILL.md",
+          "what": "commenting, following and publishing posts on Instagram."
+        },
+        {
+          "path": "_extensions/social/skills/tiktok/SKILL.md",
+          "what": "commenting, following and uploading videos on TikTok."
         }
       ],
       "behind": 0,
@@ -3859,10 +4101,10 @@
       "hasTests": false,
       "loc": 0,
       "name": "@intentic/ext-social",
-      "oneLiner": "A data-only extension that adds Reddit, X and YouTube as browser capabilities, so the agent can act on each site as the owner through a signed-in browser.",
-      "readmeRev": "cdd21d419cd19d83541365686f7af7c158a51021",
+      "oneLiner": "A data-only extension that adds Reddit, X, YouTube, Facebook, Instagram and TikTok as browser capabilities, so the agent can act on each site as the owner through a signed-in browser.",
+      "readmeRev": "ac3b77d4f899688247649a6fcac2e7b781254d81",
       "stale": false,
-      "updatedAt": 1791106205000
+      "updatedAt": 1791923465000
     },
     {
       "anchors": [
@@ -3930,16 +4172,16 @@
           "what": "a PowerPoint file read into drawable slides."
         }
       ],
-      "behind": 5,
+      "behind": 6,
       "component": "extensions",
       "dir": "_extensions/viewers",
       "files": 65,
       "hasTests": true,
-      "loc": 8066,
+      "loc": 8067,
       "name": "@intentic/ext-viewers",
       "oneLiner": "Read-only viewers for the workspace files that are not source text: images, SVG, PDF, audio and video, Word, spreadsheets, slides, RTF and EPUB.",
       "readmeRev": "cdd21d419cd19d83541365686f7af7c158a51021",
-      "reason": "5 commits have touched this package since its README was written",
+      "reason": "6 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1791106205000
     },
@@ -4093,16 +4335,16 @@
           "what": "the hostname and signed grant each sandbox gets."
         }
       ],
-      "behind": 1,
+      "behind": 4,
       "component": "platform",
       "dir": "_platform/api",
-      "files": 167,
+      "files": 171,
       "hasTests": true,
-      "loc": 35094,
+      "loc": 35696,
       "name": "@intentic/api",
       "oneLiner": "The platform's HTTP server (@intentic/api): sign-in, the registry of sandboxes and their addresses, hosted Fly machines, the hosted plan and the agent wallet.",
       "readmeRev": "4f7c1416ec087c40b56410ad7354ffd1cffacbea",
-      "reason": "1 commit has touched this package since its README was written",
+      "reason": "4 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1791836872000
     },
@@ -4164,16 +4406,16 @@
           "what": "a guarded forward fix, the model for the runbook below."
         }
       ],
-      "behind": 8,
+      "behind": 9,
       "component": "platform",
       "dir": "_platform/prisma",
-      "files": 100,
+      "files": 103,
       "hasTests": false,
-      "loc": 58737,
+      "loc": 62449,
       "name": "@intentic/prisma",
       "oneLiner": "The platform's Postgres schema, its append-only migration history and the Prisma client generated from them, shared as @intentic/prisma.",
       "readmeRev": "cdd21d419cd19d83541365686f7af7c158a51021",
-      "reason": "8 commits have touched this package since its README was written",
+      "reason": "9 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1791106205000
     },
@@ -4250,7 +4492,11 @@
         },
         {
           "path": "_sandbox/fileq/src/lib/sidecar.ts",
-          "what": "sidecar paths, front matter and the freshness rule."
+          "what": "sidecar paths, front matter, the freshness rule and the source stat."
+        },
+        {
+          "path": "_sandbox/fileq/bin/fileq-rg-pre",
+          "what": "ripgrep's preprocessor for documents; fileq ripgrep-config wires it."
         },
         {
           "path": "_sandbox/fileq/src/lib/check/check.ts",
@@ -4261,18 +4507,17 @@
           "what": "fileq render: conversion, rasterizing and the render cache."
         }
       ],
-      "behind": 6,
+      "behind": 0,
       "component": "sandbox",
       "dir": "_sandbox/fileq",
-      "files": 59,
+      "files": 62,
       "hasTests": true,
-      "loc": 8443,
+      "loc": 8911,
       "name": "@intentic/fileq",
       "oneLiner": "A CLI that shows an agent the contents of binary workspace files (Office documents, PDFs, images, audio, archives) as budgeted markdown, cached by content, and checks and draws the documents an…",
-      "readmeRev": "cdd21d419cd19d83541365686f7af7c158a51021",
-      "reason": "6 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1791106205000
+      "readmeRev": "a48d7cfd33628f6c9b2f97315e7e3d83dc72a91b",
+      "stale": false,
+      "updatedAt": 1792087577000
     },
     {
       "anchors": [
@@ -4385,15 +4630,16 @@
           "what": "ic image prefetch and the cache connect loads; src/fetch.rs"
         }
       ],
-      "behind": 0,
+      "behind": 1,
       "component": "sandbox",
       "dir": "_sandbox/ic",
       "files": 92,
       "hasTests": false,
-      "loc": 55569,
+      "loc": 55579,
       "oneLiner": "The host-side CLI that starts, updates, diagnoses and removes intentic sandbox containers on the machine that runs them, and gets Docker there first.",
       "readmeRev": "786904ec51edc68f4e6be5b2052689f4d2d4ef94",
-      "stale": false,
+      "reason": "1 commit has touched this package since its README was written",
+      "stale": true,
       "updatedAt": 1791918884000
     },
     {
@@ -4610,17 +4856,18 @@
           "what": "streamAgent: one turn, from placement to settlement."
         }
       ],
-      "behind": 0,
+      "behind": 3,
       "component": "sandbox",
       "dir": "_sandbox/sandbox",
-      "files": 2619,
+      "files": 2638,
       "hasTests": true,
-      "loc": 436725,
+      "loc": 440298,
       "name": "@intentic/sandbox",
       "oneLiner": "The Node daemon at the center of every sandbox: it runs coding agents in git worktrees, serves the workspace to the editor, and lands their work.",
-      "readmeRev": "c4f5e9d3c6b7e7bac6fd789756f759b0ddf5597a",
-      "stale": false,
-      "updatedAt": 1791920240000
+      "readmeRev": "a48d7cfd33628f6c9b2f97315e7e3d83dc72a91b",
+      "reason": "3 commits have touched this package since its README was written",
+      "stale": true,
+      "updatedAt": 1792087577000
     },
     {
       "anchors": [
@@ -4862,20 +5109,23 @@
         {
           "path": "_search/iq-engine/src/workspace/floor.ts",
           "what": "what no query can ever surface."
+        },
+        {
+          "path": "_search/iq-engine/src/workspace/shadows.ts",
+          "what": "documents read through their fileq shadows."
         }
       ],
-      "behind": 5,
+      "behind": 0,
       "component": "search",
       "dir": "_search/iq-engine",
-      "files": 114,
+      "files": 116,
       "hasTests": true,
-      "loc": 13538,
+      "loc": 13779,
       "name": "@intentic/iq-engine",
       "oneLiner": "The search engine behind iq: it indexes a workspace into SQLite and answers each query by fusing lexical, structural and semantic signals into ranked, token-budgeted anchors.",
-      "readmeRev": "fcf9970ffabf93032b00da18e1cfe18bbb41ce8e",
-      "reason": "5 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1791321252000
+      "readmeRev": "a48d7cfd33628f6c9b2f97315e7e3d83dc72a91b",
+      "stale": false,
+      "updatedAt": 1792087577000
     },
     {
       "anchors": [
@@ -4936,16 +5186,16 @@
           "what": "the single typed client the editor uses."
         }
       ],
-      "behind": 6,
+      "behind": 8,
       "component": "shared",
       "dir": "_shared/api-contract",
-      "files": 7,
+      "files": 8,
       "hasTests": true,
-      "loc": 1982,
+      "loc": 2135,
       "name": "@intentic/api-contract",
       "oneLiner": "The contracts the platform api is written against: the editor's oRPC contract, and the table of plain routes machines call on it.",
       "readmeRev": "5298a848b3f1fe29b7e31a8167d84b783a8357f8",
-      "reason": "6 commits have touched this package since its README was written",
+      "reason": "8 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1791278385000
     },
@@ -4968,7 +5218,7 @@
           "what": "which effects each kind discloses."
         }
       ],
-      "behind": 7,
+      "behind": 9,
       "component": "shared",
       "dir": "_shared/capability-catalog",
       "files": 4,
@@ -4977,7 +5227,7 @@
       "name": "@intentic/capability-catalog",
       "oneLiner": "The catalog of capability tiles an owner can connect, with each tile's add form and the side effects connecting it has, shared by the editor and the daemon.",
       "readmeRev": "cdd21d419cd19d83541365686f7af7c158a51021",
-      "reason": "7 commits have touched this package since its README was written",
+      "reason": "9 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1791106205000
     },
@@ -5020,16 +5270,17 @@
           "what": "dedupe keys, chat rings and typing heartbeats."
         }
       ],
-      "behind": 0,
+      "behind": 1,
       "component": "shared",
       "dir": "_shared/connector-runtime",
-      "files": 25,
+      "files": 27,
       "hasTests": true,
-      "loc": 2936,
+      "loc": 3075,
       "name": "@intentic/connector-runtime",
       "oneLiner": "The gateway runtime every chat connector extension runs on: the reconcile loop, the daemon client, the team-chat reply, reply painters and listener memory, written once for all providers.",
       "readmeRev": "0bcc1997bcbbcb9c32c289882c90dcd50f7383b2",
-      "stale": false,
+      "reason": "1 commit has touched this package since its README was written",
+      "stale": true,
       "updatedAt": 1791888628000
     },
     {
@@ -5175,18 +5426,17 @@
           "what": "the generated authoring schema."
         }
       ],
-      "behind": 3,
+      "behind": 0,
       "component": "shared",
       "dir": "_shared/extension-manifest",
       "files": 30,
       "hasTests": true,
-      "loc": 2466,
+      "loc": 2507,
       "name": "@intentic/extension-manifest",
       "oneLiner": "The schema of intentic-extension.json: what an extension declares it contributes and may reach, which the install dialog shows and the host holds every registration to.",
-      "readmeRev": "fdbce7b4e69f78e1291f6604a44265ae20815542",
-      "reason": "3 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1791392253000
+      "readmeRev": "a48d7cfd33628f6c9b2f97315e7e3d83dc72a91b",
+      "stale": false,
+      "updatedAt": 1792087577000
     },
     {
       "anchors": [
@@ -5309,18 +5559,18 @@
           "what": "a narrow entry point, one of several that keep small bundles off the barrel."
         }
       ],
-      "behind": 4,
+      "behind": 2,
       "component": "shared",
       "dir": "_shared/sandbox-contract",
-      "files": 368,
+      "files": 372,
       "hasTests": true,
-      "loc": 53183,
+      "loc": 53749,
       "name": "@intentic/sandbox-contract",
       "oneLiner": "The wire contract between the editor and the sandbox daemon: every route, its schemas and its access policy, as one oRPC contract both ends compile against.",
-      "readmeRev": "4772498b7fa2d6ec6c31e487e1aba13bbebd2da4",
-      "reason": "4 commits have touched this package since its README was written",
+      "readmeRev": "a48d7cfd33628f6c9b2f97315e7e3d83dc72a91b",
+      "reason": "2 commits have touched this package since its README was written",
       "stale": true,
-      "updatedAt": 1791898218000
+      "updatedAt": 1792087577000
     },
     {
       "anchors": [
@@ -5512,16 +5762,16 @@
           "what": "the modes, the viewer tier and the extension override."
         }
       ],
-      "behind": 27,
+      "behind": 31,
       "component": "site",
       "dir": "_site/demo",
       "files": 55,
       "hasTests": false,
-      "loc": 12976,
+      "loc": 13042,
       "name": "@intentic/demo",
       "oneLiner": "The interactive demo at intentic.dev/demo/: the real editor built from @intentic/web source, with its network replaced by an in-browser fixture of the platform and a sandbox daemon.",
       "readmeRev": "4c132e4b4e446624b68515260ef95162a8284f64",
-      "reason": "27 commits have touched this package since its README was written",
+      "reason": "31 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1791651619000
     },
@@ -5552,7 +5802,7 @@
           "what": "the schema, limits and link allowlist for the live document."
         }
       ],
-      "behind": 2,
+      "behind": 5,
       "component": "site",
       "dir": "_site/site",
       "files": 44,
@@ -5561,7 +5811,7 @@
       "name": "@intentic/site",
       "oneLiner": "The Astro site behind intentic.dev, prerendered to static pages and served by a Cloudflare Worker that adds redirects, versionless downloads and a live notice.",
       "readmeRev": "4772498b7fa2d6ec6c31e487e1aba13bbebd2da4",
-      "reason": "2 commits have touched this package since its README was written",
+      "reason": "5 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1791898218000
     },
@@ -5592,7 +5842,7 @@
           "what": "the home page and desk page copy."
         }
       ],
-      "behind": 3,
+      "behind": 4,
       "component": "site",
       "dir": "_site/site-content",
       "files": 21,
@@ -5601,7 +5851,7 @@
       "name": "@intentic/site-content",
       "oneLiner": "The words, documentation trees and page metadata of intentic.dev as typed TypeScript data, kept apart from the Astro markup that lays them out.",
       "readmeRev": "de07fdb5f309a828adb6b716064a8a8e114d6281",
-      "reason": "3 commits have touched this package since its README was written",
+      "reason": "4 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1791709392000
     },
@@ -5672,16 +5922,16 @@
           "what": "writeFileAtomic (its synchronous twin for a write on the way out, and writeChunksAtomic for content produced a chunk at a time), renameOver, syncDirectories, queueOnFile, pathExists and freePort, the file primitives of every Node tier."
         }
       ],
-      "behind": 3,
+      "behind": 4,
       "component": "tools",
       "dir": "_tools/base",
-      "files": 72,
+      "files": 74,
       "hasTests": true,
-      "loc": 9954,
+      "loc": 10024,
       "name": "@intentic/base",
       "oneLiner": "Runtime primitives that every tier, from the daemon to the browser, must run identically: when-expressions, disposal, async schedulers, untrusted-content tags, size and token formatting, fuzzy path…",
       "readmeRev": "3574b35d51ce0640d17793ea7f5873d9878bfd43",
-      "reason": "3 commits have touched this package since its README was written",
+      "reason": "4 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1791811765000
     },
@@ -5748,16 +5998,16 @@
           "what": "the words this repository retired and what each became."
         }
       ],
-      "behind": 16,
+      "behind": 17,
       "component": "tools",
       "dir": "_tools/constants",
       "files": 29,
       "hasTests": true,
-      "loc": 3241,
+      "loc": 3263,
       "name": "@intentic/constants",
       "oneLiner": "The values several packages must agree on (ports, workspace paths, origins, install-script URLs, the sign-in client id, the hosted price ladder), defined once so no copy drifts.",
       "readmeRev": "cdd21d419cd19d83541365686f7af7c158a51021",
-      "reason": "16 commits have touched this package since its README was written",
+      "reason": "17 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1791106205000
     },
@@ -5820,16 +6070,16 @@
           "what": "per-assertion deadlines and the failure count."
         }
       ],
-      "behind": 8,
+      "behind": 9,
       "component": "tools",
       "dir": "_tools/desktop-smoke-windows",
       "files": 21,
       "hasTests": true,
-      "loc": 3000,
+      "loc": 3004,
       "name": "@intentic/desktop-smoke-windows",
       "oneLiner": "Installs the shipped NSIS installer on a real Windows machine, runs the sandbox setup it ships, drives one /agents turn, and runs Intentic's own container engine beside Docker Desktop, one tier per…",
       "readmeRev": "1aa48551c404775e35e6a20dfd895747e0d866f6",
-      "reason": "8 commits have touched this package since its README was written",
+      "reason": "9 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1791631302000
     },
@@ -5891,16 +6141,17 @@
           "what": "shared WCAG 2.1 A/AA axe scan and per-rule summaries."
         }
       ],
-      "behind": 0,
+      "behind": 1,
       "component": "tools",
       "dir": "_tools/e2e",
       "files": 37,
       "hasTests": true,
-      "loc": 3919,
+      "loc": 3924,
       "name": "@intentic/e2e",
       "oneLiner": "Playwright harnesses that drive the real web app in Chromium: the sign-in gate, the local-stack browser tier, the post-deploy sign-in smoke, the mobile geometry gate, the desktop app's local face,…",
       "readmeRev": "4772498b7fa2d6ec6c31e487e1aba13bbebd2da4",
-      "stale": false,
+      "reason": "1 commit has touched this package since its README was written",
+      "stale": true,
       "updatedAt": 1791898218000
     },
     {
@@ -6204,7 +6455,7 @@
       "updatedAt": 1791106205000
     }
   ],
-  "generatedAt": 1791921247456,
+  "generatedAt": 1792094968482,
   "orphans": [],
   "repo": "intentic",
   "undocumented": [

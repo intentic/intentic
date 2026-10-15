@@ -44,6 +44,27 @@ export const linkCardId = (name: string): string => {
     return slug === `` ? `linked` : slug;
 };
 
+// The far sandbox an agent named when it asked for a link (`capabilities request link --target <it>`): by its name, the
+// card id that name makes, its id, or its address. Undefined when nothing, or more than one, answers to it.
+export const preferredSandbox = <Candidate extends { readonly id: string; readonly name: string; readonly daemonUrl: string | null }>(
+    candidates: readonly Candidate[],
+    prefer: string | undefined,
+): Candidate | undefined => {
+    const wanted = prefer?.trim().toLowerCase() ?? ``;
+    if (wanted === ``) {
+        return undefined;
+    }
+    const hostOf = (address: string): string => address.toLowerCase().replace(/^[a-z][a-z0-9+.-]*:\/\//, ``).replace(/[/:?#].*$/, ``);
+    const matches = candidates.filter(
+        (candidate) =>
+            candidate.name.toLowerCase() === wanted ||
+            linkCardId(candidate.name) === wanted ||
+            candidate.id.toLowerCase() === wanted ||
+            (candidate.daemonUrl !== null && candidate.daemonUrl !== `` && hostOf(candidate.daemonUrl) === hostOf(wanted)),
+    );
+    return matches.length === 1 ? matches[0] : undefined;
+};
+
 export interface PairAsk {
     readonly far: { readonly id: string; readonly name: string; readonly daemonUrl: string };
     readonly here: { readonly id: string | undefined; readonly name: string; readonly url: string | undefined };

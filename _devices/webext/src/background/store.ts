@@ -1,4 +1,7 @@
 import { type WebExtGrant, type WebExtScopes, WebExtScopesSchema } from "@intentic/sandbox-contract/webext";
+// Named imports, as in mcp.ts: the `z` namespace would keep zod's locales in the bundle.
+import { number, object, string } from "zod";
+import { approvalCovers, type KeptApproval } from "./policy.js";
 
 // Everything this extension remembers, in chrome.storage.local: the sandbox's url+token (the only secret), cached
 // scopes, per-site read/act modes, paused (must survive the worker's death), the activity log, recent declines and
@@ -16,6 +19,9 @@ const KEY_INBOX = "inbox";
 const KEY_DECLINED = "declined";
 const KEY_SETTINGS = "settings";
 const KEY_PROMPTED = "prompted";
+const KEY_APPROVAL = "approval";
+
+const KeptApprovalSchema = object({ tabId: number(), url: string(), what: string(), at: number() });
 
 export interface PairedSandbox {
     readonly url: string;
@@ -161,4 +167,20 @@ export const store = {
     // When the popup last opened itself; kept in storage because the worker that opened it may not live to the next ask.
     promptedAt: async (): Promise<number> => await read(KEY_PROMPTED, 0, (raw) => (typeof raw === "number" ? raw : undefined)),
     setPromptedAt: async (at: number): Promise<void> => await chrome.storage.local.set({ [KEY_PROMPTED]: at }),
+
+    // One kept yes (policy.ts KeptApproval), in storage since the worker that kept it may not be the one the retry
+    // reaches. One at a time: it is for the retry of the action that just failed, not a stock of answers.
+    keepApproval: async (approval: KeptApproval): Promise<void> => await chrome.storage.local.set({ [KEY_APPROVAL]: approval }),
+    // Spends the kept yes if it answers `wanted`; one that doesn't is left for its own retry until it expires.
+    takeApproval: async (wanted: Omit<KeptApproval, "at">, now: number): Promise<boolean> => {
+        const kept = await read<KeptApproval | undefined>(KEY_APPROVAL, undefined, (raw) => {
+            const parsed = KeptApprovalSchema.safeParse(raw);
+            return parsed.success ? parsed.data : undefined;
+        });
+        if (!approvalCovers(kept, wanted, now)) {
+            return false;
+        }
+        await chrome.storage.local.remove([KEY_APPROVAL]);
+        return true;
+    },
 };

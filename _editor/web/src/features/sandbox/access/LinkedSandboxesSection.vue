@@ -5,12 +5,14 @@ import { noticeFrom } from "@intentic/ui/async";
 import { timeAgo } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import ToggleSwitch from "primevue/toggleswitch";
-import { computed, ref, shallowRef } from "vue";
+import { computed, nextTick, ref, shallowRef, useTemplateRef, watch } from "vue";
+import { useRoute } from "vue-router";
 import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
 import { useRole } from "../../../client/sandbox/useRole";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useMintedTokens } from "../../../workbench/operations/useMintedTokens";
 import { usePersonas } from "../personas/usePersonas";
+import { LINKED_SANDBOXES_ANCHOR } from "../sandboxNav";
 
 // INBOUND LINKS: the owner's other sandboxes allowed to hand this one tasks. Each link's terms are written here and
 // enforced here: the persona its tasks wear, whether each waits for the owner, how many turns an hour it may start. A task
@@ -40,6 +42,21 @@ const { tokens: links, minted, minting, notice, mint, forgetMinted, revoke } = u
     owner: () => active.value?.id,
     key: `access/links/mint`,
 });
+
+// A reader sent here by a task waiting on this sandbox's yes (sandboxNav.ts linkedSandboxesHref): the router scrolls to the hash
+// before the links are read, so the section brings itself into view once it has them, once.
+const route = useRoute();
+const section = useTemplateRef<HTMLElement>(`section`);
+const stopScroll = watch(
+    () => [links.value.length, section.value] as const,
+    ([count, element]) => {
+        if (route.hash !== `#${LINKED_SANDBOXES_ANCHOR}` || count === 0 || element === null || element === undefined) {
+            return;
+        }
+        void nextTick(() => element.scrollIntoView({ block: `start`, behavior: `smooth` }));
+        stopScroll();
+    },
+);
 
 // A link answered in place (new terms, a waiting task let through or declined): its row is the daemon's answer.
 const replaced = shallowRef<Readonly<Record<string, InboundLinkSummary>>>({});
@@ -128,103 +145,105 @@ const address = computed(() => daemonUrl.value ?? ``);
 </script>
 
 <template>
-    <RowGroup v-if="canShip" :label="t(`sandbox.linkedSandboxes.title`)" :count="shown.length === 0 ? undefined : shown.length">
-        <template v-for="link in shown" :key="link.id">
-            <Row icon="link" :title="link.label" :description="describe(link)">
-                <template v-if="link.requests.length > 0" #meta>
-                    <StatusBadge variant="warning" :label="t(`sandbox.linkedSandboxes.waiting`, { count: link.requests.length }, link.requests.length)" size="xs" />
-                </template>
-                <template #control>
-                    <Button :label="t(`sandbox.linkedSandboxes.terms`)" size="small" tier="quiet" @click="edit(link)" />
-                    <Button :label="t(`ui.action.revoke`)" size="small" tier="quiet" tone="danger" @click="revoke(link.id)" />
-                </template>
-            </Row>
-            <!-- A task that waits for the owner, answered where it waits: nothing of it has run yet. -->
-            <Row
-                v-for="request in link.requests"
-                :key="`${link.id}/${request.id}`"
-                icon="clock"
-                class="pl-6"
-                :title="request.title ?? t(`sandbox.linkedSandboxes.aTask`)"
-                :description="askedLine(request)"
-            >
-                <template #control>
-                    <Button :label="t(`sandbox.linkedSandboxes.allow`)" size="small" @click="decide(link, request, true)" />
-                    <Button :label="t(`sandbox.linkedSandboxes.decline`)" size="small" tier="quiet" tone="danger" @click="decide(link, request, false)" />
-                </template>
-            </Row>
-            <RowNote v-if="editing === link.id" variant="block">
-                <form class="flex flex-col gap-3" @submit.prevent="save(link)">
-                    <div class="flex flex-wrap items-center gap-3">
+    <section v-if="canShip" :id="LINKED_SANDBOXES_ANCHOR" ref="section" class="scroll-mt-4">
+        <RowGroup :label="t(`sandbox.linkedSandboxes.title`)" :count="shown.length === 0 ? undefined : shown.length">
+            <template v-for="link in shown" :key="link.id">
+                <Row icon="link" :title="link.label" :description="describe(link)">
+                    <template v-if="link.requests.length > 0" #meta>
+                        <StatusBadge variant="warning" :label="t(`sandbox.linkedSandboxes.waiting`, { count: link.requests.length }, link.requests.length)" size="xs" />
+                    </template>
+                    <template #control>
+                        <Button :label="t(`sandbox.linkedSandboxes.terms`)" size="small" tier="quiet" @click="edit(link)" />
+                        <Button :label="t(`ui.action.revoke`)" size="small" tier="quiet" tone="danger" @click="revoke(link.id)" />
+                    </template>
+                </Row>
+                <!-- A task that waits for the owner, answered where it waits: nothing of it has run yet. -->
+                <Row
+                    v-for="request in link.requests"
+                    :key="`${link.id}/${request.id}`"
+                    icon="clock"
+                    class="pl-6"
+                    :title="request.title ?? t(`sandbox.linkedSandboxes.aTask`)"
+                    :description="askedLine(request)"
+                >
+                    <template #control>
+                        <Button :label="t(`sandbox.linkedSandboxes.allow`)" size="small" @click="decide(link, request, true)" />
+                        <Button :label="t(`sandbox.linkedSandboxes.decline`)" size="small" tier="quiet" tone="danger" @click="decide(link, request, false)" />
+                    </template>
+                </Row>
+                <RowNote v-if="editing === link.id" variant="block">
+                    <form class="flex flex-col gap-3" @submit.prevent="save(link)">
+                        <div class="flex flex-wrap items-center gap-3">
+                            <Picker
+                                v-model="draft.actsAs"
+                                :options="personaOptions"
+                                variant="input"
+                                :aria-label="t(`sandbox.linkedSandboxes.persona`)"
+                                :header="t(`sandbox.linkedSandboxes.persona`)"
+                                class="ui-field-sm w-48"
+                            />
+                            <label class="flex items-center gap-2 text-sm text-content">
+                                <ToggleSwitch v-model="draft.approve" />
+                                {{ t(`sandbox.linkedSandboxes.askMeFirst`) }}
+                            </label>
+                            <label class="flex items-center gap-2 text-sm text-content">
+                                <input v-model.number="draft.turnsPerHour" type="number" min="1" max="120" :class="ui.input({ size: `sm` }, `w-20`)" />
+                                {{ t(`sandbox.linkedSandboxes.turnsAnHour`) }}
+                            </label>
+                            <Button type="submit" :label="t(`ui.action.save`)" size="small" />
+                        </div>
+                    </form>
+                </RowNote>
+            </template>
+
+            <RowNote variant="block">
+                <div class="flex flex-col gap-3">
+                    <Notice v-if="rowNotice ?? notice" :of="(rowNotice ?? notice)!" />
+                    <p class="text-2xs text-subtle">{{ t(`sandbox.linkedSandboxes.explain`) }}</p>
+                    <form class="flex flex-wrap items-center gap-2" @submit.prevent="submit">
+                        <input
+                            v-model="label"
+                            type="text"
+                            autocomplete="off"
+                            :placeholder="t(`sandbox.linkedSandboxes.labelPlaceholder`)"
+                            :class="ui.input({ size: `sm` }, `min-w-48 flex-1`)"
+                        />
                         <Picker
-                            v-model="draft.actsAs"
+                            v-model="actsAs"
                             :options="personaOptions"
                             variant="input"
                             :aria-label="t(`sandbox.linkedSandboxes.persona`)"
                             :header="t(`sandbox.linkedSandboxes.persona`)"
-                            class="ui-field-sm w-48"
+                            class="ui-field-sm w-44"
                         />
-                        <label class="flex items-center gap-2 text-sm text-content">
-                            <ToggleSwitch v-model="draft.approve" />
+                        <label class="flex items-center gap-2 text-xs text-content">
+                            <ToggleSwitch v-model="approve" />
                             {{ t(`sandbox.linkedSandboxes.askMeFirst`) }}
                         </label>
-                        <label class="flex items-center gap-2 text-sm text-content">
-                            <input v-model.number="draft.turnsPerHour" type="number" min="1" max="120" :class="ui.input({ size: `sm` }, `w-20`)" />
-                            {{ t(`sandbox.linkedSandboxes.turnsAnHour`) }}
-                        </label>
-                        <Button type="submit" :label="t(`ui.action.save`)" size="small" />
-                    </div>
-                </form>
-            </RowNote>
-        </template>
-
-        <RowNote variant="block">
-            <div class="flex flex-col gap-3">
-                <Notice v-if="rowNotice ?? notice" :of="(rowNotice ?? notice)!" />
-                <p class="text-2xs text-subtle">{{ t(`sandbox.linkedSandboxes.explain`) }}</p>
-                <form class="flex flex-wrap items-center gap-2" @submit.prevent="submit">
-                    <input
-                        v-model="label"
-                        type="text"
-                        autocomplete="off"
-                        :placeholder="t(`sandbox.linkedSandboxes.labelPlaceholder`)"
-                        :class="ui.input({ size: `sm` }, `min-w-48 flex-1`)"
-                    />
-                    <Picker
-                        v-model="actsAs"
-                        :options="personaOptions"
-                        variant="input"
-                        :aria-label="t(`sandbox.linkedSandboxes.persona`)"
-                        :header="t(`sandbox.linkedSandboxes.persona`)"
-                        class="ui-field-sm w-44"
-                    />
-                    <label class="flex items-center gap-2 text-xs text-content">
-                        <ToggleSwitch v-model="approve" />
-                        {{ t(`sandbox.linkedSandboxes.askMeFirst`) }}
-                    </label>
-                    <Button type="submit" :label="t(`sandbox.linkedSandboxes.newLink`)" size="small" :loading="minting" :disabled="minting || label.trim() === ``">
-                        <template #icon><Icon name="link" /></template>
-                    </Button>
-                </form>
-                <div v-if="minted" class="flex flex-col gap-2 rounded-lg bg-canvas p-3">
-                    <div class="flex items-start gap-2">
-                        <p class="flex-1 text-2xs text-subtle">{{ t(`sandbox.linkedSandboxes.shownOnce`) }}</p>
-                        <button type="button" :class="ui.textButton({ tone: `quiet`, size: `xs` }, `shrink-0`)" @click="forgetMinted">
-                            {{ t(`ui.action.done`) }}
-                        </button>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <span class="w-20 shrink-0 text-2xs text-subtle">{{ t(`sandbox.linkedSandboxes.address`) }}</span>
-                        <code class="min-w-0 flex-1 truncate font-mono text-xs text-content">{{ address }}</code>
-                        <CopyButton :text="address" :label="t(`ui.action.copy`)" />
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <span class="w-20 shrink-0 text-2xs text-subtle">{{ t(`sandbox.linkedSandboxes.token`) }}</span>
-                        <code class="min-w-0 flex-1 truncate font-mono text-xs text-content">{{ minted.token }}</code>
-                        <CopyButton :text="minted.token" :label="t(`ui.action.copy`)" />
+                        <Button type="submit" :label="t(`sandbox.linkedSandboxes.newLink`)" size="small" :loading="minting" :disabled="minting || label.trim() === ``">
+                            <template #icon><Icon name="link" /></template>
+                        </Button>
+                    </form>
+                    <div v-if="minted" class="flex flex-col gap-2 rounded-lg bg-canvas p-3">
+                        <div class="flex items-start gap-2">
+                            <p class="flex-1 text-2xs text-subtle">{{ t(`sandbox.linkedSandboxes.shownOnce`) }}</p>
+                            <button type="button" :class="ui.textButton({ tone: `quiet`, size: `xs` }, `shrink-0`)" @click="forgetMinted">
+                                {{ t(`ui.action.done`) }}
+                            </button>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="w-20 shrink-0 text-2xs text-subtle">{{ t(`sandbox.linkedSandboxes.address`) }}</span>
+                            <code class="min-w-0 flex-1 truncate font-mono text-xs text-content">{{ address }}</code>
+                            <CopyButton :text="address" :label="t(`ui.action.copy`)" />
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="w-20 shrink-0 text-2xs text-subtle">{{ t(`sandbox.linkedSandboxes.token`) }}</span>
+                            <code class="min-w-0 flex-1 truncate font-mono text-xs text-content">{{ minted.token }}</code>
+                            <CopyButton :text="minted.token" :label="t(`ui.action.copy`)" />
+                        </div>
                     </div>
                 </div>
-            </div>
-        </RowNote>
-    </RowGroup>
+            </RowNote>
+        </RowGroup>
+    </section>
 </template>

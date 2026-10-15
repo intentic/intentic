@@ -1,6 +1,6 @@
 import "@intentic/testing/dom";
 import { renderPage, toPageState } from "@intentic/browser/page";
-import { clickRef, collectPage, describeRef, fillRef, readPageText, selectRef, waitForText } from "./driver.js";
+import { askConfirm, clickRef, collectPage, describeRef, fillRef, readPageText, selectRef, waitForText } from "./driver.js";
 
 // Tests the page walk against real DOM via jsdom, which is enough for the judgements that matter (what's clickable,
 // what to call it, sensitivity) but cannot lay out elements or run a page's own JavaScript.
@@ -113,4 +113,169 @@ test("wait_for's injected function still works with nothing of its module around
     }, 300);
     expect(await alone("Saved", false, 5_000)).toEqual({ ok: true, message: `"Saved" appeared` });
     expect((await alone("never", false, 250)).ok).toBe(false);
+});
+
+// jsdom lays nothing out and has no hit test: `elementFromPoint` answers with what a pointer would land on here.
+const pointingAt = (selector: string, run: () => void): void => {
+    Object.defineProperty(document, "elementFromPoint", { configurable: true, value: () => document.querySelector(selector) });
+    try {
+        run();
+    } finally {
+        Reflect.deleteProperty(document, "elementFromPoint");
+    }
+};
+
+// PrimeVue's menus: the snapshot names the li[role=menuitem], and the menu's command listens on a div inside it. A
+// click dispatched on the li bubbles up and away from that div, so the tool said "clicked" and nothing ran; a person's
+// pointer lands on the label, and so does this.
+test("a click lands where a person's pointer would, so a menu listening inside its item hears it", () => {
+    document.body.innerHTML = `<ul role="menubar"><li role="menuitem" aria-label="Remove"><div class="content"><a><span>Remove</span></a></div></li></ul>`;
+    collectPage();
+    const heard: string[] = [];
+    document.querySelector(".content")?.addEventListener("click", () => heard.push("command"));
+    pointingAt("span", () => expect(clickRef("e1").ok).toBe(true));
+    expect(heard).toEqual(["command"]);
+});
+
+test("whatever covers the element at that point does not get the click instead", () => {
+    document.body.innerHTML = `<div class="backdrop"></div><button>Save</button>`;
+    collectPage();
+    const clicked: string[] = [];
+    document.querySelector(".backdrop")?.addEventListener("click", () => clicked.push("backdrop"));
+    document.querySelector("button")?.addEventListener("click", () => clicked.push("button"));
+    pointingAt(".backdrop", () => expect(clickRef("e0").ok).toBe(true));
+    expect(clicked).toEqual(["button"]);
+});
+
+// A snapshot taken while the person decides renumbers every ref; the yes was for the element they were shown.
+test("the click after a question lands on the element asked about, though a snapshot renumbered the refs meanwhile", () => {
+    document.body.innerHTML = `<button id="keep">Keep</button><button id="remove">Remove</button>`;
+    collectPage();
+    expect(describeRef("e1", "pin-1").name).toBe("Remove");
+    document.body.insertAdjacentHTML("afterbegin", `<button id="new">Remove all</button>`);
+    collectPage();
+    const clicked: string[] = [];
+    for (const button of Array.from(document.querySelectorAll("button"))) {
+        button.addEventListener("click", () => clicked.push(button.id));
+    }
+    expect(clickRef("e1", "pin-1").ok).toBe(true);
+    expect(clicked).toEqual(["remove"]);
+    // A pin is spent by the click it was for.
+    expect(clickRef("e1", "pin-1").ok).toBe(false);
+});
+
+test("an element that went away while the person was asked is reported as gone, not as a ref that never was", () => {
+    document.body.innerHTML = `<ul role="menu"><li role="menuitem">Remove</li></ul>`;
+    collectPage();
+    describeRef("e1", "pin-2");
+    document.body.innerHTML = ``;
+    expect(clickRef("e1", "pin-2")).toMatchObject({ ok: false, gone: true });
+    expect(clickRef("e99").gone).toBeUndefined();
+});
+
+// The question's panel in the page, which is the last thing on <html> while it is up.
+const panel = (): Element | null => document.documentElement.lastElementChild;
+
+// A person's click on the panel used to reach the page as a click outside the menu the agent had opened, and the page
+// closed it; the click they allowed then had nothing to land on.
+test("the question is not part of the page: a snapshot cannot list it, and the page hears nothing aimed at it", async () => {
+    const heard: string[] = [];
+    const listen = (event: Event): void => {
+        heard.push(event.type);
+    };
+    const types = ["pointerdown", "mousedown", "pointerup", "mouseup", "click", "focusin", "keydown"];
+    for (const type of types) {
+        document.addEventListener(type, listen, true);
+    }
+    try {
+        const answer = askConfirm(`Your agent wants to click "Remove". Allow it?`, 100);
+        const host = panel();
+        expect(host?.tagName).toBe("DIV");
+        expect(collectPage().elements.some((element) => element.name === "Allow" || element.name === "No")).toBe(false);
+        for (const type of types) {
+            host?.dispatchEvent(new MouseEvent(type, { bubbles: true, composed: true, clientX: 230, clientY: 10, detail: 1 }));
+        }
+        expect(heard).toEqual([]);
+        // Not one of those was the person's, so nothing was answered: the question runs out as a no.
+        expect(await answer).toBe(false);
+        expect(panel()?.tagName).toBe("BODY");
+        // And the page hears its own events again once the question has gone.
+        document.body.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        expect(heard).toEqual(["click"]);
+    } finally {
+        for (const type of types) {
+            document.removeEventListener(type, listen, true);
+        }
+    }
+});
+
+// Only a trusted event is the person's, and jsdom cannot make one, so the panel's own window listener is caught as it
+// is added and handed events that say they are, as Chrome's would. The buttons are laid out apart, so a pointer
+// position says which one was pressed.
+const askCaught = () => {
+    const box = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+        const left = this.textContent === "Allow" ? 200 : this.textContent === "No" ? 100 : -1;
+        return left < 0 ? box.call(this) : { width: 60, height: 20, top: 0, left, right: left + 60, bottom: 20, x: left, y: 0, toJSON: () => ({}) };
+    };
+    const add = window.addEventListener;
+    const caught: EventListenerOrEventListenerObject[] = [];
+    window.addEventListener = (type: string, listener: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions): void => {
+        if (type === "click") {
+            caught.push(listener);
+        }
+        add(type, listener, options);
+    };
+    try {
+        const answer = askConfirm(`Your agent wants to click "Remove". Allow it?`, 5_000);
+        const send = (event: Event): void => {
+            for (const listener of caught) {
+                if ("handleEvent" in listener) {
+                    listener.handleEvent(event);
+                } else {
+                    listener(event);
+                }
+            }
+        };
+        return { answer, send };
+    } finally {
+        window.addEventListener = add;
+    }
+};
+
+// A press on the panel as Chrome delivers it: a real MouseEvent, aimed at the panel's host, saying whether it came
+// from the person, and noting whether the panel prevented its default.
+const press = (type: string, clientX: number, options: { readonly trusted?: boolean; readonly prevented?: string[] } = {}): MouseEvent =>
+    new Proxy(new MouseEvent(type, { clientX, clientY: 10, detail: 1 }), {
+        get: (event, key) =>
+            key === "isTrusted"
+                ? (options.trusted ?? true)
+                : key === "target"
+                  ? panel()
+                  : key === "preventDefault"
+                    ? () => options.prevented?.push(type)
+                    : key === "stopImmediatePropagation"
+                      ? () => undefined
+                      : Reflect.get(event, key, event),
+    });
+
+test("only the person's own click answers, by the button under their pointer, and a press never takes focus", async () => {
+    const { answer, send } = askCaught();
+    const prevented: string[] = [];
+    send(press("mousedown", 230, { prevented }));
+    expect(prevented).toEqual(["mousedown"]);
+    // The agent's click on Allow, or the page's, is not the person's.
+    send(press("click", 230, { trusted: false }));
+    // Nor is a click between the buttons an answer.
+    send(press("click", 180));
+    expect(panel()?.tagName).toBe("DIV");
+    send(press("click", 230));
+    expect(await answer).toBe(true);
+    expect(panel()?.tagName).toBe("BODY");
+});
+
+test("the person's click on No is a no", async () => {
+    const { answer, send } = askCaught();
+    send(press("click", 130));
+    expect(await answer).toBe(false);
 });

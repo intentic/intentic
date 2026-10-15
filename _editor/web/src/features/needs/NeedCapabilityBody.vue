@@ -1,11 +1,13 @@
-<!-- A capability need's own answer: the connection's form inside the card, a new credential, or a setting change. -->
+<!-- A capability need's own answer: the connection's form inside the card (a linked sandbox paired in it), a new credential, a setting change, or a removal. -->
 <script setup lang="ts">
 import { type CapabilityCatalogEntry, capabilityEffects, type CapabilityEffect } from "@intentic/capability-catalog";
 import type { CapabilityNeed, Need } from "@intentic/sandbox-contract";
-import { Notice, ui } from "@intentic/ui";
+import { type NoticeModel, Notice, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, reactive, ref } from "vue";
 import CapabilityFieldRow from "../capabilities/connect/CapabilityFieldRow.vue";
+import LinkPairing from "../capabilities/connect/links/LinkPairing.vue";
+import type { PairedLink } from "../capabilities/connect/links/linkPairing";
 import { guideParts, guideTokenUrl } from "../capabilities/connect/credentialGuide";
 import SecretField from "../capabilities/connect/secrets/SecretField.vue";
 import { useCapabilities } from "../capabilities/connect/useCapabilities";
@@ -23,7 +25,7 @@ const t = useT();
 
 const props = defineProps<{ need: Need; subject: CapabilityNeed }>();
 
-const { capabilities, add } = useCapabilities();
+const { capabilities, add, remove } = useCapabilities();
 const { enabled } = useExtensions();
 const needs = useNeeds();
 const entry = computed<CapabilityCatalogEntry | undefined>(() =>
@@ -136,6 +138,38 @@ const change = async (): Promise<void> => {
     });
 };
 
+// A linked sandbox, paired in the card: this editor mints the link over there under the reader's own session, and the
+// press that paired it also saves the card, since nothing is left to fill in.
+const linking = computed(() => props.subject.mode === `connect` && entry.value?.kind === `link`);
+const pairingNotice = ref<NoticeModel | null>(null);
+const paired = async (link: PairedLink): Promise<void> => {
+    name.value = link.id;
+    values[`url`] = link.url;
+    values[`token`] = link.token;
+    values[`name`] = link.name;
+    await connect();
+};
+
+// A removal, done the way the Capabilities page's Remove does it; the daemon meets the need once the connection is gone.
+const removeIt = async (): Promise<void> => {
+    const connection = instance.value;
+    if (connection === undefined) {
+        return;
+    }
+    const id = props.need.id;
+    await answer({
+        what: t(`needs.capability.removing`, { id: connection.id }),
+        tag: `remove`,
+        failed: t(`needs.capability.couldNotRemove`),
+        task: async () => {
+            await remove.mutateAsync(connection.id);
+            if (needs.byId(id)?.status !== `met`) {
+                await needs.answer.mutateAsync({ id, answer: { kind: `apply` } });
+            }
+        },
+    });
+};
+
 // The person's word that the new credential is in; the daemon checks the connection answers before it takes it.
 const fixed = async (): Promise<void> => {
     const id = props.need.id;
@@ -161,8 +195,18 @@ const settingOf = (key: string): string => entry.value?.fields.find((field) => f
             <li v-for="line in consequences" :key="line" class="flex items-center gap-1.5"><Icon name="exclamation-triangle" />{{ line }}</li>
         </ul>
 
+        <!-- Another of the reader's sandboxes, paired here: the one the agent named is chosen already. -->
+        <div v-if="linking" class="flex flex-col gap-2">
+            <LinkPairing :prefer="subject.target" @pick="paired" @notice="pairingNotice = $event" />
+            <div class="flex flex-wrap items-center gap-2">
+                <ChatDecisionButton tone="secondary" icon="external-link" :to="setupAt">{{ t(`needs.capability.fullForm`) }}</ChatDecisionButton>
+                <slot name="decline" />
+            </div>
+            <Notice v-if="pairingNotice" :of="pairingNotice" />
+        </div>
+
         <!-- A new connection whose form finishes it: filled in with everything the agent could know, credential empty. -->
-        <form v-if="subject.mode === `connect` && inline && entry" class="flex flex-col gap-3" @submit.prevent="connect">
+        <form v-else-if="subject.mode === `connect` && inline && entry" class="flex flex-col gap-3" @submit.prevent="connect">
             <details v-if="tokenUrl || guideSteps.length > 0" class="text-2xs text-muted">
                 <summary class="cursor-pointer text-xs text-link">{{ t(`needs.capability.howToGet`) }}</summary>
                 <div class="mt-1.5 flex flex-col gap-1.5">
@@ -227,6 +271,15 @@ const settingOf = (key: string): string => entry.value?.fields.find((field) => f
             </ul>
             <div class="flex flex-wrap items-center gap-2">
                 <ChatDecisionButton tone="primary" icon="check" :disabled="busy" @click="change">{{ t(`needs.capability.apply`) }}</ChatDecisionButton>
+                <slot name="decline" />
+            </div>
+        </div>
+
+        <!-- A connection to take away: what goes with it, removed in one press. -->
+        <div v-else-if="subject.mode === `remove` && instance" class="flex flex-col gap-2">
+            <span class="text-xs text-content/85">{{ t(`needs.capability.removeWhat`, { id: instance.id, name: subject.name }) }}</span>
+            <div class="flex flex-wrap items-center gap-2">
+                <ChatDecisionButton tone="primary" icon="trash" :disabled="busy" @click="removeIt">{{ t(`needs.capability.remove`, { id: instance.id }) }}</ChatDecisionButton>
                 <slot name="decline" />
             </div>
         </div>

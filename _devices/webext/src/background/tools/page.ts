@@ -2,6 +2,7 @@ import { sleep } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import { renderPage, toPageState } from "@intentic/browser/page";
 import {
+    type ActionResult,
     askConfirm,
     clickRef,
     collectPage,
@@ -14,9 +15,9 @@ import {
     selectRef,
     waitForText,
 } from "../../page/driver.js";
-import { assertRunning, assertScope, needsConfirm, RefusedError } from "../policy.js";
+import { APPROVAL_HOLD_MS, assertRunning, assertScope, needsConfirm, RefusedError } from "../policy.js";
 import { store } from "../store.js";
-import { targetTab } from "./tab-access.js";
+import { type TargetTab, targetTab } from "./tab-access.js";
 
 // Each page tool: get a permitted tab, run something in it, return the fresh page state so the model never has to
 // guess whether an action landed. Every action also flashes a banner in the tab; a failed banner must never fail
@@ -96,31 +97,55 @@ export const openUrl = async (url: string, where: "current" | "new"): Promise<st
     }
 };
 
+// How the action came to be allowed: not a question at all, the person's yes just now, or a yes they gave to this
+// same action a moment ago that had nothing to land on (policy.ts KeptApproval).
+type Consent = "unasked" | "asked" | "kept";
+
 // Asks the person when the switches require it. The question renders in the page, next to what it's about; an
 // unanswered question is a no (page/driver.ts).
-const confirmed = async (tabId: number, what: string, sensitive: boolean): Promise<void> => {
+const confirmed = async (tab: TargetTab, what: string, sensitive: boolean): Promise<Consent> => {
     const scopes = await store.scopes();
     if (!needsConfirm(scopes, sensitive)) {
-        return;
+        return "unasked";
     }
-    const ok = await inject(tabId, askConfirm, [`Your agent wants to ${what}. Allow it?`, CONFIRM_TIMEOUT_MS]);
+    if (await store.takeApproval({ tabId: tab.id, url: tab.url, what }, Date.now())) {
+        return "kept";
+    }
+    const ok = await inject(tab.id, askConfirm, [`Your agent wants to ${what}. Allow it?`, CONFIRM_TIMEOUT_MS]);
     if (!ok) {
         throw new RefusedError(
             `The person said no (or did not answer) to: ${what}. Do not try another way round it; ask them what they would prefer.`,
         );
     }
+    return "asked";
+};
+
+// What a click that found its element gone tells the agent. After the person's yes, the likely story is a menu or
+// popover the page closed while they decided; saying only "gone" had the agent retry into the same question and the
+// same loss, so the yes is kept for one retry of exactly this click.
+const failed = async (tab: TargetTab, what: string, consent: Consent, result: ActionResult): Promise<RefusedError> => {
+    if (result.gone !== true || consent !== "asked") {
+        return new RefusedError(result.message);
+    }
+    await store.keepApproval({ tabId: tab.id, url: tab.url, what, at: Date.now() });
+    return new RefusedError(
+        `Nothing happened: the person allowed it (${what}), but by then the element was gone from the page; the menu or popup it was in most likely closed while they were being asked. Their yes is kept for ${Math.round(APPROVAL_HOLD_MS / 60_000)} minutes, for one retry of exactly this click in this tab: open the menu again, take a fresh snapshot, and click the same element. They will not be asked again for it.`,
+    );
 };
 
 export const click = async (ref: string, tabId?: number): Promise<string> => {
     const tab = await targetTab("act", tabId);
-    const element = await inject(tab.id, describeRef, [ref]);
+    // The click lands on the element described here, not on whatever the ref names after the person decides.
+    const pin = crypto.randomUUID();
+    const element = await inject(tab.id, describeRef, [ref, pin]);
     if (!element.ok) {
         throw new RefusedError(`No element ${ref} on this page: take a fresh snapshot, the page has changed.`);
     }
-    await confirmed(tab.id, `click "${element.name === "" ? ref : element.name}"`, element.sensitive);
-    const result = await inject(tab.id, clickRef, [ref]);
+    const what = `click "${element.name === "" ? ref : element.name}"`;
+    const consent = await confirmed(tab, what, element.sensitive);
+    const result = await inject(tab.id, clickRef, [ref, pin]);
     if (!result.ok) {
-        throw new RefusedError(result.message);
+        throw await failed(tab, what, consent, result);
     }
     announce(tab.id, `The agent clicked "${element.name === "" ? ref : element.name}"`);
     // Re-checks permission after the click: a navigation must not be a way around a grant.
@@ -130,17 +155,20 @@ export const click = async (ref: string, tabId?: number): Promise<string> => {
 
 export const fill = async (ref: string, text: string, submit: boolean, tabId?: number): Promise<string> => {
     const tab = await targetTab("act", tabId);
-    const element = await inject(tab.id, describeRef, [ref]);
+    const pin = crypto.randomUUID();
+    const element = await inject(tab.id, describeRef, [ref, pin]);
     if (!element.ok) {
         throw new RefusedError(`No element ${ref} on this page: take a fresh snapshot, the page has changed.`);
     }
     // Submitting, not typing, is what needs confirmation.
+    // No yes is kept here when the field is gone: the question names no field ("this form"), so a kept one could
+    // not tell this form from the next.
     await confirmed(
-        tab.id,
+        tab,
         submit ? `fill in and submit this form` : `type into "${element.name === "" ? ref : element.name}"`,
         element.sensitive && submit,
     );
-    const result = await inject(tab.id, fillRef, [ref, text, submit]);
+    const result = await inject(tab.id, fillRef, [ref, text, submit, pin]);
     if (!result.ok) {
         throw new RefusedError(result.message);
     }
@@ -163,7 +191,7 @@ export const selectOption = async (ref: string, values: string[], tabId?: number
 // sensitivity, and prompting only sometimes would train people to click through.
 export const pressKey = async (key: string, tabId?: number): Promise<string> => {
     const tab = await targetTab("act", tabId);
-    await confirmed(tab.id, `press ${key}`, false);
+    await confirmed(tab, `press ${key}`, false);
     await inject(tab.id, pressKeyOnPage, [key]);
     announce(tab.id, `The agent pressed ${key}`);
     const after = await targetTab("read", tab.id).catch(() => undefined);

@@ -131,3 +131,27 @@ export const assertScope = (scopes: WebExtScopes, scope: "read" | "act" | "scree
 // and this is a plain OR.
 export const needsConfirm = (scopes: WebExtScopes, sensitive: boolean): boolean =>
     scopes.confirm === "always" || (scopes.confirm === "sensitive" && sensitive);
+
+// A yes the person gave to an action that then had nothing to land on: the menu or popover holding the element closed
+// while they were asked. Only the extension writes one, right after the person's own click on Allow, so the agent
+// can spend it but never mint it.
+export interface KeptApproval {
+    readonly tabId: number;
+    readonly url: string;
+    // The question the person answered, which names the element ("click \"Remove\"").
+    readonly what: string;
+    readonly at: number;
+}
+
+// Long enough to reopen a menu and snapshot it, short enough that the yes still belongs to the moment it was given.
+export const APPROVAL_HOLD_MS = 120_000;
+
+// Whether a kept yes answers this action: the same question in the same tab on the same page, and recent. Anything
+// else is asked afresh, so the yes can't drift to another page or another element.
+export const approvalCovers = (kept: KeptApproval | undefined, wanted: Omit<KeptApproval, "at">, now: number): boolean =>
+    kept !== undefined &&
+    kept.tabId === wanted.tabId &&
+    kept.url === wanted.url &&
+    kept.what === wanted.what &&
+    now >= kept.at &&
+    now - kept.at < APPROVAL_HOLD_MS;

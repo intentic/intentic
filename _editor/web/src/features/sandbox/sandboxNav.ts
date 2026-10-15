@@ -152,3 +152,11 @@ export const sandboxSectionPath = (slug: string): string => (slug === SANDBOX_DE
  * names its one section outright rather than opening on a bounce.
  */
 export const sandboxHubPath = (guest: boolean): string => (guest ? sandboxSectionPath(GUEST_SECTION) : `/sandbox`);
+
+// Where a sandbox's Linked sandboxes section is reached from outside the Access page: the hash marks a reader who came
+// for it, as a task handed over from another sandbox and waiting for its owner's yes sends them here.
+export const LINKED_SANDBOXES_ANCHOR = `linked-sandboxes`;
+
+/** That section on the named sandbox's own Access page, the switch to that sandbox included (router/sandboxArrival.ts). */
+export const linkedSandboxesHref = (sandboxId: string): string =>
+    `${sandboxSectionPath(`access`)}?${new URLSearchParams({ sandbox: sandboxId }).toString()}#${LINKED_SANDBOXES_ANCHOR}`;

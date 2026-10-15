@@ -7,9 +7,14 @@ import type { LinkTerms } from "@intentic/sandbox-contract";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref, watch } from "vue";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
-import { DEFAULT_TERMS, type FarPersona, type PairedLink, pairWith, personasAt } from "./linkPairing";
+import { DEFAULT_TERMS, type FarPersona, type PairedLink, pairWith, personasAt, preferredSandbox } from "./linkPairing";
 
 const t = useT();
+
+const props = defineProps<{
+    /** The sandbox to start on: an agent's ask names it by its name, its card id or its address. */
+    prefer?: string;
+}>();
 
 const emit = defineEmits<{
     /** What the form is filled with: the card's id, the far address, its token and its name. */
@@ -33,6 +38,16 @@ const others = computed(() =>
 const farOptions = computed<readonly PickerOption<string>[]>(() => others.value.map((sandbox) => ({ value: sandbox.id, label: sandbox.name })));
 
 const farId = ref<string | undefined>();
+// The named sandbox chosen up front, once the list holds it; the reader may still pick another.
+watch(
+    others,
+    (candidates) => {
+        if (farId.value === undefined) {
+            farId.value = preferredSandbox(candidates, props.prefer)?.id;
+        }
+    },
+    { immediate: true },
+);
 const personas = ref<readonly FarPersona[]>([]);
 const loadingPersonas = ref(false);
 const NO_PERSONA = ``;

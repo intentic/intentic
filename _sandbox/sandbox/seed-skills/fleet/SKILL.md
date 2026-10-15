@@ -1,23 +1,25 @@
 ---
 name: fleet
-description: Create sandboxes on the owner's intentic account from inside this one, via the `sandboxes` CLI, and read what the account already runs. Use when a task needs a SEPARATE sandbox — a second project, a specialized agent with its own tools and access, a box for a role that should not share this one's environment — instead of asking the owner to make one in the browser.
+description: Create sandboxes on the owner's intentic account from inside this one, via the `sandboxes` CLI, read what the account already runs, and remove one a task is done with. Use when a task needs a SEPARATE sandbox — a second project, a specialized agent with its own tools and access, a box for a role that should not share this one's environment — instead of asking the owner to make one in the browser.
 ---
 
 # The owner's other sandboxes
 
-This sandbox can act on the account that owns it: list its sandboxes, and create new ones on the owner's own
-computers. You reach that with the `sandboxes` command. The provisioning token behind it lives with the
-daemon and is never in your environment, so nothing you can read or run creates a sandbox without the owner
-saying yes to that exact one, in chat, first.
+This sandbox can act on the account that owns it: list its sandboxes, create new ones on the owner's own
+computers, and take one away. You reach that with the `sandboxes` command. The provisioning token behind it lives with the
+daemon and is never in your environment, so nothing you can read or run creates or removes a sandbox without the
+owner saying yes to that exact one, in chat, first.
 
 ## Commands
 
 ```sh
 sandboxes ls                                 # every sandbox on the account, and whether it ever came up
 sandboxes create storefront \
-    --on radarsu-rog \                       # which connected computer builds it; default: this one's
+    --on rog \                               # which connected computer builds it, by its device name (the
+                                             # one its tools carry, mcp__rog__…); default: this one's
     --definition ./team/reviewer.sandbox.toml \
     --why "one line on why this job needs its own box"
+sandboxes remove storefront --why "…"        # take one off the account, the owner's card first
 ```
 
 `create` holds its connection through both slow halves — the owner deciding, then `ic` pulling an image and
@@ -57,8 +59,12 @@ the same one in a conversation.
 
 - **It never provisions hosted machines.** A new sandbox runs on a computer the owner has connected as a
   device. Nothing here can spend their hosted plan or their money.
-- **It creates, it does not destroy.** There is no remove verb. Deleting a sandbox is the owner's, in their
-  own UI — and a sandbox you made outlives this conversation and this connection.
+- **It removes only behind the same card, and never for good.** `sandboxes remove` names the sandbox and what
+  goes on the card. On a machine this sandbox reaches it runs `ic sandbox remove` there, which keeps its files
+  for a week; a sandbox that never came up, or whose machine is out of reach, leaves only the account, and
+  Recently deleted brings it back for a week. It never removes the sandbox it runs in, a hosted one, or one of
+  two that share a name (name it by its id). A sandbox you made outlives this conversation unless you clean up:
+  when a task made one only to test something, offer to remove it at the end.
 - **It carries no credentials into the new box.** A definition names capabilities and secrets; it never
   carries their values, and the new sandbox's owner connects them there.
 

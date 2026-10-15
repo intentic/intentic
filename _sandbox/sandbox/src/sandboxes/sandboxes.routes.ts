@@ -4,15 +4,16 @@ import { cardDeps } from "../conversations/actor/card-deps.js";
 import type { AppEnv } from "../app-env.js";
 import type { Services } from "../composition.js";
 import { answerResponse, cliBody } from "../http/cli-answer.js";
-import { manageDeviceSandbox } from "../hosts/device-reports.js";
+import { manageDeviceSandbox,heldHostDevices } from "../hosts/device-reports.js";
 import { hostRunningSelf } from "../hosts/self-host.js";
-import { fleetList, fleetProvision } from "./fleet-client.js";
-import { createSandboxThroughFleet, listFleet } from "./fleet-gate.js";
+import { hostRunningSandbox } from "@intentic/sandbox-contract";
+import { fleetList, fleetProvision, fleetRemove } from "./fleet-client.js";
+import { createSandboxThroughFleet, listFleet, removeSandboxThroughFleet } from "./fleet-gate.js";
 import { soleLiveConversation, turnRunOf } from "../conversations/actor/conversation-holdings.js";
 import { type TurnStanding, turnStandingOf } from "../conversations/actor/turn-standing.js";
 import { holdDepsOf } from "../guard/held-asks.js";
 
-/* The `sandboxes` CLI's two routes, scoped to the agent token like the wallet's and the capability ask's. */
+/* The `sandboxes` CLI's three routes, scoped to the agent token like the wallet's and the capability ask's. */
 
 // A body field as a non-empty string, or absent. Every field of a create but the name is optional, and the difference
 // between "" and missing is not one worth carrying past the door.
@@ -58,6 +59,9 @@ export const createSandboxesRoutes = (services: Services) => {
         provision: (token: string, ask: { name: string; definition?: string }) => fleetProvision(services.config, token, ask),
         devices: () => reachableDevices(services),
         runFlow: (id: string, flow: Parameters<typeof manageDeviceSandbox>[2]) => manageDeviceSandbox(services, id, flow),
+        remove: (token: string, sandboxId: string) => fleetRemove(services.config, token, sandboxId),
+        runsOn: async (slug: string) => hostRunningSandbox(await heldHostDevices(services), slug),
+        selfUrl: () => services.config.sandbox.publicUrl,
         ...cardDeps(services),
         hold: holdDepsOf(services.heldCards, (conversationId) => turnRunOf(services.conversations, conversationId)),
     };
@@ -83,6 +87,28 @@ export const createSandboxesRoutes = (services: Services) => {
                 name: asked,
                 on: filled(on),
                 definition: filled(definition),
+                why: filled(why),
+                conversationId: c.req.header("x-intentic-conversation"),
+                signal: c.req.raw.signal,
+            });
+            return answerResponse(c, answer);
+        },
+        remove: async (c: Context<AppEnv>): Promise<Response> => {
+            const withheld = await withheldFrom(services, c);
+            if (withheld !== undefined) {
+                return withheld;
+            }
+            const body = await cliBody(c, "remove", '{"name":"…"}');
+            if (body instanceof Response) {
+                return body;
+            }
+            const { name, why } = body;
+            const asked = filled(name);
+            if (asked === undefined) {
+                return c.json({ error: { type: "invalid_request", message: "`name` is the sandbox to remove, as `sandboxes ls` names it" } }, 400);
+            }
+            const answer = await removeSandboxThroughFleet(deps, {
+                name: asked,
                 why: filled(why),
                 conversationId: c.req.header("x-intentic-conversation"),
                 signal: c.req.raw.signal,

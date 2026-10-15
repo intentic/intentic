@@ -2,8 +2,8 @@ import { type CapabilityCatalogEntry, instancesOf } from "@intentic/capability-c
 import type { Capability, CapabilityNeed, CapabilityStatus, CredentialGate, Need, NeedAsk, NeedSubject } from "@intentic/sandbox-contract";
 import type { AskContext, Met, NeedKindHandler, Resolved } from "../need-kinds.js";
 
-// A connection the agent needs (docs/architecture/needs.md): answered for the asking turn, not for the sandbox. The
-// three answers that used to come back as "already connected, use it" are each told apart here: a connection for a
+// A connection the agent needs, or one it asks a person to take away (docs/architecture/needs.md): answered for the
+// asking turn, not for the sandbox. The three answers that used to come back as "already connected, use it" are each told apart here: a connection for a
 // different site, one this turn's persona or a gate withholds, and one whose credential is being refused.
 
 export interface CapabilityNeedDeps {
@@ -64,7 +64,9 @@ const secretKeys = (entry: CapabilityCatalogEntry): ReadonlySet<string> =>
 // Where a new connection's target goes: the first address-shaped field the entry has, holding an address, else a host.
 const targetFill = (entry: CapabilityCatalogEntry, target: string): Record<string, string> => {
     const keys = fillable(entry);
-    const field = TARGET_FIELDS.find((key) => keys.has(key));
+    // A linked sandbox is asked for by the owner's name for it, which is no address: the pairing on the card finds it.
+    const named = entry.kind === "link" && !/[.:/]/.test(target) && keys.has("name");
+    const field = named ? "name" : TARGET_FIELDS.find((key) => keys.has(key));
     if (field === undefined) {
         return {};
     }
@@ -80,7 +82,26 @@ const titleOf = (subject: CapabilityNeed): string => {
             return `Reconnect ${subject.name} ("${subject.instance ?? subject.entry}")`;
         case "change":
             return `Change ${subject.name} ("${subject.instance ?? subject.entry}")`;
+        case "remove":
+            return `Remove ${subject.name} ("${subject.instance ?? subject.entry}")`;
     }
+};
+
+// The connections an ask is about: the one it named by id, else the entry's own, narrowed to the target when it gave one.
+const matchingOf = (found: { readonly instance?: Capability }, all: readonly Capability[], target: string | undefined): readonly Capability[] => {
+    if (found.instance !== undefined) {
+        return [found.instance];
+    }
+    return target === undefined ? all : all.filter((capability) => servesTarget(capability, target));
+};
+
+// A change is met by the stored settings alone.
+const changeApplied = (entry: CapabilityCatalogEntry, all: readonly Capability[], subject: CapabilityNeed): Met | undefined => {
+    const instance = all.find((capability) => capability.id === subject.instance);
+    if (instance === undefined || !Object.entries(subject.changes ?? {}).every(([key, value]) => settingOf(instance, key) === value)) {
+        return undefined;
+    }
+    return { result: `${entry.name} "${instance.id}" now has the change applied.`, use: [] };
 };
 
 const raise = (subject: CapabilityNeed): Resolved => ({ kind: "raise", subject, title: titleOf(subject) });
@@ -164,6 +185,41 @@ export const capabilityNeed = (deps: CapabilityNeedDeps): NeedKindHandler => {
         };
     };
 
+    // A removal names one connection: the instance asked by its id, or the entry's only one (for the target). Gone
+    // already is met, since what the agent wanted is so; several is the agent's to narrow, by id.
+    const removal = async (
+        ask: Extract<NeedAsk, { kind: "capability" }>,
+        found: { entry: CapabilityCatalogEntry; instance?: Capability },
+        context: AskContext,
+    ): Promise<Resolved> => {
+        const { entry } = found;
+        if ((ask.set !== undefined && Object.keys(ask.set).length > 0) || ask.reconnect === true) {
+            return refused("invalid", "A removal takes no --set and no --reconnect: it changes nothing first.");
+        }
+        const matching = matchingOf(found, instancesOf(entry, await deps.capabilities()), ask.target);
+        const [only, ...more] = matching;
+        if (only === undefined) {
+            return {
+                kind: "met",
+                message: `No ${entry.name} connection${ask.target === undefined ? "" : ` for ${hostOf(ask.target)}`} is connected: there is nothing to remove.`,
+            };
+        }
+        if (more.length > 0) {
+            return refused(
+                "ambiguous",
+                `${entry.name} has ${matching.length} connections: ${matching.map((capability) => `"${capability.id}"`).join(", ")}. Name the one to remove: \`capabilities request <id> --remove\`.`,
+            );
+        }
+        // Not given to the people this conversation works for: not theirs to have taken away either.
+        if (context.standing?.withheldByReach.includes(only.id) === true) {
+            return refused(
+                "out_of_reach",
+                `"${only.id}" is not this conversation's to remove: the people it works for were not given it. Do not ask again.`,
+            );
+        }
+        return raise({ kind: "capability", entry: entry.id, name: entry.name, mode: "remove", instance: only.id });
+    };
+
     const resolve = async (ask: NeedAsk, context: AskContext): Promise<Resolved> => {
         if (ask.kind !== "capability") {
             return refused("invalid", "Not a capability ask.");
@@ -171,6 +227,9 @@ export const capabilityNeed = (deps: CapabilityNeedDeps): NeedKindHandler => {
         const found = await entryFor(ask.entry);
         if (found === undefined) {
             return refused("unknown_capability", `No catalog entry or connection is named "${ask.entry}": \`capabilities list\` names what exists.`);
+        }
+        if (ask.remove === true) {
+            return removal(ask, found, context);
         }
         const { entry } = found;
         const set = ask.set ?? {};
@@ -191,12 +250,7 @@ export const capabilityNeed = (deps: CapabilityNeedDeps): NeedKindHandler => {
             );
         }
         const all = instancesOf(entry, await deps.capabilities());
-        const matching =
-            found.instance !== undefined
-                ? [found.instance]
-                : ask.target === undefined
-                  ? all
-                  : all.filter((capability) => servesTarget(capability, ask.target ?? ""));
+        const matching = matchingOf(found, all, ask.target);
         const statuses = await Promise.all(matching.map(async (capability) => ({ capability, status: await deps.status(capability) })));
         const live = statuses.find(({ status }) => status.state === "active");
         const connected = live ?? statuses[0];
@@ -243,6 +297,12 @@ export const capabilityNeed = (deps: CapabilityNeedDeps): NeedKindHandler => {
         });
     };
 
+    // Gone is gone, whichever page took it away, and even when its entry went with it (an extension's connector).
+    const removed = async (subject: CapabilityNeed): Promise<Met | undefined> => {
+        const present = (await deps.capabilities()).some((capability) => capability.id === subject.instance);
+        return present ? undefined : { result: `${subject.name} "${subject.instance ?? subject.entry}" is removed from this sandbox.`, use: [] };
+    };
+
     const subjectOf = (need: Need): CapabilityNeed | undefined => (need.subject.kind === "capability" ? need.subject : undefined);
 
     const check = async (need: Need): Promise<Met | undefined> => {
@@ -250,16 +310,16 @@ export const capabilityNeed = (deps: CapabilityNeedDeps): NeedKindHandler => {
         if (subject === undefined) {
             return undefined;
         }
+        if (subject.mode === "remove") {
+            return removed(subject);
+        }
         const entry = (await deps.entries()).find((candidate) => candidate.id === subject.entry);
         if (entry === undefined) {
             return undefined;
         }
         const all = instancesOf(entry, await deps.capabilities());
         if (subject.mode === "change") {
-            const instance = all.find((capability) => capability.id === subject.instance);
-            const applied =
-                instance !== undefined && Object.entries(subject.changes ?? {}).every(([key, value]) => settingOf(instance, key) === value);
-            return applied && instance !== undefined ? { result: `${entry.name} "${instance.id}" now has the change applied.`, use: [] } : undefined;
+            return changeApplied(entry, all, subject);
         }
         const candidates =
             subject.mode === "reconnect"
@@ -308,6 +368,10 @@ export const capabilityNeed = (deps: CapabilityNeedDeps): NeedKindHandler => {
                     ? { refused: `The change is not on ${subject.name} "${subject.instance ?? ""}" yet: apply it again.` }
                     : { status: "met", ...met };
             }
+            if (subject.mode === "remove") {
+                const met = await check(need);
+                return met === undefined ? { refused: `"${subject.instance ?? ""}" is still connected: remove it again.` } : { status: "met", ...met };
+            }
             // The person says it is done: a working connection meets it, a reconnect included.
             const entry = (await deps.entries()).find((candidate) => candidate.id === subject.entry);
             const instance =
@@ -327,7 +391,7 @@ export const capabilityNeed = (deps: CapabilityNeedDeps): NeedKindHandler => {
         },
         nextTurn: (need) => {
             const subject = subjectOf(need);
-            return subject !== undefined && subject.mode !== "change";
+            return subject !== undefined && subject.mode !== "change" && subject.mode !== "remove";
         },
         key: (subject: NeedSubject) =>
             subject.kind === "capability" ? [subject.entry, subject.mode, subject.instance ?? "", hostOf(subject.target ?? "")].join("|") : "",

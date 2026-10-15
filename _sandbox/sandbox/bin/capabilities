@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // The in-sandbox capability command: what this sandbox can be connected to, and the ask that puts a card in the
-// owner's chat to connect one (docs/architecture/needs.md). The ASK is the whole of it: the daemon answers for THIS
+// owner's chat to connect one, change one, or take one away (docs/architecture/needs.md). The ASK is the whole of it: the daemon answers for THIS
 // turn, not for the sandbox, so a connection for a different site, one this conversation's persona or a gate
 // withholds, and one whose credential is being refused each get their own answer and their own card, rather than the
 // "already connected, use it" that once came back for all three. The agent never connects anything itself and never
@@ -18,10 +18,12 @@ const USAGE = `capabilities — what this sandbox can be connected to, and the i
   capabilities list [--json]                 every connectable entry, what is connected, and what this workspace
                                              looks like it wants
   capabilities request <entry|connection>    ask the owner, on a card in their chat, to connect one, to fix one
-        [--target <site|host>]                 the site or host it is for, when the entry can hold several
+        [--target <site|host>]                 the site or host it is for, when the entry can hold several (for a
+                                               linked sandbox, its name: the card pairs it)
         [--set key=value]...                   settings you can fill in (never a credential), or a change to a
                                                connected one's settings (a device switch, a Docker option)
         [--reconnect]                          it is connected, but its credential is being refused
+        [--remove]                             take a connection away: the owner removes it with one press
         [--why "…"] [--wait <seconds>]         your one-line case for it, shown on the card
 
 ${WAIT_HELP}`;
@@ -66,7 +68,7 @@ const settingsOf = (pairs) =>
     );
 
 const requestOne = async (args) => {
-    const { flags, rest } = parseArgs(COMMAND, args, { values: ["why", "target", "wait"], switches: ["reconnect"], repeated: ["set"] });
+    const { flags, rest } = parseArgs(COMMAND, args, { values: ["why", "target", "wait"], switches: ["reconnect", "remove"], repeated: ["set"] });
     const [entry] = rest;
     if (entry === undefined) {
         return die(COMMAND, USAGE);
@@ -80,6 +82,7 @@ const requestOne = async (args) => {
             ...(flags.target === undefined ? {} : { target: flags.target }),
             ...(Object.keys(set).length === 0 ? {} : { set }),
             ...(flags.reconnect === true ? { reconnect: true } : {}),
+            ...(flags.remove === true ? { remove: true } : {}),
         },
         flags,
     );

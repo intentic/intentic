@@ -3,7 +3,7 @@ import type { Config } from "../env.config.js";
 import type { CliAnswer } from "../http/cli-answer.js";
 import { callPlatform } from "../system/platform-relay.js";
 
-// The owner's ACCOUNT as this sandbox can reach it: the three calls behind the `sandboxes` CLI, each authenticated by
+// The owner's ACCOUNT as this sandbox can reach it: the four calls behind the `sandboxes` CLI, each authenticated by
 // the provisioning token on the `fleet` capability rather than by this sandbox's own connect token. Buffered, because
 // each is one question with one answer — the minutes-long half of a create is `ic` running on a device, not this.
 
@@ -23,7 +23,11 @@ export type ProvisionAsk = IngressInput<"fleetProvision">;
 export const fleetProvision = (config: Config, token: string, ask: ProvisionAsk): Promise<CliAnswer> =>
     callPlatform(config, { route: "fleetProvision", input: ask, bearer: token, unreached: "nothing was created" });
 
-/* What the platform answers each of the three with, once the body parses. */
+/** Moves one of the account's sandboxes to its trash, after the owner's card said yes; restorable for the recovery window. */
+export const fleetRemove = (config: Config, token: string, sandboxId: string): Promise<CliAnswer> =>
+    callPlatform(config, { route: "fleetRemove", input: { sandboxId }, bearer: token, unreached: "nothing was removed" });
+
+/* What the platform answers each of them with, once the body parses. */
 
 export type FleetWho = IngressOutput<"fleetWhoami">;
 export type FleetSandbox = IngressOutput<"fleetSandboxes">["sandboxes"][number];

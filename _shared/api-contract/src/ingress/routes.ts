@@ -9,6 +9,8 @@ import {
     FarewellBodySchema,
     FleetProvisionBodySchema,
     FleetProvisionedSchema,
+    FleetRemoveBodySchema,
+    FleetRemovedSchema,
     FleetSandboxesSchema,
     FleetWhoSchema,
     HostReportClaimedSchema,
@@ -200,6 +202,15 @@ export const PLATFORM_INGRESS = {
         answer: "json",
         input: FleetProvisionBodySchema,
         output: FleetProvisionedSchema,
+    },
+    fleetRemove: {
+        method: "POST",
+        path: "/fleet/remove",
+        auth: "provisioning",
+        body: "json",
+        answer: "json",
+        input: FleetRemoveBodySchema,
+        output: FleetRemovedSchema,
     },
 
     /* The edge, a hosted image's builder, and anyone asking which database this is. */

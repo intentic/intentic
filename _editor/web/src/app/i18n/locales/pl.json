@@ -11263,7 +11263,11 @@
             "effectPrivileged": "Działa w sandboxie z podwyższonymi uprawnieniami.",
             "couldNotConnect": "Nie udało się tego podłączyć.",
             "couldNotApply": "Nie udało się zastosować zmiany.",
-            "notWorkingYet": "To jeszcze nie działa: dokończ konfigurację i naciśnij ponownie."
+            "notWorkingYet": "To jeszcze nie działa: dokończ konfigurację i naciśnij ponownie.",
+            "removing": "Usuwanie {id}",
+            "couldNotRemove": "Nie udało się usunąć.",
+            "removeWhat": "Usunięcie \"{id}\" kasuje to połączenie {name} i zapisane z nim poświadczenie z tego sandboxa. Agent traci jego narzędzia od następnej tury.",
+            "remove": "Usuń \"{id}\""
         },
         "secret": {
             "where": "Używany do: {where}",

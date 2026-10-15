@@ -346,6 +346,10 @@ export const FleetProvisionBodySchema = z.object({
     name: z.string().trim().min(1).max(60),
     definition: z.string().max(FLEET_DEFINITION_MAX_BYTES).optional(),
 });
+// One sandbox taken off the account, by the id `fleetSandboxes` lists it under. It goes to the trash, as the app's own
+// delete sends it, and comes back from there until `recoverableUntil`.
+export const FleetRemoveBodySchema = z.object({ sandboxId: z.string().min(1) });
+export const FleetRemovedSchema = z.object({ name: z.string(), recoverableUntil: z.string() });
 export const FleetProvisionedSchema = z.object({
     sandboxId: z.string(),
     name: z.string(),

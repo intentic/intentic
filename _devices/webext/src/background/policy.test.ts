@@ -1,5 +1,5 @@
 import { WebExtScopesSchema } from "@intentic/sandbox-contract/webext";
-import { decide, needsConfirm, originPattern, sandboxOwnOrigin, siteOf } from "./policy.js";
+import { APPROVAL_HOLD_MS, approvalCovers, decide, needsConfirm, originPattern, sandboxOwnOrigin, siteOf } from "./policy.js";
 
 // The decisions this extension makes on its own, tested away from the browser that supplies the inputs.
 // Assertions check the refusal sentence as much as the verdict: "not allowed on github.com — call ask_access"
@@ -85,4 +85,19 @@ test("the sandbox's own app is never a site the agent may work on", () => {
 test("an unpaired browser has no own origin to subtract", () => {
     expect(sandboxOwnOrigin(undefined)).toBeUndefined();
     expect(sandboxOwnOrigin("not a url")).toBeUndefined();
+});
+
+// A yes whose element closed while the person decided answers the retry of that same action, and nothing wider: not
+// another element, another tab or another page, and not long after it was given.
+test("a kept yes answers the same question in the same tab and page, for a short while only", () => {
+    const wanted = { tabId: 7, url: "https://app.example/settings", what: `click "Remove"` };
+    const kept = { ...wanted, at: 1_000 };
+    expect(approvalCovers(kept, wanted, 1_000 + APPROVAL_HOLD_MS - 1)).toBe(true);
+    expect(approvalCovers(kept, wanted, 1_000 + APPROVAL_HOLD_MS)).toBe(false);
+    expect(approvalCovers(kept, { ...wanted, what: `click "Delete account"` }, 2_000)).toBe(false);
+    expect(approvalCovers(kept, { ...wanted, tabId: 8 }, 2_000)).toBe(false);
+    expect(approvalCovers(kept, { ...wanted, url: "https://app.example/billing" }, 2_000)).toBe(false);
+    // A clock that went backwards is no reason to trust a timestamp from the future.
+    expect(approvalCovers(kept, wanted, 500)).toBe(false);
+    expect(approvalCovers(undefined, wanted, 2_000)).toBe(false);
 });

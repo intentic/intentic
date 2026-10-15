@@ -2,10 +2,12 @@
 // The in-sandbox FLEET-OF-SANDBOXES command: the owner's other sandboxes, and the one door a new one is
 // created through, from inside a turn, with nobody fetching a setup code out of a browser.
 //
-// The CREATE is the whole of it. It raises a card in the owner's chat naming the sandbox and the machine it
+// The CREATE is most of it. It raises a card in the owner's chat naming the sandbox and the machine it
 // would run on (sandboxes/fleet-gate.ts), and only a yes mints anything: the platform's row and its claim are
 // created against the approval, and the claim is spent immediately by `ic sandbox connect` on that machine.
-// A no leaves the account exactly as it was — no row, no code, nothing to expire.
+// A no leaves the account exactly as it was — no row, no code, nothing to expire. A REMOVE is the same card
+// first: then `ic sandbox remove` on the machine running it, or the account row alone for one that never came up,
+// either way restorable for the recovery window.
 //
 // It owns NO credential. The provisioning token lives on the `fleet` capability, is held by the daemon, and
 // is never put in the agent's environment: the card is only an approval while nothing here can mint a claim
@@ -16,7 +18,7 @@
 // timeout would kill the wait with the card still up.
 //
 // Auth is the per-boot agent token from /run/intentic/agent.token; auth/grants.ts admits it to exactly the
-// two /sandboxes routes and nothing credential-shaped.
+// three /sandboxes routes and nothing credential-shaped.
 
 import { readFileSync } from "node:fs";
 import { request } from "node:http";
@@ -44,6 +46,11 @@ const USAGE = `sandboxes — the owner's sandboxes, and how a new one is made
                                                    an overlay its owner still approves there. Never a
                                                    credential — those are named, not carried
                                        --why       your one-line case for it, shown on the card
+
+  sandboxes remove <name> [--why "…"]  take one off the owner's account. ASKS IN CHAT FIRST, every time.
+                                       Removed on the machine that runs it when this sandbox reaches it
+                                       (files kept there for a week), else the account entry alone; either
+                                       way the owner can bring it back for a week. Never this sandbox.
 
 The create holds its connection while the owner decides and while the machine builds: minutes, both halves.
 Hold it open rather than timing it out. A declined or expired ask answers with a sentence to act on —
@@ -173,6 +180,27 @@ const create = async (args) => {
     process.stdout.write(`\nCreated "${created.name}" on ${created.on}: ${created.url}\n`);
 };
 
+const remove = async (args) => {
+    const { rest, flags } = flagsOf(args, ["why"]);
+    const [name] = rest;
+    if (name === undefined || name === "") {
+        return die(USAGE);
+    }
+    const { status, text } = await call("POST", "/sandboxes/remove", JSON.stringify({ name, ...(flags.why ? { why: flags.why } : {}) }));
+    if (status < 200 || status >= 300) {
+        return die(`sandboxes: ${refusalOf(text)}`);
+    }
+    const removed = JSON.parse(text);
+    for (const line of removed.lines ?? []) {
+        process.stdout.write(`${line}\n`);
+    }
+    const back =
+        removed.removed === "machine"
+            ? `on ${removed.on}; to bring it back: ${removed.restore}`
+            : `from the account${removed.recoverableUntil ? `; it can be restored from Recently deleted until ${removed.recoverableUntil}` : ""}`;
+    process.stdout.write(`\nRemoved "${removed.name}" ${back}.\n`);
+};
+
 const main = async () => {
     const [command, ...rest] = process.argv.slice(2);
     if (command === "ls") {
@@ -180,6 +208,9 @@ const main = async () => {
     }
     if (command === "create") {
         return create(rest);
+    }
+    if (command === "remove") {
+        return remove(rest);
     }
     return die(USAGE);
 };

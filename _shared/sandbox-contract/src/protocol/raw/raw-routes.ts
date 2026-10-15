@@ -123,9 +123,10 @@ export const RAW_ROUTES = {
     "ALL /x/*": {},
     // The `capabilities` CLI's discovery by name; its ask is the needs door (contracts/needs.contract.ts).
     "GET /capabilities/connectable": { floor: "maintainer", agent: true, control: "never" },
-    // The `sandboxes` CLI; every create parks on a card in the owner's chat first.
+    // The `sandboxes` CLI; every create and every removal parks on a card in the owner's chat first.
     "GET /sandboxes": { agent: true },
     "POST /sandboxes": { agent: true },
+    "POST /sandboxes/remove": { agent: true },
     // The `wallet` CLI; spend is bounded by the owner's policy and the key never enters the container.
     "GET /wallet/status": { agent: true, control: "never" },
     "POST /wallet/fetch": { agent: true, control: "never" },

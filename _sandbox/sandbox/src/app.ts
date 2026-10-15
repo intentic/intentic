@@ -495,6 +495,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     const sandboxRoutes = createSandboxesRoutes(services);
     serve("GET /sandboxes", sandboxRoutes.list);
     serve("POST /sandboxes", sandboxRoutes.create);
+    serve("POST /sandboxes/remove", sandboxRoutes.remove);
 
     // The wallet surface: `status`/`history` are reads, `fetch` is the one door money leaves through.
     // It parses the endpoint's x402 challenge, checks the owner's policy, parks non-standing spend on an approval card,

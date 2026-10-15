@@ -58,11 +58,15 @@ The id a hand-over returns (`linked-…`) is a subagent of this conversation: it
 ## When there is no link
 
 There is no `mcp__<name>__delegate` in your tools, and `agents links` says so. Linking two sandboxes is the owner's, on a
-card:
+card that pairs them in place. Name the sandbox by its name or address and the card has it chosen already:
 
 ```sh
-capabilities request link --why "the migration check needs the ops sandbox's database access"
+capabilities request link --target ops --why "the migration check needs the ops sandbox's database access"
 ```
 
-Pairing happens in the owner's editor, which is signed in to both sandboxes: they choose the persona, the approval
-and the hourly limit there, and the card here fills itself in.
+The owner's editor, signed in to both sandboxes, mints the link over there: they choose the persona, the approval
+and the hourly limit on the card, and one press links them. It reaches this conversation from its next turn. A link
+you no longer need goes the same way: `capabilities request <name> --remove --why "…"`.
+
+A task waiting for that sandbox's owner to allow it shows as pending under your card; its row opens the Linked
+sandboxes section of that sandbox's Access page, where the Allow is.
