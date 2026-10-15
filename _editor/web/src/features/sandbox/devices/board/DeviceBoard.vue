@@ -78,73 +78,76 @@ const inDesktopApp = desktopApp() !== undefined;
         </template>
     </PageHeader>
 
-    <!-- `flat`: the cards bring their own surfaces, and one drawn around them would nest a card in a card. -->
-    <RowGroup flat undivided>
-        <div class="flex flex-col gap-3">
-            <p v-if="inDesktopApp" class="flex items-center gap-2 px-1 text-xs text-muted">
-                <Icon name="desktop" class="shrink-0" aria-hidden="true" />
-                <span>
-                    {{ t(`sandbox.deviceBoard.devicesOwnSandboxesAlso`) }} <b>{{ t(`sandbox.deviceBoard.device`) }}</b
-                    >{{ t(`sandbox.deviceBoard.intenticIconInTray`) }}
-                </span>
-            </p>
-
-            <!-- Shown only once there's something to search; ports are matched too. The fleet's counts sit beside it as the
-                 other half of the same narrowing, once there is more than one verdict to tell apart. -->
-            <FilterBar
-                v-if="!isLoading && (showFilter(rows) || mixed)"
-                v-model="query"
-                :placeholder="t(`sandbox.deviceBoard.filterByDeviceSandbox`)"
-                :aria-label="t(`sandbox.deviceBoard.filterDevices`)"
-                :count="shown.length"
-                :clearable="true"
-            >
-                <template v-if="mixed" #controls>
-                    <SegmentedControl v-model="status" :options="statusOptions" size="xs" :aria-label="t(`sandbox.deviceBoard.byState`)" />
-                </template>
-            </FilterBar>
-
-            <Notice v-if="notice" :of="notice" />
-            <div v-else-if="isLoading" role="status" aria-busy="true">
-                <!-- Drawn as the board last looked in this sandbox; until it has been seen once, the outline is a card like
-                     the ones it stands in for, so the board does not jump when they land. -->
-                <SkeletonSnapshot v-if="outline" of="sandbox.devices.board" :label="t(`sandbox.deviceBoard.readingDevices`)">
-                    <RowGroup>
-                        <span class="sr-only">{{ t(`sandbox.deviceBoard.readingDevices`) }}</span>
-                        <SkeletonRows :rows="2" description />
-                    </RowGroup>
-                </SkeletonSnapshot>
-            </div>
-            <p v-else-if="rows.length === 0" v-skeleton-source="`sandbox.devices.board`" :class="ui.emptyState()">
-                {{ t(`sandbox.deviceBoard.noDevicePairedSandbox`) }}
-            </p>
-
-            <!-- One box for the tiles, so the next wait can draw them. A grid on the board's own width: one column on a phone
-                 or a narrow pane, two at the page's width, three where the window gives the room. Rows of a grid share a
-                 height, so the figures strip at each tile's foot lines up across the row. -->
-            <div v-if="rows.length > 0" v-skeleton-source="`sandbox.devices.board`" class="@container">
-                <div class="grid grid-cols-1 gap-3 @2xl:grid-cols-2 @5xl:grid-cols-3">
-                    <DeviceBoardCard v-for="row in shown" :key="row.key" :machine="row" :needle="needle" :own-slug="ownSlug" :read-at="readAt" />
-                </div>
-
-                <!-- A filter that matched nothing says so, rather than leaving a board that looks empty by accident. -->
-                <p v-if="shown.length === 0" :class="ui.emptyState()" role="status">
-                    {{
-                        needle === ``
-                            ? t(`sandbox.deviceBoard.noneAtState`, { state: statusWord })
-                            : t(`sandbox.deviceBoard.noDeviceSandboxHere`, { query })
-                    }}
+    <!-- Same `gap-6` rhythm as other sandbox views (Extensions, Personas, …): one band per RowGroup, not nested in the fleet grid's `gap-3`. -->
+    <div class="flex flex-col gap-6">
+        <!-- `flat`: the cards bring their own surfaces, and one drawn around them would nest a card in a card. -->
+        <RowGroup flat undivided>
+            <div class="flex flex-col gap-3">
+                <p v-if="inDesktopApp" class="flex items-center gap-2 px-1 text-xs text-muted">
+                    <Icon name="desktop" class="shrink-0" aria-hidden="true" />
+                    <span>
+                        {{ t(`sandbox.deviceBoard.devicesOwnSandboxesAlso`) }} <b>{{ t(`sandbox.deviceBoard.device`) }}</b
+                        >{{ t(`sandbox.deviceBoard.intenticIconInTray`) }}
+                    </span>
                 </p>
+
+                <!-- Shown only once there's something to search; ports are matched too. The fleet's counts sit beside it as the
+                     other half of the same narrowing, once there is more than one verdict to tell apart. -->
+                <FilterBar
+                    v-if="!isLoading && (showFilter(rows) || mixed)"
+                    v-model="query"
+                    :placeholder="t(`sandbox.deviceBoard.filterByDeviceSandbox`)"
+                    :aria-label="t(`sandbox.deviceBoard.filterDevices`)"
+                    :count="shown.length"
+                    :clearable="true"
+                >
+                    <template v-if="mixed" #controls>
+                        <SegmentedControl v-model="status" :options="statusOptions" size="xs" :aria-label="t(`sandbox.deviceBoard.byState`)" />
+                    </template>
+                </FilterBar>
+
+                <Notice v-if="notice" :of="notice" />
+                <div v-else-if="isLoading" role="status" aria-busy="true">
+                    <!-- Drawn as the board last looked in this sandbox; until it has been seen once, the outline is a card like
+                         the ones it stands in for, so the board does not jump when they land. -->
+                    <SkeletonSnapshot v-if="outline" of="sandbox.devices.board" :label="t(`sandbox.deviceBoard.readingDevices`)">
+                        <RowGroup>
+                            <span class="sr-only">{{ t(`sandbox.deviceBoard.readingDevices`) }}</span>
+                            <SkeletonRows :rows="2" description />
+                        </RowGroup>
+                    </SkeletonSnapshot>
+                </div>
+                <p v-else-if="rows.length === 0" v-skeleton-source="`sandbox.devices.board`" :class="ui.emptyState()">
+                    {{ t(`sandbox.deviceBoard.noDevicePairedSandbox`) }}
+                </p>
+
+                <!-- One box for the tiles, so the next wait can draw them. A grid on the board's width: one column on a phone
+                     or a narrow pane, two at the page's width, three where the window gives the room. Rows of a grid share a
+                     height, so the figures strip at each tile's foot lines up across the row. -->
+                <div v-if="rows.length > 0" v-skeleton-source="`sandbox.devices.board`" class="@container">
+                    <div class="grid grid-cols-1 gap-3 @2xl:grid-cols-2 @5xl:grid-cols-3">
+                        <DeviceBoardCard v-for="row in shown" :key="row.key" :machine="row" :needle="needle" :own-slug="ownSlug" :read-at="readAt" />
+                    </div>
+
+                    <!-- A filter that matched nothing says so, rather than leaving a board that looks empty by accident. -->
+                    <p v-if="shown.length === 0" :class="ui.emptyState()" role="status">
+                        {{
+                            needle === ``
+                                ? t(`sandbox.deviceBoard.noneAtState`, { state: statusWord })
+                                : t(`sandbox.deviceBoard.noDeviceSandboxHere`, { query })
+                        }}
+                    </p>
+                </div>
             </div>
+        </RowGroup>
 
-            <!-- The owner's phones: no folders or sandboxes on them, so a row each rather than a machine's card. -->
-            <PhoneRows />
+        <!-- The owner's phones: no folders or sandboxes on them, so a row each rather than a machine's card. -->
+        <PhoneRows />
 
-            <!-- The owner's other sandboxes this one may hand tasks to: a row each, read off its link card. -->
-            <LinkedSandboxRows />
+        <!-- The owner's other sandboxes this one may hand tasks to: a row each, read off its link card. -->
+        <LinkedSandboxRows />
 
-            <!-- The account's deleted sandboxes, last: boxes that left this board, drawn only while one can come back. -->
-            <RecentlyDeleted />
-        </div>
-    </RowGroup>
+        <!-- The account's deleted sandboxes, last: boxes that left this board, drawn only while one can come back. -->
+        <RecentlyDeleted />
+    </div>
 </template>
