@@ -17,6 +17,7 @@ import { withConversationTrailer } from "../../git-identity.js";
 import { claudeStoreOf, type StoreOwner } from "../../sessions/session-store.js";
 import { mirroredDirs, overlaysDir, PACKAGE_STORE, type TurnIsolation } from "./isolation.js";
 import { coneFor, fencedComposition } from "./worktree-cone.js";
+import { addCheckoutOver } from "./checkout-aside.js";
 import type { Fence } from "@intentic/sandbox-contract";
 
 // A conversation's isolated checkout: one git worktree per workspace repo, root at <worktreesRoot>/<id>/, nested repos
@@ -278,11 +279,9 @@ export const createAgentWorktrees = (
         const branch = `agent/${id}`;
         const target = worktreeDir(id, repo);
         // A crash between branch creation and checkout leaves the branch without a dir; attach it, don't recreate.
-        if (await branchExists(main, branch)) {
-            await git(main, ["worktree", "add", target, branch]);
-        } else {
-            await git(main, ["worktree", "add", "-b", branch, target, base]);
-        }
+        const add = (await branchExists(main, branch)) ? ["worktree", "add", target, branch] : ["worktree", "add", "-b", branch, target, base];
+        // Over whatever a turn wrote where this checkout goes, before the repo was one it carried (checkout-aside.ts).
+        await addCheckoutOver({ historyRoot, logger, id, repo, target }, main, add, git);
         // The state dir needs nothing here: tracked slice checks out normally; untracked binds via the namespace.
         return { repo, base };
     };
@@ -649,14 +648,18 @@ export const createAgentWorktrees = (
 
     // Brings a recorded composition to `want`: repos it lacks join, ones it doesn't name leave; root is never a leaver.
     // Leaving is preserve then release so uncommitted edits land on agent/<id>; join and leave run concurrently.
+    // `joinsOnly`: what an unnarrowed conversation does, keeping every repo it was born with and taking in each one that
+    // can be composed since (`want` is then every live repo, so a repo missing from it has merely vanished, which
+    // vanished-repos.ts settles, not this).
     const reconcile = async (
         id: string,
         recorded: readonly { repo: string; base: string }[],
         want: readonly { repo: string; base: string | undefined }[],
+        joinsOnly = false,
     ): Promise<readonly { repo: string; base: string }[]> => {
         const have = new Map(recorded.map((entry) => [entry.repo, entry]));
         const wanted = new Set(want.map(({ repo }) => repo));
-        const leaving = recorded.filter(({ repo }) => repo !== "root" && !wanted.has(repo));
+        const leaving = joinsOnly ? [] : recorded.filter(({ repo }) => repo !== "root" && !wanted.has(repo));
         const joining = want.filter(({ repo }) => !have.has(repo));
         if (leaving.length === 0 && joining.length === 0) {
             return recorded;
@@ -676,6 +679,17 @@ export const createAgentWorktrees = (
                 }
             }),
         ]);
+        if (joinsOnly) {
+            // Every recorded repo in its recorded order, the joiners after it in `want`'s.
+            const grown = [...recorded];
+            for (const { repo } of want) {
+                const made = joined.get(repo);
+                if (made !== undefined) {
+                    grown.push(made);
+                }
+            }
+            return grown;
+        }
         return want
             .map(({ repo }) => have.get(repo) ?? joined.get(repo))
             .filter((entry): entry is { repo: string; base: string } => entry !== undefined);
@@ -715,9 +729,11 @@ export const createAgentWorktrees = (
             };
             if (recorded.length > 0) {
                 await eachRepo(recorded, "root-first", (repo) => withRepoLock(repo, () => repairOne(id, repo)));
-                // An unselected, unfenced conversation keeps the composition it was born with; anything narrowed goes
-                // to what it should now hold, so an edited area moves the checkout on the next turn.
-                const repos = selection === undefined && fence === undefined ? recorded : await reconcile(id, recorded, await wanted());
+                // An unselected, unfenced conversation keeps every repo it was born with and takes in any composable
+                // since: a project folder whose repo was unborn when it began, a repo cloned after. Anything narrowed
+                // goes to what it should now hold, so an edited area moves the checkout on the next turn.
+                const unnarrowed = selection === undefined && fence === undefined;
+                const repos = await reconcile(id, recorded, await wanted(), unnarrowed);
                 await sparsenComposition(id, repos, fence);
                 await linkComposition(id, repos, namespaced);
                 // Asked only on the repair path: a checkout this call just created stands on `branch` by construction.

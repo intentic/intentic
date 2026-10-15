@@ -5,13 +5,16 @@ import type {
     AgentRepoChanges,
     AgentRepoHistory,
     LandConflict,
+    OutsideCheckout,
     ScratchPath,
 } from "@intentic/sandbox-contract";
 import { defaultGit } from "@intentic/base/git";
 import type { Services } from "../../composition.js";
+import { opt } from "../../opt.js";
 import { headSha } from "../../git/changes/changes.js";
 import { materializedPaths } from "../../git/changes/changes-porcelain.js";
 import type { IsolatedAgent, RepoRecord } from "../registry/agents-store.js";
+import { outsideCheckout } from "../worktrees/outside-checkout.js";
 import { strayStandings } from "../worktrees/stray-work.js";
 import { NO_IGNORED_OUTPUTS, type IgnoredOutputs } from "../../git/changes/ignored-outputs.js";
 import { agentIgnoredOutputs, agentRepoChanges, agentRepoModules, agentRepoReview, anchorOf, presentInMain } from "./agent-changes.js";
@@ -55,6 +58,17 @@ const ignoredOf = async (deps: ReviewDeps, entry: IsolatedAgent, composed: RepoR
     } catch (error) {
         deps.logger.warn({ err: error, repo: composed.repo, id: entry.id }, "agents diff: ignored outputs unreadable");
         return NO_IGNORED_OUTPUTS;
+    }
+};
+
+// Files the copy holds where it carries no checkout (outside-checkout.ts): beside the rows, never in their way, so an
+// unreadable walk still shows the work.
+const outsideOf = async (deps: ReviewDeps, entry: IsolatedAgent): Promise<OutsideCheckout[]> => {
+    try {
+        return await outsideCheckout(deps.agentWorktrees, deps.agentWorktrees.mainDir("root"), entry.id, entry.placement.repos);
+    } catch (error) {
+        deps.logger.warn({ err: error, id: entry.id }, "agents diff: files outside the checkout unreadable");
+        return [];
     }
 };
 
@@ -171,6 +185,7 @@ export const reviewOf = async (deps: ReviewDeps, entry: IsolatedAgent): Promise<
     // Asked of the whole composition, not of the repos that produced rows: a conversation that did all its work
     // on a branch of its own leaves `agent/<id>` empty whenever the turn's carry could not copy it over.
     const elsewhere = await strayStandings(deps.agentWorktrees, entry.id, entry.placement.repos);
+    const outside = await outsideOf(deps, entry);
     // Tells apart an agent that wrote nothing from one whose every file is committed (AgentChangesSchema).
     return {
         repos,
@@ -179,6 +194,7 @@ export const reviewOf = async (deps: ReviewDeps, entry: IsolatedAgent): Promise<
         ...ignoredField(outputs),
         ...(conflicts.length > 0 ? { conflicts } : {}),
         ...(elsewhere.length > 0 ? { elsewhere } : {}),
+        ...opt("outside", outside.length > 0 ? outside : undefined),
     };
 };
 

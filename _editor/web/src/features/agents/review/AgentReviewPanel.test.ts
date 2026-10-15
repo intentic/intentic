@@ -509,6 +509,7 @@ const reading = (state: { fetching: boolean; loaded: boolean }): ReturnType<type
         elsewhere: ref([]),
         scratch: ref([]),
         ignored: ref([]),
+        review: ref(undefined),
         asked: ref(false),
         actionBusy: ref(false),
         actionError: ref(undefined),
@@ -592,6 +593,26 @@ it(`says when work the conversation left elsewhere won't land, and nothing about
     expect(el.textContent).toContain(`Ask the agent`);
     // The git of it is the hover's, not the line's.
     expect(el.textContent).not.toContain(`ci/extension-admission`);
+});
+
+// Files a turn wrote where its copy carries no repository are on no branch, and no row can show them: the review used to
+// read as an agent that wrote nothing. Said as what it means, why each folder is outside left to the hover.
+it(`says how many files were written outside the conversation's checkout, and where`, async () => {
+    const review = reading({ fetching: false, loaded: true });
+    review.review.value = { repos: [], absorbed: 0, outside: [{ repo: `urzednik`, reason: `unborn`, files: 118 }] };
+    const el = document.createElement(`div`);
+    document.body.append(el);
+    app = createApp({ setup: () => () => h(AgentReviewPanel, { agentId: AGENT, changes: review, streaming: false, writing: false }) });
+    app.component(`Icon`, IconStub);
+    app.directive(`tooltip`, {});
+    app.use(router);
+    app.use(VueQueryPlugin, { queryClient });
+    app.mount(el);
+    await nextTick();
+
+    expect(el.textContent).toContain(`118 files in urzednik are outside this conversation's checkout, so they won't land.`);
+    // Why is the hover's, not the line's.
+    expect(el.textContent).not.toContain(`No commit yet`);
 });
 
 // Agents install freely in their own copy, so the review is where a person sees what the project takes on: one line

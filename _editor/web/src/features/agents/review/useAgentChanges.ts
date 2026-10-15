@@ -471,6 +471,9 @@ export function useAgentChanges(
         elsewhere,
         scratch,
         ignored,
+        // The review as last answered, for a field only one reader needs (the panel's `outside`): read there rather
+        // than wrapped here, where every derived field is one more closure in an already long composable.
+        review: query.data,
         pending,
         blocked,
         fixable,

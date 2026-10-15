@@ -5,6 +5,7 @@ import { AgentDomainRefusedError } from "../../workload/agent-execution.js";
 import { commitOnly } from "../../git/changes/changes-index.js";
 import { committableSubject, commitSubjectFlaw, markSubjectBreaking } from "../../git/ops/commit-message.js";
 import { AGENT_GIT_AUTHOR, withConversationTrailer } from "../../git-identity.js";
+import { isProjectFolderRepo } from "../../git/remote/project-repo.js";
 import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
 import { standing } from "../../rules/rules.js";
 import { reposOf } from "../registry/agents-store.js";
@@ -194,19 +195,19 @@ export const settleLandingInBackground = (services: Services, id: string): void 
 // The subject of the owner's own remainder, committed before an isolated turn reads the tree.
 const REMAINDER_SUBJECT = "Your edits";
 
-// Commits whatever is dirty in the main tree of each repo a turn is about to span, when the version rule stands;
-// otherwise nothing, since an uncommitted tree is the developer's review boundary. Best-effort: a repo that refuses
-// stays as it was and the turn goes on without the owner's latest edits, which is what happened before this existed.
-export const versionMainTree = async (services: Services, repos: readonly string[]): Promise<string[]> => {
-    const { rules } = await services.sandboxSettings.get();
-    if (versionRuleOf(rules) === undefined) {
-        return [];
-    }
+// A project folder's remainder: what file sync delivered since the last boundary, and any land not committed since.
+const folderSubject = (repo: string): string => `Your ${repo} folder as it stands`;
+
+type VersionDeps = Pick<Services, "agentWorktrees" | "logger">;
+
+// Each repo's main-tree remainder committed under the repo's lock; answers the repos that took a commit. Best-effort per
+// repo: one that refuses stays as it was and is said in the log.
+const commitRemainders = async (services: VersionDeps, repos: readonly string[], subjectOf: (repo: string) => string): Promise<string[]> => {
     const committed: string[] = [];
     for (const repo of repos) {
         try {
             const did = await services.agentWorktrees.withRepoLock(repo, () =>
-                commitWorktreeRemainder(repo, services.agentWorktrees.mainDir(repo), REMAINDER_SUBJECT, services.agentWorktrees.mainDir("root")),
+                commitWorktreeRemainder(repo, services.agentWorktrees.mainDir(repo), subjectOf(repo), services.agentWorktrees.mainDir("root")),
             );
             if (did) {
                 committed.push(repo);
@@ -216,4 +217,42 @@ export const versionMainTree = async (services: Services, repos: readonly string
         }
     }
     return committed;
+};
+
+// Which of these repos are project folders' mirrors (git/remote/project-repo.ts). A repo that cannot be asked is left
+// out, as one the version rule does not reach is.
+const projectFolders = async (services: VersionDeps, repos: readonly string[]): Promise<string[]> => {
+    const marked = await Promise.all(
+        repos.map(async (repo) => {
+            try {
+                return (await isProjectFolderRepo(services.agentWorktrees.mainDir(repo))) ? [repo] : [];
+            } catch (error) {
+                services.logger.warn({ err: error, repo }, "version: could not tell whether a repo is a project folder");
+                return [];
+            }
+        }),
+    );
+    return marked.flat();
+};
+
+// A PROJECT FOLDER IS VERSIONED WHATEVER THE RULE SAYS. Its repo is a mirror of a folder file sync fills, never anyone's
+// review boundary: nothing committed there reaches the owner (the git bridge refuses a project pairing), and their own
+// edits arrive in it uncommitted by construction. Left uncommitted, a checkout cut from its HEAD reads the folder as it
+// was at the first boot, and every land is judged against edits that read as the owner's work in progress, so it is
+// refused on any file both touched. Committed at each boundary instead, a land is judged against what the folder holds,
+// and a file both touched is a merge rather than a wall.
+export const versionProjectFolders = async (services: VersionDeps, repos: readonly string[]): Promise<string[]> =>
+    commitRemainders(services, await projectFolders(services, repos), folderSubject);
+
+// Commits whatever is dirty in the main tree of each repo a turn is about to span, when the version rule stands;
+// otherwise only the project folders' (above), since an uncommitted tree is the developer's review boundary.
+// Best-effort: a repo that refuses stays as it was and the turn goes on without the owner's latest edits, which is
+// what happened before this existed.
+export const versionMainTree = async (services: Services, repos: readonly string[]): Promise<string[]> => {
+    const { rules } = await services.sandboxSettings.get();
+    const folders = await projectFolders(services, repos);
+    if (versionRuleOf(rules) === undefined) {
+        return commitRemainders(services, folders, folderSubject);
+    }
+    return commitRemainders(services, repos, (repo) => (folders.includes(repo) ? folderSubject(repo) : REMAINDER_SUBJECT));
 };

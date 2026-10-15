@@ -42,3 +42,29 @@ export const contextNote = (input: ContextNoteInput): TurnNote => {
     }
     return { title: CONTEXT_NOTE_TITLE, text: lines.join("\n") };
 };
+
+// The repositories a conversation that carries everything still cannot have checked out: one with no commit has
+// nothing to branch from, and one git cannot read has nothing to check out. Their folders look like any other in the
+// tree, so a model would write into them and never learn that the work reached no branch. Said with the way out, so a
+// model that needs one stops rather than writing where nothing lands.
+export const OUTSIDE_NOTE_TITLE = "Folders outside this checkout";
+
+export const outsideCheckoutNote = (unborn: readonly string[], unreadable: readonly string[]): TurnNote => {
+    const lines = [`## ${OUTSIDE_NOTE_TITLE}`, ""];
+    if (unborn.length > 0) {
+        lines.push(
+            `${list(unborn)} ${unborn.length === 1 ? "has" : "have"} no commit yet, so ${unborn.length === 1 ? "it is" : "they are"} not checked out ` +
+                "here. Anything written under one reaches no branch, no review and no land. Each joins this checkout, " +
+                "with whatever was already written at its path, on the first turn after its first commit.",
+        );
+    }
+    if (unreadable.length > 0) {
+        lines.push(
+            ...(unborn.length > 0 ? [""] : []),
+            `Git cannot read ${list(unreadable)}, so ${unreadable.length === 1 ? "it is" : "they are"} not checked out here either, and ` +
+                "nothing written there reaches a branch.",
+        );
+    }
+    lines.push("", "If the task needs one of these, say which and stop rather than writing there.");
+    return { title: OUTSIDE_NOTE_TITLE, text: lines.join("\n") };
+};

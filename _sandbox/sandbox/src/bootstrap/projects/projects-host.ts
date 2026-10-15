@@ -60,7 +60,7 @@ const noteAttached = async (deps: ProjectsHostDeps, entries: readonly AttachedPr
 // One folder made a repo, and logged only when that changed something; a failure is the caller's to say.
 const ensureRepo = async (deps: ProjectsHostDeps, name: string): Promise<void> => {
     const outcome = await ensureProjectRepo(deps.workspace, deps.historyRoot, name, deps.git);
-    if (outcome === "created" || outcome === "pointer restored") {
+    if (outcome !== "already a repo" && outcome !== "left to relocation") {
         deps.logger.info({ repo: name, outcome }, "attached project folder: its repo is in place, with its git dir on /history");
     }
 };

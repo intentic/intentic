@@ -7,7 +7,7 @@ import { landAgent, reportLockfileFailures } from "./land.js";
 import { intoOf, type LandTarget, landTargetOf, upstreamOf, underLeases } from "./land-target.js";
 import { keepLandFailure, settleParentBooks } from "../../agent/run/placement/turn-landing.js";
 import { syncBeforeLand } from "./sync.js";
-import { settleLandingInBackground, versionCommitsSettled } from "./version-landed.js";
+import { settleLandingInBackground, versionCommitsSettled, versionProjectFolders } from "./version-landed.js";
 
 // A land a person pressed: the same pre-land rebase an automatic land takes, then the installed tree reconciled behind
 // it, as an automatic land does. Runs inside the conversation's land lease (landByHandLeased takes it). A spawned
@@ -54,10 +54,10 @@ export const landByHand = async (services: LandByHandDeps, entry: IsolatedAgent,
     const into = intoOf(target);
     // As an automatic land does (turn-landing.ts): another land's version commit first, so its work is history here.
     if (into === undefined) {
-        await versionCommitsSettled(
-            services,
-            entry.placement.repos.map(({ repo }) => repo),
-        );
+        const repos = entry.placement.repos.map(({ repo }) => repo);
+        await versionCommitsSettled(services, repos);
+        // What file sync delivered since the turn ended, committed so the rebase below reaches it (version-landed.ts).
+        await versionProjectFolders(services, repos);
     }
     const composition = await syncedComposition(services, entry, target);
     // Snapshotted after the sync: a rebase orphans the sha a stale span would name.

@@ -3,7 +3,7 @@ import { landAgent, landFailureOf, type LandOutcome, reportLockfileFailures } fr
 import { intoOf, type LandTarget, landTargetOf, type Upstream, upstreamOf, underLeases } from "../../../conversations/land/land-target.js";
 import { landingPaths } from "../../../conversations/land/landing-paths.js";
 import { noteLandHeldForWake } from "../../../conversations/land/wake-held.js";
-import { versionCommitsSettled } from "../../../conversations/land/version-landed.js";
+import { versionCommitsSettled, versionProjectFolders } from "../../../conversations/land/version-landed.js";
 import { type IsolatedAgent, isIsolated } from "../../../conversations/registry/agents-store.js";
 import type { Services } from "../../../composition.js";
 import { landingVerdict, type RuleFacts, standing } from "../../../rules/rules.js";
@@ -136,10 +136,10 @@ const landUnderLease = async (
     // Another agent's land still waiting on its version commit reads as the owner's uncommitted edits; rebased and
     // judged after that commit instead, it is history this branch can merge with. A parent's checkout has no such commit.
     if (target.kind === "main") {
-        await versionCommitsSettled(
-            deps,
-            finished.placement.repos.map(({ repo }) => repo),
-        );
+        const repos = finished.placement.repos.map(({ repo }) => repo);
+        await versionCommitsSettled(deps, repos);
+        // What file sync delivered since the turn opened, committed so the rebase below reaches it (version-landed.ts).
+        await versionProjectFolders(deps, repos);
     }
     try {
         await turn.sync(upstreamOf(finished, target));

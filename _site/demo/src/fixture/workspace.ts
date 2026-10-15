@@ -136,6 +136,9 @@ const ELSEWHERE: Record<string, AgentChanges[`elsewhere`]> = {
     [CONFLICT_AGENT_ID]: [{ repo: `web`, carried: false, uncommitted: true }],
 };
 
+// Files written where the copy carries no repository: a folder whose repo had no commit when the conversation began.
+const OUTSIDE = new Map<string, NonNullable<AgentChanges[`outside`]>>([[CONFLICT_AGENT_ID, [{ repo: `notes`, reason: `unborn`, files: 12 }]]]);
+
 // `diverged` needs a rebase; `workspace` is the owner's uncommitted edit, which no rebase reaches.
 const CONFLICTS: Record<string, LandConflict[]> = {
     [CONFLICT_AGENT_ID]: [
@@ -187,8 +190,19 @@ export const agentChanges = (agentId: string): AgentChanges => {
         }
     }
     // Every row stays listed; nothing here is ever absorbed into the tree's history.
+    const changes: AgentChanges = { repos, absorbed: 0 };
+    if (conflicts !== undefined) {
+        changes.conflicts = conflicts;
+    }
     const elsewhere = ELSEWHERE[agentId];
-    return { repos, absorbed: 0, ...(conflicts === undefined ? {} : { conflicts }), ...(elsewhere === undefined ? {} : { elsewhere }) };
+    if (elsewhere !== undefined) {
+        changes.elsewhere = elsewhere;
+    }
+    const outside = OUTSIDE.get(agentId);
+    if (outside !== undefined) {
+        changes.outside = outside;
+    }
+    return changes;
 };
 
 // Delta becomes the tree's uncommitted work, attributed to the agent. An agent with a recorded conflict refuses

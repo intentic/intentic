@@ -464,6 +464,19 @@ export const AgentRepoChangesSchema = z.object({
 export type AgentRepoChanges = z.infer<typeof AgentRepoChangesSchema>;
 // The review, plus why the last land refused: a conflict is found when the turn ends but resolved later on this
 // surface, so it rides here rather than only in the land response, and refreshes on every land.
+// A workspace repo this conversation's copy does not carry, where the copy nonetheless holds files at its path: what a
+// turn wrote into a folder that was no checkout of its own, which therefore reached no branch.
+export const OutsideCheckoutSchema = z.object({
+    repo: z.string().describe("Which repository."),
+    reason: z
+        .enum(["unborn", "unreadable", "not-carried"])
+        .describe(
+            "Why the copy does not carry it: `unborn` has no commit yet to start from, and is taken in on the conversation's next turn once it has one; `unreadable` is a repository git cannot read; `not-carried` is one the conversation was set up without, such as a persona that names other repositories.",
+        ),
+    files: z.number().describe("How many files the copy holds at its path. A floor past a thousand, which is where the count stops."),
+});
+export type OutsideCheckout = z.infer<typeof OutsideCheckoutSchema>;
+
 export const AgentChangesSchema = z.object({
     repos: z.array(AgentRepoChangesSchema).describe("One entry per repository the conversation touched."),
     // Disambiguates two opposite reasons for an empty list: nothing written, versus everything already committed.
@@ -534,6 +547,13 @@ export const AgentChangesSchema = z.object({
         .optional()
         .describe(
             "Files the conversation wrote in its copy that the repository's ignore rules exclude, such as a render in `out/` or a build in `dist/`, which your tree lacks or holds differently. No merge carries them and they never enter git; copying one puts it at the same path in your tree. Dependencies (`node_modules`), hidden files and folders, and logs, dumps and caches are never listed. Absent when there are none.",
+        ),
+    // Read off the live copy like scratch: a retired copy has no holes to read.
+    outside: z
+        .array(OutsideCheckoutSchema)
+        .optional()
+        .describe(
+            "Repositories of your workspace this conversation's copy does not carry, where it nonetheless wrote files at their path. Nothing written there is on its branch, so no merge brings it; an `unborn` one is taken into the copy, with those files, on the conversation's next turn after its first commit. Absent when there are none.",
         ),
 });
 export type AgentChanges = z.infer<typeof AgentChangesSchema>;

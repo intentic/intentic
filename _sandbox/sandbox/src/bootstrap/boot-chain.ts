@@ -207,7 +207,7 @@ const ensureProjectFolderRepo = async ({ config, logger, services }: BootRun): P
         return;
     }
     const outcome = await ensureProjectRepo(services.workspace, config.historyRoot, name);
-    if (outcome === "created" || outcome === "pointer restored") {
+    if (outcome !== "already a repo" && outcome !== "left to relocation") {
         logger.info({ repo: name, outcome }, "project folder: its repo is in place, with its git dir on /history");
     }
 };

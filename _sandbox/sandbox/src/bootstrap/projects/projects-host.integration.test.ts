@@ -67,7 +67,9 @@ test("a folder a report names is made a repo, registered, and named in the note"
 
     expect(await attachedProjects(deps.historyRoot)).toEqual(["blog"]);
     expect(await git(join(deps.root, "blog"), "rev-parse", "--absolute-git-dir")).toBe(repoGitDir(deps.historyRoot, "blog"));
-    expect(await git(join(deps.root, "blog"), "status", "--porcelain")).toBe("?? index.html");
+    // Taken into the repo's first commit, so a conversation's checkout holds the folder as it arrived.
+    expect(await git(join(deps.root, "blog"), "ls-files")).toBe("index.html");
+    expect(await git(join(deps.root, "blog"), "status", "--porcelain")).toBe("");
     expect(await discoverRepos(deps.root)).toEqual(["blog"]);
     expect(await readFile(join(deps.root, MEMORY_FILE), "utf8")).toBe(note(deps.root, ["blog"]));
 });

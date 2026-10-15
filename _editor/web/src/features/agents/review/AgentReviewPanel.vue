@@ -15,7 +15,7 @@ import {
     useExplorerStyle,
     useLoadingReveal,
 } from "@intentic/ui";
-import { isTestPath, type WorkspaceModule, type FileDiff } from "@intentic/sandbox-contract";
+import { isTestPath, type OutsideCheckout, type WorkspaceModule, type FileDiff } from "@intentic/sandbox-contract";
 import type { LineStat } from "@intentic/code-read";
 import { computed, nextTick, ref, type Ref, useTemplateRef, watch } from "vue";
 import { useRouter } from "vue-router";
@@ -582,6 +582,24 @@ const ICON_BUTTON = ui.iconButton(`disabled:opacity-40`);
 // A notice that needs no decision: one line under the bar, no box, so only the bar reads as something to act on.
 const NOTE_LINE = `mx-2 mt-1.5 flex shrink-0 items-center gap-1.5 px-2 text-2xs text-muted`;
 
+// Files written where the copy carries no repository, said as what it means: they are on no branch, so nothing lands
+// them. Why each folder is outside is the hover's, with what clears it.
+const outside = computed(() => changes.review.value?.outside ?? []);
+const outsideFiles = computed(() => outside.value.reduce((total, hole) => total + hole.files, 0));
+const outsideRepos = computed(() => outside.value.map((hole) => hole.repo).join(`, `));
+// Each wording spelled as its own call, so the catalog check can see every message asked for.
+const OUTSIDE_REASONS = {
+    unborn: () => t(`agents.agentReviewPanel.outsideUnborn`),
+    unreadable: () => t(`agents.agentReviewPanel.outsideUnreadable`),
+    "not-carried": () => t(`agents.agentReviewPanel.outsideNotCarried`),
+} satisfies Record<OutsideCheckout["reason"], () => string>;
+const outsideTip = computed(
+    (): Tip => ({
+        title: t(`agents.agentReviewPanel.outsideTitle`),
+        rows: outside.value.map((hole) => ({ label: hole.repo, value: OUTSIDE_REASONS[hole.reason]() })),
+    }),
+);
+
 // What a refused land left behind; causes and the action ladder are AgentConflictReport's to own.
 const resolvingPaths = computed(() => (changes.resolving.value ?? []).flatMap((entry) => entry.paths));
 
@@ -674,6 +692,14 @@ const seamWidth = computed<number>({
             >
                 {{ t(`agents.agentReviewPanel.askAgent`) }}
             </button>
+        </div>
+
+        <!-- Work no land carries because no checkout of its repository stood where it was written. -->
+        <div v-if="outside.length > 0" :class="NOTE_LINE">
+            <Icon name="exclamation-triangle" class="shrink-0 text-2xs text-warning" />
+            <span class="min-w-0 flex-1" v-tooltip.bottom="outsideTip">{{
+                t(`agents.agentReviewPanel.outsideWork`, { count: outsideFiles, repos: outsideRepos }, outsideFiles)
+            }}</span>
         </div>
 
         <!-- What no land carries: files that look like scratch, left in the conversation's copy until included or deleted. -->

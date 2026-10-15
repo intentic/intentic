@@ -1,12 +1,15 @@
+import { join } from "node:path";
 import type { AgentTurn, RepoBase, TurnNote } from "@intentic/sandbox-contract";
 import { landTargetOf } from "../../conversations/land/land-target.js";
 import { compactedSinceLastTurn, type Composition, isIsolated, type PersistedAgent, worktreeOf } from "../../conversations/registry/agents-store.js";
 import type { ConversationWorktree } from "../../conversations/worktrees/worktrees.js";
 import type { Services } from "../../composition.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
+import { fencedComposition } from "../../conversations/worktrees/worktree-cone.js";
+import { headSha } from "../../git/changes/changes.js";
 import { conversationFence } from "../../areas/area-scope.js";
 import { checkpointWorktree } from "../checkpoints/checkpoint-worktree.js";
-import { contextNote } from "./context-note.js";
+import { contextNote, outsideCheckoutNote } from "./context-note.js";
 
 // Composition is decided once, by the route, on the turn that creates the conversation's worktrees — the one moment it
 // can still change what's checked out. No card, or none naming context, means everything. Static: the pick is a list on
@@ -81,7 +84,7 @@ export const ensureComposedWorktree = async (
 // Builds the note only for turns that owe it: the opening turn and the one after a compaction, when history can't carry
 // it. Reads the just-recorded composition, so the note matches the tree the turn opens on.
 export const contextNoteIfDue = (
-    services: Pick<Services, "agents" | "workspace" | "personas">,
+    services: Pick<Services, "agents" | "workspace" | "personas" | "areas">,
     input: AgentTurn,
     entry: { readonly compactedTurn?: number | undefined } | undefined,
     conversationTurns: number,
@@ -92,14 +95,54 @@ export const contextNoteIfDue = (
     return contextNoteFor(services, input.conversationId);
 };
 
-// The preamble's account of the composition; undefined when the conversation carries everything (nothing to tell). The
-// card is re-read for its label only — repos come from the record, so an edited card changes nothing here.
-export const contextNoteFor = async (services: Pick<Services, "agents" | "workspace" | "personas">, conversationId: string): Promise<TurnNote | undefined> => {
-    const composition = worktreeOf(services.agents.entry(conversationId))?.composition;
-    if (composition === undefined) {
+// Live repos no checkout can carry, by why (context-note.ts outsideCheckoutNote). A repo git cannot read is said as
+// such rather than failing the note.
+const uncomposable = async (root: string, live: readonly string[]): Promise<{ unborn: string[]; unreadable: string[] }> => {
+    const unborn: string[] = [];
+    const unreadable: string[] = [];
+    for (const repo of live) {
+        try {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- one short read per nested repo, a handful at most
+            if ((await headSha(join(root, repo))) === undefined) {
+                unborn.push(repo);
+            }
+        } catch {
+            // allow(silent-catch): a repo git cannot read is exactly what this list reports.
+            unreadable.push(repo);
+        }
+    }
+    return { unborn, unreadable };
+};
+
+// For a conversation that carries everything: what it still cannot, within its own fence. Read before the first turn
+// composes the checkout, so it asks the repos themselves rather than the record, which the composition never names
+// them in either way.
+const outsideNoteFor = async (
+    services: Pick<Services, "agents" | "workspace" | "areas">,
+    conversationId: string,
+    live: readonly string[],
+): Promise<TurnNote | undefined> => {
+    const { unborn, unreadable } = await uncomposable(services.workspace.root, live);
+    if (unborn.length === 0 && unreadable.length === 0) {
         return undefined;
     }
+    const reach = new Set(fencedComposition(conversationFence(await services.areas.list(), services.agents.entry(conversationId)?.identity), live));
+    const within = (repos: readonly string[]): string[] => repos.filter((repo) => reach.has(repo));
+    return within(unborn).length + within(unreadable).length === 0 ? undefined : outsideCheckoutNote(within(unborn), within(unreadable));
+};
+
+// The preamble's account of the composition, or of the folders an unnarrowed conversation still cannot carry;
+// undefined when there is nothing to tell. The card is re-read for its label only — repos come from the record, so an
+// edited card changes nothing here.
+export const contextNoteFor = async (
+    services: Pick<Services, "agents" | "workspace" | "personas" | "areas">,
+    conversationId: string,
+): Promise<TurnNote | undefined> => {
+    const composition = worktreeOf(services.agents.entry(conversationId))?.composition;
     const live = await discoverRepos(services.workspace.root);
+    if (composition === undefined) {
+        return outsideNoteFor(services, conversationId, live);
+    }
     const card = composition.persona === undefined ? undefined : await services.personas.get(composition.persona);
     return contextNote({
         persona: card?.label ?? composition.persona,

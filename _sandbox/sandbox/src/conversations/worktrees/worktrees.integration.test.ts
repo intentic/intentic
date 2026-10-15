@@ -747,10 +747,11 @@ test("a repo whose parked branch cannot be unparked stays out, and joins with it
     expect(await readFile(join(rejoined.cwd, "intent", "deploy.config.ts"), "utf8")).toBe("edited by the agent\n");
 });
 
-test("a conversation with no selection keeps the composition it was born with", async () => {
+// Taken in rather than left a hole: a repo the checkout does not carry is excluded by the root, so anything a turn wrote
+// at its path reached no branch, no review and no land.
+test("a conversation with no selection keeps every repo it was born with and takes in one cloned since", async () => {
     const { work, worktrees } = await setup();
     const created = await worktrees.ensure("c1", []);
-    // A repo cloned after the conversation started does not join it when no selection was ever made.
     const later = join(work, "later");
     await gitInit(later, repoGitDir(join(work, "..", "history"), "later"));
     await writeFile(join(later, "a.txt"), "a\n");
@@ -758,8 +759,24 @@ test("a conversation with no selection keeps the composition it was born with", 
     await sh(later, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "later");
 
     const again = await worktrees.ensure("c1", created.repos);
-    expect(again.repos).toEqual(created.repos);
-    expect(existsSync(join(again.cwd, "later"))).toBe(false);
+
+    expect(again.repos.slice(0, created.repos.length)).toEqual([...created.repos]);
+    expect(again.repos.map(({ repo }) => repo)).toEqual([...created.repos.map(({ repo }) => repo), "later"]);
+    expect(await readFile(join(again.cwd, "later", "a.txt"), "utf8")).toBe("a\n");
+});
+
+test("a repo still unborn stays out, and joins on the turn after its first commit", async () => {
+    const { work, worktrees } = await setup();
+    const created = await worktrees.ensure("c1", []);
+    const later = join(work, "later");
+    await gitInit(later, repoGitDir(join(work, "..", "history"), "later"));
+
+    expect((await worktrees.ensure("c1", created.repos)).repos).toEqual(created.repos);
+
+    await writeFile(join(later, "a.txt"), "a\n");
+    await sh(later, "add", "-A");
+    await sh(later, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "first");
+    expect((await worktrees.ensure("c1", created.repos)).repos.map(({ repo }) => repo)).toContain("later");
 });
 
 // The fence a conversation inherits from whoever started it, as the checkout itself. The file-tool hook stops a

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { pathExists } from "@intentic/base/fs";
+import { gitInit } from "@intentic/base/git";
 import { createLogger } from "../../logger.js";
 import { repoGitDir, rootExcludes } from "../../workspace/layout/git-layout.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
@@ -40,7 +41,9 @@ const layout = async (): Promise<{ root: string; historyRoot: string; project: s
     return { root, historyRoot: join(base, "history"), project: join(root, NAME) };
 };
 
-test("an empty folder becomes a repo with its git dir on the history root and nothing committed", async () => {
+// The commit is the point: an unborn HEAD has nothing to branch from, so a conversation's composition leaves such a
+// repo out and nothing an agent writes in the folder can be reviewed or landed.
+test("an empty folder becomes a repo with its git dir on the history root and a HEAD to branch from", async () => {
     const { root, historyRoot, project } = await layout();
     await mkdir(project);
 
@@ -50,7 +53,9 @@ test("an empty folder becomes a repo with its git dir on the history root and no
     expect(await readFile(join(project, ".git"), "utf8")).toBe(`gitdir: ${target}\n`);
     expect(await git(project, "rev-parse", "--absolute-git-dir")).toBe(target);
     expect(await git(project, "symbolic-ref", "HEAD")).toBe("refs/heads/main");
-    expect(await commitCount(project)).toBe("0");
+    // Empty, since the folder was: the commit exists to born the branch, not to claim content.
+    expect(await commitCount(project)).toBe("1");
+    expect(await git(project, "ls-files")).toBe("");
     expect(await discoverRepos(root)).toEqual([NAME]);
 });
 
@@ -64,7 +69,9 @@ test("a folder file sync has not delivered yet is made, already a repo", async (
     expect(await discoverRepos(root)).toEqual([NAME]);
 });
 
-test("a folder that already holds the owner's files keeps every one of them, untracked and uncommitted", async () => {
+// Whatever file sync has delivered goes into that first commit, so the repo opens on the folder as it stands rather
+// than on an empty tree a conversation's checkout would then be cut from.
+test("a folder that already holds the owner's files keeps every one of them, and takes them into its first commit", async () => {
     const { root, historyRoot, project } = await layout();
     await mkdir(join(project, "src"), { recursive: true });
     await writeFile(join(project, "README.md"), "# my app\n");
@@ -73,9 +80,9 @@ test("a folder that already holds the owner's files keeps every one of them, unt
     expect(await ensureProjectRepo(workspacePaths(root), historyRoot, NAME)).toBe("created");
 
     expect(await readFile(join(project, "README.md"), "utf8")).toBe("# my app\n");
-    expect(await git(project, "ls-files")).toBe("");
-    expect(await git(project, "status", "--porcelain", "--untracked-files=all")).toBe("?? README.md\n?? src/main.ts");
-    expect(await commitCount(project)).toBe("0");
+    expect(await git(project, "ls-files")).toBe("README.md\nsrc/main.ts");
+    expect(await git(project, "status", "--porcelain", "--untracked-files=all")).toBe("");
+    expect(await commitCount(project)).toBe("1");
 });
 
 // The steady state every later boot repeats.
@@ -88,7 +95,8 @@ test("a second boot finds the repo standing and changes nothing", async () => {
 
     expect(await readFile(join(project, ".git"), "utf8")).toBe(pointer);
     expect(await git(project, "rev-parse", "--absolute-git-dir")).toBe(repoGitDir(historyRoot, NAME));
-    expect(await commitCount(project)).toBe("0");
+    // The first boot's commit, and no second one: a born HEAD is asked for once.
+    expect(await commitCount(project)).toBe("1");
 });
 
 // An agent's `rm .git` loses the pointer, never the git dir on the history root; a fresh init would orphan what it holds.
@@ -98,7 +106,7 @@ test("a git dir whose pointer went missing gets its pointer back, its history wh
     await ensureProjectRepo(workspacePaths(root), historyRoot, NAME);
     await writeFile(join(project, "notes.md"), "kept\n");
     await git(project, "add", "notes.md");
-    await git(project, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "-m", "first snapshot");
+    await git(project, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "-m", "a later snapshot");
     const committed = await git(project, "rev-parse", "HEAD");
     await rm(join(project, ".git"));
 
@@ -106,7 +114,22 @@ test("a git dir whose pointer went missing gets its pointer back, its history wh
 
     expect(await readFile(join(project, ".git"), "utf8")).toBe(`gitdir: ${repoGitDir(historyRoot, NAME)}\n`);
     expect(await git(project, "rev-parse", "HEAD")).toBe(committed);
-    expect(await git(project, "log", "--format=%s")).toBe("first snapshot");
+    expect(await git(project, "log", "--format=%s")).toBe(`a later snapshot\nYour ${NAME} folder, as this sandbox received it`);
+});
+
+// A repo an older sandbox made and left unborn: every conversation since has left the folder out of its checkout, so
+// the next boot is where it gets the HEAD it was always missing.
+test("a repo an older boot left unborn is given its first commit on the next boot", async () => {
+    const { root, historyRoot, project } = await layout();
+    await mkdir(project);
+    await gitInit(project, repoGitDir(historyRoot, NAME));
+    await writeFile(join(project, "report.md"), "written while the repo had no HEAD\n");
+
+    expect(await ensureProjectRepo(workspacePaths(root), historyRoot, NAME)).toBe("first commit taken");
+
+    expect(await git(project, "ls-files")).toBe("report.md");
+    expect(await commitCount(project)).toBe("1");
+    expect(await ensureProjectRepo(workspacePaths(root), historyRoot, NAME)).toBe("already a repo");
 });
 
 // The relocation step moves it onto the history root right after; this step must not race it for the same git dir.
