@@ -111,14 +111,21 @@ describe("overlap resolution", () => {
     });
 });
 
-// The CPU time `work` took, user and system, in milliseconds. Not wall time: on a runner several jobs share, waiting for
-// a core is most of the wall clock (the megabyte below read in 110ms on an idle machine, 400ms and then 1650ms on the CI
-// fleet with the detector unchanged), while what the bounds are for, a backtracking pattern, is work and shows as such.
+// The CPU time `work` took on this thread, user and system, in milliseconds, the least of three runs. Not wall time: on a
+// runner several jobs share, waiting for a core is most of the wall clock (the megabyte below read in 110ms on an idle
+// machine, 400ms and then 1650ms on the CI fleet with the detector unchanged). Not the whole process's either: the
+// runtime's own threads (a concurrent collection of the megabyte's garbage) were charged 1982ms to an input that costs
+// 10ms. The least of three drops a pause one run happened to take; a backtracking pattern, what the bounds are for, is
+// slow on every run.
 const cpuMsOf = (work: () => void): number => {
-    const before = process.cpuUsage();
-    work();
-    const spent = process.cpuUsage(before);
-    return (spent.user + spent.system) / 1000;
+    let least = Number.POSITIVE_INFINITY;
+    for (let run = 0; run < 3; run++) {
+        const before = process.threadCpuUsage();
+        work();
+        const spent = process.threadCpuUsage(before);
+        least = Math.min(least, (spent.user + spent.system) / 1000);
+    }
+    return least;
 };
 
 describe("speed", () => {

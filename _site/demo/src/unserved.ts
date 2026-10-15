@@ -79,6 +79,7 @@ export const UNSERVED = {
     "needs.withdraw": NOT_THE_EDITORS,
     "GET /sandboxes": NOT_THE_EDITORS,
     "POST /sandboxes": NOT_THE_EDITORS,
+    "POST /sandboxes/remove": NOT_THE_EDITORS,
     "GET /wallet/status": NOT_THE_EDITORS,
     "POST /wallet/fetch": NOT_THE_EDITORS,
     "GET /wallet/history": NOT_THE_EDITORS,

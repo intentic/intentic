@@ -23,7 +23,10 @@ test.skipIf(process.platform !== "linux")("a process stamped with a conversation
 
         await sleep(1_500);
         const second = await live.read();
-        expect(second.windowMs).toBeGreaterThanOrEqual(1_500);
+        // Measured against the first reading, on the clock that stamps both: a runner whose wall clock stepped back while
+        // the timer above slept read a 1,356ms window for a 1,500ms sleep, so the sleep is no bound on it.
+        expect(second.windowMs).toBe(second.at - first.at);
+        expect(second.windowMs).toBeGreaterThan(0);
         expect(second.sessions[owner]?.cpuPercent).toBeGreaterThan(0);
         expect(second.sessions[owner]?.rssBytes).toBeGreaterThan(0);
         expect(second.sandbox.processes).toBeGreaterThan(1);
