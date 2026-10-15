@@ -74,7 +74,9 @@ interface ReadResult {
 
 const readInWorkspace = async (root: string, absPath: string): Promise<ReadResult | undefined> => {
     const outcome = await ensureSidecar(root, absPath);
-    if (outcome.kind === "skipped" && outcome.reason === "outside-workspace") {
+    // A path the shadow tree refuses (an agent's worktree, the reference shelf) is still a file someone may read: it
+    // gets no sidecar, only the content cache, like a file outside the workspace.
+    if (outcome.kind === "skipped" && (outcome.reason === "outside-workspace" || outcome.reason === "ignored-path")) {
         return readOutsideWorkspace(root, absPath);
     }
     return fromOutcome(outcome);

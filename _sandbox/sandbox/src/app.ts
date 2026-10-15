@@ -1,3 +1,4 @@
+import { createProducedFileRoute } from "./conversations/produced-files.js";
 import { randomUUID } from "node:crypto";
 import { AT_REST_ACCOUNT_STORE, AT_REST_STORES, atRestActive } from "./store/encryption/at-rest.js";
 import type { HttpBindings } from "@hono/node-server";
@@ -22,6 +23,7 @@ import { createMembersRoutes } from "./auth/members/members.routes.js";
 import { openInApp } from "./system/boot/open-in-app.js";
 import { createRelinkRoute } from "./system/boot/relink.routes.js";
 import { memberRefusal } from "./auth/role-floor.js";
+import { orgLocks } from "./org/org-locks.middleware.js";
 import { admitByGrant, grantsOf } from "./auth/grants.js";
 import { createAutomationFireRoute } from "./automations/fire.routes.js";
 import { createCapabilityAskRoutes } from "./capabilities/offers/ask.routes.js";
@@ -300,6 +302,9 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         });
     }
 
+    // An organisation's locks, for every credential alike, the owner's included (org/org-locks.middleware.ts).
+    app.use("*", orgLocks(services.orgPolicy));
+
     // Every raw route below is registered under its declaration, so none exists without a policy (raw-routes.ts).
     const serve = rawRouteServer(app);
 
@@ -357,6 +362,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // The workspace's byte routes: raw file read, the ranged media read a <video> talks to, the ZIP download of a selection, and the three upload doors.
     // Off oRPC since their bodies are streamed bytes; registered before the catch-all, like /health.
     const workspaceBytes = createWorkspaceBytesRoutes(services);
+    serve("GET /agents/{id}/documents/raw", createProducedFileRoute(services));
     serve("GET /workspace/raw", workspaceBytes.raw);
     serve("GET /workspace/thumb", workspaceBytes.thumb);
     serve("GET /workspace/media", workspaceBytes.media);

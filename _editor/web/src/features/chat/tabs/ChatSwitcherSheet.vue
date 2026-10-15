@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { BottomSheet, SearchBar, timeAgo } from "@intentic/ui";
+import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { useSettled } from "@intentic/ui/async";
 import { ref, watch } from "vue";
 import { useAgents } from "../../agents/fleet/useAgents";
@@ -19,6 +20,7 @@ import { useT } from "@intentic/ui/i18n";
 // drift between them. Picking closes the sheet; what the pick does is the host's.
 
 const t = useT();
+const vocabulary = useVocabulary();
 
 const open = defineModel<boolean>({ required: true });
 const emit = defineEmits<{ select: [id: string]; close: [ids: ReadonlySet<string>]; open: [id: string]; new: [] }>();
@@ -80,7 +82,7 @@ const startNew = (): void => {
                 @click="startNew"
             >
                 <span class="flex h-6 w-6 shrink-0 items-center justify-center"><Icon name="plus" class="text-base" /></span>
-                {{ t(`chat.words.newAgent`) }}
+                {{ vocabulary.newAgent }}
             </button>
             <button
                 v-for="c in conversations"
@@ -92,7 +94,7 @@ const startNew = (): void => {
             >
                 <Icon v-bind="statusIcon(c.status.value)" />
                 <span class="min-w-0 flex-1 truncate text-sm" :class="activeId === c.conversationId ? 'text-link' : 'text-content'">{{
-                    c.title.value ?? (c.isolated.value ? t(`chat.words.newAgent`) : t(`chat.words.newChat`))
+                    c.title.value ?? (c.isolated.value ? vocabulary.newAgent : t(`chat.words.newChat`))
                 }}</span>
                 <span v-if="twinFact(c) !== undefined" class="max-w-32 shrink-0 truncate text-2xs text-subtle">{{ twinFact(c) }}</span>
                 <!-- Archived: off the agents board, but the conversation is still open right here. -->

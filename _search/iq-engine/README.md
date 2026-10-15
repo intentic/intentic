@@ -37,6 +37,15 @@ flowchart LR
 - Embeddings are bge-small-en-v1.5 (q8): an attention-masked mean over the token states, L2-normalised. Queries carry bge's retrieval instruction ("Represent this sentence for searching relevant passages: "); passages never do. `VECTOR_SPACE` names what a stored vector depends on (model, pooling, normalisation), and both the index and the vector-cache sidecar are keyed by it: changing it empties both stores once and re-embeds every chunk, so vectors from two spaces never mix. The mean config keeps the bare model id as its value, the key existing caches already carry.
   - 2026-09-29: kept mean pooling over bge's reference [CLS] pooling. On iq-bench's 58 natural-language cases (hono, click, intentic), nDCG@10 for mean vs CLS was 0.716 vs 0.699 in the full pipeline (CLS better on 6 cases, worse on 4, sign p 0.75) and 0.610 vs 0.600 for the vector leg alone (12 better, 14 worse). That is a tie, and switching would force every index through a full re-embed (about 80 minutes for this repository's 138k chunks) for no measured gain. Revisit if a larger bench shows a real difference. Dropping the query instruction lowered nDCG under both poolings (vector leg with mean pooling 0.610 to 0.582).
 - `verify(text)` is the grounding check behind `iq verify`: it pulls the file paths, `path:line` anchors and code names out of an answer and checks them against the sweep and the index. A missing file or a name defined and written nowhere is an issue with the closest real one suggested; an anchor past its file's end is one; and an anchor whose line cites names the file holds, none of them inside the cited range, its enclosing function, or 15 lines around it, has drifted. Names are matched case-exactly, and a line citing one file at several lines is not judged for drift, since which name belongs to which anchor is a guess there. A file the index has not caught up with is read from disk and its index rows ignored, since an agent verifies right after editing, ahead of the daemon's re-index.
+- Documents (pdf, docx, xlsx, pptx, odt, ods, odp, rtf, epub; 2026-10-13) are indexed by their text, under their own
+  paths: the sweep points a document that has a fileq shadow (`.intentic/local/cache/derived/<path>.md`, which the
+  daemon's shadow keeper keeps current) at it, and the indexer reads the shadow's body in place of the bytes, with the
+  shadow's mtime and size, so a re-rendered shadow re-indexes its document. The text is page-marked as fileq's ripgrep
+  preprocessor prints it (`[p. 12] …`, from `@intentic/base/shadow-text`), so a hit's line and page are the ones
+  `rg -n` gives. Chunks never straddle a page and are labelled with it (`docs/terms.pdf § p. 12`). `iq context` and
+  `iq verify` read a document's lines from the shadow too. Documents take the docs prior (0.5) wherever they sit. The
+  floor is unchanged: a shadow is read as its document's content and never surfaces under its own path. The embedder is
+  unchanged. Since the shadow tree is not watched, the daemon marks the index dirty when the keeper writes one.
 - Every engine's output passes through `floor.ts`: inside any `.intentic` directory only the authored, versioned slice is searchable, and `--ignored` cannot lift that.
 - `createEngine` serves one CLI process. `createEngineClient` (`./host`) runs a resident engine in a child process for the daemon, re-indexing on filesystem changes.
 - Each retrieval stage is a named entry in `FEATURES`, so [iq-bench](../iq-bench) can switch stages off and compare.
@@ -55,6 +64,7 @@ flowchart LR
 - [src/render/text.ts](src/render/text.ts) — the capsule (`answer:`, the `key:`/`route:`/`siblings:` lines under it, `candidates:`, `more:`) and the body under a hard token budget.
 - [src/store/db.ts](src/store/db.ts) — the index schema and its rebuild-on-mismatch version.
 - [src/workspace/floor.ts](src/workspace/floor.ts) — what no query can ever surface.
+- [src/workspace/shadows.ts](src/workspace/shadows.ts) — documents read through their fileq shadows.
 
 ## Commands
 

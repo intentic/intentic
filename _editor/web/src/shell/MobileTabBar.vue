@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { IconName } from "@intentic/ui";
+import { useVocabulary } from "../workbench/views/vocabulary";
 import type { ViewBadge } from "@intentic/extension-api";
 import { computed } from "vue";
 import { type RouteLocationNormalizedLoaded, RouterLink, useRoute } from "vue-router";
@@ -23,6 +24,7 @@ import { useT } from "@intentic/ui/i18n";
 import { lessMotion } from "@intentic/ui/motion";
 
 const t = useT();
+const words = useVocabulary();
 const { isGuest } = useRole();
 
 // Four fixed tabs: Agents (fleet, "needs you" badge), Chat (the conversation you were last in), Review (the count of
@@ -113,7 +115,7 @@ const tabs = computed<readonly Tab[]>(() => [
     {
         id: `agents`,
         to: `/agents`,
-        label: t(`shared.agents`),
+        label: words.value.agents,
         // The desktop rail's tile, on a phone: one derivation (agentsTile.ts) for both, so a count that follows
         // the board's scope cannot follow it in one shell and not the other.
         ...(agentsBadge.value === undefined ? {} : { badge: agentsBadge.value }),

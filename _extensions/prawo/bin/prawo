@@ -1,0 +1,3 @@
+#!/usr/bin/env node
+/* This launcher runs the compiled `prawo` CLI from the extension bundle. */
+import "../dist/main.js";

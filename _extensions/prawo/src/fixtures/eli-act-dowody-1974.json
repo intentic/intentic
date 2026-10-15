@@ -1,0 +1,52 @@
+{
+ "ELI": "DU/1974/85",
+ "address": "WDU19740140085",
+ "publisher": "DU",
+ "year": 1974,
+ "volume": 14,
+ "pos": 85,
+ "title": "Ustawa z dnia 10 kwietnia 1974 r. o ewidencji ludności i dowodach osobistych.",
+ "type": "Ustawa",
+ "displayAddress": "Dz.U. 1974 nr 14 poz. 85",
+ "status": "uchylony",
+ "inForce": "NOT_IN_FORCE",
+ "promulgation": "1974-04-17",
+ "announcementDate": "1974-04-10",
+ "entryIntoForce": "1975-01-01",
+ "validFrom": "1975-01-01",
+ "repealDate": "2015-03-01",
+ "changeDate": "2024-03-15T11:12:00",
+ "textHTML": true,
+ "textPDF": true,
+ "texts": [
+  {
+   "fileName": "text.html",
+   "type": "H"
+  },
+  {
+   "fileName": "D19740085.pdf",
+   "type": "O"
+  },
+  {
+   "fileName": "D19740085.pdf",
+   "type": "I"
+  },
+  {
+   "fileName": "D19740085Lj.pdf",
+   "type": "U"
+  }
+ ],
+ "references": {
+  "Akty uchylające": [
+   {
+    "id": "DU/2010/1131",
+    "date": "2015-03-01"
+   }
+  ],
+  "Inf. o tekście jednolitym": [
+   {
+    "id": "DU/2006/993"
+   }
+  ]
+ }
+}

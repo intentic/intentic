@@ -18,7 +18,7 @@ flowchart LR
 - Cards that need a client tool (`postgres`, `mysql`, `posthog`) name a Dockerfile fragment in `env/`, restricted to `RUN` and `ENV` and built into the sandbox's image overlay.
 - The manifest also offers automation templates tied to these cards: push webhooks for GitHub and GitLab, and Sentry alerts.
 - Baked into every sandbox image; switching it off on the Extensions tab removes exactly these cards.
-- `ezd-rp` connects an office's EZD RP integration and OAuth authority with an administrator-issued API key. `e-doreczenia` connects registered UA API v3 and SE API v4 endpoints with a system X.509 certificate. Both skills restrict outgoing registration or formal delivery to an approval draft. Neither offers a generic authenticated probe: EZD RP needs a token exchange, while e-Doręczenia needs a signed JWT and a registered system. The office supplies instance URLs; the card does not assume production endpoints.
+- The EZD RP and e-Doręczenia cards for Polish public offices live in [e-urzad](../e-urzad), beside the CLI, tools and view that use them.
 
 ## Key files
 

@@ -1,0 +1,12 @@
+/* Source-consumed by the web app's Vite (the view, through ./src/index.ts); the CLI and the backend are bundled by vite.cli.config.ts and vite.server.config.ts. This config type-checks all of it, suites included. */
+{
+    "compilerOptions": {
+        "noEmit": true,
+        "rootDir": "./src",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo",
+        "resolveJsonModule": true,
+        "types": ["bun", "@intentic/testing/globals", "node"]
+    },
+    "include": ["./src/**/*.ts", "./src/**/*.vue", "./intentic-extension.json"],
+    "extends": "@intentic/tsconfig/tsconfig.vue.json"
+}

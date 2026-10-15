@@ -1,0 +1,3 @@
+#!/usr/bin/env node
+/* This launcher imports the bundled e-Urząd CLI (dist/cli.js, built by vite.cli.config.ts) from the extension tree. */
+import "../dist/cli.js";

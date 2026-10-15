@@ -1,5 +1,5 @@
 import { SPECIMEN_CHAT_ID, SPECIMEN_TRANSCRIPT } from "./specimen";
-import type { AgentHarness, AgentProvider, SandboxHandlerOutput, TranscriptRow } from "@intentic/sandbox-contract";
+import { type AgentHarness, type AgentProvider, producedDocumentPaths, type SandboxHandlerOutput, type TranscriptRow } from "@intentic/sandbox-contract";
 import { SUPPORT_SWEEP_PATH } from "./browserShots";
 import { DESK_REVIEW_ID, SEPTEMBER_AFTER, SEPTEMBER_BEFORE, SEPTEMBER_PAGE, SEPTEMBER_PAGE_PATH, SEPTEMBER_PRINT_PATH } from "./desk";
 import {
@@ -515,3 +515,6 @@ const TRANSCRIPTS: Record<string, AgentTranscript> = {
 
 // Each recording is one whole page: it starts at the record's first message, and nothing older precedes it.
 export const transcriptFor = (id: string): SandboxHandlerOutput<`agents`, `transcript`> => ({ ...(TRANSCRIPTS[id] ?? { messages: [] }), from: 0, more: false });
+
+// The documents a recorded conversation's calls wrote, as the daemon lists them for its owner (agents.documents).
+export const documentsFor = (id: string): string[] => producedDocumentPaths(TRANSCRIPTS[id]?.messages ?? []);

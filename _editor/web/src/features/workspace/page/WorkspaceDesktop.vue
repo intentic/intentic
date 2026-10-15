@@ -982,7 +982,9 @@ const includeTip = computed((): Tip => ({
                         <!-- One file read in every folder: the tree then lists folders alone, and the page beside it reads them. -->
                         <HomeCoverPicker v-if="!contentMode" compact :cover="cover" @choose="(name) => (cover = name)" @drop="cover = undefined" />
                         <!-- Root's own codebase health: root is a repo (ensureRootRepo) with no tree row, so this lives on the toolbar. -->
+                        <!-- Codebase health is a developer's reading: a maker's toolbar has no press for it. -->
                         <button
+                            v-if="!maker"
                             type="button"
                             class="flex shrink-0 items-center rounded-md px-1.5 py-0.5 text-muted transition-colors hover:text-content"
                             v-tooltip.bottom="rootHealthTooltip"

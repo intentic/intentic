@@ -20,9 +20,14 @@ COPY --from=trees extensions/whatsapp /opt/extensions/whatsapp
 # → bin/gw, a launcher over the built dist/). Dependency-free like telegram — Google's APIs are fetch and JSON —
 # so its tree is its own dist plus the two workspace packages it types against.
 COPY --from=trees extensions/google-workspace /opt/extensions/google-workspace
+# microsoft-365 is the same shape: `m365` (bin/m365) and the inbox watcher over its dist, fetch and JSON only.
+COPY --from=trees extensions/microsoft-365 /opt/extensions/microsoft-365
+# prawo is a CLI and nothing else (contributes.bin → bin/prawo over its dist/): Polish acts from the Sejm's ELI API and
+# rulings from SAOS, fetch and JSON like google-workspace, with PDFs read through the image's fileq.
+COPY --from=trees extensions/prawo /opt/extensions/prawo
 # EVERY AGENT CLI THESE PACKS CONTRIBUTE (contributes.bin), made runnable. The daemon prepends their directories
 # to the agent's PATH every turn, and PATH resolution skips a file with no execute bit — so all three shipped as
 # mode 644, resolved to nothing, and failed the moment the agent took the skill at its word. Done here rather
 # than as `--chmod` on the COPYs above, because those copy whole deployed trees and would hand the exec bit to
 # every file in node_modules with them. A new pack that ships a `bin` belongs on this line.
-RUN chmod +x /opt/extensions/discord/bin/* /opt/extensions/whatsapp/bin/* /opt/extensions/google-workspace/bin/*
+RUN chmod +x /opt/extensions/discord/bin/* /opt/extensions/whatsapp/bin/* /opt/extensions/google-workspace/bin/* /opt/extensions/microsoft-365/bin/* /opt/extensions/imap/bin/* /opt/extensions/prawo/bin/*

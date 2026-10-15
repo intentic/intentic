@@ -1,0 +1,40 @@
+{
+ "ELI": "DU/2025/1691",
+ "address": "WDU20250001691",
+ "publisher": "DU",
+ "year": 2025,
+ "volume": 0,
+ "pos": 1691,
+ "title": "Obwieszczenie Marszałka Sejmu Rzeczypospolitej Polskiej z dnia 7 listopada 2025 r. w sprawie ogłoszenia jednolitego tekstu ustawy - Kodeks postępowania administracyjnego",
+ "type": "Obwieszczenie",
+ "displayAddress": "Dz.U. 2025 poz. 1691",
+ "status": "obowiązujący",
+ "inForce": "IN_FORCE",
+ "promulgation": "2025-12-03",
+ "announcementDate": "2025-11-07",
+ "legalStatusDate": "2025-11-03",
+ "changeDate": "2025-12-04T11:34:38",
+ "textHTML": false,
+ "textPDF": true,
+ "texts": [
+  {
+   "fileName": "D20251691.pdf",
+   "type": "O"
+  },
+  {
+   "fileName": "D20251691.pdf",
+   "type": "I"
+  },
+  {
+   "fileName": "D20251691L.pdf",
+   "type": "T"
+  }
+ ],
+ "references": {
+  "Tekst jednolity dla aktu": [
+   {
+    "id": "DU/1960/168"
+   }
+  ]
+ }
+}

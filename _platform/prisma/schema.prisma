@@ -290,11 +290,20 @@ model Sandbox {
     // null for one running on a computer the owner owns.
     hosted             HostedMachine?
     members            SandboxMember[]
+    // The organisation whose policy this sandbox is held to (Organisation below); null is a personal sandbox, which
+    // is every sandbox until an admin of an organisation who owns it binds it. Set null if the organisation goes, so
+    // its sandboxes fall back to personal rather than vanishing with it.
+    orgId              String?
+    org                Organisation?   @relation(fields: [orgId], references: [id], onDelete: SetNull)
+    // The policy edition this sandbox's daemon last said it holds (POST /sandbox/org-policy), so the organisation's
+    // console can tell applied from pending. Null until a bound daemon first asks.
+    orgPolicyApplied   Int?
     createdAt          DateTime        @default(now())
     updatedAt          DateTime        @updatedAt
 
     // sandbox.list's owned-sandboxes findMany is the hottest platform query.
     @@index([ownerId])
+    @@index([orgId])
     hostedUsage      HostedUsage[]
 
     @@map("sandbox")
@@ -920,6 +929,41 @@ model SandboxMember {
     // above leads with sandboxId, so it can't serve them.
     @@index([email])
     @@map("sandbox_member")
+}
+
+// An ORGANISATION (docs/architecture/organisations.md): people and the sandboxes they run, held to one policy its admins
+// write. A sandbox belongs to one by Sandbox.orgId; a personal sandbox belongs to none, and nothing here reaches it.
+model Organisation {
+    id            String      @id @default(cuid())
+    name          String
+    // The rules as an admin wrote them (sandbox-contract OrgPolicyRulesSchema): which hub sections are open, locked
+    // or hidden. JSON rather than columns, so a new kind of rule is a contract change, not a migration.
+    policy        Json        @default("{}")
+    // The edition of `policy`, raised by every save. Daemons report the edition they hold (Sandbox.orgPolicyApplied),
+    // and a save names the edition it edited, so two admins cannot silently undo each other.
+    policyVersion Int         @default(1)
+    members       OrgMember[]
+    sandboxes     Sandbox[]
+    createdAt     DateTime    @default(now())
+    updatedAt     DateTime    @updatedAt
+
+    @@map("organisation")
+}
+
+// A person in an organisation, by address like SandboxMember: they need not have signed in yet, and the row is what
+// later phases provision their sandbox access from. `role` is OrgRoleSchema (admin/member), a string at rest.
+model OrgMember {
+    id        String       @id @default(cuid())
+    orgId     String
+    org       Organisation @relation(fields: [orgId], references: [id], onDelete: Cascade)
+    email     String
+    role      String       @default("member")
+    createdAt DateTime     @default(now())
+
+    @@unique([orgId, email])
+    // "Which organisations am I in" looks up by address alone.
+    @@index([email])
+    @@map("org_member")
 }
 
 // A native install registered with the push relay — one row per (account, device token). The row is the

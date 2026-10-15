@@ -1,4 +1,5 @@
-import { deliverableKindOf, documentOf, documentTitle, isDocumentPath, isPlanDocumentPath } from "./documents.js";
+import type { TranscriptRow } from "../events/transcript.js";
+import { deliverableKindOf, documentOf, documentTitle, isDocumentPath, isPlanDocumentPath, producedDocumentPaths } from "./documents.js";
 import { PLAN_DOCUMENTS_DIR } from "../state/workspace-state.js";
 
 const write = (path: string, newText: string, extra: { oldText?: string; truncated?: boolean } = {}) => [
@@ -86,5 +87,33 @@ describe("deliverableKindOf", () => {
             undefined,
             undefined,
         ]);
+    });
+});
+
+
+test("ODF text, sheets, slides and RTF are result documents", () => {
+    expect(["letter.ODT", "budget.ods", "briefing.odp", "letter.rtf"].map(deliverableKindOf)).toEqual(["odt", "ods", "odp", "rtf"]);
+});
+
+describe("producedDocumentPaths", () => {
+    const rows: TranscriptRow[] = [
+        { role: "user", text: "make me letter.odt and notes.pdf" },
+        {
+            role: "assistant",
+            text: "Done",
+            tools: [
+                { id: "1", name: "Write", category: "edit", status: "completed", content: write("./out/letter.odt", "") },
+                { id: "2", name: "Write", category: "edit", status: "failed", locations: [{ path: "broken.docx" }] },
+                { id: "3", name: "Bash", category: "execute", status: "failed", locations: [{ path: "deck.pptx" }, { path: "build.log" }] },
+                { id: "4", name: "Bash", category: "execute", status: "completed", locations: [{ path: "draft.pdf" }] },
+                { id: "5", name: "Bash", category: "delete", status: "completed", locations: [{ path: "draft.pdf" }] },
+                { id: "6", name: "Read", category: "read", status: "completed", locations: [{ path: "source.xlsx" }] },
+                { id: "7", name: "Task", category: "think", status: "completed", children: [{ id: "8", name: "Write", category: "edit", status: "completed", locations: [{ path: "budget.ods" }] }] },
+            ],
+        },
+    ];
+
+    test("lists what settled calls recorded writing, never what prose or a read named, minus what was deleted", () => {
+        expect(producedDocumentPaths(rows)).toEqual(["out/letter.odt", "deck.pptx", "budget.ods"]);
     });
 });

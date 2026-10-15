@@ -12,8 +12,11 @@ import { errandOf } from "../run/errands";
 import { useOperation } from "../../../workbench/operations/operations";
 import { forksAt } from "./forksIndex";
 import { useT } from "@intentic/ui/i18n";
+import { useAudience } from "../../../app/useAudience";
 
 const t = useT();
+// Forking a conversation at a message is a developer's branching move; a maker's transcript carries no such strip.
+const { maker } = useAudience();
 
 // A mark in the column's right gutter, costing no transcript height, hanging off the answer above it rather than the
 // prompt below. That gutter is the reader's side, what they can DO; what the agent did stands on the spine down the
@@ -264,7 +267,7 @@ const open = (event: Event): void => {
 <template>
     <!-- Negative top margin cancels the flex gap so this zero-height strip doesn't change the transcript's height. -->
     <!-- Arming survives the pointer leaving this strip, since the menu opens beside it; only the timeout disarms it. -->
-    <div class="relative z-[6] -mt-1 h-0">
+    <div v-if="!maker" class="relative z-[6] -mt-1 h-0">
         <button
             type="button"
             class="touch-target absolute right-[calc(-1*var(--chat-gutter))] bottom-0 flex h-7 w-[var(--chat-gutter)] cursor-pointer items-center justify-center rounded-md transition hover:bg-overlay hover:text-content"

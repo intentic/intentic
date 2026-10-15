@@ -11,6 +11,7 @@ import { useChat } from "../run/useChat";
 import { conversationView, PANE_VIEW } from "./useChat-view";
 import { useChatRoute } from "../routing/chatRoute";
 import { useRole } from "../../../client/sandbox/useRole";
+import { useAudience } from "../../../app/useAudience";
 import { useChatAttachments } from "../drafts/useChatAttachments";
 import { useQueuedAttachments } from "../drafts/pendingAttachments";
 import { useComposerVoice } from "../composer/voice/useComposerVoice";
@@ -103,6 +104,10 @@ const blocked = computed(() => connection.value.failure !== undefined && isBlock
 const { mobile } = useDevice();
 // A viewer's composer is present but inert (the daemon floors every route at collaborator).
 const { canDrive, isGuest } = useRole();
+// Plain words in the composer: a reader who does not write code, and a guest, talk to an assistant, not to a coding tool
+// by name; neither is offered the model, the effort or the shaping controls a developer tunes.
+const { maker } = useAudience();
+const plainWords = computed(() => maker.value || isGuest.value);
 
 const scroller = ref<HTMLElement | null>(null);
 const content = ref<HTMLElement | null>(null);
@@ -234,6 +239,8 @@ const {
     runThrough,
     steered,
     editing,
+    plain: plainWords,
+    guest: isGuest,
     pills: {
         mode: modePill,
         placement: placementPill,
@@ -320,6 +327,7 @@ const {
         provider: providerName.value,
         onTrial: onTrial.value,
         editDropped: props.conversation.transcript.doomed.value.size,
+        plain: plainWords.value,
     })),
     pin,
     refocus: () => {
@@ -512,7 +520,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                 <!-- The scratch pad withholds the turns, so no message component mounts and the scroller shrinks to the composer. -->
                 <ChatPaneTurns v-if="!strip">
                     <template #empty>
-                        <ChatPaneEmpty :unset="modelReading.unset" :on-trial="onTrial" :provider-name="providerName" />
+                        <ChatPaneEmpty :unset="modelReading.unset" :on-trial="onTrial" :provider-name="providerName" :plain="plainWords" />
                     </template>
                 </ChatPaneTurns>
 
@@ -645,7 +653,11 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                              dropping "Choose a model" leaves a bare glyph with nothing saying to press it. The free trial keeps
                                              its name too: its mark is a gift box no vendor owns, which alone read as a stray decoration rather
                                              than as the model, and the one press that leads off the trial. -->
+                                        <!-- Plain words leave the model out of the row (the overflow's "Which AI answers" reaches it), except while
+                                             nothing is picked, when the pill is the press that gets the chat going; a guest's model is the
+                                             assistant it was handed, so neither the pill nor the effort is theirs. -->
                                         <ComposerModelPill
+                                            v-if="!plainWords || (!isGuest && modelReading.unset)"
                                             ref="modelPill"
                                             :conversation="conversation"
                                             :class="{
@@ -665,6 +677,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                         />
 
                                         <ComposerEffort
+                                            v-if="!plainWords"
                                             :conversation="conversation"
                                             :class="{ 'composer-steered': pickedWorkflow !== undefined, 'composer-flash': flashed === 'effort' }"
                                             :disabled="pickedWorkflow !== undefined"
@@ -691,7 +704,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                                 :disabled="pickedWorkflow !== undefined"
                                                 @click="modeOpen = !modeOpen"
                                                 :aria-expanded="modeOpen"
-                                                :aria-label="t(`chat.words.agentMode`)"
+                                                :aria-label="plainWords ? t(`chat.composerMore.plain.mode`) : t(`chat.words.agentMode`)"
                                             >
                                                 <Icon :name="modeIcon" class="text-2xs text-link" />
                                                 <span class="@max-md:hidden">{{ modeLabel }}</span>
@@ -849,7 +862,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                             @click="moreOpen = !moreOpen"
                                             v-tooltip.top="moreHint"
                                             :aria-expanded="moreOpen"
-                                            :aria-label="t(`chat.chatPane.moreComposerSettings`)"
+                                            :aria-label="plainWords ? t(`chat.chatPane.plain.moreSettings`) : t(`chat.chatPane.moreComposerSettings`)"
                                         >
                                             <Icon name="sliders-h" class="text-xs max-md:text-base" />
                                         </button>
@@ -1013,10 +1026,16 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
         <ChatPaneStatus v-if="connected && !strip" :block="subagentOf ? undefined : refusal" :hint="subagentOf ? `` : composerHint" />
 
         <!-- The four composer menus, each in the app's standard desktop-panel/mobile-sheet swap (ResponsiveOverlay), uncapped in height. -->
-        <ResponsiveOverlay v-model="modelOpen" :anchor="modelPill?.el" :header="t(`shared.model`)" panel-class="w-[26rem]">
+        <ResponsiveOverlay
+            v-if="!isGuest"
+            v-model="modelOpen"
+            :anchor="modelPill?.el ?? morePill ?? composerForm"
+            :header="t(`shared.model`)"
+            panel-class="w-[26rem]"
+        >
             <ChatModelPicker :conversation="conversation" @selected="modelOpen = false" />
         </ResponsiveOverlay>
-        <ResponsiveOverlay v-model="modeOpen" :anchor="modeAnchor" cross="end" :header="t(`chat.words.agentMode`)" panel-class="w-56 p-1">
+        <ResponsiveOverlay v-model="modeOpen" :anchor="modeAnchor" cross="end" :header="plainWords ? t(`chat.composerMore.plain.mode`) : t(`chat.words.agentMode`)" panel-class="w-56 p-1">
             <ChatModeMenu @selected="modeOpen = false" />
         </ResponsiveOverlay>
         <ResponsiveOverlay v-model="personaOpen" :anchor="personaAnchor" cross="end" :header="t(`chat.words.acts`)" panel-class="w-80 p-1">

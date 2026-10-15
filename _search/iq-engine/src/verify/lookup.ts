@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { readDocumentTextSync } from "../workspace/shadows.js";
 import { isAbsolute, join, relative } from "node:path";
 import { rankByFuzzy } from "@intentic/base/fuzzy";
 import type { SqliteDb } from "@intentic/base/sqlite";
@@ -33,7 +34,8 @@ export const indexLookup = (db: SqliteDb, root: string, entries: readonly FileEn
         if (!texts.has(path)) {
             let lines: string[] | undefined;
             try {
-                lines = readFileSync(join(root, path), "utf8").split("\n");
+                // A document's lines are its shadow's, the ones `rg -n` and iq's own hits number.
+                lines = (readDocumentTextSync(root, path) ?? readFileSync(join(root, path), "utf8")).split("\n");
                 if (lines.at(-1) === "") {
                     lines.pop();
                 }

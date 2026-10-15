@@ -1,5 +1,6 @@
 import type { AutomationApproval, WorkflowRun } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
+import { useVocabulary } from "../../../../workbench/views/vocabulary";
 import { computed, type Ref } from "vue";
 import type { FleetLane } from "../../fleet/agentStatus";
 import type { SubagentRoster } from "../../fleet/subagentRoster";
@@ -28,20 +29,20 @@ export const laneHeads = (): readonly LaneHead[] => [
         key: `attention`,
         label: t(`shared.attention`),
         empty: t(`agents.agentsView.nothingNeedsRightNow`),
-        first: t(`agents.agentsView.attentionFirst`),
+        first: useVocabulary().value.laneAttentionFirst,
     },
     // Active never says its first-run line: that lane holds the first agent's slot instead (FirstAgentSlot).
     {
         key: `active`,
         label: t(`shared.active`),
-        empty: t(`agents.agentsView.noAgentsWorkingStart`),
-        first: t(`agents.agentsView.noAgentsWorkingStart`),
+        empty: useVocabulary().value.laneActiveEmpty,
+        first: useVocabulary().value.laneActiveEmpty,
     },
     {
         key: `finished`,
         label: t(`shared.finished`),
-        empty: t(`agents.agentsView.finishedAgentsLandWork`),
-        first: t(`agents.agentsView.finishedFirst`),
+        empty: useVocabulary().value.laneFinishedEmpty,
+        first: useVocabulary().value.laneFinishedFirst,
     },
 ];
 

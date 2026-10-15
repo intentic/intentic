@@ -55,6 +55,8 @@ const rowOf = () => {
                 steered,
                 editing,
                 pills,
+                plain: ref(false),
+                guest: ref(false),
             });
             return () => h(`div`);
         },
@@ -77,19 +79,19 @@ describe(`the row and its overflow`, () => {
     it(`keeps each control in the overflow at this chat's default, and brings a set one into the row`, () => {
         const { chat, mode, runState, row } = rowOf();
         expect(keys(row)).toEqual([`mode`, `persona`, `runThrough`, `land`]);
-        expect(row.inRow.value).toEqual({ mode: false, placement: false, persona: false, runThrough: false, voice: false, land: false });
+        expect(row.inRow.value).toEqual({ mode: false, model: false, placement: false, persona: false, runThrough: false, voice: false, land: false });
         expect(row.laterOffered.value).toBe(true);
 
         mode.value = `plan`;
         chat.selection.apply({ kind: `set`, picks: { actsAs: `backend` } });
         chat.autoLandDraft.value = true;
         expect(keys(row)).toEqual([`runThrough`]);
-        expect(row.inRow.value).toEqual({ mode: true, placement: false, persona: true, runThrough: false, voice: false, land: true });
+        expect(row.inRow.value).toEqual({ mode: true, model: false, placement: false, persona: true, runThrough: false, voice: false, land: true });
 
         // A loop takes the send somewhere a booking cannot follow: the send's caret offers no later then.
         runState.value = `loop`;
         expect(keys(row)).toEqual([]);
-        expect(row.inRow.value).toEqual({ mode: true, placement: false, persona: true, runThrough: true, voice: false, land: true });
+        expect(row.inRow.value).toEqual({ mode: true, model: false, placement: false, persona: true, runThrough: true, voice: false, land: true });
         expect(row.laterOffered.value).toBe(false);
     });
 

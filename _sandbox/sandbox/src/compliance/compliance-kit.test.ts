@@ -284,4 +284,20 @@ describe("a mailbox that can also send", () => {
     it("holds the e-mail send key the IMAP sender reads", () => {
         expect(PUBLIC_OFFICE_ACTION_KEYS).toContain("imap.message.send");
     });
+
+    it("holds every outward action key the Microsoft 365 CLI reads", () => {
+        expect(PUBLIC_OFFICE_ACTION_KEYS).toEqual(expect.arrayContaining(["microsoft365.mail.send", "microsoft365.calendar.write", "microsoft365.files.upload"]));
+    });
+
+    it("holds every office act the e-urzad gate reads", () => {
+        expect(PUBLIC_OFFICE_ACTION_KEYS).toEqual(
+            expect.arrayContaining([
+                "ezdrp.document.register-incoming",
+                "ezdrp.document.register-outgoing",
+                "ezdrp.case.attach-draft",
+                "edoreczenia.delivery.send",
+                "edoreczenia.delivery.open",
+            ]),
+        );
+    });
 });

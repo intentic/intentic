@@ -17,13 +17,26 @@ import { mediaDeriver } from "./derivers/media.js";
 import { odpDeriver } from "./derivers/odp.js";
 import { odsDeriver } from "./derivers/ods.js";
 import { odtDeriver } from "./derivers/odt.js";
-import { pdfDeriver } from "./derivers/pdf.js";
+import { ocrPageCap, pdfDeriver } from "./derivers/pdf.js";
 import { pptxDeriver } from "./derivers/pptx.js";
 import { profileDeriver } from "./derivers/profile.js";
 import { rtfDeriver } from "./derivers/rtf.js";
 import { xlsxDeriver } from "./derivers/xlsx.js";
 import { cacheRendering, readCachedRendering } from "./content-cache.js";
-import { isFresh, readSidecar, removeSidecar, sidecarBody, sidecarPathFor, sha256OfFile, writeSidecar } from "./sidecar.js";
+import {
+    isFresh,
+    ocrCapOf,
+    parseSidecarFront,
+    readSidecar,
+    readSourceStat,
+    removeSidecar,
+    sidecarBody,
+    sidecarPathFor,
+    sha256OfFile,
+    sourceUnchanged,
+    writeSidecar,
+    type SourceStat,
+} from "./sidecar.js";
 
 // Pipeline `read` and `derive` both run: place the file, recognize it, route it, keep its shadow honest.
 // One module, so `read` and `derive` cannot disagree about a file's markdown.
@@ -90,6 +103,10 @@ interface Rendered {
     readonly cachedPath: string | undefined;
 }
 
+// A rendering whose OCR stopped short of the page cap this run asks for (a 20-page interactive read, met by the shadow
+// keeper's 500) is not good enough for it; one that went deeper serves a shallower ask as it is.
+const deepEnough = (notes: readonly string[]): boolean => (ocrCapOf(notes) ?? Number.POSITIVE_INFINITY) >= ocrPageCap();
+
 // These bytes as this deriver renders them: from the content cache when rendered before, else derived and stored there.
 // Throws only what the deriver throws.
 const renderCached = async (
@@ -101,13 +118,47 @@ const renderCached = async (
 ): Promise<Rendered> => {
     const stamp = deriverStamp(deriver);
     const cached = await readCachedRendering(workspaceRoot, sourceSha, stamp);
-    if (cached !== undefined) {
+    if (cached !== undefined && deepEnough(cached.doc.notes)) {
         return { kind: "fresh", doc: cached.doc, derivedAt: cached.derivedAt, cachedPath: cached.path };
     }
     // Neutralized once here so every consumer gets folded text.
     const doc = neutralizeDoc(await deriver.derive(absPath));
     const derivedAt = now();
     return { kind: "derived", doc, derivedAt, cachedPath: await cacheRendering(workspaceRoot, { sourceSha, deriverStamp: stamp, doc, derivedAt }) };
+};
+
+interface ReuseAsk {
+    readonly relPath: string;
+    readonly sourceSha: string;
+    readonly stamp: string;
+    readonly sourceStat: SourceStat | undefined;
+}
+
+// The sidecar's body when it is fresh for these bytes and deep enough for this run; undefined when it must be derived.
+// Same bytes under a new stat (a touch, a checkout, a sidecar from before stats were kept) get the stat rewritten, so
+// hash-free readers find the shadow current again.
+const reuseFresh = async (workspaceRoot: string, ask: ReuseAsk, now: () => Date): Promise<string | undefined> => {
+    const existing = await readSidecar(sidecarPathFor(workspaceRoot, ask.relPath));
+    if (existing === undefined || !isFresh(existing, ask.sourceSha, ask.stamp)) {
+        return undefined;
+    }
+    const front = parseSidecarFront(existing);
+    if (!deepEnough(front.notes)) {
+        return undefined;
+    }
+    const body = sidecarBody(existing);
+    if (!sourceUnchanged(front, ask.sourceStat)) {
+        const derivedAt = new Date(front.derivedAt ?? Number.NaN);
+        await writeSidecar(workspaceRoot, {
+            relPath: ask.relPath,
+            sourceSha: ask.sourceSha,
+            deriverStamp: ask.stamp,
+            sourceStat: ask.sourceStat,
+            doc: { markdown: body.endsWith("\n") ? body.slice(0, -1) : body, title: front.title, notes: [...front.notes] },
+            derivedAt: Number.isNaN(derivedAt.getTime()) ? now() : derivedAt,
+        });
+    }
+    return body;
 };
 
 /** Converges a workspace file's sidecar with its source: derive when stale, reuse fresh, remove when gone. */
@@ -142,11 +193,13 @@ export const ensureSidecar = async (workspaceRoot: string, absPath: string, now:
     }
     const deriver = DERIVERS[format];
     const stamp = deriverStamp(deriver);
+    // Taken before the hash, so a write racing the read leaves a stat that no longer matches, never one that vouches
+    // for bytes it did not see.
+    const sourceStat = await readSourceStat(absPath);
     const sourceSha = await sha256OfFile(absPath);
-    const existing = await readSidecar(sidecarPath);
-    if (isFresh(existing, sourceSha, stamp)) {
-        const body = sidecarBody(existing ?? "");
-        return { kind: "fresh", relPath, format, sidecarPath, body, tokens: estimateTokens(body) };
+    const fresh = await reuseFresh(workspaceRoot, { relPath, sourceSha, stamp, sourceStat }, now);
+    if (fresh !== undefined) {
+        return { kind: "fresh", relPath, format, sidecarPath, body: fresh, tokens: estimateTokens(fresh) };
     }
     // A corrupt file's failure is a loud skip, not fatal.
     let rendered: Rendered;
@@ -156,7 +209,14 @@ export const ensureSidecar = async (workspaceRoot: string, absPath: string, now:
         const detail = errorMessage(error).split("\n")[0];
         return { kind: "skipped", relPath, reason: `derive-failed (${format}): ${detail}` };
     }
-    const written = await writeSidecar(workspaceRoot, { relPath, sourceSha, deriverStamp: stamp, doc: rendered.doc, derivedAt: rendered.derivedAt });
+    const written = await writeSidecar(workspaceRoot, {
+        relPath,
+        sourceSha,
+        deriverStamp: stamp,
+        sourceStat,
+        doc: rendered.doc,
+        derivedAt: rendered.derivedAt,
+    });
     return rendered.kind === "fresh"
         ? { kind: "fresh", relPath, format, sidecarPath: written.path, body: written.body, tokens: written.tokens }
         : { kind: "derived", relPath, format, sidecarPath: written.path, body: written.body, doc: rendered.doc, tokens: written.tokens };

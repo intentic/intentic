@@ -27,6 +27,23 @@ const { tokens, minted, minting, notice, mint, revoke } = useMintedTokens({
 
 const label = ref(``);
 
+// A server's own status line ("Not Found", "Service Unavailable") is English and names nothing a reader can act on: in
+// its place, what it means here. Any other detail is the platform's sentence and stays.
+const STATUS_WORDS = new Map<string, () => string>([
+    [`not found`, () => t(`settings.settingsTokens.unavailable`)],
+    [`forbidden`, () => t(`settings.settingsTokens.notAllowed`)],
+    [`unauthorized`, () => t(`settings.settingsTokens.notAllowed`)],
+    [`internal server error`, () => t(`settings.settingsTokens.serverTrouble`)],
+    [`bad gateway`, () => t(`settings.settingsTokens.serverTrouble`)],
+    [`service unavailable`, () => t(`settings.settingsTokens.serverTrouble`)],
+    [`gateway timeout`, () => t(`settings.settingsTokens.serverTrouble`)],
+]);
+const shownNotice = computed(() => {
+    const raw = notice.value;
+    const words = raw?.detail === undefined ? undefined : STATUS_WORDS.get(raw.detail.trim().toLowerCase());
+    return raw === undefined || words === undefined ? raw : { ...raw, detail: words() };
+});
+
 const submit = async (): Promise<void> => {
     if (minting.value) {
         return;
@@ -64,7 +81,7 @@ const pasteSnippet = computed(() => t(`settings.settingsTokens.pastePath`));
             <RowNote variant="block">
                 <div class="flex flex-col gap-3">
                     <p class="text-2xs text-subtle">{{ t(`settings.settingsTokens.whatProvisioningTokensAre`) }}</p>
-                    <Notice v-if="notice" :of="notice" />
+                    <Notice v-if="shownNotice" :of="shownNotice" />
                     <form class="flex flex-wrap items-center gap-2" @submit.prevent="submit">
                         <input
                             v-model="label"

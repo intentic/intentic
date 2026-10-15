@@ -39,7 +39,8 @@
                 "system",
                 "intentic",
                 "activity",
-                "audit"
+                "audit",
+                "org"
             ]
         },
         {

@@ -3,7 +3,16 @@ import type { ViewBadge } from "@intentic/extension-api";
 import type { NavGroup } from "@intentic/ui";
 import { computed } from "vue";
 import { useRoute } from "vue-router";
-import { GUEST_SECTION, isSandboxSlot, SANDBOX_DEFAULT_SECTION, type SandboxRow, sandboxKeyAllowed, sandboxSectionGroups, sandboxSlots } from "./sandboxNav";
+import {
+    GUEST_SECTION,
+    isSandboxSlot,
+    SANDBOX_DEFAULT_SECTION,
+    type SandboxRow,
+    sandboxBuiltInSlugs,
+    sandboxKeyAllowed,
+    sandboxSectionGroups,
+    sandboxSlots,
+} from "./sandboxNav";
 import { useCapabilities } from "../capabilities/connect/useCapabilities";
 import { useExtensions } from "../extensions/useExtensions";
 import { usePanels } from "../extensions/usePanels";
@@ -33,6 +42,8 @@ import SandboxOverview from "./overview/SandboxOverview.vue";
 import SandboxSecrets from "./secrets/SandboxSecrets.vue";
 import SandboxUsage from "./usage/SandboxUsage.vue";
 import SandboxDataProtection from "./data-protection/SandboxDataProtection.vue";
+import OrgHeldSection from "../organisations/OrgHeldSection.vue";
+import { useOrgPolicy } from "../organisations/useOrgPolicy";
 import { useT } from "@intentic/ui/i18n";
 
 // One home for the active sandbox, reached from the rail's chip; the selected section lives in the URL, and only it
@@ -76,6 +87,9 @@ const sectionBadge = (slug: string, counts: { updates: number; models: number },
 };
 
 const sandbox = useSandbox();
+const { hidden: orgHidden } = useOrgPolicy();
+// The hub's own sections, which an organisation's lock wraps; an extension's view is never one an organisation holds.
+const builtIn = computed(() => sandboxBuiltInSlugs());
 // Operating surfaces need the top revokable grant too; the daemon enforces it, this just keeps the index honest.
 const { canShip, isGuest } = useRole();
 // A guest's hub is one section, so it opens on it rather than on an overview the daemon would refuse.
@@ -137,6 +151,10 @@ const rowOf = (row: SandboxRow): readonly HubTab[] => {
     if (isGuest.value ? row.slug !== GUEST_SECTION : !canShip.value && row.maintainer === true) {
         return [];
     }
+    // A section the sandbox's organisation hides leaves the index (organisations/useOrgPolicy.ts).
+    if (orgHidden.value.has(row.slug)) {
+        return [];
+    }
     return [{ ...row, badge: sectionBadge(row.slug, { updates: updatable.value, models: modelsNeedingSomeone.value }, runningIn(row.slug)) }];
 };
 
@@ -164,18 +182,21 @@ const groups = computed<readonly NavGroup<HubTab>[]>(() => [
         :ready="!isLoading"
     >
         <template #default="{ slug }">
-            <SandboxOverview v-if="slug === `overview`" />
-            <SandboxUsage v-else-if="slug === `usage`" />
-            <SandboxSecrets v-else-if="slug === `secrets`" />
-            <SandboxDataProtection v-else-if="slug === `data-protection`" />
-            <SandboxEnvironment v-else-if="slug === `environment`" />
-            <SandboxAccess v-else-if="slug === `access`" :open="openPersona" />
-            <SandboxPersonas v-else-if="slug === `personas`" :open="openPersona" />
-            <SandboxAreas v-else-if="slug === `areas`" />
-            <SandboxAudit v-else-if="slug === `audit`" />
-            <SandboxModels v-else-if="slug === `models`" />
-            <SandboxAgent v-else-if="slug === `agent`" />
-            <SandboxExtensions v-else-if="slug === `extensions`" />
+            <!-- An organisation's lock draws the section read-only; every personal sandbox passes straight through. -->
+            <OrgHeldSection v-if="builtIn.has(slug)" :slug="slug">
+                <SandboxOverview v-if="slug === `overview`" />
+                <SandboxUsage v-else-if="slug === `usage`" />
+                <SandboxSecrets v-else-if="slug === `secrets`" />
+                <SandboxDataProtection v-else-if="slug === `data-protection`" />
+                <SandboxEnvironment v-else-if="slug === `environment`" />
+                <SandboxAccess v-else-if="slug === `access`" :open="openPersona" />
+                <SandboxPersonas v-else-if="slug === `personas`" :open="openPersona" />
+                <SandboxAreas v-else-if="slug === `areas`" />
+                <SandboxAudit v-else-if="slug === `audit`" />
+                <SandboxModels v-else-if="slug === `models`" />
+                <SandboxAgent v-else-if="slug === `agent`" />
+                <SandboxExtensions v-else-if="slug === `extensions`" />
+            </OrgHeldSection>
             <!-- Extension-contributed sections, with the same error boundary and lazy-view cache the rail's routed host uses. -->
             <ExtensionView v-else-if="extensionFor(slug) !== undefined" v-bind="extensionFor(slug)!" />
         </template>

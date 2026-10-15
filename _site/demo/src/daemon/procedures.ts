@@ -50,7 +50,7 @@ import {
 } from "../fixture/sandbox";
 import { demoStorageCancel, demoStorageClean, demoStorageReport, demoStorageScan } from "../fixture/storage";
 import { subagentTranscriptFor } from "../fixture/subagentTranscripts";
-import { transcriptFor } from "../fixture/transcripts";
+import { documentsFor, transcriptFor } from "../fixture/transcripts";
 import { demoRuns, demoWorkflows } from "../fixture/workflows";
 import {
     agentChanges,
@@ -199,6 +199,7 @@ export const procedures = {
         diff: ({ id }) => agentChanges(id),
         // A card that is not mid-turn reads its transcript instead of attaching.
         transcript: ({ id }) => transcriptFor(id),
+        documents: ({ id }) => ({ paths: documentsFor(id) }),
         // The checkout agent's in-process subagents, read as transcripts of their own from its tray and its cards.
         subagentTranscript: ({ subagentId }) => subagentTranscriptFor(subagentId),
         systemPrompt: () => DEMO_SYSTEM_PROMPT,
@@ -512,6 +513,10 @@ export const procedures = {
         verify: () => demoAuditVerify(),
         status: () => demoAuditStatus(),
         export: ({ from, to }) => demoAuditExport(from, to),
+    },
+    // The demo sandbox is a person's own: no organisation holds any section of its hub (docs/architecture/organisations.md).
+    org: {
+        policy: () => ({ bound: false as const }),
     },
     areas: {
         list: () => ({ areas: demoAreas }),

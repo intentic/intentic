@@ -451,6 +451,15 @@ RUN chmod +x /opt/sandbox/node_modules/@intentic/fileq/dist/cli.js \
 RUN fileq git-attributes > /etc/gitattributes \
     && git config --global core.attributesFile /etc/gitattributes \
     && git config --global diff.fileq.textconv 'fileq read --plain'
+# Plain `rg` searches documents: fileq-rg-pre (POSIX sh, no Node on its fast path) prints a pdf's, docx's, xlsx's…
+# fresh shadow with `[p. N] ` page marks, else falls back to `fileq read --plain`. The config routes only document
+# globs to it, so code reads as before. The daemon points agents' shells at it (RIPGREP_CONFIG_PATH, derived/
+# search-env.ts) while the documentSearch setting keeps the shadows current. Symlinked like fileq above; the chmod is
+# the same existence check.
+RUN chmod +x /opt/sandbox/node_modules/@intentic/fileq/bin/fileq-rg-pre \
+    && ln -s /opt/sandbox/node_modules/@intentic/fileq/bin/fileq-rg-pre /usr/local/bin/fileq-rg-pre \
+    && mkdir -p /etc/fileq \
+    && fileq ripgrep-config --pre /usr/local/bin/fileq-rg-pre > /etc/fileq/ripgreprc
 # The `codex` CLI is the codex feature pack (a global install pinned to @openai/codex-sdk's exact dependency —
 # image-packs/codex.Dockerfile): prepare-image-trees.sh prunes the ~350 MiB @openai/codex platform package OUT of the
 # daemon tree, so the pack's copy is the only one and the daemon directly spawns its app-server surface.
@@ -458,12 +467,13 @@ RUN fileq git-attributes > /etc/gitattributes \
 # via SANDBOX_EXTENSIONS_DIR (the iq-plugin precedent): present in every sandbox, not removable, no capability
 # entry. connectors, social, computers, acp-agents and pi-agent are data-only (manifest + skill packs + client
 # image fragments) so they copy straight from context. The gateway extensions (discord, imap, slack, telegram,
-# whatsapp, google-workspace) bake their MANIFESTS here — the cards exist in every image — while their deployed
+# whatsapp, google-workspace, microsoft-365) bake their MANIFESTS here — the cards exist in every image — while their deployed
 # runtime trees are the bake-only `messaging` feature pack (image-packs/messaging.Dockerfile, in the standard
 # profile); on a core image the daemon surfaces "not included in this image" instead of spawning a runtime that
-# isn't there. google-workspace is in that group for its `bin` as much as its watcher: the manifest promises
+# isn't there. google-workspace (like microsoft-365 and imap) is in that group for its `bin` as much as its watcher: the manifest promises
 # both, and extensionRuntimeAbsent is all-or-nothing per extension, so shipping the CLI from context here would
-# make the watcher's absence on a core image invisible rather than stated.
+# make the watcher's absence on a core image invisible rather than stated. prawo rides the same way: a CLI-only
+# extension (`prawo`, Polish acts and rulings) whose tree is in the pack and whose manifest is here.
 #
 # The data-only packs are what makes the /capabilities grid: every card that is a ROW over a generic core
 # handler (a cli connector, a social platform, an OS pack, a browser or phone family, an ACP preset, the Pi agent) is one of these manifest
@@ -482,6 +492,8 @@ COPY _extensions/slack/intentic-extension.json /opt/extensions/slack/
 COPY _extensions/telegram/intentic-extension.json /opt/extensions/telegram/
 COPY _extensions/whatsapp/intentic-extension.json /opt/extensions/whatsapp/
 COPY _extensions/google-workspace/intentic-extension.json /opt/extensions/google-workspace/
+COPY _extensions/microsoft-365/intentic-extension.json /opt/extensions/microsoft-365/
+COPY _extensions/prawo/intentic-extension.json /opt/extensions/prawo/
 # The web-builtin UI extensions bake their MANIFEST ONLY — their code is compiled into the web bundle
 # (extension-host/builtins.ts), so there is nothing daemon-side to ship. The manifest is what makes them exist
 # for the daemon: `GET /extensions` then enumerates EVERY first-party extension through one enumerator (a count
@@ -511,6 +523,15 @@ COPY _extensions/viewers/intentic-extension.json /opt/extensions/viewers/
 COPY _extensions/onlyoffice/intentic-extension.json /opt/extensions/onlyoffice/
 COPY --from=trees extensions/onlyoffice/dist /opt/extensions/onlyoffice/dist
 COPY _extensions/workflows/intentic-extension.json /opt/extensions/workflows/
+# e-urzad (EZD RP and e-Doręczenia for Polish public offices, and signature checks) is both as well: its rail view is
+# compiled into the web bundle, and the daemon runs its backend (dist/server.js: the EZD RP card's agent tools and the
+# view's routes) while the agent runs its CLI (contributes.bin: bin/e-urzad over dist/cli.js). Both are self-contained
+# bundles from the `trees` context; the manifest, the cards' skill and the launcher come from the repository. Inert
+# until an office connects one of its cards.
+COPY _extensions/e-urzad/intentic-extension.json /opt/extensions/e-urzad/
+COPY _extensions/e-urzad/skills /opt/extensions/e-urzad/skills
+COPY --chmod=755 _extensions/e-urzad/bin /opt/extensions/e-urzad/bin
+COPY --from=trees extensions/e-urzad/dist /opt/extensions/e-urzad/dist
 # ---- packs:post-trees ---- (spliced by compose-image-dockerfile.mjs — packs that read the daemon tree or
 # COPY from the trees context land here, below every tree COPY they depend on)
 # pane-log-clean on PATH — the tmux pipe-pane hooks (above / logs/log-files.ts) replay each pane's byte

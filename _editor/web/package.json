@@ -30,6 +30,7 @@
         "@intentic/ext-activity": "workspace:*",
         "@intentic/ext-automations": "workspace:*",
         "@intentic/ext-approvals": "workspace:*",
+        "@intentic/ext-e-urzad": "workspace:*",
         "@intentic/ext-git-history": "workspace:*",
         "@intentic/ext-onlyoffice": "workspace:*",
         "@intentic/ext-pipelines": "workspace:*",

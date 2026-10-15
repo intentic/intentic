@@ -272,6 +272,7 @@ const firstCandidate = (srcset: string): string => srcset.trim().split(/\s+/, 1)
 // document resolves `#section` against the window's own address and would otherwise navigate away. Beyond those, the
 // frame only says whether a mouse is over it; HtmlPreview.vue checks every message is this frame's before it acts.
 const LINK_GUIDE = `(() => {
+    addEventListener("message", (event) => { if (event.source === parent && event.data?.intenticPrint === true) parent.postMessage({ intenticPrintHtml: document.documentElement.outerHTML }, "*"); });
     const say = (message) => parent.postMessage({ intenticHtmlPreview: message }, "*");
     addEventListener("click", (event) => {
         const link = event.target instanceof Element ? event.target.closest("a[href], area[href]") : null;

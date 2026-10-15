@@ -158,6 +158,8 @@ export const raw = {
         } satisfies SandboxVitals),
     // Screenshot bytes for an <img>, served here rather than from /public.
     "GET /workspace/raw": ({ url }) => workspaceRaw(url.searchParams.get(`path`) ?? ``),
+    // A conversation's recorded document: the same bytes, since the fixture keeps one tree and every result is in it.
+    "GET /agents/{id}/documents/raw": ({ url }) => workspaceRaw(url.searchParams.get(`path`) ?? ``),
     // A picture at tile size, answered as the daemon answers it: SVG is refused (415) for the client to draw the file.
     "GET /workspace/thumb": ({ url }) => workspaceThumb(url.searchParams.get(`path`) ?? ``),
     // Pre-flight for the upload queue; nothing here is ever a re-drop, so it always reports none to skip.

@@ -120,6 +120,7 @@ jest.mock("../../../../client/session/sandboxSession", () => ({
 }));
 
 const { askAgentToResolve, landAgent, startAgent } = await import("../agentActions");
+const { useAudience } = await import("../../../../app/useAudience");
 const { setProjectScope } = await import("../../../../app/projectScope");
 // The board's own roster, which the errand reads the agent's settings off; written per test, cleared with the tabs.
 const { registry } = await import("../useAgents-registry");
@@ -199,6 +200,20 @@ it("carries an explicit mode, so the conflict report's Merge is a different requ
     await landAgent(`a1`, `merge`);
     expect(sent[0]?.headers.get(`content-type`)).toBe(`application/json`);
     expect(await sent[0]?.json()).toEqual({ mode: `merge`, span: `outstanding`, force: false });
+});
+
+// A reader in plain words accepts the documents the conversation made with the rest, even ones git ignores; a
+// developer's body above carries no such ask.
+it("asks for the conversation's documents to ride a press made in plain words", async () => {
+    stubLand();
+    const { audience } = useAudience();
+    audience.value = `maker`;
+    try {
+        await landAgent(`a1`);
+    } finally {
+        audience.value = `developer`;
+    }
+    expect(await sent[0]?.json()).toEqual({ mode: `check`, span: `outstanding`, force: false, includeDocuments: true });
 });
 
 // A card whose work waits on its branch for a press, as the roster reports one.

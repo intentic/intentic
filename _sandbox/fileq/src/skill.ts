@@ -47,9 +47,34 @@ diff; do not convert both versions by hand.
 
 `;
 
+// Searching documents: in the sandbox the daemon keeps every document's shadow current and points ripgrep at fileq's
+// preprocessor (RIPGREP_CONFIG_PATH, while the "Search documents" setting is on), and iq indexes the shadows under the
+// documents' own paths. Elsewhere the same preprocessor is one config line away.
+const SEARCH = {
+    sandbox: `## Searching documents
+The text of every pdf, docx, xlsx, pptx, odt, ods, odp, rtf and epub in the workspace is searchable under the
+document's own path, kept current as files change:
+- \`rg <pattern>\` in the shell searches documents along with code, through fileq's preprocessor. A hit reads
+  \`docs/terms.pdf:345:[p. 12] … wniosek …\`: the line number counts lines of the document's text, and
+  \`[p. 12] \` (or \`[slide 3] \`) is the page or slide that line is on. Use \`rg\` in the shell for documents:
+  a Grep tool that runs its own bundled ripgrep may skip them.
+- \`iq "<question>"\` finds documents by meaning too; their passages carry the same page marks.
+- When you answer from a document, cite it as file and page: "docs/terms.pdf, p. 12". Read the page around a hit
+  with \`fileq read <file>\` (or the sidecar it names) rather than guessing from one line.
+- Scans are OCR'd only where the image carries the OCR models, and the shadow notes it when they are missing.
+
+`,
+    standalone: `## Searching documents
+\`fileq ripgrep-config > ~/.config/fileq.ripgreprc\` and \`RIPGREP_CONFIG_PATH=~/.config/fileq.ripgreprc\` make plain
+\`rg\` search pdf, docx, xlsx, pptx, odt, ods, odp, rtf and epub as text, each hit cited by page
+(\`docs/terms.pdf:345:[p. 12] …\`). Cite answers from a document as file and page.
+
+`,
+} satisfies Record<FileqSkillHost["host"], string>;
+
 export const fileqSkill = ({ host }: FileqSkillHost): string => `---
 name: fileq
-description: Read binary files (docx, xlsx, pptx, pdf, odt, epub, ipynb, images, audio, archives, V8 profiles) as budgeted markdown with \`fileq\`, size up csv, json or logs too big to cat, and check and render a docx, pptx, xlsx or pdf you made. Use instead of guessing from a filename, ad-hoc converters, or delivering it unseen.
+description: Read binary files (docx, xlsx, pptx, pdf, odt, epub, ipynb, images, audio, archives, V8 profiles) as budgeted markdown with \`fileq\`, search documents' text cited by page, size up csv, json or logs too big to cat, and check and render a docx, pptx, xlsx or pdf you made. Use instead of guessing from a filename, ad-hoc converters, or delivering it unseen.
 ---
 
 # fileq: binary files as markdown
@@ -82,7 +107,7 @@ ${OCR_REFUSAL[host]}
 - Plain text (md, csv, txt, code) is not fileq's business: Read it directly — but see below for the big ones.
 - Web pages belong to \`webq\`; images for a vision model belong to the Read tool, which shows the pixels.
 
-${host === "sandbox" ? TEXTCONV : ""}Exit codes: 0 content, 1 nothing derivable, 2 broken invocation or install.
+${SEARCH[host]}${host === "sandbox" ? TEXTCONV : ""}Exit codes: 0 content, 1 nothing derivable, 2 broken invocation or install.
 
 ## After you produce a document
 A deck, report, spreadsheet or PDF made for someone is not finished until you have checked it and looked at it.

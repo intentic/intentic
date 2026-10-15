@@ -490,11 +490,15 @@ export const useComposerSend = (host: SendHost) => {
         // first keystroke; gated on `staged`, so a refused send keeps its greyed button and tooltip.
         sendShown: computed(() => !live.value || staged.value),
         composerPlaceholder: computed(() => {
+            const plain = words.value.plain === true;
             if (!host.canDrive.value) {
-                return viewerPlaceholder();
+                return plain ? t(`chat.composerIntent.plain.viewerPlaceholder`) : viewerPlaceholder();
             }
             // Nothing to send with: the box still takes the task, without naming a vendor nobody chose.
-            return connected.value ? placeholderFor(intent.value, words.value) : unconnectedPlaceholder();
+            if (connected.value) {
+                return placeholderFor(intent.value, words.value);
+            }
+            return plain ? t(`chat.composerIntent.plain.placeholderIdle`) : unconnectedPlaceholder();
         }),
         sendHint: computed((): TooltipValue => {
             if (!host.reachable.value) {
@@ -514,10 +518,17 @@ export const useComposerSend = (host: SendHost) => {
             return shown === undefined ? sendHintFor(intent.value, words.value) : reopenHintFor(shown, words.value);
         }),
         // Offered for every live turn, a parked one included, naming what goes with it there.
-        stopLabel: computed(() => (awaitingDecision.value ? t(`chat.composerSend.stopTheTurn`) : t(`chat.composerSend.stopGenerating`))),
+        // Plain words say Stop: a non-coder has no "turn" to stop, only an assistant that is working.
+        stopLabel: computed(() =>
+            words.value.plain === true
+                ? t(`ui.action.stop`)
+                : awaitingDecision.value
+                  ? t(`chat.composerSend.stopTheTurn`)
+                  : t(`chat.composerSend.stopGenerating`),
+        ),
         stopHint: computed((): TooltipValue => {
             if (awaitingDecision.value) {
-                return { title: t(`chat.composerIntent.stopTurn`), note: t(`chat.composerIntent.discardsRequest`) };
+                return { title: words.value.plain === true ? t(`ui.action.stop`) : t(`chat.composerIntent.stopTurn`), note: t(`chat.composerIntent.discardsRequest`) };
             }
             return host.mobile.value ? t(`ui.action.stop`) : { title: t(`ui.action.stop`), keys: t(`ui.keys.esc`) };
         }),

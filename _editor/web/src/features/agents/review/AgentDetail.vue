@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useAudience } from "../../../app/useAudience";
+import { deliverableKindOf } from "@intentic/sandbox-contract";
 import {
     Avatar,
     Button,
@@ -244,7 +246,7 @@ const streaming = computed(() => !remote.value && conversation.value?.turn.strea
 // refused mid-turn). `actionBusy` is the ledger's, so a land still running when this page is opened again holds it. `writing` (fleet status, not `streaming`) decides which press it is, since a parked turn
 // still streams.
 const writing = computed(() => fleetAgent.value !== undefined && writingNow(fleetAgent.value));
-const canLand = computed(() => !changes.actionBusy.value && changes.pending.value.length > 0);
+const canLand = computed(() => !changes.actionBusy.value && (changes.pending.value.length > 0 || pendingDocuments.value));
 // A live turn that isn't writing: parked on a question, permission, or a Stop unwind; land is ordinary.
 const parked = computed(() => streaming.value && !writing.value);
 // What the Land button promises, across the three states it can be pressed in.
@@ -274,10 +276,16 @@ const confirmForceLand = async (): Promise<void> => {
 
 // Role split on the primary action: maintainers land, collaborators ask (the daemon enforces the floor itself).
 const { canDrive, canShip } = useRole();
+const { maker } = useAudience();
+// In plain words a document git ignores, or one the land would set aside as scratch, still waits on Accept, since that
+// press carries the conversation's documents with it (landAgent); for a developer it stays out, as git says.
+const pendingDocuments = computed(() => maker.value && [...changes.ignored.value, ...changes.scratch.value].some((group) => group.paths.some((file) => deliverableKindOf(file.path) !== undefined)));
 // Whichever of the three land presses this reader gets, they all answer the same condition: in the header on a desktop,
 // under the review on a phone, where the header's width is the title's and the thumb is at the bottom of the screen.
-const landPending = computed(() => reviewable.value && changes.pending.value.length > 0 && (canShip.value || canDrive.value));
-const landOffered = computed(() => !mobile.value && landPending.value);
+const landPending = computed(() => reviewable.value && (changes.pending.value.length > 0 || pendingDocuments.value) && (canShip.value || canDrive.value));
+// In plain words the press is never the header's: it closes the review instead, under the documents it accepts and the
+// sentence saying what accepting does, as on a phone.
+const landOffered = computed(() => !mobile.value && !maker.value && landPending.value);
 // A refused land the agent can clear turns the press into the fix: landing again would only be refused again, so the
 // retry moves to the session menu. Local only, since the ask is a turn in this sandbox's conversation.
 const fixPress = computed(() =>
@@ -513,8 +521,9 @@ const confirmHandOver = async (): Promise<void> => {
                 <span class="max-w-[10rem] truncate">{{ remoteName }}</span>
             </span>
             <!-- Session name, pasteable: replaces a truncated, unclickable chip that forced retyping the id by eye. -->
+            <!-- Not in plain words: a branch is git's name for the copy, and the plain review says what it holds instead. -->
             <span
-                v-if="fleetAgent?.branch !== undefined"
+                v-if="fleetAgent?.branch !== undefined && !maker"
                 ref="identityAnchor"
                 class="ui-status-pill hidden max-w-[16rem] shrink-0 items-center bg-overlay @2xl:inline-flex"
             >
@@ -658,16 +667,33 @@ const confirmHandOver = async (): Promise<void> => {
             {{ remoteUnavailable }}
         </p>
         <!-- The review alone: a desktop's (its chat is the docked panel) and any remote agent's. -->
-        <AgentReviewPanel
-            v-else-if="agentId !== '' && reviewable"
-            :agent-id="agentId"
-            :at="remoteBox"
-            :changes="changes"
-            :streaming="streaming"
-            :writing="writing"
-            class="min-h-0 flex-1"
-            @chat="view = 'chat'"
-        />
+        <template v-else-if="agentId !== '' && reviewable">
+            <AgentReviewPanel
+                :agent-id="agentId"
+                :at="remoteBox"
+                :changes="changes"
+                :streaming="streaming"
+                :writing="writing"
+                class="min-h-0 flex-1"
+                @chat="view = 'chat'"
+            />
+            <!-- In plain words the review ends in its press, where the header would have carried it (landOffered). -->
+            <div v-if="maker && landPending" class="shrink-0 border-t border-line bg-card px-4 py-3">
+                <AgentLandPress
+                    :block="mobile"
+                    :can-ship="canShip"
+                    :requested="fleetAgent?.landRequested !== undefined"
+                    :land-disabled="!canLand"
+                    :requesting="requestingLand"
+                    :land-hint="landHint"
+                    :request-hint="requestLandHint"
+                    :fix="fixPress"
+                    @land="pressLand"
+                    @request="requestLand"
+                    @fix="changes.fixConflicts()"
+                />
+            </div>
+        </template>
 
         <!-- The phone's switcher, from the title above; desktop switches chats on the docked panel's own strip. -->
         <ChatSwitcherSheet v-if="mobile" v-model="switcherOpen" @select="switchTo" @close="closeTabs" @open="openPast" @new="startAgent()" />

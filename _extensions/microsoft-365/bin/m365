@@ -1,0 +1,3 @@
+#!/usr/bin/env node
+/* This launcher imports the compiled Microsoft 365 CLI from the extension bundle. */
+import "../dist/cli.js";

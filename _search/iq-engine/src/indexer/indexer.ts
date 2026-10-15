@@ -16,9 +16,14 @@ import {
 } from "../store/index-store.js";
 import { clearVectors } from "../store/vectors.js";
 import type { ChunkRow, FileEntry, SymbolRow } from "../types.js";
+import { shadowSearchText } from "@intentic/base/shadow-text";
 import { langOf } from "../workspace/scan.js";
+import { chunkDocument } from "./chunker.js";
 
 const MAX_FILE_BYTES = 1024 * 1024;
+// A document's shadow is its whole text: a long report runs to megabytes and is still worth every page.
+const MAX_SHADOW_BYTES = 8 * 1024 * 1024;
+const maxBytesOf = (entry: FileEntry): number => (entry.text === undefined ? MAX_FILE_BYTES : MAX_SHADOW_BYTES);
 
 // Bump when parse/chunk/complexity logic changes; forces a reparse, but unchanged chunks keep their embeddings.
 const PARSER_VERSION = "3";
@@ -39,6 +44,11 @@ export interface RevalidateResult {
 }
 
 const isBinary = (buf: Buffer): boolean => buf.includes(0);
+
+const EMPTY_PARSE = { symbols: [], chunks: [], complexity: 0, imports: [] };
+
+// A document read through its shadow: no symbols, no imports, chunks by page over the page-marked text.
+const parseDocument = (path: string, shadow: string): ReturnType<ParseFile> => ({ ...EMPTY_PARSE, chunks: chunkDocument(path, shadowSearchText(shadow)) });
 
 // Invalidate stored vectors when the vector space (VECTOR_SPACE: model, pooling, normalisation) changes, while preserving
 // chunks. The meta key keeps its name, so any two releases whose spaces differ each see a mismatch and clear.
@@ -118,7 +128,7 @@ export const revalidate = async (db: SqliteDb, entries: readonly FileEntry[], pa
             return;
         }
         const content = buf.includes(0) ? buf.toString("utf8").replaceAll("\0", "�") : buf.toString("utf8");
-        const parsed = parse?.(entry.path, lang, content) ?? { symbols: [], chunks: [], complexity: 0, imports: [] };
+        const parsed = entry.text !== undefined && parse !== undefined ? parseDocument(entry.path, content) : (parse?.(entry.path, lang, content) ?? EMPTY_PARSE);
         db.transaction(() =>
             replaceFile(
                 db,
@@ -132,7 +142,7 @@ export const revalidate = async (db: SqliteDb, entries: readonly FileEntry[], pa
     };
     // Undefined for a file gone since the sweep; the failure's code, as a string, for one that is there but did not read.
     const readEntry = (entry: FileEntry): Promise<Buffer | undefined | string> =>
-        readFile(entry.abs).catch((error: unknown) => (isMissing(error) ? undefined : (errnoCode(error) ?? errorMessage(error))));
+        readFile(entry.text ?? entry.abs).catch((error: unknown) => (isMissing(error) ? undefined : (errnoCode(error) ?? errorMessage(error))));
     // Partition first: unchanged files short-circuit on mtime+size; the rest need a read.
     const toRead: { entry: FileEntry; previous: ReturnType<(typeof stored)["get"]>; read: Promise<Buffer | undefined | string> | undefined }[] = [];
     for (const entry of entries) {
@@ -148,11 +158,11 @@ export const revalidate = async (db: SqliteDb, entries: readonly FileEntry[], pa
     for (const [index, item] of toRead.entries()) {
         for (let ahead = index; ahead < Math.min(index + READ_AHEAD, toRead.length); ahead++) {
             const upcoming = toRead[ahead]!;
-            if (upcoming.read === undefined && upcoming.entry.size <= MAX_FILE_BYTES) {
+            if (upcoming.read === undefined && upcoming.entry.size <= maxBytesOf(upcoming.entry)) {
                 upcoming.read = readEntry(upcoming.entry);
             }
         }
-        if (item.entry.size > MAX_FILE_BYTES) {
+        if (item.entry.size > maxBytesOf(item.entry)) {
             skipEntry(item.entry);
             continue;
         }

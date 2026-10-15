@@ -10,7 +10,8 @@ import { defaultExec, DERIVE_TIMEOUT_MS, FILEQ_MAX_BUFFER, isMissingBinary, runF
 
 // Reading a file's rendered text for a person rather than an agent: the same markdown `fileq read` serves from its cache,
 // plus the front matter's provenance, so a reader can see what was derived, by which reader, and what it had to cut.
-// Nothing renders in the background: a file has text once someone asks, and fileq keeps it until the file changes.
+// This is the on-demand half: the shadow keeper (shadow-keeper.ts) renders documents in the background, and anything
+// else has text once someone asks; fileq keeps it until the file changes.
 // The shared tree only: fileq refuses worktree paths, so there is no scope here to get wrong.
 
 // What one response carries. Well past any real document's shadow and far under the daemon's own read ceiling, so a

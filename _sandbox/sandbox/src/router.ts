@@ -11,6 +11,7 @@ import { createTranslatorRoutes } from "./agent/routes/translator.routes.js";
 import { createAutomationsRoutes } from "./automations/automations.routes.js";
 import { createCapabilitiesRoutes } from "./capabilities/capabilities.routes.js";
 import { createPersonasRoutes } from "./personas/personas.routes.js";
+import { createOrgRoutes } from "./org/org.routes.js";
 import { createChoresRoutes } from "./chores/chores.routes.js";
 import { createCiRoutes } from "./ci/ci.routes.js";
 import { createComplianceRoutes } from "./compliance/compliance.routes.js";
@@ -79,6 +80,7 @@ export const createRouter = (services: Services): SandboxRouter => ({
     approvals: createApprovalsRoutes(services),
     extensions: createExtensionsRoutes(services),
     personas: createPersonasRoutes(services),
+    org: createOrgRoutes(services),
     privacy: createPrivacyRoutes(services),
     safety: createSafetyRoutes(services),
     sessions: createSessionsRoutes(services),

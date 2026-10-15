@@ -16,6 +16,10 @@ export const startPlatformPresence = ({ config, logger, role, services, shutdown
         services.announcer.start();
         services.reach.start(reach);
     }
+    // The organisation policy, from the same platform over the same token; a personal sandbox is answered null each time.
+    if (config.platform.url !== "" && config.connectToken !== "") {
+        services.orgPolicy.start();
+    }
 
     // 0 means always-on. A wake due before a stopped machine could be back keeps it up, since only a visit would restart it.
     if (config.idleStopMinutes > 0 && role.container) {

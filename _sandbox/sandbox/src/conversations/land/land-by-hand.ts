@@ -1,3 +1,4 @@
+import { includeProducedFiles } from "../produced-files.js";
 import type { AgentSpan, LandMode, LandResult } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import { reportChildConflict } from "../../agent/subagents/child-lands.js";
@@ -14,7 +15,7 @@ import { settleLandingInBackground, versionCommitsSettled, versionProjectFolders
 // child's press goes where its turn's own land goes (land-target.ts): into its parent's checkout, under the parent's
 // lease too, with none of the main tree's after-land. The same door is its parent's `merge`, in `merge` mode.
 
-export type LandByHandDeps = Pick<Services, "agentWorktrees" | "agents" | "conversations" | "dependencies" | "events" | "history" | "logger" | "perf" | "turns"> &
+export type LandByHandDeps = Pick<Services, "agentWorktrees" | "agents" | "conversations" | "dependencies" | "events" | "history" | "logger" | "perf" | "turns" | "transcripts"> &
     Parameters<typeof settleLandingInBackground>[0];
 
 // The composition a manual land applies: the same pre-land rebase as auto-land, with `base` moved onto what each
@@ -119,10 +120,13 @@ export const landByHand = async (services: LandByHandDeps, entry: IsolatedAgent,
 
 // The press whole: where the work goes decided first, then the land under the lease of every checkout it writes, and a
 // parent that took it brought up to date once those leases are free (its own measure takes its lease again).
-export const landByHandLeased = async (services: LandByHandDeps, entry: IsolatedAgent, mode: LandMode, rung: AgentSpan): Promise<LandResult> => {
+export const landByHandLeased = async (services: LandByHandDeps, entry: IsolatedAgent, mode: LandMode, rung: AgentSpan, includeDocuments = false): Promise<LandResult> => {
     const target = await landTargetOf(services, entry);
     const into = intoOf(target);
-    const result = await underLeases(services.conversations, entry.id, into, () => landByHand(services, entry, mode, rung, target));
+    const result = await underLeases(services.conversations, entry.id, into, async () => {
+        if (includeDocuments && mode !== "measure") await includeProducedFiles(services, entry);
+        return landByHand(services, entry, mode, rung, target);
+    });
     await settleParentBooks(services, { into, landed: result.landed });
     return result;
 };

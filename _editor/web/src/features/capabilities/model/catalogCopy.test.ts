@@ -1,9 +1,23 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { CAPABILITY_CATALOG, CAPABILITY_CATEGORIES, type CapabilityCatalogEntry, coreFields } from "@intentic/capability-catalog";
+import { repoRoot } from "@intentic/constants/node";
 import type { CapabilityKind } from "@intentic/sandbox-contract";
 import { type MessageTree, setLocale, t } from "@intentic/ui/i18n";
 import en from "../../../app/i18n/locales/en.json";
 import pl from "../../../app/i18n/locales/pl.json";
-import { categoryHint, categoryLabel, entryDescription, entryFields, entryGuide, entryHint, entryName, fieldSlot, optionSlot } from "./catalogCopy";
+import {
+    categoryHint,
+    categoryLabel,
+    EXTENSION_TILES,
+    entryDescription,
+    entryFields,
+    entryGuide,
+    entryHint,
+    entryName,
+    fieldSlot,
+    optionSlot,
+} from "./catalogCopy";
 import { sliceDescription } from "./slices";
 import { entryHaystack } from "./tiles";
 
@@ -91,6 +105,34 @@ const shownCategories = (): Map<string, string> =>
         ]),
     );
 
+// The first-party extensions' tiles whose words en.json and pl.json carry, read off their manifests as the daemon serves
+// them to the catalog.
+const EXTENSIONS_DIR = join(repoRoot(import.meta.url), `_extensions`);
+const EXTENSION_ENTRIES: readonly CapabilityCatalogEntry[] = readdirSync(EXTENSIONS_DIR).flatMap((dir) => {
+    let raw: string;
+    try {
+        raw = readFileSync(join(EXTENSIONS_DIR, dir, `intentic-extension.json`), `utf8`);
+    } catch {
+        // allow(silent-catch): a directory with no manifest is no extension.
+        return [];
+    }
+    // SAFETY: a first-party manifest, parsed by the daemon's own suite; only the card's words are read here.
+    const cards =
+        (JSON.parse(raw) as { contributes?: { capabilities?: (Words & { id: string; kind: string; catalog: Words })[] } }).contributes
+            ?.capabilities ?? [];
+    return cards
+        .filter((card) => EXTENSION_TILES.has(card.id))
+        .map((card): CapabilityCatalogEntry => ({ ...card.catalog, id: card.id, kind: `cli`, category: `communication`, fields: card.fields }));
+});
+const EXTENSION_SENTENCES = new Map(EXTENSION_ENTRIES.flatMap((entry) => sentences(entry.id, entry)));
+const extensionTile = (id: string): CapabilityCatalogEntry => {
+    const entry = EXTENSION_ENTRIES.find((candidate) => candidate.id === id);
+    if (entry === undefined) {
+        throw new Error(`no extension tile ${id}`);
+    }
+    return entry;
+};
+
 const builtIn = (id: string): CapabilityCatalogEntry => {
     const entry = CAPABILITY_CATALOG.find((candidate) => candidate.id === id);
     if (entry === undefined) {
@@ -122,6 +164,19 @@ test(`every tile sentence en.json holds is the package's current English`, () =>
         .map(([key, copy, english]) => `${key}: en.json says ${JSON.stringify(copy)}, the package ${JSON.stringify(english)}`);
 
     expect(drifted).toEqual([]);
+});
+
+test(`every extension tile sentence en.json holds is its manifest's current English, and every one has a copy`, () => {
+    expect(EXTENSION_ENTRIES.map((entry) => entry.id).toSorted()).toEqual([...EXTENSION_TILES].toSorted());
+    const drifted = leaves(en.capabilities.extensionCatalog)
+        .map(([key]) => [key, t(`capabilities.extensionCatalog.${key}`), EXTENSION_SENTENCES.get(key)] as const)
+        .filter(([, copy, english]) => copy !== english)
+        .map(([key, copy, english]) => `${key}: en.json says ${JSON.stringify(copy)}, the manifest ${JSON.stringify(english)}`);
+    const keyed = new Set(leaves(en.capabilities.extensionCatalog).map(([key]) => key));
+
+    expect(drifted).toEqual([]);
+    expect([...EXTENSION_SENTENCES.keys()].filter((key) => !key.endsWith(`.placeholder`) && !keyed.has(key))).toEqual([]);
+    expect(new Set(leaves(pl.capabilities.extensionCatalog).map(([key]) => key))).toEqual(keyed);
 });
 
 test(`every core field sentence en.json holds is the package's current English`, () => {
@@ -287,6 +342,49 @@ describe(`in Polish`, () => {
             `Signs in with your own account.`,
         ]);
         expect([categoryLabel(later), categoryHint(later)]).toEqual([`Robots`, `Let the agent drive a robot.`]);
+    });
+
+    test(`a first-party extension's tile reads in Polish, what its form submits as it was`, () => {
+        const microsoft = extensionTile(`microsoft365`);
+        const fields = entryFields(microsoft);
+
+        expect([entryName(microsoft), entryDescription(microsoft), entryGuide(microsoft)?.linkLabel]).toEqual([
+            `Microsoft 365`,
+            `Poczta Outlook, kalendarz i pliki biurowe.`,
+            `Otwórz rejestracje aplikacji w Entra ID`,
+        ]);
+        expect(fields.find((field) => field.key === `access`)?.options).toEqual([
+            { value: `write`, label: `Odczyt i zapis` },
+            { value: `read`, label: `Tylko odczyt` },
+        ]);
+        expect(fields.map((field) => [field.key, field.secret, field.default, field.advanced])).toEqual(
+            microsoft.fields.map((field) => [field.key, field.secret, field.default, field.advanced]),
+        );
+        expect(entryFields(extensionTile(`imap`)).find((field) => field.key === `authMode`)?.label).toBe(`Logowanie przez`);
+        // The helpers reach every sentence pl.json translates for these tiles.
+        const shown = new Map(
+            EXTENSION_ENTRIES.flatMap((entry) =>
+                sentences(entry.id, {
+                    name: entryName(entry),
+                    description: entryDescription(entry),
+                    hint: entryHint(entry),
+                    guide: entryGuide(entry),
+                    fields: entryFields(entry),
+                }),
+            ),
+        );
+        expect(leaves(pl.capabilities.extensionCatalog).filter(([key]) => shown.get(key) !== t(`capabilities.extensionCatalog.${key}`))).toEqual([]);
+    });
+
+    test(`an extension tile's sentence its manifest has changed since keeps the manifest's English`, () => {
+        const edited: CapabilityCatalogEntry = {
+            ...extensionTile(`microsoft365`),
+            description: `Outlook, Teams calendar and files.`,
+            fields: [{ key: `tenantId`, label: `Tenant`, hint: `A new hint.` }],
+        };
+
+        expect(entryDescription(edited)).toBe(`Outlook, Teams calendar and files.`);
+        expect(entryFields(edited)[0]).toMatchObject({ label: `Tenant`, hint: `A new hint.` });
     });
 
     test(`search finds a built-in tile by its Polish words and by its English ones`, () => {

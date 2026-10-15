@@ -198,6 +198,7 @@ const samplesOf = (
             search: { query: `stripe`, caseSensitive: `false` },
             seenAll: undefined,
             diff: { id: fleet.REVIEW_AGENT_ID },
+            documents: { id: fleet.REVIEW_AGENT_ID },
             transcript: { id: fleet.REVIEW_AGENT_ID },
             subagentTranscript: { id: fleet.FEATURED_AGENT_ID, subagentId: `toolu_01explore8k2m` },
             systemPrompt: { id: fleet.FEATURED_AGENT_ID },
@@ -374,6 +375,9 @@ const samplesOf = (
             verify: undefined,
             status: undefined,
             export: { from: 0, to: Date.now() },
+        },
+        org: {
+            policy: undefined,
         },
         areas: {
             list: undefined,

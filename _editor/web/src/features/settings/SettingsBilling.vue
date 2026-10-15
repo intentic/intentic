@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { HOSTED_PLAN_MAX_SLOTS } from "@intentic/api-contract";
-import { hostedShapeLine } from "@intentic/constants";
 import { Button, formatElapsed, Notice, RowGroup, RowNote, SkeletonSnapshot, useLoadingReveal, vSkeletonSource } from "@intentic/ui";
 import { messageOr, type NoticeModel, usePoll } from "@intentic/ui/async";
 import { timeAgo } from "@intentic/ui/format";
@@ -8,6 +7,7 @@ import { computed, onMounted } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import { useQueryClient } from "@tanstack/vue-query";
 import HostedHoursMeter from "./hosted-plan/HostedHoursMeter.vue";
+import { machineWords } from "./hosted-plan/machineWords";
 import HostedPlanOffer from "./hosted-plan/HostedPlanOffer.vue";
 import { formatDay, hoursMeter, machineHours, RECOVERABLE } from "./hosted-plan/hostedHours";
 import { dropStripeErrand, planMark, POLL_EVERY_MS, RETURN_WAIT_MS, waitForStripe } from "./hosted-plan/stripeErrand";
@@ -184,7 +184,7 @@ const ladder = computed(() =>
             id: tier.id,
             name: tier.name,
             priceUsd: tier.priceUsd,
-            shape: hostedShapeLine(tier.id === free?.id ? free.shape : tier),
+            shape: machineWords(tier.id === free?.id ? free.shape : tier),
             hours: tier.id === free?.id ? (free?.monthlyHours ?? tier.monthlyHours) : tier.monthlyHours,
             held,
             standing: machines.value.filter((machine) => machine.tier === tier.id).length,
@@ -423,7 +423,7 @@ const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
                                 <span class="min-w-0 truncate text-sm text-content">{{ machine.name }}</span>
                                 <!-- This machine's own shape and month, from its row: once rungs differ, the account has neither. -->
                                 <span class="text-2xs text-subtle">
-                                    {{ hostedShapeLine(machine.shape) }} · {{ machine.region }} · {{ machineState(machine.wokeAt) }}
+                                    {{ machineWords(machine.shape) }} · {{ machine.region }} · {{ machineState(machine.wokeAt) }}
                                 </span>
                                 <!-- Whose hours this machine spends and what is left of them: its own month on a slot, or
                                      the account's free hours, shared when another machine spends them too. -->

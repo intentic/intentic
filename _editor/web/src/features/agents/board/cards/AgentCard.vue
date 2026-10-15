@@ -365,11 +365,11 @@ const relanding = computed(() => props.pending === `reland` || (relandOffered.va
 // The diff chip's own condition, not merely `diff exists`, since renames alone render nothing.
 // Context is deliberately absent: it is a row of the identity tile's hover (see `tileHint`), so a card whose only stat
 // was its context opens no summary row at all.
-const stats = computed(
-    () =>
-        props.agent.costUsd !== undefined ||
-        (props.agent.diff !== undefined && (props.agent.diff.insertions > 0 || props.agent.diff.deletions > 0)),
-);
+// A maker's card says what the work is and where it stands, not what it cost, how many lines it moved, or which model
+// and login ran it: the three facts that crowded the title off a narrow card and that a non-coder has no use for.
+const costShown = computed(() => !maker.value && props.agent.costUsd !== undefined);
+const diffShown = computed(() => !maker.value && props.agent.diff !== undefined && (props.agent.diff.insertions > 0 || props.agent.diff.deletions > 0));
+const stats = computed(() => costShown.value || diffShown.value);
 // THE IDENTITY TILE IS ALSO THE PROGRESS GAUGE. The kind-of-work glyph was doing one job, telling cards apart, and it
 // did it in the strongest position a card has — leading, where the eye lands first — while the readings that say where
 // a session has got to sat in the summary row, last, among four other stats. So the rim went around the tile, and
@@ -477,6 +477,9 @@ const sendAgain = async (): Promise<void> => {
 // Once the category glyph replaces that mark, a card with no recorded model would otherwise never say the provider at
 // all.
 const model = computed(() => {
+    if (maker.value) {
+        return undefined;
+    }
     if (props.agent.model !== undefined) {
         return modelLabelFor(props.agent.provider, props.agent.model);
     }
@@ -486,7 +489,7 @@ const model = computed(() => {
 // differ after a mid-chat switch.
 // The summary carries only a UUID; read against the window's account list, so an unresolvable id (disconnected login)
 // draws nothing.
-const account = computed(() => accountBadge(providerAccounts.value[props.agent.provider] ?? [], props.agent.account));
+const account = computed(() => (maker.value ? undefined : accountBadge(providerAccounts.value[props.agent.provider] ?? [], props.agent.account)));
 // A computed of its own, not a call in the template: `previewOf` reads every composer's words, and wrapping it here
 // leaves Vue comparing one string, so only the card being typed into redraws.
 const unsentWords = computed(() => previewOf(props.agent.id));
@@ -558,12 +561,12 @@ const cardActions = computed((): ActionItem[] => {
         });
     }
     if (localOnly.value) {
-        actions.push({ id: `rename`, label: t(`agents.agentCard.renameAgent`), icon: `pencil`, hint: t(`ui.action.rename`), disabled: busy.value, run: () => edit.begin() });
+        actions.push({ id: `rename`, label: words.value.renameAgent, icon: `pencil`, hint: t(`ui.action.rename`), disabled: busy.value, run: () => edit.begin() });
     }
     if (archivable.value) {
         actions.push({
             id: `archive`,
-            label: t(`agents.agentCard.archiveAgent`),
+            label: words.value.archiveAgent,
             icon: `box`,
             hint: archiveHint.value,
             note: archiveHint.value.note,
@@ -686,7 +689,10 @@ const grab = (event: PointerEvent): void => {
         @keydown.enter.self.prevent="openCard()"
         @keydown.space.self.prevent="openCard()"
     >
-        <div class="flex items-center gap-2.5">
+        <!-- THE TITLE COMES FIRST: it keeps a readable width (basis-28) and what trails it (the presses, the chip, the marks)
+             wraps onto a line of its own when a narrow column has no room for both, rather than squeezing the name to a
+             letter or two beside a long chip and the press seats. -->
+        <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
             <!-- Kind-of-work glyph tinted by the title's category (sessionCategory: audit=blue magnifier, redesign=purple arrows, new=green plus, fix=red wrench). -->
             <span v-tooltip.top="tileHint" class="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full">
                 <!-- A tick per checklist item and one for the session's ending, closed once it is finished (`tileRim`). -->
@@ -699,7 +705,7 @@ const grab = (event: PointerEvent): void => {
                 type="text"
                 maxlength="80"
                 :aria-label="t(`agents.words.agentTitle`)"
-                class="ui-field-box ui-field-inline min-w-0 flex-1 select-text px-1 font-semibold"
+                class="ui-field-box ui-field-inline min-w-0 grow basis-28 select-text px-1 font-semibold"
                 :class="live ? 'text-sm' : 'text-xs'"
                 @click.stop
                 @keydown.enter.stop.prevent="edit.commit()"
@@ -712,7 +718,7 @@ const grab = (event: PointerEvent): void => {
                 <!-- Its whole text in a hover, only while it is cut short. -->
                 <span
                     v-tooltip.top.overflow="displayTitle"
-                    class="min-w-0 flex-1 font-semibold text-content"
+                    class="min-w-0 grow basis-28 font-semibold text-content"
                     :class="live ? 'line-clamp-2 break-words text-sm leading-snug' : 'truncate text-xs'"
                 >
                     <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{
@@ -721,9 +727,15 @@ const grab = (event: PointerEvent): void => {
                     <!-- The peek state rides along as text for a screen reader, not an aria-label with no role. -->
                     <span v-if="peek" class="sr-only">{{ t(`agents.agentCard.temporary`) }}</span>
                 </span>
+            </template>
+            <span class="ml-auto flex shrink-0 items-center gap-2.5">
                 <!-- The card's own presses (headerActions), revealed on hover where there is a pointer and folded behind one ⋯ on a
                      phone. Clustered tight where a pointer is fine; a touch target is 44px, so a coarse one keeps the gap. -->
-                <span v-if="headerActions.length > 0 || menuFolds" class="flex shrink-0 items-center" :class="coarse ? 'gap-2.5' : 'gap-0.5'">
+                <span
+                    v-if="!edit.editing && (headerActions.length > 0 || menuFolds)"
+                    class="flex shrink-0 items-center"
+                    :class="coarse ? 'gap-2.5' : 'gap-0.5'"
+                >
                     <OverflowActions :actions="headerActions" :button-class="actionClass" :header="displayTitle" />
                     <button
                         v-if="menuFolds"
@@ -737,31 +749,31 @@ const grab = (event: PointerEvent): void => {
                         <Icon name="ellipsis" class="text-sm" />
                     </button>
                 </span>
-            </template>
-            <!-- Same pill, same tones, same precedence as a rail row's corner (RailCard): one standing, one reading. -->
-            <span
-                v-if="chip !== undefined"
-                v-tooltip.top="chipHint"
-                class="ui-status-pill shrink-0 gap-1 text-2xs font-semibold"
-                :class="chip.tone"
-                ><Icon v-if="chip.family" name="subagents" class="shrink-0 text-2xs" />{{ chip.label }}</span
-            >
-            <!-- The resting standing for a card with no reason or unread mark; carries meta.label as a word in its hover, not just a glyph. -->
-            <!-- What the last turn left open is the tile rim's to say (tileRim): the checklist it drew here twice was one fact with two marks. -->
-            <Icon
-                v-else-if="!sealStandsIn"
-                :name="statusMeta.icon"
-                :spin="statusMeta.spin"
-                v-tooltip.top="statusMeta.label"
-                :aria-label="statusMeta.label"
-                role="img"
-                class="shrink-0 text-base"
-                :class="statusMeta.class"
-            />
-            <!-- What its last turn showed of its own work, one glyph, its words in its hover (CardSeal). The corner's marks are
-                 a step over the title's size, as the rail's are: a board card is bigger, its ring is 28px to the rail's
-                 24, and at the title's own size the two marks read as specks beside it. -->
-            <CardSeal v-if="proof !== undefined" :proof="proof" :quiet="receipt" :status="sealStandsIn ? statusMeta.label : undefined" class="text-base" />
+                <!-- Same pill, same tones, same precedence as a rail row's corner (RailCard): one standing, one reading. -->
+                <span
+                    v-if="chip !== undefined"
+                    v-tooltip.top="chipHint"
+                    class="ui-status-pill shrink-0 gap-1 text-2xs font-semibold"
+                    :class="chip.tone"
+                    ><Icon v-if="chip.family" name="subagents" class="shrink-0 text-2xs" />{{ chip.label }}</span
+                >
+                <!-- The resting standing for a card with no reason or unread mark; carries meta.label as a word in its hover, not just a glyph. -->
+                <!-- What the last turn left open is the tile rim's to say (tileRim): the checklist it drew here twice was one fact with two marks. -->
+                <Icon
+                    v-else-if="!sealStandsIn"
+                    :name="statusMeta.icon"
+                    :spin="statusMeta.spin"
+                    v-tooltip.top="statusMeta.label"
+                    :aria-label="statusMeta.label"
+                    role="img"
+                    class="shrink-0 text-base"
+                    :class="statusMeta.class"
+                />
+                <!-- What its last turn showed of its own work, one glyph, its words in its hover (CardSeal). The corner's marks are
+                     a step over the title's size, as the rail's are: a board card is bigger, its ring is 28px to the rail's
+                     24, and at the title's own size the two marks read as specks beside it. -->
+                <CardSeal v-if="proof !== undefined" :proof="proof" :quiet="receipt" :status="sealStandsIn ? statusMeta.label : undefined" class="text-base" />
+            </span>
         </div>
         <p v-if="edit.error !== undefined" class="text-2xs text-danger">{{ edit.error }}</p>
 
@@ -980,12 +992,12 @@ const grab = (event: PointerEvent): void => {
                 <!-- No hover labels: a stat you can't name from its icon doesn't belong in this row. -->
 
                 <!-- Red and green only while the diff is a live signal. -->
-                <span v-if="agent.diff !== undefined && (agent.diff.insertions > 0 || agent.diff.deletions > 0)" class="font-mono">
+                <span v-if="diffShown && agent.diff !== undefined" class="font-mono">
                     <span :class="receipt ? '' : 'text-success'">+{{ agent.diff.insertions }}</span>
                     <span :class="receipt ? '' : 'text-danger'"> −{{ agent.diff.deletions }}</span>
                 </span>
                 <!-- Lifetime cost total, read-only here. -->
-                <span v-if="agent.costUsd !== undefined">{{ formatMoney(agent.costUsd) }}</span>
+                <span v-if="costShown && agent.costUsd !== undefined">{{ formatMoney(agent.costUsd) }}</span>
                 <!-- Opt-in geek metrics, beside what it cost: what its processes hold now. Draws only when the board provides a reading naming this conversation, so never for another box's card. -->
                 <SessionMetrics v-if="localOnly" :conversation-id="agent.id" />
                 <!-- The agents it started, counted, live-of-total while any work: the list itself opens under the card only while it is the one being looked at (ChildRows). -->

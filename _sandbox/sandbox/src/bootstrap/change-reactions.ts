@@ -4,10 +4,12 @@ import { capabilitiesDocument } from "../capabilities/capabilities-store.js";
 import { invalidateContributions } from "../capabilities/contributions.js";
 import { extensionsRoot, workspaceExtensionsRoot } from "../capabilities/extension-dirs.js";
 import { extensionDevDocument } from "../extensions/extension-dev.js";
+import { createShadowKeeper } from "../derived/shadow-keeper.js";
 import { recomposeOnInputChanges } from "../environment/recompose-on-change.js";
 import { extensionEnablementDocument } from "../extensions/extension-enablement.js";
 import { followExtensionDirs, stopPendingExtensionProcesses } from "../extensions/extension-processes.js";
 import { onListenerStatusMoved } from "../extensions/listener/listener-status.js";
+import { settingsDocument } from "../settings/settings-store.js";
 import { startRefWatch, subscribeRefChanges } from "../git/remote/ref-watch.js";
 import { ignoreFileMode } from "../git/remote/repo-git-dirs.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
@@ -26,6 +28,33 @@ const extensionSourceOf = (root: string): ((path: string) => boolean) => {
     const dirs = [workspaceExtensionsRoot(root), extensionsRoot(root)].map((dir) => `${relative(root, dir)}/`);
     const files = new Set([extensionEnablementDocument.path, extensionDevDocument.path]);
     return (path) => files.has(path) || dirs.some((dir) => path.startsWith(dir));
+};
+
+// After boot has done its own work: the keeper's first sweep stats every document in the tree.
+const SHADOW_SWEEP_DELAY_MS = 60_000;
+
+// Every document in the main tree keeps a searchable text shadow (derived/shadow-keeper.ts): a sweep after boot, then
+// the watcher's batches, and a sweep when the setting is switched back on. Container daemon only, which owns the tree.
+const startShadowKeeper = ({ logger, services, shutdown }: Pick<BootPhase, "logger" | "services" | "shutdown">): void => {
+    const keeper = createShadowKeeper({
+        root: services.workspace.root,
+        enabled: async () => (await services.sandboxSettings.get()).documentSearch,
+        logger,
+        // Shadows are written where the watcher does not look, so iq hears of them from here.
+        onShadowsChanged: () => services.iq.markDirty(),
+    });
+    shutdown.push(() => keeper.stop());
+    shutdown.push(
+        subscribeWorkspaceChanges((paths) => {
+            keeper.changed(paths);
+            if (paths.includes(settingsDocument.path)) {
+                void keeper.reconsider();
+            }
+        }),
+    );
+    const first = setTimeout(() => void keeper.sweep(), SHADOW_SWEEP_DELAY_MS);
+    first.unref();
+    shutdown.push(() => clearTimeout(first));
 };
 
 export const startChangeReactions = ({ logger, role, services, shutdown, traits }: BootPhase): void => {
@@ -63,6 +92,7 @@ export const startChangeReactions = ({ logger, role, services, shutdown, traits 
     // container's own daemon only, as at boot (boot-restores.ts).
     if (role.container) {
         shutdown.push(recomposeOnInputChanges(services, subscribeWorkspaceChanges));
+        startShadowKeeper({ logger, services, shutdown });
     }
     shutdown.push(startRepoWatch(services.workspace.root, logger));
     shutdown.push(startRefWatch(services.workspace.root, subscribeRepoChanges, logger));

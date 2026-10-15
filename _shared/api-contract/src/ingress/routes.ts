@@ -21,6 +21,8 @@ import {
     LocalDnsBodySchema,
     LocalDnsConfirmBodySchema,
     LocalDnsConfirmedSchema,
+    OrgPolicyAnswerSchema,
+    OrgPolicyFetchBodySchema,
     PlatformIdentitySchema,
     PresentationSchema,
     ReachabilitySchema,
@@ -130,6 +132,16 @@ export const PLATFORM_INGRESS = {
         answer: "json",
         input: BootReportBodySchema,
         output: IngressOkSchema,
+    },
+    // The organisation's policy it enforces, if it belongs to one, with the edition it already holds.
+    orgPolicy: {
+        method: "POST",
+        path: "/sandbox/org-policy",
+        auth: "connect",
+        body: "json",
+        answer: "json",
+        input: OrgPolicyFetchBodySchema,
+        output: OrgPolicyAnswerSchema,
     },
     // Its owner's name for it and its logo, for an export bundle.
     presentation: { method: "POST", path: "/sandbox/presentation", auth: "connect", body: "json", answer: "json", output: PresentationSchema },

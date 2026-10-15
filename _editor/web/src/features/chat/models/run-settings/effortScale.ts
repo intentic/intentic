@@ -1,18 +1,21 @@
 import { type AgentProvider, type CatalogOption, effortAllowed, EFFORT_TIERS, NATIVE_PROVIDERS, type NativeProvider } from "@intentic/sandbox-contract";
 import { providerModels } from "../../accounts/providerCatalog";
+import { t } from "@intentic/ui/i18n";
 
 // Which reasoning tiers a model offers, and what a pick runs at: a scale is a property of the model, not the provider
 // (Kimi K2.7 stops at 'high', K3 at 'max'). Read at every use (composer segments, ComposerSelection.effort) rather than
 // written back, so a smaller model never ratchets the pick down.
 
-const EFFORT_LABELS: Record<string, string> = {
-    minimal: `Minimal`,
-    low: `Low`,
-    medium: `Medium`,
-    high: `High`,
-    xhigh: `X-High`,
-    max: `Max`,
-    ultra: `Ultra`,
+// Each tier's name in the reader's language, read at every use (a table of strings built at import would keep the
+// language it was born in). A tier this build has never heard of keeps its own id.
+const EFFORT_LABELS: Record<string, () => string> = {
+    minimal: () => t(`chat.effortScale.minimal`),
+    low: () => t(`chat.effortScale.low`),
+    medium: () => t(`chat.effortScale.medium`),
+    high: () => t(`chat.effortScale.high`),
+    xhigh: () => t(`chat.effortScale.xhigh`),
+    max: () => t(`chat.effortScale.max`),
+    ultra: () => t(`chat.effortScale.ultra`),
 };
 
 // Default floor tiers, deliberately without 'max' (a provider must claim it); Claude's is the exception.
@@ -28,7 +31,7 @@ export const effortsFor = (provider: AgentProvider, modelId: string | undefined,
     }
     const published = (providerModels.value[provider] ?? []).find((option) => option.value === modelId)?.efforts;
     const scale = published !== undefined && published.length > 0 ? published : floorFor(provider);
-    return scale.filter((value) => effortAllowed(value, provider, thinking)).map((value) => ({ label: EFFORT_LABELS[value] ?? value, value }));
+    return scale.filter((value) => effortAllowed(value, provider, thinking)).map((value) => ({ label: EFFORT_LABELS[value]?.() ?? value, value }));
 };
 
 // The tier a selection actually runs at: the pick itself if offered, else the strongest weaker tier the model has (or

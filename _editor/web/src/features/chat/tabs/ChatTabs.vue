@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { AnchoredOverlay, Button, ContextMenu, isOverlayTarget, SearchBar, type Tip, toneWash } from "@intentic/ui";
+import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { useSettled } from "@intentic/ui/async";
 import { createInlineRename } from "@intentic/ui/inline-rename";
 import type { Disposable } from "@intentic/extension-api";
@@ -31,6 +32,7 @@ import { useT } from "@intentic/ui/i18n";
 // list from useChat and emits select/close/open rather than writing it.
 
 const t = useT();
+const vocabulary = useVocabulary();
 
 const emit = defineEmits<{
     select: [id: string];
@@ -445,7 +447,7 @@ const openHistory = (event: Event): void => {
                 type="text"
                 maxlength="80"
                 :aria-label="t(`chat.words.chatTitle`)"
-                :placeholder="active.isolated.value ? t(`chat.words.newAgent`) : t(`chat.words.newChat`)"
+                :placeholder="active.isolated.value ? vocabulary.newAgent : t(`chat.words.newChat`)"
                 class="ui-field-box ui-field-inline h-7 min-w-0 flex-1 select-text px-2 text-2xs"
                 @keydown.enter.stop.prevent="edit.commit()"
                 @keydown.esc.stop.prevent="edit.cancel()"
@@ -531,8 +533,8 @@ const openHistory = (event: Event): void => {
                 type="button"
                 class="composer-ghost h-7 w-7 shrink-0"
                 @click="startAgent()"
-                v-tooltip.bottom="t(`chat.words.newAgent`)"
-                :aria-label="t(`chat.words.newAgent`)"
+                v-tooltip.bottom="vocabulary.newAgent"
+                :aria-label="vocabulary.newAgent"
             >
                 <Icon name="plus" class="text-sm" />
             </button>
@@ -575,7 +577,7 @@ const openHistory = (event: Event): void => {
                 <span class="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-500/15 text-link">
                     <Icon name="plus" class="text-2xs" />
                 </span>
-                <span class="leading-none">{{ t(`chat.words.newAgent`) }}</span>
+                <span class="leading-none">{{ vocabulary.newAgent }}</span>
             </Button>
         </div>
 

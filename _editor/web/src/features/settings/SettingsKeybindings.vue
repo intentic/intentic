@@ -6,6 +6,8 @@ import { rankCommands } from "../../workbench/commands/commandSearch";
 import { chordFromEvent, formatChord, isApplePlatform } from "../../workbench/commands/keybindings";
 import { effectiveKeybinding, keymapOverrides, useKeymap } from "../../workbench/commands/useKeymap";
 import { useT } from "@intentic/ui/i18n";
+import { categoryLabel } from "../../workbench/commands/categories";
+import { useAudience } from "../../app/useAudience";
 
 // Lists every command (builtins and extensions share one registry) with its effective chord; lets the user record,
 // reset, or unbind a shortcut, live everywhere via the keymap store. Recording captures one keystroke in the capture
@@ -19,6 +21,8 @@ const { setKeybinding, unbindKeybinding, resetKeybinding, resetKeymap } = useKey
 const query = ref(``);
 // The command id currently capturing a keystroke, or undefined when not recording.
 const recording = ref<string | undefined>(undefined);
+// A command's id (`view.agents`) is a developer's handle on it; a maker reads its name alone.
+const { maker } = useAudience();
 
 interface CommandRow {
     readonly command: string;
@@ -38,7 +42,8 @@ const rows = computed<readonly CommandRow[]>(() =>
     rankCommands(commands.value, query.value).map((entry): CommandRow => ({
         command: entry.command,
         title: entry.title,
-        category: entry.category,
+        // The family in the reader's language ("Przejdź do"), never its id ("Go to"), which is an English constant.
+        category: entry.category === undefined ? undefined : categoryLabel(entry.category),
         label: commandLabel(entry),
         owner: entry.owner,
         chord: effectiveKeybinding(entry.command, entry.keybinding),
@@ -130,7 +135,7 @@ onUnmounted(stopRecording);
 
         <!-- Compact tier: a long list of commands read by scanning. -->
         <RowGroup>
-            <Row v-for="row in rows" :key="row.command" :title="row.label" :description="row.command">
+            <Row v-for="row in rows" :key="row.command" :title="row.label" :description="maker ? undefined : row.command">
                 <template #title>
                     <span class="flex items-center gap-2">
                         <span class="truncate"

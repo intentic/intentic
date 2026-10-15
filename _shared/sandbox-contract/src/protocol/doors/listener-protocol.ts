@@ -4,7 +4,7 @@ import { ActivityStatusSchema } from "../../schemas/activity.js";
 import { rawRouteUrl } from "../raw/raw-routes.js";
 
 // Wire between the daemon and an extension's realtime-listener gateway (ext-discord, ext-slack, ext-telegram,
-// ext-whatsapp, ext-imap, ext-google-workspace): the five /listeners/:provider routes (state, dispatch, failure,
+// ext-whatsapp, ext-imap, ext-google-workspace, ext-microsoft-365): the five /listeners/:provider routes (state, dispatch, failure,
 // status, stop). Shared here so both ends compile against one declaration.
 
 // The path of one of the five listener routes for a provider, built from RAW_ROUTES so the gateway and the daemon

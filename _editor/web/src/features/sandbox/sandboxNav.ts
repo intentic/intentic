@@ -113,8 +113,9 @@ const builtInSections = (): readonly SandboxSection[] =>
         .flatMap((group) => group.items)
         .filter((row): row is SandboxSection => !isSandboxSlot(row));
 
-// Every built-in slug, derived from the rows themselves so adding a section cannot forget to guard its name.
-const builtInSlugs = (): ReadonlySet<string> => new Set(builtInSections().map((section) => section.slug));
+// Every built-in slug, derived from the rows themselves so adding a section cannot forget to guard its name. The hub also
+// asks it which sections an organisation's lock may wrap (organisations/OrgHeldSection.vue): slots are extensions' own.
+export const sandboxBuiltInSlugs = (): ReadonlySet<string> => new Set(builtInSections().map((section) => section.slug));
 
 /** The slots, each kept for the one extension it names. */
 export const sandboxSlots = (): readonly SandboxSlot[] =>
@@ -127,7 +128,7 @@ export const sandboxSlots = (): readonly SandboxSlot[] =>
  * the extension it is kept for. Asked by the hub and by the palette, so neither offers a row that opens something else.
  */
 export const sandboxKeyAllowed = (owner: string, key: string): boolean =>
-    !builtInSlugs().has(key) && sandboxSlots().every((slot) => slot.slug !== key || slot.extension === owner);
+    !sandboxBuiltInSlugs().has(key) && sandboxSlots().every((slot) => slot.slug !== key || slot.extension === owner);
 
 /** The one section a guest member has business in: their own passkeys, and giving their grant back. */
 export const GUEST_SECTION = `access`;
@@ -137,8 +138,11 @@ export const GUEST_SECTION = `access`;
  * guest sees one row, since the daemon refuses it every other section's reads. Slots are not here: an extension fills
  * them, and whoever lists the extension's views lists those.
  */
-export const sandboxSections = (canShip: boolean, guest = false): readonly SandboxSection[] =>
-    builtInSections().filter((section) => (guest ? section.slug === GUEST_SECTION : canShip || section.maintainer !== true));
+export const sandboxSections = (canShip: boolean, guest = false, orgHidden: ReadonlySet<string> = new Set()): readonly SandboxSection[] =>
+    builtInSections()
+        .filter((section) => (guest ? section.slug === GUEST_SECTION : canShip || section.maintainer !== true))
+        // What the sandbox's organisation hides (organisations/useOrgPolicy.ts) is no destination either.
+        .filter((section) => !orgHidden.has(section.slug));
 
 export const sandboxSectionPath = (slug: string): string => (slug === SANDBOX_DEFAULT_SECTION ? `/sandbox` : `/sandbox/${slug}`);
 

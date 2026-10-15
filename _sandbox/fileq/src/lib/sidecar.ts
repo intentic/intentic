@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { readFile, rm, writeFile } from "node:fs/promises";
+import { readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { estimateTokens } from "@intentic/base/format";
 import { writeFileAtomic } from "@intentic/base/fs";
 import { neutralizeOutsideText } from "@intentic/base/outside-text";
-import { STATE_DIR } from "@intentic/constants";
+import { DERIVED_SHADOWS_DIR } from "@intentic/constants";
 import type { DerivedDoc } from "./derivers/deriver.js";
 
 // One markdown shadow per derivable file, at a predictable mirrored path under .intentic/local/cache/derived (portable,
@@ -14,8 +14,12 @@ import type { DerivedDoc } from "./derivers/deriver.js";
 // deriver stamp both still match, never by mtime.
 // Writes (sidecars and content-cache entries alike) go through exactly one function, since either is read back by a
 // plain `Read` with no untrusted-content wrapper, so neutralization must happen at write time.
+// A sidecar also records the source's size and mtime (`source_size`, `source_mtime`). They are not what freshness
+// means here, and fileq never trusts them over the hash; they let a reader that cannot afford a hash (the ripgrep
+// preprocessor, a POSIX shell script; the daemon's shadow keeper, over thousands of files) tell an untouched source
+// with one `stat`. A sidecar written before they existed simply lacks them, and such a reader takes its slow path.
 
-export const DERIVED_DIR = `${STATE_DIR}/local/cache/derived`;
+export const DERIVED_DIR = DERIVED_SHADOWS_DIR;
 
 export const sidecarPathFor = (workspaceRoot: string, relPath: string): string => join(workspaceRoot, DERIVED_DIR, `${relPath}.md`);
 
@@ -35,11 +39,65 @@ export interface SidecarFront {
     readonly deriver: string | undefined;
     readonly derivedAt: string | undefined;
     readonly title: string | undefined;
+    /** The source's byte size and mtime when this was written (sourceStatOf's spelling); absent on older sidecars. */
+    readonly sourceSize: string | undefined;
+    readonly sourceMtime: string | undefined;
     /** Every cap and degradation the derivation hit, in the order it wrote them. */
     readonly notes: readonly string[];
 }
 
-const EMPTY_FRONT: SidecarFront = { source: undefined, sha256: undefined, deriver: undefined, derivedAt: undefined, title: undefined, notes: [] };
+const EMPTY_FRONT: SidecarFront = {
+    source: undefined,
+    sha256: undefined,
+    deriver: undefined,
+    derivedAt: undefined,
+    title: undefined,
+    sourceSize: undefined,
+    sourceMtime: undefined,
+    notes: [],
+};
+
+/** A source's size and mtime as a sidecar records them: what GNU `stat -c '%s %.9Y'` prints, so a shell can compare. */
+export interface SourceStat {
+    readonly size: string;
+    readonly mtime: string;
+}
+
+export const sourceStatOf = (stats: { readonly size: bigint; readonly mtimeNs: bigint }): SourceStat => {
+    const seconds = stats.mtimeNs / 1_000_000_000n;
+    const nanos = stats.mtimeNs % 1_000_000_000n;
+    return { size: stats.size.toString(), mtime: `${seconds.toString()}.${nanos.toString().padStart(9, "0")}` };
+};
+
+/** The file's SourceStat now; undefined when it cannot be stat'd. */
+export const readSourceStat = async (absPath: string): Promise<SourceStat | undefined> => {
+    try {
+        return sourceStatOf(await stat(absPath, { bigint: true }));
+    } catch {
+        // allow(silent-catch): no stat means no hash-free answer; every caller then takes the path that hashes.
+        return undefined;
+    }
+};
+
+// pdf.ts's note for a scan whose OCR stopped at a page cap (interactive reads recognise 20 pages, the daemon's
+// background keeper more). Read here, beside the front matter, so a caller that never loads the pdf reader (the
+// daemon) can tell a shadow cut shorter than it wants.
+const CAP_NOTE = /^OCR stops at (\d+) pages/;
+
+/** The page cap a rendering's OCR stopped at, off its notes; undefined when it recognised every page (or none). */
+export const ocrCapOf = (notes: readonly string[]): number | undefined => {
+    for (const note of notes) {
+        const match = CAP_NOTE.exec(note);
+        if (match !== null) {
+            return Number(match[1]);
+        }
+    }
+    return undefined;
+};
+
+/** Whether a sidecar's recorded size and mtime are this source's: the hash-free test, false when either is missing. */
+export const sourceUnchanged = (front: SidecarFront, now: SourceStat | undefined): boolean =>
+    now !== undefined && front.sourceSize === now.size && front.sourceMtime === now.mtime;
 
 // A line scan rather than a YAML parse, so an edited-by-hand sidecar simply reads as stale instead of throwing.
 // Title and notes are JSON-encoded on the way in (writeSidecar), so they decode back rather than splitting on a colon.
@@ -67,6 +125,8 @@ export const parseSidecarFront = (content: string): SidecarFront => {
         deriver: field("deriver"),
         derivedAt: field("derived_at"),
         title: decode(field("title")),
+        sourceSize: field("source_size"),
+        sourceMtime: field("source_mtime"),
         notes: [...head.matchAll(/^note: (.+)$/gm)].map((match) => decode(match[1]) ?? ""),
     };
 };
@@ -103,6 +163,8 @@ export interface DerivedEntry {
     readonly deriverStamp: string;
     readonly doc: DerivedDoc;
     readonly derivedAt: Date;
+    /** The source's stat when it was read, for a sidecar only (see SourceStat). */
+    readonly sourceStat?: SourceStat | undefined;
 }
 
 export interface WriteSidecarInput extends Omit<DerivedEntry, "source"> {
@@ -123,6 +185,7 @@ export const writeDerived = async (path: string, entry: DerivedEntry): Promise<{
         "---",
         ...(entry.source === undefined ? [] : [`source: ${entry.source}`]),
         `sha256: ${entry.sourceSha}`,
+        ...(entry.sourceStat === undefined ? [] : [`source_size: ${entry.sourceStat.size}`, `source_mtime: ${entry.sourceStat.mtime}`]),
         `deriver: ${entry.deriverStamp}`,
         `derived_at: ${entry.derivedAt.toISOString()}`,
         ...(title === undefined ? [] : [`title: ${JSON.stringify(title)}`]),

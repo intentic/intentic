@@ -80,6 +80,15 @@ describe("derive", () => {
         expect(exitCode).toBe(1);
     });
 
+    it("still reads a file the shadow tree refuses, through the content cache alone", async () => {
+        mkdirSync(join(root, "refs/other"), { recursive: true });
+        writeFileSync(join(root, "refs/other/spec.docx"), docxBytes("Spec", ["Shelved body line."]));
+        const { out, exitCode } = await fileq("read", "--plain", join(root, "refs/other/spec.docx"));
+        expect(exitCode ?? 0).toBe(0);
+        expect(out).toContain("Shelved body line.");
+        expect(existsSync(sidecarOf("refs/other/spec.docx"))).toBe(false);
+    });
+
     it("a forged envelope marker in the document dies in the sidecar's bytes", async () => {
         writeFileSync(
             join(root, "evil.docx"),

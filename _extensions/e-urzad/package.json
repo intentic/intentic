@@ -1,0 +1,50 @@
+{
+    "name": "@intentic/ext-e-urzad",
+    "version": "1.0.0",
+    "description": "e-Urząd: EZD RP cases and documents, e-Doręczenia deliveries and proofs, and electronic-signature verification for Polish public offices, as an agent CLI, per-card MCP tools and a rail view",
+    "license": "MIT",
+    "private": true,
+    "type": "module",
+    "main": "src/index.ts",
+    "types": "src/index.ts",
+    "exports": {
+        ".": {
+            "types": "./src/index.ts",
+            "default": "./src/index.ts"
+        }
+    },
+    "scripts": {
+        "build": "vite build --config vite.server.config.ts && vite build --config vite.cli.config.ts",
+        "typecheck": "vue-tsc --noEmit",
+        "test": "suites"
+    },
+    "dependencies": {
+        "@intentic/extension-api": "workspace:*",
+        "@intentic/extension-manifest": "workspace:*",
+        "@intentic/extension-ui": "workspace:*"
+    },
+    "devDependencies": {
+        "@intentic/base": "workspace:*",
+        "@intentic/connector-runtime": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*",
+        "@intentic/testing": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+        "@xmldom/xmldom": "catalog:",
+        "asn1js": "catalog:",
+        "jose": "catalog:",
+        "pkijs": "catalog:",
+        "typescript": "catalog:",
+        "vite": "catalog:",
+        "vue": "catalog:",
+        "vue-tsc": "catalog:",
+        "xadesjs": "catalog:",
+        "xmldsigjs": "catalog:",
+        "xpath": "catalog:",
+        "zod": "catalog:"
+    },
+    "peerDependencies": {
+        "vue": "3"
+    }
+}

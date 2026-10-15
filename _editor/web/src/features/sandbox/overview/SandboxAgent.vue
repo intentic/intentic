@@ -10,6 +10,7 @@ import AgentChatPages from "../agent-settings/behaviour/AgentChatPages.vue";
 import AgentChecks from "../agent-settings/behaviour/AgentChecks.vue";
 import AgentClock from "../agent-settings/behaviour/AgentClock.vue";
 import AgentCodeSearch from "../agent-settings/behaviour/AgentCodeSearch.vue";
+import AgentDocumentSearch from "../agent-settings/behaviour/AgentDocumentSearch.vue";
 import AgentCommandOutput from "../agent-settings/behaviour/AgentCommandOutput.vue";
 import AgentDataRetention from "../agent-settings/behaviour/AgentDataRetention.vue";
 import AgentFinishedWork from "../agent-settings/behaviour/AgentFinishedWork.vue";
@@ -131,6 +132,8 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
         <!-- Finding code, feedback after edits, command output, then how much of the job it may delegate. -->
         <template v-else-if="section === `tools`">
             <AgentCodeSearch />
+            <!-- Beside code search: the same searches reaching into PDFs, Word files and spreadsheets. -->
+            <AgentDocumentSearch />
             <AgentRepoChecks />
             <AgentCommandOutput />
             <!-- What it may answer with besides words: a page drawn in the chat, or one it asks on. -->

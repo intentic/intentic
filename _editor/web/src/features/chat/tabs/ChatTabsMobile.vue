@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { startAgent } from "../../agents/fleet/agentActions";
 import { statusIcon } from "../models/catalog";
 import { useChat } from "../run/useChat";
@@ -9,6 +10,7 @@ import ChatSwitcherSheet from "./ChatSwitcherSheet.vue";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
+const vocabulary = useVocabulary();
 
 /* The mobile counterpart of ChatTabs: a compact header naming the active conversation, over the shared switcher sheet. */
 
@@ -34,7 +36,7 @@ const sheetOpen = ref(false);
         >
             <Icon v-if="active" v-bind="statusIcon(active.status.value)" />
             <span class="min-w-0 flex-1 truncate text-sm font-medium text-content">{{
-                active?.title.value ?? (active?.isolated.value ? t(`chat.words.newAgent`) : t(`chat.words.newChat`))
+                active?.title.value ?? (active?.isolated.value ? vocabulary.newAgent : t(`chat.words.newChat`))
             }}</span>
             <PresenceAvatars
                 v-if="active && active.session.value !== undefined"
@@ -43,7 +45,7 @@ const sheetOpen = ref(false);
             />
             <Icon name="chevron-down" class="shrink-0 text-2xs text-subtle" />
         </button>
-        <button type="button" class="composer-ghost h-10 w-10 shrink-0" @click="startAgent()" :aria-label="t(`chat.words.newAgent`)">
+        <button type="button" class="composer-ghost h-10 w-10 shrink-0" @click="startAgent()" :aria-label="vocabulary.newAgent">
             <Icon name="plus" class="text-base" />
         </button>
 

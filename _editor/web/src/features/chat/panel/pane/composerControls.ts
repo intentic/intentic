@@ -55,6 +55,9 @@ const openersOf = (flags: Record<Exclude<ComposerControl, `land`>, Ref<boolean>>
         mode: () => {
             flags.mode.value = true;
         },
+        model: () => {
+            flags.model.value = true;
+        },
         placement: () => {
             flags.placement.value = true;
         },
@@ -81,6 +84,9 @@ export interface ControlsHost {
     readonly steered: Readonly<Ref<boolean>>;
     readonly editing: Readonly<Ref<ChatMessage | undefined>>;
     readonly pills: ControlPills;
+    // Plain words (a reader who does not write code) and a guest: what the overflow offers them (composerMore.ts).
+    readonly plain: Readonly<Ref<boolean>>;
+    readonly guest: Readonly<Ref<boolean>>;
 }
 
 export const useComposerControls = (host: ControlsHost) => {
@@ -139,6 +145,9 @@ export const useComposerControls = (host: ControlsHost) => {
         landOffered: landing.offered.value,
         lands: landing.lands.value,
         landOwn: landing.own.value,
+        plain: host.plain.value,
+        guest: host.guest.value,
+        modelLabel: modelReading.value.label,
     }));
     // Whether the send's caret may book this message for later: a booking is held by this sandbox's own daemon, for a
     // send nothing else claims (a workflow or a loop takes the message somewhere a booking cannot follow).
@@ -149,7 +158,7 @@ export const useComposerControls = (host: ControlsHost) => {
     const anchorOf = (control: ComposerControl, own: Readonly<Ref<HTMLElement | undefined>>) =>
         computed(() => (inRow.value[control] ? own.value : host.pills.more.value));
 
-    const OPENERS = openersOf({ mode: modeOpen, placement: placementOpen, persona: personaOpen, runThrough: runThrough.open, voice: voiceAgent }, landing.toggle);
+    const OPENERS = openersOf({ mode: modeOpen, model: modelOpen, placement: placementOpen, persona: personaOpen, runThrough: runThrough.open, voice: voiceAgent }, landing.toggle);
 
     // Only one answer to "what does send do" can hold, and an armed edit wins as the most specific act; cleared visibly
     // rather than disabled, so the precedence is seen rather than discovered by pressing Send.
@@ -203,7 +212,10 @@ export const useComposerControls = (host: ControlsHost) => {
         moreRows,
         // What's behind the overflow button, said on the button: the one thing it owes a reader before the press.
         moreHint: computed(
-            (): Tip => ({ title: t(`chat.chatPane.moreComposerSettings`), rows: moreRows.value.map((row) => ({ label: row.label, value: row.value })) }),
+            (): Tip => ({
+                title: host.plain.value ? t(`chat.chatPane.plain.moreSettings`) : t(`chat.chatPane.moreComposerSettings`),
+                rows: moreRows.value.map((row) => ({ label: row.label, value: row.value })),
+            }),
         ),
         modeAnchor: anchorOf(`mode`, host.pills.mode),
         placementAnchor: anchorOf(`placement`, host.pills.placement),

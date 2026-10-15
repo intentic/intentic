@@ -19,6 +19,28 @@ export const HISTORY_ROOT = "/history";
 // Daemon's own state folder; join through the state table's typed helpers instead, not by hand.
 export const STATE_DIR = ".intentic";
 
+// fileq's text shadows of workspace documents, one `<path>.md` per file at its mirrored path: written by fileq,
+// kept current by the daemon's shadow keeper, read by iq and by the ripgrep preprocessor as the text of the original.
+export const DERIVED_SHADOWS_DIR = `${STATE_DIR}/local/cache/derived`;
+
+// The documents whose shadow stands in for their bytes when searched (iq, ripgrep): fileq's document formats, by
+// extension, lower case. fileq's own table (formats.ts DOCUMENT_FORMATS) is held to this one by a test.
+export const SHADOWED_DOCUMENT_EXTENSIONS: readonly string[] = [
+    ".docx",
+    ".epub",
+    ".odg",
+    ".odp",
+    ".ods",
+    ".odt",
+    ".otp",
+    ".ots",
+    ".ott",
+    ".pdf",
+    ".pptx",
+    ".rtf",
+    ".xlsx",
+];
+
 // Reserved top-level shelf for reference material: consultation-only, so every part that walks the workspace — the
 // tree, search, dependency setup, file sync — skips it. A repository's own `refs/` deeper in is ordinary content, so
 // match it by first segment (@intentic/workspace-ignore's isReferencePath), never by name at any depth.

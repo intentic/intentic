@@ -104,6 +104,8 @@ import { awaitingResolved, turnFinished } from "./push/notifications.js";
 import { notifyAwaiting } from "./push/awaiting-detail.js";
 import { createDomainEvents, type DomainEvents } from "./seams/domain-events.js";
 import { type Announcer, createAnnouncer } from "./system/boot/announce.js";
+import { createOrgPolicyHolder, type OrgPolicyHolder } from "./org/org-policy.js";
+import { platformOrgPolicyFetch } from "./org/org.routes.js";
 import { type ReachReporter, createReachReporter } from "./system/listeners/reach-report.js";
 import { type BootTracker, createBootTracker } from "./system/boot/boot.js";
 import { DAEMON_OWNER } from "./seams/workload-stamp.js";
@@ -199,6 +201,8 @@ export interface Services
     readonly invariants: InvariantRegistry;
     // Platform registration; main starts/stops it, /health reports its state, the one link the container can probe.
     readonly announcer: Announcer;
+    // The organisation policy this sandbox enforces, if one holds it (org/org-policy.ts); app.ts refuses what it locks.
+    readonly orgPolicy: OrgPolicyHolder;
     // Whether this sandbox's public address answers; the announcer proves it started, this proves it's reachable.
     readonly reach: ReachReporter;
     // Makes a turn's browser router, which the turn then mounts.
@@ -516,6 +520,7 @@ const createDaemonMembers = (
         clientLogger: createClientLogger(config),
         boot,
         announcer: createAnnouncer(config, logger, { identityKey: deps.platformIdentityKey.learn }),
+        orgPolicy: createOrgPolicyHolder({ authRoot: authRootOf(config), logger, fetch: platformOrgPolicyFetch(config) }),
         reach: createReachReporter(config, logger, () => boot),
         browserRouters: createBrowserRouters(() => ({ capabilities, workspace, logger })),
         desktopServers: desktopServersOf,
@@ -856,6 +861,7 @@ export const servicesTeardown = (services: Services): readonly (() => unknown)[]
     () => services.perf.stop(),
     () => services.ciHooks.stop(),
     () => services.announcer.stop(),
+    () => services.orgPolicy.stop(),
     () => services.reach.stop(),
     () => services.history.stop(),
     () => services.processes.stopAll(),

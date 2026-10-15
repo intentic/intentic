@@ -53,7 +53,9 @@ const { showIgnored, toggleShowIgnored, hideTests, toggleHideTests, hideTechnica
 const t = useT();
 
 // Who the screens are written for: the same workspace with git's words or plain ones.
-const { audience, setAudience } = useAudience();
+// A maker's page keeps the look and the words; the file tree's code preview, its ignore and test filters, how a diff
+// opens, tool calls and the status bar's gauges are a developer's, and leave the page with the answer that hides them.
+const { audience, setAudience, maker } = useAudience();
 const audienceOptions = computed(
     () =>
         [
@@ -159,7 +161,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
     <div class="flex flex-col gap-6">
         <!-- Who the words are for; first, since it decides what the rest of the app is called. -->
         <RowGroup :label="t(`settings.words.group`)">
-            <Row icon="user" :title="t(`settings.words.group`)" :description="t(`settings.appearance.work.hint`)">
+            <Row icon="user" :title="t(`settings.words.group`)" :description="maker ? t(`settings.appearance.plain.workHint`) : t(`settings.appearance.work.hint`)">
                 <template #control
                     ><SegmentedControl :model-value="audience" :options="audienceOptions" @update:model-value="setAudience"
                 /></template>
@@ -169,7 +171,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
         <!-- Look: whole-workspace appearance choices. -->
         <RowGroup :label="t(`settings.appearance.look.group`)" equal-rows>
             <!-- First in the group: it decides what every other row on this page is written in. -->
-            <Row icon="globe" :title="t(`settings.appearance.look.language`)" :description="t(`settings.appearance.look.languageHint`)">
+            <Row icon="globe" :title="t(`settings.appearance.look.language`)" :description="maker ? t(`settings.appearance.plain.languageHint`) : t(`settings.appearance.look.languageHint`)">
                 <template #control>
                     <!-- Ghost, like every other Picker that sits in a settings Row: a bordered field here would tower
                          over the segmented controls it shares the group with. -->
@@ -189,7 +191,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                     ><SegmentedControl :model-value="themeChoice" :options="themeOptions" @update:model-value="setThemeChoice"
                 /></template>
             </Row>
-            <Row icon="image" :title="t(`settings.appearance.look.wallpaper`)" :description="t(`settings.appearance.look.wallpaperHint`)">
+            <Row icon="image" :title="t(`settings.appearance.look.wallpaper`)" :description="maker ? t(`settings.appearance.plain.wallpaperHint`) : t(`settings.appearance.look.wallpaperHint`)">
                 <template #control>
                     <SegmentedControl :model-value="wallpaper" :options="wallpaperOptions" @update:model-value="(value) => (wallpaper = value)" />
                 </template>
@@ -224,7 +226,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
         </RowGroup>
 
         <!-- File tree: the explorer's look, with its live preview flush under the row (no boxed inset). -->
-        <RowGroup :label="t(`settings.appearance.explorer.group`)">
+        <RowGroup v-if="!maker" :label="t(`settings.appearance.explorer.group`)">
             <Row icon="sitemap" :title="t(`settings.appearance.explorer.title`)" indent>
                 <template #control>
                     <SegmentedControl
@@ -285,7 +287,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
         </RowGroup>
 
         <!-- How a review reads: its file list and where each diff opens; grouping mirrors the panel's own toggle. -->
-        <RowGroup :label="t(`shared.changes`)">
+        <RowGroup v-if="!maker" :label="t(`shared.changes`)">
             <Row
                 as="label"
                 icon="box"
@@ -312,7 +314,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
         </RowGroup>
 
         <!-- How much of an agent's working-out shows in transcripts; also flipped from the chat's own readout row. -->
-        <RowGroup :label="t(`shared.chat`)">
+        <RowGroup v-if="!maker" :label="t(`shared.chat`)">
             <Row as="label" icon="eye" :title="t(`chat.words.showToolCalls`)" :description="t(`settings.appearance.chat.showToolCallsHint`)">
                 <template #control><ToggleSwitch v-model="showToolCalls" /></template>
             </Row>
@@ -320,7 +322,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
 
         <!-- The status bar's CPU, memory and disk gauges, and each card's share; off means the sandbox measures nothing for
              them, not that they are hidden. The bar itself is always there on a desktop, carrying what the sandbox runs. -->
-        <RowGroup :label="t(`settings.appearance.statusBar.group`)">
+        <RowGroup v-if="!maker" :label="t(`settings.appearance.statusBar.group`)">
             <Row
                 as="label"
                 icon="cpu"

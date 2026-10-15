@@ -19,6 +19,8 @@ import { useEditBuffers } from "../files/useEditBuffers";
 import { useLayout } from "../../../workbench/window/useLayout";
 import { formatChord, isApplePlatform } from "../../../workbench/commands/keybindings";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
+import { useNotifications } from "../../../workbench/notifications/notifications";
+import { useAudience } from "../../../app/useAudience";
 import { useMonaco } from "../files/useMonaco";
 import { changeEpochOf } from "../changes/live/useWorkspaceLive";
 import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
@@ -37,6 +39,7 @@ import type { LineJump } from "../tabs/workspaceTabs";
 import MarkdownViewer from "./MarkdownViewer.vue";
 import { resolveOpenFile, type OpenFile } from "./openFile";
 import HtmlPreview from "./html/HtmlPreview.vue";
+import { printRendered } from "./results/printRendered";
 import { MAX_FILE_BYTES } from "./html/htmlDocument";
 import { htmlPreviewed, setHtmlPreviewed } from "./html/htmlPreviewed";
 import { openWorkspaceRef } from "../files/refs/openFileRef";
@@ -432,6 +435,31 @@ const download = async (): Promise<void> => {
 const derivedOnly = computed(() => viewAgent.value === undefined && derivedIsOnlyView(path, open.value.kind));
 const derivedOffered = computed(() => viewAgent.value === undefined && !derivedOnly.value && mayHaveDerivedText(path, open.value.kind));
 const showDerived = computed(() => derivedOnly.value || (textWanted.value && derivedOffered.value));
+
+// Print is offered over a surface that reads as pages: a rendered web page, markdown, or a viewer's document or picture.
+// Source in the code editor is left out, since it draws only the lines in view and would print cut short, and so is a
+// played file (audio, video: a viewer handed a stream's address rather than the bytes), which has no page to print.
+const printHost = ref<HTMLElement>();
+const pagedViewer = computed(() => viewerComponent.value !== undefined && !(viewerContent.value !== undefined && `src` in viewerContent.value));
+const printOffered = computed(
+    () => !loading.value && error.value === null && !showDerived.value && (previewing.value || open.value.kind === `markdown` || pagedViewer.value),
+);
+// Where Download and Print give up their words for glyphs alone: as the tab bar narrows past its notes' own width, or,
+// for a reader in plain words, whom these two presses are for, only once the bar is truly short of room.
+const { maker } = useAudience();
+const fileWords = computed(() => (maker.value ? `@max-xl/tabbar:sr-only @max-sm/viewerbar:sr-only` : `@max-4xl/tabbar:sr-only @max-sm/viewerbar:sr-only`));
+// Printed from a document of its own (printRendered.ts), so the app around the file never reaches the paper; a
+// failure is said where the app says its passing failures, leaving the file on screen as it was.
+const printFile = async (): Promise<void> => {
+    if (printHost.value === undefined) {
+        return;
+    }
+    try {
+        await printRendered(printHost.value);
+    } catch {
+        useNotifications().warn(t(`workspace.results.printFailed`));
+    }
+};
 // The file's own bytes are worth offering beside its text wherever they aren't already on screen as text.
 const derivedDownloadable = computed(() => open.value.kind !== `code` && open.value.kind !== `markdown` && open.value.kind !== `big-text`);
 
@@ -660,6 +688,31 @@ const onEditorSave = (value: string): void =>
                 <Icon name="lock" class="text-xs" />
                 <span class="max-md:hidden">{{ t(`workspace.words.readOnly`) }}</span>
             </span>
+            <!-- The file as a file: saved to this computer, or on paper as it reads here. Words beside the glyphs while the bar
+                 has room, since these are the presses a reader who does not write code comes for. -->
+            <Button
+                size="small"
+                tier="quiet"
+                class="shrink-0"
+                :aria-label="t(`workspace.results.downloadNamed`, { name: basename(path) })"
+                v-tooltip.bottom="t(`workspace.results.download`)"
+                @click="download"
+            >
+                <Icon name="download" class="text-2xs" />
+                <span :class="fileWords">{{ t(`workspace.results.download`) }}</span>
+            </Button>
+            <Button
+                v-if="printOffered"
+                size="small"
+                tier="quiet"
+                class="shrink-0"
+                :aria-label="t(`workspace.results.printNamed`, { name: basename(path) })"
+                v-tooltip.bottom="t(`workspace.results.print`)"
+                @click="printFile"
+            >
+                <Icon name="print" class="text-2xs" />
+                <span :class="fileWords">{{ t(`workspace.results.print`) }}</span>
+            </Button>
             <!-- Save icon with top-right dirty dot badge -->
             <button
                 v-if="!mobile && canEdit"
@@ -695,7 +748,7 @@ const onEditorSave = (value: string): void =>
             <span class="flex-1">{{ t(`workspace.fileViewer.notUtf8ReadOnly`) }}</span>
         </div>
 
-        <div class="relative min-h-0 flex-1">
+        <div ref="printHost" class="relative min-h-0 flex-1">
             <!-- Floating copy button on the content's top-right corner on hover; inside the content, so it never covers a banner's action above.
                  Over a rendered page the window's hover stops at the frame, so the frame's own word stands in for it (pageHovered). -->
             <div

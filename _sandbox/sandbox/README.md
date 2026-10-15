@@ -68,6 +68,15 @@ flowchart LR
   (`personas/owner-grants.ts`). Those lines live on the auth root, which a turn cannot write. They are listed under
   Sandbox-wide permissions on the Access tab and are never shipped in a definition export.
   When main's CI fails, `ci/main-fixer.ts` gives the failing streak one fix agent and sends it every later failure.
+- A conversation's results, the documents its calls recorded writing (Word, OpenDocument, RTF, PDF, decks, sheets, web
+  pages), are listed at `GET /agents/{id}/documents` and served as bytes at `GET /agents/{id}/documents/raw?path=`
+  (`conversations/produced-files.ts`, 2026-10-13). Both are on a guest's list, which has no Files: a guest takes the
+  files of a conversation it owns and nothing else, and a member takes them wherever it may see the conversation. Only
+  a recorded path is served, never one with `..`, an absolute one, or one with a link on the way. The bytes come from
+  the conversation's checkout until a land into the main tree carried the file, and from the main tree after that,
+  which keeps them downloadable once the checkout is removed. A land pressed with `includeDocuments` (the editor sends
+  it in plain words) first stages each recorded document by force, so one git ignores, or one the land would set aside
+  as scratch, goes with it; any other ignored file stays where it was.
 - A helper job (a session title, a land's commit subject, the safety judge's verdict, the chat router's pick) is a
   sealed request on the same seam (`agent/run/sealed/sealed-request.ts`): the runtime's own arm plans it and its own loop
   runs it, with `policy.sealed` (`agent/providers/agent-request.ts`) withholding every tool, server, instruction file
@@ -407,6 +416,22 @@ flowchart LR
   `derived-blobs/`, thumbnails) and raw output (`logs/raw-output`, `output-cache`, `terminals`, and each overlay's) by
   write time. Hourly, restore points daily, and everything within a tick of the settings changing; each run logs
   what it deleted per kind (`RetentionPass`), the seam an audit trail connects to (`record`).
+- Document shadows (`derived/shadow-keeper.ts`, 2026-10-13): every pdf, docx, xlsx, pptx, odt, ods, odp, rtf and
+  epub in the main tree keeps a current text shadow under `.intentic/local/cache/derived/`, so agents can search what
+  documents say without anyone having opened them. A minute after boot one sweep walks the tree (skipping
+  `node_modules` and the other ignored dirs, `.intentic`, `refs/`, agent worktrees and browser profiles, and files
+  over 200 MB) and hands every document whose shadow is missing or stale to `fileq derive --ocr-pages 500`; then the
+  workspace watcher's batches re-derive what changed and drop the shadows of what went. Stale is judged without
+  hashing: the shadow's recorded source size and mtime, fileq's current deriver stamp (`fileq stamps`), and whether
+  its OCR stopped short of 500 pages. It runs one fileq at a time under `nice`, in the same two slots interactive
+  renders use (`derived/fileq.ts`): the keeper holds at most one and never takes one an interactive render is waiting
+  for. A file fileq refuses is not asked again until it changes; more than 20 000 documents is logged and not swept.
+  Each batch that moved a shadow marks iq dirty, since the watcher does not look under `.intentic/local/cache`. The
+  `documentSearch` setting (Sandbox ▸ Agent ▸ Tools, on by default) switches it off, and with it the
+  `RIPGREP_CONFIG_PATH=/etc/fileq/ripgreprc` every turn's shell gets (`derived/search-env.ts`), which makes plain `rg`
+  read documents through fileq's preprocessor. Claude Code's Grep tool runs its bundled ripgrep with `--no-config`
+  (read off 0.3.296's binary), so it would skip documents; the same env sets `USE_BUILTIN_RIPGREP=0`, which makes it
+  run the image's `rg` instead.
 - netd's two sockets (`INTENTIC_NETD_SOCKET`, `INTENTIC_NODE_SOCKET`) leave the daemon's environment once its
   netd door has dialled them, and the tmux server's, so no agent-spawned child inherits them (2026-10-05).
 

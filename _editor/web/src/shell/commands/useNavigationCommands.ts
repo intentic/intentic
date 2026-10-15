@@ -10,6 +10,7 @@ import { browsersPath } from "../../workbench/browsers/browsersPaths";
 import { DELETED_PATH, DEVICES_PATH } from "../../features/sandbox/devices/deviceLinks";
 import { sandboxKeyAllowed, sandboxSectionPath, sandboxSections } from "../../features/sandbox/sandboxNav";
 import { useRole } from "../../client/sandbox/useRole";
+import { useOrgPolicy } from "../../features/organisations/useOrgPolicy";
 import { useHostedPlan } from "../../features/settings/hosted-plan/useHostedPlan";
 import { settingsSectionPath, settingsSections } from "../../features/settings/settingsNav";
 import { GO_TO, SANDBOX, SETTINGS } from "../../workbench/commands/categories";
@@ -40,13 +41,14 @@ export function useNavigationCommands(): void {
     // tiles its rail has.
     const { canShip, isGuest } = useRole();
     const { offered: planOffered } = useHostedPlan();
+    const { hidden: orgHidden } = useOrgPolicy();
     const words = useVocabulary();
 
     // The rail's own tiles, which are shell routes rather than registered views, so no detect() reports them. Named as
     // the rail names them, including the two the maker's vocabulary renames.
     const shellSections = computed<readonly NavCommand[]>(() => [
         { command: `view.chat`, title: t(`shared.chat`), category: GO_TO, icon: `comments`, to: `/chat` },
-        { command: `view.agents`, title: t(`shared.agents`), category: GO_TO, icon: `robot`, to: `/agents` },
+        { command: `view.agents`, title: useVocabulary().value.agents, category: GO_TO, icon: `robot`, to: `/agents` },
         ...(isGuest.value ? [] : guestless.value),
     ]);
     const guestless = computed<readonly NavCommand[]>(() => [
@@ -93,7 +95,7 @@ export function useNavigationCommands(): void {
     // collides with a built-in section, or with a slot kept for another extension, is dropped here too rather than
     // registering a row that opens something else.
     const sandboxDestinations = computed<readonly NavCommand[]>(() => [
-        ...sandboxSections(canShip.value, isGuest.value).map((section) => ({
+        ...sandboxSections(canShip.value, isGuest.value, orgHidden.value).map((section) => ({
             command: `view.sandbox.${section.slug}`,
             title: section.label,
             category: SANDBOX,

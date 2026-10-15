@@ -129,6 +129,38 @@ export const detectFormat = async (absPath: string): Promise<Format | undefined>
  */
 export const claimedFormat = async (absPath: string): Promise<Format | undefined> => (await detectFormat(absPath)) ?? EXTENSION_FORMAT[extname(absPath).toLowerCase()];
 
+// Documents: formats whose text is what a reader searches for, and cheap to derive (no model is asked anything, unless a
+// scanned pdf finds the OCR pack). The daemon's shadow keeper keeps a shadow of every one of these in the workspace, and
+// ripgrep reads them through fileq's preprocessor; pictures, recordings, archives and notebooks are left to be read
+// when someone asks.
+export const DOCUMENT_FORMATS: ReadonlySet<Format> = new Set(["pdf", "docx", "xlsx", "pptx", "odt", "ods", "odp", "rtf", "epub"]);
+
+/** Every extension (lower case, with its dot) a document format is recognised by. */
+export const documentExtensions = (): string[] =>
+    Object.entries(EXTENSION_FORMAT)
+        .filter(([, format]) => DOCUMENT_FORMATS.has(format))
+        .map(([extension]) => extension)
+        .toSorted();
+
+/** The format a path's extension names when it is a document; undefined for anything else. */
+export const documentFormatOf = (path: string): Format | undefined => {
+    const format = EXTENSION_FORMAT[extname(path).toLowerCase()];
+    return format !== undefined && DOCUMENT_FORMATS.has(format) ? format : undefined;
+};
+
+// Both spellings of each extension, since ripgrep's globs are case-sensitive and a scanner names files `SCAN.PDF`.
+const caseGlob = (extension: string): string => `*.{${extension.slice(1)},${extension.slice(1).toUpperCase()}}`;
+
+/**
+ * A ripgrep config (RIPGREP_CONFIG_PATH) routing every document through `pre`, fileq's preprocessor: one flag per
+ * line, as ripgrep reads it. Code and every other file are untouched, since only these globs reach the preprocessor.
+ */
+export const ripgrepConfigLines = (pre: string): string[] => [
+    "# fileq: ripgrep searches the text of documents, cited by page (`[p. 12] `); see `fileq ripgrep-config --help`.",
+    `--pre=${pre}`,
+    ...documentExtensions().map((extension) => `--pre-glob=${caseGlob(extension)}`),
+];
+
 // Formats whose text diff is already the better reading: a textconv over them would replace a line diff with a
 // rendering of the same text.
 const TEXT_UNDERNEATH: ReadonlySet<Format> = new Set(["html"]);

@@ -56,17 +56,24 @@ type GuidanceEntry =
 
 // What the `search` entry says for each tool, as data: the iq teaching's cohort hashes the iq half
 // (iq-search-instruction.ts), since it is part of what that experiment's arm is told.
+// Documents ride both arms: the shadow keeper and its ripgrep config (derived/search-env.ts) make them searchable
+// whichever tool finds code, and the variable is how a turn can tell the setting is on.
+const documentSearch = (ranker: string): string =>
+    " When `$RIPGREP_CONFIG_PATH` is set, documents (pdf, docx, xlsx, pptx, odt, epub…) are searchable too: `rg` in the " +
+    `shell prints a hit as \`docs/terms.pdf:345:[p. 12] …\` (\`[p. N]\` is the page)${ranker}, and an answer drawn ` +
+    "from one cites file and page.";
+
 export const SEARCH_GUIDANCE: Record<SearchTool, string> = {
     iq:
-        'Find code with `iq "<question>"`: it ranks the workspace by what you mean and names the line to open, so use ' +
-        "it whenever you are looking for where something lives or how it works. Use `rg` (ripgrep) once you hold the " +
-        "exact string, and to list or count every occurrence of it; never `grep -r`, which walks node_modules. Reach " +
-        "for `grep` only to filter text you already have in hand (a log, a command's output).",
+        `Find code with \`iq "<question>"\`: it ranks the workspace by what you mean and names the line to open, so use ` +
+        `it whenever you are looking for where something lives or how it works. Use \`rg\` (ripgrep) once you hold the ` +
+        `exact string, and to list or count every occurrence of it; never \`grep -r\`, which walks node_modules. Reach ` +
+        `for \`grep\` only to filter text you already have in hand (a log, a command's output).${documentSearch(", iq ranks them by meaning")}`,
     rg:
-        "Search code with `rg` (ripgrep), which is installed: it is ~30× faster than `grep -r` on this tree and " +
-        "returns about a third of the bytes for the same hits, because it skips node_modules, dist and binaries " +
-        "without being told to. Reach for `grep` only to filter text you already have in hand (a log, a command's " +
-        "output), never to walk the repository.",
+        `Search code with \`rg\` (ripgrep), which is installed: it is ~30× faster than \`grep -r\` on this tree and ` +
+        `returns about a third of the bytes for the same hits, because it skips node_modules, dist and binaries ` +
+        `without being told to. Reach for \`grep\` only to filter text you already have in hand (a log, a command's ` +
+        `output), never to walk the repository.${documentSearch("")}`,
 };
 
 const LANDING = "The owner lands uncommitted work; commit only when asked.";

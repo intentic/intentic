@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import PlainResultReview from "./results/PlainResultReview.vue";
+import { useAudience } from "../../../app/useAudience";
 import {
     Button,
     ChangeStatusMark,
@@ -67,6 +69,7 @@ import { REVIEW_MARK, REVIEW_MARK_GROUP, REVIEW_NEXT, REVIEW_PREVIOUS, useReview
 // heading's rows and advances past them.
 
 const t = useT();
+const { maker } = useAudience();
 
 // The review pass's hovers: its one-key peers as key caps, read off the registry (reviewKeys.ts) so a remapped key
 // shows as it is bound.
@@ -639,7 +642,8 @@ const seamWidth = computed<number>({
 </script>
 
 <template>
-    <div ref="panel" class="flex min-h-0 flex-1 flex-col">
+    <PlainResultReview v-if="maker" :agent-id="agentId" :changes="changes" :at="at" />
+    <div v-else ref="panel" class="flex min-h-0 flex-1 flex-col">
         <Notice v-if="changes.error.value" tone="danger" size="sm" class="mx-2 mt-2 shrink-0">
             <span class="block font-medium">{{ t(`agents.agentReviewPanel.couldntReadAgentsChanges`) }}</span>
             <span class="block break-words text-muted">{{ changes.error.value }}</span>

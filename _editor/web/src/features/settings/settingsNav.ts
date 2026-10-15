@@ -22,6 +22,11 @@ export interface SettingsSection {
     readonly desktop?: true;
     /** About what a sandbox does, so a desktop window on a folder of this computer, which has none, leaves it out. */
     readonly sandbox?: true;
+    /**
+     * A developer's tool (shortcut tables, API tokens), so a reader who does not write code is not shown it in the index.
+     * Still reachable by its address and from the command palette: nothing is taken away, only out of the way.
+     */
+    readonly developer?: true;
 }
 
 /** The section a param-less `/settings` shows. */
@@ -42,19 +47,30 @@ const SETTINGS_SECTIONS = [
     { slug: `notifications`, icon: `volume-up`, sandbox: true },
     // Whether this device listens for the agent's name (chat/wake): its own microphone, heard by the sandbox's model.
     { slug: `voice`, icon: `microphone`, sandbox: true, desktop: true },
-    { slug: `keybindings`, icon: `bolt`, keyboard: true },
+    { slug: `keybindings`, icon: `bolt`, keyboard: true, developer: true },
     // Account credentials, not this sandbox's: a token minted here acts for the person on every sandbox they own,
     // which is why it lives beside the account's own rows rather than on a Sandbox tab.
-    { slug: `tokens`, icon: `key` },
+    { slug: `tokens`, icon: `key`, developer: true },
+    // The organisations this account is in, and the console an organisation admin runs them from (organisations/).
+    { slug: `organisation`, icon: `users` },
     { slug: `data`, icon: `database` },
-] as const satisfies readonly { slug: string; icon: IconName; plan?: true; keyboard?: true; desktop?: true; sandbox?: true }[];
+] as const satisfies readonly { slug: string; icon: IconName; plan?: true; keyboard?: true; desktop?: true; sandbox?: true; developer?: true }[];
 
 // Named inside a `computed` by both callers, so `t` is read where a language change can re-run it. `phone` drops the
-// sections about a keyboard a phone does not have, `noSandbox` (a desktop window on a folder) the ones about a sandbox.
-export const settingsSections = (planOffered: boolean, phone = false, noSandbox = localFace() !== undefined): readonly SettingsSection[] =>
+// sections about a keyboard a phone does not have, `noSandbox` (a desktop window on a folder) the ones about a sandbox,
+// `plain` (the hub's index for a reader who does not write code) the developer's tools.
+export const settingsSections = (
+    planOffered: boolean,
+    phone = false,
+    noSandbox = localFace() !== undefined,
+    plain = false,
+): readonly SettingsSection[] =>
     SETTINGS_SECTIONS.filter(
         (section) =>
-            (planOffered || !(`plan` in section)) && !(phone && (`keyboard` in section || `desktop` in section)) && !(noSandbox && `sandbox` in section),
+            (planOffered || !(`plan` in section)) &&
+            !(phone && (`keyboard` in section || `desktop` in section)) &&
+            !(noSandbox && `sandbox` in section) &&
+            !(plain && `developer` in section),
     ).map((section) => ({
         ...section,
         label: t(`settings.section.${section.slug}`),

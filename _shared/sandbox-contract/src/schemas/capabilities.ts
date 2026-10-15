@@ -518,6 +518,18 @@ export const CapabilitySecretInputSchema = z.object({
     id: z.string().describe("Which connection."),
     value: z.string().min(1).describe("The new credential. Its other settings are left alone."),
 });
+// POST /capabilities/{id}/oauth-token: a delegated sign-in's refresh token, stored on the card that declares
+// `refreshToken` in its manifest. Write-only: the caller proves it holds the card's current token (empty before the
+// first sign-in) and names the settings it signed in against, so a card edited meanwhile, or another card, is refused.
+export const CapabilityRefreshTokenInputSchema = z.object({
+    id: z.string().describe("Which connection."),
+    binding: z
+        .record(z.string(), z.string())
+        .describe("The card's settings the sign-in was made against, by field key: those its manifest's `refreshToken.boundTo` names."),
+    previous: z.string().max(32768).describe("The token the caller holds for this card, empty before its first sign-in."),
+    refreshToken: z.string().min(1).max(32768).describe("The new refresh token. Never echoed back."),
+    login: z.boolean().optional().describe("A fresh interactive sign-in rather than a rotation: restarts the card's listener."),
+});
 // POST /capabilities/{id}/rename: a capability's id is the agent's handle for it (skill file, tool prefix, env suffix,
 // ssh alias), so renaming is a migration, not a label edit. Which kinds may be renamed is the handler's own answer, not
 // this schema's.

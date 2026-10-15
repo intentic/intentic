@@ -5,6 +5,8 @@ import { deriveCommand } from "./commands/derive.command.js";
 import { gitAttributesCommand } from "./commands/git-attributes.command.js";
 import { readCommand } from "./commands/read.command.js";
 import { renderCommand } from "./commands/render.command.js";
+import { ripgrepConfigCommand } from "./commands/ripgrep-config.command.js";
+import { stampsCommand } from "./commands/stamps.command.js";
 
 // The agent-facing contract, kept small — this is what `fileq --help` prints.
 const HELP = `fileq — binary workspace files as clean, budgeted markdown.
@@ -20,6 +22,8 @@ markdown SIDECAR under .intentic/local/cache/derived/<path>.md.
   fileq derive <file…>    converge named files' sidecars (stale→derive, gone→remove)
   fileq read --plain <f>  the markdown alone, for a program; git's textconv driver
   fileq git-attributes    the gitattributes that route documents through it
+  fileq ripgrep-config    a ripgrep config (RIPGREP_CONFIG_PATH) so plain \`rg\`
+                          searches documents' text, each line cited \`[p. N] \`
 
 After producing a document, check it and look at it:
 
@@ -47,6 +51,8 @@ export const app = buildApplication(
             render: renderCommand,
             derive: deriveCommand,
             gitAttributes: gitAttributesCommand,
+            ripgrepConfig: ripgrepConfigCommand,
+            stamps: stampsCommand,
         },
         defaultCommand: "read",
         docs: { brief: "fileq, agent-native file reading: binary files as clean budgeted markdown", fullDescription: HELP },

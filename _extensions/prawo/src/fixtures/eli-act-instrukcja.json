@@ -1,0 +1,31 @@
+{
+ "ELI": "DU/2011/67",
+ "address": "WDU20110140067",
+ "publisher": "DU",
+ "year": 2011,
+ "volume": 14,
+ "pos": 67,
+ "title": "Rozporządzenie Prezesa Rady Ministrów z dnia 18 stycznia 2011 r. w sprawie instrukcji kancelaryjnej, jednolitych rzeczowych wykazów akt oraz instrukcji w sprawie organizacji i zakresu działania archiwów zakładowych",
+ "type": "Rozporządzenie",
+ "displayAddress": "Dz.U. 2011 nr 14 poz. 67",
+ "status": "obowiązujący",
+ "inForce": "IN_FORCE",
+ "promulgation": "2011-01-20",
+ "announcementDate": "2011-01-18",
+ "entryIntoForce": "2011-01-20",
+ "validFrom": "2011-01-20",
+ "changeDate": "2014-12-31T12:26:15",
+ "textHTML": false,
+ "textPDF": true,
+ "texts": [
+  {
+   "fileName": "D20110067.pdf",
+   "type": "O"
+  },
+  {
+   "fileName": "D20110067.pdf",
+   "type": "I"
+  }
+ ],
+ "references": {}
+}

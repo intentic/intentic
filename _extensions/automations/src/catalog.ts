@@ -4,6 +4,7 @@ import type { IconName } from "@intentic/extension-ui";
 import { computed } from "vue";
 import { host } from "./host";
 import { t } from "./i18n.js";
+import base from "./locales/en.json";
 
 // What can wake an agent here, and what to start from, in one read from the daemon: it merges what it emits itself with
 // what every installed pack declares. The page names no integration itself, and `upsert` accepts exactly what the
@@ -57,6 +58,39 @@ export const listenerSourceOf = (sources: readonly AvailableSource[], provider: 
 // cast here, at the one boundary, where an unknown name falls back rather than renders nothing.
 export const glyph = (name: string | undefined): IconName | undefined => name as IconName | undefined;
 
+// A first-party pack's listener words that this editor's catalogs carry (`catalog.microsoft365`), each looked up only
+// while the pack still says what en.json holds for it, so a pack edited since shows its own words rather than a stale
+// translation. Provider ids and event values never change, and the starter prompt stays the pack's: it is written for
+// the agent, not the reader.
+const MICROSOFT = base.catalog.microsoft365;
+
+const said = (english: string, held: string, translated: () => string): string => (english === held ? translated() : english);
+
+export const sourceWords = (source: TriggerSource): TriggerSource => {
+    if (source.provider !== `microsoft365`) {
+        return source;
+    }
+    const sender = source.sender;
+    return {
+        ...source,
+        events: source.events.map((event) =>
+            event.value === `mail` ? { ...event, label: said(event.label, MICROSOFT.mail, () => t(`catalog.microsoft365.mail`)) } : event,
+        ),
+        channel: { ...source.channel, label: said(source.channel.label, MICROSOFT.folder, () => t(`catalog.microsoft365.folder`)) },
+        mentionLabel:
+            source.mentionLabel === undefined ? undefined : said(source.mentionLabel, MICROSOFT.mention, () => t(`catalog.microsoft365.mention`)),
+        sender:
+            sender === undefined
+                ? undefined
+                : {
+                      ...sender,
+                      label: said(sender.label, MICROSOFT.sender, () => t(`catalog.microsoft365.sender`)),
+                      hint:
+                          sender.hint === undefined ? undefined : said(sender.hint, MICROSOFT.senderHint, () => t(`catalog.microsoft365.senderHint`)),
+                  },
+    };
+};
+
 const NO_SOURCES: readonly TriggerSource[] = [];
 const NO_TEMPLATES: readonly AutomationTemplate[] = [];
 
@@ -68,7 +102,7 @@ export function useCatalog() {
         queryFn: () => api.sandbox.rpc.automations.catalog(),
     });
     return {
-        sources: computed<readonly TriggerSource[]>(() => query.data.value?.sources ?? NO_SOURCES),
+        sources: computed<readonly TriggerSource[]>(() => (query.data.value?.sources ?? NO_SOURCES).map(sourceWords)),
         templates: computed<readonly AutomationTemplate[]>(() => query.data.value?.templates ?? NO_TEMPLATES),
         error,
     };

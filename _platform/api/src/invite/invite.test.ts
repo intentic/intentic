@@ -4,7 +4,7 @@ import type { OrpcContext } from "../context.js";
 import { inviteRoutes } from "./invite.routes.js";
 
 const user = { id: `u1`, email: `owner@example.com`, name: `Owner`, image: null, emailVerified: true };
-const sandboxRow = { id: `s1`, name: `dev`, image: null, ownerId: `u1`, token: `tok`, daemonUrl: null, lastSeenAt: null, tunnelToken: null };
+const sandboxRow = { id: `s1`, name: `dev`, image: null, ownerId: `u1`, token: `tok`, daemonUrl: null, lastSeenAt: null, tunnelToken: null, orgId: null };
 
 // Minimal prisma fake: each test overrides just the calls its route makes.
 const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof jest.fn>>>) => overrides as unknown as OrpcContext[`prisma`];

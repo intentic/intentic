@@ -353,7 +353,14 @@
     },
     "catalog": {
         "allChannels": "wszystkie kanały",
-        "channelIdOptional": "Identyfikator kanału (opcjonalnie)"
+        "channelIdOptional": "Identyfikator kanału (opcjonalnie)",
+        "microsoft365": {
+            "mail": "Nowa poczta w Outlooku",
+            "folder": "Folder (opcjonalnie)",
+            "mention": "Tylko poczta zaadresowana bezpośrednio do Ciebie (Twój adres w polu Do)",
+            "sender": "Adres nadawcy",
+            "senderHint": "Adres Od w postaci dostarczonej przez Outlooka; nazwa wyświetlana nie jest sprawdzana."
+        }
     },
     "extension": {
         "automations": "Automatyzacje"

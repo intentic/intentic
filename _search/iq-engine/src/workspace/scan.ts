@@ -5,6 +5,7 @@ import { createIgnoreScope, type IgnoreScope } from "@intentic/workspace-ignore"
 import type { FileClass, FileEntry, Scope } from "../types.js";
 import { isIqDenied } from "./floor.js";
 import { globToRegExp } from "./glob.js";
+import { withShadows } from "./shadows.js";
 
 // Runaway guard, well above any real workspace; the tree route caps at 5k entries.
 const MAX_FILES = 100_000;
@@ -84,12 +85,15 @@ export const sweep = async (root: string, includeIgnored: boolean): Promise<Swee
         );
     };
     await walk(root, "", createIgnoreScope(), undefined);
-    // Re-applied here: concurrent pushes can overshoot MAX_FILES; the sorted prefix is the slice kept.
-    return { entries: entries.toSorted((a, b) => (a.path < b.path ? -1 : 1)).slice(0, MAX_FILES), unreadable: unreadable.toSorted() };
+    // Re-applied here: concurrent pushes can overshoot MAX_FILES; the sorted prefix is the slice kept. Documents with a
+    // shadow then point at it, so every engine reads a pdf's text rather than its bytes.
+    const kept = entries.toSorted((a, b) => (a.path < b.path ? -1 : 1)).slice(0, MAX_FILES);
+    return { entries: await withShadows(root, kept), unreadable: unreadable.toSorted() };
 };
 
 const CLASS_TESTS = /(^|\/)((__tests__|tests?)\/|test_[^/]*$)|\.(test|spec)\.[^/.]+$/;
-const CLASS_DOCS = /(^|\/)(docs?\/)|\.(md|mdx|rst|txt)$/i;
+// Documents (pdf, docx, …, searched through their shadows) are prose like a README: the docs prior, wherever they sit.
+const CLASS_DOCS = /(^|\/)(docs?\/)|\.(md|mdx|rst|txt|pdf|docx|xlsx|pptx|odt|ott|ods|ots|odp|otp|odg|rtf|epub)$/i;
 const CLASS_CONFIG = /(^|\/)[^/]*\.(json|jsonc|ya?ml|toml|ini)$|(^|\/)\.[^/]*rc[^/]*$|(^|\/)[^/]*\.config\.[^/.]+$/;
 
 // Which of the four `--only` buckets a path falls in, as a total function so ranking can prefer implementation over

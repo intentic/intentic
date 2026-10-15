@@ -31,6 +31,7 @@ import { normalizeDaemonUrl } from "../lib/daemonUrl";
 import { ownsMissingSandboxes } from "../client/directory/deviceDirectory";
 import { signInAt } from "../lib/routes/signIn";
 import { t } from "@intentic/ui/i18n";
+import { useVocabulary } from "../workbench/views/vocabulary";
 import { localFace } from "../app/environments/local";
 import { localHost } from "../app/environments/localHost";
 import { receiveHandoff } from "../features/chat/drafts/localHandoff";
@@ -304,7 +305,7 @@ const routes: RouteRecordRaw[] = [
             {
                 path: `agents`,
                 name: `agents`,
-                meta: { title: () => t(`shared.agents`) },
+                meta: { title: () => useVocabulary().value.agents },
                 component: asyncView(() => import(`../features/agents/fleet/Agents.vue`)),
             },
             // The Needs you inbox until 2026-10-12, when each of its rows went back to the tile that already badged it
@@ -376,7 +377,7 @@ const routes: RouteRecordRaw[] = [
             {
                 path: `workspace/:path(.*)*`,
                 name: `workspace`,
-                meta: { title: () => t(`shared.workspace`) },
+                meta: { title: () => useVocabulary().value.workspace },
                 component: asyncView(() => import(`../features/workspace/page/Workspace.vue`)),
             },
             // Everything live the sandbox shows: its browser windows, the apps it serves, its desktop and the windows on it,

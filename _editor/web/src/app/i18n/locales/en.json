@@ -1,4 +1,60 @@
 {
+    "organisations": {
+        "held": {
+            "notice": "{org} manages this part of the sandbox. You can look, but changes are made by your organisation's admin."
+        },
+        "console": {
+            "couldntLoad": "Couldn't load your organisations",
+            "couldntCreate": "Couldn't start the organisation",
+            "yours": "Your organisations",
+            "summary": "{role} · {count} sandbox | {role} · {count} sandboxes",
+            "none": "You are not in any organisation. Personal sandboxes work without one.",
+            "namePlaceholder": "Name, e.g. Gmina Example Office",
+            "create": "Start organisation"
+        },
+        "role": {
+            "admin": "Admin",
+            "member": "Member"
+        },
+        "mode": {
+            "open": "Open",
+            "locked": "Read-only",
+            "hidden": "Hidden"
+        },
+        "section": {
+            "models": "Models",
+            "agent": "Agent",
+            "environment": "Environment",
+            "secrets": "Secrets and connections",
+            "data-protection": "Data protection",
+            "extensions": "Extensions",
+            "access": "Access",
+            "areas": "Areas",
+            "personas": "Personas",
+            "updates": "Automatic updates"
+        },
+        "detail": {
+            "couldntSave": "Couldn't save the policy",
+            "couldntAdd": "Couldn't add that person",
+            "couldntRemove": "Couldn't remove that person",
+            "couldntBind": "Couldn't add that sandbox",
+            "couldntUnbind": "Couldn't release that sandbox",
+            "applied": "policy v{version} in force",
+            "pending": "waiting to take v{version}",
+            "policy": "Policy · version {version}",
+            "policyNote": "How each part of every sandbox in this organisation is held. Read-only: people can look but not change it, the sandbox owner included. Hidden: it is also left out of the sandbox's menu. Sandboxes pick up a new version within a few minutes.",
+            "savePolicy": "Save as new version",
+            "members": "People",
+            "emailPlaceholder": "name{'@'}office.example",
+            "add": "Add",
+            "sandboxes": "Sandboxes",
+            "unbind": "Release",
+            "noSandboxes": "No sandbox belongs to this organisation yet.",
+            "pickSandbox": "Choose one of your sandboxes",
+            "bind": "Add to organisation",
+            "bindNote": "Only sandboxes you own can be added. Once added, the policy above applies to it until an admin releases it."
+        }
+    },
     "a11yKit": {
         "toggleDetails": "Toggle headline details",
         "selectRow": "Select example row",
@@ -2328,6 +2384,173 @@
             "tooOld": "{name} runs a sandbox too old for links. Update it, then pair again.",
             "couldntPair": "Couldn't make the link on {name}.",
             "couldntReadPersonas": "Couldn't read that sandbox's personas."
+        },
+        "extensionCatalog": {
+            "microsoft365": {
+                "name": "Microsoft 365",
+                "description": "Outlook mail, calendar and office files.",
+                "hint": "Outlook, Exchange Online, OneDrive and SharePoint for one office user, signed in through your own Entra ID app. Read only asks Microsoft for read permissions and refuses every writing command. Sending, calendar changes and uploads wait for your approval. Add the card again for another mailbox.",
+                "guide": {
+                    "linkLabel": "Open Entra ID app registrations",
+                    "scopes": "delegated Microsoft Graph: `User.Read` `Mail.ReadWrite` `Mail.Send` `Calendars.ReadWrite` `Files.ReadWrite.All` `Sites.Read.All` `offline_access`; read only: `User.Read` `Mail.Read` `Calendars.Read` `Files.Read.All` `Sites.Read.All` `offline_access`",
+                    "steps": {
+                        "0": "`App registrations` → `New registration`: accounts in this organizational directory only, no redirect URI.",
+                        "1": "Copy the `Directory (tenant) ID` and `Application (client) ID` from the overview onto this card.",
+                        "2": "`Authentication` → `Allow public client flows`: `Yes`. That is what lets the sign-in work without a redirect URI or a secret.",
+                        "3": "`API permissions` → `Microsoft Graph` → `Delegated permissions`: add the permissions listed above, then `Grant admin consent` if your tenant asks for it.",
+                        "4": "Save this card, then ask the agent to run `m365 auth login` in a chat you are watching. Open the Microsoft page it prints in your own browser, type the code, and sign in as the office user.",
+                        "5": "The sign-in is stored on this card by itself, never shown in the chat. Start a new chat to use it, or press `Test`.",
+                        "6": "Changing what the agent may do (read only or read & write) needs a new sign-in."
+                    }
+                },
+                "fields": {
+                    "tenantId": {
+                        "label": "Directory (tenant) ID"
+                    },
+                    "clientId": {
+                        "label": "Application (client) ID"
+                    },
+                    "access": {
+                        "label": "What the agent may do",
+                        "hint": "Sending mail, calendar changes and uploads wait for your approval either way.",
+                        "options": {
+                            "write": "Read & write",
+                            "read": "Read only"
+                        }
+                    },
+                    "authority": {
+                        "label": "Microsoft cloud",
+                        "options": {
+                            "login_microsoftonline_com": "Microsoft 365 (worldwide)",
+                            "login_microsoftonline_us": "US Government (GCC High)",
+                            "login_chinacloudapi_cn": "Microsoft 365 operated by 21Vianet (China)"
+                        }
+                    },
+                    "refreshToken": {
+                        "label": "Sign-in",
+                        "hint": "Filled in by `m365 auth login`; leave it empty."
+                    },
+                    "clientSecret": {
+                        "label": "Client secret (confidential apps only)",
+                        "hint": "Only for an app that signs in through its own authorization-code flow and pastes its refresh token above. Leave it empty for the usual sign-in."
+                    }
+                }
+            },
+            "imap": {
+                "name": "IMAP",
+                "description": "Read an inbox over IMAP; wake automations.",
+                "guide": {
+                    "linkLabel": "Create a Gmail app password",
+                    "steps": {
+                        "0": "Gmail: turn on `2-Step Verification`, then use an `App Password` (link above).",
+                        "1": "Outlook.com: `account.microsoft.com` → `Security` → `App passwords`.",
+                        "2": "Exchange Online (Microsoft 365 at work) accepts no passwords over IMAP: choose `OAuth2`. In Entra ID register an app with `Allow public client flows` on and the delegated `Office 365 Exchange Online` permissions `IMAP.AccessAsUser.All` and `SMTP.Send`, put its tenant and client IDs here, then ask the agent to run `imap login`. For Outlook mail, calendar and files together, the Microsoft 365 card is the better fit.",
+                        "3": "Gmail with OAuth2: an OAuth client with the `https://mail.google.com/` scope; paste its client ID, secret and a refresh token.",
+                        "4": "Anywhere else: your normal IMAP password works.",
+                        "5": "Paste your address into `Username`: the host and port fill themselves in."
+                    }
+                },
+                "fields": {
+                    "host": {
+                        "label": "IMAP host"
+                    },
+                    "port": {
+                        "label": "Port"
+                    },
+                    "username": {
+                        "label": "Username"
+                    },
+                    "authMode": {
+                        "label": "Sign in with",
+                        "options": {
+                            "password": "Password or app password",
+                            "oauth2": "OAuth2 (Exchange Online, Gmail)"
+                        }
+                    },
+                    "password": {
+                        "label": "Password"
+                    },
+                    "oauthProvider": {
+                        "label": "OAuth2 provider",
+                        "options": {
+                            "microsoft": "Microsoft 365 (Exchange Online)",
+                            "google": "Google (Gmail)",
+                            "token": "An access token I keep current myself"
+                        }
+                    },
+                    "oauthTenant": {
+                        "label": "Directory (tenant) ID"
+                    },
+                    "oauthClientId": {
+                        "label": "Application (client) ID"
+                    },
+                    "oauthClientSecret": {
+                        "label": "Client secret",
+                        "hint": "Gmail's OAuth clients need it. Leave it empty for Exchange Online's sign-in."
+                    },
+                    "oauthRefreshToken": {
+                        "label": "Refresh token",
+                        "hint": "Exchange Online: leave it empty, `imap login` fills it in. Gmail: paste one with the https://mail.google.com/ scope."
+                    },
+                    "accessToken": {
+                        "label": "Access token",
+                        "hint": "Access tokens expire within hours: replace it before then, or the watcher stops."
+                    },
+                    "mailbox": {
+                        "label": "Watched mailbox"
+                    },
+                    "smtpHost": {
+                        "label": "SMTP host"
+                    },
+                    "smtpPort": {
+                        "label": "SMTP port"
+                    },
+                    "smtpSecurity": {
+                        "label": "SMTP security",
+                        "options": {
+                            "starttls": "STARTTLS (587)",
+                            "tls": "Implicit TLS (465)"
+                        }
+                    },
+                    "smtpUsername": {
+                        "label": "SMTP username (blank uses IMAP username)"
+                    },
+                    "smtpPassword": {
+                        "label": "SMTP password (blank uses IMAP password)"
+                    }
+                }
+            },
+            "sharepoint": {
+                "name": "SharePoint (app-only)",
+                "description": "Sites, document libraries and lists in SharePoint.",
+                "hint": "App-only access for an administrator-managed integration. Prefer Sites.Selected and grant individual sites. For an office user’s Outlook, calendar and files, connect Microsoft 365 instead. Client secrets expire; rotate when Graph answers 401.",
+                "guide": {
+                    "linkLabel": "Open Entra ID app registrations",
+                    "scopes": "application permissions `Sites.Read.All`, or `Sites.ReadWrite.All` to write, `Sites.Selected` to scope per site",
+                    "steps": {
+                        "0": "`App registrations` → `New registration`: single tenant, no redirect URI.",
+                        "1": "Copy the client ID and tenant ID from the overview.",
+                        "2": "`Certificates & secrets` → `New client secret`, copy its `Value` (shown once).",
+                        "3": "`API permissions` → `Microsoft Graph` → `Application permissions`: add `Sites.Read.All` or `Sites.Selected`, then `Grant admin consent`.",
+                        "4": "`Sites.Selected` reaches nothing until a site owner grants this app each site."
+                    }
+                },
+                "fields": {
+                    "tenantId": {
+                        "label": "Directory (tenant) ID"
+                    },
+                    "clientId": {
+                        "label": "Application (client) ID"
+                    },
+                    "clientSecret": {
+                        "label": "Client secret value",
+                        "hint": "The Value shown at creation: Entra never shows it again."
+                    },
+                    "hostname": {
+                        "label": "SharePoint hostname"
+                    }
+                }
+            }
         }
     },
     "chat": {
@@ -2861,7 +3084,11 @@
             "enterToContinueAt": "Enter to continue at {when}",
             "enterToContinueIn": "Enter to continue in {when}",
             "enterToSendAgainAt": "Enter to send again at {when}",
-            "enterToSendAgainIn": "Enter to send again in {when}"
+            "enterToSendAgainIn": "Enter to send again in {when}",
+            "plain": {
+                "startConversation": "Start a conversation with your assistant.",
+                "moreSettings": "More options"
+            }
         },
         "chatPaneNotices": {
             "accountNeedsToReconnected": "This account needs to be reconnected.",
@@ -3193,7 +3420,11 @@
             "region": "Documents from this turn",
             "sheet": "Spreadsheet",
             "slides": "Slide deck",
-            "word": "Word document"
+            "word": "Word document",
+            "odt": "Text document (ODT)",
+            "ods": "Spreadsheet (ODS)",
+            "odp": "Presentation (ODP)",
+            "rtf": "Text document (RTF)"
         },
         "chatTurnShots": {
             "asideHidden": "{what} hidden",
@@ -3277,7 +3508,16 @@
             "hintSendAgainAtReopen": "Send again at reset",
             "hintSendAgainAtReopenNote": "Sets this chat's answer above to Send again: the held turn goes by itself once the allowance reopens.",
             "hintGoesAtReopen": "Goes by itself at reset",
-            "hintGoesAtReopenNote": "This chat's answer above already sends the held turn again once the allowance reopens."
+            "hintGoesAtReopenNote": "This chat's answer above already sends the held turn again once the allowance reopens.",
+            "plain": {
+                "placeholderIdle": "Tell me what you need help with…",
+                "placeholderSteer": "Add something before it finishes…",
+                "placeholderQueue": "Write a message for when it's done…",
+                "placeholderEdit": "Ask this again, differently…",
+                "hintSteer": "Send it now, while it works",
+                "hintQueue": "Goes once it's done",
+                "viewerPlaceholder": "You can read this conversation. Ask the owner if you'd like to write here too."
+            }
         },
         "composerModelPill": {
             "chooseModel": "Choose a model",
@@ -3302,7 +3542,13 @@
             "on": "On",
             "off": "Off",
             "landWhenDoneNote": "Its finished work lands by itself.",
-            "holdOnBranchNote": "Hold its finished work on the branch."
+            "holdOnBranchNote": "Hold its finished work on the branch.",
+            "plain": {
+                "mode": "How much it does on its own",
+                "modeNote": "When it stops to ask you first.",
+                "model": "Which AI answers",
+                "modelNote": "Change the AI model it uses."
+            }
         },
         "composerQuickPick": {
             "anotherSandbox": "Another sandbox",
@@ -3450,7 +3696,10 @@
             "weeklyAllModels": "Weekly · all models",
             "weeklyOverage": "Weekly · included overage",
             "weeklyScoped": "Weekly · {label}",
-            "weeklyThirdParty": "Weekly · third-party apps"
+            "weeklyThirdParty": "Weekly · third-party apps",
+            "plain": {
+                "percentLeft": "{percent} of your usage limit left"
+            }
         },
         "turnFailures": {
             "installNewerEngine": "Install a newer engine under Sandbox ▸ Environment ▸ Agent engines.",
@@ -4012,6 +4261,15 @@
                 "goOn": "Go on…",
                 "listeningDetail": "Listening for “{word}” on this device. Click to pause for an hour."
             }
+        },
+        "effortScale": {
+            "minimal": "Minimal",
+            "low": "Low",
+            "medium": "Medium",
+            "high": "High",
+            "xhigh": "X-High",
+            "max": "Max",
+            "ultra": "Ultra"
         }
     },
     "common": {
@@ -8263,6 +8521,11 @@
                 "storedSecret": "a stored secret, used in the command itself"
             }
         },
+        "agentDocumentSearch": {
+            "group": "Documents",
+            "title": "Search inside documents",
+            "description": "Keeps the text of PDFs, Word, spreadsheets and presentations ready in the background, so rg and iq find it, cited by page."
+        },
         "agentChatPages": {
             "group": "Pages in chat",
             "title": "Answer with pages",
@@ -8810,6 +9073,11 @@
                 "systemHint": "Follows your operating system: instant when it asks for reduced motion, animated when it does not.",
                 "on": "On",
                 "off": "Off"
+            },
+            "plain": {
+                "languageHint": "The language this interface is written in. Your files and conversations are untouched.",
+                "wallpaperHint": "A picture behind the assistants board, in the light or dark version of your theme.",
+                "workHint": "Changes the words the app uses and which page is home. Nothing about your files or conversations."
             }
         },
         "hostedHours": {
@@ -8870,7 +9138,8 @@
             "notifications": "Notifications",
             "profile": "Profile",
             "tokens": "Tokens",
-            "voice": "Voice"
+            "voice": "Voice",
+            "organisation": "Organisation"
         },
         "settingsBilling": {
             "activating": "Activating…",
@@ -9044,7 +9313,10 @@
             "shownOnceCopyNow": "Shown once. Copy it now: only its digest is stored.",
             "used": "used {ago}",
             "whatProvisioningTokensAre": "A provisioning token lets one of your sandboxes create sandboxes on this account. Paste it into that sandbox's Sandbox fleet capability; every sandbox its agent creates still asks you in chat first.",
-            "whereItGoes": "Where it goes"
+            "whereItGoes": "Where it goes",
+            "unavailable": "Tokens aren't available on this server yet.",
+            "notAllowed": "Your account isn't allowed to manage tokens here.",
+            "serverTrouble": "The server had a problem. Try again in a moment."
         },
         "words": {
             "iWriteCode": "I write code",
@@ -9072,6 +9344,10 @@
             "inApp": "In the Intentic app it keeps listening while the window is closed to the tray.",
             "inBrowser": "In a browser it listens while a tab of this workspace is open, and the browser shows its microphone mark. The Intentic app keeps listening from the tray.",
             "wordChange": "Change the word in Sandbox ▸ Agent ▸ Tools"
+        },
+        "hostedMachine": {
+            "shared": "{cpus} shared vCPU · {memory} GB memory · {disk} GB disk | {cpus} shared vCPUs · {memory} GB memory · {disk} GB disk",
+            "performance": "{cpus} dedicated vCPU · {memory} GB memory · {disk} GB disk | {cpus} dedicated vCPUs · {memory} GB memory · {disk} GB disk"
         }
     },
     "setup": {
@@ -10199,6 +10475,19 @@
             "pasteCloudflareApiToken": "Paste your Cloudflare API token",
             "whyCloudflareApiToken": "Why the Cloudflare API token is required",
             "whyToken": "Why this token?"
+        },
+        "plain": {
+            "assistants": "Assistants",
+            "newConversation": "New conversation",
+            "renameConversation": "Rename conversation",
+            "archiveConversation": "Archive conversation",
+            "untitledConversation": "Untitled conversation",
+            "laneActiveEmpty": "No assistant is working right now. Start a conversation and hand it a task.",
+            "laneAttentionFirst": "When an assistant asks you something or needs your permission, it waits here.",
+            "laneFinishedEmpty": "Finished work waits here until you look at it.",
+            "laneFinishedFirst": "Finished work waits here for you. Nothing changes your files until you accept it.",
+            "archiveEmptied": "Archive emptied. Finished conversations gather here again by themselves after a few quiet days.",
+            "archiveNothingYet": "Nothing archived yet. Finished conversations move here by themselves after a few quiet days."
         }
     },
     "workspace": {
@@ -11187,6 +11476,23 @@
         },
         "projectFocus": {
             "showOnly": "Show only this project"
+        },
+        "results": {
+            "download": "Download",
+            "print": "Print",
+            "close": "Close",
+            "heading": "Results",
+            "couldNotOpen": "Could not open this result.",
+            "downloadToOpen": "Download this file to open it.",
+            "noDocuments": "This conversation has no recorded documents yet.",
+            "otherChanges": "{count} other changed file | {count} other changed files",
+            "conflict": "Some files need attention before they can be saved.",
+            "acceptExplanation": "Accept puts the assistant’s files into your folders; until then they stay in this conversation’s draft.",
+            "downloadFailed": "Could not download this file.",
+            "printFailed": "Could not print this preview.",
+            "downloadNamed": "Download {name}",
+            "printNamed": "Print {name}",
+            "listFailed": "Could not read which documents this conversation made."
         }
     },
     "gettingStarted": {

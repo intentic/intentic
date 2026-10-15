@@ -32,6 +32,7 @@ import { router } from "./router.js";
 import { createTracingHttpMiddleware } from "./tracing.js";
 import { hostedPlanHttpRoutes } from "./sandbox/hosted/plan/hosted-plan.routes.js";
 import { fleetHttpRoutes } from "./fleet/fleet.routes.js";
+import { orgPolicyHttpRoutes } from "./org/org-policy-http.js";
 import { walletHttpRoutes } from "./wallet/wallet.routes.js";
 import { trialRoutes } from "./trial/trial.routes.js";
 import { repairRoutes } from "./repair/repair.routes.js";
@@ -334,6 +335,9 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         });
         return removed.count === 0 ? kit.refuse(404, `unknown sandbox`) : kit.answer({ ok: true });
     });
+
+    // A bound sandbox's organisation policy, through the same door as announce (org/org-policy-http.ts).
+    app.route(`/`, orgPolicyHttpRoutes({ prisma }));
 
     /* The sandbox presents itself through the same sessionless credentialed door as announce. */
     ingress(`presentation`, async (_c, kit) => {

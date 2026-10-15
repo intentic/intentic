@@ -39,6 +39,7 @@ declare module "vue-i18n" {
         readonly gettingStarted: AppMessages["gettingStarted"];
         readonly local: AppMessages["local"];
         readonly needs: AppMessages["needs"];
+        readonly organisations: AppMessages["organisations"];
         readonly preview: AppMessages["preview"];
         readonly router: AppMessages["router"];
         readonly sandbox: AppMessages["sandbox"];

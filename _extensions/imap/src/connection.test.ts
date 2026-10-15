@@ -1,5 +1,5 @@
 import type { FetchMessageObject } from "imapflow";
-import { CATCH_UP_MAX, configKeyOf, desiredAccounts, mailboxOf, syncNewMail, type SyncOptions, type SyncSource } from "./connection.js";
+import { CATCH_UP_MAX, imapAuth, configKeyOf, desiredAccounts, mailboxOf, syncNewMail, type SyncOptions, type SyncSource } from "./connection.js";
 
 const config = { provider: "imap", host: "imap.example.com", port: "993", username: "me@example.com", password: "pw" };
 
@@ -124,4 +124,37 @@ test("syncNewMail caps a huge backlog to the newest messages and says so", async
     expect(dispatched[0]).toBe(120);
     expect(mark.lastUid).toBe(uids.at(-1)!);
     expect(warned).toEqual(["imap catch-up capped to the newest messages"]);
+});
+
+test("an OAuth2 card logs in with a minted access token, never its password, and needs a sign-in to be wanted", async () => {
+    const oauth = {
+        ...config,
+        authMode: "oauth2",
+        password: "",
+        oauthProvider: "microsoft",
+        oauthTenant: "t",
+        oauthClientId: "c",
+        oauthRefreshToken: "rt",
+    };
+    expect(await imapAuth(oauth, async () => "minted")).toEqual({ user: "me@example.com", accessToken: "minted" });
+    expect(
+        await imapAuth(config, async () => {
+            throw new Error("a password login mints nothing");
+        }),
+    ).toEqual({ user: "me@example.com", pass: "pw" });
+    expect(
+        desiredAccounts([
+            { id: "oauth", config: oauth },
+            { id: "unsigned", config: { ...oauth, oauthRefreshToken: "" } },
+            { id: "token", config: { ...oauth, oauthProvider: "token", oauthRefreshToken: "", accessToken: "at" } },
+        ]).map(({ id }) => id),
+    ).toEqual(["oauth", "token"]);
+});
+
+test("a Microsoft rotation does not reopen the watcher, a new sign-in or a pasted Google token does", () => {
+    const microsoft = { ...config, authMode: "oauth2", oauthProvider: "microsoft", oauthClientId: "c", oauthRefreshToken: "one", signedInAt: "1" };
+    expect(configKeyOf({ ...microsoft, oauthRefreshToken: "two" })).toBe(configKeyOf(microsoft));
+    expect(configKeyOf({ ...microsoft, signedInAt: "2" })).not.toBe(configKeyOf(microsoft));
+    const google = { ...microsoft, oauthProvider: "google" };
+    expect(configKeyOf({ ...google, oauthRefreshToken: "pasted" })).not.toBe(configKeyOf(google));
 });

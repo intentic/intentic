@@ -158,3 +158,16 @@ test(`names an MCP server that answers the handshake as an event stream, a notif
 
     expect(answer).toMatchObject({ checked: true, ok: true, who: `notion` });
 });
+
+test(`a delegated sign-in card says there is nothing to test before anyone signs in, and a refused trade says so`, async () => {
+    const oauth = {
+        tokenUrl: "https://${authority}/${tenantId:uri}/oauth2/v2.0/token",
+        form: { client_id: "${clientId}", refresh_token: "${token}", grant_type: "refresh_token" },
+    };
+    const registry = entry({ url: "https://graph.microsoft.com/v1.0/me", identity: "userPrincipalName", oauth });
+    const card = { provider: "example", authority: "login.microsoftonline.com", tenantId: "t", clientId: "c" };
+    expect(await probeCapability(registry, { id: "example", kind: "cli", config: card })).toMatchObject({ checked: false, ok: false });
+    // A cloud the trade does not serve is refused before any request, in words that never quote an authority's answer.
+    const answer = await probeCapability(registry, { id: "example", kind: "cli", config: { ...card, authority: "evil.example", token: "rt" } });
+    expect(answer).toEqual({ checked: true, ok: false, message: "The sign-in was refused: ask the agent to sign in with this connection again." });
+});

@@ -64,3 +64,39 @@ export const chunkFile = (path: string, symbols: readonly SymbolRow[], content: 
     }
     return chunks.toSorted((a, b) => a.startLine - b.startLine);
 };
+
+// Lines of a page-marked document (`[p. 12] …`, `[slide 3] …`) to the page they sit on.
+const PAGE_LABEL = /^\[(p\.|slide) (\d+)\] /;
+const pageOf = (line: string): string | undefined => {
+    const match = PAGE_LABEL.exec(line);
+    return match === null ? undefined : `${match[1]} ${match[2]}`;
+};
+
+// A document's text (a shadow, page-marked: see workspace/shadows.ts) in windows that never straddle a page, each
+// labelled with its page (`docs/terms.pdf § p. 12`) so the page is a retrieval signal and the passage's context.
+// Windows are char-budgeted as well as line-capped: one page of a pdf can be a few long lines.
+export const chunkDocument = (path: string, content: string): ChunkRow[] => {
+    const lines = content.split(/\r?\n/);
+    const chunks: ChunkRow[] = [];
+    let from = 1;
+    while (from <= lines.length) {
+        const page = pageOf(lines[from - 1] ?? "");
+        let to = from;
+        let chars = (lines[from - 1]?.length ?? 0) + 1;
+        while (
+            to < lines.length &&
+            to - from + 1 < WINDOW_LINES &&
+            pageOf(lines[to] ?? "") === page &&
+            chars + (lines[to]?.length ?? 0) + 1 <= SYMBOL_BODY_CHARS
+        ) {
+            chars += (lines[to]?.length ?? 0) + 1;
+            to += 1;
+        }
+        const body = lines.slice(from - 1, to);
+        if (body.some((line) => line.replace(PAGE_LABEL, "").trim() !== "")) {
+            chunks.push(chunk(path, page ?? `L${from}`, lines, from, to));
+        }
+        from = to + 1;
+    }
+    return chunks;
+};

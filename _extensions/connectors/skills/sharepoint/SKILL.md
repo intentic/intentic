@@ -8,7 +8,9 @@ description: Read and write SharePoint sites, document libraries, files and list
 App-only access through Microsoft Graph. Credentials in `$SHAREPOINT_TENANT_ID`, `$SHAREPOINT_CLIENT_ID` and
 `$SHAREPOINT_CLIENT_SECRET`; `$SHAREPOINT_HOSTNAME` may hold the tenant's host (`contoso.sharepoint.com`).
 There is no user behind this token: it is the app itself, so "my files" / OneDrive personal drives are out of
-reach and `/me` always fails. Get an hour-long token, then call Graph with it:
+reach and `/me` always fails. A person's own Outlook mail, calendar, OneDrive and the libraries they can open belong
+to the Microsoft 365 card (`m365`), signed in as that person; never move a token between the two cards. Get an
+hour-long token, then call Graph with it:
 
 ```sh
 sp_token() { curl -s -X POST "$SHAREPOINT_LOGIN_URL/$SHAREPOINT_TENANT_ID/oauth2/v2.0/token" \

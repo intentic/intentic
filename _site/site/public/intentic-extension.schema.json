@@ -684,6 +684,32 @@
                                         "description": "One authenticated request that tests this card's settings before they are saved, so a wrong token or an unreachable host is answered on the form rather than by a card that says 'not connected' afterwards.",
                                         "type": "object",
                                         "properties": {
+                                            "oauth": {
+                                                "description": "Trade the card's refresh token for an access token before the request, sent as `Authorization: Bearer`. For Microsoft's identity platform the request goes to the Graph cloud paired with the token endpoint's host, whatever host `url` names.",
+                                                "type": "object",
+                                                "properties": {
+                                                    "tokenUrl": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "description": "The token endpoint, templated like `url`. Only Microsoft identity platform hosts are served today."
+                                                    },
+                                                    "form": {
+                                                        "type": "object",
+                                                        "propertyNames": {
+                                                            "type": "string"
+                                                        },
+                                                        "additionalProperties": {
+                                                            "type": "string"
+                                                        },
+                                                        "description": "The refresh-token grant's form fields, templated like `url`; a field that comes out empty is left out."
+                                                    }
+                                                },
+                                                "required": [
+                                                    "tokenUrl",
+                                                    "form"
+                                                ],
+                                                "additionalProperties": false
+                                            },
                                             "url": {
                                                 "type": "string",
                                                 "minLength": 1,
@@ -719,6 +745,28 @@
                                         },
                                         "required": [
                                             "url"
+                                        ],
+                                        "additionalProperties": false
+                                    },
+                                    "refreshToken": {
+                                        "description": "This card's credential is a delegated OAuth refresh token the extension's own CLI or process obtains and rotates. They store it through `POST /capabilities/{id}/oauth-token` (an extension process also needs that route in `permissions.daemon`) instead of printing it for someone to paste.",
+                                        "type": "object",
+                                        "properties": {
+                                            "field": {
+                                                "type": "string",
+                                                "description": "The secret field the refresh token is kept in."
+                                            },
+                                            "boundTo": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "string"
+                                                },
+                                                "description": "Fields a token is only good for as filled in at sign-in (tenant, client, cloud, access level); a token arriving after one of them changed is refused."
+                                            }
+                                        },
+                                        "required": [
+                                            "field",
+                                            "boundTo"
                                         ],
                                         "additionalProperties": false
                                     },

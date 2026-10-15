@@ -3,6 +3,7 @@ import { isRecord } from "@intentic/base/escape";
 import { type Capability, type CapabilityProbe, parseSseText, sseJson } from "@intentic/sandbox-contract";
 import { versionedBase } from "../endpoints/endpoint-config.js";
 import { nodeRequest } from "../system/tls/node-request.js";
+import { type OAuthExchange, probeOAuth } from "./probe-oauth.js";
 import { contributionFor, type ResolvedContribution } from "./contributions.js";
 
 // Checks whether a entry's settings actually reach the service, turning a generic failure into a specific reason. A cli
@@ -74,6 +75,7 @@ const httpReason = (status: number): string => {
 
 interface HttpProbe {
     readonly url: string;
+    readonly oauth?: OAuthExchange | undefined;
     readonly method?: string | undefined;
     readonly headers?: Record<string, string> | undefined;
     readonly body?: string | undefined;
@@ -154,6 +156,27 @@ const runHttpProbe = async (probe: HttpProbe): Promise<CapabilityProbe> => {
         : { checked: true, ok: true, message: `Reached ${probe.subject}, authenticated as ${who}.`, who };
 };
 
+// A card whose credential is a delegated sign-in has nothing to test until someone has signed in, which happens after
+// it is saved: that is not a failure either.
+const NOT_SIGNED_IN: CapabilityProbe = {
+    checked: false,
+    ok: false,
+    message: "Nothing to test until someone signs in: save this connection, then ask the agent to sign in with it.",
+};
+
+const signedInProbe = async (plan: HttpProbe, oauth: OAuthExchange): Promise<CapabilityProbe> => {
+    if (oauth.form["refresh_token"] === undefined) {
+        return NOT_SIGNED_IN;
+    }
+    try {
+        const target = await probeOAuth(oauth, plan.url);
+        return await runHttpProbe({ ...plan, url: target.url, headers: { ...plan.headers, authorization: `Bearer ${target.token}` } });
+    } catch {
+        // allow(silent-catch): the authority's answer may echo the credential, so a refusal is said only as one.
+        return { checked: true, ok: false, message: "The sign-in was refused: ask the agent to sign in with this connection again." };
+    }
+};
+
 // Not tested is not a failure: an ssh box, paired device or signed-in browser has no test besides using it.
 const NO_TEST: CapabilityProbe = {
     checked: false,
@@ -170,6 +193,17 @@ const contributionProbe = (contribution: ResolvedContribution | undefined, confi
     const declared = spec.probe;
     return {
         url: template(declared.url, config),
+        oauth:
+            declared.oauth === undefined
+                ? undefined
+                : {
+                      tokenUrl: template(declared.oauth.tokenUrl, config),
+                      form: Object.fromEntries(
+                          Object.entries(declared.oauth.form)
+                              .map(([key, value]) => [key, template(value, config)])
+                              .filter(([, value]) => value !== ""),
+                      ),
+                  },
         method: declared.method,
         headers: Object.fromEntries(Object.entries(declared.headers ?? {}).map(([key, value]) => [key, template(value, config)])),
         identity: declared.identity,
@@ -220,5 +254,8 @@ const coreProbe = (capability: Capability): CapabilityProbe | HttpProbe => {
 export const probeCapability = async (registry: ReadonlyMap<string, ResolvedContribution>, capability: Capability): Promise<CapabilityProbe> => {
     const config = capability.config as Record<string, unknown>;
     const plan = capability.kind === "cli" ? contributionProbe(contributionFor(registry, capability.kind, config), config) : coreProbe(capability);
-    return "checked" in plan ? plan : runHttpProbe(plan);
+    if ("checked" in plan) {
+        return plan;
+    }
+    return plan.oauth === undefined ? runHttpProbe(plan) : signedInProbe(plan, plan.oauth);
 };

@@ -298,6 +298,14 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "Let the agent answer with a page drawn right in the chat: a chart, a table, a diagram, a mock-up, or a small form you answer it on. Off, the agent is not offered the tools at all, so it spends nothing on them.",
         ),
+    // The daemon's shadow keeper (derived/shadow-keeper.ts) and the ripgrep config agents' shells get with it. On by
+    // default: it renders without asking any model (OCR excepted, on this machine), one low-priority process at a time.
+    documentSearch: z
+        .boolean()
+        .default(true)
+        .describe(
+            "Keep the text of every document in the workspace (pdf, Word, OpenDocument, spreadsheets, presentations, epub, and scans where OCR is installed) ready to search. In the background, one low-priority process at a time, each document is rendered to text when it appears or changes, so `rg` and iq find what documents say under their own paths, cited by page. Off, nothing renders until someone opens a document, and searches skip them.",
+        ),
     hashlineEdits: z
         .boolean()
         .default(false)

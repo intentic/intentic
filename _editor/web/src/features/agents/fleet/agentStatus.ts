@@ -287,9 +287,9 @@ export const agentDisplayTitle = (agent: { readonly title?: string; readonly sta
         return preview;
     }
     if (agent.status === `draft`) {
-        return t(`agents.agentStatus.newAgent`);
+        return useVocabulary().value.draftTitle;
     }
-    return agent.status === `resumed` ? t(`agents.agentStatus.untitledChat`) : t(`agents.agentStatus.untitledAgent`);
+    return agent.status === `resumed` ? t(`agents.agentStatus.untitledChat`) : useVocabulary().value.untitledAgent;
 };
 
 // A turn is in flight: running, unwinding after a Stop, or repairing itself after its daemon died. Every hands-off

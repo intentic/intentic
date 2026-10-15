@@ -2,6 +2,7 @@ import type { ConnectorEntry, GatewayCtx, ListenerMessage } from "@intentic/conn
 import { ImapFlow, type FetchMessageObject } from "imapflow";
 import { simpleParser } from "mailparser";
 import { expungeMessage, flagsMessage, htmlText, mailMessage } from "./normalize.js";
+import { type OAuthSettings, OAuthRefusedError, providerOf } from "./oauth.js";
 import { readWatermark, resumePoint, watermarkPath, writeWatermark } from "./watermark.js";
 
 // One account's ImapFlow lifecycle: connect, watch the mailbox read-only, catch up from the persisted UID watermark,
@@ -11,27 +12,58 @@ import { readWatermark, resumePoint, watermarkPath, writeWatermark } from "./wat
 // Cap on fetched raw MIME per message; attachments come from BODYSTRUCTURE, not the source.
 const SOURCE_MAX = 512 * 1024;
 
-export interface ImapConnectorConfig {
+export interface ImapConnectorConfig extends OAuthSettings {
     readonly provider: string;
     readonly host: string;
     readonly port: string;
-    readonly username: string;
     readonly password: string;
+    readonly authMode?: string;
     readonly mailbox?: string;
+    // Moves on every `imap login`: what reopens a watcher a refused sign-in had paused.
+    readonly signedInAt?: string;
 }
 // On catch-up, only the newest of these are delivered; the rest are skipped, still readable via the skill.
 export const CATCH_UP_MAX = 50;
 
 export const mailboxOf = (config: ImapConnectorConfig): string => (config.mailbox === undefined || config.mailbox === "" ? "INBOX" : config.mailbox);
 
+const usesOAuth = (config: ImapConnectorConfig): boolean => config.authMode === "oauth2";
+
 // Identity used to detect a config change (reopens the slot) and as the fatal-backoff key (an edit clears backoff
-// instantly).
+// instantly). A Microsoft refresh token is left out: every connection rotates it, which would reopen the slot each
+// time; a new sign-in moves `signedInAt` instead. A pasted Google token does not rotate, so editing it counts.
 export const configKeyOf = (config: ImapConnectorConfig): string =>
-    JSON.stringify([config.host, config.port, config.username, config.password, mailboxOf(config)]);
+    JSON.stringify([
+        config.host,
+        config.port,
+        config.username,
+        config.password,
+        config.authMode ?? "",
+        config.oauthProvider ?? "",
+        config.oauthTenant ?? "",
+        config.oauthClientId ?? "",
+        config.oauthClientSecret ?? "",
+        config.accessToken ?? "",
+        providerOf(config) === "microsoft" ? (config.signedInAt ?? "") : (config.oauthRefreshToken ?? ""),
+        mailboxOf(config),
+    ]);
+
+const credentialPresent = (config: ImapConnectorConfig): boolean => {
+    if (!usesOAuth(config)) {
+        return config.password !== "";
+    }
+    return providerOf(config) === "token" ? Boolean(config.accessToken) : Boolean(config.oauthRefreshToken && config.oauthClientId);
+};
 
 // Accounts with enough config to attempt a connection.
 export const desiredAccounts = (connectors: ReadonlyArray<ConnectorEntry<ImapConnectorConfig>>): ReadonlyArray<ConnectorEntry<ImapConnectorConfig>> =>
-    connectors.filter(({ config }) => config.host !== "" && config.username !== "" && config.password !== "");
+    connectors.filter(({ config }) => config.host !== "" && config.username !== "" && credentialPresent(config));
+
+export type ImapAuth = { readonly user: string; readonly pass: string } | { readonly user: string; readonly accessToken: string };
+
+// The login for one connection: the password, or an access token minted for it (SASL XOAUTH2 in imapflow).
+export const imapAuth = async (config: ImapConnectorConfig, mint: (settings: OAuthSettings) => Promise<string>): Promise<ImapAuth> =>
+    usesOAuth(config) ? { user: config.username, accessToken: await mint(config) } : { user: config.username, pass: config.password };
 
 // Marks a connect failure retries can't fix (bad credential or mailbox); providers can lock an account on repeated
 // failed logins.
@@ -98,37 +130,62 @@ const textOf = async (source: Buffer | undefined): Promise<string | undefined> =
     }
 };
 
-export const openImapConnection = async (
+// Why a login was refused, said as what to fix on the card.
+const loginRefusal = (config: ImapConnectorConfig): string =>
+    usesOAuth(config)
+        ? `IMAP refused the OAuth sign-in for ${config.username} at ${config.host}: the account needs IMAP enabled, and the app the IMAP.AccessAsUser.All permission (Exchange Online) or the https://mail.google.com/ scope (Gmail)`
+        : `IMAP login failed for ${config.username} at ${config.host}: check the username/password (Gmail needs an app password; Exchange Online has switched passwords off, use OAuth2)`;
+
+// A connected, logged-in client; a credential the provider refuses is fatal, since retrying it can lock the account.
+const connectClient = async (
     ctx: GatewayCtx,
     capabilityId: string,
     config: ImapConnectorConfig,
-    hooks: { readonly onClose: () => void },
-): Promise<ImapConnection> => {
-    const mailbox = mailboxOf(config);
+    mint: (settings: OAuthSettings) => Promise<string>,
+): Promise<ImapFlow> => {
+    let auth: ImapAuth;
+    try {
+        auth = await imapAuth(config, mint);
+    } catch (error) {
+        if (error instanceof OAuthRefusedError) {
+            throw new FatalConnectionError(`IMAP sign-in for ${config.username}: ${error.message}`);
+        }
+        throw error;
+    }
     const port = Number(config.port) || 993;
     const client = new ImapFlow({
         host: config.host,
         port,
         // 993 implies implicit TLS; other ports start plain and upgrade via STARTTLS if offered.
         secure: port === 993,
-        auth: { user: config.username, pass: config.password },
+        auth,
         logger: false,
         // Re-issues IDLE every 5 min, under RFC's 29-min cap; also surfaces a dead connection as a close event.
         maxIdleTime: 5 * 60_000,
         connectionTimeout: 30_000,
     });
-    let stopping = false;
     client.on("error", (error) => ctx.log.warn({ err: error, capabilityId }, "imap connection error"));
     try {
         await client.connect();
     } catch (error) {
+        // SAFETY: imapflow marks a refused login with `authenticationFailed`; any other error passes through unread.
         if ((error as { authenticationFailed?: boolean }).authenticationFailed === true) {
-            throw new FatalConnectionError(
-                `IMAP login failed for ${config.username} at ${config.host}: check the username/password (Gmail and Outlook need an app password, not the account password)`,
-            );
+            throw new FatalConnectionError(loginRefusal(config));
         }
         throw error;
     }
+    return client;
+};
+
+export const openImapConnection = async (
+    ctx: GatewayCtx,
+    capabilityId: string,
+    config: ImapConnectorConfig,
+    hooks: { readonly onClose: () => void; readonly mint: (settings: OAuthSettings) => Promise<string> },
+): Promise<ImapConnection> => {
+    const mailbox = mailboxOf(config);
+    const client = await connectClient(ctx, capabilityId, config, hooks.mint);
+    let stopping = false;
     let box;
     try {
         // Read-only EXAMINE: watching must never mutate the mailbox (no \Seen from the gateway's fetches).

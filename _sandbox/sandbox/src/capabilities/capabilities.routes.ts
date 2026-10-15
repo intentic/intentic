@@ -1,5 +1,12 @@
 import { errorMessage } from "@intentic/base/errors";
-import { type Capability, capabilitiesContract, CapabilitySchema, collidesWithReservedServer, isVaulted } from "@intentic/sandbox-contract";
+import {
+    type Capability,
+    capabilitiesContract,
+    CapabilitySchema,
+    collidesWithReservedServer,
+    EXTENSION_TOKEN_HEADER,
+    isVaulted,
+} from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { forkedExec } from "@intentic/base/git";
 import { authorizeMaintainer, bearerFrom } from "../auth/auth.js";
@@ -28,6 +35,7 @@ import { createStatusCache } from "./status/status-cache.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { versionedSettingsWrite } from "../seams/settings-versions.js";
 import { capabilitiesDocument } from "./capabilities-store.js";
+import { storeRefreshToken } from "./refresh-token.js";
 import { stateRelPath } from "../state-paths.js";
 
 // personas-store.ts's document, named by its contract-checked state path rather than imported: personas reaches
@@ -317,6 +325,19 @@ export const createCapabilitiesRoutes = (services: Services) => {
             if (renamed.kind === "extension") {
                 services.extensionBackend.restart();
             }
+            return { ok: true } as const;
+        }),
+        // A delegated sign-in's refresh token, from the connector's own CLI (the agent token) or its listener process (an
+        // extension token, which must be the extension contributing the card). No apply and no composeEnvironment: the
+        // agent's env is composed per turn from the store, and a token changes no fragment.
+        oauthToken: i.oauthToken.handler(async ({ input, context }) => {
+            const caller = callingExtension(services.extensionBackend.verifyExtensionToken, (name) => context.headers.get(name));
+            if (context.headers.has(EXTENSION_TOKEN_HEADER) && caller === undefined) {
+                throw new ORPCError("FORBIDDEN", { message: "that extension token is not one this daemon issued" });
+            }
+            await storeRefreshToken(services.capabilities, await contributionRegistry(services), input, caller?.id);
+            publishRuntimeChange("capabilities");
+            void reconcileListenerProcesses(services);
             return { ok: true } as const;
         }),
         // Replaces one secret field and re-runs the idempotent apply; no composeEnvironment, since a secret can't

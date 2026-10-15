@@ -5,6 +5,7 @@ import { type StoredSymbol, symbolRows } from "../engines/symbols.js";
 import type { SqliteDb } from "@intentic/base/sqlite";
 import type { RankedGroup } from "../types.js";
 import { isIqDenied } from "../workspace/floor.js";
+import { readDocumentText } from "../workspace/shadows.js";
 
 const FALLBACK_RADIUS = 20;
 
@@ -184,7 +185,8 @@ export const parseAnchor = (anchor: string): { path: string; line: number; endLi
 // `iq context <path:line>`, the smallest enclosing symbol's live body (fallback: ±20 lines), grown by -C.
 export const contextOf = async (db: SqliteDb, root: string, anchor: string, grow: number): Promise<{ groups: RankedGroup[]; label: string }> => {
     const { path, line } = parseAnchor(anchor);
-    const content = await readFile(join(root, path), "utf8").catch(undefinedIfMissing);
+    // A document reads as its page-marked text, so `iq context docs/terms.pdf:345` shows the page around a hit.
+    const content = (await readDocumentText(root, path)) ?? (await readFile(join(root, path), "utf8").catch(undefinedIfMissing));
     if (content === undefined) {
         throw new Error(`iq: no such file: ${path}`);
     }

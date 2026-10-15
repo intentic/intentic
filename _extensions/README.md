@@ -30,13 +30,16 @@ flowchart LR
 | [connectors](connectors) | CLI and browser cards: GitHub, GitLab, Sentry, Postgres and more. |
 | [devices](devices) | Cards pairing the owner's Windows or Linux machine. |
 | [discord](discord) | Discord bot card, message listener and voice-transcribing gateway. |
+| [e-urzad](e-urzad) | EZD RP cases and tasks, e-Doręczenia deliveries and proofs for Polish public offices, and electronic-signature checks. |
 | [git-history](git-history) | Per-repository commit graph with branch, stash and undo actions. |
 | [google-workspace](google-workspace) | `gw` CLI for Gmail, Calendar, Drive, Docs and Sheets, plus a watcher. |
-| [imap](imap) | IMAP inbox card and a mailbox watcher that wakes automations. |
+| [imap](imap) | IMAP inbox card, an `imap` CLI for reading and sending (password or OAuth2), and a mailbox watcher that wakes automations. |
+| [microsoft-365](microsoft-365) | `m365` CLI for Outlook mail, calendar and OneDrive/SharePoint, with approval holds and a mail listener. |
 | [onlyoffice](onlyoffice) | Office documents in an ONLYOFFICE editor, run in the browser or as a Docker document server. |
 | [phones](phones) | Card pairing the owner's Android phone through the Intentic Device app. |
 | [pi-agent](pi-agent) | The Pi coding agent as a chat provider. |
 | [pipelines](pipelines) | Rail view of CI runs on the workspace repositories' remotes. |
+| [prawo](prawo) | `prawo` CLI quoting Polish acts (Sejm ELI) and court rulings (SAOS), with citations. |
 | [preview](preview) | Sandbox tabs for exposed ports and the served `public/` directory. |
 | [repo-apps](repo-apps) | Per-repository panels for a monorepo's apps, tests and dependencies. |
 | [slack](slack) | Slack card plus a Socket Mode gateway. |

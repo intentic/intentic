@@ -1,0 +1,101 @@
+{
+ "links": [
+  {
+   "rel": "self",
+   "href": "https://www.saos.org.pl/api/judgments/552277"
+  }
+ ],
+ "data": {
+  "id": 552277,
+  "courtType": "COMMON",
+  "href": "https://www.saos.org.pl/api/judgments/552277",
+  "courtCases": [
+   {
+    "caseNumber": "VIII Pa 201/25"
+   }
+  ],
+  "judgmentType": "SENTENCE",
+  "judgmentDate": "2026-08-14",
+  "source": {
+   "code": "COMMON_COURT",
+   "judgmentUrl": "https://apiorzeczenia.wroclaw.sa.gov.pl/ncourt-api/judgement/details?id=153005000004021_VIII_Pa_000201_2025_Uz_2026-08-14_002",
+   "judgmentId": "153005000004021_VIII_Pa_000201_2025_Uz_2026-08-14_002",
+   "publicationDate": "2026-09-21"
+  },
+  "decision": null,
+  "summary": "w sprawach funkcjonariuszy służby celnej o uposażenie zdolność sądowa przysługuje zgodnie z art. 67 par. 2 kpc Skarbowi Państwa reprezentowanemu przez organ jednostki organizacyjnej, z której działalnością wiąże się dochodzone przez funkcjonariusza (powoda) roszczenie, w przedmiotowym przypadku przez Izbę Administracji Skarbowej",
+  "textContent": "<p>Sygn. akt VIII Pa 201/25</p>\n    <div>\n      <h2>WYROK</h2>\n      <h5>W IMIENIU RZECZYPOSPOLITEJ POLSKIEJ</h5>\n      <p> Dnia 14 sierpnia 2026 roku</p>\n      <p>Sąd Okręgowy w Lublinie VIII Wydział Pracy i Ubezpieczeń Społecznych</p>\n      <p>\n<p>[…]</p>\nUZASADNIENIE</h2>\n      <p>Sąd Rejonowy w Białej Podlaskiej, IV Wydział Pracy w sprawie z powództwa <span class=\"anon-block\">K. K.</span> przeciwko Izbie Administracji Skarbowej w <span class=\"anon-block\">L.</span> o uposażenie, sygn. akt IV P 20/25, wyrokiem z dnia 8 września 2025 roku w punkcie I. zasądził od pozwanego Izby Administracji Skarbowej w <span class=\"anon-block\">L.</span> na rzecz powoda <span class=\"anon-block\">K. K.</span> tytułem wynagrodzenia za okres od 1 marca 2018 r. do dnia 30 stycznia 2019 r. kwotę 75 203,40 zł /siedemdziesiąt pięć tysięcy dwieście trzy złote i czterdzieści groszy/ - brutto, z ustawowymi odsetkami za opóźnienie od następujących kwot i terminów wymagalności, tj.:</p>\n      <p>od kwoty 6 783,25 zł /sześć tysięcy siedemset osiemdziesiąt trzy złote i dwadzieścia pięć groszy/ - brutto, od dnia 11 kwietnia 2018 r. do dnia zapłaty,</p>\n      <p>od kwoty 6</p>",
+  "legalBases": [],
+  "referencedRegulations": [
+   {
+    "journalTitle": "Konstytucja Rzeczypospolitej Polskiej z dnia 2 kwietnia 1997 r.",
+    "journalNo": 78,
+    "journalYear": 1997,
+    "journalEntry": 483,
+    "text": "Konstytucja Rzeczypospolitej Polskiej z dnia 2 kwietnia 1997 r. (Dz. U. z 1997 r. Nr 78, poz. 483 - art. 2)"
+   },
+   {
+    "journalTitle": "Ustawa z dnia 17 listopada 1964 r. - Kodeks postępowania cywilnego",
+    "journalNo": 43,
+    "journalYear": 1964,
+    "journalEntry": 296,
+    "text": "Ustawa z dnia 17 listopada 1964 r. - Kodeks postępowania cywilnego (Dz. U. z 1964 r. Nr 43, poz. 296 - art. 1; art. 189; art. 378; art. 378 § 1; art. 379; art. 379 pkt. 2; art. 386; art. 386 § 2; art. 460; art. 460 § 1; art. 477(2); art. 477(2) § 1; art. 64; art. 64 § 1(1); art. 67; art. 67 § 2; art. 98; art. 98 § 1; art. 98 § 3)"
+   },
+   {
+    "journalTitle": "Ustawa z dnia 14 czerwca 1960 r. - Kodeks postępowania administracyjnego",
+    "journalNo": 30,
+    "journalYear": 1960,
+    "journalEntry": 168,
+    "text": "Ustawa z dnia 14 czerwca 1960 r. - Kodeks postępowania administracyjnego (Dz. U. z 1960 r. Nr 30, poz. 168 - art. 104; art. 104 § 1; art. 104 § 2)"
+   },
+   {
+    "journalTitle": "Ustawa z dnia 24 lipca 1999 r. o Służbie Celnej",
+    "journalNo": 72,
+    "journalYear": 1999,
+    "journalEntry": 802,
+    "text": "Ustawa z dnia 24 lipca 1999 r. o Służbie Celnej (Dz. U. z 1999 r. Nr 72, poz. 802 - )"
+   },
+   {
+    "journalTitle": "Ustawa z dnia 30 sierpnia 2002 r. - Prawo o postępowaniu przed sądami administracyjnymi",
+    "journalNo": 153,
+    "journalYear": 2002,
+    "journalEntry": 1270,
+    "text": "Ustawa z dnia 30 sierpnia 2002 r. - Prawo o postępowaniu przed sądami administracyjnymi (Dz. U. z 2002 r. Nr 153, poz. 1270 - art. 52; art. 52 § 3)"
+   },
+   {
+    "journalTitle": "Ustawa z dnia 23 kwietnia 1964 r. - Kodeks cywilny",
+    "journalNo": 16,
+    "journalYear": 1964,
+    "journalEntry": 93,
+    "text": "Ustawa z dnia 23 kwietnia 1964 r. - Kodeks cywilny (Dz. U. z 1964 r. Nr 16, poz. 93 - art. 5)"
+   },
+   {
+    "journalTitle": "Ustawa z dnia 26 czerwca 1974 r. - Kodeks pracy",
+    "journalNo": 24,
+    "journalYear": 1974,
+    "journalEntry": 141,
+    "text": "Ustawa z dnia 26 czerwca 1974 r. - Kodeks pracy (Dz. U. z 1974 r. Nr 24, poz. 141 - art. 3; art. 80; art. 81; art. 81 § 1)"
+   }
+  ],
+  "keywords": [],
+  "referencedCourtCases": [],
+  "receiptDate": "",
+  "meansOfAppeal": null,
+  "judgmentResult": null,
+  "lowerCourtJudgments": [],
+  "division": {
+   "id": 1190,
+   "name": "VIII Wydział Pracy i Ubezpieczeń Społecznych",
+   "href": "https://www.saos.org.pl/api/ccDivisions/1190",
+   "code": "0004021",
+   "type": "Pracy i Ubezpieczeń Społecznych",
+   "court": {
+    "href": "https://www.saos.org.pl/api/commonCourts/187",
+    "id": 187,
+    "name": "Sąd Okręgowy w Lublinie",
+    "code": "15300500",
+    "type": "REGIONAL"
+   }
+  }
+ }
+}

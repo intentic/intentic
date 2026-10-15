@@ -1,0 +1,13 @@
+/* Emits the `prawo` CLI (src/main.ts) that bin/prawo runs. */
+{
+    "compilerOptions": {
+        "types": ["node"],
+        "outDir": "./dist",
+        "rootDir": "./src",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo",
+        "skipLibCheck": true
+    },
+    "include": ["./src/**/*"],
+    "exclude": ["./src/**/*.test.ts"],
+    "extends": "@intentic/tsconfig/tsconfig.base.json"
+}

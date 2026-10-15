@@ -73,6 +73,15 @@ export const configSchema = z.object({
             upstreamCookie: z.string().default(``).meta({ secret: true }),
         })
         .prefault({}),
+    // Organisations (org/, docs/architecture/organisations.md). `creation` says who may start one: `operators` (an
+    // address on ADMIN_EMAILS, proven the way ADMIN_SIGN_IN asks) or `anyone` signed in. Operators by default, so a
+    // hosted platform grows organisations only when somebody decided to offer them; a self-hosted office sets `anyone`
+    // or lists its IT staff as operators.
+    orgs: z
+        .object({
+            creation: z.enum([`operators`, `anyone`]).default(`operators`),
+        })
+        .prefault({}),
     // Resend email for invites and the setup link; unset logs the link server-side instead of sending it.
     email: z
         .object({

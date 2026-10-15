@@ -5,6 +5,7 @@ import { computed } from "vue";
 import ProviderLogo from "../../../chat/accounts/ProviderLogo.vue";
 import { effortRungFill } from "../../../chat/models/run-settings/effortScale";
 import type { RunLook } from "./childLook";
+import { useAudience } from "../../../../app/useAudience";
 
 // WHAT A CHILD RUNS ON: the model by its catalog name and the tier it ran at, drawn on the composer's own ladder
 // (EffortMeter) so a child's tier reads the way the reader set their own. The lit rungs say the tier; its word is only
@@ -21,6 +22,8 @@ const props = defineProps<{
 }>();
 
 const t = useT();
+// Which model ran a child, and at what effort, is a developer's reading: a maker's tray row and bar say neither.
+const { maker } = useAudience();
 
 const rungs = computed(() =>
     Array.from({ length: props.run.effort?.rungs ?? 0 }, (_, index) =>
@@ -31,7 +34,7 @@ const pill = computed(() => (props.chips === true ? `ui-status-pill bg-content/5
 </script>
 
 <template>
-    <span class="flex min-w-0 items-center" :class="chips ? 'flex-wrap gap-1.5' : 'gap-1.5'">
+    <span v-if="!maker" class="flex min-w-0 items-center" :class="chips ? 'flex-wrap gap-1.5' : 'gap-1.5'">
         <span
             class="flex min-w-0 items-center gap-1 text-2xs"
             :class="[pill, columns ? 'w-24 shrink-0' : '']"

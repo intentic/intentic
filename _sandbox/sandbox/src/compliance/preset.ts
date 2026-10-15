@@ -39,7 +39,11 @@ export const PUBLIC_OFFICE_RETENTION: RetentionSettings = {
 // Every outward action the agent can take that the action rules (SandboxSettings.actionRules) gate, as the outbound
 // sniffer names it (activity/outbound.ts: discord, slack, telegram, whatsapp) and the subagent gate does
 // (guard/actions.ts childSpawn). Writes only: a rule on `messages.read` would hold a bot reading its own channel. Email
-// sending is the key the IMAP extension's sender consults (_extensions/imap/src/send.ts), which holds by default.
+// sending is the key the IMAP extension's sender consults (_extensions/imap/src/send.ts); the three `microsoft365.*`
+// keys are what `m365` consults before sending, changing a calendar or uploading (_extensions/microsoft-365/src/actions.ts);
+// the `ezdrp.*` and `edoreczenia.*` keys are the office acts the e-urzad extension's guard consults
+// (_extensions/e-urzad/src/core/guard.ts): registering mail and adding files in EZD RP, sending an e-Doręczenia delivery,
+// and opening one, the one read here with legal effect (it can make the delivery received). All of them hold by default.
 export const PUBLIC_OFFICE_ACTION_KEYS = [
     "discord.message.send",
     "discord.reaction.add",
@@ -52,6 +56,14 @@ export const PUBLIC_OFFICE_ACTION_KEYS = [
     "telegram.reaction.add",
     "whatsapp.message.send",
     "imap.message.send",
+    "microsoft365.mail.send",
+    "microsoft365.calendar.write",
+    "microsoft365.files.upload",
+    "ezdrp.document.register-incoming",
+    "ezdrp.document.register-outgoing",
+    "ezdrp.case.attach-draft",
+    "edoreczenia.delivery.send",
+    "edoreczenia.delivery.open",
     "agents.spawn",
 ] as const;
 

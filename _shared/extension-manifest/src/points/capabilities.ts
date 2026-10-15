@@ -84,6 +84,22 @@ export const fieldApplies = (field: CapabilityField, values: Readonly<Record<str
 // One authenticated request the daemon makes on the form's behalf, declared as data since the check is per-service.
 // Worth declaring on any card whose failure is otherwise silent.
 const ProbeSchema = z.object({
+    // A delegated sign-in's card keeps only a refresh token, so its test first trades that for an access token. The
+    // trade is held in memory for this one request; neither token is stored or shown.
+    oauth: z
+        .object({
+            tokenUrl: z
+                .string()
+                .min(1)
+                .describe("The token endpoint, templated like `url`. Only Microsoft identity platform hosts are served today."),
+            form: z
+                .record(z.string(), z.string())
+                .describe("The refresh-token grant's form fields, templated like `url`; a field that comes out empty is left out."),
+        })
+        .optional()
+        .describe(
+            "Trade the card's refresh token for an access token before the request, sent as `Authorization: Bearer`. For Microsoft's identity platform the request goes to the Graph cloud paired with the token endpoint's host, whatever host `url` names.",
+        ),
     url: z
         .string()
         .min(1)
@@ -264,6 +280,22 @@ export const CapabilityContributionSchema = z
             probe: ProbeSchema.optional().describe(
                 "One authenticated request that tests this card's settings before they are saved, so a wrong token or an unreachable host is answered on the form rather than by a card that says 'not connected' afterwards.",
             ),
+            // Lets a sign-in on the agent's side store what it got without printing it: the daemon's oauth-token route
+            // writes `field` and nothing else, for a caller holding the card's current token, while every `boundTo`
+            // field still holds what the sign-in was made against.
+            refreshToken: z
+                .object({
+                    field: z.string().describe("The secret field the refresh token is kept in."),
+                    boundTo: z
+                        .array(z.string())
+                        .describe(
+                            "Fields a token is only good for as filled in at sign-in (tenant, client, cloud, access level); a token arriving after one of them changed is refused.",
+                        ),
+                })
+                .optional()
+                .describe(
+                    "This card's credential is a delegated OAuth refresh token the extension's own CLI or process obtains and rotates. They store it through `POST /capabilities/{id}/oauth-token` (an extension process also needs that route in `permissions.daemon`) instead of printing it for someone to paste.",
+                ),
             // Only narrows what the credential may do, so it carries no effect: nothing here grants the extension reach.
             hosts: z
                 .array(z.string().min(1))
@@ -355,6 +387,15 @@ export const CapabilityContributionSchema = z
         // daemon's one-time codes.
         if (spec.kind !== "cli") {
             return;
+        }
+        if (spec.refreshToken !== undefined) {
+            const declared = new Map(spec.fields.map((field) => [field.key, field]));
+            if (declared.get(spec.refreshToken.field)?.secret !== true) {
+                ctx.addIssue({ code: "custom", message: `refreshToken.field "${spec.refreshToken.field}" must name a secret field` });
+            }
+            for (const key of spec.refreshToken.boundTo.filter((candidate) => !declared.has(candidate) || candidate === spec.refreshToken?.field)) {
+                ctx.addIssue({ code: "custom", message: `refreshToken.boundTo names "${key}", which is not another field of this card` });
+            }
         }
         for (const field of spec.fields.filter((candidate) => candidate.totp === true)) {
             if (Object.values(spec.env).some((template) => template.includes(`\${${field.key}}`) || template.includes(`\${${field.key}:uri}`))) {

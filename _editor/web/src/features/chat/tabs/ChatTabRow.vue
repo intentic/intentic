@@ -19,6 +19,8 @@ import { computed } from "vue";
 import { type CardView, modelOrProvider } from "./cardView";
 import { isArchived, originOf, tabLabel, twinTitles } from "./tabs";
 import { timeAgo } from "@intentic/ui";
+import { useAudience } from "../../../app/useAudience";
+import { useRole } from "../../../client/sandbox/useRole";
 
 // One open chat as the rail draws it. A component rather than a block of ChatTabList's template because the card is
 // named by its own composer while nothing else has named it (tabLabel → draftPreview): read from the list, that one
@@ -27,6 +29,10 @@ import { timeAgo } from "@intentic/ui";
 // the row it was typed into.
 
 const t = useT();
+// Which model answers is a developer's fact: a maker's and a guest's rail row names the conversation, not the model.
+const { maker } = useAudience();
+const { isGuest } = useRole();
+const modelShown = computed(() => !maker.value && !isGuest.value);
 
 const props = defineProps<{
     conversation: Conversation;
@@ -196,8 +202,8 @@ const act = (event: Event, verb: "close" | "keep"): void => {
             <!-- The agents it started, counted, as its board card counts them: the list opens under this card only while it is on screen (ChildRows). -->
             <ChildCount v-if="props.agent !== undefined" :agent="props.agent" />
             <!-- Spend, diff and turn count are deliberately absent here; they live on the board and Usage tab. -->
-            <span v-if="props.view.model !== undefined" class="max-w-24 truncate">{{ props.view.model }}</span>
-            <span v-else-if="twinFact !== undefined" class="max-w-24 truncate">{{ twinFact }}</span>
+            <span v-if="props.view.model !== undefined && modelShown" class="max-w-24 truncate">{{ props.view.model }}</span>
+            <span v-else-if="twinFact !== undefined && modelShown" class="max-w-24 truncate">{{ twinFact }}</span>
             <!-- Age is shown only when settled; a running card's clock is the live line's elapsed readout instead. -->
             <span v-if="props.agent !== undefined && !turnInFlight(props.agent) && props.agent.updatedAt > 0" class="ml-auto shrink-0">{{
                 timeAgo(props.agent.updatedAt, { days: true })

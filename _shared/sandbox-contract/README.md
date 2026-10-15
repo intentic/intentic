@@ -62,6 +62,11 @@ flowchart LR
   (`sandboxDocument`): guarded, pure conversions of raw JSON that settle on their own output, the passthrough that
   keeps what a build does not know on its writes, and `readDocument`, the one read every store makes of a file (JSON,
   conversions, parse, whole or one entry at a time), whose problems carry a `reason` a reader matches on.
+- What counts as a result is decided here: `deliverableKindOf` in `src/text/documents.ts` names a Word, OpenDocument
+  (text, sheet, slides), RTF, PDF, PowerPoint, Excel or HTML file a person opens rather than reads as code, and
+  `producedDocumentPaths` lists the ones a conversation's calls recorded writing. The chat draws its document chips by
+  the same rule, and the daemon serves those paths' bytes to the conversation's owner, a guest included, on the strength
+  of that list (`agents.documents`, `GET /agents/{id}/documents/raw`), so a path named only in prose never counts.
 - The sandbox's own transcript notices (a land, a memory hold, a renewal, a stop) keep their English sentence in
   `text`, which older editors, stored records and agents reading their own history go on reading, and carry
   `noticeCode` beside it: which notice it is and the facts it was worded from (`src/events/sandbox-notice.ts`), so the

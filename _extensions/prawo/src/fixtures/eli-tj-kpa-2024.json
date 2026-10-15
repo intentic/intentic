@@ -1,0 +1,48 @@
+{
+ "ELI": "DU/2024/572",
+ "address": "WDU20240000572",
+ "publisher": "DU",
+ "year": 2024,
+ "volume": 0,
+ "pos": 572,
+ "title": "Obwieszczenie Marszałka Sejmu Rzeczypospolitej Polskiej z dnia 2 kwietnia 2024 r. w sprawie ogłoszenia jednolitego tekstu ustawy - Kodeks postępowania administracyjnego",
+ "type": "Obwieszczenie",
+ "displayAddress": "Dz.U. 2024 poz. 572",
+ "status": "wygaśnięcie aktu",
+ "inForce": "NOT_IN_FORCE",
+ "promulgation": "2024-04-15",
+ "announcementDate": "2024-04-02",
+ "legalStatusDate": "2024-03-27",
+ "changeDate": "2025-12-04T09:54:22",
+ "textHTML": true,
+ "textPDF": true,
+ "texts": [
+  {
+   "fileName": "text.html",
+   "type": "H"
+  },
+  {
+   "fileName": "D20240572.pdf",
+   "type": "O"
+  },
+  {
+   "fileName": "D20240572.pdf",
+   "type": "I"
+  },
+  {
+   "fileName": "D20240572L.pdf",
+   "type": "T"
+  },
+  {
+   "fileName": "D20240572Lj.pdf",
+   "type": "U"
+  }
+ ],
+ "references": {
+  "Tekst jednolity dla aktu": [
+   {
+    "id": "DU/1960/168"
+   }
+  ]
+ }
+}

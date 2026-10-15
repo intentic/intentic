@@ -92,6 +92,11 @@ export interface ComposerWords {
     readonly onTrial: boolean;
     /** How many bubbles the armed edit would take with it, the edited prompt included. */
     readonly editDropped: number;
+    /**
+     * Plain words: a reader who does not write code, or a guest, is talking to an assistant, not to a named coding tool
+     * mid-"turn". Absent reads as the developer's words.
+     */
+    readonly plain?: boolean;
     /** When the spent allowance reopens, as the button and the limit card both say it (pickUpWhen); `scheduled` only. */
     readonly reopens?: string;
     /** A turn already waits on the limit here: it goes first when the allowance reopens, and the booked message after it. */
@@ -136,16 +141,22 @@ export const sendIntentOf = (situation: ComposerSituation): SendIntent => {
 const PLACEHOLDER: Record<SendIntent, (words: ComposerWords) => string> = {
     place: (words) => t(`chat.composerIntent.placeholderPlace`, { provider: words.provider }),
     // Read only once the box is cleared, exactly when "what was I doing?" needs answering.
-    edit: () => t(`chat.composerIntent.placeholderEdit`),
+    edit: (words) => (words.plain === true ? t(`chat.composerIntent.plain.placeholderEdit`) : t(`chat.composerIntent.placeholderEdit`)),
     // Says what typing does here, since a reply that reads like consent ("go ahead") would otherwise look like approval.
     plan: () => t(`chat.composerIntent.placeholderPlan`),
     // When it goes is on the pill and the button already; the box only says this message is the one being booked.
     later: () => t(`chat.composerIntent.placeholderLater`),
     scheduled: (words) => t(`chat.composerIntent.placeholderScheduled`, { when: words.reopens ?? `` }),
-    idle: (words) => (words.onTrial ? t(`chat.words.askAnything`) : t(`chat.composerIntent.placeholderIdle`, { provider: words.provider })),
+    idle: (words) =>
+        words.plain === true
+            ? t(`chat.composerIntent.plain.placeholderIdle`)
+            : words.onTrial
+              ? t(`chat.words.askAnything`)
+              : t(`chat.composerIntent.placeholderIdle`, { provider: words.provider }),
     parked: () => t(`chat.composerIntent.placeholderParked`),
-    steer: (words) => t(`chat.composerIntent.placeholderSteer`, { provider: words.provider }),
-    queue: () => t(`chat.composerIntent.placeholderQueue`),
+    steer: (words) =>
+        words.plain === true ? t(`chat.composerIntent.plain.placeholderSteer`) : t(`chat.composerIntent.placeholderSteer`, { provider: words.provider }),
+    queue: (words) => (words.plain === true ? t(`chat.composerIntent.plain.placeholderQueue`) : t(`chat.composerIntent.placeholderQueue`)),
 };
 
 // The Send button's hover: a label, or a small card where the press has a fact or a consequence worth a glance.
@@ -176,8 +187,11 @@ const SEND_HINT: Record<SendIntent, (words: ComposerWords) => TooltipValue> = {
             : t(`chat.composerIntent.hintIdle`),
     // Says whether Send reaches the running turn or waits, so identical buttons don't mean different things.
     parked: () => ({ title: t(`chat.composerIntent.queue`), note: t(`chat.composerIntent.hintParked`) }),
-    steer: () => t(`chat.composerIntent.hintSteer`),
-    queue: () => ({ title: t(`chat.composerIntent.queue`), note: t(`chat.composerIntent.hintQueue`) }),
+    steer: (words) => (words.plain === true ? t(`chat.composerIntent.plain.hintSteer`) : t(`chat.composerIntent.hintSteer`)),
+    queue: (words) => ({
+        title: t(`chat.composerIntent.queue`),
+        note: words.plain === true ? t(`chat.composerIntent.plain.hintQueue`) : t(`chat.composerIntent.hintQueue`),
+    }),
 };
 
 /**

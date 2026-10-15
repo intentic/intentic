@@ -47,6 +47,8 @@ import { useKeybindings } from "../workbench/commands/useKeybindings";
 import { useLayout } from "../workbench/window/useLayout";
 import { uiLength } from "../workbench/window/uiScale";
 import { useIconRailSize } from "../workbench/window/useIconRailSize";
+import { useAudience } from "../app/useAudience";
+import { startAgent } from "../features/agents/fleet/agentActions";
 import { railFrame } from "./rail/railFrame";
 import { presenceOthers } from "../workbench/presence/usePresence";
 import { usePanels } from "../features/extensions/usePanels";
@@ -135,6 +137,9 @@ const route = useRoute();
 const router = useRouter();
 // The audience's words for the core tiles that have maker names (Files); Chat and Agents keep theirs.
 const words = useVocabulary();
+// A reader who does not write code meets the rail's + as the start of a conversation, which is what they came to do;
+// connecting Docker, SSH or a wallet is an owner's errand, kept one press further in, under the overflow.
+const { maker } = useAudience();
 
 // Prefix match, not active-class: a splat/optional param (workspace/:path) drops it once one is set.
 const isNavActive = (to: string): boolean => route.path === to || route.path.startsWith(`${to}/`);
@@ -214,7 +219,7 @@ const fixedTiles = computed<readonly SectionTile[]>(() => [
     {
         id: `agents`,
         to: `/agents`,
-        label: t(`shared.agents`),
+        label: words.value.agents,
         // RailIcon draws by section identity; these generic names remain the fallback vocabulary.
         icon: `robot`,
         // Both come from agentsTile.ts, shared with the phone tab bar; the note names the scope when it's wide.
@@ -638,7 +643,7 @@ useGettingStarted();
                 <div class="flex w-48 flex-col gap-0.5 p-1">
                     <!-- With every section pinned the menu is empty, and saying only that sent its reader back four times: it
                          says where the way back is too (the tile's own menu, onTileContextMenu). -->
-                    <template v-if="moreTiles.length === 0">
+                    <template v-if="moreTiles.length === 0 && !(maker && !isGuest)">
                         <p class="px-2 pt-1.5 text-xs text-subtle">{{ t(`shell.shellDesktop.everySectionOnRail`) }}</p>
                         <p class="px-2 pb-1.5 text-2xs text-subtle">{{ t(`shell.shellDesktop.howToUnpin`) }}</p>
                     </template>
@@ -686,14 +691,37 @@ useGettingStarted();
                             <Icon name="pin" class="text-xs" />
                         </button>
                     </div>
+                    <!-- Plain words gave the rail's + to a new conversation; what it used to open stays here, one press in. -->
+                    <RouterLink
+                        v-if="maker && !isGuest"
+                        to="/capabilities"
+                        class="flex min-w-0 items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors"
+                        :class="isNavActive('/capabilities') ? 'bg-primary-600/15 text-link' : 'text-content hover:bg-content/5'"
+                        @click="dismissMore"
+                    >
+                        <span class="flex h-5 w-5 shrink-0 items-center justify-center">
+                            <RailIcon section="capabilities" class="text-base" :class="isNavActive('/capabilities') ? 'text-link' : 'text-muted'" />
+                        </span>
+                        <span class="min-w-0 flex-1 truncate">{{ t(`shell.words.addCapability`) }}</span>
+                    </RouterLink>
                 </div>
             </AnchoredOverlay>
 
             <!-- Every "add" here writes to the sandbox's deploy.config.ts or clones into /work, never platform storage. -->
             <!-- A guest connects nothing: what this box can reach is the operator's decision, and the page says so at
                  the maintainer tier. -->
+            <button
+                v-if="!isGuest && maker"
+                type="button"
+                :class="ui.addTile(`icon-rail-tile rounded-lg hover:bg-overlay`)"
+                :aria-label="words.newAgent"
+                v-tooltip.right="words.newAgent"
+                @click="startAgent()"
+            >
+                <RailIcon section="capabilities" class="icon-rail-glyph" />
+            </button>
             <RouterLink
-                v-if="!isGuest"
+                v-else-if="!isGuest"
                 to="/capabilities"
                 :class="[
                     ui.addTile(`icon-rail-tile rounded-lg hover:bg-overlay`),

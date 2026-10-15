@@ -23,7 +23,7 @@ const keys = (situation: ComposerControlSituation): string[] => overflowRows(sit
 
 // When the message goes is not among them: it is the send's own caret, beside the press it changes (ChatPane).
 it(`keeps an ordinary chat's row empty and offers all six in the overflow`, () => {
-    expect(ridesRow(PLAIN)).toEqual({ mode: false, placement: false, persona: false, runThrough: false, voice: false, land: false });
+    expect(ridesRow(PLAIN)).toEqual({ mode: false, model: false, placement: false, persona: false, runThrough: false, voice: false, land: false });
     expect(keys(PLAIN)).toEqual([`mode`, `placement`, `persona`, `runThrough`, `voice`, `land`]);
 });
 
@@ -60,7 +60,8 @@ it(`puts every offered control in exactly one of the two places`, () => {
     for (const situation of situations) {
         const row = ridesRow(situation);
         const menu = new Set(keys(situation));
-        for (const control of CONTROL_ORDER) {
+        // A developer's model is the row's own pill, drawn beside these rather than by this rule.
+        for (const control of CONTROL_ORDER.filter((each) => each !== `model`)) {
             expect(row[control] && menu.has(control)).toBe(false);
             expect(row[control] || menu.has(control)).toBe(true);
         }
@@ -96,7 +97,7 @@ it(`keeps where the chat runs in the overflow while it is here, and on the row o
 // transcript.
 it(`drops the controls this chat is not offered`, () => {
     const away = chat({ placementOffered: false, personaOffered: false, voiceOffered: false, landOffered: false });
-    expect(ridesRow(away)).toEqual({ mode: false, placement: false, persona: false, runThrough: false, voice: false, land: false });
+    expect(ridesRow(away)).toEqual({ mode: false, model: false, placement: false, persona: false, runThrough: false, voice: false, land: false });
     expect(keys(away)).toEqual([`mode`, `runThrough`]);
     // An answer given before the chat stopped being this reader's to land gets no chip either.
     expect(ridesRow(chat({ landOffered: false, landOwn: true })).land).toBe(false);
@@ -122,4 +123,25 @@ it(`keeps every description to a single line`, () => {
             expect(row.description.length, `${row.label}: "${row.description}"`).toBeLessThanOrEqual(DESCRIPTION_LIMIT);
         }
     }
+});
+
+// Plain words: a reader who does not write code is offered what they can judge, the model among it, and none of a
+// developer's tools; a guest is offered nothing, since the assistant it was handed decides all of it.
+it(`offers a non-coder only how much it does alone and which model answers`, () => {
+    const plain = chat({ plain: true, modelLabel: `Claude Opus 5` });
+    expect(keys(plain)).toEqual([`mode`, `model`]);
+    expect(overflowRows(plain).find((row) => row.key === `model`)).toMatchObject({ label: `Which AI answers`, value: `Claude Opus 5` });
+    expect(overflowRows(plain).find((row) => row.key === `mode`)?.label).toBe(`How much it does on its own`);
+    expect(Object.values(ridesRow(plain)).some(Boolean)).toBe(false);
+});
+
+it(`offers a guest nothing at all, in either place`, () => {
+    const guest = chat({ guest: true, mode: `plan`, persona: `ada` });
+    expect(keys(guest)).toEqual([]);
+    expect(Object.values(ridesRow(guest)).some(Boolean)).toBe(false);
+});
+
+it(`keeps the developer's menu exactly as it was`, () => {
+    expect(keys(chat({ plain: false }))).toEqual(keys(PLAIN));
+    expect(keys(PLAIN)).not.toContain(`model`);
 });

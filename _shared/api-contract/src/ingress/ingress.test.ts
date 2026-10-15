@@ -11,6 +11,8 @@ import {
     FleetProvisionBodySchema,
     ingressRefusalOf,
     LocalDnsBodySchema,
+    OrgPolicyAnswerSchema,
+    OrgPolicyFetchBodySchema,
     SetupClaimFormSchema,
     SetupReportBodySchema,
 } from "./ingress-schemas.js";
@@ -69,6 +71,12 @@ describe("bodies an older machine sends still parse", () => {
     it("a provision with no definition", () => {
         expect(FleetProvisionBodySchema.parse({ name: "  scratch " })).toEqual({ name: "scratch" });
     });
+
+    it("an org-policy fetch from a daemon that holds no edition, or names one it cannot", () => {
+        expect(OrgPolicyFetchBodySchema.parse({})).toEqual({});
+        expect(OrgPolicyFetchBodySchema.parse({ applied: "three" })).toEqual({});
+        expect(OrgPolicyFetchBodySchema.parse({ applied: 3 })).toEqual({ applied: 3 });
+    });
 });
 
 describe("ingressRefusalOf", () => {
@@ -82,6 +90,13 @@ describe("ingressRefusalOf", () => {
     it("has nothing to say for an empty body or an empty error", () => {
         expect(ingressRefusalOf("  ")).toBeUndefined();
         expect(ingressRefusalOf(`{"error":""}`)).toBeUndefined();
+    });
+});
+
+describe("an org-policy answer", () => {
+    it("says unbound with null, and fills a section-less policy as all open", () => {
+        expect(OrgPolicyAnswerSchema.parse({ policy: null })).toEqual({ policy: null });
+        expect(OrgPolicyAnswerSchema.parse({ policy: { orgId: "o", orgName: "Gmina", version: 2 } }).policy?.sections).toEqual({});
     });
 });
 

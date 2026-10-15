@@ -1,0 +1,69 @@
+{
+ "links": [
+  {
+   "rel": "self",
+   "href": "https://www.saos.org.pl/api/search/judgments?pageSize=3&pageNumber=0&all=bezczynno%C5%9B%C4%87%20organu&sortingField=JUDGMENT_DATE&sortingDirection=DESC"
+  },
+  {
+   "rel": "next",
+   "href": "https://www.saos.org.pl/api/search/judgments?pageSize=3&pageNumber=1&all=bezczynno%C5%9B%C4%87%20organu&sortingField=JUDGMENT_DATE&sortingDirection=DESC"
+  }
+ ],
+ "items": [
+  {
+   "id": 552277,
+   "href": "https://www.saos.org.pl/api/judgments/552277",
+   "courtType": "COMMON",
+   "courtCases": [
+    {
+     "caseNumber": "VIII Pa 201/25"
+    }
+   ],
+   "judgmentType": "SENTENCE",
+   "textContent": " administracyjnymi, wezwał DIAS do usunięcia naruszenia prawa i przedstawienia mu propozycji służby. Pismem z dnia 3 lipca 2017 r. powód złożył do Szefa Krajowej Administracji Skarbowej zażalenie na <em>bezczynności</em> DIAS ...  postępowania administracyjnego czy też sądowo-administracyjnego. Dnia 8 sierpnia 2017 r. powód wniósł do Wojewódzkiego Sądu Administracyjnego w L. skargę na <em>bezczynność</em> DIAS, w związku z brakiem realizacji ustawowego obowiązku przedstawienia mu propozycji służby, w której domagał się stwierdzenia istnienia <em>bezczynności</em> po stronie dyrektora i zobowiązania go do niezwłocznego złożenia propozycji służby w Służbie ... , że <em>bezczynność</em> dyrektora nie miała miejsca z rażącym naruszeniem prawa. Postanowieniem z dnia 17 października 2019 r., sygn. akt I OSK 1093/18 Naczelny Sąd Administracyjny w Warszawie uchylił powyższy wyrok i",
+   "keywords": [],
+   "division": {
+    "href": "https://www.saos.org.pl/api/ccDivisions/1190",
+    "id": 1190,
+    "name": "VIII Wydział Pracy i Ubezpieczeń Społecznych",
+    "code": "0004021",
+    "court": {
+     "href": "https://www.saos.org.pl/api/commonCourts/187",
+     "id": 187,
+     "code": "15300500",
+     "name": "Sąd Okręgowy w Lublinie"
+    }
+   },
+   "judgmentDate": "2026-08-14"
+  },
+  {
+   "id": 550032,
+   "href": "https://www.saos.org.pl/api/judgments/550032",
+   "courtType": "COMMON",
+   "courtCases": [
+    {
+     "caseNumber": "IV Ka 11/25"
+    }
+   ],
+   "judgmentType": "REASONS",
+   "textContent": " obiecanych umowy odnośnie prac w kuchni i przedpokój. W odpowiedzi oskarżony ogranicza się jedynie do zapewnień, że „ projektantka pracuje”. Zdaniem Sądu Okręgowego ta kilkumiesięczna <em>bezczynność</em> (od kwietnia ...  udowodnione, tylko wówczas można przyjąć, że są one prawdziwe, czyli zgodne z rzeczywistością. Zobowiązuje ona <em>organy</em> procesowe do dołożenia – niezależnie od woli stron – maksymalnych starań i wyczerpania wszelkich dostępnych środków poznania prawdy. <em>Organy</em> procesowe w ramach swobodnej oceny dowodów są ustawowo zobligowane do ukształtowania przekonania dopiero na podstawie wszystkich przeprowadzonych dowodów ...  ustosunkowanie się do konkretnych dowodów i nie wprowadza różnic co do wartości poszczególnych dowodów. Zasada prawdy materialnej jest adresowana do wszelkich <em>organów</em> procesowych. Nie da się jednak",
+   "keywords": [],
+   "division": {
+    "href": "https://www.saos.org.pl/api/ccDivisions/132",
+    "id": 132,
+    "name": "IV Wydział Karny Odwoławczy",
+    "code": "0002006",
+    "court": {
+     "href": "https://www.saos.org.pl/api/commonCourts/26",
+     "id": 26,
+     "code": "15502500",
+     "name": "Sąd Okręgowy we Wrocławiu"
+    }
+   },
+   "judgmentDate": "2026-07-21"
+  }
+ ],
+ "info": {
+  "totalResults": 3403
+ }
+}

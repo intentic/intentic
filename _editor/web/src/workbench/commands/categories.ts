@@ -1,4 +1,5 @@
 import { t } from "@intentic/ui/i18n";
+import { useVocabulary } from "../views/vocabulary";
 
 // The families a built-in command can belong to, in one table because the word is part of the command's name
 // everywhere it is read ("Terminal: Split"): two registrars spelling the same family differently would split it into
@@ -41,7 +42,7 @@ export const categoryLabel = (category: string): string => {
         case BROWSERS:
             return t(`shared.browsers`);
         case AGENTS:
-            return t(`shared.agents`);
+            return useVocabulary().value.agents;
         case ACCOUNT:
             return t(`shared.account`);
         case PROJECT:

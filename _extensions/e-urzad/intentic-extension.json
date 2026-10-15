@@ -1,0 +1,220 @@
+{
+    "$schema": "https://intentic.dev/intentic-extension.schema.json",
+    "publisher": "intentic",
+    "name": "e-urzad",
+    "version": "1.0.0",
+    "category": "connections",
+    "icon": "folder-open",
+    "engines": {
+        "intentic": "^2.28.0"
+    },
+    "server": "dist/server.js",
+    "permissions": {
+        "daemon": ["GET /capabilities/*/connection"]
+    },
+    "contributes": {
+        "bin": "bin",
+        "views": [
+            {
+                "id": "e-urzad",
+                "label": "e-Urząd",
+                "surface": "rail"
+            }
+        ],
+        "files": [
+            {
+                "path": ".intentic/records/e-urzad/",
+                "invalidates": ["e-urzad"]
+            }
+        ],
+        "tools": {
+            "perCard": "ezd-rp"
+        },
+        "capabilities": [
+            {
+                "id": "ezd-rp",
+                "kind": "cli",
+                "catalog": {
+                    "name": "EZD RP",
+                    "icon": "folder-open",
+                    "description": "Your office's cases, documents and tasks in EZD RP.",
+                    "category": "business",
+                    "hint": "Reads cases (sprawy), documents and the position's tasks through the EZD RP integration API, and checks electronic signatures. Registering mail, adding files to a case and outgoing mail are held for your approval unless you allow them in the action rules. Test checks that the SSO answers; `e-urzad ezd test` (or the view's Test) checks the key itself.",
+                    "guide": {
+                        "url": "https://www.gov.pl/web/ezd-rp/piaskownica-api",
+                        "linkLabel": "EZD RP API (sandbox and documentation)",
+                        "steps": [
+                            "An administrator with the `Administracja.KluczeApi` permission opens Administracja → Klucze API → Dodaj klucz in EZD RP and creates a key for a technical user.",
+                            "Copy the key's ID (aki), the business owner's entity ID (pid) and the key value: EZD shows the value only once.",
+                            "Enter your instance's addresses: the integrator API, the SSO and the EZD web host (for NASK's sandbox: integrator-api.int2.ezdrp.gov.pl, sso-idp.int2.ezdrp.gov.pl, ezdrp-web.int2.ezdrp.gov.pl).",
+                            "Put the position (stanowisko) the key acts in under Sid if the user has more than one."
+                        ]
+                    }
+                },
+                "fields": [
+                    {
+                        "key": "apiUrl",
+                        "label": "Integrator API address",
+                        "placeholder": "https://integrator-api.int2.ezdrp.gov.pl"
+                    },
+                    {
+                        "key": "ssoUrl",
+                        "label": "SSO address",
+                        "placeholder": "https://sso-idp.int2.ezdrp.gov.pl"
+                    },
+                    {
+                        "key": "webHost",
+                        "label": "EZD RP web host",
+                        "placeholder": "ezdrp-web.int2.ezdrp.gov.pl",
+                        "hint": "The host people open EZD RP at, without https://. The key exchange is bound to it."
+                    },
+                    {
+                        "key": "subjectId",
+                        "label": "Business owner entity ID (pid)"
+                    },
+                    {
+                        "key": "keyId",
+                        "label": "API key ID (aki)"
+                    },
+                    {
+                        "key": "apiKey",
+                        "label": "API key",
+                        "secret": true
+                    },
+                    {
+                        "key": "positionId",
+                        "label": "Position ID (Sid)",
+                        "optional": true,
+                        "hint": "The stanowisko every call acts in. Empty uses the user's current position."
+                    },
+                    {
+                        "key": "userId",
+                        "label": "User ID (uid)",
+                        "optional": true,
+                        "advanced": true,
+                        "hint": "Only to act as a user other than the key's own technical user."
+                    }
+                ],
+                "env": {
+                    "EZDRP_API_URL": "${apiUrl}",
+                    "EZDRP_SSO_URL": "${ssoUrl}",
+                    "EZDRP_WEB_HOST": "${webHost}",
+                    "EZDRP_PID": "${subjectId}",
+                    "EZDRP_AKI": "${keyId}",
+                    "EZDRP_API_KEY": "${apiKey}",
+                    "EZDRP_SID": "${positionId}",
+                    "EZDRP_UID": "${userId}"
+                },
+                "hosts": ["${apiUrl}", "${ssoUrl}"],
+                "skill": "skills/e-urzad/SKILL.md",
+                "probe": {
+                    "url": "${ssoUrl}/.well-known/openid-configuration",
+                    "method": "GET"
+                }
+            },
+            {
+                "id": "e-doreczenia",
+                "kind": "cli",
+                "catalog": {
+                    "name": "e-Doręczenia",
+                    "icon": "envelope",
+                    "description": "Your office's e-Doręczenia mailbox: deliveries, proofs, addresses.",
+                    "category": "communication",
+                    "hint": "Signs in as your registered system with its certificate. Lists received deliveries without opening them, saves proofs, searches the address register (BAE). Opening a delivery (which can make it legally delivered) and sending one are held for your approval unless you allow them in the action rules. Test checks that the environment's sign-in service answers; `e-urzad ed test` (or the view's Test) signs in.",
+                    "guide": {
+                        "url": "https://www.gov.pl/web/e-doreczenia/integracja-uslugi-e-doreczen",
+                        "linkLabel": "e-Doręczenia integration",
+                        "steps": [
+                            "The mailbox administrator signs in to e-Doręczenia and opens Moduł uprawnień → Systemy → Dodaj system.",
+                            "Name the system and either send a certificate request (CSR) or upload the office's own qualified certificate or e-seal; one certificate per system.",
+                            "Download the issued certificate and keep its private key; paste both here as PEM.",
+                            "Use INT for testing (INT admits only the public IP addresses you registered with it) and PROD once the integration works."
+                        ]
+                    }
+                },
+                "fields": [
+                    {
+                        "key": "environment",
+                        "label": "Environment",
+                        "default": "https://int-ow.edoreczenia.gov.pl",
+                        "options": [
+                            {
+                                "value": "https://int-ow.edoreczenia.gov.pl",
+                                "label": "INT (test)"
+                            },
+                            {
+                                "value": "https://ow.edoreczenia.gov.pl",
+                                "label": "PROD (production)"
+                            }
+                        ]
+                    },
+                    {
+                        "key": "ade",
+                        "label": "Office delivery address (ADE)",
+                        "placeholder": "AE:PL-12345-67890-ABCDE-12"
+                    },
+                    {
+                        "key": "systemName",
+                        "label": "System name",
+                        "hint": "Exactly as registered in Moduł uprawnień."
+                    },
+                    {
+                        "key": "certificate",
+                        "label": "System certificate (PEM)",
+                        "secret": true,
+                        "multiline": true
+                    },
+                    {
+                        "key": "privateKey",
+                        "label": "Certificate private key (PEM)",
+                        "secret": true,
+                        "multiline": true
+                    },
+                    {
+                        "key": "uaUrl",
+                        "label": "UA API address",
+                        "optional": true,
+                        "advanced": true,
+                        "hint": "Empty uses the environment's: uaapi-int-ow / uaapi-ow.poczta-polska.pl/api/v3."
+                    },
+                    {
+                        "key": "seUrl",
+                        "label": "SE API address",
+                        "optional": true,
+                        "advanced": true,
+                        "hint": "Empty uses the environment's: int-ow / ow.edoreczenia.gov.pl/api/se/v4."
+                    },
+                    {
+                        "key": "tokenUrl",
+                        "label": "Token address",
+                        "optional": true,
+                        "advanced": true
+                    },
+                    {
+                        "key": "audience",
+                        "label": "Token audience",
+                        "optional": true,
+                        "advanced": true
+                    }
+                ],
+                "env": {
+                    "EDORECZENIA_ENVIRONMENT": "${environment}",
+                    "EDORECZENIA_ADE": "${ade}",
+                    "EDORECZENIA_SYSTEM_NAME": "${systemName}",
+                    "EDORECZENIA_CERTIFICATE": "${certificate}",
+                    "EDORECZENIA_PRIVATE_KEY": "${privateKey}",
+                    "EDORECZENIA_UA_URL": "${uaUrl}",
+                    "EDORECZENIA_SE_URL": "${seUrl}",
+                    "EDORECZENIA_TOKEN_URL": "${tokenUrl}",
+                    "EDORECZENIA_AUDIENCE": "${audience}"
+                },
+                "hosts": ["${environment}", "uaapi-int-ow.poczta-polska.pl", "uaapi-ow.poczta-polska.pl", "${uaUrl}", "${seUrl}", "${tokenUrl}"],
+                "skill": "skills/e-urzad/SKILL.md",
+                "probe": {
+                    "url": "${environment}/auth/realms/EDOR/.well-known/openid-configuration",
+                    "method": "GET"
+                }
+            }
+        ]
+    }
+}

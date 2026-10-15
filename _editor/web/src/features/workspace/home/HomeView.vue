@@ -30,6 +30,7 @@ import HomeCoverPicker from "./HomeCoverPicker.vue";
 import HomeQuickLook from "./HomeQuickLook.vue";
 import HomeTile from "./HomeTile.vue";
 import { useT } from "@intentic/ui/i18n";
+import { useVocabulary } from "../../../workbench/views/vocabulary";
 
 // Drawn by EditorPane in place of the empty state while the home preference is on. Reads the same tree the explorer
 // draws, opens files into the same tabs, and does to its tiles what the tree does to its rows (useHomeActions). Owns
@@ -195,7 +196,8 @@ const homeImprint = computed(() => (homeDir.value === workspaceDir.value ? `work
 
 // --- Where you are -------------------------------------------------------------------------------------------------
 // A desktop app's window on a folder of this computer names it as the folder it is, not as a workspace.
-const rootLabel = computed(() => (workspaceDir.value === `` ? (localFace()?.name ?? t(`shared.workspace`)) : basename(workspaceDir.value)));
+// The root says what the rail's tile says: "Workspace" to a developer, "Files" to a maker (vocabulary.ts).
+const rootLabel = computed(() => (workspaceDir.value === `` ? (localFace()?.name ?? useVocabulary().value.workspace) : basename(workspaceDir.value)));
 const crumbs = computed<readonly { readonly label: string; readonly path: string }[]>(() => {
     const root = workspaceDir.value;
     const relative = homeDir.value === root ? `` : root === `` ? homeDir.value : homeDir.value.slice(root.length + 1);

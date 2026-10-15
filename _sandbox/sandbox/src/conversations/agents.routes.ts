@@ -1,3 +1,4 @@
+import { documentsOf } from "./produced-files.js";
 import { conversationReader, registryProvenance } from "../auth/scope/conversation-reader.js";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -100,6 +101,7 @@ export const createAgentsRoutes = (services: Services) => {
         capabilitiesOf(agent.profile.provider, agent.profile.harness).runtime === "claude-code" ? services.conversations.sessionIdOf(agent.id) : undefined;
     // `i.router()`, not a plain object: typechecked against agentsContract, so a dropped handler fails the build.
     return i.router({
+        documents: i.documents.handler(async ({ input, context }) => ({ paths: await documentsOf(services, entryFor(input.id, context)) })),
         // Revision the roster was taken at, so the browser can tell this apart from a racing /events snapshot
         // (AgentsListSchema). Refreshes standings first, which is what makes a roster read self-healing.
         list: i.list.handler(async ({ context }) => {
@@ -525,7 +527,7 @@ export const createAgentsRoutes = (services: Services) => {
             if (services.conversations.landing(input.id)) {
                 throw new ORPCError("CONFLICT", { message: "this agent is already landing, wait for it to finish" });
             }
-            return landByHandLeased(services, entry, input.mode ?? "check", input.span ?? "outstanding");
+            return landByHandLeased(services, entry, input.mode ?? "check", input.span ?? "outstanding", input.includeDocuments === true);
         }),
         discard: i.discard.handler(async ({ input, context }) => {
             const entry = isolatedEntryOf(input.id, context);

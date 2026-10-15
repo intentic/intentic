@@ -1,0 +1,25 @@
+{
+    "name": "@intentic/ext-microsoft-365",
+    "version": "1.0.0",
+    "description": "Delegated Microsoft 365 mail, calendar and files with approval holds and an inbox listener",
+    "license": "MIT",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "build": "tsgo",
+        "typecheck": "bun check -p tsconfig.test.json",
+        "test": "suites"
+    },
+    "dependencies": {
+        "@intentic/base": "workspace:*",
+        "@intentic/connector-runtime": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*"
+    },
+    "devDependencies": {
+        "@intentic/testing": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:"
+    }
+}

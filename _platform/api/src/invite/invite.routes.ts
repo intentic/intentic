@@ -5,6 +5,7 @@ import { errorMessage } from "@intentic/base/errors";
 import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../context.js";
 import { requireOwnedSandbox, requireUser } from "../guards.js";
+import { refuseWhenOrgHolds } from "../org/org-policy.js";
 import { inviteLink, sendInviteEmail } from "./email.js";
 import { INVITE_TTL_MS, inviteAcceptDecision, inviteStatus, toInviteRecord } from "./invites.js";
 
@@ -45,6 +46,7 @@ export const inviteRoutes = {
     create: os.invite.create.handler(async ({ context, input }) => {
         const user = requireUser(context);
         const sandbox = await requireOwnedSandbox(context, input.sandboxId);
+        await refuseWhenOrgHolds(context.prisma, sandbox, `access`);
         const email = input.email.toLowerCase();
         const existing = await context.prisma.sandboxMember.findUnique({ where: { sandboxId_email: { sandboxId: sandbox.id, email } } });
         if (existing?.acceptedAt) {
@@ -64,6 +66,7 @@ export const inviteRoutes = {
     resend: os.invite.resend.handler(async ({ context, input }) => {
         const user = requireUser(context);
         const sandbox = await requireOwnedSandbox(context, input.sandboxId);
+        await refuseWhenOrgHolds(context.prisma, sandbox, `access`);
         const email = input.email.toLowerCase();
         const existing = await context.prisma.sandboxMember.findUnique({ where: { sandboxId_email: { sandboxId: sandbox.id, email } } });
         if (!existing) {
@@ -81,6 +84,7 @@ export const inviteRoutes = {
     // Re-grades an invitee's role; mirror-only, the daemon's own grant is pushed separately by the owner's browser.
     setRole: os.invite.setRole.handler(async ({ context, input }) => {
         const sandbox = await requireOwnedSandbox(context, input.sandboxId);
+        await refuseWhenOrgHolds(context.prisma, sandbox, `access`);
         const email = input.email.toLowerCase();
         const existing = await context.prisma.sandboxMember.findUnique({ where: { sandboxId_email: { sandboxId: sandbox.id, email } } });
         if (!existing) {
@@ -92,6 +96,7 @@ export const inviteRoutes = {
     // Revokes access; the owner's browser then removes the email from the daemon's authorized list.
     revoke: os.invite.revoke.handler(async ({ context, input }) => {
         const sandbox = await requireOwnedSandbox(context, input.sandboxId);
+        await refuseWhenOrgHolds(context.prisma, sandbox, `access`);
         await context.prisma.sandboxMember.deleteMany({ where: { sandboxId: sandbox.id, email: input.email.toLowerCase() } });
         return listInvites(context, sandbox.id);
     }),

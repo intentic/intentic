@@ -36,12 +36,16 @@ TREES="
 @intentic/ext-telegram:$out/extensions/telegram
 @intentic/ext-whatsapp:$out/extensions/whatsapp
 @intentic/ext-google-workspace:$out/extensions/google-workspace
+@intentic/ext-microsoft-365:$out/extensions/microsoft-365
+@intentic/ext-prawo:$out/extensions/prawo
 "
 # The extensions whose dist the image needs: onlyoffice's backend bundle (dist/server.js, the manifest's `server`) and
 # the browser engine's editor page it serves (dist/editor/editor.js),
 # which the daemon's extension host runs in every sandbox. The feature backends (deployments, knowledge) are not
-# here: they moved to their own repositories and install from the registry. The copy loop below carries each entry.
-BUNDLES="onlyoffice"
+# here: they moved to their own repositories and install from the registry. e-urzad's backend (dist/server.js) and its
+# agent CLI (dist/cli.js, which bin/e-urzad runs) are vite bundles too, so its dist is all it needs beside the files the
+# Dockerfile copies from the repository. The copy loop below carries each entry.
+BUNDLES="onlyoffice e-urzad"
 
 filters=()
 for entry in $TREES; do filters+=(--filter="${entry%%:*}"); done

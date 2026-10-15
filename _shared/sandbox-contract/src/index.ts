@@ -21,6 +21,7 @@ import { endpointsContract } from "./contracts/endpoints.contract.js";
 import { exitContract } from "./contracts/exit.contract.js";
 import { extensionsContract } from "./contracts/extensions.contract.js";
 import { personasContract } from "./contracts/personas.contract.js";
+import { orgContract } from "./contracts/org.contract.js";
 import { gitContract } from "./contracts/git.contract.js";
 import { historyContract } from "./contracts/history.contract.js";
 import { intenticContract } from "./contracts/intentic.contract.js";
@@ -81,6 +82,7 @@ export {
 export { exitContract } from "./contracts/exit.contract.js";
 export { extensionsContract } from "./contracts/extensions.contract.js";
 export { personasContract } from "./contracts/personas.contract.js";
+export { orgContract } from "./contracts/org.contract.js";
 export { diffContract } from "./contracts/diff.contract.js";
 export { gitContract } from "./contracts/git.contract.js";
 export { historyContract } from "./contracts/history.contract.js";
@@ -254,6 +256,8 @@ export * from "./schemas/members.js";
 export * from "./schemas/metrics.js";
 export * from "./schemas/panels.js";
 export * from "./schemas/personas.js";
+export * from "./schemas/organisation.js";
+export * from "./policy/org-locks.js";
 export * from "./schemas/privacy.js";
 export * from "./schemas/providers/plan-limits.js";
 export * from "./schemas/providers/handoff.js";
@@ -329,6 +333,7 @@ export const sandboxContract = {
     endpoints: endpointsContract,
     extensions: extensionsContract,
     personas: personasContract,
+    org: orgContract,
     privacy: privacyContract,
     safety: safetyContract,
     sessions: sessionsContract,

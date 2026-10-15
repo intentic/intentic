@@ -258,6 +258,14 @@ test("cliEnvOf expands each connector's env template; two instances of one provi
         SMTP_SECURITY_IMAP: "",
         SMTP_USERNAME_IMAP: "",
         SMTP_PASSWORD_IMAP: "",
+        // The OAuth2 sign-in fields, unused by a password card: empty, and the CLI and watcher log in with the password.
+        IMAP_AUTH_MODE_IMAP: "",
+        IMAP_OAUTH_PROVIDER_IMAP: "",
+        IMAP_OAUTH_TENANT_IMAP: "",
+        IMAP_OAUTH_CLIENT_ID_IMAP: "",
+        IMAP_OAUTH_CLIENT_SECRET_IMAP: "",
+        IMAP_OAUTH_REFRESH_TOKEN_IMAP: "",
+        IMAP_ACCESS_TOKEN_IMAP: "",
     });
     // Postgres URL template percent-encodes user/password/database via ${field:uri}.
     expect(await cliEnvOf(hostFor([primary, secondary]), raw)).toEqual({

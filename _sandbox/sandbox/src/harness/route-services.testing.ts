@@ -1,3 +1,5 @@
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { AuditEvent } from "@intentic/sandbox-contract";
 import { DEFAULT_SAFETY_POLICY, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { portSlotsFromToken } from "@intentic/sandbox-contract/tunnel-ids";
@@ -34,6 +36,7 @@ import { memoryOwnerGrants } from "../personas/owner-grants.js";
 import { createDomainEvents } from "../seams/domain-events.js";
 import { sessionsSliceFake } from "../sessions/sessions-slice.testing.js";
 import { createAnnouncer } from "../system/boot/announce.js";
+import { createOrgPolicyHolder } from "../org/org-policy.js";
 import { createBootTracker } from "../system/boot/boot.js";
 import { createReachReporter } from "../system/listeners/reach-report.js";
 import { resourcesSliceFake } from "../system/resources/resources-slice.testing.js";
@@ -186,6 +189,9 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         announcer: createAnnouncer(testConfig, createLogger(testConfig)),
         // Same terms as announcer: never started, so /health reads `off` on a daemon with no public address to probe.
         reach: createReachReporter(testConfig, createLogger(testConfig)),
+        // A personal sandbox: no policy held, and nowhere it could be fetched from. A suite about organisations builds
+        // its own holder over a directory of its own.
+        orgPolicy: createOrgPolicyHolder({ authRoot: join(tmpdir(), "route-services-no-org-policy"), logger: createLogger(testConfig) }),
         // No personas by default: an unattended turn reaches no logged-in account, since an unpinned wake is denied
         // rather than waved through. A suite wanting one builds the card and its browser capability.
         personas: memoryPersonasStore(),

@@ -5,6 +5,14 @@ import { inject, type InjectionKey } from "vue";
 // What a card can reach beyond itself, injected rather than imported, so a published conversation renders the
 // same card with nothing to click instead of a second copy. Absent capabilities offer nothing; they never throw.
 export interface ChatSurface {
+    // The conversation whose recorded documents a document chip downloads and prints, through the daemon's route
+    // that serves only those (GET /agents/{id}/documents/raw), and the sandbox it lives on. Absent where the card cannot
+    // reach that conversation (a published page): its chips then offer neither.
+    readonly resultConversation?: () => string;
+    readonly resultBox?: () => string | undefined;
+    // Whether a document chip opens its document over the chat rather than through `openFile`: a guest has no Files to
+    // open one in. Absent reads as no.
+    readonly resultsInPlace?: () => boolean;
     // A workspace path as something an `<img>` can show, or undefined; not optional, every surface answers it.
     readonly imageUrl: (path: string) => string | undefined;
     // Open a workspace file, at a line where known; absent means paths render as text, not buttons.

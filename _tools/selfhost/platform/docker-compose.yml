@@ -83,6 +83,7 @@ services:
             ADMIN_MUTATIONS: ${ADMIN_MUTATIONS:-}
             # An admin needs a verified address with a Google account linked. `any` drops the Google requirement.
             ADMIN_SIGN_IN: ${ADMIN_SIGN_IN:-}
+            ORGS_CREATION: ${ORGS_CREATION:-}
             # Email sign-in: a six-digit code mailed to the address (on unless `false`, and off in production while
             # EMAIL_API_KEY or EMAIL_FROM is unset).
             SIGN_IN_EMAIL: ${SIGN_IN_EMAIL:-}

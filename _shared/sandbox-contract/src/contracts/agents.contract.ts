@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { procedure } from "../protocol/route-meta.js";
 import { AgentToolChildrenSchema, AgentTranscriptSchema, SessionTranscriptSchema } from "../events/transcript.js";
 import {
@@ -36,6 +37,10 @@ import { ConversationPromptSchema } from "../schemas/system-prompt.js";
 // `archive` is the non-destructive counterpart to `discard` (worktree committed, entry kept); `purge` is `discard`
 // applied to every already-archived agent.
 export const agentsContract = {
+    // The documents a conversation's calls recorded writing (producedDocumentPaths), which its owner may take as bytes at
+    // GET /agents/{id}/documents/raw; a guest's too, since a guest has no Files to find them in.
+    documents: procedure.route({ method: "GET", path: "/agents/{id}/documents", summary: "Recorded result documents" })
+        .meta({ guest: true }).input(AgentIdSchema).output(z.object({ paths: z.array(z.string()) })),
     list: procedure
         .route({
             method: "GET",

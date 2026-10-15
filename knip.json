@@ -88,8 +88,11 @@
         "_extensions/discord": {
             "entry": ["src/gateway.ts", "src/**/*.test.ts"]
         },
+        "_extensions/e-urzad": {
+            "entry": ["src/server/server.ts", "src/cli.ts", "src/**/*.test.ts"]
+        },
         "_extensions/imap": {
-            "entry": ["src/gateway.ts", "src/**/*.test.ts"]
+            "entry": ["src/cli.ts", "src/gateway.ts", "src/**/*.test.ts"]
         },
         "_extensions/slack": {
             "entry": ["src/gateway.ts", "src/**/*.test.ts"]
@@ -100,8 +103,14 @@
         "_extensions/whatsapp": {
             "entry": ["src/gateway.ts", "src/**/*.test.ts"]
         },
+        "_extensions/microsoft-365": {
+            "entry": ["src/cli.ts", "src/gateway.ts", "src/**/*.test.ts"]
+        },
         "_extensions/google-workspace": {
             "entry": ["src/cli.ts", "src/gateway.ts", "src/**/*.test.ts"]
+        },
+        "_extensions/prawo": {
+            "entry": ["src/main.ts", "src/**/*.test.ts"]
         },
         "_extensions/deployments": {
             "entry": ["src/server/server.ts", "src/**/*.test.ts"]

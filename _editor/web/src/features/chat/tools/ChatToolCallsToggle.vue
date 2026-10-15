@@ -5,6 +5,7 @@ import type { ChatMessage } from "../transcript/transcript";
 import { runningTotal } from "../transcript/transcriptScan";
 import { toolCallsNote, useToolCalls } from "./useToolCalls";
 import { useT } from "@intentic/ui/i18n";
+import { useAudience } from "../../../app/useAudience";
 
 // One control for whether a transcript shows its tool calls, under the chat pane's composer (ChatPaneStatus). A hammer
 // alone, struck through when hidden; state is the slash, not brightness, so it doesn't out-glow the numbers beside it.
@@ -13,6 +14,8 @@ import { useT } from "@intentic/ui/i18n";
 const t = useT();
 
 const { showToolCalls } = useToolCalls();
+// Which tools a turn called is a developer's reading; a maker's chat strip carries no such switch.
+const { maker } = useAudience();
 const { messages } = usePaneView();
 
 // Every call this pane's transcript holds: what the press shows or folds here, one row each. Summed over only the rows
@@ -35,7 +38,7 @@ onBeforeUnmount(() => clearTimeout(saidTimer));
 </script>
 
 <template>
-    <span class="relative inline-flex">
+    <span v-if="!maker" class="relative inline-flex">
         <button
             type="button"
             class="touch-target relative inline-flex cursor-pointer items-center transition-colors hover:text-content"

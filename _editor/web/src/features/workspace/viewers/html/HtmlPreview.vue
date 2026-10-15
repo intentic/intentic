@@ -8,6 +8,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, useTemplateRef, watch } from "vue";
 import { changeEpochOf } from "../../changes/live/useWorkspaceLive";
 import { type AssetLoader, buildPreviewDocument, type PreviewDocument, PreviewAskSchema } from "./htmlDocument";
+import { recordPrintSource } from "../results/printRendered";
 
 // A web page rendered, in a frame sealed off from this window (htmlDocument.ts has what goes in and why). The frame has
 // scripts and an opaque origin: no `allow-same-origin`, so it cannot read this window, its storage or its cookies; no
@@ -40,8 +41,19 @@ watch(shown, () => {
     pointerIn.value = false;
 });
 const strays = ref(0);
-const onLoad = (): void => {
+const onLoad = (event: Event): void => {
+    // A frame already replaced by the next document can still report a load as it goes (Chromium fires one for a frame
+    // taken out mid-load); counted against the new frame, that read as the page leaving, and two such took its scripts.
+    if (event.target !== frame.value || frame.value === null) {
+        return;
+    }
     loads += 1;
+    // What a print waits for before it asks the page what it shows, and what it prints if the page cannot answer
+    // (printRendered.ts).
+    frame.value.dataset[`printReady`] = `true`;
+    if (built.value !== undefined) {
+        recordPrintSource(frame.value, built.value.html);
+    }
     if (loads > 1) {
         strays.value += 1;
         shown.value += 1;
@@ -194,8 +206,9 @@ defineExpose({ notes, pointerIn });
 
 <template>
     <div class="flex h-full min-h-0 flex-col">
-        <EmptyState v-if="failed" tone="danger" :title="t(`workspace.htmlPreview.failed`)" class="flex-1" />
-        <div v-else-if="built === undefined" class="flex flex-1 items-center justify-center text-muted">
+        <!-- Marked the way a viewer's own status is (ViewerStatus), so a print waits for the page rather than this. -->
+        <EmptyState v-if="failed" data-print-error="true" tone="danger" :title="t(`workspace.htmlPreview.failed`)" class="flex-1" />
+        <div v-else-if="built === undefined" data-print-loading="true" class="flex flex-1 items-center justify-center text-muted">
             <Icon name="spinner" class="text-xl" spin />
         </div>
         <!-- Keyed by the document it was handed, so a fresh frame's first load is always that document (onLoad). -->

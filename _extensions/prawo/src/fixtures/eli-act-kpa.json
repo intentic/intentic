@@ -1,0 +1,73 @@
+{
+ "ELI": "DU/1960/168",
+ "address": "WDU19600300168",
+ "publisher": "DU",
+ "year": 1960,
+ "volume": 30,
+ "pos": 168,
+ "title": "Ustawa z dnia 14 czerwca 1960 r. Kodeks postępowania administracyjnego.",
+ "type": "Ustawa",
+ "displayAddress": "Dz.U. 1960 nr 30 poz. 168",
+ "status": "akt posiada tekst jednolity",
+ "inForce": "IN_FORCE",
+ "promulgation": "1960-06-25",
+ "announcementDate": "1960-06-14",
+ "entryIntoForce": "1961-01-01",
+ "validFrom": "1961-01-01",
+ "changeDate": "2025-12-12T14:35:06",
+ "textHTML": true,
+ "textPDF": true,
+ "texts": [
+  {
+   "fileName": "text.html",
+   "type": "H"
+  },
+  {
+   "fileName": "D19600168.pdf",
+   "type": "O"
+  },
+  {
+   "fileName": "D19600168.pdf",
+   "type": "I"
+  },
+  {
+   "fileName": "D19600168Lj.pdf",
+   "type": "U"
+  }
+ ],
+ "references": {
+  "Akty zmieniające": [
+   {
+    "id": "DU/2025/769",
+    "date": "2025-07-13"
+   },
+   {
+    "id": "DU/2023/803",
+    "date": "2023-05-12"
+   },
+   {
+    "id": "DU/2022/2185",
+    "date": "2022-11-10"
+   }
+  ],
+  "Inf. o tekście jednolitym": [
+   {
+    "id": "DU/2025/1691"
+   },
+   {
+    "id": "DU/2024/572"
+   },
+   {
+    "id": "DU/2023/775"
+   }
+  ],
+  "Orzeczenie TK": [
+   {
+    "id": "DU/2019/2196"
+   },
+   {
+    "id": "DU/2015/702"
+   }
+  ]
+ }
+}

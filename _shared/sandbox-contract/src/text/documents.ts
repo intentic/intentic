@@ -1,4 +1,5 @@
 import type { RequestDocument, ToolCallContent } from "../events/requests.js";
+import type { TranscriptRow, TranscriptTool } from "../events/transcript.js";
 import { planParts } from "./title.js";
 import { PLAN_DOCUMENTS_DIR } from "../state/workspace-state.js";
 
@@ -17,10 +18,14 @@ export const isDocumentPath = (path: string): boolean => {
 // A deliverable is a file a turn hands a person to open rather than read as code: an office document, a PDF, a web
 // page. The daemon names the ones a command wrote on its card (agent/tools/produced-documents.ts) and the chat lists a
 // turn's under its answer, so the two ask this one table. Markdown stays out: the chat already draws it as a document.
-export type DeliverableKind = "docx" | "pptx" | "xlsx" | "pdf" | "html";
+export type DeliverableKind = "docx" | "pptx" | "xlsx" | "pdf" | "html" | "odt" | "ods" | "odp" | "rtf";
 
 const DELIVERABLE_BY_EXTENSION = new Map<string, DeliverableKind>([
     ["docx", "docx"],
+    ["odt", "odt"],
+    ["ods", "ods"],
+    ["odp", "odp"],
+    ["rtf", "rtf"],
     ["pptx", "pptx"],
     ["xlsx", "xlsx"],
     ["pdf", "pdf"],
@@ -64,3 +69,40 @@ export const documentOf = (name: string, content: readonly ToolCallContent[] | u
         ...(isPlanDocumentPath(diff.path) ? { plan: true } : {}),
     };
 };
+
+// The deliverables a conversation's calls recorded writing, across its whole transcript, in the order first written;
+// one a later call deleted is gone. The rule the chat's document chips follow per turn (the editor's deliverables.ts):
+// an edit's locations and diffs, a settled command's locations (what the daemon found it wrote), a delete's locations.
+// Recorded writes only, never a path named in prose or a command's text, since the daemon serves these paths' bytes
+// to the conversation's owner on the strength of this list (conversations/produced-files.ts).
+export const producedDocumentPaths = (rows: readonly TranscriptRow[]): string[] => {
+    const paths = new Set<string>();
+    for (const row of rows) {
+        for (const { path, deleted } of row.role === "assistant" ? recordedWrites(row.tools ?? []) : []) {
+            if (deleted) {
+                paths.delete(path);
+            } else {
+                paths.add(path);
+            }
+        }
+    }
+    return [...paths];
+};
+
+// What one settled call wrote or deleted, by name (a leading `./` folded away); a failed edit wrote nothing, a failed
+// command still wrote what the daemon found it wrote.
+const writesOf = (tool: TranscriptTool): readonly { readonly path: string; readonly deleted: boolean }[] => {
+    const settled = tool.status === "completed" || (tool.category === "execute" && tool.status === "failed");
+    if (!settled || (tool.category !== "edit" && tool.category !== "execute" && tool.category !== "delete")) {
+        return [];
+    }
+    const diffed = tool.category === "edit" ? (tool.content ?? []).flatMap((entry) => (entry.type === "diff" ? [entry.path] : [])) : [];
+    return [...(tool.locations ?? []).map(({ path }) => path), ...diffed].map((name) => ({
+        path: name.startsWith("./") ? name.slice(2) : name,
+        deleted: tool.category === "delete",
+    }));
+};
+
+// Depth first, a delegation's own calls right after the card that started them; deliverables only.
+const recordedWrites = (tools: readonly TranscriptTool[]): { readonly path: string; readonly deleted: boolean }[] =>
+    tools.flatMap((tool) => [...writesOf(tool).filter(({ path }) => deliverableKindOf(path) !== undefined), ...recordedWrites(tool.children ?? [])]);

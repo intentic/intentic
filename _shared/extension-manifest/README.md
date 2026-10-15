@@ -16,6 +16,10 @@ flowchart LR
 - The runtime parse is lenient and the authoring schema strict, since an unknown key in an author's file is a typo.
   The generated schema is committed twice, here and in the site's `public/` behind `MANIFEST_SCHEMA_URL`, and the
   editor's `manifest-schema.test.ts` fails when either copy is stale.
+- A cli card whose credential is a delegated OAuth sign-in declares `refreshToken` (the secret field it lives in and
+  the fields it is bound to), so its own CLI and listener can store a new or rotated token through the daemon's
+  write-only oauth-token route instead of printing it for someone to paste, and `probe.oauth`, which trades the token
+  for an access token before the card's connection test (Microsoft's identity platform only, today).
 - `sandboxRouteAllowed` is the permission rule: an entry is `"<METHOD> <path-glob>"`, and each `*` stands alone
   between slashes and matches one whole path segment, never a `.` or `..` the URL would resolve away. A malformed entry
   (`**`, a `*` inside a segment, an unknown method, a relative path) fails the manifest parse rather than the first

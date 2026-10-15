@@ -14,12 +14,15 @@ const props = defineProps<{
     unset: boolean;
     onTrial: boolean;
     providerName: string;
+    // Plain words (a non-coder, a guest): the assistant, never the coding tool behind it, and no offer to change models.
+    plain?: boolean;
 }>();
 
 // Only a sandbox with nothing but the trial is offered a way off it, while the trial is fresh; past that the trial strip
 // says it instead (trialPhase, the one reading of the allowance).
 const offerUncapped = computed(
     () =>
+        props.plain !== true &&
         props.onTrial &&
         accessKnown.value &&
         trialPhase(TRIAL_PROVIDER) === `fresh` &&
@@ -34,7 +37,9 @@ const offerUncapped = computed(
             {{
                 unset
                     ? t(`chat.chatPane.startConversationAny`)
-                    : onTrial
+                    : plain
+                      ? t(`chat.chatPane.plain.startConversation`)
+                      : onTrial
                       ? t(`chat.chatPane.askAnythingChatFree`)
                       : t(`chat.chatPane.startConversation`, { providerName })
             }}

@@ -1,4 +1,60 @@
 {
+    "organisations": {
+        "held": {
+            "notice": "{org} gère cette partie du sandbox. Vous pouvez la consulter, mais les modifications sont faites par l'administrateur de votre organisation."
+        },
+        "console": {
+            "couldntLoad": "Impossible de charger vos organisations",
+            "couldntCreate": "Impossible de créer l'organisation",
+            "yours": "Vos organisations",
+            "summary": "{role} · {count} sandbox | {role} · {count} sandboxes",
+            "none": "Vous ne faites partie d'aucune organisation. Les sandboxes personnels fonctionnent sans.",
+            "namePlaceholder": "Nom, p. ex. Mairie d'Exemple",
+            "create": "Créer l'organisation"
+        },
+        "role": {
+            "admin": "Administrateur",
+            "member": "Membre"
+        },
+        "mode": {
+            "open": "Ouvert",
+            "locked": "Lecture seule",
+            "hidden": "Masqué"
+        },
+        "section": {
+            "models": "Modèles",
+            "agent": "Agent",
+            "environment": "Environnement",
+            "secrets": "Secrets et connexions",
+            "data-protection": "Protection des données",
+            "extensions": "Extensions",
+            "access": "Accès",
+            "areas": "Zones",
+            "personas": "Personas",
+            "updates": "Mises à jour automatiques"
+        },
+        "detail": {
+            "couldntSave": "Impossible d'enregistrer la politique",
+            "couldntAdd": "Impossible d'ajouter cette personne",
+            "couldntRemove": "Impossible de retirer cette personne",
+            "couldntBind": "Impossible d'ajouter ce sandbox",
+            "couldntUnbind": "Impossible de libérer ce sandbox",
+            "applied": "politique v{version} en vigueur",
+            "pending": "en attente de la v{version}",
+            "policy": "Politique · version {version}",
+            "policyNote": "Comment chaque partie de chaque sandbox de cette organisation est tenue. Lecture seule : on peut consulter mais pas modifier, propriétaire du sandbox compris. Masqué : disparaît aussi du menu du sandbox. Les sandboxes adoptent une nouvelle version en quelques minutes.",
+            "savePolicy": "Enregistrer comme nouvelle version",
+            "members": "Personnes",
+            "emailPlaceholder": "nom{'@'}mairie.example",
+            "add": "Ajouter",
+            "sandboxes": "Sandboxes",
+            "unbind": "Libérer",
+            "noSandboxes": "Aucun sandbox n'appartient encore à cette organisation.",
+            "pickSandbox": "Choisissez un de vos sandboxes",
+            "bind": "Ajouter à l'organisation",
+            "bindNote": "Seuls vos propres sandboxes peuvent être ajoutés. Une fois ajouté, la politique ci-dessus s'applique jusqu'à ce qu'un administrateur le libère."
+        }
+    },
     "a11yKit": { "toggleDetails": "Afficher ou masquer les détails du titre", "selectRow": "Sélectionner la ligne d’exemple", "settingsButton": "Exemple de bouton des paramètres", "codeField": "Exemple de champ de code" },
     "agents": {
         "accountChip": {
@@ -1367,7 +1423,11 @@
             "uncappedLink": "Connectez-le pour lever la limite quotidienne",
             "uncappedQuestion": "Vous payez déjà un abonnement IA, ou un modèle tourne sur cette machine ?",
             "upForPreviousMessage": "↑ pour le message précédent",
-            "writingAgent": "Écrire en tant qu'agent"
+            "writingAgent": "Écrire en tant qu'agent",
+            "plain": {
+                "startConversation": "Commencez une conversation avec votre assistant.",
+                "moreSettings": "Plus d'options"
+            }
         },
         "chatPaneNotices": {
             "accountNeedsToReconnected": "Ce compte doit être reconnecté.",
@@ -1635,7 +1695,11 @@
             "region": "Documents de ce tour",
             "sheet": "Tableur",
             "slides": "Présentation",
-            "word": "Document Word"
+            "word": "Document Word",
+            "odt": "Document texte (ODT)",
+            "ods": "Feuille de calcul (ODS)",
+            "odp": "Présentation (ODP)",
+            "rtf": "Document texte (RTF)"
         },
         "chatTurnShots": {
             "asideHidden": "Masquées : {what}",
@@ -1707,7 +1771,16 @@
             "sendsAt": "Envoi",
             "stopTurn": "Arrêter le tour",
             "unconnectedHint": "Choisir un modèle",
-            "viewerPlaceholder": "Vous regardez seulement : demandez au propriétaire un rôle de collaborateur pour piloter des agents"
+            "viewerPlaceholder": "Vous regardez seulement : demandez au propriétaire un rôle de collaborateur pour piloter des agents",
+            "plain": {
+                "placeholderIdle": "Dites-moi en quoi je peux vous aider…",
+                "placeholderSteer": "Ajoutez quelque chose avant qu'il ait fini…",
+                "placeholderQueue": "Écrivez un message pour quand il aura fini…",
+                "placeholderEdit": "Redemandez-le autrement…",
+                "hintSteer": "Envoyer maintenant, pendant qu'il travaille",
+                "hintQueue": "Part dès qu'il a fini",
+                "viewerPlaceholder": "Vous pouvez lire cette conversation. Demandez au propriétaire si vous souhaitez aussi y écrire."
+            }
         },
         "composerModelPill": {
             "model": "Modèle : {modelLabelText}"
@@ -1718,7 +1791,13 @@
             "loopRunWorkflow": "Mettez-le en boucle, ou lancez un workflow.",
             "onePersonasAccountsOnly": "Les comptes d'un seul persona.",
             "runThrough": "Faire passer par",
-            "writeAgent": "Écrire en tant qu'agent"
+            "writeAgent": "Écrire en tant qu'agent",
+            "plain": {
+                "mode": "Ce qu'il fait seul",
+                "modeNote": "Quand il vous demande d'abord.",
+                "model": "Quelle IA répond",
+                "modelNote": "Changer le modèle d'IA utilisé."
+            }
         },
         "composerQuickPick": {
             "anotherSandbox": "Un autre sandbox",
@@ -1808,7 +1887,10 @@
             "unread": "sans relevé"
         },
         "usageStatus": {
-            "percentLeft": "{percent} restant"
+            "percentLeft": "{percent} restant",
+            "plain": {
+                "percentLeft": "il reste {percent} de votre limite d'utilisation"
+            }
         },
         "words": {
             "keepOpen": "Garder ouvert",
@@ -1970,6 +2052,15 @@
             "waitHoursMinutes": "{hours} h {minutes}",
             "pickTime": "Autre jour ou heure",
             "caretNote": "Choisir une heure, un jour, ou attendre un autre agent"
+        },
+        "effortScale": {
+            "minimal": "Minimal",
+            "low": "Faible",
+            "medium": "Moyen",
+            "high": "Élevé",
+            "xhigh": "Très élevé",
+            "max": "Maximal",
+            "ultra": "Ultra"
         },
         "wake": {
             "untitled": "ce chat",
@@ -4504,6 +4595,11 @@
                 "hint": "Change les mots employés par l'application et la page d'accueil. Rien pour vos fichiers ni vos agents.",
                 "maker": "Pas moi",
                 "makerHint": "Des mots simples, les fichiers d'outillage à l'écart."
+            },
+            "plain": {
+                "languageHint": "La langue de cette interface. Vos fichiers et conversations restent intacts.",
+                "wallpaperHint": "Une image derrière le tableau des assistants, dans la version claire ou sombre de votre thème.",
+                "workHint": "Change les mots de l'application et la page d'accueil. Rien dans vos fichiers ni vos conversations."
             }
         },
         "hostedHours": {
@@ -4555,6 +4651,7 @@
             "sameWorkspace": "Le même espace de travail"
         },
         "section": {
+            "organisation": "Organisation",
             "appearance": "Apparence",
             "billing": "Facturation",
             "data": "Données",
@@ -4655,7 +4752,10 @@
             "mintToken": "Créer le jeton",
             "shownOnceCopyNow": "Affiché une seule fois. Copiez-le maintenant : seule son empreinte est conservée.",
             "whatProvisioningTokensAre": "Un jeton d'approvisionnement permet à l'une de vos sandboxes de créer des sandboxes sur ce compte. Collez-le dans la capacité « Flotte de sandboxes » de cette sandbox ; chaque sandbox créée par son agent vous demandera quand même d'abord dans le chat.",
-            "whereItGoes": "Où le coller"
+            "whereItGoes": "Où le coller",
+            "unavailable": "Les jetons ne sont pas encore disponibles sur ce serveur.",
+            "notAllowed": "Votre compte ne peut pas gérer les jetons ici.",
+            "serverTrouble": "Le serveur a rencontré un problème. Réessayez dans un instant."
         },
         "words": {
             "iWriteCode": "J'écris du code",
@@ -4665,6 +4765,10 @@
         "analytics": {
             "title": "Analyse du produit",
             "description": "Événements d’utilisation et enregistrements de l’interface pendant votre travail, liés à votre compte, pour voir où les gens bloquent. Le contenu de votre espace de travail y est masqué. Désactivé, ce navigateur n’envoie rien."
+        },
+        "hostedMachine": {
+            "shared": "{cpus} vCPU partagé · {memory} Go de mémoire · {disk} Go de disque | {cpus} vCPU partagés · {memory} Go de mémoire · {disk} Go de disque",
+            "performance": "{cpus} vCPU dédié · {memory} Go de mémoire · {disk} Go de disque | {cpus} vCPU dédiés · {memory} Go de mémoire · {disk} Go de disque"
         },
         "settingsVoice": {
             "group": "Mot d'éveil",
@@ -5438,6 +5542,19 @@
             "pasteCloudflareApiToken": "Collez votre jeton d'API Cloudflare",
             "whyCloudflareApiToken": "Pourquoi le jeton d'API Cloudflare est nécessaire",
             "whyToken": "Pourquoi ce jeton ?"
+        },
+        "plain": {
+            "assistants": "Assistants",
+            "newConversation": "Nouvelle conversation",
+            "renameConversation": "Renommer la conversation",
+            "archiveConversation": "Archiver la conversation",
+            "untitledConversation": "Conversation sans titre",
+            "laneActiveEmpty": "Aucun assistant ne travaille en ce moment. Commencez une conversation et confiez-lui une tâche.",
+            "laneAttentionFirst": "Quand un assistant vous pose une question ou a besoin de votre accord, il attend ici.",
+            "laneFinishedEmpty": "Le travail terminé attend ici que vous le regardiez.",
+            "laneFinishedFirst": "Le travail terminé vous attend ici. Rien ne modifie vos fichiers tant que vous ne l'acceptez pas.",
+            "archiveEmptied": "Archive vidée. Les conversations terminées s'y rassembleront d'elles-mêmes après quelques jours calmes.",
+            "archiveNothingYet": "Rien d'archivé pour l'instant. Les conversations terminées arrivent ici d'elles-mêmes après quelques jours calmes."
         }
     },
     "workspace": {
@@ -6132,6 +6249,23 @@
         },
         "projectFocus": {
             "showOnly": "Afficher uniquement ce projet"
+        },
+        "results": {
+            "download": "Télécharger",
+            "print": "Imprimer",
+            "close": "Fermer",
+            "heading": "Résultats",
+            "couldNotOpen": "Impossible d’ouvrir ce résultat.",
+            "downloadToOpen": "Téléchargez ce fichier pour l’ouvrir.",
+            "noDocuments": "Cette conversation n’a pas encore de documents prêts.",
+            "otherChanges": "{count} autre fichier modifié | {count} autres fichiers modifiés",
+            "conflict": "Certains fichiers doivent être vérifiés avant d’être enregistrés.",
+            "acceptExplanation": "Accepter place les fichiers de l’assistant dans vos dossiers ; d’ici là, ils restent dans le brouillon de cette conversation.",
+            "downloadFailed": "Impossible de télécharger ce fichier.",
+            "printFailed": "Impossible d’imprimer cet aperçu.",
+            "downloadNamed": "Télécharger {name}",
+            "printNamed": "Imprimer {name}",
+            "listFailed": "Impossible de lire quels documents cette conversation a créés."
         }
     },
     "needs": {

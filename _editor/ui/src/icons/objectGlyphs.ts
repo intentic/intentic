@@ -34,6 +34,8 @@ export const OBJECT_GLYPHS = {
     microphone: { outline: `M8 6a4 4 0 0 1 8 0v6a4 4 0 0 1-8 0Z M4 10v2a8 8 0 0 0 16 0v-2 M12 20v2` },
     palette: { outline: `M12 3a9 9 0 1 0 0 18h1c2 0 3-2 1-4s0-4 2-4h2c5 0 3-10-6-10Z`, solid: `M7 7h2v2H7Z M13 6h2v2h-2Z M5 12h2v2H5Z` },
     paperclip: { outline: `m9 15 7-7a2 2 0 0 1 3 3l-9 9a4 4 0 0 1-6-6L15 3` },
+    // A printer: the tray, the body, the sheet coming out of it.
+    print: { outline: `M6 9V3h12v6 M6 17H3V9h18v8h-3 M6 14h12v7H6Z M17 11h1` },
     save: { outline: `M3 3h15l3 3v15H3Z M7 3v6h9V3 M7 21v-7h10v7` },
     server: {
         outline: `M5 3h14l2 2v5H3V5Z M3 14h18v5l-2 2H5l-2-2Z M12 6.5h5 M12 17.5h5`,

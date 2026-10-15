@@ -997,6 +997,7 @@ export type AgentSpan = z.infer<typeof AgentSpanSchema>;
 // the rest of the turn lands on top of it later. Doesn't apply to a turn parked on a question, which needs no override
 // at all.
 export const AgentLandSchema = z.object({
+    includeDocuments: z.boolean().optional().describe("Include recorded result documents, even when ignored or classified as scratch."),
     id: z.string().min(1).describe("Which conversation's work to merge."),
     mode: LandModeSchema.optional().describe(
         "How to apply it. The default applies every repository or none, so a refusal leaves the workspace exactly as it was. The other carries the whole composition and leaves conflicted paths with markers to resolve by hand.",

@@ -1,12 +1,18 @@
 // The row of documents a finished turn ends on: one chip per document, named with what kind it is, a press opening the
 // file where the chat opens files, and a web page asked for rendered rather than as its source.
 import "@intentic/testing/dom";
+import PrimeVue from "primevue/config";
 import { type App, createApp, h } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import { CHAT_SURFACE, type ChatSurface } from "../../tools/chatToolSurface";
 import { htmlPreviewed, setHtmlPreviewed } from "../../../workspace/viewers/html/htmlPreviewed";
 import type { ChatDeliverable } from "./deliverables";
-import ChatTurnDeliverables from "./ChatTurnDeliverables.vue";
+
+// The conversation's results as the daemon serves them (resultFiles.ts), so a press here is a call to read, not a fetch.
+const read = jest.fn(async (_id: string, _path: string, _at?: string): Promise<Blob> => new Blob([`%PDF`], { type: `application/pdf` }));
+const saved = jest.fn(async (_id: string, _path: string, _at?: string): Promise<void> => undefined);
+jest.mock(`../../../workspace/viewers/results/resultFiles`, () => ({ readResult: read, saveResult: saved }));
+const { default: ChatTurnDeliverables } = await import(`./ChatTurnDeliverables.vue`);
 
 let app: App | undefined;
 const opened = jest.fn<(path: string, line?: number) => void>();
@@ -15,6 +21,8 @@ const mount = (deliverables: readonly ChatDeliverable[], surface: ChatSurface = 
     const element = document.createElement(`div`);
     document.body.append(element);
     app = createApp({ render: () => h(ChatTurnDeliverables, { deliverables }) });
+    // The document over the chat is a dialog, which needs PrimeVue's config.
+    app.use(PrimeVue);
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.provide(CHAT_SURFACE, surface);
@@ -29,6 +37,8 @@ const made = (...paths: string[]): ChatDeliverable[] =>
 
 beforeEach(() => {
     opened.mockClear();
+    read.mockClear();
+    saved.mockClear();
     setHtmlPreviewed(`site/index.html`, false);
 });
 
@@ -64,5 +74,28 @@ describe(`ChatTurnDeliverables`, () => {
         const [chip] = buttons(mount(made(`deck.pptx`), { imageUrl: () => undefined }));
         expect(chip?.disabled).toBe(true);
         expect(chip?.textContent).toContain(`deck.pptx`);
+    });
+
+    it(`where the chat reaches the conversation's results, each document downloads and prints too, and still opens in the viewer`, async () => {
+        const element = mount(made(`board/minutes.pdf`), { imageUrl: () => undefined, openFile: opened, resultConversation: () => `c1`, resultBox: () => `box` });
+        expect(buttons(element).map((button) => button.getAttribute(`aria-label`))).toEqual([`Open minutes.pdf, PDF`, `Download minutes.pdf`, `Print minutes.pdf`]);
+        buttons(element)[0]?.click();
+        expect(opened.mock.calls).toEqual([[`board/minutes.pdf`]]);
+        buttons(element)[1]?.click();
+        await Promise.resolve();
+        expect(saved.mock.calls).toEqual([[`c1`, `board/minutes.pdf`, `box`]]);
+    });
+
+    it(`a reader with no Files to open it in (a guest) gets the document over the chat instead`, async () => {
+        const element = mount(made(`board/minutes.pdf`), { imageUrl: () => undefined, openFile: opened, resultConversation: () => `c1`, resultsInPlace: () => true });
+        buttons(element)[0]?.click();
+        await Promise.resolve();
+        expect(opened).not.toHaveBeenCalled();
+        expect(read.mock.calls[0]?.slice(0, 2)).toEqual([`c1`, `board/minutes.pdf`]);
+    });
+
+    it(`a published page, which cannot reach the conversation, offers neither download nor print`, () => {
+        const element = mount(made(`board/minutes.pdf`));
+        expect(buttons(element)).toHaveLength(1);
     });
 });

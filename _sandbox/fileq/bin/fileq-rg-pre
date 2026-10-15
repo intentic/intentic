@@ -1,0 +1,66 @@
+#!/bin/sh
+# fileq-rg-pre: ripgrep's preprocessor for documents (`rg --pre`), so `rg wniosek .` searches the text of a pdf, docx,
+# xlsx, pptx, odt, ods, odp, rtf or epub and reports the hit under the document's own path:
+#
+#   docs/terms.pdf:345:[p. 12] … wniosek …
+#
+# Every line under a page or slide heading carries `[p. N] ` or `[slide N] `, so a hit is already a citation. Line
+# numbers are lines of the document's text, the same ones iq reports for it.
+#
+# Fast path (no Node): the file's shadow at <root>/.intentic/local/cache/derived/<path>.md, when its recorded
+# source_size and source_mtime are the file's own (one `stat`). Otherwise `fileq read --plain`, which derives it
+# (or answers from its content cache) and leaves a shadow for next time. A file that is not a document is passed
+# through unchanged; one fileq cannot read prints nothing. Wired by `fileq ripgrep-config` (RIPGREP_CONFIG_PATH).
+
+file=$1
+[ -n "$file" ] || exit 0
+
+case $file in
+    *.[pP][dD][fF] | *.[dD][oO][cC][xX] | *.[xX][lL][sS][xX] | *.[pP][pP][tT][xX] | \
+    *.[oO][dD][tT] | *.[oO][tT][tT] | *.[oO][dD][sS] | *.[oO][tT][sS] | *.[oO][dD][pP] | *.[oO][tT][pP] | *.[oO][dD][gG] | \
+    *.[rR][tT][fF] | *.[eE][pP][uU][bB]) ;;
+    *) exec cat -- "$file" ;;
+esac
+
+# One awk program for both paths. With `want` set it first reads the shadow's front matter and exits 3, having printed
+# nothing, unless the recorded size and mtime are `want`; the body after the fence (one leading blank line dropped, as
+# fileq's sidecarBody does) is then printed with page marks. Without `want` its input is all body.
+MARK='
+function mark(line,   n) {
+    if (line ~ /^## Page [0-9]+$/) { page = "[p. " substr(line, 9) "] " }
+    else if (line ~ /^## Slide [0-9]+/) { n = substr(line, 10); sub(/[^0-9].*$/, "", n); page = "[slide " n "] " }
+    print page line
+}
+BEGIN { inside = (want != ""); page = "" }
+inside && NR == 1 { if ($0 != "---") exit 3; next }
+inside {
+    if ($0 == "---") { inside = 0; lead = 1; if (size " " mtime != want) exit 3; next }
+    if (index($0, "source_size: ") == 1) size = substr($0, 14)
+    else if (index($0, "source_mtime: ") == 1) mtime = substr($0, 15)
+    next
+}
+lead && $0 == "" { lead = 0; next }
+{ lead = 0; mark($0) }
+END { if (inside) exit 3 }
+'
+
+root=${WORKSPACE_ROOT:-/work}
+case $file in
+    /*) abs=$file ;;
+    *) abs=$PWD/${file#./} ;;
+esac
+case $abs in
+    */./* | */../*) abs=$(realpath -s -- "$abs") ;;
+esac
+case $abs in
+    "$root"/*)
+        shadow=$root/.intentic/local/cache/derived/${abs#"$root"/}.md
+        if [ -f "$shadow" ]; then
+            want=$(stat -c '%s %.9Y' -- "$file" 2>/dev/null) && awk -v want="$want" "$MARK" "$shadow" && exit 0
+        fi
+        ;;
+esac
+
+command -v fileq >/dev/null 2>&1 || exit 0
+WORKSPACE_ROOT=$root fileq read --plain "$abs" 2>/dev/null | awk -v want= "$MARK"
+exit 0

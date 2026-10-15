@@ -1,0 +1,13 @@
+/* Both Node entry points are emitted for the agent's `gw` command. */
+{
+    "compilerOptions": {
+        "types": ["node"],
+        "outDir": "./dist",
+        "rootDir": "./src",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo",
+        "skipLibCheck": true
+    },
+    "include": ["./src/**/*"],
+    "exclude": ["./src/**/*.test.ts", "./src/testing.ts"],
+    "extends": "@intentic/tsconfig/tsconfig.base.json"
+}

@@ -29,6 +29,9 @@ export const RAW_ROUTES = {
     "GET /speech/voices": { guest: true },
     "POST /speech/say": { floor: "collaborator" },
     "GET /speech/say": { auth: "door" },
+    // A conversation's recorded documents as bytes, for whoever owns it, a guest with no Files included; the route
+    // serves those paths alone (the daemon's conversations/produced-files.ts).
+    "GET /agents/{id}/documents/raw": { guest: true, lane: "bulk" },
     // The bytes behind the workspace reads; each applies the caller's fence itself.
     "GET /workspace/raw": { guest: true, lane: "bulk" },
     // No door, unlike media: the page fetches a thumbnail itself, so the request carries the header.

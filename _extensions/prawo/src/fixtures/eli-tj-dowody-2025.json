@@ -1,0 +1,44 @@
+{
+ "ELI": "DU/2025/1753",
+ "address": "WDU20250001753",
+ "publisher": "DU",
+ "year": 2025,
+ "volume": 0,
+ "pos": 1753,
+ "title": "Obwieszczenie Marszałka Sejmu Rzeczypospolitej Polskiej z dnia 27 listopada 2025 r. w sprawie ogłoszenia jednolitego tekstu ustawy o dowodach osobistych",
+ "type": "Obwieszczenie",
+ "displayAddress": "Dz.U. 2025 poz. 1753",
+ "status": "obowiązujący",
+ "inForce": "IN_FORCE",
+ "promulgation": "2025-12-10",
+ "announcementDate": "2025-11-27",
+ "legalStatusDate": "2025-11-24",
+ "changeDate": "2026-10-08T10:50:09",
+ "textHTML": false,
+ "textPDF": true,
+ "texts": [
+  {
+   "fileName": "D20251753.pdf",
+   "type": "O"
+  },
+  {
+   "fileName": "D20251753.pdf",
+   "type": "I"
+  },
+  {
+   "fileName": "D20251753L.pdf",
+   "type": "T"
+  },
+  {
+   "fileName": "D20251753Lj.pdf",
+   "type": "U"
+  }
+ ],
+ "references": {
+  "Tekst jednolity dla aktu": [
+   {
+    "id": "DU/2010/1131"
+   }
+  ]
+ }
+}

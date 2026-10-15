@@ -1,4 +1,4 @@
-import { runConnectorGateway } from "@intentic/connector-runtime";
+import { runConnectorGateway, storeRefreshTokenAsExtension } from "@intentic/connector-runtime";
 import {
     FatalConnectionError,
     type ImapConnection,
@@ -7,6 +7,7 @@ import {
     desiredAccounts,
     openImapConnection,
 } from "./connection.js";
+import { bindingOf, mintAccessToken } from "./oauth.js";
 
 // The IMAP gateway process (autoStart, contributes.processes): reconciles one imapflow connection per account, watches
 // each mailbox over IDLE, and dispatches normalized events. A bad credential is fatal until fixed; a dropped connection
@@ -26,6 +27,14 @@ void runConnectorGateway<ImapConnectorConfig, ImapConnection>({
                     onClose: () => {
                         closed.add(connection);
                     },
+                    // Each connection signs in with a fresh access token; a refresh token Microsoft rotated on the way
+                    // is stored on the card through the daemon (`permissions.daemon` names the route).
+                    mint: (settings) =>
+                        mintAccessToken(settings, {
+                            save: async (refreshToken, previous) => {
+                                await storeRefreshTokenAsExtension(ctx.api, { id, binding: bindingOf(settings), previous, refreshToken });
+                            },
+                        }),
                 });
                 return connection;
             },

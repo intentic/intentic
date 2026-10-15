@@ -10,9 +10,10 @@ import KeepWarmPanel from "../../agents/fleet/prompt-cache/KeepWarmPanel.vue";
 import { contextPct, turnInFlight } from "../../agents/fleet/agentStatus";
 import { cacheAlive, cacheCooling, keptWarm } from "../../agents/fleet/prompt-cache/promptCache";
 import { useAgents } from "../../agents/fleet/useAgents";
-import { formatRemaining, formatReset, planHeadroom, usageStatusFor } from "../session/usageStatus";
+import { formatRemaining, formatReset, planHeadroom, remainingFigure, usageStatusFor } from "../session/usageStatus";
 import { usePaneView } from "./useChat-view";
 import { useRole } from "../../../client/sandbox/useRole";
+import { useAudience } from "../../../app/useAudience";
 import ChatToolCallsToggle from "../tools/ChatToolCallsToggle.vue";
 import ChatJobsReadout from "./jobs/ChatJobsReadout.vue";
 import UsageMeter from "../session/UsageMeter.vue";
@@ -33,6 +34,9 @@ const { block, hint } = defineProps<{
 }>();
 
 const { isGuest } = useRole();
+// A maker's strip keeps the one reading they can act on, how much of the allowance is left, said as that; the context
+// window and the prompt cache's clock are a developer's instruments and stay off it.
+const { maker } = useAudience();
 const { contextUsage, provider, account, model, conversation } = usePaneView();
 const { mobile, keyboardInset } = useDevice();
 
@@ -137,7 +141,10 @@ const usageChip = computed(() => {
         headroom.percent >= SPENT_UTILIZATION && headroom.binding.resetsAt !== undefined
             ? ` · ${t(`common.usageRing.resets`, { resetsAt: formatReset(headroom.binding.resetsAt) })}`
             : ``;
-    return { headroom, label: `${formatRemaining(headroom.percent, headroom.stale)}${reset}` };
+    const left = maker.value
+        ? t(`chat.usageStatus.plain.percentLeft`, { percent: remainingFigure(headroom.percent, headroom.stale) })
+        : formatRemaining(headroom.percent, headroom.stale);
+    return { headroom, label: `${left}${reset}` };
 });
 </script>
 
@@ -162,7 +169,7 @@ const usageChip = computed(() => {
             <!-- What this chat left running past its turns; first, since it is the one readout here that ends on its own. -->
             <ChatJobsReadout />
             <!-- How long answering stays cheap, and the one press that keeps it so while the chat sits idle. -->
-            <template v-if="cacheChip !== undefined && card !== undefined">
+            <template v-if="cacheChip !== undefined && card !== undefined && !maker">
                 <button
                     ref="cacheTrigger"
                     type="button"
@@ -179,7 +186,7 @@ const usageChip = computed(() => {
                     <KeepWarmPanel :agent="card" @done="cacheOpen = false" />
                 </ResponsiveOverlay>
             </template>
-            <span v-if="contextRing" class="inline-flex items-center gap-1" v-tooltip.top="contextRing.tooltip">
+            <span v-if="contextRing && !maker" class="inline-flex items-center gap-1" v-tooltip.top="contextRing.tooltip">
                 <ProgressRing :value="contextRing.value" :class="contextRing.warn ? 'text-warning' : 'text-accent'" />
                 <span class="@max-xs:hidden">{{ contextRing.label }}</span>
             </span>

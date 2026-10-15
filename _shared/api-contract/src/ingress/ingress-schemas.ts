@@ -1,4 +1,4 @@
-import { SANDBOX_ID, TrialStatusSchema } from "@intentic/sandbox-contract";
+import { OrgPolicySchema, SANDBOX_ID, TrialStatusSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 
 /* THE SHAPES MACHINES SEND THE PLATFORM AND WHAT IT ANSWERS, declared once for both ends (routes.ts names the route
@@ -380,3 +380,15 @@ export const ingressRefusalOf = (body: string): string | undefined => {
     const text = raw.replace(/^error:\s*/u, "").trim();
     return text === "" ? undefined : text;
 };
+
+/* AN ORGANISATION'S POLICY FOR ONE SANDBOX (POST /sandbox/org-policy, the connect token in `x-intentic-connect`;
+ * docs/architecture/organisations.md). The daemon asks at boot and every few minutes after, saying which edition it
+ * already holds so the organisation's console can tell applied from pending. `null` is the platform's word that this
+ * sandbox belongs to no organisation, and the only answer that unbinds one: a refusal or a silence keeps what the
+ * daemon holds, so a bound sandbox cannot be loosened by cutting it off from the platform. */
+export const OrgPolicyFetchBodySchema = z.object({
+    applied: z.number().int().min(1).optional().catch(undefined),
+});
+export type OrgPolicyFetchBody = z.input<typeof OrgPolicyFetchBodySchema>;
+export const OrgPolicyAnswerSchema = z.object({ policy: OrgPolicySchema.nullable() });
+export type OrgPolicyAnswer = z.infer<typeof OrgPolicyAnswerSchema>;

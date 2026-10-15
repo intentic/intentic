@@ -1,3 +1,4 @@
+import { useAudience } from "../../../app/useAudience";
 import type { AgentChanges, AgentHarness, AgentProvider, AgentSpan, AgentSummary, LandMode, LandResult } from "@intentic/sandbox-contract";
 import { type AgentRunChoice, useDevice } from "@intentic/ui";
 import type { Conversation } from "../../chat/session/conversation";
@@ -150,7 +151,13 @@ export const landAgent = async (
     force = false,
     at: AgentReach = undefined,
 ): Promise<LandResult> => {
-    const request = (): Promise<LandResult> => sandboxRpc.agents.land({ id, mode, span, force }, { context: { at, deadline: false } });
+    const body: Parameters<typeof sandboxRpc.agents.land>[0] = { id, mode, span, force };
+    // A reader in plain words gets the documents the conversation made with its Accept even where git ignores them
+    // (the daemon's produced-files.ts); a developer's land stays exactly what git says it is.
+    if (useAudience().maker.value) {
+        body.includeDocuments = true;
+    }
+    const request = (): Promise<LandResult> => sandboxRpc.agents.land(body, { context: { at, deadline: false } });
     if (mode === `measure`) {
         return request();
     }

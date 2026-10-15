@@ -1,5 +1,6 @@
 <!-- The review's one primary press, in whichever form this reader gets it: Fix conflicts, Land now, Request land, or the fact that it was asked. -->
 <script setup lang="ts">
+import { useAudience } from "../../../app/useAudience";
 import { Button, type Tip } from "@intentic/ui";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { useT } from "@intentic/ui/i18n";
@@ -30,54 +31,60 @@ const emit = defineEmits<{ land: []; request: []; fix: [] }>();
 
 const words = useVocabulary();
 const t = useT();
+const { maker } = useAudience();
 </script>
 
 <template>
-    <!-- While it is queued or running the press is a fact, not a second ask; the conflict bar carries its Cancel and Stop. -->
-    <Button
-        v-if="fix !== undefined"
-        :size="block ? undefined : `small`"
-        :tier="fix.state === `ready` ? `accent` : `boring`"
-        :thumb="block"
-        class="shrink-0 whitespace-nowrap"
-        :class="block ? `w-full` : ``"
-        :disabled="fix.state !== `ready` || fix.busy"
-        @click="emit(`fix`)"
-        v-tooltip.bottom="fix.state === `ready` ? { title: t(`agents.agentLandPress.fixTitle`), note: t(`agents.agentLandPress.fixHint`) } : undefined"
-    >
-        <template v-if="fix.state === `working`"><Icon name="spinner" spin />{{ t(`agents.agentLandPress.fixing`) }}</template>
-        <template v-else-if="fix.state === `queued`"><Icon name="clock" />{{ t(`agents.agentLandPress.fixQueued`) }}</template>
-        <template v-else><Icon name="sparkles" />{{ t(`agents.agentLandPress.fix`, { count: fix.count }, fix.count) }}</template>
-    </Button>
-    <!-- Success-toned with the check glyph, matching the board card's own Land now: the same action on the same work reads as such. -->
-    <Button
-        v-else-if="canShip"
-        :size="block ? undefined : `small`"
-        tone="success"
-        :thumb="block"
-        class="shrink-0 whitespace-nowrap"
-        :class="block ? `w-full` : ``"
-        :disabled="landDisabled"
-        @click="emit(`land`)"
-        v-tooltip.bottom="landHint"
-    >
-        <Icon name="check" />{{ words.land }}
-    </Button>
-    <!-- The collaborator's copy of the press above; once asked it becomes a fact instead of a press. -->
-    <span v-else-if="requested" class="inline-flex shrink-0 items-center gap-1 text-2xs text-muted" :class="block ? `w-full justify-center py-2` : ``">
-        <Icon name="clock" class="text-2xs" />{{ words.landRequested }}
-    </span>
-    <Button
-        v-else
-        :size="block ? undefined : `small`"
-        tier="boring"
-        :thumb="block"
-        class="shrink-0 whitespace-nowrap"
-        :class="block ? `w-full` : ``"
-        :disabled="requesting"
-        @click="emit(`request`)"
-        v-tooltip.bottom="requestHint"
-    >
-        <Icon :name="requesting ? 'spinner' : 'send'" :spin="requesting" />{{ words.requestLand }}
-    </Button>
+    <!-- In plain words the press comes with one sentence above it saying what accepting does; a developer's press is
+         laid out exactly as before (`contents` leaves no box of its own). -->
+    <div :class="maker ? [`flex min-w-0 flex-col gap-2`, block ? `items-stretch` : `items-start`] : `contents`">
+        <p v-if="maker && canShip && fix === undefined" class="max-w-sm text-xs text-muted">{{ t(`workspace.results.acceptExplanation`) }}</p>
+        <!-- While it is queued or running the press is a fact, not a second ask; the conflict bar carries its Cancel and Stop. -->
+        <Button
+            v-if="fix !== undefined"
+            :size="block ? undefined : `small`"
+            :tier="fix.state === `ready` ? `accent` : `boring`"
+            :thumb="block"
+            class="shrink-0 whitespace-nowrap"
+            :class="block ? `w-full` : ``"
+            :disabled="fix.state !== `ready` || fix.busy"
+            @click="emit(`fix`)"
+            v-tooltip.bottom="fix.state === `ready` ? { title: t(`agents.agentLandPress.fixTitle`), note: t(`agents.agentLandPress.fixHint`) } : undefined"
+        >
+            <template v-if="fix.state === `working`"><Icon name="spinner" spin />{{ t(`agents.agentLandPress.fixing`) }}</template>
+            <template v-else-if="fix.state === `queued`"><Icon name="clock" />{{ t(`agents.agentLandPress.fixQueued`) }}</template>
+            <template v-else><Icon name="sparkles" />{{ t(`agents.agentLandPress.fix`, { count: fix.count }, fix.count) }}</template>
+        </Button>
+        <!-- Success-toned with the check glyph, matching the board card's own Land now: the same action on the same work reads as such. -->
+        <Button
+            v-else-if="canShip"
+            :size="block ? undefined : `small`"
+            tone="success"
+            :thumb="block"
+            class="shrink-0 whitespace-nowrap"
+            :class="block ? `w-full` : ``"
+            :disabled="landDisabled"
+            @click="emit(`land`)"
+            v-tooltip.bottom="landHint"
+        >
+            <Icon name="check" />{{ words.land }}
+        </Button>
+        <!-- The collaborator's copy of the press above; once asked it becomes a fact instead of a press. -->
+        <span v-else-if="requested" class="inline-flex shrink-0 items-center gap-1 text-2xs text-muted" :class="block ? `w-full justify-center py-2` : ``">
+            <Icon name="clock" class="text-2xs" />{{ words.landRequested }}
+        </span>
+        <Button
+            v-else
+            :size="block ? undefined : `small`"
+            tier="boring"
+            :thumb="block"
+            class="shrink-0 whitespace-nowrap"
+            :class="block ? `w-full` : ``"
+            :disabled="requesting"
+            @click="emit(`request`)"
+            v-tooltip.bottom="requestHint"
+        >
+            <Icon :name="requesting ? 'spinner' : 'send'" :spin="requesting" />{{ words.requestLand }}
+        </Button>
+    </div>
 </template>

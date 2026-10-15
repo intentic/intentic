@@ -69,6 +69,20 @@ export interface Vocabulary {
     readonly referenceChip: string;
     readonly publicChip: string;
     readonly publicTooltip: string;
+    // The board and the cards on it: what a developer calls agents and a maker calls assistants and conversations.
+    readonly agents: string;
+    readonly newAgent: string;
+    // What a card or a tab is called before its first message has named it.
+    readonly draftTitle: string;
+    readonly renameAgent: string;
+    readonly archiveAgent: string;
+    readonly untitledAgent: string;
+    readonly laneActiveEmpty: string;
+    readonly laneAttentionFirst: string;
+    readonly laneFinishedEmpty: string;
+    readonly laneFinishedFirst: string;
+    readonly archiveEmptied: string;
+    readonly archiveNothingYet: string;
 }
 
 const developer = (): Vocabulary => ({
@@ -122,6 +136,18 @@ const developer = (): Vocabulary => ({
     referenceChip: t(`views.vocabulary.reference`),
     publicChip: t(`views.vocabulary.public`),
     publicTooltip: t(`views.vocabulary.servedOnOpenInternet`),
+    agents: t(`shared.agents`),
+    newAgent: t(`chat.words.newAgent`),
+    draftTitle: t(`agents.agentStatus.newAgent`),
+    renameAgent: t(`agents.agentCard.renameAgent`),
+    archiveAgent: t(`agents.agentCard.archiveAgent`),
+    untitledAgent: t(`agents.agentStatus.untitledAgent`),
+    laneActiveEmpty: t(`agents.agentsView.noAgentsWorkingStart`),
+    laneAttentionFirst: t(`agents.agentsView.attentionFirst`),
+    laneFinishedEmpty: t(`agents.agentsView.finishedAgentsLandWork`),
+    laneFinishedFirst: t(`agents.agentsView.finishedFirst`),
+    archiveEmptied: t(`agents.agentsView.archiveEmptiedFinishedAgents`),
+    archiveNothingYet: t(`agents.agentsView.nothingArchivedYetFinished`),
 });
 
 const maker = (): Vocabulary => ({
@@ -175,6 +201,18 @@ const maker = (): Vocabulary => ({
     referenceChip: t(`views.vocabulary.referenceMaterial`),
     publicChip: t(`views.vocabulary.shared`),
     publicTooltip: t(`views.vocabulary.anyoneLinkOpenWhat`),
+    agents: t(`views.plain.assistants`),
+    newAgent: t(`views.plain.newConversation`),
+    draftTitle: t(`views.plain.newConversation`),
+    renameAgent: t(`views.plain.renameConversation`),
+    archiveAgent: t(`views.plain.archiveConversation`),
+    untitledAgent: t(`views.plain.untitledConversation`),
+    laneActiveEmpty: t(`views.plain.laneActiveEmpty`),
+    laneAttentionFirst: t(`views.plain.laneAttentionFirst`),
+    laneFinishedEmpty: t(`views.plain.laneFinishedEmpty`),
+    laneFinishedFirst: t(`views.plain.laneFinishedFirst`),
+    archiveEmptied: t(`views.plain.archiveEmptied`),
+    archiveNothingYet: t(`views.plain.archiveNothingYet`),
 });
 
 const byAudience = (): Record<Audience, Vocabulary> => ({ developer: developer(), maker: maker() });

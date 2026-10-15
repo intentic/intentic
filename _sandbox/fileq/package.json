@@ -10,6 +10,7 @@
         "directory": "_sandbox/fileq"
     },
     "files": [
+        "bin",
         "dist",
         "src",
         "!src/testing.ts",
@@ -21,7 +22,8 @@
         "registry": "https://registry.npmjs.org/"
     },
     "bin": {
-        "fileq": "./dist/cli.js"
+        "fileq": "./dist/cli.js",
+        "fileq-rg-pre": "./bin/fileq-rg-pre"
     },
     "exports": {
         "./NOTICE": "./NOTICE",

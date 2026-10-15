@@ -353,7 +353,14 @@
     },
     "catalog": {
         "allChannels": "all channels",
-        "channelIdOptional": "Channel ID (optional)"
+        "channelIdOptional": "Channel ID (optional)",
+        "microsoft365": {
+            "mail": "New Outlook mail",
+            "folder": "Folder (optional)",
+            "mention": "Only mail addressed directly to you (your address in To)",
+            "sender": "Sender address",
+            "senderHint": "The From address as Outlook delivered it; a display name is not checked."
+        }
     },
     "extension": {
         "automations": "Automations"

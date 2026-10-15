@@ -119,6 +119,8 @@ export interface FileEntry {
     readonly size: number;
     // Root-relative path of the enclosing git repo (dir containing .git), if any.
     readonly repo?: string;
+    // A document's shadow (workspace/shadows.ts): read in place of `abs`, whose stat `mtimeMs` and `size` then are.
+    readonly text?: string;
 }
 
 // A raw hit from one engine, before fusion; engines return hits in their own ranked order.

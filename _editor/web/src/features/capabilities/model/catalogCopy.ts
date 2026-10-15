@@ -35,8 +35,35 @@ const tileCopy = (id: string): Copy => ({
     ask: (part) => t(`capabilities.catalog.${id}.${part}`),
 });
 
-const entryWords = (entry: CapabilityCatalogEntry, part: string, english: string, own: string | undefined): string =>
-    KEYABLE.test(entry.id) ? copyOf(tileCopy(entry.id), part, english, own) : english;
+// The first-party extensions' tiles, whose words the web's catalogs carry under `capabilities.extensionCatalog.<id>`
+// (catalogCopy.test.ts holds the English there equal to each manifest). "The package's words" for such a tile are
+// that English: a manifest edited since speaks its own new words until the catalogs catch up, never a stale
+// translation of the old ones.
+export const EXTENSION_TILES: ReadonlySet<string> = new Set([`microsoft365`, `imap`, `sharepoint`]);
+
+const extensionCopy = (id: string): Copy => ({
+    key: (part) => `capabilities.extensionCatalog.${id}.${part}`,
+    ask: (part) => t(`capabilities.extensionCatalog.${id}.${part}`),
+});
+
+// The English the catalogs hold for a part, or undefined where they hold none.
+const extensionEnglish = (copy: Copy, part: string): string | undefined => {
+    const words = t(copy.key(part), {}, { locale: BASE_LOCALE });
+    return words === copy.key(part) ? undefined : words;
+};
+
+const isExtensionTile = (entry: CapabilityCatalogEntry): boolean => EXTENSION_TILES.has(entry.id) && !BUILT_IN.has(entry.id);
+
+const entryWords = (entry: CapabilityCatalogEntry, part: string, english: string, own: string | undefined): string => {
+    if (!KEYABLE.test(entry.id)) {
+        return english;
+    }
+    if (isExtensionTile(entry)) {
+        const copy = extensionCopy(entry.id);
+        return copyOf(copy, part, english, extensionEnglish(copy, part));
+    }
+    return copyOf(tileCopy(entry.id), part, english, own);
+};
 
 /** The tile's name as the reader's language says it; a proper name ("Docker", "SSH") has no key and stays. */
 export const entryName = (entry: CapabilityCatalogEntry): string => entryWords(entry, `name`, entry.name, BUILT_IN.get(entry.id)?.name);
@@ -198,6 +225,16 @@ const fieldWords = (copy: Copy, derived: string, field: Field, own: Field): Fiel
         : { options: field.options.map((option) => ({ ...option, label: optionWords(copy, derived, option, own) })) }),
 });
 
+// An extension tile's field as the catalogs' English has it, standing in for the built-in package's own field.
+// fieldWords reads a part only where the manifest's field has it, so asking for every part is harmless.
+const extensionField = (copy: Copy, field: Field): Field => ({
+    ...field,
+    label: extensionEnglish(copy, `label`) ?? ``,
+    hint: extensionEnglish(copy, `hint`),
+    placeholder: extensionEnglish(copy, `placeholder`),
+    options: field.options?.map((option) => ({ ...option, label: extensionEnglish(copy, `options.${optionSlot(option.value)}`) ?? `` })),
+});
+
 const coreCopy = (kind: string, key: string): Copy => ({
     key: (part) => `capabilities.coreFields.${kind}.${key}.${part}`,
     ask: (part) => t(`capabilities.coreFields.${kind}.${key}.${part}`),
@@ -214,6 +251,10 @@ export const entryFields = (entry: CapabilityCatalogEntry): readonly Field[] => 
         const slot = fieldSlot(entry.fields, index);
         if (slot === undefined) {
             return field;
+        }
+        if (isExtensionTile(entry)) {
+            const copy = extensionCopy(`${entry.id}.fields.${slot}`);
+            return fieldWords(copy, `${entry.id}.${field.key}`, field, extensionField(copy, field));
         }
         const mine = own?.get(slot);
         if (mine !== undefined) {

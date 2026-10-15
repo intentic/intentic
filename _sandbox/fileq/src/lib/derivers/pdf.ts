@@ -18,11 +18,24 @@ import { stripRunningFurniture } from "./pdf-furniture.js";
 // Below this many chars per page, the text layer is furniture, not content: a scan with a vestigial layer.
 const SCAN_THRESHOLD_CHARS_PER_PAGE = 24;
 
-// OCR costs seconds per page, so a long scan gets its first pages and a note.
-const MAX_OCR_PAGES = 20;
+// OCR costs seconds per page, so a long scan gets its first pages and a note. Someone reading now gets 20; the daemon's
+// shadow keeper, working in the background with nobody waiting, asks for more (`fileq derive --ocr-pages 500`, which
+// sets FILEQ_OCR_PAGES for the run).
+const DEFAULT_OCR_PAGES = 20;
+const MAX_OCR_PAGES = 5000;
 const OCR_DPI = "200";
+
+/** How many pages of a scan this run recognises: FILEQ_OCR_PAGES when it is a sane count, else 20. */
+export const ocrPageCap = (): number => {
+    const asked = Number(process.env["FILEQ_OCR_PAGES"]);
+    return Number.isInteger(asked) && asked > 0 ? Math.min(asked, MAX_OCR_PAGES) : DEFAULT_OCR_PAGES;
+};
+
+// The note a capped recognition leaves; ocrCapOf (sidecar.ts) reads the cap back off it.
+const capNote = (cap: number): string => `OCR stops at ${cap} pages: draw the rest with pdftoppm and read them with \`ocr <page.png>...\` if they matter`;
+
 // The reader loads its models once per run and then takes a second or few per page.
-const OCR_TIMEOUT_MS = 60_000 + MAX_OCR_PAGES * 15_000;
+const ocrTimeoutMs = (pages: number): number => 60_000 + pages * 15_000;
 
 // Asked once per PATH: the answer is a fact of the image, and a stamp is read on every derive.
 const checked = new Map<string, boolean>();
@@ -46,18 +59,19 @@ export const ocrAvailable = (): boolean => {
 // could not read leaves its page empty (exit 1) rather than shifting the ones after it. The pages are split on those
 // form feeds, so the cap stays well past what twenty pages of text come to: a cut middle would shift every page after it.
 const readPages = async (images: readonly string[]): Promise<string> => {
-    const result = await runBounded("ocr", images, { timeoutMs: OCR_TIMEOUT_MS, maxOutput: 16 * 1024 * 1024 });
+    const result = await runBounded("ocr", images, { timeoutMs: ocrTimeoutMs(images.length), maxOutput: 64 * 1024 * 1024 });
     if (!result.timedOut && (result.exitCode === 0 || result.exitCode === 1)) {
         return result.stdout.text;
     }
     throw new ProcessError("ocr", images, result);
 };
 
-const recognisePages = async (absPath: string, totalPages: number): Promise<string[]> => {
+const recognisePages = async (absPath: string, totalPages: number, cap: number): Promise<string[]> => {
     const dir = await mkdtemp(join(tmpdir(), "fileq-ocr-"));
+    const last = Math.min(totalPages, cap);
     try {
-        await execBounded("pdftoppm", ["-r", OCR_DPI, "-png", "-f", "1", "-l", String(Math.min(totalPages, MAX_OCR_PAGES)), absPath, join(dir, "page")], {
-            timeoutMs: 120_000,
+        await execBounded("pdftoppm", ["-r", OCR_DPI, "-png", "-f", "1", "-l", String(last), absPath, join(dir, "page")], {
+            timeoutMs: 120_000 + last * 2_000,
         });
         const images = (await readdir(dir)).filter((name) => name.endsWith(".png")).toSorted();
         if (images.length === 0) {
@@ -114,12 +128,13 @@ export const pdfDeriver: Deriver = {
                     notes: [`no usable text layer across ${totalPages} page${plural} (a scan?): OCR is not part of this tier`],
                 };
             }
-            const recognised = await recognisePages(absPath, totalPages);
+            const cap = ocrPageCap();
+            const recognised = await recognisePages(absPath, totalPages, cap);
             const notes = [
                 `scanned: text recognised by OCR (PaddleOCR) on ${recognised.length} of ${totalPages} page${plural} — recognised, not exact; check figures against the page image`,
             ];
-            if (totalPages > MAX_OCR_PAGES) {
-                notes.push(`OCR stops at ${MAX_OCR_PAGES} pages: draw the rest with pdftoppm and read them with \`ocr <page.png>...\` if they matter`);
+            if (totalPages > cap) {
+                notes.push(capNote(cap));
             }
             const { markdown, notes: stripped } = withoutFurniture(recognised);
             return { markdown, title, notes: [...notes, ...stripped] };

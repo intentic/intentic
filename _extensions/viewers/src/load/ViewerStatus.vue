@@ -9,11 +9,12 @@ const { loading, error, overlay = false } = defineProps<{ loading: boolean; erro
 </script>
 
 <template>
-    <div v-if="loading" class="flex items-center justify-center text-muted" :class="overlay ? `absolute inset-0 bg-canvas` : `h-full`">
+    <div v-if="loading" data-print-loading="true" class="flex items-center justify-center text-muted" :class="overlay ? `absolute inset-0 bg-canvas` : `h-full`">
         <Icon name="spinner" class="text-xl" spin />
     </div>
     <div
         v-else-if="error !== undefined"
+        data-print-error="true"
         class="flex flex-col items-center justify-center gap-2 px-6 text-center"
         :class="overlay ? `absolute inset-0 bg-canvas` : `h-full`"
     >

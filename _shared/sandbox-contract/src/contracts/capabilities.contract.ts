@@ -9,6 +9,7 @@ import {
     CapabilityLoginSchema,
     CapabilityOtpSchema,
     CapabilityProbeSchema,
+    CapabilityRefreshTokenInputSchema,
     CapabilityRenameSchema,
     CapabilitySchema,
     CapabilitySecretInputSchema,
@@ -98,6 +99,19 @@ export const capabilitiesContract = {
             description: "Swaps one connection's key or token for a new one and re-applies it, without touching any of its other settings.",
         })
         .input(CapabilitySecretInputSchema)
+        .output(OkSchema),
+    // Called by a connector's own CLI and listener process, never by a page: a sign-in on the agent's side stores its
+    // refresh token here rather than printing it for someone to paste.
+    oauthToken: capabilityRoute
+        .route({
+            method: "POST",
+            path: "/capabilities/{id}/oauth-token",
+            summary: "Store a delegated sign-in's refresh token",
+            description:
+                "Write-only. Only for a card whose manifest declares `refreshToken`, only with the card's current token in hand, and only while the card still holds the settings the sign-in was made against. Never returns a token or changes any other setting.",
+        })
+        .meta({ agent: true, panel: false })
+        .input(CapabilityRefreshTokenInputSchema)
         .output(OkSchema),
     status: capabilityRoute
         .route({

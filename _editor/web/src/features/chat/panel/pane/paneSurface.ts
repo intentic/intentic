@@ -1,5 +1,6 @@
 import type { SubagentSession } from "@intentic/sandbox-contract";
 import type { Router } from "vue-router";
+import { useRole } from "../../../../client/sandbox/useRole";
 import { useAgents } from "../../../agents/fleet/useAgents";
 import { agentSeed } from "../../../agents/fleet/useAgents-actions";
 import { summonChat } from "../../run/summon";
@@ -24,6 +25,10 @@ export const paneSurface = (conversation: () => Conversation, router: Router, su
     const agent = (): string | undefined => conversation().scope.value;
     const navigate = (route: string): void => navigateInApp(router, route);
     return {
+        resultConversation: () => conversation().conversationId,
+        resultBox: () => conversation().box.value,
+        // A guest is fenced out of Files (guestPaths.ts), so its documents open where it reads them.
+        resultsInPlace: () => useRole().isGuest.value,
         // The daemon's re-encoded view rather than the file, in the conversation's own scope like `openFile`.
         imageUrl: (path) => picture(agent(), path, `view`)?.url,
         openFile: (path, line) => openWorkspaceRef(path, line, { agent: agent() }),

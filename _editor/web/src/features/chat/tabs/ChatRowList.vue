@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { MatchSnippet } from "@intentic/sandbox-contract";
+import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount } from "vue";
@@ -16,6 +17,7 @@ import { injectChatRowActions } from "./useChatRowActions";
 // menu comes from the host's one set of verbs (useChatRowActions), so no cut can offer less than another.
 
 const t = useT();
+const vocabulary = useVocabulary();
 
 const props = withDefaults(
     defineProps<{
@@ -78,7 +80,7 @@ onBeforeUnmount(actions.registerDrawn(() => drawnIds.value));
                 type="text"
                 maxlength="80"
                 :aria-label="t(`chat.words.chatTitle`)"
-                :placeholder="c.isolated.value ? t(`chat.words.newAgent`) : t(`chat.words.newChat`)"
+                :placeholder="c.isolated.value ? vocabulary.newAgent : t(`chat.words.newChat`)"
                 class="ui-field-box ui-field-inline w-full shrink-0 select-text rounded-lg px-2.5 py-2 text-xs font-semibold placeholder:font-normal"
                 @keydown.enter.stop.prevent="edit.commit()"
                 @keydown.esc.stop.prevent="edit.cancel()"

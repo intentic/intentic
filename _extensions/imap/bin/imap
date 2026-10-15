@@ -1,0 +1,3 @@
+#!/usr/bin/env node
+/* This launcher imports the compiled IMAP mail CLI from the extension bundle. */
+import "../dist/cli.js";

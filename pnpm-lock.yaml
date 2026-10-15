@@ -366,6 +366,9 @@ catalogs:
     '@vue-flow/core':
       specifier: 1.48.2
       version: 1.48.2
+    '@xmldom/xmldom':
+      specifier: 0.9.12
+      version: 0.9.12
     '@xterm/addon-search':
       specifier: 0.16.0
       version: 0.16.0
@@ -381,6 +384,9 @@ catalogs:
     '@xterm/xterm':
       specifier: 6.0.0
       version: 6.0.0
+    asn1js:
+      specifier: 3.0.10
+      version: 3.0.10
     astro:
       specifier: 7.3.5
       version: 7.3.5
@@ -504,6 +510,9 @@ catalogs:
     pino-pretty:
       specifier: 13.2.0
       version: 13.2.0
+    pkijs:
+      specifier: 3.4.1
+      version: 3.4.1
     playwright:
       specifier: 1.63.0
       version: 1.63.0
@@ -609,6 +618,15 @@ catalogs:
     ws:
       specifier: 8.22.0
       version: 8.22.0
+    xadesjs:
+      specifier: 2.6.8
+      version: 2.6.8
+    xmldsigjs:
+      specifier: 2.8.8
+      version: 2.8.8
+    xpath:
+      specifier: 0.0.34
+      version: 0.0.34
     yaml:
       specifier: 2.9.1
       version: 2.9.1
@@ -1460,6 +1478,9 @@ importers:
       '@intentic/ext-automations':
         specifier: workspace:*
         version: link:../../_extensions/automations
+      '@intentic/ext-e-urzad':
+        specifier: workspace:*
+        version: link:../../_extensions/e-urzad
       '@intentic/ext-git-history':
         specifier: workspace:*
         version: link:../../_extensions/git-history
@@ -1783,6 +1804,76 @@ importers:
         specifier: 'catalog:'
         version: 7.0.0-dev.20260707.2
 
+  _extensions/e-urzad:
+    dependencies:
+      '@intentic/extension-api':
+        specifier: workspace:*
+        version: link:../../_shared/extension-api
+      '@intentic/extension-manifest':
+        specifier: workspace:*
+        version: link:../../_shared/extension-manifest
+      '@intentic/extension-ui':
+        specifier: workspace:*
+        version: link:../../_shared/extension-ui
+    devDependencies:
+      '@intentic/base':
+        specifier: workspace:*
+        version: link:../../_tools/base
+      '@intentic/connector-runtime':
+        specifier: workspace:*
+        version: link:../../_shared/connector-runtime
+      '@intentic/sandbox-contract':
+        specifier: workspace:*
+        version: link:../../_shared/sandbox-contract
+      '@intentic/testing':
+        specifier: workspace:*
+        version: link:../../_tools/testing
+      '@intentic/tsconfig':
+        specifier: workspace:*
+        version: link:../../_tools/tsconfig
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.2
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.19.1
+      '@xmldom/xmldom':
+        specifier: 'catalog:'
+        version: 0.9.12
+      asn1js:
+        specifier: 'catalog:'
+        version: 3.0.10
+      jose:
+        specifier: 'catalog:'
+        version: 6.2.12
+      pkijs:
+        specifier: 'catalog:'
+        version: 3.4.1
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+      vite:
+        specifier: 'catalog:'
+        version: 8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)
+      vue:
+        specifier: 'catalog:'
+        version: 3.5.43(typescript@6.0.3)
+      vue-tsc:
+        specifier: 'catalog:'
+        version: 3.3.12(typescript@6.0.3)
+      xadesjs:
+        specifier: 'catalog:'
+        version: 2.6.8(@xmldom/xmldom@0.9.12)(xpath@0.0.34)
+      xmldsigjs:
+        specifier: 'catalog:'
+        version: 2.8.8(@xmldom/xmldom@0.9.12)
+      xpath:
+        specifier: 'catalog:'
+        version: 0.0.34
+      zod:
+        specifier: 4.6.5
+        version: 4.6.5
+
   _extensions/git-history:
     dependencies:
       '@intentic/extension-api':
@@ -1885,6 +1976,34 @@ importers:
         specifier: 'catalog:'
         version: 7.0.0-dev.20260707.2
 
+  _extensions/microsoft-365:
+    dependencies:
+      '@intentic/base':
+        specifier: workspace:*
+        version: link:../../_tools/base
+      '@intentic/connector-runtime':
+        specifier: workspace:*
+        version: link:../../_shared/connector-runtime
+      '@intentic/sandbox-contract':
+        specifier: workspace:*
+        version: link:../../_shared/sandbox-contract
+    devDependencies:
+      '@intentic/testing':
+        specifier: workspace:*
+        version: link:../../_tools/testing
+      '@intentic/tsconfig':
+        specifier: workspace:*
+        version: link:../../_tools/tsconfig
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.2
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.19.1
+      '@typescript/native-preview':
+        specifier: 'catalog:'
+        version: 7.0.0-dev.20260707.2
+
   _extensions/onlyoffice:
     dependencies:
       '@intentic/base':
@@ -1971,6 +2090,37 @@ importers:
       vue-tsc:
         specifier: 'catalog:'
         version: 3.3.12(typescript@6.0.3)
+
+  _extensions/prawo:
+    dependencies:
+      '@intentic/base':
+        specifier: workspace:*
+        version: link:../../_tools/base
+      '@intentic/connector-runtime':
+        specifier: workspace:*
+        version: link:../../_shared/connector-runtime
+      '@intentic/sandbox-contract':
+        specifier: workspace:*
+        version: link:../../_shared/sandbox-contract
+      zod:
+        specifier: 4.6.5
+        version: 4.6.5
+    devDependencies:
+      '@intentic/testing':
+        specifier: workspace:*
+        version: link:../../_tools/testing
+      '@intentic/tsconfig':
+        specifier: workspace:*
+        version: link:../../_tools/tsconfig
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.2
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.19.1
+      '@typescript/native-preview':
+        specifier: 'catalog:'
+        version: 7.0.0-dev.20260707.2
 
   _extensions/preview:
     dependencies:
@@ -5805,6 +5955,10 @@ packages:
     resolution: {integrity: sha512-T/BoHgFXirb0ENSPBquzX0rcjXeM6Lo892a2jlYJkqk83LqZx0l1Of7DzlKJ6jkpvMrkHSnAcgb5JegL8SeIkQ==}
     engines: {node: '>= 20.19.0'}
 
+  '@noble/hashes@1.8.0':
+    resolution: {integrity: sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==}
+    engines: {node: ^14.21.3 || >=16}
+
   '@noble/hashes@2.2.0':
     resolution: {integrity: sha512-IYqDGiTXab6FniAgnSdZwgWbomxpy9FtYvLKs7wCUs2a8RkITG+DFGO1DM9cr+E3/RgADRpFjrKVaJ1z6sjtEg==}
     engines: {node: '>= 20.19.0'}
@@ -7942,6 +8096,10 @@ packages:
     resolution: {integrity: sha512-/5NV/vDALVFDXgLmfsy9TRCBlKwO2LNBFzpzvb9iIj+jR+eSc6DLYYvVOdivT/jm7MtU6TebYuRmzEOI7w40UA==}
     engines: {node: '>=10.0.0'}
 
+  '@xmldom/xmldom@0.9.12':
+    resolution: {integrity: sha512-5AXjrcMClTryPe9LgZrygpB1lj7s0S9E0+W+AHaVKAVyHanafK86iPSvG5xHVSp/jC+VH1UXu0TAEmY279xH7A==}
+    engines: {node: '>=14.6'}
+
   '@xterm/addon-search@0.16.0':
     resolution: {integrity: sha512-9OeuBFu0/uZJPu+9AHKY6g/w0Czyb/Ut0A5t79I4ULoU4IfU5BEpPFVGQxP4zTTMdfZEYkVIRYbHBX1xWwjeSA==}
 
@@ -8102,6 +8260,10 @@ packages:
 
   asn1@0.2.6:
     resolution: {integrity: sha512-ix/FxPn0MDjeyJ7i/yoHGFt/EX6LyNbxSEhPPXODPL+KB0VPk86UYfL0lMdy+KCnv+fmvIzySwaK5COwqVbWTQ==}
+
+  asn1js@3.0.10:
+    resolution: {integrity: sha512-S2s3aOytiKdFRdulw2qPE51MzjzVOisppcVv7jVFR+Kw0kxwvFrDcYA0h7Ndqbmj0HkMIXYWaoj7fli8kgx1eg==}
+    engines: {node: '>=12.0.0'}
 
   assertion-error@2.0.1:
     resolution: {integrity: sha512-Izi8RQcffqCeNVgFigKli1ssklIbpHnCYc6AknXGYoB6grJqyeby7jv12JUQgmTAnIDnbck1uxksT4dzN3PWBA==}
@@ -8420,6 +8582,10 @@ packages:
   bytes@3.1.2:
     resolution: {integrity: sha512-/Nf7TyzTx6S3yRJObOAV7956r8cr2+Oj8AC5dt8wSP3BQAoeX58NoHyCU8P8zGkNXStjTSi6fzO6F0pBdcYbEg==}
     engines: {node: '>= 0.8'}
+
+  bytestreamjs@2.0.1:
+    resolution: {integrity: sha512-U1Z/ob71V/bXfVABvNr/Kumf5VyeQRBEm6Txb0PQ6S7V5GpBM3w4Cbqz/xPDicR5tN0uvDifng8C+5qECeGwyQ==}
+    engines: {node: '>=6.0.0'}
 
   c12@3.3.4:
     resolution: {integrity: sha512-cM0ApFQSBXuourJejzwv/AuPRvAxordTyParRVcHjjtXirtkzM0uK2L9TTn9s0cXZbG7E55jCivRQzoxYmRAlA==}
@@ -11197,6 +11363,10 @@ packages:
   pkg-types@2.3.3:
     resolution: {integrity: sha512-j/lCFdcppV0JxWpCEITdbDltBxPP6cHT+yNJ6Go2OgoSA9518X847X9z0p6LtA4Nc16+eQzCZjRrWanTGvHJ5w==}
 
+  pkijs@3.4.1:
+    resolution: {integrity: sha512-Oo/NZcSWccq8KyoG7gLE9fnltgHns+pNCjCAp/WmjsUySi+sX7y4z4Xqu4fVb42CDHzRPl33fjzT15V1wvcyhA==}
+    engines: {node: '>=16.0.0'}
+
   platform@1.3.6:
     resolution: {integrity: sha512-fnWVljUchTro6RiCFvCXBbNhJc2NijN7oIQxbwsyL0buWJPG85v81ehlHI9fXrJsMNgTofEoWIQeClKpgxFLrg==}
 
@@ -11427,6 +11597,13 @@ packages:
 
   pure-rand@8.4.2:
     resolution: {integrity: sha512-vvuOGgcuPJAirlHvuQw1TrOiw7ptaIXXmIbNuiNOY6lNGJJH49PQ1Kj4nd783nPdQhQdicgOjVI2yI/9BD6/Ng==}
+
+  pvtsutils@1.3.6:
+    resolution: {integrity: sha512-PLgQXQ6H2FWCaeRak8vvk1GW462lMxB5s3Jm673N82zI4vqtVUPuZdffdZbPDFRoU8kAhItWFtPCWiPpp4/EDg==}
+
+  pvutils@1.2.0:
+    resolution: {integrity: sha512-BbubeCEyTuQjVMakvJQ/Sxbc93F2pwmbsxONT/ZRrwU7Ua38d8unYTwXpTVLAKJ4BDuH9IGztCjQcd/N/39Dvg==}
+    engines: {node: '>=16.0.0'}
 
   qified@0.10.1:
     resolution: {integrity: sha512-+Owyggi9IxT1ePKGafcI87ubSmxol6smwJ+RAHDQlx9+9cPwFWDiKFFCPuWhr9ignlGpZ9vDQLw67N4dcTVFEA==}
@@ -12912,6 +13089,17 @@ packages:
       utf-8-validate:
         optional: true
 
+  xadesjs@2.6.8:
+    resolution: {integrity: sha512-OM/jb1YB4Kim9XAA5QqnAmx2LMxNilvwa34EtewBtLedgf4+Y3sBqGg9Wcxutn2fEh1U6MaJ/A9C42+5iSWnIQ==}
+    engines: {node: '>=16.0.0'}
+
+  xml-core@1.2.6:
+    resolution: {integrity: sha512-hNiMqDG28WKzpEgKY+kn06272c7Mx0A8NB+Hx706Uwbb2obNnxKc+g4NyBkw6gcbBJaYM5GpK8iKKJv02Vwbmw==}
+    engines: {node: '>=16.0.0'}
+    peerDependencies:
+      '@xmldom/xmldom': ^0.9.10
+      xpath: ^0.0.34
+
   xml-name-validator@5.0.0:
     resolution: {integrity: sha512-EvGK8EJ3DhaHfbRlETOWAS5pO9MZITeauHKJyb8wyajUfQUenkIg2MvLDTZ4T/TgIcm3HU0TFBgWWboAZ30UHg==}
     engines: {node: '>=18'}
@@ -12922,6 +13110,14 @@ packages:
 
   xmlchars@2.2.0:
     resolution: {integrity: sha512-JZnDKK8B0RCDw84FNdDAIpZK+JuJw+s7Lz8nksI7SIuU3UXJJslUthsi+uWBUYOwPFwW7W7PRLRfUKpxjtjFCw==}
+
+  xmldsigjs@2.8.8:
+    resolution: {integrity: sha512-RxOyKIvuYV3b4K97uS0djVxvjfXY9evhj1UXt2cW1O7kClDO9SqlnsVbuHC4keMukbU1xnWOF9P0qXzJAQB83w==}
+    engines: {node: '>=16.0.0'}
+
+  xpath@0.0.34:
+    resolution: {integrity: sha512-FxF6+rkr1rNSQrhUNYrAFJpRXNzlDoMxeXN5qI84939ylEv3qqPFKa85Oxr6tDaJKqwW6KKyo2v26TSv3k6LeA==}
+    engines: {node: '>=0.6.0'}
 
   xtend@4.0.2:
     resolution: {integrity: sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ==}
@@ -14667,6 +14863,8 @@ snapshots:
   '@noble/curves@2.2.0':
     dependencies:
       '@noble/hashes': 2.2.0
+
+  '@noble/hashes@1.8.0': {}
 
   '@noble/hashes@2.2.0': {}
 
@@ -16701,6 +16899,8 @@ snapshots:
 
   '@xmldom/xmldom@0.8.15': {}
 
+  '@xmldom/xmldom@0.9.12': {}
+
   '@xterm/addon-search@0.16.0': {}
 
   '@xterm/addon-web-links@0.12.0': {}
@@ -16882,6 +17082,12 @@ snapshots:
   asn1@0.2.6:
     dependencies:
       safer-buffer: 2.1.2
+
+  asn1js@3.0.10:
+    dependencies:
+      pvtsutils: 1.3.6
+      pvutils: 1.2.0
+      tslib: 2.8.1
 
   assertion-error@2.0.1: {}
 
@@ -17239,6 +17445,8 @@ snapshots:
   byline@5.0.0: {}
 
   bytes@3.1.2: {}
+
+  bytestreamjs@2.0.1: {}
 
   c12@3.3.4(magicast@0.5.5):
     dependencies:
@@ -20027,6 +20235,15 @@ snapshots:
       exsolve: 1.1.1
       pathe: 2.0.3
 
+  pkijs@3.4.1:
+    dependencies:
+      '@noble/hashes': 1.8.0
+      asn1js: 3.0.10
+      bytestreamjs: 2.0.1
+      pvtsutils: 1.3.6
+      pvutils: 1.2.0
+      tslib: 2.8.1
+
   platform@1.3.6: {}
 
   playwright-core@1.63.0: {}
@@ -20229,6 +20446,12 @@ snapshots:
   pure-rand@6.1.0: {}
 
   pure-rand@8.4.2: {}
+
+  pvtsutils@1.3.6:
+    dependencies:
+      tslib: 2.8.1
+
+  pvutils@1.2.0: {}
 
   qified@0.10.1:
     dependencies:
@@ -21740,11 +21963,39 @@ snapshots:
 
   ws@8.22.0: {}
 
+  xadesjs@2.6.8(@xmldom/xmldom@0.9.12)(xpath@0.0.34):
+    dependencies:
+      xml-core: 1.2.6(@xmldom/xmldom@0.9.12)(xpath@0.0.34)
+      xmldsigjs: 2.8.8(@xmldom/xmldom@0.9.12)
+    transitivePeerDependencies:
+      - '@xmldom/xmldom'
+      - xpath
+
+  xml-core@1.2.6(@xmldom/xmldom@0.9.12)(xpath@0.0.34):
+    dependencies:
+      '@xmldom/xmldom': 0.9.12
+      tslib: 2.8.1
+      xpath: 0.0.34
+
   xml-name-validator@5.0.0: {}
 
   xmlbuilder@10.1.1: {}
 
   xmlchars@2.2.0: {}
+
+  xmldsigjs@2.8.8(@xmldom/xmldom@0.9.12):
+    dependencies:
+      asn1js: 3.0.10
+      pkijs: 3.4.1
+      pvtsutils: 1.3.6
+      pvutils: 1.2.0
+      tslib: 2.8.1
+      xml-core: 1.2.6(@xmldom/xmldom@0.9.12)(xpath@0.0.34)
+      xpath: 0.0.34
+    transitivePeerDependencies:
+      - '@xmldom/xmldom'
+
+  xpath@0.0.34: {}
 
   xtend@4.0.2: {}
 

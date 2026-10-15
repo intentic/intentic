@@ -363,7 +363,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                 </Button>
                 <!-- A phone floats it over the board instead (below), where the thumb is and the filters get the row. -->
                 <Button v-if="!mobile" size="small" thumb @click="startAgent()">
-                    <Icon name="plus" />{{ t(`chat.words.newAgent`) }}
+                    <Icon name="plus" />{{ words.newAgent }}
                 </Button>
             </div>
         </div>
@@ -425,7 +425,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                                     v-if="archiveSize > 0"
                                     type="button"
                                     :aria-label="t(`agents.agentsView.openArchive`, { archiveSize })"
-                                    v-tooltip.bottom="{ title: t(`shared.archived`), rows: [{ label: t(`shared.agents`), value: archiveSize }], note: t(`agents.words.allKept`) }"
+                                    v-tooltip.bottom="{ title: t(`shared.archived`), rows: [{ label: words.agents, value: archiveSize }], note: t(`agents.words.allKept`) }"
                                     :class="ui.chip({ on: pulsing }, `shrink-0 gap-1 px-2 py-px`, pulsing && `ring-1 ring-primary-500/50`)"
                                     @click="toggleArchive"
                                 >
@@ -438,7 +438,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                                     tier="quiet" thumb
                                     class="shrink-0"
                                     :aria-label="t(`agents.agentsView.archiveEveryFinishedAgent`)"
-                                    v-tooltip.bottom="{ title: t(`agents.agentsView.archiveAll`), rows: [{ label: t(`shared.agents`), value: clearable }], note: t(`agents.words.undoable`) }"
+                                    v-tooltip.bottom="{ title: t(`agents.agentsView.archiveAll`), rows: [{ label: words.agents, value: clearable }], note: t(`agents.words.undoable`) }"
                                     @click="archive()"
                                 >
                                     {{ t(`ui.action.clear`) }}
@@ -452,7 +452,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                                 class="shrink-0"
                                 :aria-label="t(`agents.agentsView.deleteAllArchivedAgents`, { count: archived.length })"
                                 :disabled="purging"
-                                v-tooltip.bottom="{ title: t(`agents.agentsView.deleteAll`), rows: [{ label: t(`shared.agents`), value: archived.length }], note: t(`agents.words.cantUndo`) }"
+                                v-tooltip.bottom="{ title: t(`agents.agentsView.deleteAll`), rows: [{ label: words.agents, value: archived.length }], note: t(`agents.words.cantUndo`) }"
                                 @click="pendingPurge = true"
                             >
                                 <Icon :name="purging ? 'spinner' : 'trash'" :spin="purging" class="text-2xs" />{{ t(`agents.agentsView.deleteAll`) }}
@@ -498,7 +498,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                     >
                         {{
                             archiveFailure ??
-                            (view.purged ? t(`agents.agentsView.archiveEmptiedFinishedAgents`) : t(`agents.agentsView.nothingArchivedYetFinished`))
+                            (view.purged ? words.archiveEmptied : words.archiveNothingYet)
                         }}
                     </p>
                     <!-- Until the reader's own first agent finishes, Finished holds the example of one (ExampleAgentCard). -->
@@ -790,7 +790,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
         </div>
         <!-- The board's one creating press on a phone: over the board's corner rather than in its header, where it spent a
              thumb-high row the filters needed and sat furthest from the thumb. -->
-        <FloatingAction v-if="mobile" icon="plus" labelled :label="t(`chat.words.newAgent`)" @click="startAgent()" />
+        <FloatingAction v-if="mobile" icon="plus" labelled :label="words.newAgent" @click="startAgent()" />
         <!-- One menu for every card on the board; see cardMenuItems. -->
         <ContextMenu ref="cardMenu" :model="cardMenuItems" :min-width="12" />
     </div>

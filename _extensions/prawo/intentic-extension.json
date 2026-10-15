@@ -1,0 +1,44 @@
+{
+    "$schema": "https://intentic.dev/intentic-extension.schema.json",
+    "publisher": "intentic",
+    "name": "prawo",
+    "version": "1.0.0",
+    "category": "connections",
+    "icon": "book",
+    "engines": {
+        "intentic": "^2.0.0"
+    },
+    "contributes": {
+        "bin": "bin",
+        "capabilities": [
+            {
+                "id": "prawo",
+                "kind": "cli",
+                "catalog": {
+                    "name": "Polish law · Prawo polskie",
+                    "icon": "book",
+                    "description": "Acts and rulings, quoted · Akty i orzeczenia z cytatem",
+                    "category": "business",
+                    "hint": "Current texts of Polish acts from the Sejm's ELI database (Dziennik Ustaw, Monitor Polski), with in-force status, consolidated texts and amendments, and court rulings from SAOS. Public sources: no account, no key. · Aktualne teksty ustaw i rozporządzeń z bazy ELI Sejmu (ISAP), tekst jednolity, status obowiązywania, nowelizacje, orzecznictwo SAOS. Źródła publiczne, bez konta i klucza."
+                },
+                "fields": [
+                    {
+                        "key": "limit",
+                        "label": "Results per search · Wyników na wyszukanie",
+                        "default": "10",
+                        "advanced": true,
+                        "hint": "How many acts or rulings a search shows unless asked for more (1–100). · Ile aktów lub orzeczeń pokazuje wyszukiwanie (1–100)."
+                    }
+                ],
+                "env": {
+                    "PRAWO_RESULTS_LIMIT": "${limit}"
+                },
+                "hosts": ["api.sejm.gov.pl", "eli.gov.pl", "isap.sejm.gov.pl", "www.saos.org.pl"],
+                "probe": {
+                    "url": "https://api.sejm.gov.pl/eli/statuses"
+                },
+                "skill": "skills/prawo/SKILL.md"
+            }
+        ]
+    }
+}

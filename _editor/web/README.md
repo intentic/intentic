@@ -45,6 +45,18 @@ flowchart LR
   device remembers sandboxes of the account's own goes to `/recover` rather than onboarding; and a sandbox's own
   address opens it through `/open?url=`. [recovery/README.md](src/features/sandbox/recovery/README.md) has the rules.
 - **AI literacy notice.** When enabled in Sandbox ▸ Access, every member, including guests, confirms the current notice before continuing. A new text opens it again. Maintainers can read the confirmation list. The default is off.
+- **Results one press away.** The documents a turn made (Word, OpenDocument, RTF, PDF, decks, sheets, web pages) are
+  chips under its answer, each with Download and Print beside it (`features/chat/transcript/deliverables/`). A press on
+  the chip opens the document in Files as before; a guest, who has no Files, gets it over the chat instead
+  (`features/workspace/viewers/results/ResultPreview.vue`), read through the daemon's route that serves a
+  conversation's recorded documents and nothing else (`resultFiles.ts`). The file viewer's bar has Download for every
+  file and Print over a surface that reads as pages. Print copies what is on screen into a hidden frame of its own,
+  with no script, no handler and nothing loaded from outside the app (`printRendered.ts`): a document keeps its page
+  layout, a web page prints as its sealed frame shows it, a PDF goes to the browser's PDF printing. In plain words
+  (Settings ▸ Appearance ▸ "I don't" write code) a conversation's review leads with those documents instead of the diff,
+  with no branch, status letters or line counts, and ends in Accept under one sentence saying what accepting does
+  (`features/agents/review/results/PlainResultReview.vue`); that press carries the documents even where git ignores
+  them. A developer's review and land are unchanged.
 - **A first run.** The agents board is always its three lanes, even empty: a first run draws the first agent's
   dashed slot in Active, where its card will arrive, and says in each empty lane what will land there
   (`features/agents/board/view/firstScreen.ts`). A maintainer's first run also carries a getting-started checklist,

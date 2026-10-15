@@ -2,6 +2,7 @@ import { PROFILE_IDS } from "@intentic/constants";
 import { GrantedRoleSchema, isProjectDirName, SANDBOX_ID } from "@intentic/sandbox-contract";
 import { oc } from "@orpc/contract";
 import { z } from "zod";
+import { orgContract } from "./organisations.js";
 import {
     AddressOfferSchema,
     AdoptionTicketSchema,
@@ -48,6 +49,7 @@ import {
 } from "./schemas.js";
 
 export * from "./schemas.js";
+export * from "./organisations.js";
 
 // Current authenticated user, or null with no session. `export` is the caller's GDPR data export as JSON; credentials
 // (session/OAuth/connect tokens, setup payloads) are excluded.
@@ -312,4 +314,5 @@ export const apiContract = {
     push: pushRelayContract,
     wallet: walletContract,
     admin: adminContract,
+    org: orgContract,
 };

@@ -1,4 +1,60 @@
 {
+    "organisations": {
+        "held": {
+            "notice": "Tą częścią sandboxa zarządza {org}. Możesz ją przeglądać, ale zmiany wprowadza administrator Twojej organizacji."
+        },
+        "console": {
+            "couldntLoad": "Nie udało się wczytać Twoich organizacji",
+            "couldntCreate": "Nie udało się założyć organizacji",
+            "yours": "Twoje organizacje",
+            "summary": "{role} · {count} sandbox | {role} · {count} sandboxy | {role} · {count} sandboxów",
+            "none": "Nie należysz do żadnej organizacji. Prywatne sandboxy działają bez niej.",
+            "namePlaceholder": "Nazwa, np. Urząd Gminy Przykładowo",
+            "create": "Załóż organizację"
+        },
+        "role": {
+            "admin": "Administrator",
+            "member": "Członek"
+        },
+        "mode": {
+            "open": "Otwarte",
+            "locked": "Tylko do odczytu",
+            "hidden": "Ukryte"
+        },
+        "section": {
+            "models": "Modele",
+            "agent": "Agent",
+            "environment": "Środowisko",
+            "secrets": "Sekrety i połączenia",
+            "data-protection": "Ochrona danych",
+            "extensions": "Rozszerzenia",
+            "access": "Dostęp",
+            "areas": "Obszary",
+            "personas": "Persony",
+            "updates": "Automatyczne aktualizacje"
+        },
+        "detail": {
+            "couldntSave": "Nie udało się zapisać zasad",
+            "couldntAdd": "Nie udało się dodać tej osoby",
+            "couldntRemove": "Nie udało się usunąć tej osoby",
+            "couldntBind": "Nie udało się dodać tego sandboxa",
+            "couldntUnbind": "Nie udało się odłączyć tego sandboxa",
+            "applied": "obowiązują zasady w wersji {version}",
+            "pending": "czeka na wersję {version}",
+            "policy": "Zasady · wersja {version}",
+            "policyNote": "Jak traktowana jest każda część każdego sandboxa w tej organizacji. Tylko do odczytu: można przeglądać, ale nie zmieniać, także właściciel sandboxa. Ukryte: dodatkowo znika z menu sandboxa. Sandboxy przejmują nową wersję w ciągu kilku minut.",
+            "savePolicy": "Zapisz jako nową wersję",
+            "members": "Osoby",
+            "emailPlaceholder": "imie{'@'}urzad.example",
+            "add": "Dodaj",
+            "sandboxes": "Sandboxy",
+            "unbind": "Odłącz",
+            "noSandboxes": "Żaden sandbox nie należy jeszcze do tej organizacji.",
+            "pickSandbox": "Wybierz jeden ze swoich sandboxów",
+            "bind": "Dodaj do organizacji",
+            "bindNote": "Dodać można tylko sandboxy, których jesteś właścicielem. Po dodaniu obowiązują go powyższe zasady, dopóki administrator go nie odłączy."
+        }
+    },
     "a11yKit": {
         "toggleDetails": "Pokaż lub ukryj szczegóły nagłówka",
         "selectRow": "Zaznacz przykładowy wiersz",
@@ -2328,6 +2384,173 @@
             "tooOld": "{name} działa na zbyt starym sandboxie dla połączeń. Zaktualizuj go i sparuj ponownie.",
             "couldntPair": "Nie udało się utworzyć połączenia na {name}.",
             "couldntReadPersonas": "Nie udało się odczytać person tamtego sandboxa."
+        },
+        "extensionCatalog": {
+            "microsoft365": {
+                "name": "Microsoft 365",
+                "description": "Poczta Outlook, kalendarz i pliki biurowe.",
+                "hint": "Outlook, Exchange Online, OneDrive i SharePoint jednego pracownika, z logowaniem przez aplikację zarejestrowaną w Waszym Entra ID. Tryb tylko do odczytu prosi Microsoft wyłącznie o uprawnienia do odczytu i odrzuca każde polecenie zapisu. Wysyłka poczty, zmiany w kalendarzu i przesyłanie plików czekają na Twoją zgodę. Dla kolejnej skrzynki dodaj kartę ponownie.",
+                "guide": {
+                    "linkLabel": "Otwórz rejestracje aplikacji w Entra ID",
+                    "scopes": "delegowane uprawnienia Microsoft Graph: `User.Read` `Mail.ReadWrite` `Mail.Send` `Calendars.ReadWrite` `Files.ReadWrite.All` `Sites.Read.All` `offline_access`; tylko do odczytu: `User.Read` `Mail.Read` `Calendars.Read` `Files.Read.All` `Sites.Read.All` `offline_access`",
+                    "steps": {
+                        "0": "`Rejestracje aplikacji` → `Nowa rejestracja`: tylko konta w tym katalogu organizacyjnym, bez adresu przekierowania.",
+                        "1": "Skopiuj z przeglądu `Identyfikator katalogu (dzierżawy)` i `Identyfikator aplikacji (klienta)` do tej karty.",
+                        "2": "`Uwierzytelnianie` → `Zezwalaj na przepływy klienta publicznego`: `Tak`. Dzięki temu logowanie działa bez adresu przekierowania i bez sekretu.",
+                        "3": "`Uprawnienia interfejsu API` → `Microsoft Graph` → `Uprawnienia delegowane`: dodaj uprawnienia wymienione wyżej, a jeśli dzierżawa tego wymaga, `Udziel zgody administratora`.",
+                        "4": "Zapisz kartę i w czacie, który obserwujesz, poproś agenta o uruchomienie `m365 auth login`. Otwórz podaną stronę Microsoft we własnej przeglądarce, wpisz kod i zaloguj się jako pracownik.",
+                        "5": "Logowanie zapisuje się na tej karcie samo i nigdy nie pojawia się w czacie. Aby z niego skorzystać, zacznij nowy czat albo naciśnij `Testuj`.",
+                        "6": "Zmiana tego, co może agent (tylko odczyt albo odczyt i zapis), wymaga ponownego logowania."
+                    }
+                },
+                "fields": {
+                    "tenantId": {
+                        "label": "Identyfikator katalogu (dzierżawy)"
+                    },
+                    "clientId": {
+                        "label": "Identyfikator aplikacji (klienta)"
+                    },
+                    "access": {
+                        "label": "Co może robić agent",
+                        "hint": "Wysyłka poczty, zmiany w kalendarzu i przesyłanie plików i tak czekają na Twoją zgodę.",
+                        "options": {
+                            "write": "Odczyt i zapis",
+                            "read": "Tylko odczyt"
+                        }
+                    },
+                    "authority": {
+                        "label": "Chmura Microsoft",
+                        "options": {
+                            "login_microsoftonline_com": "Microsoft 365 (globalna)",
+                            "login_microsoftonline_us": "Administracja USA (GCC High)",
+                            "login_chinacloudapi_cn": "Microsoft 365 obsługiwany przez 21Vianet (Chiny)"
+                        }
+                    },
+                    "refreshToken": {
+                        "label": "Logowanie",
+                        "hint": "Wypełnia je `m365 auth login`; zostaw puste."
+                    },
+                    "clientSecret": {
+                        "label": "Sekret klienta (tylko aplikacje poufne)",
+                        "hint": "Tylko dla aplikacji, która loguje się własnym przepływem kodu autoryzacji i wkleja token odświeżania powyżej. Przy zwykłym logowaniu zostaw puste."
+                    }
+                }
+            },
+            "imap": {
+                "name": "IMAP",
+                "description": "Czytaj skrzynkę przez IMAP i uruchamiaj automatyzacje.",
+                "guide": {
+                    "linkLabel": "Utwórz hasło aplikacji Gmail",
+                    "steps": {
+                        "0": "Gmail: włącz `Weryfikację dwuetapową`, a potem użyj `hasła aplikacji` (link powyżej).",
+                        "1": "Outlook.com: `account.microsoft.com` → `Zabezpieczenia` → `Hasła aplikacji`.",
+                        "2": "Exchange Online (Microsoft 365 w pracy) nie przyjmuje haseł przez IMAP: wybierz `OAuth2`. W Entra ID zarejestruj aplikację z włączonym `Zezwalaj na przepływy klienta publicznego` i delegowanymi uprawnieniami `Office 365 Exchange Online` `IMAP.AccessAsUser.All` oraz `SMTP.Send`, wpisz tu jej identyfikatory dzierżawy i klienta, a potem poproś agenta o `imap login`. Do poczty, kalendarza i plików Outlook naraz lepiej pasuje karta Microsoft 365.",
+                        "3": "Gmail przez OAuth2: klient OAuth z zakresem `https://mail.google.com/`; wklej jego identyfikator, sekret i token odświeżania.",
+                        "4": "Gdzie indziej działa zwykłe hasło IMAP.",
+                        "5": "Wpisz swój adres w polu `Nazwa użytkownika`: host i port uzupełnią się same."
+                    }
+                },
+                "fields": {
+                    "host": {
+                        "label": "Host IMAP"
+                    },
+                    "port": {
+                        "label": "Port"
+                    },
+                    "username": {
+                        "label": "Nazwa użytkownika"
+                    },
+                    "authMode": {
+                        "label": "Logowanie przez",
+                        "options": {
+                            "password": "Hasło lub hasło aplikacji",
+                            "oauth2": "OAuth2 (Exchange Online, Gmail)"
+                        }
+                    },
+                    "password": {
+                        "label": "Hasło"
+                    },
+                    "oauthProvider": {
+                        "label": "Dostawca OAuth2",
+                        "options": {
+                            "microsoft": "Microsoft 365 (Exchange Online)",
+                            "google": "Google (Gmail)",
+                            "token": "Token dostępu, który sam odświeżam"
+                        }
+                    },
+                    "oauthTenant": {
+                        "label": "Identyfikator katalogu (dzierżawy)"
+                    },
+                    "oauthClientId": {
+                        "label": "Identyfikator aplikacji (klienta)"
+                    },
+                    "oauthClientSecret": {
+                        "label": "Sekret klienta",
+                        "hint": "Klienci OAuth Gmaila go wymagają. Przy logowaniu do Exchange Online zostaw puste."
+                    },
+                    "oauthRefreshToken": {
+                        "label": "Token odświeżania",
+                        "hint": "Exchange Online: zostaw puste, wypełni je `imap login`. Gmail: wklej token z zakresem https://mail.google.com/."
+                    },
+                    "accessToken": {
+                        "label": "Token dostępu",
+                        "hint": "Tokeny dostępu wygasają w ciągu kilku godzin: wymień go wcześniej, inaczej obserwowanie skrzynki się zatrzyma."
+                    },
+                    "mailbox": {
+                        "label": "Obserwowany folder"
+                    },
+                    "smtpHost": {
+                        "label": "Host SMTP"
+                    },
+                    "smtpPort": {
+                        "label": "Port SMTP"
+                    },
+                    "smtpSecurity": {
+                        "label": "Zabezpieczenia SMTP",
+                        "options": {
+                            "starttls": "STARTTLS (587)",
+                            "tls": "TLS od początku połączenia (465)"
+                        }
+                    },
+                    "smtpUsername": {
+                        "label": "Nazwa użytkownika SMTP (puste: użytkownik IMAP)"
+                    },
+                    "smtpPassword": {
+                        "label": "Hasło SMTP (puste: hasło IMAP)"
+                    }
+                }
+            },
+            "sharepoint": {
+                "name": "SharePoint (aplikacja)",
+                "description": "Witryny, biblioteki dokumentów i listy SharePoint.",
+                "hint": "Dostęp aplikacji zarządzanej przez administratora. Najlepiej z Sites.Selected i dostępem przyznanym do konkretnych witryn. Do poczty Outlook, kalendarza i plików pracownika połącz raczej Microsoft 365. Sekrety klienta wygasają: wymień sekret, gdy Graph odpowie 401.",
+                "guide": {
+                    "linkLabel": "Otwórz rejestracje aplikacji w Entra ID",
+                    "scopes": "uprawnienia aplikacji `Sites.Read.All`, do zapisu `Sites.ReadWrite.All`, a dla wybranych witryn `Sites.Selected`",
+                    "steps": {
+                        "0": "`Rejestracje aplikacji` → `Nowa rejestracja`: jedna dzierżawa, bez adresu przekierowania.",
+                        "1": "Skopiuj z przeglądu identyfikator klienta i identyfikator dzierżawy.",
+                        "2": "`Certyfikaty i wpisy tajne` → `Nowy wpis tajny klienta`, skopiuj jego `Wartość` (widać ją tylko raz).",
+                        "3": "`Uprawnienia interfejsu API` → `Microsoft Graph` → `Uprawnienia aplikacji`: dodaj `Sites.Read.All` lub `Sites.Selected`, a potem `Udziel zgody administratora`.",
+                        "4": "`Sites.Selected` nie daje dostępu do niczego, dopóki właściciel witryny nie przyzna tej aplikacji dostępu do każdej z nich."
+                    }
+                },
+                "fields": {
+                    "tenantId": {
+                        "label": "Identyfikator katalogu (dzierżawy)"
+                    },
+                    "clientId": {
+                        "label": "Identyfikator aplikacji (klienta)"
+                    },
+                    "clientSecret": {
+                        "label": "Wartość sekretu klienta",
+                        "hint": "Wartość widoczna przy tworzeniu: Entra nie pokaże jej ponownie."
+                    },
+                    "hostname": {
+                        "label": "Nazwa hosta SharePoint"
+                    }
+                }
+            }
         }
     },
     "chat": {
@@ -2861,7 +3084,11 @@
             "enterToContinueAt": "Enter, aby kontynuować o {when}",
             "enterToContinueIn": "Enter, aby kontynuować za {when}",
             "enterToSendAgainAt": "Enter, aby wysłać ponownie o {when}",
-            "enterToSendAgainIn": "Enter, aby wysłać ponownie za {when}"
+            "enterToSendAgainIn": "Enter, aby wysłać ponownie za {when}",
+            "plain": {
+                "startConversation": "Zacznij rozmowę z asystentem.",
+                "moreSettings": "Więcej opcji"
+            }
         },
         "chatPaneNotices": {
             "accountNeedsToReconnected": "To konto trzeba podłączyć ponownie.",
@@ -3193,7 +3420,11 @@
             "region": "Dokumenty z tej tury",
             "sheet": "Arkusz kalkulacyjny",
             "slides": "Prezentacja",
-            "word": "Dokument Word"
+            "word": "Dokument Word",
+            "odt": "Dokument tekstowy (ODT)",
+            "ods": "Arkusz kalkulacyjny (ODS)",
+            "odp": "Prezentacja (ODP)",
+            "rtf": "Dokument tekstowy (RTF)"
         },
         "chatTurnShots": {
             "asideHidden": "Ukryte: {what}",
@@ -3277,7 +3508,16 @@
             "hintSendAgainAtReopen": "Wyślij ponownie po resecie",
             "hintSendAgainAtReopenNote": "Ustawia odpowiedź tego czatu powyżej na „Wyślij ponownie”: wstrzymana tura ruszy sama, gdy limit się odnowi.",
             "hintGoesAtReopen": "Ruszy sama po resecie",
-            "hintGoesAtReopenNote": "Odpowiedź tego czatu powyżej już wysyła wstrzymaną turę ponownie, gdy limit się odnowi."
+            "hintGoesAtReopenNote": "Odpowiedź tego czatu powyżej już wysyła wstrzymaną turę ponownie, gdy limit się odnowi.",
+            "plain": {
+                "placeholderIdle": "Napisz, w czym mogę pomóc…",
+                "placeholderSteer": "Dopisz coś, zanim skończy…",
+                "placeholderQueue": "Napisz wiadomość na moment, gdy skończy…",
+                "placeholderEdit": "Zapytaj o to jeszcze raz, inaczej…",
+                "hintSteer": "Wyślij teraz, gdy pracuje",
+                "hintQueue": "Pójdzie, gdy skończy",
+                "viewerPlaceholder": "Możesz czytać tę rozmowę. Poproś właściciela, jeśli chcesz też tu pisać."
+            }
         },
         "composerModelPill": {
             "chooseModel": "Wybierz model",
@@ -3302,7 +3542,13 @@
             "on": "Wł.",
             "off": "Wył.",
             "landWhenDoneNote": "Gotowa praca scali się sama.",
-            "holdOnBranchNote": "Zatrzymaj gotową pracę na gałęzi."
+            "holdOnBranchNote": "Zatrzymaj gotową pracę na gałęzi.",
+            "plain": {
+                "mode": "Ile robi sam",
+                "modeNote": "Kiedy najpierw Cię zapyta.",
+                "model": "Który model AI odpowiada",
+                "modelNote": "Zmień model AI, z którego korzysta."
+            }
         },
         "composerQuickPick": {
             "anotherSandbox": "Inny sandbox",
@@ -3450,7 +3696,10 @@
             "weeklyAllModels": "Tygodniowo · wszystkie modele",
             "weeklyOverage": "Tygodniowo · wliczona nadwyżka",
             "weeklyScoped": "Tygodniowo · {label}",
-            "weeklyThirdParty": "Tygodniowo · aplikacje zewnętrzne"
+            "weeklyThirdParty": "Tygodniowo · aplikacje zewnętrzne",
+            "plain": {
+                "percentLeft": "zostało {percent} limitu użycia"
+            }
         },
         "turnFailures": {
             "installNewerEngine": "Zainstaluj nowszy silnik w Sandbox ▸ Środowisko ▸ Silniki agentów.",
@@ -4012,6 +4261,15 @@
                 "goOn": "Mów dalej…",
                 "listeningDetail": "Słucham „{word}” na tym urządzeniu. Kliknij, aby wstrzymać na godzinę."
             }
+        },
+        "effortScale": {
+            "minimal": "Minimalny",
+            "low": "Niski",
+            "medium": "Średni",
+            "high": "Wysoki",
+            "xhigh": "Bardzo wysoki",
+            "max": "Maksymalny",
+            "ultra": "Ultra"
         }
     },
     "common": {
@@ -7859,6 +8117,11 @@
                 "storedSecret": "zapisany sekret użyty w samym poleceniu"
             }
         },
+        "agentDocumentSearch": {
+            "group": "Dokumenty",
+            "title": "Przeszukuj treść dokumentów",
+            "description": "W tle przygotowuje tekst PDF-ów, plików Word, arkuszy i prezentacji, by rg i iq go znajdowały, ze wskazaniem strony."
+        },
         "agentChatPages": {
             "group": "Strony w czacie",
             "title": "Odpowiadaj stronami",
@@ -8406,6 +8669,11 @@
                 "hint": "Zmienia słowa, których używa aplikacja, i to, która strona jest główna. Nic w Twoich plikach ani agentach.",
                 "maker": "Ja nie",
                 "makerHint": "Proste słowa, pliki narzędziowe zejdą z drogi."
+            },
+            "plain": {
+                "languageHint": "Język, w którym napisany jest ten interfejs. Twoje pliki i rozmowy pozostają nietknięte.",
+                "wallpaperHint": "Obraz za tablicą asystentów, w jasnej lub ciemnej wersji Twojego motywu.",
+                "workHint": "Zmienia słowa, których używa aplikacja, i to, która strona jest główna. Nic w Twoich plikach ani rozmowach."
             }
         },
         "hostedHours": {
@@ -8466,7 +8734,8 @@
             "notifications": "Powiadomienia",
             "profile": "Profil",
             "tokens": "Tokeny",
-            "voice": "Głos"
+            "voice": "Głos",
+            "organisation": "Organizacja"
         },
         "settingsBilling": {
             "activating": "Aktywowanie…",
@@ -8640,7 +8909,10 @@
             "shownOnceCopyNow": "Pokazywany raz. Skopiuj go teraz: przechowywany jest tylko jego skrót.",
             "used": "użyty {ago}",
             "whatProvisioningTokensAre": "Token provisioningowy pozwala jednemu z Twoich sandboxów tworzyć sandboxy na tym koncie. Wklej go w możliwość „Flota sandboxów” tego sandboxa; każdy sandbox tworzony przez jego agenta i tak najpierw zapyta Cię na czacie.",
-            "whereItGoes": "Gdzie go wkleić"
+            "whereItGoes": "Gdzie go wkleić",
+            "unavailable": "Tokeny nie są jeszcze dostępne na tym serwerze.",
+            "notAllowed": "Twoje konto nie może tu zarządzać tokenami.",
+            "serverTrouble": "Serwer miał problem. Spróbuj ponownie za chwilę."
         },
         "words": {
             "iWriteCode": "Piszę kod",
@@ -8668,6 +8940,10 @@
             "inApp": "W aplikacji Intentic słucha dalej, gdy okno jest zamknięte do zasobnika.",
             "inBrowser": "W przeglądarce słucha, dopóki otwarta jest karta tego obszaru roboczego, a przeglądarka pokazuje znak mikrofonu. Aplikacja Intentic słucha dalej z zasobnika.",
             "wordChange": "Zmień słowo w Sandbox ▸ Agent ▸ Narzędzia"
+        },
+        "hostedMachine": {
+            "shared": "{cpus} współdzielony vCPU · {memory} GB pamięci · {disk} GB dysku | {cpus} współdzielone vCPU · {memory} GB pamięci · {disk} GB dysku | {cpus} współdzielonych vCPU · {memory} GB pamięci · {disk} GB dysku",
+            "performance": "{cpus} dedykowany vCPU · {memory} GB pamięci · {disk} GB dysku | {cpus} dedykowane vCPU · {memory} GB pamięci · {disk} GB dysku | {cpus} dedykowanych vCPU · {memory} GB pamięci · {disk} GB dysku"
         }
     },
     "setup": {
@@ -9795,6 +10071,19 @@
             "pasteCloudflareApiToken": "Wklej swój token API Cloudflare",
             "whyCloudflareApiToken": "Dlaczego token API Cloudflare jest wymagany",
             "whyToken": "Po co ten token?"
+        },
+        "plain": {
+            "assistants": "Asystenci",
+            "newConversation": "Nowa rozmowa",
+            "renameConversation": "Zmień nazwę rozmowy",
+            "archiveConversation": "Zarchiwizuj rozmowę",
+            "untitledConversation": "Rozmowa bez tytułu",
+            "laneActiveEmpty": "Żaden asystent teraz nie pracuje. Zacznij rozmowę i powierz mu zadanie.",
+            "laneAttentionFirst": "Gdy asystent o coś zapyta albo poprosi o zgodę, poczeka tutaj.",
+            "laneFinishedEmpty": "Skończona praca czeka tutaj, aż na nią spojrzysz.",
+            "laneFinishedFirst": "Skończona praca czeka tu na Ciebie. Nic nie zmieni Twoich plików, dopóki tego nie przyjmiesz.",
+            "archiveEmptied": "Archiwum opróżnione. Skończone rozmowy same trafią tu znowu po kilku spokojnych dniach.",
+            "archiveNothingYet": "Nic jeszcze nie zarchiwizowano. Skończone rozmowy same trafiają tu po kilku spokojnych dniach."
         }
     },
     "workspace": {
@@ -10783,6 +11072,23 @@
         },
         "projectFocus": {
             "showOnly": "Pokaż tylko ten projekt"
+        },
+        "results": {
+            "download": "Pobierz",
+            "print": "Drukuj",
+            "close": "Zamknij",
+            "heading": "Gotowe dokumenty",
+            "couldNotOpen": "Nie udało się otworzyć tego dokumentu.",
+            "downloadToOpen": "Pobierz plik, aby go otworzyć.",
+            "noDocuments": "Ta rozmowa nie ma jeszcze gotowych dokumentów.",
+            "otherChanges": "{count} inny zmieniony plik | {count} inne zmienione pliki | {count} innych zmienionych plików",
+            "conflict": "Niektóre pliki wymagają sprawdzenia, zanim będzie można je zapisać.",
+            "acceptExplanation": "Po przyjęciu pliki asystenta trafią do Twoich folderów, a do tego czasu zostają w szkicu tej rozmowy.",
+            "downloadFailed": "Nie udało się pobrać pliku.",
+            "printFailed": "Nie udało się wydrukować podglądu.",
+            "downloadNamed": "Pobierz {name}",
+            "printNamed": "Drukuj {name}",
+            "listFailed": "Nie udało się sprawdzić, jakie dokumenty powstały w tej rozmowie."
         }
     },
     "needs": {

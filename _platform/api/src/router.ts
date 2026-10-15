@@ -4,6 +4,7 @@ import { adminRoutes } from "./admin/admin.routes.js";
 import { desktopRoutes } from "./desktop/desktop.routes.js";
 import { inviteRoutes } from "./invite/invite.routes.js";
 import { meRoutes } from "./me/me.routes.js";
+import { orgRoutes } from "./org/org.routes.js";
 import { pushRelayRoutes } from "./push-relay/push-relay.routes.js";
 import { hostedPlanRoutes } from "./sandbox/hosted/plan/hosted-plan.orpc.js";
 import { sandboxRoutes } from "./sandbox/sandbox.routes.js";
@@ -27,4 +28,5 @@ export const router: ApiRouter = {
     push: pushRelayRoutes(),
     wallet: walletRoutes(),
     admin: adminRoutes,
+    org: orgRoutes,
 };

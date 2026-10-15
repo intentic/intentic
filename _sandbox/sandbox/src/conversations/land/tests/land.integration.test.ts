@@ -1,3 +1,6 @@
+import { includeProducedFiles } from "../../produced-files.js";
+import { unstubbed } from "@intentic/testing";
+import type { Services } from "../../../composition.js";
 import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -933,4 +936,23 @@ test("scratch staged in the checkout rides the next land like any other file", a
     await landAgent(worktrees, isolatedAgent(conversation.repos));
 
     expect(await readFile(join(work, "fixture.log"), "utf8")).toBe("a log the tests read\n");
+});
+
+
+test("plain Accept carries a recorded ignored binary document through the normal land", async () => {
+    const { work, worktrees, conversation } = await setup();
+    const agent = isolatedAgent(conversation.repos);
+    await writeFile(join(conversation.cwd, ".gitignore"), "*.odt\n");
+    const bytes = new Uint8Array([80, 75, 3, 4, 0, 255, 13, 10]);
+    await writeFile(join(conversation.cwd, "letter.odt"), bytes);
+    const transcripts = unstubbed<Services["transcripts"]>("transcripts", { read: async () => [{ role: "assistant", text: "Done", tools: [
+        { id: "made", name: "Bash", category: "execute", status: "completed", locations: [{ path: "letter.odt" }] },
+    ] }] });
+    await includeProducedFiles({ transcripts, agentWorktrees: worktrees }, agent);
+    const head = await sh(work, "rev-parse", "HEAD");
+    const result = await landAgent(worktrees, agent);
+    expect(result.landed).toBe(true);
+    expect(result.changed).toBe(true);
+    expect(new Uint8Array(await readFile(join(work, "letter.odt")))).toEqual(bytes);
+    expect(await sh(work, "rev-parse", "HEAD")).toBe(head);
 });

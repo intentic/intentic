@@ -48,6 +48,14 @@ export {
 export { type ChatRings, chatRings, type RecentKeys, recentKeys, type TypingHeartbeat, typingHeartbeat } from "./listener-memory.js";
 export { createLog, type Logger } from "./log.js";
 export { deliverChunked, HISTORY_LIMIT, paintReply, RECENT_KEYS_MAX, type ReplyOptions, type ReplySurface, TYPING_MAX_MS } from "./reply.js";
+export {
+    type AgentStoreOptions,
+    type RefreshTokenDaemon,
+    type RefreshTokenStored,
+    type RefreshTokenWrite,
+    storeRefreshTokenAsAgent,
+    storeRefreshTokenAsExtension,
+} from "./refresh-token.js";
 export { findWorkspaceRoot, readGatewayUrl } from "./workspace.js";
 // Each platform's one-message ceiling, from the contract's single table (the subpath, so a gateway loads no more of
 // the contract than that).
