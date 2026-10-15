@@ -4,9 +4,13 @@
 #   bash _tools/scripts/image/build-netd.sh [out-dir]   (default .image-out/netd)
 set -euo pipefail
 . "$(dirname "$0")/../lib/repo-root.sh"
+. "$(dirname "$0")/../lib/docker-config.sh"
 cd "$(repo_root)"
 
 out="${1:-.image-out/netd}"
+# The `# syntax=` line and the rust base are pulls, and a credential helper docker cannot run fails both before
+# they reach the registry. dev-restart.sh runs this script on its own, so it applies the fix itself.
+docker_config_without_missing_helpers
 # Without a working buildx plugin, `docker buildx build` falls through to docker's own parser and fails with "unknown
 # flag: --file" (125), which names nothing. Say what is missing instead.
 if ! docker buildx version >/dev/null 2>&1; then

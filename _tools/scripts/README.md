@@ -65,7 +65,7 @@ flowchart LR
 | [ci/](ci) | git hooks, runner setup, provider CLI installs, CI failure audit, SDLC scoreboard |
 | [engines/](engines) | agent engine version pins and the bumper behind `engines.yml` |
 | [tools/](tools) | the sandbox image's pinned tools, every place each is written, and the bumper behind `tools.yml` |
-| [lib/](lib) | shared shell and JS helpers: repo root, git, GitHub, registry retries, the publish set, gate steps |
+| [lib/](lib) | shared shell and JS helpers: repo root, git, GitHub, registry retries, the publish set, gate steps, a docker config without the credential helpers docker cannot run (`docker-config.sh`) |
 | [fonts.mjs](fonts.mjs) | downloads the served webfonts and writes their `@font-face` rules |
 
 ## Commands
@@ -73,7 +73,7 @@ flowchart LR
 ```sh
 pnpm verify               # the whole repo, the way CI's verify groups measure it
 pnpm verify:push          # the push check, the branch against its upstream; CI's quick job runs it with --base
-pnpm build:sandbox        # a local sandbox image, intentic-sandbox:dev
+pnpm build:sandbox        # a local sandbox image, intentic-sandbox:dev (image/build-sandbox-image.sh)
 pnpm try:onboarding       # rehearse the Windows onboarding from this branch
 pnpm ci:audit             # group recent CI failures by step
 ```

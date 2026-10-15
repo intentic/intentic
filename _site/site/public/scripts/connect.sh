@@ -613,9 +613,7 @@ case "${SANDBOX_IMAGE:-}" in
         if [ -n "$repo_root" ] && [ -f "$repo_root/_sandbox/sandbox/Dockerfile" ]; then
             kit_step pulling-image "building the local sandbox image ${SANDBOX_IMAGE} from your checkout (cached when unchanged; the first build takes a few minutes)…" "Build $SANDBOX_IMAGE from the checkout"
             kit_suspend
-            if ! (cd "$repo_root" && bash _tools/scripts/image/prepare-image-trees.sh &&
-                node _tools/scripts/image/compose-image-dockerfile.mjs standard >.image-out/Dockerfile.standard &&
-                docker build --build-context trees=.image-out -f .image-out/Dockerfile.standard -t "$SANDBOX_IMAGE" .); then
+            if ! bash "$repo_root/_tools/scripts/image/build-sandbox-image.sh" "$SANDBOX_IMAGE"; then
                 if docker image inspect "$SANDBOX_IMAGE" >/dev/null 2>&1; then
                     kit_warn "building $SANDBOX_IMAGE failed (the docker output above says why), so the previous local build runs, without your latest changes."
                 else
