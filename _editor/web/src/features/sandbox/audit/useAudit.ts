@@ -12,7 +12,9 @@ import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 
 export type AuditFilters = Pick<AuditQuery, "action" | "actor">;
 
-const PAGE = 100;
+// Fifty, not the daemon's hundred: a page is a couple of days of an ordinary sandbox, which is what a reader scans
+// before they reach for the filter, and "Show older" is one press under the last day.
+const PAGE = 50;
 
 export function useAuditLog(filters: MaybeRefOrGetter<AuditFilters>) {
     const input = computed(() => {

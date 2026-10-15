@@ -321,6 +321,7 @@ export {
     formatDate,
     formatDateLong,
     formatDateTime,
+    formatDayHeading,
     formatDayMonth,
     formatDayMonthTime,
     formatElapsed,

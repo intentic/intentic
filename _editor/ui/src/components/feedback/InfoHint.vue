@@ -84,8 +84,11 @@ onBeforeUnmount(hide);
     <span ref="trigger" class="relative inline-flex" @mouseenter="show" @mouseleave="hide" @focusin="show" @focusout="hide">
         <!-- `-m-1.5 p-1.5`: bigger tap target around the icon at no layout cost; padding is what a tap must land in. -->
         <span class="-m-1.5 inline-flex cursor-help items-center gap-1.5 p-1.5 text-muted transition-colors hover:text-content" tabindex="0">
-            <Icon name="info-circle" role="img" :aria-label="label" />
-            <span v-if="text" class="text-xs font-medium">{{ text }}</span>
+            <!-- `#trigger` replaces the glyph with what the hint explains (a status pill), for a state whose reasons belong behind it. -->
+            <slot name="trigger">
+                <Icon name="info-circle" role="img" :aria-label="label" />
+                <span v-if="text" class="text-xs font-medium">{{ text }}</span>
+            </slot>
         </span>
         <!-- Teleports into the trigger's document, not necessarily this module's. -->
         <Teleport v-if="trigger !== undefined" :to="trigger.ownerDocument.body">

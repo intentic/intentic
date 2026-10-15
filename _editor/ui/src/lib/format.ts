@@ -248,6 +248,20 @@ const WEEKDAY_HORIZON_MS = 7 * 24 * 60 * 60_000;
 export const formatWhen = (at: number, now: number = Date.now()): string =>
     at - now < WEEKDAY_HORIZON_MS ? formatWeekdayTime(at) : formatDayMonthTime(at);
 
+/**
+ * The day a run of rows falls on, as the heading over them: "Today", "Yesterday", then the day written out ("Tuesday,
+ * October 14"), with the year once it is not this one's. Days are counted between the two midnights and rounded, since
+ * the day a clock change falls on is 23 or 25 hours long. The two words are CLDR's, so no translator supplies them.
+ */
+export const formatDayHeading = (at: number, now: number = Date.now()): string => {
+    const days = Math.round((new Date(now).setHours(0, 0, 0, 0) - new Date(at).setHours(0, 0, 0, 0)) / 86_400_000);
+    if (days === 0 || days === 1) {
+        const word = relativeFormat(`auto`).format(-days, `day`);
+        return `${word.charAt(0).toLocaleUpperCase(formatLocale.value)}${word.slice(1)}`;
+    }
+    return new Date(at).getFullYear() === new Date(now).getFullYear() ? formatDayLong(at) : formatDateLong(at);
+};
+
 // Coarse relative time ("now", "5m ago", "3h ago"), always rounded down since an age is a floor. `days` switches
 // the day-and-beyond case between a rolling "2d ago" (for the week after, then the calendar day: "40d ago" is a sum
 // the reader has to do) and the absolute timestamp; `now` is injectable for tests.
