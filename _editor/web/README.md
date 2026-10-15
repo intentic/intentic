@@ -186,6 +186,13 @@ flowchart LR
   corner (`FloatingAction`): New agent on the board, upload in the file tree. The review's Land button sits under the
   Changes tab instead of in the header. _2026-09-29: an index page, not a strip of section chips wrapping above
   every section. With extensions installed that strip was seventeen chips over every page of the sandbox hub._
+- **The agents board between a phone and a desktop.** The board measures its own width, not the window's, so a docked
+  chat counts. Under 48rem the lanes stack; from 48rem to 72rem it is two columns, Attention over Active in the first
+  and Finished in the second; from 72rem it is three. On a desktop a card's header keeps only its filing press
+  (archive, close or restore) and one ⋯. The ⋯ opens the same menu a right-click does, and the card's other presses
+  (rename, add a reaction, review) are rows in that menu. A touch screen too wide to count as a phone, such as a
+  tablet, shows the ⋯ without hover. _2026-10-15: three columns from 48rem, with a hidden 30px seat per press, left a
+  card's title some 60px on a small laptop._
 - **The rail and the status bar.** The rail holds places a reader goes. What the sandbox is running sits in the
   status bar at the foot of the window instead (`shell/status-bar/`): the terminal's toggle, always there for a
   developer, then a chip for each live thing (Browsers, counting the live apps that answer, the agents' open browsers and the

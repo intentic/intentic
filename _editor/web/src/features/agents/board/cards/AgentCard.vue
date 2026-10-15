@@ -34,6 +34,7 @@ import { presenceOthers } from "../../../../workbench/presence/usePresence";
 import UnsentMark from "../../../../components/UnsentMark.vue";
 import WorkflowMark from "../../../../components/WorkflowMark.vue";
 import { dropActionFor, type PendingAction } from "../laneDrop";
+import type { CardOwnPresses } from "../view/cardMenu";
 import type { IdMatch } from "../idMatch";
 import {
     activityLine,
@@ -122,6 +123,9 @@ const props = defineProps<{
     placed?: FleetLane;
     // What the children calling the reader through this card say in its corner (agentStatus.familyChip).
     call?: FamilyChip;
+    // The board offers this card its one menu (cardMenu), opened by a right-click or the header's ⋯; without it the
+    // browser's own menu stays, and the header draws every press itself.
+    menus?: boolean;
 }>();
 const emit = defineEmits<{
     // The click that opened it, if any; a modified click asks for a pane instead of focus.
@@ -141,12 +145,14 @@ const emit = defineEmits<{
     // Keeps a chat open that this card's click only opened as a look (see `peek`).
     keep: [];
     grab: [event: PointerEvent, card: HTMLElement];
+    // Opens the board's menu on this card, handing over what only the card can do (rename, react).
+    menu: [event: MouseEvent, presses: CardOwnPresses];
 }>();
 
 // A fresh blade each time this card is selected, so its sweep starts on the click (selectionBlade.ts).
 const blade = useSelectionBlade(() => props.selected);
 
-const { mobile } = useDevice();
+const { mobile, coarse } = useDevice();
 const { user } = useAuth();
 // Whose it is, decided here rather than inside the mark, since the line the mark rides must know whether it has
 // anything at all to draw: a card of the reader's own says nothing about ownership and spends no row on it.
@@ -534,7 +540,7 @@ const reviewCard = (): void => {
 const HOVER_ACTION = `touch-target flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted transition hover:bg-content/10 hover:text-content`;
 // Hidden until the card is hovered or one of them is focused, since at rest they are forty cards of glyphs; a phone has
 // no hover, so what it keeps of them (one ⋯, or a lone press) stays drawn, quieter than the ink around it.
-const actionClass = computed(() => `${HOVER_ACTION} ${mobile.value ? `opacity-60` : `opacity-0 focus-visible:opacity-100 group-hover:opacity-100`}`);
+const actionClass = computed(() => `${HOVER_ACTION} ${mobile.value || coarse.value ? `opacity-60` : `opacity-0 focus-visible:opacity-100 group-hover:opacity-100`}`);
 
 // Every press the header offers, in the order the row draws them. Keep leads, since it is the one with a deadline (the
 // look closes on the next click elsewhere); the drill-in closes the row. Adding a mark rides with the card's other
@@ -589,6 +595,45 @@ const cardActions = computed((): ActionItem[] => {
     return actions;
 });
 
+// THE HEADER RESERVES TWO SEATS, NOT FIVE. Every press it drew kept a 20px seat and a 10px gap at rest, hidden or not, so
+// on a card about 300px wide (three lanes on a small laptop) the title kept some 60px. Where the board offers its menu
+// (`menus`), which names every press in words, the header keeps the presses that are one click on purpose: a look's
+// keep, with its deadline, and the filing press (archive, close or restore) a lane is tidied with; rename, react and the
+// drill-in move behind one ⋯ opening that menu, and the drill-in keeps its double-click. A touch screen with the room of
+// a tablet has no hover to reveal glyphs on and swipes a card to file it (cardSwipe.ts), so there the ⋯ alone stays,
+// drawn. A phone folds them into its own sheet (OverflowActions).
+const DIRECT_PRESSES: ReadonlySet<string> = new Set([`keep`, `archive`, `close`, `restore`]);
+const menuFolds = computed(() => props.menus === true && !mobile.value);
+const headerActions = computed((): ActionItem[] => {
+    if (!menuFolds.value) {
+        return cardActions.value;
+    }
+    return coarse.value ? [] : cardActions.value.filter((action) => DIRECT_PRESSES.has(action.id));
+});
+// What the board's menu offers on this card's behalf: renaming and reacting are the card's own, and so are their fields.
+const ownPresses = computed(
+    (): CardOwnPresses => ({
+        rename: localOnly.value && !busy.value ? () => edit.begin() : undefined,
+        react: reactable.value
+            ? (from) => {
+                  const anchor = from ?? cardRoot.value;
+                  if (anchor !== null) {
+                      reactionsStrip.value?.open(anchor);
+                  }
+              }
+            : undefined,
+    }),
+);
+// A right-click and the ⋯ open the same menu; the ⋯ is what the menu is anchored to, so a picker it opens comes from there.
+const openMenu = (event: MouseEvent): void => {
+    if (props.menus !== true) {
+        return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    emit(`menu`, event, ownPresses.value);
+};
+
 // Starts the drag only when the press begins on the card body; the rename pencil and its input run their own pointer
 // gestures. The card moves by pointer and nothing native may start inside it (`@dragstart.prevent` on the root): a
 // native drag of one of its selectable spans freezes the tab in Brave (brave/brave-browser#57753).
@@ -637,6 +682,7 @@ const grab = (event: PointerEvent): void => {
         @dragstart.prevent
         @click="openCard"
         @dblclick="reviewCard"
+        @contextmenu="openMenu"
         @keydown.enter.self.prevent="openCard()"
         @keydown.space.self.prevent="openCard()"
     >
@@ -663,7 +709,9 @@ const grab = (event: PointerEvent): void => {
             />
             <template v-else>
                 <!-- A LIVE CARD'S TITLE WRAPS, a receipt's clips. -->
+                <!-- Its whole text in a hover, only while it is cut short. -->
                 <span
+                    v-tooltip.top.overflow="displayTitle"
                     class="min-w-0 flex-1 font-semibold text-content"
                     :class="live ? 'line-clamp-2 break-words text-sm leading-snug' : 'truncate text-xs'"
                 >
@@ -673,8 +721,22 @@ const grab = (event: PointerEvent): void => {
                     <!-- The peek state rides along as text for a screen reader, not an aria-label with no role. -->
                     <span v-if="peek" class="sr-only">{{ t(`agents.agentCard.temporary`) }}</span>
                 </span>
-                <!-- The card's own presses (cardActions), revealed on hover where there is a pointer and folded behind one ⋯ on a phone. -->
-                <OverflowActions :actions="cardActions" :button-class="actionClass" :header="displayTitle" />
+                <!-- The card's own presses (headerActions), revealed on hover where there is a pointer and folded behind one ⋯ on a
+                     phone. Clustered tight where a pointer is fine; a touch target is 44px, so a coarse one keeps the gap. -->
+                <span v-if="headerActions.length > 0 || menuFolds" class="flex shrink-0 items-center" :class="coarse ? 'gap-2.5' : 'gap-0.5'">
+                    <OverflowActions :actions="headerActions" :button-class="actionClass" :header="displayTitle" />
+                    <button
+                        v-if="menuFolds"
+                        type="button"
+                        :class="actionClass"
+                        :aria-label="t(`ui.action.moreActions`)"
+                        aria-haspopup="menu"
+                        v-tooltip.top="t(`ui.action.moreActions`)"
+                        @click.stop="openMenu"
+                    >
+                        <Icon name="ellipsis" class="text-sm" />
+                    </button>
+                </span>
             </template>
             <!-- Same pill, same tones, same precedence as a rail row's corner (RailCard): one standing, one reading. -->
             <span
@@ -763,8 +825,12 @@ const grab = (event: PointerEvent): void => {
                     agent.branch !== undefined ||
                     (account !== undefined && !mobile)
                 "
-                class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-subtle"
+                class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle"
             >
+                <!-- NO DOT BEFORE A FACT THAT LEADS WITH ITS OWN GLYPH (the runner's desktop, the branch's code mark, the
+                     account's person): the glyph already parts it from the one before, and a dot written ahead of it was
+                     left at the start of the next line whenever the line wrapped there ("· 👤 someone"). The dot stays only
+                     between the two facts that are bare words, whose it is and the model. -->
                 <!-- Shape and wording live in UnsentMark, shared with the rail row. -->
                 <UnsentMark v-if="agent.unsent" :preview="unsentWords" :at="agent.draftAt" />
                 <!-- Which sandbox this agent is in, shown only when it isn't the reader's own; leads the line since it changes what every other number means. -->
@@ -779,7 +845,8 @@ const grab = (event: PointerEvent): void => {
                 <!-- Whose it is leads what it runs on: for a card that isn't the reader's own, that outranks the model. -->
                 <OwnerMark v-if="provenance !== undefined" :mark="provenance" />
                 <span v-if="model !== undefined" class="inline-flex min-w-0 items-center gap-1.5">
-                    <span v-if="provenance !== undefined">·</span>
+                    <!-- Pulled back into the line's wider gap, so the dot sits as close to whose it is as to the model. -->
+                    <span v-if="provenance !== undefined" class="-ml-1.5">·</span>
                     <span class="truncate">{{ model }}</span>
                 </span>
                 <!-- Where it's running, shown only when that's somewhere other than here: the fleet spreads work across machines without a per-agent choice. -->
@@ -793,17 +860,11 @@ const grab = (event: PointerEvent): void => {
                 </span>
                 <!-- Abbreviated on the card, full string on hover; a label, not a control (copy is on the right-click menu). -->
                 <!-- Clipped on the card, full identity on hover; nothing renders if the sandbox can't name the account. -->
-                <span v-if="agent.branch !== undefined && !maker" class="inline-flex min-w-0 items-center gap-1.5">
-                    <span v-if="model !== undefined || provenance !== undefined">·</span>
-                    <SessionChip :branch="agent.branch" />
-                </span>
+                <SessionChip v-if="agent.branch !== undefined && !maker" :branch="agent.branch" />
                 <!-- Not on a phone: which login served the turn is the line's least-read fact, and on a phone's width it was the one that broke the line in two. -->
-                <span v-if="account !== undefined && !mobile" class="inline-flex min-w-0 shrink items-center gap-1">
-                    <span v-if="model !== undefined || provenance !== undefined || (agent.branch !== undefined && !maker)">·</span>
-                    <span v-tooltip.top="account.hint" class="inline-flex min-w-0 shrink items-center gap-1">
-                        <Icon name="user" class="shrink-0 text-2xs" />
-                        <span class="truncate">{{ account.label }}</span>
-                    </span>
+                <span v-if="account !== undefined && !mobile" v-tooltip.top="account.hint" class="inline-flex min-w-0 shrink items-center gap-1">
+                    <Icon name="user" class="shrink-0 text-2xs" />
+                    <span class="truncate">{{ account.label }}</span>
                 </span>
             </div>
 

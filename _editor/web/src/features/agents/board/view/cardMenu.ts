@@ -22,6 +22,22 @@ export interface MenuFacts {
     readonly href: () => string;
     // Another sandbox's name, for the row that crosses to it.
     readonly boxName: string | undefined;
+    // What only the card itself can do (its title's field, its reactions' picker), handed over by the card the menu was
+    // opened on; a child's row and a card that offers neither hand nothing, and the menu leaves the rows out.
+    readonly presses?: CardPresses;
+}
+
+// The presses a card makes on itself, which the board cannot reach any other way. Since the card's header keeps only its
+// filing press and the ⋯ that opens this menu (AgentCard), these rows are where renaming and reacting live on a desktop.
+export interface CardPresses {
+    readonly rename?: () => void;
+    readonly react?: () => void;
+}
+
+// The same, as the card hands them over: its reactions' picker opens from whatever element the menu was opened on.
+export interface CardOwnPresses {
+    readonly rename?: () => void;
+    readonly react?: (from: HTMLElement | undefined) => void;
 }
 
 // What each row does.
@@ -68,6 +84,12 @@ const filingRow = (agent: FleetAgent, here: boolean, act: MenuActions): MenuItem
     return [...filing, ...(unregistered(agent.status) ? [{ label: t(`ui.action.close`), icon: `times`, command: () => act.closeAgent(agent) }] : [])];
 };
 
+// The card's own presses, beside the name they act on.
+const ownRows = ({ rename, react }: CardPresses = {}): MenuItem[] => [
+    ...(rename === undefined ? [] : [{ label: t(`ui.action.rename`), icon: `pencil`, command: () => rename() }]),
+    ...(react === undefined ? [] : [{ label: t(`agents.agentReactions.addReaction`), icon: `plus`, command: () => react() }]),
+];
+
 // Groups rather than a flat list with inline separators: almost every row is conditional, and a separator written inline
 // would draw a line under a group that turned out empty.
 export const menuItemsFor = (agent: FleetAgent, facts: MenuFacts, act: MenuActions): MenuItem[] => {
@@ -86,6 +108,7 @@ export const menuItemsFor = (agent: FleetAgent, facts: MenuFacts, act: MenuActio
                   ? [{ label: review, icon: `comments`, command: () => act.drillIn(agent) }]
                   : [{ label: review, icon: `copy`, url: facts.href(), command: () => act.reviewAgent(agent) }]),
         ],
+        ownRows(facts.presses),
         // The bare name (`sleek-arrow-uzgj`) `agents show`, Quick Open and the worktree path take; `agent/` is git's spelling.
         branch === undefined
             ? []
@@ -114,6 +137,17 @@ export const menuItemsFor = (agent: FleetAgent, facts: MenuFacts, act: MenuActio
     return items;
 };
 
+// PrimeVue opens a menu where its event says. A press from the keyboard (Enter on the card's ⋯, the menu key on the card)
+// says 0,0, the screen's corner, so the menu hangs from the bottom-left of the element pressed instead.
+const menuEventAt = (event: MouseEvent): MouseEvent => {
+    const target = event.currentTarget;
+    if (event.clientX !== 0 || event.clientY !== 0 || !(target instanceof Element)) {
+        return event;
+    }
+    const box = target.getBoundingClientRect();
+    return new MouseEvent(event.type, { clientX: box.left, clientY: box.bottom });
+};
+
 export interface MenuHost {
     readonly mobile: Readonly<Ref<boolean>>;
     readonly peeked: (id: string) => boolean;
@@ -130,6 +164,8 @@ export const useCardMenu = (host: MenuHost) => {
     // The ContextMenu, through the template's `ref`.
     const cardMenu = ref<{ show: (event: Event) => void } | undefined>();
     const menuAgent = ref<FleetAgent>();
+    // What the card pressed handed over of its own (CardPresses), bound to the element pressed, which a picker opens from.
+    const menuPresses = ref<CardOwnPresses>();
     // The element pressed, whose own document the clipboard is asked of (clipboardOf), not this module's `navigator`.
     const menuAnchor = ref<Element>();
     const copySessionName = async (branch: string): Promise<void> => {
@@ -140,6 +176,12 @@ export const useCardMenu = (host: MenuHost) => {
         }
     };
     const act: MenuActions = { ...host.focus, ...host.agents, copySessionName, openInSandbox };
+    const ownPresses = (): CardPresses | undefined => {
+        const presses = menuPresses.value;
+        const react = presses?.react;
+        const from = menuAnchor.value instanceof HTMLElement ? menuAnchor.value : undefined;
+        return presses === undefined ? undefined : { rename: presses.rename, react: react === undefined ? undefined : () => react(from) };
+    };
     const cardMenuItems = computed<MenuItem[]>(() => {
         const agent = menuAgent.value;
         if (agent === undefined) {
@@ -152,13 +194,16 @@ export const useCardMenu = (host: MenuHost) => {
             peeked: host.peeked(agent.id),
             href: () => host.focus.agentHref(agent),
             boxName: here || agent.sandboxId === undefined ? undefined : boxNameOf.value.get(agent.sandboxId),
+            presses: ownPresses(),
         };
         return menuItemsFor(agent, facts, act);
     });
-    const openCardMenu = (agent: FleetAgent, event: MouseEvent): void => {
+    // A card hands its own presses along (AgentCard's `menu`); a child's row opens the same menu with none.
+    const openCardMenu = (agent: FleetAgent, event: MouseEvent, presses?: CardOwnPresses): void => {
         menuAgent.value = agent;
+        menuPresses.value = presses;
         menuAnchor.value = event.currentTarget instanceof Element ? event.currentTarget : undefined;
-        cardMenu.value?.show(event);
+        cardMenu.value?.show(menuEventAt(event));
     };
     return { cardMenu, cardMenuItems, openCardMenu };
 };

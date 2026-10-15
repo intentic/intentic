@@ -106,6 +106,30 @@ describe(`what a card's menu offers`, () => {
         expect(rows(menuItemsFor(far, facts({ here: false }), actions()))).toEqual([t(`ui.action.open`), `—`, `Open in its sandbox`]);
     });
 
+    // Renaming and reacting are the card's own (its title's field, its reactions' picker), so the card hands them over;
+    // they sit beside the name they act on, and a card or child row that hands none gets neither row.
+    it(`offers the presses the card hands over, beside its name`, () => {
+        const rename = jest.fn();
+        const react = jest.fn();
+        const items = menuItemsFor(landed, facts({ presses: { rename, react } }), actions());
+        expect(rows(items)).toEqual([
+            t(`ui.action.open`),
+            reviewAction(landed)!,
+            `—`,
+            t(`ui.action.rename`),
+            t(`agents.agentReactions.addReaction`),
+            `—`,
+            t(`agents.agentsView.copySessionName`),
+            `—`,
+            t(`agents.agentsView.archive`),
+        ]);
+        press(items, t(`ui.action.rename`));
+        press(items, t(`agents.agentReactions.addReaction`));
+        expect([rename.mock.calls, react.mock.calls]).toEqual([[[]], [[]]]);
+        expect(rows(menuItemsFor(landed, facts({ presses: { react } }), actions()))).not.toContain(t(`ui.action.rename`));
+        expect(rows(menuItemsFor(landed, facts({ presses: {} }), actions()))).toEqual(rows(menuItemsFor(landed, facts(), actions())));
+    });
+
     it(`runs each row's own press on the card it was opened for`, () => {
         const act = actions();
         const items = menuItemsFor(landed, facts({ peeked: true }), act);
@@ -177,6 +201,29 @@ describe(`the one menu`, () => {
         ]);
         press(menu.cardMenuItems.value, t(`ui.action.open`));
         expect(focus.focusAgent.mock.calls).toEqual([[landed]]);
+    });
+
+    // A press from the keyboard (Enter on the card's ⋯) says 0,0, which PrimeVue would open the menu at: the screen's corner.
+    it(`hangs a keyboard-opened menu from the element pressed, and opens the card's picker from there`, () => {
+        const pressed = document.createElement(`button`);
+        document.body.appendChild(pressed);
+        pressed.getBoundingClientRect = () => new DOMRect(400, 120, 20, 20);
+        const { menu, show } = menuOf();
+        const react = jest.fn();
+        const keyed = new MouseEvent(`click`);
+        Object.defineProperty(keyed, `currentTarget`, { value: pressed });
+        menu.openCardMenu(landed, keyed, { react });
+        const shown = show.mock.calls[0]?.[0];
+        expect(shown instanceof MouseEvent ? [shown.clientX, shown.clientY] : shown).toEqual([400, 140]);
+        press(menu.cardMenuItems.value, t(`agents.agentReactions.addReaction`));
+        expect(react.mock.calls).toEqual([[pressed]]);
+
+        // A pointer's own place is kept.
+        const clicked = new MouseEvent(`contextmenu`, { clientX: 30, clientY: 60 });
+        Object.defineProperty(clicked, `currentTarget`, { value: pressed });
+        menu.openCardMenu(landed, clicked);
+        expect(show.mock.calls[1]).toEqual([clicked]);
+        expect(rows(menu.cardMenuItems.value)).not.toContain(t(`agents.agentReactions.addReaction`));
     });
 
     // jsdom has no clipboard; this one records what was written, then refuses as an insecure context would.

@@ -29,7 +29,7 @@ import { usePersonas } from "../../sandbox/personas/usePersonas";
 import { useAuth } from "../../../client/auth/useAuth";
 import { useSandboxSharedAccess } from "../../sandbox/access/useSandboxSharedAccess";
 import { useAgents } from "../fleet/useAgents";
-import { agentDisplayTitle } from "../fleet/agentStatus";
+import { agentDisplayTitle, type FleetLane } from "../fleet/agentStatus";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
 import type { FleetAgent } from "../fleet/useAgents-fleet";
 import { pendingOn } from "../fleet/useAgents-provisional";
@@ -240,9 +240,28 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
     drag.begin(event, agent, card);
 };
 // The board's own width, measured (useNarrow): a container query's `container-type` would contain the fixed drag ghost.
+// THREE SHAPES, NOT TWO. Under 48rem the lanes stack. From there to 72rem (a tablet, a small laptop, a desktop with the
+// chat docked) three columns leave a card about 300px wide, and after its glyph, standing and presses its title kept
+// some 60px of that ("Soft-delet…"); so the board is two columns there: the lanes about work in flight (Attention over
+// Active, both short) share the first, and Finished, the long ledger, has the second. Reading order is the same in all
+// three shapes: Attention, Active, Finished.
 const NARROW_BOARD_REM = 48;
+const PAIRED_BOARD_REM = 72;
 const boardEl = ref<HTMLElement | undefined>(undefined);
 const narrow = useNarrow(boardEl, NARROW_BOARD_REM);
+const underThree = useNarrow(boardEl, PAIRED_BOARD_REM);
+const paired = computed(() => underThree.value && !narrow.value);
+// Where each lane sits in the paired shape: Finished spans both rows of the second column, so the first column's rows
+// size to Attention and Active alone (`grid-rows-[auto_1fr]`: the second row takes whatever Finished needs past them).
+// That needs the rows sized by what they hold: held to the board's height (`h-full`) with the lanes allowed to shrink
+// (`min-h-0`), as three columns in one row can be, a long Attention lane left Active a 0px row and drew it over its cards;
+// so the paired grid only starts at the board's height (`min-h-full`) and its lanes keep their own.
+const PAIRED_PLACE = {
+    attention: `col-start-1 row-start-1`,
+    active: `col-start-1 row-start-2`,
+    finished: `col-start-2 row-span-2 row-start-1`,
+} satisfies Record<FleetLane, string>;
+const laneGrid = computed(() => (narrow.value ? `content-start` : paired.value ? `grid-cols-2 grid-rows-[auto_1fr] items-start lg:gap-6 lg:p-6` : `grid-cols-3 items-start lg:gap-6 lg:p-6`));
 const LANES = computed(laneHeads);
 // A wallpaper shows through the lanes (wallpapers.css), so their headers drop the canvas band they pin on; a pinned
 // header with nothing behind it would slide over the cards scrolling under it, so they scroll away with the lane.
@@ -363,7 +382,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
             <!-- A phone's board ends with room for the floating New agent, so its last card never sits under the press. -->
             <div
                 class="grid gap-3.5 p-3.5 sm:gap-4 sm:p-4"
-                :class="[narrow ? 'content-start' : 'grid-cols-3 items-start lg:gap-6 lg:p-6', noMatches ? '' : 'h-full', mobile ? 'pb-24' : '']"
+                :class="[laneGrid, noMatches ? '' : paired ? 'min-h-full' : 'h-full', mobile ? 'pb-24' : '']"
             >
                 <section
                     v-for="lane in LANES"
@@ -372,7 +391,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                     :data-reveal-column="narrow ? undefined : ``"
                     :data-drop="lane.key === 'finished' && view.archive ? undefined : lane.key"
                     class="flex min-w-0 flex-col rounded-xl transition-colors"
-                    :class="[!dragging && !narrow ? 'min-h-0' : '', laneDropClass(lane.key)]"
+                    :class="[!dragging && !narrow && !paired ? 'min-h-0' : '', paired ? PAIRED_PLACE[lane.key] : '', laneDropClass(lane.key)]"
                 >
                     <!-- Finished's header doubles as the archive's window, swapping its label and growing a way back; pinned while scrolling, unless a wallpaper shows through. -->
                     <LaneHeader :label="lane.label" class="rounded-t-xl px-1" :class="papered ? '' : 'sticky top-0 z-10 bg-canvas'">
@@ -566,7 +585,8 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                                         @restore="restore(familyIds(agent))"
                                         @close="closeAgent(agent)"
                                         @grab="(event, card) => grabCard(event, agent, card)"
-                                        @contextmenu.prevent.stop="openCardMenu(agent, $event)"
+                                        menus
+                                        @menu="(event, presses) => openCardMenu(agent, event, presses)"
                                     />
                                 </SwipeRow>
                                 <ChildRows
@@ -629,7 +649,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                 <section v-if="archivedHits.length > 0" class="flex min-w-0 flex-col gap-3.5">
                     <LaneHeader :label="t(`agents.agentsView.inArchive`)" icon="box" :count="archivedHits.length" class="px-1" />
                     <!-- Archived agents retain the branch, diff, and transcript actions. -->
-                    <div class="grid gap-3.5" :class="narrow ? '' : 'grid-cols-3 items-start lg:gap-4.5'">
+                    <div class="grid gap-3.5" :class="narrow ? '' : paired ? 'grid-cols-2 items-start lg:gap-4.5' : 'grid-cols-3 items-start lg:gap-4.5'">
                         <AgentCard
                             v-for="agent in archivedHits"
                             :key="agent.id"
@@ -646,7 +666,8 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                             @restore="restore([agent.id])"
                             @unwatch="unwatchNow(agent.id)"
                             @stop-job="(jobId) => agents.stopJob(agent.id, jobId)"
-                            @contextmenu.prevent.stop="openCardMenu(agent, $event)"
+                            menus
+                            @menu="(event, presses) => openCardMenu(agent, event, presses)"
                         />
                     </div>
                 </section>

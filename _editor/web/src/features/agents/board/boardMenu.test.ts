@@ -77,10 +77,32 @@ it(`opens on the card right-clicked, with that card's rows, and points the chat 
     expect(menuRows()).toEqual([
         t(`ui.action.open`),
         reviewAction(landed(`a2`))!,
+        t(`ui.action.rename`),
+        t(`agents.agentReactions.addReaction`),
         t(`agents.agentsView.copySessionName`),
         t(`agents.agentsView.archive`),
     ]);
     pressRow(t(`ui.action.open`));
     await settle();
     expect(useChat().activeId.value).toBe(`a2`);
+});
+
+// The header keeps the filing press and one ⋯ (AgentCard's headerActions), not a seat per press: the ⋯ opens this same
+// menu, and what only the card can do, renaming its title in place, is done from there.
+it(`opens from the card's ⋯ as well, and renames the card in place from it`, async () => {
+    setAgents([landed(`a1`)], 100);
+    const board = await mountBoard();
+    const card = board.querySelector<HTMLElement>(`[aria-label="Focus agent: agent a1"]`)!;
+    const header = card.firstElementChild!;
+    expect([...header.querySelectorAll(`button`)].map((button) => button.getAttribute(`aria-label`))).toEqual([
+        t(`agents.agentCard.archiveAgent`),
+        t(`ui.action.moreActions`),
+    ]);
+
+    header.querySelector<HTMLElement>(`button[aria-label="${t(`ui.action.moreActions`)}"]`)!.click();
+    await settle();
+    expect(menuRows()).toContain(t(`ui.action.rename`));
+    pressRow(t(`ui.action.rename`));
+    await settle();
+    expect(card.querySelector<HTMLInputElement>(`input[aria-label="${t(`agents.words.agentTitle`)}"]`)?.value).toBe(`agent a1`);
 });
