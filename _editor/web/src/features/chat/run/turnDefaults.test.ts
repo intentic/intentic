@@ -5,10 +5,18 @@
 import "@intentic/testing/dom";
 import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { receivePreferenceChange } from "@intentic/ui/preference";
-import { rememberedHarnessFor, rememberedProviderFor, rememberHarness, turnDefaults } from "./turnDefaults";
+import { rememberedHarnessFor, rememberedModelFor, rememberedProviderFor, rememberHarness, turnDefaults } from "./turnDefaults";
 import { advertisedLoops } from "../models/offeredLoops";
 import { accountsLoaded, providerAccounts, translatorAccounts } from "../accounts/providerAccounts";
-import { acpProviders, endpointProviders, endpointsLoaded, perProvider, trialStatus } from "../accounts/providerCatalog";
+import {
+    acpProviders,
+    endpointProviders,
+    endpointsLoaded,
+    perProvider,
+    providerModels,
+    providerModelsState,
+    trialStatus,
+} from "../accounts/providerCatalog";
 
 const trialServed = (): void => {
     endpointProviders.value = [{ id: TRIAL_PROVIDER, label: `Free trial`, kind: `endpoint` }];
@@ -93,4 +101,53 @@ it(`reopens a provider on its remembered loop, and on its default once that loop
     } finally {
         advertisedLoops.value = undefined;
     }
+});
+
+// The reported bug: after a self-heal wiped storage, the model map read back the seed floor's head (claude-opus-5), and
+// every new chat for a day and a half opened on it while Opus 5.5 was in the list. A stray click on an older row did
+// the same. What a new chat remembers is the family, at its newest version; the older pick stays with its own chat.
+describe(`the model a new chat opens on`, () => {
+    const claudeCatalog = (ids: readonly string[]): void => {
+        providerModels.value = { ...providerModels.value, claude: ids.map((id) => ({ label: id, value: id })) };
+        providerModelsState.value = { ...providerModelsState.value, claude: `loaded` };
+    };
+    afterEach(() => {
+        providerModels.value = perProvider(() => []);
+        providerModelsState.value = perProvider(() => `idle`);
+        turnDefaults.models.value = perProvider(() => ``);
+    });
+
+    it(`is the newest version of the family last chosen, not the older version itself`, () => {
+        claudeCatalog([`claude-haiku-5-5`, `claude-sonnet-5-5`, `claude-opus-5-5`, `claude-opus-5`, `claude-opus-4-8`]);
+        turnDefaults.models.value = { ...turnDefaults.models.value, claude: `claude-opus-5` };
+        expect(rememberedModelFor(`claude`)).toBe(`claude-opus-5-5`);
+        // The pick itself is left as it was: resolved at read, never rewritten.
+        expect(turnDefaults.models.value.claude).toBe(`claude-opus-5`);
+    });
+
+    it(`keeps a pick that is its family's newest, and another family's pick within its own family`, () => {
+        claudeCatalog([`claude-sonnet-5-5`, `claude-opus-5-5`, `claude-opus-5`, `claude-sonnet-5`]);
+        turnDefaults.models.value = { ...turnDefaults.models.value, claude: `claude-opus-5-5` };
+        expect(rememberedModelFor(`claude`)).toBe(`claude-opus-5-5`);
+        turnDefaults.models.value = { ...turnDefaults.models.value, claude: `claude-sonnet-5` };
+        expect(rememberedModelFor(`claude`)).toBe(`claude-sonnet-5-5`);
+    });
+
+    it(`never upgrades onto a row a chat cannot run`, () => {
+        providerModels.value = {
+            ...providerModels.value,
+            claude: [
+                { label: `Claude Opus 5.5`, value: `claude-opus-5-5`, helperOnly: `instant-tier` },
+                { label: `Claude Opus 5`, value: `claude-opus-5` },
+            ],
+        };
+        providerModelsState.value = { ...providerModelsState.value, claude: `loaded` };
+        turnDefaults.models.value = { ...turnDefaults.models.value, claude: `claude-opus-5` };
+        expect(rememberedModelFor(`claude`)).toBe(`claude-opus-5`);
+    });
+
+    it(`rides the stored pick untouched until the catalog has answered`, () => {
+        turnDefaults.models.value = { ...turnDefaults.models.value, claude: `claude-opus-5` };
+        expect(rememberedModelFor(`claude`)).toBe(`claude-opus-5`);
+    });
 });

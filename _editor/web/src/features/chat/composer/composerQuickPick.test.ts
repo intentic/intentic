@@ -215,3 +215,23 @@ it(`drills landing to its two answers, the one in force ticked`, () => {
     const landing: QuickPickSources = { ...ALL, land: { lands: true } };
     expect(quickRows(landing, { kind: undefined, query: `land` })[0]).toMatchObject({ kind: `drill`, into: `land`, detail: `Lands by itself` });
 });
+
+// Opus 5 and Opus 5.5 read alike in a four-row list; the older one says so beside its provider and sits second.
+it(`tags a superseded version and lists it under the newer one`, () => {
+    const sources: QuickPickSources = {
+        ...ALL,
+        model: {
+            entries: [entry(`claude`, `claude-opus-5`, `Claude Opus 5`), entry(`claude`, `claude-opus-5-5`, `Claude Opus 5.5`)],
+            provider: `claude`,
+            model: `claude-opus-5-5`,
+            label: `Claude Opus 5.5`,
+            isReady: () => true,
+            older: (row) => row.value === `claude-opus-5`,
+        },
+    };
+    const rows = quickRows(sources, { kind: `model`, query: `opus` });
+    expect(rows.map((row) => [row.label, row.detail])).toEqual([
+        [`Claude Opus 5.5`, `Claude Code`],
+        [`Claude Opus 5`, `Claude Code · older`],
+    ]);
+});

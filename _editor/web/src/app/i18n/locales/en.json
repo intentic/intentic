@@ -3284,6 +3284,9 @@
             "fromNextMessage": "{model} answers from your next message. This reply keeps running on {running}.",
             "model": "Model: {modelLabelText}",
             "nextMessage": "from next message",
+            "older": "older",
+            "olderNote": "This chat runs on {model}, an older version. Pick {newer} in the list to move it.",
+            "olderTitle": "{newer} is newer",
             "trialNote": "Switch models or connect yours.",
             "trialServed": "Last answer: {model}."
         },
@@ -3376,6 +3379,8 @@
             "noModelsMatch": "No models match.",
             "notConnected": "not connected",
             "runtime": "Runtime",
+            "older": "older",
+            "olderThan": "older version, {newer} is newer",
             "searchAllProviders": "Search all providers",
             "searchModels": "Search models…",
             "showFewerModels": "Show fewer {label} models",

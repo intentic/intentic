@@ -4,7 +4,9 @@ import {
     type AgentCommand,
     type AgentProvider,
     type CatalogOption,
+    compareModelIds,
     endpointIdOf,
+    familyOf,
     type HelperOnly,
     humanizeModelId,
     isEndpointProvider,
@@ -59,6 +61,26 @@ export const defaultModelFor = (provider: AgentProvider): string => {
         return live;
     }
     return modelsFor(provider)[0]?.value ?? ``;
+};
+
+// The newest version of `modelId`'s own family in this provider's live catalog (claude-opus-5 → claude-opus-5-5), or
+// undefined when `modelId` is that version already, is not listed, or the list is not a vendor's. Family and recency
+// come from the id (familyOf, compareModelIds), the picker's own grouping, so the "older" a composer warns about is
+// the row the picker files under older versions. Only rows a chat may run qualify: a helper-only row is no upgrade.
+// Endpoint and ACP providers are left out: a newer local model is a different download, not a newer version.
+export const newerVersionOf = (provider: AgentProvider, modelId: string): ModelOption | undefined => {
+    if (!NATIVE_PROVIDERS.some((native) => native === provider) || modelId === ``) {
+        return undefined;
+    }
+    const live = providerModels.value[provider] ?? [];
+    if (!live.some((option) => option.value === modelId)) {
+        return undefined;
+    }
+    const family = familyOf(modelId);
+    const newest = live
+        .filter((option) => option.helperOnly === undefined && familyOf(option.value) === family)
+        .toSorted((left, right) => compareModelIds(left.value, right.value))[0];
+    return newest === undefined || compareModelIds(newest.value, modelId) >= 0 ? undefined : newest;
 };
 
 // A catalog can publish two ids under the same label (Cursor's `auto`/`auto-smart` both say "Auto");

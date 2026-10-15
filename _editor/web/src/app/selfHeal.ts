@@ -14,6 +14,8 @@
 
 import { sleep } from "@intentic/base/async";
 import { describeError, flushClientDiagnostics, reportClient } from "./clientDiagnostics";
+import { storedValue, storeValue } from "@intentic/ui/storage";
+import { TURN_DEFAULT_KEYS } from "../lib/turnDefaultKeys";
 
 // How long after boot an error still counts as a failed start rather than an ordinary bug; generous, since a false
 // positive only costs one wipe and reload.
@@ -22,15 +24,26 @@ const STARTUP_WINDOW_MS = 15_000;
 // sessionStorage: survives the recovery reload but dies with the tab, matching the scope of a "we already tried"
 // claim.
 const HEALED_MARKER = `intentic.selfHealed`;
-// localStorage: the one key that must outlive the reload that acts on it (everything else was just cleared).
+// localStorage: the key that marks the reload that acts on it; besides it only the turn defaults (KEPT_KEYS) remain.
 const WIPE_KEY = `intentic.wipeOnBoot`;
 
 // Fallback list when `indexedDB.databases()` is unavailable: the vue-query mirror's default store, the transcript
 // mirror, and the loading placeholders' imprints (lib/skeletonPersistence.ts), which a render reads at boot too.
 const KNOWN_DATABASES = [`keyval-store`, `intentic.chat`, `intentic.skeletons`];
 
+// What a new chat runs on outlives the wipe (turnDefaultKeys.ts says why): one heal on 2026-10-13 reset the model
+// map, and the next four new chats all opened on an older Claude model without anyone choosing it.
+const KEPT_KEYS: readonly string[] = Object.values(TURN_DEFAULT_KEYS);
+
 const startedAt = performance.now();
 let healing = false;
+
+// The kept keys' values as they stand, to be written back once the storage is clear.
+const keptValues = (): readonly (readonly [string, string])[] =>
+    KEPT_KEYS.flatMap((key) => {
+        const value = storedValue(key);
+        return value === undefined ? [] : [[key, value] as const];
+    });
 
 const marked = (): boolean => {
     try {
@@ -50,8 +63,12 @@ const heal = (error: unknown): void => {
     reportClient(`self-heal.wipe`, message, { fields });
     flushClientDiagnostics();
     try {
+        const kept = keptValues();
         localStorage.clear();
         sessionStorage.clear();
+        for (const [key, value] of kept) {
+            storeValue(key, value);
+        }
         sessionStorage.setItem(HEALED_MARKER, `1`);
         localStorage.setItem(WIPE_KEY, `1`);
     } catch {

@@ -3284,6 +3284,9 @@
             "fromNextMessage": "{model} odpowie od twojej następnej wiadomości. Ta odpowiedź nadal działa na {running}.",
             "model": "Model: {modelLabelText}",
             "nextMessage": "od następnej wiadomości",
+            "older": "starsza",
+            "olderNote": "Ten czat działa na {model}, starszej wersji. Wybierz {newer} z listy, żeby go przenieść.",
+            "olderTitle": "{newer} jest nowszy",
             "trialNote": "Zmień model lub podłącz własny.",
             "trialServed": "Ostatnia odpowiedź: {model}."
         },
@@ -3381,7 +3384,9 @@
             "helperOnlyNoTools": "Tylko zadania pomocnicze: jego serwer mówi, że nie potrafi wywoływać narzędzi",
             "helperOnlyQuickJobs": "Tylko zadania pomocnicze: za mały, żeby prowadzić czat",
             "currentModel": "bieżący model",
-            "notConnected": "niepodłączony"
+            "notConnected": "niepodłączony",
+            "older": "starsza",
+            "olderThan": "starsza wersja, {newer} jest nowszy"
         },
         "modelPickerState": {
             "useCustomModelId": "użyj jako własnego id modelu"

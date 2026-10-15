@@ -10,8 +10,9 @@ import {
 import { definePreference } from "@intentic/ui/preference";
 import { accessKnown, firstReadyProvider, providerReady } from "../session/access";
 import { DEFAULT_EFFORT, DEFAULT_THINKING } from "../models/run-settings/pickerRunSettings";
-import { defaultModelFor, perProvider, providerModels, providerModelsState } from "../accounts/providerCatalog";
+import { defaultModelFor, newerVersionOf, perProvider, providerModels, providerModelsState } from "../accounts/providerCatalog";
 import { offeredHarness, offeredLoops } from "../models/offeredLoops";
+import { TURN_DEFAULT_KEYS } from "../../../lib/turnDefaultKeys";
 
 // What a new conversation starts on: the composer's last deliberate pick (model, provider, effort), never a fallback or
 // a thin catalog read — those resolve at read time instead, so bad luck can't overwrite a real choice. Each field is a
@@ -55,7 +56,7 @@ const writeHarnesses = (picks: HarnessPicks): string =>
 // Turn prefs a new conversation seeds from; permission mode is not one of them (see startingMode, per conversation).
 export const turnDefaults = {
     provider: definePreference<AgentProvider | undefined>({
-        key: `ui-chat-provider`,
+        key: TURN_DEFAULT_KEYS.provider,
         // Undefined is a real value here: nobody has chosen yet, which is not the same as having chosen Claude. Every
         // surface that would otherwise name a provider reads this, so a sandbox whose owner never picked one is never
         // told that some particular vendor is missing. A native id and an endpoint id (the free trial among them) both
@@ -67,12 +68,12 @@ export const turnDefaults = {
     // The loop picked per provider: a Claude Code pick on Codex says nothing about Grok, whose Claude Code loop needs a
     // sign-in of its own. A provider offered one loop never reads it (rememberedHarnessFor).
     harnesses: definePreference<HarnessPicks>({
-        key: `ui-chat-harness`,
+        key: TURN_DEFAULT_KEYS.harnesses,
         read: readHarnesses,
         write: writeHarnesses,
     }),
     models: definePreference<Record<AgentProvider, string>>({
-        key: `ui-chat-models`,
+        key: TURN_DEFAULT_KEYS.models,
         read: readModels,
         write: (models) => JSON.stringify(models),
     }),
@@ -80,19 +81,19 @@ export const turnDefaults = {
     // again: a conversation that starts on one tier while every picker opens on another is two answers to one
     // question, and nothing would have caught them drifting apart.
     effort: definePreference<string>({
-        key: `ui-chat-effort`,
+        key: TURN_DEFAULT_KEYS.effort,
         read: (raw) => raw ?? DEFAULT_EFFORT,
         write: (effort) => effort,
     }),
     thinking: definePreference<boolean>({
-        key: `ui-chat-thinking`,
+        key: TURN_DEFAULT_KEYS.thinking,
         read: (raw) => (raw === null ? DEFAULT_THINKING : raw !== `false`),
         write: String,
     }),
     // Whether a new chat opens on Auto, with its model still to be chosen. Its own preference rather than a value in
     // `provider`, which only ever holds a provider a turn can really run on.
     auto: definePreference<boolean>({
-        key: `ui-chat-auto`,
+        key: TURN_DEFAULT_KEYS.auto,
         read: (raw) => raw === `true`,
         write: String,
     }),
@@ -139,13 +140,19 @@ export const rememberedProviderFor = (): AgentProvider => {
 // Same rule as rememberedProviderFor, for the model: the picked value when the provider's loaded catalog still offers
 // it, else the provider's default, resolved at read rather than rewritten when a catalog answers thinly.
 // Harness-independent, since the catalog is shared across a harness switch.
+// What is remembered is the family, at its newest version (newerVersionOf): an older version is a pick for the chat it
+// was made in, never the next chat's start. A remembered claude-opus-5 had every new chat open on it unasked, for a
+// day and a half, after a wiped storage read back the seed floor's head; a stray click on an older row did the same.
 export const rememberedModelFor = (provider: AgentProvider): string => {
     const picked = turnDefaults.models.value[provider] || defaultModelFor(provider);
     if (providerModelsState.value[provider] !== `loaded`) {
         return picked;
     }
     const catalog = providerModels.value[provider] ?? [];
-    return catalog.some((option) => option.value === picked) ? picked : defaultModelFor(provider);
+    if (!catalog.some((option) => option.value === picked)) {
+        return defaultModelFor(provider);
+    }
+    return newerVersionOf(provider, picked)?.value ?? picked;
 };
 
 // The loop a chat on this provider opens on: its own remembered pick, while this sandbox's daemon still offers it.

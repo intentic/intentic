@@ -10,6 +10,8 @@ import { acpProviders, type CatalogLoadState, endpointProviders, providerModelsS
 import {
     customEntryFor,
     filterEntries,
+    isOlderEntry,
+    newerThanEntry,
     type PickerEntry,
     type PickerLane,
     lanesOf,
@@ -126,7 +128,7 @@ const sections = computed<
     if (searching.value) {
         // Lead rows search alongside the catalog rather than being pinned through a query: somebody typing a model
         // name is asking for that model, not for the mode sitting above it.
-        const matched = filterEntries([...(leadRows ?? []), ...pickerEntries.value], query.value, rail.value, leadAwareReady);
+        const matched = filterEntries([...(leadRows ?? []), ...pickerEntries.value], query.value, rail.value, leadAwareReady, isOlderEntry);
         // Ranked hits first, custom entry last, so Enter takes the real match; search stays flat, no family folding.
         const rows = withRows(customEntry.value === undefined ? matched : [...matched, customEntry.value]);
         return [
@@ -269,6 +271,13 @@ const coolingBadge = (entry: PickerEntry): string | undefined =>
         ? undefined
         : t(`chat.modelPicker.backAt`, { at: formatReset(entry.availableAt, now.value) });
 
+// A version its family has moved past, said on the row: Opus 5 and Opus 5.5 differ by two characters, and a row picked
+// by mistake became the model every new chat opened on.
+const olderWords = (entry: PickerEntry): readonly string[] => {
+    const newer = newerThanEntry(entry);
+    return newer === undefined ? [] : [t(`chat.modelPicker.olderThan`, { newer: newer.label })];
+};
+
 const rowAriaLabel = (entry: PickerEntry): string => {
     const cooling = coolingBadge(entry);
     const helperOnly = helperOnlyWhy(entry);
@@ -276,6 +285,7 @@ const rowAriaLabel = (entry: PickerEntry): string => {
         entry.label,
         ...(isSelected(entry) ? [t(`chat.modelPicker.currentModel`)] : []),
         ...(isLocked(entry) ? [accessBadge(entry.provider) ?? t(`chat.modelPicker.notConnected`)] : []),
+        ...olderWords(entry),
         ...(cooling === undefined ? [] : [cooling]),
         ...(helperOnly === undefined ? [] : [helperOnly]),
     ].join(`, `);
@@ -521,6 +531,13 @@ onMounted(() => {
                             >
                                 {{ row.entry.label }}
                             </span>
+                            <span
+                                v-if="isOlderEntry(row.entry)"
+                                class="shrink-0 rounded-sm border border-line px-1 text-2xs leading-4 text-subtle"
+                                aria-hidden="true"
+                                v-tooltip.top="olderWords(row.entry)[0]"
+                                >{{ t(`chat.modelPicker.older`) }}</span
+                            >
                             <span class="min-w-0 flex-1 truncate text-2xs text-subtle">{{ helperOnlyWhy(row.entry) ?? row.entry.description }}</span>
                             <!-- Every credential for this model is refused until then; the instant, not a dot, since the wait is the decision. -->
                             <span v-if="isCooling(row.entry)" class="shrink-0 whitespace-nowrap text-2xs text-warning">

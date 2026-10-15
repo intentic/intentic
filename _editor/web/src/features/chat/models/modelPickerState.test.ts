@@ -366,3 +366,16 @@ test("the Auto row searches like a catalog row, so typing its name finds it", ()
 
     expect(filterEntries(withAuto, `auto`, undefined, readyOnly(`claude`)).map((row) => row.key)).toEqual([AUTO_KEY]);
 });
+
+// "opus" finds Opus 5 and Opus 5.5 alike and Enter takes the first row; a catalog listed oldest-first (Cursor's, any
+// registry order) put the superseded version there. An older row sinks below every equal hit, and only below those.
+test("sinks a version its family superseded below the equal hits, never below a better one", () => {
+    const rows = [entry(`cursor`, `claude-opus-5`, `Claude Opus 5`), entry(`cursor`, `claude-opus-5-5`, `Claude Opus 5.5`)];
+    const older = (row: PickerEntry): boolean => row.value === `claude-opus-5`;
+
+    expect(filterEntries(rows, `opus`, undefined, readyOnly(`cursor`)).map((row) => row.value)).toEqual([`claude-opus-5`, `claude-opus-5-5`]);
+    expect(filterEntries(rows, `opus`, undefined, readyOnly(`cursor`), older).map((row) => row.value)).toEqual([`claude-opus-5-5`, `claude-opus-5`]);
+    // Runnable still outranks it: an older row that can run leads a newer one that cannot.
+    const mixed = [entry(`claude`, `claude-opus-5`, `Claude Opus 5`), entry(`cursor`, `claude-opus-5-5`, `Claude Opus 5.5`)];
+    expect(filterEntries(mixed, `opus`, undefined, readyOnly(`claude`), older).map((row) => row.provider)).toEqual([`claude`, `cursor`]);
+});

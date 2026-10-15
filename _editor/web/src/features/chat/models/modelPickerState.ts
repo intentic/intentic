@@ -11,7 +11,15 @@ import {
     providerLabel,
 } from "@intentic/sandbox-contract";
 import { computed } from "vue";
-import { type ModelOption, acpProviders, endpointProviders, modelOptionsFor, providerGroup, providerGroupLabel } from "../accounts/providerCatalog";
+import {
+    type ModelOption,
+    acpProviders,
+    endpointProviders,
+    modelOptionsFor,
+    newerVersionOf,
+    providerGroup,
+    providerGroupLabel,
+} from "../accounts/providerCatalog";
 import type { TurnPick } from "../run/turnDefaults";
 import { t } from "@intentic/ui/i18n";
 
@@ -68,6 +76,10 @@ export const pickerEntries = computed<readonly PickerEntry[]>(() => [
     ...acpProviders.value.map((agent) => entryFor(agent.id, { label: agent.label, value: `` })),
 ]);
 
+// The newer version a row's family has superseded it with, if any: the picker tags the row and search sinks it.
+export const newerThanEntry = (entry: PickerEntry): ModelOption | undefined => newerVersionOf(entry.provider, entry.value);
+export const isOlderEntry = (entry: PickerEntry): boolean => newerThanEntry(entry) !== undefined;
+
 // Lowercase and strip separators, so "gpt5" matches "GPT-5" and "45" matches "4.5". Shared with the composer's `@`
 // picker so a persona or runner matches the way a model does.
 export const normalize = (text: string): string => text.toLowerCase().replace(/[\s.\-_]/g, ``);
@@ -114,12 +126,15 @@ export const lanesOf = (providers: readonly AgentProvider[]): readonly PickerLan
 };
 
 // Case-insensitive, multi-token AND search over label/id/provider/badges (not descriptions). `rail` scopes to one
-// lane; `isReady` outranks match quality, as in the browse view.
+// lane; `isReady` outranks match quality, as in the browse view. An `older` row (a version its family has superseded,
+// newerVersionOf) sinks below every equal hit: "opus" finds Opus 5 and Opus 5.5 alike, and Enter takes the first row,
+// which in a catalog listed oldest-first was the older one.
 export const filterEntries = (
     entries: readonly PickerEntry[],
     query: string,
     rail: string | undefined,
     isReady: (provider: AgentProvider) => boolean,
+    older: (entry: PickerEntry) => boolean = () => false,
 ): readonly PickerEntry[] => {
     const scoped = rail === undefined ? entries : entries.filter((entry) => providerGroup(entry.provider) === rail);
     const tokens = query
@@ -131,7 +146,9 @@ export const filterEntries = (
     }
     const matched = scoped.filter((entry) => tokens.every((token) => haystackFor(entry).includes(token)));
     // Runnable first, then match quality; equal hits keep catalog order (stable sort), as in browse.
-    return matched.toSorted((a, b) => Number(isReady(b.provider)) - Number(isReady(a.provider)) || rankFor(a, tokens) - rankFor(b, tokens));
+    return matched.toSorted(
+        (a, b) => Number(isReady(b.provider)) - Number(isReady(a.provider)) || rankFor(a, tokens) - rankFor(b, tokens) || Number(older(a)) - Number(older(b)),
+    );
 };
 
 // The custom-model escape hatch: any typed id no catalog row already offers, mirroring Claude Code's `/model <id>`.

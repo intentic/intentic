@@ -4,7 +4,7 @@ import { computed, ref } from "vue";
 import { isTrialProvider } from "@intentic/sandbox-contract";
 import type { Conversation } from "../session/conversation";
 import { trialBadge } from "../session/access";
-import { modelLabelFor, trialStatus } from "../accounts/providerCatalog";
+import { modelLabelFor, newerVersionOf, trialStatus } from "../accounts/providerCatalog";
 import { composerModelReading, stillRunningOn } from "./composerModelLabel";
 import ProviderLogo from "../accounts/ProviderLogo.vue";
 import { useT } from "@intentic/ui/i18n";
@@ -55,6 +55,20 @@ const trialHint = computed(() => {
     return { title: badge, note: [...lastAnswer, t(`chat.composerModelPill.trialNote`)].join(` `) };
 });
 
+// An older version of its family, said on the pill: "Opus 5" and "Opus 5.5" differ by two characters, and four chats in
+// a row ran on the older one before anyone saw it. Silent on Auto (the model underneath is only its fallback) and on
+// the press to choose one.
+const newer = computed(() => (reading.value.unset || auto.value ? undefined : newerVersionOf(provider.value, model.value)));
+const olderHint = computed(() =>
+    newer.value === undefined
+        ? undefined
+        : {
+              title: t(`chat.composerModelPill.olderTitle`, { newer: newer.value.label }),
+              note: t(`chat.composerModelPill.olderNote`, { model: modelLabelText.value, newer: newer.value.label }),
+              tone: `warning` as const,
+          },
+);
+
 // The button itself: see the note above on why the anchor has to be this element and not a stand-in.
 const el = ref<HTMLButtonElement>();
 defineExpose({ el, label: modelLabelText });
@@ -68,8 +82,8 @@ defineExpose({ el, label: modelLabelText });
         :disabled="disabled"
         :aria-expanded="expanded"
         :aria-label="ariaLabel ?? t(`chat.composerModelPill.model`, { modelLabelText })"
-        :aria-description="nextHint"
-        v-tooltip.top="nextHint ?? trialHint"
+        :aria-description="nextHint ?? olderHint?.note"
+        v-tooltip.top="nextHint ?? olderHint ?? trialHint"
     >
         <!-- A vendor's mark over a chat that vendor cannot answer is the same lie as its name; the list's own mark stands there. -->
         <Icon v-if="reading.unset" name="th-large" class="shrink-0 text-2xs text-link" aria-hidden="true" />
@@ -79,6 +93,7 @@ defineExpose({ el, label: modelLabelText });
         <span class="truncate" :class="labelClass">{{ modelLabelText }}</span>
         <!-- Hides with the name: on a pill down to its logo it would be the one word left. -->
         <span v-if="runningOn !== undefined" class="shrink-0 font-normal text-subtle" :class="labelClass">{{ t(`chat.composerModelPill.nextMessage`) }}</span>
+        <span v-else-if="newer !== undefined" class="shrink-0 font-normal text-warning" :class="labelClass">{{ t(`chat.composerModelPill.older`) }}</span>
         <!-- Goes with the name: a pill down to its logo is a glyph press like its neighbours, and the chevron was width it no longer
              had. -->
         <Icon name="chevron-down" class="text-2xs text-subtle" :class="labelClass" />

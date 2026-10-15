@@ -37,6 +37,20 @@ it(`answers a startup crash by wiping storage, marking the try, and reloading`, 
     expect(reload).toHaveBeenCalledTimes(1);
 });
 
+it(`keeps what a new chat runs on across the wipe: a reset model map opened every new chat on an older model`, async () => {
+    const { reportStartupError } = await load();
+    localStorage.setItem(`ui-chat-models`, `{"claude":"claude-opus-5-5"}`);
+    localStorage.setItem(`ui-chat-provider`, `claude`);
+    localStorage.setItem(`ui-chat-effort`, `xhigh`);
+    localStorage.setItem(`ui-skin`, `wiped`);
+    reportStartupError(new Error(`boom`));
+    expect(localStorage.getItem(`ui-chat-models`)).toBe(`{"claude":"claude-opus-5-5"}`);
+    expect(localStorage.getItem(`ui-chat-provider`)).toBe(`claude`);
+    expect(localStorage.getItem(`ui-chat-effort`)).toBe(`xhigh`);
+    expect(localStorage.getItem(`ui-skin`)).toBeNull();
+    expect(reload).toHaveBeenCalledTimes(1);
+});
+
 it(`does not wipe twice: a crash that survives the clean slate surfaces instead of looping`, async () => {
     const { reportStartupError } = await load();
     reportStartupError(new Error(`boom`));

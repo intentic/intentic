@@ -5,7 +5,7 @@ import { modelLabelFor } from "../../accounts/providerCatalog";
 import type { QuickPick, QuickPickSources } from "../../composer/composerQuickPick";
 import { drillMention, fileMention, mentionQueryAt, replaceMention } from "../../composer/useMentions";
 import { type SendLater, timeChoices } from "../../composer/later/sendLater";
-import { chatPickable, pickerEntries } from "../../models/modelPickerState";
+import { chatPickable, isOlderEntry, pickerEntries } from "../../models/modelPickerState";
 import { effortsFor } from "../../models/run-settings/effortScale";
 import { ensureProviderCommands, loadAllProviderModels } from "../../models/useChat-catalog";
 import { providerReady } from "../../session/access";
@@ -79,6 +79,7 @@ const quickSourcesOf = (chat: Conversation, host: PopoversHost): QuickPickSource
                   model: selection.model.value,
                   label: modelLabelFor(provider, selection.model.value),
                   isReady: providerReady,
+                  older: isOlderEntry,
               },
         effort: steered || selection.auto.value || !selection.capabilities.value.effort ? undefined : effortSourceOf(chat),
         // Both are this sandbox's, and neither is the send's while a workflow takes it, as their pills say.

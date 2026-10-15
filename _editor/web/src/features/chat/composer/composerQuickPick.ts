@@ -39,6 +39,8 @@ export interface QuickPickSources {
               // What the current pick is called, by the app's one naming rule (providerCatalog.modelLabelFor).
               readonly label: string;
               readonly isReady: (provider: AgentProvider) => boolean;
+              // A version its family has superseded (modelPickerState.isOlderEntry): tagged, and sunk below equal hits.
+              readonly older?: (entry: PickerEntry) => boolean;
           }
         | undefined;
     readonly effort: { readonly options: readonly CatalogOption[]; readonly picked: string } | undefined;
@@ -151,13 +153,13 @@ const modelRow = (source: NonNullable<QuickPickSources[`model`]>, entry: PickerE
     key: `model:${entry.key}`,
     entry,
     label: entry.label,
-    detail: providerLabel(entry.provider),
+    detail: source.older?.(entry) === true ? `${providerLabel(entry.provider)} · ${t(`chat.modelPicker.older`)}` : providerLabel(entry.provider),
     current: entry.provider === source.provider && entry.value === source.model,
 });
 
 // The model list's own ranking (filterEntries); the current pair leads an unfiltered list so its tick is in view.
 const modelRows = (source: NonNullable<QuickPickSources[`model`]>, query: string): ModelRow[] => {
-    const ranked = filterEntries(source.entries, query, undefined, source.isReady);
+    const ranked = filterEntries(source.entries, query, undefined, source.isReady, source.older);
     const rows = ranked.map((entry) => modelRow(source, entry));
     if (query.trim() !== ``) {
         return rows;
