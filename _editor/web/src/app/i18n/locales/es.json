@@ -4171,7 +4171,9 @@
             "title": "Analítica de producto de Intentic en este sandbox"
         },
         "dataProtection": {
-            "intro": "Antes de que este sandbox trate datos personales de alguien, sigue tres pasos: activa las protecciones recomendadas, comprueba adónde van los datos y entrega los documentos a tu delegado de protección de datos. Nada cambia hasta que pulses «Aplicar» en el paso 1.",
+            "intro": "Tres pasos antes de que este sandbox trate datos personales.",
+            "introHint": "Activa las protecciones recomendadas, comprueba adónde van los datos y entrega los documentos a tu delegado de protección de datos. Nada cambia hasta que pulses «Aplicar» en el paso 1.",
+            "about": "Acerca de: {name}",
             "steps": "Pasos",
             "step": {
                 "protections": "Protecciones",
@@ -4180,29 +4182,29 @@
             },
             "tile": {
                 "protectionsOn": "{on} de {total} activadas",
-                "recommended": "{count} cambio recomendado por aplicar | {count} cambios recomendados por aplicar",
-                "allApplied": "Todos los ajustes recomendados están aplicados",
-                "places": "{count} destino en uso | {count} destinos en uso",
+                "recommended": "{count} por aplicar",
+                "allApplied": "Recomendadas aplicadas",
+                "places": "{count} en uso",
                 "outsideEea": "{count} fuera del EEE",
-                "questions": "{count} pregunta para tu organismo | {count} preguntas para tu organismo",
-                "documents": "3 borradores para descargar",
-                "bestAfter": "Mejor descargarlos después del paso 1"
+                "questions": "{count} pregunta abierta | {count} preguntas abiertas",
+                "documents": "3 borradores",
+                "bestAfter": "Mejor tras el paso 1"
             },
-            "protectionsIntro": "Cada protección es un ajuste de este sandbox. Las recomendadas son las que debería activar un organismo que trabaja bajo el RGPD y el Reglamento de IA. Ya vienen marcadas: desmarca lo que no quieras y pulsa «Aplicar». Las demás se activan donde se configura cada una.",
+            "recommendedHint": "Lo que debería activar un organismo que trabaja bajo el RGPD y el Reglamento de IA. Ya vienen marcadas: desmarca lo que no quieras y pulsa «Aplicar».",
             "recommended": "Recomendadas",
-            "applyNote": "Verás la lista antes de que cambie nada.",
+            "applyNote": "Primero lo confirmarás.",
             "more": "Qué más puedes activar",
-            "moreCaption": "Opcional, según cómo trabaje tu organismo. Cada una se activa donde se configura.",
+            "moreHint": "Opcional, según cómo trabaje tu organismo. Cada una se activa donde se configura.",
             "inPlace": "Ya activas",
-            "showInPlace": "Mostrar {count} protección ya activa | Mostrar las {count} protecciones ya activas",
-            "hideInPlace": "Ocultar las ya activas",
-            "placesIntro": "Cada destino al que este sandbox envía datos, tal como está configurado ahora. Tu delegado de protección de datos los anota como destinatarios. Un destino fuera del EEE (Espacio Económico Europeo) es una transferencia a un tercer país, que necesita su propia base jurídica (RGPD, capítulo V).",
-            "questionsTitle": "{count} pregunta que solo tu organismo puede responder | {count} preguntas que solo tu organismo puede responder",
+            "showInPlace": "Mostrar",
+            "hideInPlace": "Ocultar",
+            "placesHint": "Tu delegado de protección de datos los anota como destinatarios. Un destino fuera del EEE (Espacio Económico Europeo) es una transferencia a un tercer país, que necesita su propia base jurídica (RGPD, capítulo V).",
+            "questionsTitle": "{count} pregunta abierta para tu organismo | {count} preguntas abiertas para tu organismo",
             "inUse": "En uso",
-            "idleCaption": "Sin uso ahora. Aparecen porque un solo ajuste los abriría.",
+            "idleHint": "Sin uso ahora. Aparecen porque un solo ajuste los abriría.",
             "outsideEeaIn": "fuera del EEE ({region})",
-            "documentsIntro": "Los tres documentos que tu delegado de protección de datos lleva sobre este sandbox. Cada uno se redacta con los ajustes del sandbox en el momento de descargarlo.",
-            "pendingBeforeDocuments": "{count} cambio recomendado del paso 1 aún no está aplicado, así que un documento descargado ahora describe este sandbox sin él. | {count} cambios recomendados del paso 1 aún no están aplicados, así que un documento descargado ahora describe este sandbox sin ellos.",
+            "documentsHint": "Lo que tu delegado de protección de datos lleva sobre este sandbox, redactado con sus ajustes en el momento de descargarlo. Los campos que solo tu organismo puede completar están marcados con ✎.",
+            "pendingBeforeDocuments": "{count} cambio recomendado aún no está aplicado; los documentos no lo incluirán. | {count} cambios recomendados aún no están aplicados; los documentos no los incluirán.",
             "goToProtections": "Volver al paso 1",
             "format": "Formato",
             "download": "Descargar",
@@ -4210,19 +4212,20 @@
             "couldntDownload": "No se pudo preparar el documento",
             "couldntApply": "No se pudieron aplicar los ajustes",
             "couldntReadPreset": "No se pudieron leer los ajustes para una administración pública",
-            "documentsCaption": "Borradores rellenados según la configuración actual. Los campos que solo tu organismo puede completar están marcados con ✎.",
             "language": "Idioma",
             "document": {
                 "ropa": "Registro de actividades de tratamiento",
-                "ropaNote": "La entrada de este sistema en tu registro (art. 30 RGPD): destinatarios, transferencias fuera del EEE, plazos de supresión.",
+                "ropaNote": "La entrada de este sistema en tu registro: destinatarios, transferencias fuera del EEE, plazos de supresión.",
+                "ropaRef": "Art. 30 RGPD",
                 "dpia": "Evaluación de impacto relativa a la protección de datos",
-                "dpiaNote": "Un borrador (art. 35 RGPD) con los riesgos de usar IA y las protecciones activadas aquí, más una nota sobre el Reglamento de IA.",
+                "dpiaNote": "Un borrador con los riesgos de usar IA y las protecciones activadas aquí, más una nota sobre el Reglamento de IA.",
+                "dpiaRef": "Art. 35 RGPD · Reglamento de IA",
                 "toms": "Medidas técnicas y organizativas",
-                "tomsNote": "Cada protección del sistema, si está activada y dónde se cambia (art. 32 RGPD)."
+                "tomsNote": "Cada protección del sistema, si está activada y dónde se cambia.",
+                "tomsRef": "Art. 32 RGPD"
             },
             "notInUse": "sin uso",
             "outsideEea": "fuera del EEE",
-            "officeAnswers": "Tu organismo debe determinar:",
             "kind": {
                 "modelProvider": "Proveedor de modelo de IA",
                 "modelEndpoint": "Modelo de IA externo",
@@ -4277,11 +4280,11 @@
                 "none": "sin protección"
             },
             "question": {
-                "endpointOperator": "quién gestiona este modelo y dónde trata los datos.",
-                "mailOperator": "quién gestiona el servidor de correo y dónde está.",
-                "ingressRegion": "si el punto de acceso de Intentic, donde termina el cifrado, sigue funcionando solo en EE. UU. (Ashburn), como indica su página de subencargados.",
-                "ingressProxy": "si se accede a este sandbox a través de un servidor propio del organismo o del punto de acceso de Intentic.",
-                "platformRegion": "dónde guarda Intentic los datos de las cuentas."
+                "endpointOperator": "¿Quién gestiona este modelo y dónde trata los datos?",
+                "mailOperator": "¿Quién gestiona el servidor de correo y dónde está?",
+                "ingressRegion": "¿Sigue funcionando solo en EE. UU. (Ashburn) el punto de acceso de Intentic, donde termina el cifrado?",
+                "ingressProxy": "¿Se accede a este sandbox a través de un servidor propio del organismo o del punto de acceso de Intentic?",
+                "platformRegion": "¿Dónde guarda Intentic los datos de las cuentas?"
             },
             "change": "Cambiar",
             "status": {
@@ -4393,7 +4396,7 @@
                     "what": "Las copias de seguridad de este sandbox se hacen fuera de él, así que las hace y protege tu organismo."
                 }
             },
-            "ownerApplies": "Solo el propietario del sandbox puede aplicar estos ajustes.",
+            "ownerApplies": "Solo el propietario puede aplicarlos.",
             "apply": "Aplicar {count} ajuste | Aplicar {count} ajustes",
             "nothingToChange": "Todos los ajustes ya están como se propone.",
             "applied": "{count} ajuste aplicado | {count} ajustes aplicados",

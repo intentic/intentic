@@ -8596,7 +8596,9 @@
             "title": "Intentic product analytics in this sandbox"
         },
         "dataProtection": {
-            "intro": "Before this sandbox handles anyone's personal data, take three steps: switch on the protections recommended for it, check where its data goes, then hand your data protection officer the documents. Nothing changes until you press Apply in step 1.",
+            "intro": "Three steps before this sandbox handles anyone's personal data.",
+            "introHint": "Switch on the recommended protections, check where data goes, then hand your data protection officer the documents. Nothing changes until you press Apply in step 1.",
+            "about": "About {name}",
             "steps": "Steps",
             "step": {
                 "protections": "Protections",
@@ -8604,30 +8606,30 @@
                 "documents": "Documents"
             },
             "tile": {
-                "protectionsOn": "{on} of {total} switched on",
-                "recommended": "{count} recommended change to apply | {count} recommended changes to apply",
-                "allApplied": "Every recommended setting is applied",
-                "places": "{count} place in use | {count} places in use",
-                "outsideEea": "{count} outside the EEA",
-                "questions": "{count} question for your office | {count} questions for your office",
-                "documents": "3 drafts to download",
-                "bestAfter": "Best downloaded after step 1"
+                "protectionsOn": "{on} of {total} on",
+                "recommended": "{count} to apply",
+                "allApplied": "All recommended on",
+                "places": "{count} in use",
+                "outsideEea": "{count} outside EEA",
+                "questions": "{count} open question | {count} open questions",
+                "documents": "3 drafts",
+                "bestAfter": "Best after step 1"
             },
-            "protectionsIntro": "Each protection here is a setting of this sandbox. The recommended ones are what an office working under GDPR and the AI Act should switch on. They start ticked: untick any you don't want, then press Apply. The rest are switched on where each one is set.",
+            "recommendedHint": "What an office working under GDPR and the AI Act should switch on. Each starts ticked: untick what you don't want, then press Apply.",
             "recommended": "Recommended",
-            "applyNote": "You see the list before anything changes.",
+            "applyNote": "You'll confirm first.",
             "more": "More you can switch on",
-            "moreCaption": "Optional, depending on how your office works. Each is switched on where it is set.",
+            "moreHint": "Optional, depending on how your office works. Each is switched on where it is set.",
             "inPlace": "Already in place",
-            "showInPlace": "Show the {count} protection already in place | Show the {count} protections already in place",
-            "hideInPlace": "Hide what is already in place",
-            "placesIntro": "Every place this sandbox sends data to, as it is set up now. Your data protection officer lists them as recipients. A place outside the EEA (European Economic Area) is a transfer to a third country, which needs a legal basis of its own (GDPR, chapter V).",
-            "questionsTitle": "{count} question only your office can answer | {count} questions only your office can answer",
+            "showInPlace": "Show",
+            "hideInPlace": "Hide",
+            "placesHint": "Your data protection officer lists these as recipients. A place outside the EEA (European Economic Area) is a transfer to a third country, which needs a legal basis of its own (GDPR, chapter V).",
+            "questionsTitle": "{count} open question for your office | {count} open questions for your office",
             "inUse": "In use",
-            "idleCaption": "Not in use now, listed because one switch would open them.",
+            "idleHint": "Not in use now, listed because one switch would open them.",
             "outsideEeaIn": "outside the EEA ({region})",
-            "documentsIntro": "The three documents your data protection officer keeps about this sandbox. Each is written from the sandbox's settings at the moment you download it.",
-            "pendingBeforeDocuments": "{count} recommended change from step 1 is not applied yet, so a document downloaded now describes this sandbox without it. | {count} recommended changes from step 1 are not applied yet, so a document downloaded now describes this sandbox without them.",
+            "documentsHint": "What your data protection officer keeps about this sandbox, drafted from its settings at the moment you download. Fields only your office can answer are marked ✎.",
+            "pendingBeforeDocuments": "{count} recommended change isn't applied yet; documents will leave it out. | {count} recommended changes aren't applied yet; documents will leave them out.",
             "goToProtections": "Back to step 1",
             "format": "Format",
             "download": "Download",
@@ -8635,19 +8637,20 @@
             "couldntDownload": "Couldn't prepare the document",
             "couldntApply": "Couldn't apply the settings",
             "couldntReadPreset": "Couldn't read the settings for a public office",
-            "documentsCaption": "Drafts filled in from the current setup. Fields only your office can answer are marked ✎.",
             "language": "Language",
             "document": {
                 "ropa": "Record of processing activities",
-                "ropaNote": "The entry for this system in your record (GDPR Art. 30): recipients, transfers outside the EEA, deletion periods.",
+                "ropaNote": "The entry for this system in your record: recipients, transfers outside the EEA, deletion periods.",
+                "ropaRef": "GDPR Art. 30",
                 "dpia": "Data protection impact assessment",
-                "dpiaNote": "A draft (GDPR Art. 35) with the risks of using AI and the protections switched on here, plus a note on the AI Act.",
+                "dpiaNote": "A draft with the risks of using AI and the protections switched on here, plus a note on the AI Act.",
+                "dpiaRef": "GDPR Art. 35 · AI Act",
                 "toms": "Technical and organisational measures",
-                "tomsNote": "Every protection the system offers, whether it is on, and where it is changed (GDPR Art. 32)."
+                "tomsNote": "Every protection the system offers, whether it is on, and where it is changed.",
+                "tomsRef": "GDPR Art. 32"
             },
             "notInUse": "not in use",
             "outsideEea": "outside the EEA",
-            "officeAnswers": "Your office should establish:",
             "kind": {
                 "modelProvider": "AI model provider",
                 "modelEndpoint": "External AI model",
@@ -8702,11 +8705,11 @@
                 "none": "not shielded"
             },
             "question": {
-                "endpointOperator": "who runs this model and where it processes data.",
-                "mailOperator": "who runs the mail server and where it is.",
-                "ingressRegion": "whether Intentic's access point, where encryption ends, still runs only in the US (Ashburn), as its sub-processors page says.",
-                "ingressProxy": "whether people reach this sandbox through your own server or through Intentic's access point.",
-                "platformRegion": "where Intentic keeps account data."
+                "endpointOperator": "Who runs this model, and where does it process data?",
+                "mailOperator": "Who runs the mail server, and where is it?",
+                "ingressRegion": "Does Intentic's access point, where encryption ends, still run only in the US (Ashburn)?",
+                "ingressProxy": "Do people reach this sandbox through your own server, or through Intentic's access point?",
+                "platformRegion": "Where does Intentic keep account data?"
             },
             "change": "Change",
             "status": {
@@ -8818,7 +8821,7 @@
                     "what": "Backups of this sandbox are made outside it, so your office makes and protects them."
                 }
             },
-            "ownerApplies": "Only the sandbox's owner can apply these settings.",
+            "ownerApplies": "Only the owner can apply these.",
             "apply": "Apply {count} setting | Apply {count} settings",
             "nothingToChange": "Every setting is already as proposed.",
             "applied": "Applied {count} setting | Applied {count} settings",

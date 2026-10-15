@@ -4155,7 +4155,9 @@
             "title": "Intentic-Produktanalyse in dieser Sandbox"
         },
         "dataProtection": {
-            "intro": "Bevor diese Sandbox personenbezogene Daten verarbeitet, geh drei Schritte durch: Schalte die empfohlenen Schutzmaßnahmen ein, prüfe, wohin Daten gehen, und gib deinem Datenschutzbeauftragten die Dokumente. Nichts ändert sich, bis du in Schritt 1 auf „Anwenden“ drückst.",
+            "intro": "Drei Schritte, bevor diese Sandbox personenbezogene Daten verarbeitet.",
+            "introHint": "Schalte die empfohlenen Schutzmaßnahmen ein, prüfe, wohin Daten gehen, und gib deinem Datenschutzbeauftragten die Dokumente. Nichts ändert sich, bis du in Schritt 1 auf „Anwenden“ drückst.",
+            "about": "Mehr zu: {name}",
             "steps": "Schritte",
             "step": {
                 "protections": "Schutzmaßnahmen",
@@ -4163,30 +4165,30 @@
                 "documents": "Dokumente"
             },
             "tile": {
-                "protectionsOn": "{on} von {total} eingeschaltet",
-                "recommended": "{count} empfohlene Änderung anzuwenden | {count} empfohlene Änderungen anzuwenden",
-                "allApplied": "Alle empfohlenen Einstellungen angewendet",
-                "places": "{count} Ziel in Gebrauch | {count} Ziele in Gebrauch",
-                "outsideEea": "{count} außerhalb des EWR",
-                "questions": "{count} Frage an deine Behörde | {count} Fragen an deine Behörde",
-                "documents": "3 Entwürfe zum Herunterladen",
-                "bestAfter": "Am besten nach Schritt 1 herunterladen"
+                "protectionsOn": "{on} von {total} an",
+                "recommended": "{count} anzuwenden",
+                "allApplied": "Alle Empfehlungen an",
+                "places": "{count} in Gebrauch",
+                "outsideEea": "{count} außerhalb EWR",
+                "questions": "{count} offene Frage | {count} offene Fragen",
+                "documents": "3 Entwürfe",
+                "bestAfter": "Am besten nach Schritt 1"
             },
-            "protectionsIntro": "Jede Schutzmaßnahme ist eine Einstellung dieser Sandbox. Die empfohlenen sollte eine Behörde einschalten, die nach DSGVO und KI-Verordnung arbeitet. Sie sind schon angehakt: Entferne den Haken bei allem, was du nicht willst, und drücke „Anwenden“. Die übrigen schaltest du dort ein, wo sie jeweils eingestellt werden.",
+            "recommendedHint": "Was eine Behörde einschalten sollte, die nach DSGVO und KI-Verordnung arbeitet. Sie sind schon angehakt: Entferne den Haken bei allem, was du nicht willst, und drücke „Anwenden“.",
             "recommended": "Empfohlen",
-            "applyNote": "Bevor sich etwas ändert, siehst du die Liste.",
+            "applyNote": "Du bestätigst vorher.",
             "more": "Was du noch einschalten kannst",
-            "moreCaption": "Optional, je nachdem, wie deine Behörde arbeitet. Jede wird dort eingeschaltet, wo sie eingestellt wird.",
+            "moreHint": "Optional, je nachdem, wie deine Behörde arbeitet. Jede wird dort eingeschaltet, wo sie eingestellt wird.",
             "inPlace": "Bereits aktiv",
-            "showInPlace": "{count} aktive Schutzmaßnahme anzeigen | {count} aktive Schutzmaßnahmen anzeigen",
-            "hideInPlace": "Aktive ausblenden",
-            "placesIntro": "Jeder Ort, an den diese Sandbox Daten sendet, so wie sie jetzt eingerichtet ist. Dein Datenschutzbeauftragter führt sie als Empfänger. Ein Ort außerhalb des EWR (Europäischer Wirtschaftsraum) ist eine Übermittlung in ein Drittland, die eine eigene Rechtsgrundlage braucht (DSGVO, Kapitel V).",
-            "questionsTitle": "{count} Frage, die nur deine Behörde beantworten kann | {count} Fragen, die nur deine Behörde beantworten kann",
+            "showInPlace": "Anzeigen",
+            "hideInPlace": "Ausblenden",
+            "placesHint": "Dein Datenschutzbeauftragter führt sie als Empfänger. Ein Ort außerhalb des EWR (Europäischer Wirtschaftsraum) ist eine Übermittlung in ein Drittland, die eine eigene Rechtsgrundlage braucht (DSGVO, Kapitel V).",
+            "questionsTitle": "{count} offene Frage an deine Behörde | {count} offene Fragen an deine Behörde",
             "inUse": "In Gebrauch",
-            "idleCaption": "Gerade nicht in Gebrauch. Aufgeführt, weil ein Schalter sie öffnen würde.",
+            "idleHint": "Gerade nicht in Gebrauch. Aufgeführt, weil ein Schalter sie öffnen würde.",
             "outsideEeaIn": "außerhalb des EWR ({region})",
-            "documentsIntro": "Die drei Dokumente, die dein Datenschutzbeauftragter über diese Sandbox führt. Jedes wird beim Herunterladen aus den aktuellen Einstellungen der Sandbox erstellt.",
-            "pendingBeforeDocuments": "{count} empfohlene Änderung aus Schritt 1 ist noch nicht angewendet, ein jetzt heruntergeladenes Dokument beschreibt die Sandbox also ohne sie. | {count} empfohlene Änderungen aus Schritt 1 sind noch nicht angewendet, ein jetzt heruntergeladenes Dokument beschreibt die Sandbox also ohne sie.",
+            "documentsHint": "Was dein Datenschutzbeauftragter über diese Sandbox führt, beim Herunterladen aus ihren aktuellen Einstellungen erstellt. Felder, die nur deine Behörde beantworten kann, sind mit ✎ markiert.",
+            "pendingBeforeDocuments": "{count} empfohlene Änderung ist noch nicht angewendet; Dokumente lassen sie aus. | {count} empfohlene Änderungen sind noch nicht angewendet; Dokumente lassen sie aus.",
             "goToProtections": "Zurück zu Schritt 1",
             "format": "Format",
             "download": "Herunterladen",
@@ -4194,19 +4196,20 @@
             "couldntDownload": "Das Dokument konnte nicht erstellt werden",
             "couldntApply": "Die Einstellungen konnten nicht angewendet werden",
             "couldntReadPreset": "Die Einstellungen für Behörden konnten nicht gelesen werden",
-            "documentsCaption": "Entwürfe nach der aktuellen Einrichtung. Felder, die nur deine Behörde beantworten kann, sind mit ✎ markiert.",
             "language": "Sprache",
             "document": {
                 "ropa": "Verzeichnis von Verarbeitungstätigkeiten",
-                "ropaNote": "Der Eintrag für dieses System in deinem Verzeichnis (Art. 30 DSGVO): Empfänger, Übermittlungen außerhalb des EWR, Löschfristen.",
+                "ropaNote": "Der Eintrag für dieses System in deinem Verzeichnis: Empfänger, Übermittlungen außerhalb des EWR, Löschfristen.",
+                "ropaRef": "Art. 30 DSGVO",
                 "dpia": "Datenschutz-Folgenabschätzung",
-                "dpiaNote": "Ein Entwurf (Art. 35 DSGVO) mit den Risiken des KI-Einsatzes und den hier eingeschalteten Schutzmaßnahmen, dazu ein Hinweis zur KI-Verordnung.",
+                "dpiaNote": "Ein Entwurf mit den Risiken des KI-Einsatzes und den hier eingeschalteten Schutzmaßnahmen, dazu ein Hinweis zur KI-Verordnung.",
+                "dpiaRef": "Art. 35 DSGVO · KI-Verordnung",
                 "toms": "Technische und organisatorische Maßnahmen",
-                "tomsNote": "Jede Schutzmaßnahme des Systems, ob sie eingeschaltet ist und wo sie geändert wird (Art. 32 DSGVO)."
+                "tomsNote": "Jede Schutzmaßnahme des Systems, ob sie eingeschaltet ist und wo sie geändert wird.",
+                "tomsRef": "Art. 32 DSGVO"
             },
             "notInUse": "nicht genutzt",
             "outsideEea": "außerhalb des EWR",
-            "officeAnswers": "Deine Behörde sollte klären:",
             "kind": {
                 "modelProvider": "Anbieter eines KI-Modells",
                 "modelEndpoint": "Externes KI-Modell",
@@ -4261,11 +4264,11 @@
                 "none": "nicht geschützt"
             },
             "question": {
-                "endpointOperator": "wer dieses Modell betreibt und wo es Daten verarbeitet.",
-                "mailOperator": "wer den Mailserver betreibt und wo er steht.",
-                "ingressRegion": "ob der Zugangspunkt von Intentic, an dem die Verschlüsselung endet, weiterhin nur in den USA (Ashburn) läuft, wie seine Seite zu Unterauftragsverarbeitern angibt.",
-                "ingressProxy": "ob die Sandbox über einen eigenen Server der Behörde oder über den Zugangspunkt von Intentic erreicht wird.",
-                "platformRegion": "wo Intentic Kontodaten speichert."
+                "endpointOperator": "Wer betreibt dieses Modell, und wo verarbeitet es Daten?",
+                "mailOperator": "Wer betreibt den Mailserver, und wo steht er?",
+                "ingressRegion": "Läuft der Zugangspunkt von Intentic, an dem die Verschlüsselung endet, weiterhin nur in den USA (Ashburn)?",
+                "ingressProxy": "Wird die Sandbox über einen eigenen Server der Behörde oder über den Zugangspunkt von Intentic erreicht?",
+                "platformRegion": "Wo speichert Intentic Kontodaten?"
             },
             "change": "Ändern",
             "status": {
@@ -4377,7 +4380,7 @@
                     "what": "Sicherungen dieser Sandbox entstehen außerhalb von ihr, deshalb erstellt und schützt sie deine Behörde."
                 }
             },
-            "ownerApplies": "Nur der Eigentümer der Sandbox kann diese Einstellungen anwenden.",
+            "ownerApplies": "Nur der Eigentümer kann sie anwenden.",
             "apply": "{count} Einstellung anwenden | {count} Einstellungen anwenden",
             "nothingToChange": "Alle Einstellungen entsprechen bereits dem Vorschlag.",
             "applied": "{count} Einstellung angewendet | {count} Einstellungen angewendet",

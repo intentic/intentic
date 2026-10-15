@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Icon, Notice, type NoticeModel, type Tone, toneInk, toneWash } from "@intentic/ui";
+import { Icon, InfoHint, Notice, type NoticeModel, type Tone, toneInk, toneWash } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, useId } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -17,6 +17,9 @@ import { useComplianceReport, usePreset } from "./useCompliance";
 // Until 2026-10-13 this was one page about seven screens long: documents, every data path in seven cards, twenty-five
 // protections under six GDPR headings, and the public-office preset at the foot as a second list of the same switches.
 // A newcomer met the documents first, before anything they describe was set, and read most switches twice.
+//
+// Every word on it is a short line; what a newcomer needs once and a regular never again (why the order, what a step's
+// list means in law) sits behind an (i) beside the line it explains, so the page reads as its controls and counts.
 //
 // Maintainer and up see it; only the owner applies.
 
@@ -40,7 +43,8 @@ const counts = computed(() => (report.value === undefined ? undefined : stepCoun
 interface Tile {
     readonly key: Step;
     readonly title: string;
-    line?: string;
+    /** Its counts, a line each: in a narrow tile, two joined on one line broke mid-phrase. */
+    line?: readonly string[];
     note?: { readonly text: string; readonly tone: Tone };
     /** Nothing left to do in it: its number becomes a tick. */
     done: boolean;
@@ -55,15 +59,15 @@ const tiles = computed<readonly Tile[]>(() => {
     const documents: Tile = {
         key: `documents`,
         title: t(`sandbox.dataProtection.step.documents`),
-        line: t(`sandbox.dataProtection.tile.documents`),
+        line: [t(`sandbox.dataProtection.tile.documents`)],
         done: false,
     };
     if (count !== undefined) {
-        protections.line = t(`sandbox.dataProtection.tile.protectionsOn`, { on: count.protectionsOn, total: count.protections });
+        protections.line = [t(`sandbox.dataProtection.tile.protectionsOn`, { on: count.protectionsOn, total: count.protections })];
         places.line = [
-            t(`sandbox.dataProtection.tile.places`, { count: count.places }, count.places),
+            t(`sandbox.dataProtection.tile.places`, { count: count.places }),
             t(`sandbox.dataProtection.tile.outsideEea`, { count: count.outsideEea }, count.outsideEea),
-        ].join(` · `);
+        ];
         if (count.questions > 0) {
             places.note = { text: t(`sandbox.dataProtection.tile.questions`, { count: count.questions }, count.questions), tone: `warning` };
         }
@@ -71,7 +75,7 @@ const tiles = computed<readonly Tile[]>(() => {
     if (recommended !== undefined) {
         protections.note =
             recommended > 0
-                ? { text: t(`sandbox.dataProtection.tile.recommended`, { count: recommended }, recommended), tone: `warning` }
+                ? { text: t(`sandbox.dataProtection.tile.recommended`, { count: recommended }), tone: `warning` }
                 : { text: t(`sandbox.dataProtection.tile.allApplied`), tone: `success` };
         if (recommended > 0) {
             documents.note = { text: t(`sandbox.dataProtection.tile.bestAfter`), tone: `neutral` };
@@ -105,7 +109,12 @@ const pageNotice = computed<NoticeModel | undefined>(() =>
 
 <template>
     <div class="@container flex flex-col gap-6">
-        <p class="text-xs text-muted">{{ t(`sandbox.dataProtection.intro`) }}</p>
+        <p class="flex items-center gap-2 text-xs text-muted">
+            {{ t(`sandbox.dataProtection.intro`) }}
+            <InfoHint :label="t(`sandbox.dataProtection.about`, { name: t(`sandbox.sandboxNav.dataProtection`) })">
+                <span class="block text-xs text-content">{{ t(`sandbox.dataProtection.introHint`) }}</span>
+            </InfoHint>
+        </p>
         <Notice v-if="pageNotice" :of="pageNotice" />
 
         <div role="tablist" :aria-label="t(`sandbox.dataProtection.steps`)" class="grid grid-cols-1 gap-2 @md:grid-cols-3">
@@ -129,7 +138,7 @@ const pageNotice = computed<NoticeModel | undefined>(() =>
                 </span>
                 <span class="flex min-w-0 flex-col gap-0.5">
                     <span class="text-sm font-medium text-content">{{ tile.title }}</span>
-                    <span v-if="tile.line !== undefined" class="text-xs text-muted">{{ tile.line }}</span>
+                    <span v-for="part in tile.line" :key="part" class="text-xs text-muted">{{ part }}</span>
                     <span v-if="tile.note !== undefined" :class="toneInk(tile.note.tone, `text-xs`)">{{ tile.note.text }}</span>
                 </span>
             </button>

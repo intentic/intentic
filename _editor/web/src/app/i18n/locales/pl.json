@@ -8192,7 +8192,9 @@
             "title": "Analityka produktu Intentic w tym sandboxie"
         },
         "dataProtection": {
-            "intro": "Zanim ten sandbox zacznie przetwarzać czyjekolwiek dane osobowe, przejdź trzy kroki: włącz zalecane zabezpieczenia, sprawdź, dokąd trafiają dane, i przekaż dokumenty inspektorowi ochrony danych. Nic się nie zmieni, dopóki nie naciśniesz „Zastosuj” w kroku 1.",
+            "intro": "Trzy kroki, zanim ten sandbox zacznie przetwarzać czyjekolwiek dane osobowe.",
+            "introHint": "Włącz zalecane zabezpieczenia, sprawdź, dokąd trafiają dane, i przekaż dokumenty inspektorowi ochrony danych. Nic się nie zmieni, dopóki nie naciśniesz „Zastosuj” w kroku 1.",
+            "about": "Więcej o: {name}",
             "steps": "Kroki",
             "step": {
                 "protections": "Zabezpieczenia",
@@ -8201,29 +8203,29 @@
             },
             "tile": {
                 "protectionsOn": "Włączone: {on} z {total}",
-                "recommended": "{count} zalecana zmiana do zastosowania | {count} zalecane zmiany do zastosowania | {count} zalecanych zmian do zastosowania",
-                "allApplied": "Wszystkie zalecane ustawienia zastosowane",
-                "places": "{count} używane miejsce | {count} używane miejsca | {count} używanych miejsc",
+                "recommended": "{count} do zastosowania",
+                "allApplied": "Zalecane włączone",
+                "places": "{count} w użyciu",
                 "outsideEea": "{count} poza EOG",
-                "questions": "{count} pytanie do urzędu | {count} pytania do urzędu | {count} pytań do urzędu",
-                "documents": "3 projekty do pobrania",
-                "bestAfter": "Najlepiej pobrać po kroku 1"
+                "questions": "{count} otwarte pytanie | {count} otwarte pytania | {count} otwartych pytań",
+                "documents": "3 projekty",
+                "bestAfter": "Najlepiej po kroku 1"
             },
-            "protectionsIntro": "Każde zabezpieczenie to ustawienie tego sandboxa. Zalecane to te, które powinien włączyć urząd działający zgodnie z RODO i aktem w sprawie AI. Są od razu zaznaczone: odznacz to, czego nie chcesz, i naciśnij „Zastosuj”. Pozostałe włącza się tam, gdzie każde z nich jest ustawiane.",
+            "recommendedHint": "To, co powinien włączyć urząd działający zgodnie z RODO i aktem w sprawie AI. Są od razu zaznaczone: odznacz to, czego nie chcesz, i naciśnij „Zastosuj”.",
             "recommended": "Zalecane",
-            "applyNote": "Zanim cokolwiek się zmieni, zobaczysz listę.",
+            "applyNote": "Najpierw to potwierdzisz.",
             "more": "Co jeszcze można włączyć",
-            "moreCaption": "Opcjonalne, zależnie od tego, jak pracuje urząd. Każde włącza się tam, gdzie jest ustawiane.",
+            "moreHint": "Opcjonalne, zależnie od tego, jak pracuje urząd. Każde włącza się tam, gdzie jest ustawiane.",
             "inPlace": "Już działa",
-            "showInPlace": "Pokaż {count} działające zabezpieczenie | Pokaż {count} działające zabezpieczenia | Pokaż {count} działających zabezpieczeń",
-            "hideInPlace": "Ukryj to, co już działa",
-            "placesIntro": "Wszystkie miejsca, do których ten sandbox wysyła dane, przy obecnych ustawieniach. Inspektor ochrony danych wpisuje je jako odbiorców. Miejsce poza EOG (Europejskim Obszarem Gospodarczym) oznacza przekazanie do państwa trzeciego, które wymaga własnej podstawy prawnej (RODO, rozdział V).",
-            "questionsTitle": "{count} pytanie, na które odpowie tylko urząd | {count} pytania, na które odpowie tylko urząd | {count} pytań, na które odpowie tylko urząd",
+            "showInPlace": "Pokaż",
+            "hideInPlace": "Ukryj",
+            "placesHint": "Inspektor ochrony danych wpisuje je jako odbiorców. Miejsce poza EOG (Europejskim Obszarem Gospodarczym) oznacza przekazanie do państwa trzeciego, które wymaga własnej podstawy prawnej (RODO, rozdział V).",
+            "questionsTitle": "{count} otwarte pytanie do urzędu | {count} otwarte pytania do urzędu | {count} otwartych pytań do urzędu",
             "inUse": "Używane",
-            "idleCaption": "Teraz nieużywane. Są na liście, bo jeden przełącznik by je otworzył.",
+            "idleHint": "Teraz nieużywane. Są na liście, bo jeden przełącznik by je otworzył.",
             "outsideEeaIn": "poza EOG ({region})",
-            "documentsIntro": "Trzy dokumenty, które inspektor ochrony danych prowadzi dla tego sandboxa. Każdy powstaje z ustawień sandboxa w chwili pobrania.",
-            "pendingBeforeDocuments": "{count} zalecana zmiana z kroku 1 nie jest jeszcze zastosowana, więc pobrany teraz dokument opisze sandbox bez niej. | {count} zalecane zmiany z kroku 1 nie są jeszcze zastosowane, więc pobrany teraz dokument opisze sandbox bez nich. | {count} zalecanych zmian z kroku 1 nie jest jeszcze zastosowanych, więc pobrany teraz dokument opisze sandbox bez nich.",
+            "documentsHint": "Dokumenty, które inspektor ochrony danych prowadzi dla tego sandboxa, tworzone z jego ustawień w chwili pobrania. Pola, które może uzupełnić tylko urząd, są oznaczone ✎.",
+            "pendingBeforeDocuments": "{count} zalecana zmiana nie jest jeszcze zastosowana; dokumenty jej nie uwzględnią. | {count} zalecane zmiany nie są jeszcze zastosowane; dokumenty ich nie uwzględnią. | {count} zalecanych zmian nie jest jeszcze zastosowanych; dokumenty ich nie uwzględnią.",
             "goToProtections": "Wróć do kroku 1",
             "format": "Format",
             "download": "Pobierz",
@@ -8231,19 +8233,20 @@
             "couldntDownload": "Nie udało się przygotować dokumentu",
             "couldntApply": "Nie udało się zastosować ustawień",
             "couldntReadPreset": "Nie udało się odczytać ustawień dla urzędu",
-            "documentsCaption": "Projekty wypełnione na podstawie bieżącej konfiguracji. Pola, które może uzupełnić tylko urząd, są oznaczone ✎.",
             "language": "Język",
             "document": {
                 "ropa": "Rejestr czynności przetwarzania",
-                "ropaNote": "Wpis dla tego systemu w rejestrze (art. 30 RODO): odbiorcy, przekazania poza EOG, terminy usunięcia danych.",
+                "ropaNote": "Wpis dla tego systemu w rejestrze: odbiorcy, przekazania poza EOG, terminy usunięcia danych.",
+                "ropaRef": "Art. 30 RODO",
                 "dpia": "Ocena skutków dla ochrony danych",
-                "dpiaNote": "Projekt oceny (art. 35 RODO) z ryzykami korzystania z AI i zabezpieczeniami włączonymi w tym systemie oraz uwagą o akcie w sprawie sztucznej inteligencji.",
+                "dpiaNote": "Projekt oceny z ryzykami korzystania z AI i zabezpieczeniami włączonymi w tym systemie oraz uwagą o akcie w sprawie sztucznej inteligencji.",
+                "dpiaRef": "Art. 35 RODO · akt w sprawie AI",
                 "toms": "Środki techniczne i organizacyjne",
-                "tomsNote": "Wszystkie zabezpieczenia systemu, informacja, czy są włączone, i gdzie się je zmienia (art. 32 RODO)."
+                "tomsNote": "Wszystkie zabezpieczenia systemu, informacja, czy są włączone, i gdzie się je zmienia.",
+                "tomsRef": "Art. 32 RODO"
             },
             "notInUse": "nieużywane",
             "outsideEea": "poza EOG",
-            "officeAnswers": "Urząd powinien ustalić:",
             "kind": {
                 "modelProvider": "Dostawca modelu AI",
                 "modelEndpoint": "Zewnętrzny model AI",
@@ -8298,11 +8301,11 @@
                 "none": "bez osłony"
             },
             "question": {
-                "endpointOperator": "kto prowadzi ten model i gdzie przetwarza dane.",
-                "mailOperator": "kto prowadzi serwer poczty i gdzie się znajduje.",
-                "ingressRegion": "czy punkt dostępowy Intentic, na którym kończy się szyfrowanie, nadal działa wyłącznie w USA (Ashburn), jak podaje jego strona podmiotów przetwarzających.",
-                "ingressProxy": "czy użytkownicy łączą się z tym sandboxem przez własny serwer urzędu, czy przez punkt dostępu Intentic.",
-                "platformRegion": "gdzie Intentic przechowuje dane kont."
+                "endpointOperator": "Kto prowadzi ten model i gdzie przetwarza dane?",
+                "mailOperator": "Kto prowadzi serwer poczty i gdzie się znajduje?",
+                "ingressRegion": "Czy punkt dostępowy Intentic, na którym kończy się szyfrowanie, nadal działa wyłącznie w USA (Ashburn)?",
+                "ingressProxy": "Czy użytkownicy łączą się z tym sandboxem przez własny serwer urzędu, czy przez punkt dostępu Intentic?",
+                "platformRegion": "Gdzie Intentic przechowuje dane kont?"
             },
             "change": "Zmień",
             "status": {
@@ -8414,7 +8417,7 @@
                     "what": "Kopie zapasowe tego sandboxa powstają poza nim, więc wykonuje je i chroni urząd."
                 }
             },
-            "ownerApplies": "Te ustawienia może zastosować tylko właściciel sandboxa.",
+            "ownerApplies": "Zastosować je może tylko właściciel.",
             "apply": "Zastosuj {count} ustawienie | Zastosuj {count} ustawienia | Zastosuj {count} ustawień",
             "nothingToChange": "Wszystkie ustawienia są już takie, jak proponowane.",
             "applied": "Zastosowano {count} ustawienie | Zastosowano {count} ustawienia | Zastosowano {count} ustawień",

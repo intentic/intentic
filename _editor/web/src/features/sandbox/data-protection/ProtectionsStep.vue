@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import type { Measure, PresetItem } from "@intentic/sandbox-contract";
-import { Button, ConfirmDialog, Notice, type NoticeModel, Row, RowGroup, RowNote, SkeletonRows, StatusBadge, ui } from "@intentic/ui";
+import { Button, ConfirmDialog, InfoHint, Notice, type NoticeModel, Row, RowGroup, RowNote, SkeletonRows, StatusBadge, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import Checkbox from "primevue/checkbox";
 import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { useRole } from "../../../client/sandbox/useRole";
+import HintedTitle from "./HintedTitle.vue";
 import { keyOf, MEASURE_LINKS, planProtections, presetLabel, presetValue, STATUS_TONE } from "./dataProtection";
 import { useComplianceReport, usePreset } from "./useCompliance";
 
@@ -14,7 +15,8 @@ import { useComplianceReport, usePreset } from "./useCompliance";
 // public-office preset's changes, each filed under the protection it switches and ticked to start with, applied
 // together after a confirmation. Then what else could be switched on where it lives, then, folded away, what is in
 // place. One list where there were two: the protections under six GDPR headings and the preset below them named most
-// switches twice.
+// switches twice. What each protection does is behind the (i) beside its name: the name says enough to scan the list,
+// and three lines of explanation under every row made the list the longest thing on the page.
 
 const t = useT();
 const { isOwner } = useRole();
@@ -65,8 +67,6 @@ const reasonOf = (item: PresetItem): string => t(`sandbox.dataProtection.unavail
 
 <template>
     <div class="flex flex-col gap-6">
-        <p class="text-xs text-muted">{{ t(`sandbox.dataProtection.protectionsIntro`) }}</p>
-
         <SkeletonRows v-if="reportLoading || presetLoading" :rows="6" description />
         <template v-else>
             <Notice v-if="presetError" :of="{ tone: `danger`, title: t(`sandbox.dataProtection.couldntReadPreset`), detail: presetError }" />
@@ -74,7 +74,13 @@ const reasonOf = (item: PresetItem): string => t(`sandbox.dataProtection.unavail
 
             <div v-if="plan.recommended.length > 0" class="flex flex-col gap-3">
                 <RowGroup :label="t(`sandbox.dataProtection.recommended`)" :count="changeable.length">
-                    <Row v-for="entry in plan.recommended" :key="entry.measure.id" :title="nameOf(entry.measure)" :description="whatOf(entry.measure)" indent>
+                    <template #info>
+                        <InfoHint :label="t(`sandbox.dataProtection.about`, { name: t(`sandbox.dataProtection.recommended`) })">
+                            <span class="block text-xs text-content">{{ t(`sandbox.dataProtection.recommendedHint`) }}</span>
+                        </InfoHint>
+                    </template>
+                    <Row v-for="entry in plan.recommended" :key="entry.measure.id" indent>
+                        <template #title><HintedTitle :title="nameOf(entry.measure)">{{ whatOf(entry.measure) }}</HintedTitle></template>
                         <template #control>
                             <StatusBadge :variant="STATUS_TONE[entry.measure.status]" dot :label="statusOf(entry.measure)" />
                         </template>
@@ -110,8 +116,14 @@ const reasonOf = (item: PresetItem): string => t(`sandbox.dataProtection.unavail
             </div>
             <Notice v-else-if="items !== undefined" tone="success">{{ t(`sandbox.dataProtection.nothingToChange`) }}</Notice>
 
-            <RowGroup v-if="plan.more.length > 0" :label="t(`sandbox.dataProtection.more`)" :caption="t(`sandbox.dataProtection.moreCaption`)" :count="plan.more.length">
-                <Row v-for="entry in plan.more" :key="entry.measure.id" :title="nameOf(entry.measure)" :description="whatOf(entry.measure)" indent>
+            <RowGroup v-if="plan.more.length > 0" :label="t(`sandbox.dataProtection.more`)" :count="plan.more.length">
+                <template #info>
+                    <InfoHint :label="t(`sandbox.dataProtection.about`, { name: t(`sandbox.dataProtection.more`) })">
+                        <span class="block text-xs text-content">{{ t(`sandbox.dataProtection.moreHint`) }}</span>
+                    </InfoHint>
+                </template>
+                <Row v-for="entry in plan.more" :key="entry.measure.id" indent>
+                    <template #title><HintedTitle :title="nameOf(entry.measure)">{{ whatOf(entry.measure) }}</HintedTitle></template>
                     <template #control>
                         <div class="flex items-center gap-2">
                             <StatusBadge :variant="STATUS_TONE[entry.measure.status]" dot :label="statusOf(entry.measure)" />
@@ -128,7 +140,8 @@ const reasonOf = (item: PresetItem): string => t(`sandbox.dataProtection.unavail
 
             <RowGroup v-if="plan.inPlace.length > 0" :label="t(`sandbox.dataProtection.inPlace`)" :count="plan.inPlace.length">
                 <template v-if="showInPlace">
-                    <Row v-for="measure in plan.inPlace" :key="measure.id" :title="nameOf(measure)" :description="whatOf(measure)">
+                    <Row v-for="measure in plan.inPlace" :key="measure.id">
+                        <template #title><HintedTitle :title="nameOf(measure)">{{ whatOf(measure) }}</HintedTitle></template>
                         <template #control>
                             <div class="flex items-center gap-2">
                                 <StatusBadge :variant="STATUS_TONE[measure.status]" dot :label="statusOf(measure)" />
@@ -141,7 +154,7 @@ const reasonOf = (item: PresetItem): string => t(`sandbox.dataProtection.unavail
                 </template>
                 <RowNote>
                     <button type="button" :class="ui.textButton()" :aria-expanded="showInPlace" @click="showInPlace = !showInPlace">
-                        {{ showInPlace ? t(`sandbox.dataProtection.hideInPlace`) : t(`sandbox.dataProtection.showInPlace`, { count: plan.inPlace.length }, plan.inPlace.length) }}
+                        {{ showInPlace ? t(`sandbox.dataProtection.hideInPlace`) : t(`sandbox.dataProtection.showInPlace`) }}
                     </button>
                 </RowNote>
             </RowGroup>
