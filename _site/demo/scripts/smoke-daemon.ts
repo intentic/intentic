@@ -198,6 +198,7 @@ const samplesOf = (
             search: { query: `stripe`, caseSensitive: `false` },
             seenAll: undefined,
             diff: { id: fleet.REVIEW_AGENT_ID },
+            copyIgnored: { id: fleet.REVIEW_AGENT_ID, repo: `api`, paths: [`docs/out/users-erd.svg`] },
             documents: { id: fleet.REVIEW_AGENT_ID },
             transcript: { id: fleet.REVIEW_AGENT_ID },
             subagentTranscript: { id: fleet.FEATURED_AGENT_ID, subagentId: `toolu_01explore8k2m` },

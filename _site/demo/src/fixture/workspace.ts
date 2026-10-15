@@ -139,6 +139,36 @@ const ELSEWHERE: Record<string, AgentChanges[`elsewhere`]> = {
 // Files written where the copy carries no repository: a folder whose repo had no commit when the conversation began.
 const OUTSIDE = new Map<string, NonNullable<AgentChanges[`outside`]>>([[CONFLICT_AGENT_ID, [{ repo: `notes`, reason: `unborn`, files: 12 }]]]);
 
+// What the soft-deletes agent made that the repositories' ignore rules keep out of every land: a walkthrough render and
+// the screens it was cut from, and a diagram the owner already holds an older one of. Copied files leave the listing,
+// as the daemon's do once the main tree holds them.
+const IGNORED = new Map<string, NonNullable<AgentChanges[`ignored`]>>([
+    [
+        REVIEW_AGENT_ID,
+        [
+            {
+                repo: `web`,
+                paths: [
+                    { path: `out/soft-delete-walkthrough.mp4`, kind: `new`, bytes: 8_420_000 },
+                    ...[`archive-dialog`, `archived-filter`, `restore-toast`, `user-list`, `user-row-archived`].map((screen, index) => ({
+                        path: `out/screens/${String(index + 1).padStart(2, `0`)}-${screen}.png`,
+                        kind: `new` as const,
+                        bytes: 180_000 + index * 23_000,
+                    })),
+                ],
+            },
+            { repo: `api`, paths: [{ path: `docs/out/users-erd.svg`, kind: `changed`, bytes: 41_200 }] },
+        ],
+    ],
+]);
+
+export const copyAgentIgnored = (agentId: string, repo: string, paths: readonly string[]): void => {
+    const groups = (IGNORED.get(agentId) ?? [])
+        .map((group) => (group.repo === repo ? { ...group, paths: group.paths.filter((output) => !paths.includes(output.path)) } : group))
+        .filter((group) => group.paths.length > 0);
+    IGNORED.set(agentId, groups);
+};
+
 // `diverged` needs a rebase; `workspace` is the owner's uncommitted edit, which no rebase reaches.
 const CONFLICTS: Record<string, LandConflict[]> = {
     [CONFLICT_AGENT_ID]: [
@@ -201,6 +231,10 @@ export const agentChanges = (agentId: string): AgentChanges => {
     const outside = OUTSIDE.get(agentId);
     if (outside !== undefined) {
         changes.outside = outside;
+    }
+    const ignored = IGNORED.get(agentId);
+    if (ignored !== undefined && ignored.length > 0) {
+        changes.ignored = ignored;
     }
     return changes;
 };

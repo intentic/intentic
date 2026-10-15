@@ -276,7 +276,7 @@ export type ScratchPath = z.infer<typeof ScratchPathSchema>;
 export const isScratch = (path: string, scratch: readonly Pick<ScratchPath, "path">[]): boolean =>
     scratch.some((entry) => (entry.path.endsWith("/") ? path.startsWith(entry.path) : path === entry.path));
 // Apart from scratch, which is left out for its shape: these are left out because the repository says so, and the
-// owner usually wants them most (a render in `out/`, a build in `dist/`).
+// owner usually wants them most (a render in `out/`, a report as a PDF). Build output an ignore rule hides is not one.
 export const IgnoredOutputKindSchema = z
     .enum(["new", "changed"])
     .describe("Whether your tree has nothing at this path yet, or holds a different file there that copying would replace.");
@@ -546,7 +546,7 @@ export const AgentChangesSchema = z.object({
         )
         .optional()
         .describe(
-            "Files the conversation wrote in its copy that the repository's ignore rules exclude, such as a render in `out/` or a build in `dist/`, which your tree lacks or holds differently. No merge carries them and they never enter git; copying one puts it at the same path in your tree. Dependencies (`node_modules`), hidden files and folders, and logs, dumps and caches are never listed. Absent when there are none.",
+            "Files made for a person that the conversation wrote in its copy and the repository's ignore rules exclude, such as a render in `out/` or a report as a PDF, which your tree lacks or holds differently. Only media, documents, tables, archives and installers are listed: what a build regenerates (code, maps, a Cargo `target/` or anything else tagged CACHEDIR.TAG), dependencies, hidden files, logs and dumps never are. No merge carries them and they never enter git; copying one puts it at the same path in your tree. Absent when there are none.",
         ),
     // Read off the live copy like scratch: a retired copy has no holes to read.
     outside: z

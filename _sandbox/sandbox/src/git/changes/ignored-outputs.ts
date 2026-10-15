@@ -10,9 +10,14 @@ import { currentRepos } from "../../workspace/watch/repo-watch.js";
 import { resolveRealWithin, resolveWithin } from "../../workspace/files/workspace-files-paths.js";
 import { isByproductName } from "./scratch.js";
 
-// What a conversation wrote into its copy that the repository's ignore rules exclude: the render in `out/`, the build in
-// `dist/`. No land carries an ignored file and the scratch listing (`ls-files --exclude-standard`) cannot see one, so
+// What a conversation made for its owner that the repository's ignore rules exclude: the render in `out/`, the report as
+// a PDF. No land carries an ignored file and the scratch listing (`ls-files --exclude-standard`) cannot see one, so
 // without this the deliverable a turn was asked for stayed in the copy, unseen.
+//
+// Only files a person opens are offered. Everything else an ignore rule hides in a copy is what a build regenerates from
+// the landed source (a Cargo `target/`, a `dist/`, generated clients), and every copy that ever ran a build holds
+// hundreds of them: listed, they buried the one render among them, and copied, they would hand the owner's own build
+// output made from source that may not have landed.
 //
 // Whose file it is, read off the main tree rather than a record of the turn's writes: a copy is cut holding tracked
 // files only, so every ignored file in it was written since, by the conversation or a tool it ran; the ones the owner
@@ -23,8 +28,34 @@ import { isByproductName } from "./scratch.js";
 // Folders whose contents are never anybody's deliverable: installed dependencies and Python's bytecode cache, which a
 // turn that ran a script leaves beside every module it imported.
 const CACHE_DIRS = new Set(["node_modules", "__pycache__"]);
-// Compiler caches written beside their sources, one per project a type check or an import touched.
-const CACHE_EXTENSIONS = new Set([".pyc", ".tsbuildinfo"]);
+// What a person opens rather than a program reads: media, documents, tables, archives and installers. A file of any
+// other type in an ignored folder is taken for build output. Kept narrow on purpose: a type left off costs a deliverable
+// its row (what it cost before any were listed), while one let in lists every build that writes it.
+const DELIVERABLE_EXTENSIONS = new Set([
+    // Video, audio, subtitles.
+    ".mp4", ".mov", ".webm", ".mkv", ".m4v", ".avi", ".gif",
+    ".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".opus",
+    ".srt", ".vtt",
+    // Images and 3D.
+    ".png", ".jpg", ".jpeg", ".webp", ".avif", ".heic", ".tif", ".tiff", ".bmp", ".svg", ".psd",
+    ".glb", ".gltf", ".stl", ".blend",
+    // Documents and tables.
+    ".pdf", ".docx", ".doc", ".odt", ".rtf", ".epub", ".pptx", ".ppt", ".odp", ".xlsx", ".xls", ".ods", ".csv", ".tsv",
+    // Archives, packages and installers.
+    ".zip", ".7z", ".tgz", ".apk", ".aab", ".ipa", ".exe", ".msi", ".dmg", ".deb", ".rpm", ".appimage", ".vsix",
+]);
+// Two-part extensions extname reads only the last part of (`.gz`, which a build also writes beside every bundle).
+const DELIVERABLE_SUFFIXES = [".tar.gz", ".tar.xz", ".tar.zst"];
+
+// Whether a file name is of a type a person opens (DELIVERABLE_EXTENSIONS).
+export const isDeliverableName = (name: string): boolean => {
+    const lower = name.toLowerCase();
+    return DELIVERABLE_EXTENSIONS.has(extname(lower)) || DELIVERABLE_SUFFIXES.some((suffix) => lower.endsWith(suffix));
+};
+
+// The Cache Directory Tagging standard's marker: a folder holding it says it is a cache any tool may rebuild. Cargo
+// writes one into every `target/`, a build of thousands of files nobody opens; the walk does not enter one.
+const CACHE_TAG = "CACHEDIR.TAG";
 
 // Files looked at per repository before the count stops: a build's output can run to tens of thousands, and the review
 // reads this on every refresh.
@@ -36,18 +67,17 @@ const COMPARE_CHUNK = 1024 * 1024;
 // Files judged at once: each costs two lstats, and a few a read.
 const JUDGE_BATCH = 32;
 
-// Whether a repository-relative path can be an output at all: every segment a plain name (nothing hidden, nothing that
-// climbs), outside every cache folder, and not a log, dump or cache file. Hidden files are config or secrets (`.env`),
-// whose copy would replace the owner's own.
+// Whether a repository-relative path can hold or be an output at all: every segment a plain name (nothing hidden,
+// nothing that climbs), outside every cache folder, and not a log or dump. Hidden files are config or secrets (`.env`),
+// whose copy would replace the owner's own. Said of folders too; a file is offered only when its type is also a
+// deliverable's (isOutputFile).
 export const isOutputPath = (path: string): boolean => {
     const segments = path.split("/");
-    const name = segments.at(-1) ?? "";
-    return (
-        segments.every((segment) => segment !== "" && !segment.startsWith(".") && !CACHE_DIRS.has(segment)) &&
-        !isByproductName(name) &&
-        !CACHE_EXTENSIONS.has(extname(name).toLowerCase())
-    );
+    return segments.every((segment) => segment !== "" && !segment.startsWith(".") && !CACHE_DIRS.has(segment)) && !isByproductName(segments.at(-1) ?? "");
 };
+
+// Whether a repository-relative file path is one the review offers: a possible output, of a type a person opens.
+export const isOutputFile = (path: string): boolean => isOutputPath(path) && isDeliverableName(basename(path));
 
 // Folders of the repository that belong to someone else: a repository nested inside it, and at the workspace's top the
 // reference shelf, whose clones are reading material rather than work. Relative to the repository, each without a slash.
@@ -72,34 +102,48 @@ const ignoredRows = async (dir: string, git: GitRunner): Promise<string[]> => {
         .map((record) => Buffer.from(record.slice(3), "utf8").toString("utf8"));
 };
 
-// Every file under an ignored folder, outermost first, until `room` runs out; another checkout, a link and anything
-// `isOutputPath` refuses are not entered. Everything in an ignored folder is ignored, so git need not be asked again.
+interface FolderEntries {
+    readonly folders: string[];
+    readonly files: string[];
+}
+
+// One folder's entries the walk may take, sorted: its subfolders to enter and its files to look at. Nothing for a folder
+// that is another checkout or a tagged cache, or that is gone or unreadable since git listed it.
+const entriesOf = async (dir: string, current: string, skip: readonly string[]): Promise<FolderEntries> => {
+    // allow(silent-catch): a folder gone or unreadable since git listed it holds nothing to offer.
+    const entries = await readdir(join(dir, current), { withFileTypes: true }).catch(() => []);
+    const taken: FolderEntries = { folders: [], files: [] };
+    if (entries.some((entry) => entry.name === ".git" || entry.name === CACHE_TAG)) {
+        return taken;
+    }
+    for (const entry of entries.toSorted((a, b) => (a.name < b.name ? -1 : 1))) {
+        const path = `${current}/${entry.name}`;
+        if (!isOutputPath(path) || skipped(path, skip)) {
+            continue;
+        }
+        if (entry.isDirectory()) {
+            taken.folders.push(path);
+        } else if (entry.isFile()) {
+            taken.files.push(path);
+        }
+    }
+    return taken;
+};
+
+// Every deliverable under an ignored folder, outermost first, until `room` runs out; another checkout, a tagged cache, a
+// link and anything `isOutputPath` refuses are not entered. Every file looked at spends room, kept or not, so a build of
+// a hundred thousand files costs the same ceiling as one of renders. Everything in an ignored folder is ignored, so git
+// need not be asked again.
 const walkIgnored = async (dir: string, folder: string, skip: readonly string[], room: { left: number }): Promise<string[]> => {
     const found: string[] = [];
     const pending = [folder];
     while (pending.length > 0 && room.left > 0) {
-        const current = pending.shift() ?? "";
-        // allow(silent-catch): a folder gone or unreadable since git listed it holds nothing to offer.
         // oxlint-disable-next-line eslint/no-await-in-loop -- one folder at a time keeps the walk inside its ceiling
-        const entries = await readdir(join(dir, current), { withFileTypes: true }).catch(() => []);
-        if (entries.some((entry) => entry.name === ".git")) {
-            continue;
-        }
-        for (const entry of entries.toSorted((a, b) => (a.name < b.name ? -1 : 1))) {
-            const path = `${current}/${entry.name}`;
-            if (room.left <= 0) {
-                break;
-            }
-            if (!isOutputPath(path) || skipped(path, skip)) {
-                continue;
-            }
-            if (entry.isDirectory()) {
-                pending.push(path);
-            } else if (entry.isFile()) {
-                room.left -= 1;
-                found.push(path);
-            }
-        }
+        const { folders, files } = await entriesOf(dir, pending.shift() ?? "", skip);
+        const looked = files.slice(0, room.left);
+        room.left -= looked.length;
+        found.push(...looked.filter((path) => isDeliverableName(basename(path))));
+        pending.push(...folders);
     }
     return found;
 };
@@ -121,7 +165,9 @@ const candidatesOf = async (dir: string, skip: readonly string[], git: GitRunner
             paths.push(...(await walkIgnored(dir, path, skip, room)));
         } else {
             room.left -= 1;
-            paths.push(path);
+            if (isOutputFile(path)) {
+                paths.push(path);
+            }
         }
     }
     return paths.toSorted();
@@ -244,7 +290,7 @@ const contained = async (dir: string, main: string, path: string): Promise<boole
 export interface NamedOutputs {
     // Paths that leave the repository on either side.
     readonly outside: string[];
-    // Paths inside it that are not an ignored file of the conversation's that main lacks or holds differently.
+    // Paths inside it that are not an ignored deliverable of the conversation's that main lacks or holds differently.
     readonly not: string[];
     // The rest, each as the listing would show it.
     readonly named: IgnoredOutput[];
@@ -267,7 +313,7 @@ export const namedIgnoredOutputs = async (
         // oxlint-disable-next-line eslint/no-await-in-loop -- a handful of paths, each resolved through its links
         if (!(await contained(dir, main, path))) {
             result.outside.push(path);
-        } else if (!isOutputPath(path) || skipped(path, skip)) {
+        } else if (!isOutputFile(path) || skipped(path, skip)) {
             result.not.push(path);
         } else {
             inside.push(path);

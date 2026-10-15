@@ -54,6 +54,7 @@ import { documentsFor, transcriptFor } from "../fixture/transcripts";
 import { demoRuns, demoWorkflows } from "../fixture/workflows";
 import {
     agentChanges,
+    copyAgentIgnored,
     deleteEntry,
     fileDiff,
     gitChanges,
@@ -197,6 +198,10 @@ export const procedures = {
         search: ({ query, caseSensitive }) => searchAgents(query, caseSensitive === true),
         seenAll: () => ({ agents: roster.agents, rev: roster.rev, held: heldApprovals() }),
         diff: ({ id }) => agentChanges(id),
+        copyIgnored: ({ id, repo, paths }) => {
+            copyAgentIgnored(id, repo, paths);
+            return { ok: true as const };
+        },
         // A card that is not mid-turn reads its transcript instead of attaching.
         transcript: ({ id }) => transcriptFor(id),
         documents: ({ id }) => ({ paths: documentsFor(id) }),

@@ -1,4 +1,4 @@
-// jsdom because the subject is what each press hands back: one file from its own row, every listed file from the head.
+// jsdom because the subject is what each press hands back, and which rows a folder of many folds into.
 import "@intentic/testing/dom";
 import { type App, createApp, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
@@ -36,8 +36,17 @@ afterEach(() => {
 });
 
 const text = (el: Element | null): string => (el?.textContent ?? ``).replace(/\s+/g, ` `).trim();
-// Each file as [path, what the row says of it], the path being the one monospaced span a row draws.
-const rows = (el: HTMLElement): string[][] => [...el.querySelectorAll(`.font-mono`)].map((path) => [text(path), text(path.nextElementSibling)]);
+// A row as it reads, one piece per text node: the compiler drops the whitespace between a row's elements.
+const words = (el: Element): string => {
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    const pieces: string[] = [];
+    for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+        pieces.push(node.textContent ?? ``);
+    }
+    return pieces.join(` `).replace(/\s+/g, ` `).trim();
+};
+// Each top-level row, its button's words included.
+const rows = (el: HTMLElement): string[] => [...el.querySelectorAll(`section > ul > li`)].map((row) => words(row));
 const buttons = (el: HTMLElement, label: string): HTMLButtonElement[] =>
     [...el.querySelectorAll(`button`)].filter((button) => text(button) === label);
 
@@ -46,16 +55,13 @@ const IGNORED: readonly IgnoredGroup[] = [
     { repo: `root`, paths: [{ path: `renders/poster.png`, kind: `changed`, bytes: 2048 }] },
 ];
 
-it(`says how many files the ignore rules kept out, names each with its size, and counts what is not listed`, async () => {
+it(`says what won't land and how much, names each file by its name and folder, and flags only one it would replace`, async () => {
     const el = await mount(IGNORED);
 
-    expect(text(el)).toContain(`This conversation also wrote 5 files your .gitignore excludes. They won't land on their own.`);
-    expect(rows(el)).toEqual([
-        [`video/out/warcry-9x16.mp4`, `new · 12 MB`],
-        [`renders/poster.png`, `replaces a different one in your tree · 2.0 KB`],
-    ]);
+    expect(text(el.querySelector(`header`))).toContain(`Won't land: 5 files your .gitignore excludes`);
+    expect(rows(el)).toEqual([`warcry-9x16.mp4 video/out 12 MB Copy`, `poster.png renders replaces yours 2.0 KB Copy`]);
     expect(text(el)).toContain(`3 more not listed here`);
-    expect(buttons(el, `Copy into my tree`)).toHaveLength(2);
+    expect(buttons(el, `Copy`)).toHaveLength(2);
     expect(buttons(el, `Copy all into my tree`)).toHaveLength(1);
 });
 
@@ -63,7 +69,7 @@ it(`hands back one file from its row and every listed file, repo by repo, from c
     const emitted: unknown[][] = [];
     const el = await mount(IGNORED, emitted);
 
-    buttons(el, `Copy into my tree`)[1]?.click();
+    buttons(el, `Copy`)[1]?.click();
     buttons(el, `Copy all into my tree`)[0]?.click();
 
     expect(emitted).toEqual([
@@ -75,10 +81,29 @@ it(`hands back one file from its row and every listed file, repo by repo, from c
     ]);
 });
 
-it(`offers no copy all for a single file, and waits for a running turn, whose copy it would be reading`, async () => {
+it(`folds a folder of many into one row that copies them all and opens onto them`, async () => {
+    const frames = Array.from({ length: 5 }, (_, index) => ({ path: `out/frames/f${index}.png`, kind: `new` as const, bytes: 1024 }));
+    const emitted: unknown[][] = [];
+    const el = await mount([{ repo: `root`, paths: [{ path: `out/film.mp4`, kind: `new`, bytes: 10 }, ...frames] }], emitted);
+
+    expect(rows(el)).toEqual([`film.mp4 out 10 B Copy`, `frames out 5 files 5.0 KB Copy`]);
+
+    buttons(el, `Copy`)[1]?.click();
+    expect(emitted).toEqual([[{ repo: `root`, paths: frames.map((frame) => frame.path) }]]);
+
+    el.querySelector<HTMLButtonElement>(`[aria-expanded]`)?.click();
+    await nextTick();
+    expect([...el.querySelectorAll(`section > ul > li > ul > li`)].map((row) => words(row))).toEqual(
+        frames.map((frame) => `${frame.path.slice(`out/frames/`.length)} 1.0 KB Copy`),
+    );
+});
+
+it(`gives a lone file the whole phrase and no copy all, and waits for a running turn, whose copy it would be reading`, async () => {
     const single = await mount([{ repo: `root`, paths: [{ path: `out/film.mp4`, kind: `new`, bytes: 10 }] }], [], true);
 
-    expect(text(single)).toContain(`This conversation also wrote 1 file your .gitignore excludes. It won't land on its own.`);
+    expect(text(single.querySelector(`header`))).toContain(`Won't land: 1 file your .gitignore excludes`);
+    expect(text(single.querySelector(`header`))).toContain(`Copy once this turn ends`);
     expect(buttons(single, `Copy all into my tree`)).toHaveLength(0);
+    expect(buttons(single, `Copy into my tree`)).toHaveLength(1);
     expect([...single.querySelectorAll(`button`)].every((button) => button.disabled)).toBe(true);
 });

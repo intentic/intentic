@@ -249,13 +249,16 @@
             "title": "{count} ścieżka pominięta przy scalaniu jako plik roboczy | {count} ścieżki pominięte przy scalaniu jako pliki robocze | {count} ścieżek pominiętych przy scalaniu jako pliki robocze"
         },
         "agentIgnoredReport": {
-            "changed": "zastąpi inny plik w Twoim drzewie",
-            "copy": "Skopiuj do mojego drzewa",
+            "afterTurn": "Skopiujesz po zakończeniu tej tury",
+            "copy": "Skopiuj",
             "copyAll": "Skopiuj wszystkie do mojego drzewa",
-            "hint": "Każdy trafia pod tę samą ścieżkę w Twoim drzewie. Git go nie widzi, a ta rozmowa zachowuje swoją kopię.",
+            "copyOne": "Skopiuj do mojego drzewa",
+            "files": "{count} plik | {count} pliki | {count} plików",
+            "hint": "Trafia pod tę samą ścieżkę",
             "more": "{count} kolejny nie jest tu wymieniony | {count} kolejne nie są tu wymienione | {count} kolejnych nie jest tu wymienionych",
-            "new": "nowy",
-            "title": "Ta rozmowa zapisała też {count} plik wykluczony przez Twój .gitignore. Nie zostanie scalony sam. | Ta rozmowa zapisała też {count} pliki wykluczone przez Twój .gitignore. Nie zostaną scalone same. | Ta rozmowa zapisała też {count} plików wykluczonych przez Twój .gitignore. Nie zostaną scalone same."
+            "outsideGit": "Poza gitem",
+            "replaces": "zastąpi Twój",
+            "title": "Nie zostanie scalony: {count} plik wykluczony przez Twój .gitignore | Nie zostaną scalone: {count} pliki wykluczone przez Twój .gitignore | Nie zostanie scalonych: {count} plików wykluczonych przez Twój .gitignore"
         },
         "agentSessionMenu": {
             "agentStillWritingYoull": "Agent wciąż pisze: poprosimy Cię o potwierdzenie",

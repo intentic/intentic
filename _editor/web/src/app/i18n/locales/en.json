@@ -249,13 +249,16 @@
             "title": "{count} path left out of the land as scratch | {count} paths left out of the land as scratch"
         },
         "agentIgnoredReport": {
-            "changed": "replaces a different one in your tree",
-            "copy": "Copy into my tree",
+            "afterTurn": "Copy once this turn ends",
+            "copy": "Copy",
             "copyAll": "Copy all into my tree",
-            "hint": "Each one goes to the same path in your tree. Git never sees it, and this conversation keeps its own.",
+            "copyOne": "Copy into my tree",
+            "files": "{count} file | {count} files",
+            "hint": "Lands at the same path",
             "more": "{count} more not listed here | {count} more not listed here",
-            "new": "new",
-            "title": "This conversation also wrote {count} file your .gitignore excludes. It won't land on its own. | This conversation also wrote {count} files your .gitignore excludes. They won't land on their own."
+            "outsideGit": "Outside git",
+            "replaces": "replaces yours",
+            "title": "Won't land: {count} file your .gitignore excludes | Won't land: {count} files your .gitignore excludes"
         },
         "agentSessionMenu": {
             "agentStillWritingYoull": "The agent is still writing: you'll be asked to confirm",
