@@ -1,8 +1,8 @@
 import { retryAfterMs } from "@intentic/base/async";
 import type { UsageWindow, WindowGates } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { type ClaudeStore, ensureFreshToken } from "./claude-credentials.js";
-import type { HeadroomSource } from "../../usage/headroom.js";
-import { asNumber, asRecord, asString, clampPercent, readFailure, resetFromIso } from "../../usage/payload.js";
+import type { HeadroomSource } from "../../../usage/headroom.js";
+import { asNumber, asRecord, asString, clampPercent, readFailure, resetFromIso } from "../../../usage/payload.js";
 
 // Reader for native Claude accounts (translator-usage.ts's counterpart): reads the same OAuth endpoint claude.ai and
 // Claude Code's /usage use, so numbers match. Not the SDK's usage-control request (null for an env token) or the

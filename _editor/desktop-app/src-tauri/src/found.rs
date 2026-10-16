@@ -5,7 +5,7 @@
 //! a plan); no token is kept, returned or sent anywhere. The sandbox signs in on its own instead (Connect, with this
 //! computer catching the browser's redirect), because these logins renew with single-use refresh tokens: a copy in a
 //! sandbox and the original here would each log the other out the first time either renewed
-//! (`_sandbox/sandbox/src/runtimes/claude/claude-credentials.ts`).
+//! (`_sandbox/sandbox/src/agent/providers/claude/claude-credentials.ts`).
 //!
 //! Projects come from the tools' own histories, never from a crawl of the disk: Claude Code's sessions and trusted
 //! folders, Codex's trusted projects and sessions, the last windows of the VS Code family and JetBrains' recent

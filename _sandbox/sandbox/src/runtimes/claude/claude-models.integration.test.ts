@@ -7,7 +7,7 @@ import { unstubbed } from "@intentic/testing";
 import { DISCOVERY_TIMEOUT_MS } from "../../agent/models/model-discovery.js";
 import { expireTimeouts, stalledFetch } from "../../http/fetch.testing.js";
 import type { Config } from "../../env.config.js";
-import type { ClaudeStore } from "./claude-credentials.js";
+import type { ClaudeStore } from "../../agent/providers/claude/claude-credentials.js";
 import { createClaudeCatalog } from "./claude-models.js";
 
 // Catalog's two-source merge (CLI aliases + REST /v1/models), falling live merge to persisted last-known-good to seed

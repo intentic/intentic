@@ -720,7 +720,7 @@
     "_sandbox/sandbox/src/runtimes/acp/acp-adapter.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/runtimes/acp/acp-mcp-proxy.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/runtimes/acp/acp-model.ts": "standing when the check arrived (2026-10-16)",
-    "_sandbox/sandbox/src/runtimes/claude/claude-session-copy.ts": {
+    "_sandbox/sandbox/src/agent/providers/claude/claude-session-copy.ts": {
         "count": 10,
         "why": "standing when the check arrived (2026-10-16)"
     },

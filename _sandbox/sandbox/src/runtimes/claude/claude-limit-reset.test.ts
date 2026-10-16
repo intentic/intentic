@@ -1,8 +1,8 @@
 import type { UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { unstubbed } from "@intentic/testing";
-import type { ClaudeStore, StoredAccount } from "./claude-credentials.js";
+import type { ClaudeStore, StoredAccount } from "../../agent/providers/claude/claude-credentials.js";
 import { claimLimitReset, type LimitResetDeps, readLimitReset } from "./claude-limit-reset.js";
-import { claudeUsageWindows, RATE_LIMIT_PARK_MS } from "./claude-usage.js";
+import { claudeUsageWindows, RATE_LIMIT_PARK_MS } from "../../agent/providers/claude/claude-usage.js";
 
 // Once-a-week session-limit reset, over its two seams: the stored credential and the provider (stubbed as fetch).
 // Shapes are transcribed from live responses, not invented.

@@ -6,7 +6,7 @@ import {
     runnerTranslatorPath,
 } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import type { Context } from "hono";
-import { replaceRejectedToken } from "../runtimes/claude/claude-credentials.js";
+import { replaceRejectedToken } from "../agent/providers/claude/claude-credentials.js";
 import type { Services } from "../composition.js";
 import type { HarnessCredentialsResult } from "../agent/providers/harness-credentials.js";
 import { REQUEST_REFRAMED, RESPONSE_REFRAMED, forwardHeaders } from "../http/forward-headers.js";

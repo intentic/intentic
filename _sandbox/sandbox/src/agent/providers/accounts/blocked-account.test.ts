@@ -2,9 +2,9 @@ import type { AccountUsage, ProviderRefusal } from "@intentic/sandbox-contract/s
 import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../../composition.js";
-import { FIRST_RECHECK_MS, type SeatProbe } from "../../../runtimes/claude/claude-seat-check.js";
-import { BACK_ON, memoryRefusals, memorySeats, scriptedSeatCheck, STILL_OFF } from "../../../runtimes/claude/claude-seat-check.testing.js";
-import type { SeatRefusal } from "../../../runtimes/claude/claude-seats.js";
+import { FIRST_RECHECK_MS, type SeatProbe } from "../claude/claude-seat-check.js";
+import { BACK_ON, memoryRefusals, memorySeats, scriptedSeatCheck, STILL_OFF } from "../claude/claude-seat-check.testing.js";
+import type { SeatRefusal } from "../claude/claude-seats.js";
 import { type BlockedAccountDeps, offBlockedAccount } from "./blocked-account.js";
 
 // Which turns are moved off the account their conversation remembers, and which are left where routing points. The

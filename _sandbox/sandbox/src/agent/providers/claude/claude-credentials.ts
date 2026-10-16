@@ -6,7 +6,7 @@ import { FetchJsonError, fetchJson } from "@intentic/base/fetch-json";
 import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import type { Logger } from "pino";
 import { z } from "zod";
-import { accountFiles } from "../../agent/providers/accounts/account-files.js";
+import { accountFiles } from "../accounts/account-files.js";
 
 // Claude subscription OAuth (PKCE) against the public Claude Code client; the sandbox owns these credentials, not the
 // platform. The constants mirror claude setup-token and are unofficial. Two redirects, the two Claude Code itself uses:

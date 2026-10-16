@@ -22,7 +22,8 @@ import { root } from "./repo.mjs";
 // import has no baseline to stand in (baselines/daemon-layers.json is absent while empty). The same pass took the
 // same-layer cycles from 54 edges to 9: the runtime table is handed to the providers slice rather than imported by it,
 // image/ and workload/ took the helpers system/ and environment/ lent the host layer, and the skill notes the
-// capability handlers print moved in beside them. The 9 left (baselines/daemon-cycles.json) each say why they stand.
+// capability handlers print moved in beside them. 2026-10-16: the last 9 went; the final pair was the engine and runtimes/claude,
+// cut by moving the Claude primitives the engine spends into agent/providers/claude/. baselines/daemon-cycles.json is absent.
 //
 // `subunits` names the units too tangled to leave unchecked inside: each immediate subdirectory, and the unit's root files
 // as one more, is a subunit, and a value import closing a new cycle between two subunits fails (baselines/daemon-subunits.json).

@@ -1,4 +1,0 @@
-{
-    "agent -> runtimes/claude": "Claude Code is the engine's native harness: the engine mints and re-mints its OAuth token through the runtime's own rotation while the runtime implements the engine's adapter seams.",
-    "runtimes/claude -> agent": "Claude Code is the engine's native harness: the engine mints and re-mints its OAuth token through the runtime's own rotation while the runtime implements the engine's adapter seams."
-}

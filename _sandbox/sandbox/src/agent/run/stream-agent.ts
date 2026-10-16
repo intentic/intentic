@@ -25,7 +25,7 @@ import { retryNote, type SetupRefusal, setupRefusalOf } from "./placement/setup-
 import { startDomainAnchor } from "../../conversations/worktrees/domain-anchor.js";
 import { authRootOf } from "../../state-paths.js";
 import { type PersistedAgent, worktreeOf } from "../../conversations/registry/agents-store.js";
-import { holdAccount } from "../../runtimes/claude/claude-credentials.js";
+import { holdAccount } from "../providers/claude/claude-credentials.js";
 import { ensureComposedWorktree } from "../context/conversation-context.js";
 import { settleLandingInBackground, versionMainTree } from "../../conversations/land/version-landed.js";
 import { handoffHistory, turnStartIndex } from "../../sessions/turn-transcript.js";

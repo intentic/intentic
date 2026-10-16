@@ -15,7 +15,7 @@ import { RESUME_NOTES, type ResumeReason, resumeNoteWith, withoutResumeNote, wit
 import type { HandoffMode, HandoffOffer } from "@intentic/sandbox-contract/schemas/providers/handoff";
 import { SingleFlight } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
-import { replaceRejectedToken } from "../../../runtimes/claude/claude-credentials.js";
+import { replaceRejectedToken } from "../../providers/claude/claude-credentials.js";
 import { planRevision } from "../../prompt/plan-revision.js";
 import type { Services } from "../../../composition.js";
 import { openingRows, openTurnTranscript, recordInterruptedTurn, recordTurnTranscript } from "../../../sessions/turn-transcript.js";

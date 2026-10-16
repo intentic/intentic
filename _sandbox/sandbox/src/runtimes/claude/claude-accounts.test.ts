@@ -4,8 +4,8 @@ import { mergeSupersededAccounts } from "../../agent/providers/accounts/account-
 import type { Services } from "../../composition.js";
 import { CATCHING_DEVICE, catchingServicesHubs, fakeCatcher } from "../../agent/providers/accounts/loopback-bridge.testing.js";
 import { type ClaudeAccountDeps, claudeAccountDoor } from "./claude-accounts.js";
-import { displayLabel, type StoredAccount } from "./claude-credentials.js";
-import type { SeatRefusal } from "./claude-seats.js";
+import { displayLabel, type StoredAccount } from "../../agent/providers/claude/claude-credentials.js";
+import type { SeatRefusal } from "../../agent/providers/claude/claude-seats.js";
 
 // Claude's account door, built on ClaudeAccountDeps rather than the daemon, so a fake cannot drift from a daemon it no
 // longer describes. Route-family behavior lives in agent/accounts.routes.test.ts.

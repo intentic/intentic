@@ -1,6 +1,6 @@
 import type { ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { pino } from "pino";
-import type { ProviderRefusalStore } from "../../usage/provider-refusals.js";
+import type { ProviderRefusalStore } from "../../../usage/provider-refusals.js";
 import { type ClaudeSeatCheck, createClaudeSeatCheck, type SeatProbe } from "./claude-seat-check.js";
 import type { ClaudeSeatStore, SeatRefusal } from "./claude-seats.js";
 

@@ -2,7 +2,7 @@ import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
 import { roomiestAccount } from "@intentic/sandbox-contract/models/plan-pools";
 import type { Services } from "../../../composition.js";
-import { FIRST_RECHECK_MS, LONGEST_RECHECK_MS } from "../../../runtimes/claude/claude-seat-check.js";
+import { FIRST_RECHECK_MS, LONGEST_RECHECK_MS } from "../claude/claude-seat-check.js";
 import { serviceabilities, type ServiceabilityDeps } from "../../../usage/serviceability/serviceability.js";
 
 // A turn that runs on the account its conversation remembers, when that account can no longer serve: an organisation
@@ -21,7 +21,7 @@ import { serviceabilities, type ServiceabilityDeps } from "../../../usage/servic
 // A spent account is the limit move's (bookLimitMove), a revoked sign-in is fixed in place by reconnecting (its refusal
 // holds the turn for that), and a bench that lifts by itself is waited out; none of those moves a conversation here.
 
-// The seat's re-test is Claude's alone (runtimes/claude/claude-seat-check.ts).
+// The seat's re-test is Claude's alone (agent/providers/claude/claude-seat-check.ts).
 export type BlockedAccountDeps = ServiceabilityDeps & Pick<Services, "claudeSeatCheck">;
 
 export type AccountRoute =

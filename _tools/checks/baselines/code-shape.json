@@ -1432,6 +1432,14 @@
         "count": 24,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_sandbox/sandbox/src/agent/providers/claude/claude-session-copy.ts#chainBefore#cyclomatic": {
+        "count": 22,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/providers/claude/claude-session-copy.ts#copySession#cognitive": {
+        "count": 25,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
     "_sandbox/sandbox/src/agent/providers/harness-credentials.ts#resolveHarnessCredentials#cognitive": {
         "count": 43,
         "why": "standing when the check arrived (2026-10-16)"
@@ -1461,7 +1469,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/agent.ts": {
-        "count": 1090,
+        "count": 1086,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/agent.ts#baseOptions#cognitive": {
@@ -1516,7 +1524,7 @@
         "count": 21,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/agent/run/stream-agent.ts": 1086,
+    "_sandbox/sandbox/src/agent/run/stream-agent.ts": 1082,
     "_sandbox/sandbox/src/agent/run/stream-agent.ts#preflight#cyclomatic": {
         "count": 22,
         "why": "standing when the check arrived (2026-10-16)"
@@ -1530,7 +1538,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/turn/turn-resume.ts": {
-        "count": 1207,
+        "count": 1196,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/turn/turn-resume.ts#rehydrateParkedTurn#lines": {
@@ -2435,14 +2443,6 @@
     },
     "_sandbox/sandbox/src/runtimes/claude/claude-accounts.ts#claudeAccountDoor#lines": {
         "count": 164,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_sandbox/sandbox/src/runtimes/claude/claude-session-copy.ts#chainBefore#cyclomatic": {
-        "count": 22,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_sandbox/sandbox/src/runtimes/claude/claude-session-copy.ts#copySession#cognitive": {
-        "count": 25,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/runtimes/codex/codex-agent.ts": {

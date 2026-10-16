@@ -15,8 +15,8 @@ import { gitOut, realCheckout } from "../../harness/route-fakes.testing.js";
 import { codexConnectedProxy, services, withTranslator } from "../../harness/route-services.testing.js";
 import { attachedRows, runAgentTurn, startedRun } from "../../harness/route-turns.testing.js";
 import { createTurnResumeScheduler, ROOM_SETTLE_MS } from "../run/turn/turn-resume.js";
-import { FIRST_RECHECK_MS, type SeatProbe } from "../../runtimes/claude/claude-seat-check.js";
-import { BACK_ON, memorySeats, scriptedSeatCheck, STILL_OFF } from "../../runtimes/claude/claude-seat-check.testing.js";
+import { FIRST_RECHECK_MS, type SeatProbe } from "../providers/claude/claude-seat-check.js";
+import { BACK_ON, memorySeats, scriptedSeatCheck, STILL_OFF } from "../providers/claude/claude-seat-check.testing.js";
 
 // Exercises the agent routes over the daemon's HTTP surface, as the browser does. Shared fakes and client live in
 // route-services.testing.ts and its siblings.

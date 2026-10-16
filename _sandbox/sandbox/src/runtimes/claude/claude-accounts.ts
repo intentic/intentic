@@ -18,8 +18,8 @@ import {
     reconnectAccount,
     renameAccount,
     toAccount,
-} from "./claude-credentials.js";
-import type { SeatRefusal } from "./claude-seats.js";
+} from "../../agent/providers/claude/claude-credentials.js";
+import type { SeatRefusal } from "../../agent/providers/claude/claude-seats.js";
 
 // Claude's account door (agent/provider-module.ts): subscription OAuth the sandbox owns, never the platform. Two ways
 // back, one exchange: where a device or browser of the owner's watches loopback (loopback-bridge.ts), Anthropic sends

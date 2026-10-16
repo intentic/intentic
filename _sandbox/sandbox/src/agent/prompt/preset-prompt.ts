@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { type ClaudeSdk, sdk } from "../../engines/claude-sdk.js";
 import { opt } from "../../opt.js";
-import { CLAUDE_INSTRUCTION_FILES } from "../../runtimes/claude/claude-builtins.js";
+import { CLAUDE_INSTRUCTION_FILES } from "../providers/claude/claude-builtins.js";
 import type { BuiltinPromptText } from "@intentic/sandbox-contract/schemas/settings";
 import { parseJsonOr } from "@intentic/base/json";
 

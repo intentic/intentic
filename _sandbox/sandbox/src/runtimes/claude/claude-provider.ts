@@ -5,10 +5,10 @@ import { authStateRelPath, type ProviderModule, providerAccountEntry } from "../
 import { type HarnessPlanDeps, planHarnessTurn } from "../../agent/run/harness/harness-plan.js";
 import type { Services } from "../../composition.js";
 import type { Config } from "../../env.config.js";
-import { type ClaudeStore, fileClaudeStore, startClaudeRefresh } from "./claude-credentials.js";
+import { type ClaudeStore, fileClaudeStore, startClaudeRefresh } from "../../agent/providers/claude/claude-credentials.js";
 import { type ClaudeCatalog, createClaudeCatalog } from "./claude-models.js";
-import { type ClaudeSeatStore, fileClaudeSeatStore } from "./claude-seats.js";
-import { type ClaudeSeatCheck, claudeSeatProbe, createClaudeSeatCheck } from "./claude-seat-check.js";
+import { type ClaudeSeatStore, fileClaudeSeatStore } from "../../agent/providers/claude/claude-seats.js";
+import { type ClaudeSeatCheck, claudeSeatProbe, createClaudeSeatCheck } from "../../agent/providers/claude/claude-seat-check.js";
 import type { ProviderRefusalStore } from "../../usage/provider-refusals.js";
 import { type ClaudeAccountDeps, claudeAccountDoor } from "./claude-accounts.js";
 import { claudeWarm, type ClaudeWarmDeps } from "./claude-warm.js";

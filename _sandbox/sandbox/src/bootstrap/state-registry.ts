@@ -6,6 +6,7 @@
 import type { DocumentSpec } from "../store/evolution/documents.js";
 import type { StructuralStep } from "../store/evolution/state-steps.js";
 import { activityLogDocument } from "../activity/activity-store.js";
+import { claudeSeatsDocument } from "../agent/providers/claude/claude-seats.js";
 import { pausedChildrenDocument } from "../agent/subagents/paused-children.js";
 import { approvalDecisionsDocument } from "../approvals/approval-decisions.js";
 import { approvalsDocument } from "../approvals/approvals-store.js";
@@ -64,7 +65,6 @@ import { privacyVaultDocument } from "../privacy/privacy-vault.js";
 import { pushDocument } from "../push/push-store.js";
 import { ruleFiringsDocument } from "../rules/rule-firings.js";
 import { runnerIdentityDocument } from "../runners/runner-identity.js";
-import { claudeSeatsDocument } from "../runtimes/claude/claude-seats.js";
 import { safetyLogDocument } from "../safety/safety-log.js";
 import { autostartDocument } from "../scaffold/autostart.js";
 import { credentialGatesDocument } from "../secrets/credential-gates.js";
@@ -115,6 +115,7 @@ import { dependencyRequestsDocument } from "../workspace/deps/reconcile-deps.js"
 
 export const stateDocuments = (): readonly DocumentSpec[] => [
     activityLogDocument,
+    claudeSeatsDocument,
     pausedChildrenDocument,
     approvalDecisionsDocument,
     approvalsDocument,
@@ -186,7 +187,6 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     pushDocument,
     ruleFiringsDocument,
     runnerIdentityDocument,
-    claudeSeatsDocument,
     safetyLogDocument,
     autostartDocument,
     credentialGatesDocument,

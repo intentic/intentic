@@ -2,7 +2,7 @@ import { MINTED_PROVIDERS, mintedVariant, mintedVariants } from "@intentic/sandb
 import { PROVIDER_ACCESS, PROVIDER_VENDOR, TRIAL_ENDPOINT_ID, TRIAL_MODEL_ID } from "@intentic/sandbox-contract/models/agent-catalog";
 import type { ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { Services } from "../../../composition.js";
-import type { SeatRefusal } from "../../../runtimes/claude/claude-seats.js";
+import type { SeatRefusal } from "../claude/claude-seats.js";
 import { services, withTranslator } from "../../../harness/route-services.testing.js";
 import { testConfig } from "../../../env.config.testing.js";
 import { memoryCapabilitiesStore } from "../../../capabilities/capabilities-slice.testing.js";

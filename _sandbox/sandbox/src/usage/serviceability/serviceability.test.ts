@@ -4,7 +4,7 @@ import { preferredAccount } from "@intentic/sandbox-contract/models/plan-pools";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
 import { recordingLogger } from "../../harness/route-fakes.testing.js";
-import type { SeatRefusal } from "../../runtimes/claude/claude-seats.js";
+import type { SeatRefusal } from "../../agent/providers/claude/claude-seats.js";
 import { serviceabilities, serviceability, type ServiceabilityDeps, withAccountStates, withRoutedStates } from "./serviceability.js";
 
 // The one "can this account serve a turn?" answer, fed from every store that holds a fact about it. The ranking cases

@@ -10,7 +10,7 @@ import {
 } from "@intentic/sandbox-contract/schemas/providers/handoff";
 import type { TranscriptRow, TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import type { Services } from "../../composition.js";
-import { estimateCopy, readSessionChain, writeSessionCopy } from "../../runtimes/claude/claude-session-copy.js";
+import { estimateCopy, readSessionChain, writeSessionCopy } from "./claude/claude-session-copy.js";
 import type { AgentExecutionContext } from "../../workload/agent-execution.js";
 import { askRoleModel, roleModelIsSet } from "../models/role-model.js";
 

@@ -8,7 +8,7 @@ import type { Services } from "../../composition.js";
 import type { IsolationAnchor } from "../../conversations/worktrees/isolation.js";
 import { opt } from "../../opt.js";
 import { shieldHarnessCredential } from "../../privacy/harness-route.js";
-import { ensureFreshToken, holdAccount } from "./claude-credentials.js";
+import { ensureFreshToken, holdAccount } from "../../agent/providers/claude/claude-credentials.js";
 import { agentExecutionScope, assertAgentExecution, requireRootAgentExecution, type AgentExecutionContext } from "../../workload/agent-execution.js";
 
 // Keeping a Claude conversation's prompt cache warm: one forked, unsaved request on the subscription account that served

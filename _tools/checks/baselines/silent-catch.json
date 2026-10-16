@@ -284,7 +284,7 @@
     "_sandbox/sandbox/src/runners/runner-link.ts": 1,
     "_sandbox/sandbox/src/runners/runner-sync.ts": 1,
     "_sandbox/sandbox/src/runtimes/acp/acp-agent.ts": 1,
-    "_sandbox/sandbox/src/runtimes/claude/claude-credentials.ts": 2,
+    "_sandbox/sandbox/src/agent/providers/claude/claude-credentials.ts": 2,
     "_sandbox/sandbox/src/runtimes/claude/claude-limit-reset.ts": 3,
     "_sandbox/sandbox/src/runtimes/claude/claude-models.ts": 4,
     "_sandbox/sandbox/src/runtimes/codex/codex-app-server.ts": 2,

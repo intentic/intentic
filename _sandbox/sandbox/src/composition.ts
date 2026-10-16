@@ -34,7 +34,7 @@ import { environmentSourcesOf } from "./environment-composers.js";
 import type { EnvironmentSources } from "./seams/environment-sources.js";
 
 import { accountUsageDocument, fileAccountUsageStore } from "./usage/account-usage.js";
-import { claudeHeadroomSource } from "./runtimes/claude/claude-usage.js";
+import { claudeHeadroomSource } from "./agent/providers/claude/claude-usage.js";
 import { createHeadroomService } from "./usage/headroom.js";
 import { fileUsageParkStore, usageParksDocument } from "./usage/usage-parks.js";
 import { fileObservedLimitStore, observedLimitsDocument } from "./usage/observed-limits.js";

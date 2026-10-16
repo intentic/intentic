@@ -10,7 +10,7 @@ import { discoveredCatalog } from "../../agent/models/model-catalog.js";
 import { DISCOVERY_TIMEOUT_MS } from "../../agent/models/model-discovery.js";
 import type { Config } from "../../env.config.js";
 import { cacheFile } from "../../store/open-document.js";
-import { type ClaudeStore, ensureFreshToken } from "./claude-credentials.js";
+import { type ClaudeStore, ensureFreshToken } from "../../agent/providers/claude/claude-credentials.js";
 import { containerKeyEnv } from "../../seams/sealed-env.js";
 
 // Claude's model catalog merges the CLI's tier aliases (effort levels and badges, no versioned id) with Anthropic's

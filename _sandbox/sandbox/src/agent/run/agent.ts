@@ -59,7 +59,7 @@ import type { AgentRequest, HarnessCredential } from "../providers/agent-request
 import { harnessEnv } from "../providers/harness-credentials.js";
 import { ONE_SHOT_OWNER, workloadStamp } from "../../seams/workload-stamp.js";
 import { opt } from "../../opt.js";
-import { readClaudeUsage } from "../../runtimes/claude/claude-usage.js";
+import { readClaudeUsage } from "../providers/claude/claude-usage.js";
 import { routedEndpointOf } from "../providers/routed-refusal.js";
 import { defaultQuery, promptInput, type QueryFn, streamSdk, type TurnPosture } from "./sdk-stream.js";
 import { checklistCloseHooks } from "./checklist-close.js";
@@ -75,7 +75,7 @@ import { uiServer } from "../pages/ui-server.js";
 import { PAGE_TOOL_NAMES } from "../pages/page-names.js";
 import { McpAppHost } from "../pages/mcp-apps.js";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
-import { CLAUDE_INSTRUCTION_FILES } from "../../runtimes/claude/claude-builtins.js";
+import { CLAUDE_INSTRUCTION_FILES } from "../providers/claude/claude-builtins.js";
 import { storedPromptTitle } from "../../sessions/vocabulary/prompt-envelope.js";
 
 // The request the Claude Code loop runs: it spends a stored account's token, a routed endpoint, the trial, or the

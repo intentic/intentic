@@ -2,7 +2,7 @@ import type { AccountUsage } from "@intentic/sandbox-contract/schemas/providers/
 import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
-import type { SeatRefusal } from "../../runtimes/claude/claude-seats.js";
+import type { SeatRefusal } from "../providers/claude/claude-seats.js";
 import { conversationEntry } from "../../conversations/registry/agents-store.testing.js";
 import { bookLimitMove, siblingWithRoom } from "./sibling-account.js";
 
