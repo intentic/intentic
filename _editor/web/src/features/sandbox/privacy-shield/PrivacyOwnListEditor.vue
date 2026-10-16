@@ -5,7 +5,7 @@ import {
     type PrivacyNameMatching,
     type PrivacyOwnNameList,
 } from "@intentic/sandbox-contract/schemas/privacy";
-import { Button, SegmentedControl, ui } from "@intentic/ui";
+import { SegmentedControl, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref, watch } from "vue";
 import { inflects, OWN_WORD_LIMITS } from "./privacyOwn";
@@ -77,8 +77,10 @@ const labels = computed(() => ({
 </script>
 
 <template>
-    <div class="flex flex-col gap-3 rounded border border-line-subtle p-3" :class="{ 'pointer-events-none opacity-60': !ready }">
-        <div class="flex flex-wrap items-center gap-2">
+    <!-- No frame of its own: it hangs under the list's row, inside the card the section already is; the words are the one
+         boxed field. -->
+    <div class="flex flex-col gap-2.5 pb-1 pl-4" :class="{ 'pointer-events-none opacity-60': !ready }">
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
             <input
                 v-model="title"
                 type="text"
@@ -86,12 +88,14 @@ const labels = computed(() => ({
                 spellcheck="false"
                 :maxlength="PRIVACY_TITLE_MAX"
                 :aria-label="t(`sandbox.agentPrivacyShield.ownList.titleField`)"
-                :class="ui.input({ size: `sm` }, `min-w-0 flex-1`)"
+                class="field-bare -mx-1 min-w-0 flex-1 rounded px-1 py-0.5 text-xs font-medium text-content hover:bg-content/5"
                 @keydown.enter.prevent="($event.target as HTMLInputElement).blur()"
                 @keydown.esc.prevent="title = list.title"
                 @blur="commitTitle"
             />
-            <Button size="small" tier="quiet" tone="danger" @click="emit(`remove`)">{{ t(`sandbox.agentPrivacyShield.ownList.remove`) }}</Button>
+            <button type="button" :class="ui.textButton({ size: `xs`, tone: `danger`, flush: true })" @click="emit(`remove`)">
+                {{ t(`sandbox.agentPrivacyShield.ownList.remove`) }}
+            </button>
         </div>
 
         <div class="flex flex-col gap-1.5">

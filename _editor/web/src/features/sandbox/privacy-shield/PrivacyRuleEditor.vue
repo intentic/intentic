@@ -10,7 +10,7 @@ import {
 import { Button, Picker, SegmentedControl, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import Checkbox from "primevue/checkbox";
-import { computed, ref, watch } from "vue";
+import { computed, onMounted, ref, useTemplateRef, watch } from "vue";
 import { type RuleProblem, ruleProblem, TERM_LIMITS } from "./privacyOwn";
 import PrivacyValueList from "./PrivacyValueList.vue";
 
@@ -95,14 +95,25 @@ const termLabels = computed(() => ({
     hint: t(`sandbox.agentPrivacyShield.rule.termsHint`),
 }));
 
+// A new rule starts at its name, selected, so typing replaces the placeholder name at once.
+const name = useTemplateRef<HTMLInputElement>(`name`);
+onMounted(() => {
+    if (draft) {
+        name.value?.select();
+    }
+});
+
 // An example in the field, shown as written rather than translated.
 const PATTERN_EXAMPLE = String.raw`EMP-\d{6}`;
 const VALUE_GROUP = `(?<value>…)`;
 </script>
 
 <template>
-    <div class="flex flex-col gap-3 rounded border border-line-subtle p-3" :class="{ 'pointer-events-none opacity-60': !ready }">
+    <!-- No frame of its own: it hangs under the row's title, inside the card the section already is. The words or the
+         pattern are the one boxed field; the name reads as the row's title, typed in place. -->
+    <div class="flex flex-col gap-2.5 pb-1 pl-4" :class="{ 'pointer-events-none opacity-60': !ready }">
         <input
+            ref="name"
             :value="local.title"
             type="text"
             autocomplete="off"
@@ -110,7 +121,7 @@ const VALUE_GROUP = `(?<value>…)`;
             :maxlength="PRIVACY_TITLE_MAX"
             :aria-label="t(`sandbox.agentPrivacyShield.rule.titleField`)"
             :placeholder="t(`sandbox.agentPrivacyShield.rule.titleField`)"
-            :class="ui.input({ size: `sm` }, `w-full`)"
+            class="field-bare -mx-1 w-full rounded px-1 py-0.5 text-xs font-medium text-content hover:bg-content/5"
             @input="local = { ...local, title: ($event.target as HTMLInputElement).value }"
             @keydown.enter.prevent="($event.target as HTMLInputElement).blur()"
             @blur="commit((current) => ({ ...current, title: current.title.trim() }))"
@@ -181,14 +192,18 @@ const VALUE_GROUP = `(?<value>…)`;
 
         <p v-if="shownProblem !== undefined" aria-live="polite" class="text-2xs text-danger">{{ shownProblem }}</p>
 
-        <div class="flex flex-wrap items-center gap-2">
+        <div class="flex flex-wrap items-center justify-end gap-x-4 gap-y-1">
             <template v-if="draft">
+                <button type="button" :class="ui.textButton({ size: `xs`, tone: `quiet`, flush: true })" @click="emit(`cancel`)">
+                    {{ t(`ui.action.cancel`) }}
+                </button>
                 <Button size="small" tier="accent" :disabled="problem !== undefined" @click="emit(`save`, { ...local, title: local.title.trim() })">{{
                     t(`sandbox.agentPrivacyShield.rule.add`)
                 }}</Button>
-                <Button size="small" tier="quiet" @click="emit(`cancel`)">{{ t(`ui.action.cancel`) }}</Button>
             </template>
-            <Button v-else size="small" tier="quiet" tone="danger" @click="emit(`remove`)">{{ t(`sandbox.agentPrivacyShield.rule.remove`) }}</Button>
+            <button v-else type="button" :class="ui.textButton({ size: `xs`, tone: `danger`, flush: true })" @click="emit(`remove`)">
+                {{ t(`sandbox.agentPrivacyShield.rule.remove`) }}
+            </button>
         </div>
     </div>
 </template>

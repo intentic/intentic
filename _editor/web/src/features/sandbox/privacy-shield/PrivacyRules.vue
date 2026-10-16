@@ -86,7 +86,7 @@ const undo = (): void => {
     <Row indent icon="filter" :title="t(`sandbox.agentPrivacyShield.rules`)" :description="t(`sandbox.agentPrivacyShield.rulesDescription`)">
         <template #below>
             <div class="flex flex-col gap-2" :class="{ 'pointer-events-none opacity-60': !ready }">
-                <ul v-if="rows.length > 0" class="flex flex-col divide-y divide-line-subtle">
+                <ul v-if="rows.length > 0 || draft !== undefined" class="flex flex-col divide-y divide-line-subtle">
                     <li v-for="row in rows" :key="row.rule.id" class="flex flex-col gap-2 py-1.5">
                         <div class="flex items-center justify-between gap-x-4">
                             <button
@@ -132,18 +132,12 @@ const undo = (): void => {
                             @remove="remove(row.rule)"
                         />
                     </li>
+                    <!-- A new rule is written as one more row of the list, not a box under it. -->
+                    <li v-if="draft !== undefined" class="py-1.5">
+                        <PrivacyRuleEditor :rule="draft" draft :ready="ready" :kinds="kinds" @save="add" @cancel="draft = undefined" />
+                    </li>
                 </ul>
-                <p v-else-if="draft === undefined" class="text-2xs text-subtle">{{ t(`sandbox.agentPrivacyShield.rulesEmpty`) }}</p>
-
-                <PrivacyRuleEditor
-                    v-if="draft !== undefined"
-                    :rule="draft"
-                    draft
-                    :ready="ready"
-                    :kinds="kinds"
-                    @save="add"
-                    @cancel="draft = undefined"
-                />
+                <p v-else class="text-2xs text-subtle">{{ t(`sandbox.agentPrivacyShield.rulesEmpty`) }}</p>
 
                 <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                     <button
