@@ -49,7 +49,7 @@ const dataOf = (flow: DataFlow): string => t(`sandbox.dataProtection.data.${keyO
                 </ul>
             </Notice>
 
-            <RowGroup v-if="list.inUse.length > 0" :label="t(`sandbox.dataProtection.inUse`)" :count="list.inUse.length">
+            <RowGroup v-if="list.inUse.length > 0" :label="t(`sandbox.dataProtection.inUse`)">
                 <template #info>
                     <InfoHint :label="t(`sandbox.dataProtection.about`, { name: t(`sandbox.dataProtection.step.places`) })">
                         <span class="block text-xs text-content">{{ t(`sandbox.dataProtection.placesHint`) }}</span>
@@ -75,7 +75,7 @@ const dataOf = (flow: DataFlow): string => t(`sandbox.dataProtection.data.${keyO
                 </Row>
             </RowGroup>
 
-            <RowGroup v-if="list.idle.length > 0" :label="t(`sandbox.dataProtection.notInUse`)" :count="list.idle.length">
+            <RowGroup v-if="list.idle.length > 0" :label="t(`sandbox.dataProtection.notInUse`)">
                 <template #info>
                     <InfoHint :label="t(`sandbox.dataProtection.about`, { name: t(`sandbox.dataProtection.notInUse`) })">
                         <span class="block text-xs text-content">{{ t(`sandbox.dataProtection.idleHint`) }}</span>

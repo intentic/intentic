@@ -73,7 +73,7 @@ const reasonOf = (item: PresetItem): string => t(`sandbox.dataProtection.unavail
             <Notice v-if="outcome" :of="outcome" />
 
             <div v-if="plan.recommended.length > 0" class="flex flex-col gap-3">
-                <RowGroup :label="t(`sandbox.dataProtection.recommended`)" :count="changeable.length">
+                <RowGroup :label="t(`sandbox.dataProtection.recommended`)">
                     <template #info>
                         <InfoHint :label="t(`sandbox.dataProtection.about`, { name: t(`sandbox.dataProtection.recommended`) })">
                             <span class="block text-xs text-content">{{ t(`sandbox.dataProtection.recommendedHint`) }}</span>
@@ -116,7 +116,7 @@ const reasonOf = (item: PresetItem): string => t(`sandbox.dataProtection.unavail
             </div>
             <Notice v-else-if="items !== undefined" tone="success">{{ t(`sandbox.dataProtection.nothingToChange`) }}</Notice>
 
-            <RowGroup v-if="plan.more.length > 0" :label="t(`sandbox.dataProtection.more`)" :count="plan.more.length">
+            <RowGroup v-if="plan.more.length > 0" :label="t(`sandbox.dataProtection.more`)">
                 <template #info>
                     <InfoHint :label="t(`sandbox.dataProtection.about`, { name: t(`sandbox.dataProtection.more`) })">
                         <span class="block text-xs text-content">{{ t(`sandbox.dataProtection.moreHint`) }}</span>
@@ -138,7 +138,7 @@ const reasonOf = (item: PresetItem): string => t(`sandbox.dataProtection.unavail
                 </Row>
             </RowGroup>
 
-            <RowGroup v-if="plan.inPlace.length > 0" :label="t(`sandbox.dataProtection.inPlace`)" :count="plan.inPlace.length">
+            <RowGroup v-if="plan.inPlace.length > 0" :label="t(`sandbox.dataProtection.inPlace`)">
                 <template v-if="showInPlace">
                     <Row v-for="measure in plan.inPlace" :key="measure.id">
                         <template #title><HintedTitle :title="nameOf(measure)">{{ whatOf(measure) }}</HintedTitle></template>
