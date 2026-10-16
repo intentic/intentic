@@ -414,7 +414,7 @@ const deliveringClient = (deps: ProjectDeliveryDeps, host: string): DeliveryClie
 
 const waitReason = (deps: ProjectDeliveryDeps, host: string): string =>
     deps.hostHub.online(host)
-        ? `The agent on ${host} is too old to deliver landed work by itself. Update it (\`intentic-machine upgrade\`) and the work is delivered then.`
+        ? `The agent on ${host} is too old to deliver landed work by itself. Update agent, on its card under Devices, updates it from here, and the work is delivered then.`
         : `${host} is not connected. The work is delivered when it next is.`;
 
 // The connections a volunteered report speaks for: the same computer and the same install on it, as each said.

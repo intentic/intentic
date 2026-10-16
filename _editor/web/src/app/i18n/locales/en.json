@@ -5884,7 +5884,13 @@
             "confirmReconnect": "Recreates its container on {host} from its setup. Logins, files, history and Docker are kept.",
             "sandboxReplacedPageReconnects": "If it was replaced, this page reconnects once it's back.",
             "missingEnv": "Missing from its container:",
-            "details": "Details"
+            "details": "Details",
+            "pickCopyToRemove": "Both copies are on computers of yours. Remove the one you don't use:",
+            "removeCopyOn": "Remove the copy on {machine}",
+            "removingCopyOn": "Removing the copy on {machine}",
+            "couldntRemoveCopy": "Couldn't remove the copy on {machine}.",
+            "removeCopyHeader": "Remove the copy on {machine}?",
+            "removeCopyBody": "Its container on {machine} stops, and the other copy keeps this sandbox. Its files and history stay on {machine} for a week, where ic sandbox restore brings it back."
         },
         "controlTokensSection": {
             "expired": "expired",
@@ -7364,7 +7370,8 @@
             "title": "This sandbox needs an update",
             "titleNamed": "{name} needs an update",
             "olderThanApp": "It runs version {version}, and this app works with sandboxes from version {oldest} on. Update it to open it here. Your files and conversations are kept.",
-            "manual": "Installed it yourself? Run this on the machine it runs on:"
+            "manual": "Installed it yourself? Run this on the machine it runs on:",
+            "byHand": "Run it by hand instead"
         },
         "sandboxUnauthorized": {
             "noAccessTo": "No access to \"{name}\"",
@@ -7931,8 +7938,18 @@
             "gateHeading": "Get it running again",
             "rollBackCommand": "Go back to the version before the last update",
             "restartCommand": "Restart it",
-            "siblingReaches": "{name} can reach {machine} too:",
-            "openItsDevices": "manage this sandbox from its Devices page"
+            "openItsDevices": "manage this sandbox from its Devices page",
+            "restartOn": "Restart it on {machine}",
+            "rollBackOn": "Roll back on {machine}",
+            "throughSibling": "Through {name}, which reaches {machine}:",
+            "lookingForMachine": "Looking for another of your sandboxes that reaches its computer…",
+            "restartingOn": "Restarting it on {machine}",
+            "rollingBackOn": "Rolling it back on {machine}",
+            "couldntOn": "Couldn't do it on {machine}.",
+            "picksUpByItself": "This page picks it up again as soon as it answers.",
+            "startingOn": "Starting on {machine}…",
+            "rollBackOnHeader": "Roll back on {machine}?",
+            "rollBackOnBody": "It goes back to the version it ran before its last update. Its files and history are kept."
         },
         "driftReport": {
             "areas": {
@@ -9812,6 +9829,14 @@
             "stillNothing": "Still nothing.",
             "toPastedIntoTerminal": "This has to be pasted into a terminal on the machine that will run your sandbox.",
             "waitingOnInstaller": "Waiting on the installer."
+        },
+        "setupOnMachine": {
+            "alreadyConnected": "Or set it up with a press on a computer of yours that is already connected:",
+            "setUpOn": "Set it up on {machine}",
+            "settingUpOn": "Setting it up on {machine}",
+            "couldntOn": "Couldn't set it up on {machine}.",
+            "startingOn": "Starting on {machine}…",
+            "syncAfter": "File syncing isn't set up this way: turn it on from its Devices page once it is running."
         },
         "setupRunDetails": {
             "dials": "Dials",

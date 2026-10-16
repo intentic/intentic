@@ -12,6 +12,9 @@ const active = ref<{ name?: string; hosted: object | null } | undefined>({ name:
 jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ active }) }));
 const slug = ref<string | undefined>(`sandbox-3c469e9d6c58`);
 jest.mock(`../environment/servingSlug`, () => ({ useServingSlug: () => slug }));
+// The connected machine running it, when this sandbox reaches one; none unless a case says so.
+const runsOn = ref<string | undefined>(undefined);
+jest.mock(`../devices/useDevices`, () => ({ useHostRunning: () => runsOn }));
 // The update card is the Sandbox page's own, with its own tests; here it only has to be there.
 jest.mock(`../overview/version/SandboxUpdateCard.vue`, () => ({
     default: defineComponent({ render: () => h(`div`, { "data-update-card": `` }) }),
@@ -44,6 +47,7 @@ beforeEach(() => {
 afterEach(() => {
     active.value = { name: `workspace`, hosted: null };
     slug.value = `sandbox-3c469e9d6c58`;
+    runsOn.value = undefined;
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
@@ -71,4 +75,15 @@ it(`still says what is wrong without a name for the sandbox`, async () => {
     active.value = undefined;
     const el = await mount();
     expect(el.querySelector(`h2`)?.textContent).toContain(`This sandbox needs an update`);
+});
+
+// The card above carries the Update press when this sandbox reaches its machine: the recipe stays, folded, for a card that
+// has nothing to offer a daemon this old.
+it(`folds the command away when this sandbox reaches the machine it runs on`, async () => {
+    runsOn.value = `rog`;
+    const el = await mount();
+    const folded = el.querySelector(`details`);
+    expect(folded?.querySelector(`summary`)?.textContent).toContain(`Run it by hand instead`);
+    expect(folded?.querySelector(`pre`)?.textContent).toBe(`curl -fsSL https://intentic.dev/update/sandbox-3c469e9d6c58 | sh`);
+    expect(el.textContent).not.toContain(`Installed it yourself?`);
 });

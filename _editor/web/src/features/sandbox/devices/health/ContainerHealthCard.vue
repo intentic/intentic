@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Device } from "@intentic/sandbox-contract";
-import { Button, Icon, toneTint, ui } from "@intentic/ui";
-import { computed, ref } from "vue";
+import { Button, ConfirmDialog, Icon, Notice, toneTint, ui } from "@intentic/ui";
+import { computed, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { apiClient } from "../../../../lib/useApi";
 import { useOperation } from "../../../../workbench/operations/operations";
@@ -12,6 +12,8 @@ import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { useRole } from "../../../../client/sandbox/useRole";
 import { beginDeviceWork, machineKeyOf } from "../runners/deviceWork";
 import { expectRestart } from "../../live/sandboxRestart";
+import { doorsHolding, type MachineDoor } from "../../live/sandboxDoors";
+import { useDeviceRelays } from "../../live/useDeviceRelays";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
@@ -49,6 +51,31 @@ const machine = computed(() => (host.value === undefined ? undefined : machineKe
 const reconnect = useOperation<string>(() => `devices/${machine.value ?? `unknown`}/reconnect/${ownSlug.value ?? ``}`);
 const { busy, lines, failure } = reconnect;
 const done = reconnect.value;
+
+// TWO COPIES OF THIS SANDBOX, each on a machine one of the owner's sandboxes reaches: which one goes is the owner's call,
+// so each is a press of its own rather than the `ic sandbox list` / `ic sandbox remove` recipe. Offered only when both
+// copies are found; with one out of reach, the recipe is all there is. The machines are asked again as this shows.
+const { relays, look } = useDeviceRelays();
+const duplicate = computed(() => isOwner.value && notices.value.some((notice) => notice.fault === `duplicate`));
+watch(duplicate, (now) => now && void look(), { immediate: true });
+const copies = computed(() => (duplicate.value ? doorsHolding(relays.value, ownSlug.value, active.value?.id) : []));
+const pickCopy = computed(() => copies.value.length > 1);
+const removingCopy = ref<MachineDoor>();
+const copyRemoval = useOperation<string>(() => `devices/duplicate/${ownSlug.value ?? ``}`);
+const removeCopy = async (): Promise<void> => {
+    const door = removingCopy.value;
+    const slug = ownSlug.value;
+    removingCopy.value = undefined;
+    if (door === undefined || slug === undefined || copyRemoval.busy.value) {
+        return;
+    }
+    await copyRemoval.run({
+        what: t(`sandbox.containerHealthCard.removingCopyOn`, { machine: door.machineLabel }),
+        failed: t(`sandbox.containerHealthCard.couldntRemoveCopy`, { machine: door.machineLabel }),
+        // Either copy may be the one serving this page; through this sandbox, removing that one ends the call with it.
+        task: async () => await manageDeviceSandbox(door.hostId, slug, `remove`, { at: door.relay === active.value?.id ? undefined : door.relay, severing: door.severs }),
+    });
+};
 
 // The missing env names are evidence for a bug report or a `docker inspect`, not something to act on, so they open
 // on asking. One open at a time: in practice there is only ever one drift notice.
@@ -121,7 +148,29 @@ const repair = async (): Promise<void> => {
             <div class="flex min-w-0 flex-1 flex-col gap-1">
                 <p class="text-sm font-medium text-content">{{ notice.title }}</p>
                 <p class="text-xs text-muted">{{ notice.detail }}</p>
-                <p v-if="notice.repair" class="text-xs text-muted">{{ notice.repair }}</p>
+                <p v-if="notice.repair" class="text-xs text-muted">
+                    {{ notice.fault === `duplicate` && pickCopy ? t(`sandbox.containerHealthCard.pickCopyToRemove`) : notice.repair }}
+                </p>
+                <div v-if="notice.fault === `duplicate` && pickCopy" class="mt-2 flex flex-col gap-2">
+                    <div class="flex flex-wrap gap-2">
+                        <Button
+                            v-for="copy of copies"
+                            :key="copy.machineKey"
+                            size="small"
+                            tier="boring"
+                            :label="t(`sandbox.containerHealthCard.removeCopyOn`, { machine: copy.machineLabel })"
+                            :disabled="copyRemoval.busy.value"
+                            @click="removingCopy = copy"
+                        >
+                            <template #icon><Icon name="trash" /></template>
+                        </Button>
+                    </div>
+                    <p v-if="copyRemoval.busy.value" class="flex items-center gap-1.5 text-2xs text-muted" role="status">
+                        <Icon name="spinner" spin class="shrink-0" aria-hidden="true" />{{ copyRemoval.operation.value?.what }}
+                    </p>
+                    <Notice v-else-if="copyRemoval.failure.value" :of="copyRemoval.failure.value" />
+                    <p v-else-if="copyRemoval.value.value" class="text-2xs text-muted">{{ copyRemoval.value.value }}</p>
+                </div>
 
                 <!-- Only an out-of-date setup is repaired by reinstalling; every other notice says what to run instead. -->
                 <div v-if="offersReconnect(notice)" class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -209,5 +258,14 @@ const repair = async (): Promise<void> => {
             <!-- Said next to the error rather than instead of it: this call cuts its own connection by design. -->
             <span class="text-muted">{{ t(`sandbox.containerHealthCard.sandboxReplacedPageReconnects`) }}</span>
         </p>
+        <ConfirmDialog
+            :open="removingCopy !== undefined"
+            :header="t(`sandbox.containerHealthCard.removeCopyHeader`, { machine: removingCopy?.machineLabel ?? `` })"
+            :description="t(`sandbox.containerHealthCard.removeCopyBody`, { machine: removingCopy?.machineLabel ?? `` })"
+            :confirm-label="t(`ui.action.remove`)"
+            confirm-icon="trash"
+            @cancel="removingCopy = undefined"
+            @confirm="removeCopy"
+        />
     </section>
 </template>

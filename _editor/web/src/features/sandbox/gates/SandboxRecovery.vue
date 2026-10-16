@@ -1,34 +1,37 @@
 <script setup lang="ts">
-import { Button, ui, useOsPreference } from "@intentic/ui";
+import { Button, ConfirmDialog, DeviceRunLog, Notice, ui, useOsPreference } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { computed, onBeforeUnmount, ref } from "vue";
+import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import { apiClient } from "../../../lib/useApi";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { desktopRepairLink, desktopVersion, openDesktopLink } from "../../../app/environments/desktop";
 import { deviceRoute } from "../devices/deviceLinks";
 import { useServingSlug } from "../environment/servingSlug";
-import { devicesAcross, subscribeDevicesAcross } from "../live/devicesAcross";
+import { manageDeviceSandbox } from "../devices/useDevices";
+import { sandboxDoor } from "../live/sandboxDoors";
+import { useDeviceRelays } from "../live/useDeviceRelays";
 import { expectRestart } from "../live/sandboxRestart";
 import { useOperation } from "../../../workbench/operations/operations";
 import HostedRollbackDialog from "../overview/version/HostedRollbackDialog.vue";
 import DiagnosisChain from "../diagnosis/DiagnosisChain.vue";
 import FixCommand from "../diagnosis/FixCommand.vue";
 import type { DiagnosisAction } from "../diagnosis/presentation";
-import { recoveryCommands, type SiblingManager, siblingManagers } from "./recovery";
+import { recoveryCommands } from "./recovery";
 import RunCommand from "../../../components/RunCommand.vue";
 import { useDiagnosisNotice, useVisibleOutage } from "./useVisibleOutage";
 
 // THE WAY BACK WHEN A SANDBOX DOESN'T COME BACK, drawn by the connecting gate and by the notification lane beneath the
 // diagnosis's own sentence. It shows which link of the chain broke, what the machine the sandbox runs on found (in its
 // own words), and ONE thing to do: the platform's restart or rollback for a machine we run, the one command (or the
-// desktop app's button) for a machine of the owner's. Anything else waits behind "other options". Nothing here asks the
-// daemon, which is the one thing not answering.
+// desktop app's button) for a machine of the owner's. Anything else waits behind "other options": there, a restart or a
+// rollback is a press when another of the owner's sandboxes reaches that machine, and a command only when none does.
+// Nothing here asks this sandbox's daemon, which is the one thing not answering.
 
 const t = useT();
 const router = useRouter();
 
-const { active, select } = useSandbox();
+const { active, sandboxes, select } = useSandbox();
 const slug = useServingSlug();
 const notice = useDiagnosisNotice(useVisibleOutage());
 const hosted = computed(() => (active.value?.hosted ?? null) !== null);
@@ -36,13 +39,53 @@ const owner = computed(() => active.value?.role === `owner`);
 // The machine by the name it reported itself under, if it ever did.
 const machine = computed(() => (hosted.value ? undefined : active.value?.hostReport?.machine));
 
-// The owner's other sandboxes that can reach the same machine, read while this is on screen.
-const release = hosted.value ? undefined : subscribeDevicesAcross();
-onBeforeUnmount(() => release?.());
-const siblings = computed(() => siblingManagers(devicesAcross.value, slug.value));
-const manageFrom = (sibling: SiblingManager): void => {
-    select(sibling.sandbox.id);
-    void router.push(deviceRoute(sibling.machineKey));
+// THE OWNER'S OTHER SANDBOXES AS WAYS TO THIS ONE'S MACHINE, read fresh as this opens and kept read while it is on
+// screen. This one is left out: it is the sandbox not answering, so it can carry nothing.
+const { relays, looking, look } = useDeviceRelays({ withoutActive: true, follow: !hosted.value });
+if (!hosted.value && owner.value) {
+    void look();
+}
+const door = computed(() => (hosted.value ? undefined : sandboxDoor(relays.value, slug.value, active.value?.id)));
+const relayName = computed(() => sandboxes.value.find((sandbox) => sandbox.id === door.value?.relay)?.name ?? ``);
+const manageFrom = (): void => {
+    const through = door.value;
+    if (through !== undefined) {
+        select(through.relay);
+        void router.push(deviceRoute(through.machineKey));
+    }
+};
+
+// A RESTART OR A ROLLBACK PRESSED ON THAT MACHINE through the sibling that reaches it: the same ops its Devices page
+// runs, so the reader no longer has to go there, or type them. One at a time, kept in the ledger like the platform's.
+type MachineOp = `restart` | `rollback`;
+const onMachine = useOperation<string>(`gates/recovery/machine`);
+const pressing = ref<MachineOp>();
+const confirmingRollback = ref(false);
+const pressOnMachine = async (op: MachineOp): Promise<void> => {
+    confirmingRollback.value = false;
+    const through = door.value;
+    const sandbox = active.value?.id;
+    const name = slug.value;
+    if (through === undefined || sandbox === undefined || name === undefined || onMachine.busy.value) {
+        return;
+    }
+    pressing.value = op;
+    const label = through.machineLabel;
+    const what = op === `restart` ? t(`sandbox.sandboxRecovery.restartingOn`, { machine: label }) : t(`sandbox.sandboxRecovery.rollingBackOn`, { machine: label });
+    await onMachine.run({
+        what,
+        failed: t(`sandbox.sandboxRecovery.couldntOn`, { machine: label }),
+        task: async (report) => {
+            // What the coming silence and return are, for every surface; its end is this sandbox answering again.
+            const settled = expectRestart({ sandbox, id: `recovery`, what, quiet: { title: what, detail: t(`sandbox.sandboxRecovery.picksUpByItself`) }, untilAnswered: true });
+            try {
+                return await manageDeviceSandbox(through.hostId, name, op, { at: through.relay, onLine: report.line });
+            } catch (error) {
+                settled();
+                throw error;
+            }
+        },
+    });
 };
 
 const { cmdOs } = useOsPreference();
@@ -85,9 +128,9 @@ const restartHosted = async (): Promise<void> => {
 
 const primary = computed(() => notice.value?.action);
 const others = computed<readonly DiagnosisAction[]>(() => notice.value?.otherActions ?? []);
-// Behind "other options": the other presses the diagnosis offers, and for a machine of the owner's the two
-// single-purpose commands and any sibling that can press them there.
-const hasOthers = computed(() => owner.value && (others.value.length > 0 || !hosted.value || siblings.value.length > 0));
+// Behind "other options": the other presses the diagnosis offers, and for a machine of the owner's the restart and the
+// rollback, as presses where a sibling reaches that machine and as commands where none does.
+const hasOthers = computed(() => owner.value && (others.value.length > 0 || !hosted.value));
 const desktop = desktopVersion() !== undefined;
 const repairReason = computed(() => notice.value?.findings.map((check) => check.problem ?? check.label).join(`; `) || undefined);
 const askRepair = (): void => {
@@ -149,20 +192,63 @@ const askRepair = (): void => {
                     />
                 </div>
                 <FixCommand v-if="others.includes(`fix`)" :machine="machine" />
-                <template v-if="!hosted">
+                <!-- A sandbox of the owner's that still answers reaches the machine: the two presses, made there now. -->
+                <div v-if="door" class="flex min-w-0 flex-col gap-2">
+                    <div class="flex flex-wrap gap-2">
+                        <Button
+                            size="small"
+                            tier="boring"
+                            :label="t(`sandbox.sandboxRecovery.restartOn`, { machine: door.machineLabel })"
+                            :loading="onMachine.busy.value && pressing === `restart`"
+                            :disabled="onMachine.busy.value"
+                            @click="pressOnMachine(`restart`)"
+                        >
+                            <template #icon><Icon name="refresh" /></template>
+                        </Button>
+                        <Button
+                            size="small"
+                            tier="boring"
+                            :label="t(`sandbox.sandboxRecovery.rollBackOn`, { machine: door.machineLabel })"
+                            :loading="onMachine.busy.value && pressing === `rollback`"
+                            :disabled="onMachine.busy.value"
+                            @click="confirmingRollback = true"
+                        >
+                            <template #icon><Icon name="undo" /></template>
+                        </Button>
+                    </div>
+                    <p class="flex flex-wrap items-center gap-x-1.5 text-muted">
+                        <span>{{ t(`sandbox.sandboxRecovery.throughSibling`, { name: relayName, machine: door.machineLabel }) }}</span>
+                        <button type="button" :class="ui.textButton()" @click="manageFrom">{{ t(`sandbox.sandboxRecovery.openItsDevices`) }}</button>
+                    </p>
+                    <DeviceRunLog
+                        v-if="onMachine.busy.value || onMachine.lines.value.length > 0"
+                        :lines="onMachine.lines.value"
+                        :running="onMachine.busy.value"
+                        :empty="t(`sandbox.sandboxRecovery.startingOn`, { machine: door.machineLabel })"
+                    />
+                    <Notice v-if="onMachine.failure.value" :of="onMachine.failure.value" />
+                    <p v-else-if="onMachine.value.value" class="text-muted">{{ onMachine.value.value }}</p>
+                </div>
+                <!-- Not found YET: the siblings are being asked, and a command drawn now is often replaced a second later. -->
+                <p v-else-if="!hosted && looking" class="flex items-center gap-2 text-muted">
+                    <Icon name="spinner" spin class="shrink-0" />{{ t(`sandbox.sandboxRecovery.lookingForMachine`) }}
+                </p>
+                <template v-else-if="!hosted">
                     <!-- One shell choice for both: the first carries the toggle, the second follows it. -->
                     <RunCommand :command="(os) => recoveryCommands(slug, os).restart" :label="t(`sandbox.sandboxRecovery.restartCommand`)" />
                     <RunCommand :command="commands.rollback" :os="cmdOs" :label="t(`sandbox.sandboxRecovery.rollBackCommand`)" />
                 </template>
-                <!-- The cheaper way where it exists: a sandbox of the owner's that still answers can press these on that machine. -->
-                <p v-for="sibling in siblings" :key="sibling.sandbox.id" class="flex flex-wrap items-center gap-x-1.5 text-muted">
-                    <span>{{ t(`sandbox.sandboxRecovery.siblingReaches`, { name: sibling.sandbox.name, machine: sibling.machineLabel }) }}</span>
-                    <button type="button" :class="ui.textButton()" @click="manageFrom(sibling)">
-                        {{ t(`sandbox.sandboxRecovery.openItsDevices`) }}
-                    </button>
-                </p>
             </div>
         </details>
         <HostedRollbackDialog :sandbox="rollingBack ? active : undefined" @close="rollingBack = false" />
+        <ConfirmDialog
+            :open="confirmingRollback && door !== undefined"
+            :header="t(`sandbox.sandboxRecovery.rollBackOnHeader`, { machine: door?.machineLabel ?? `` })"
+            :description="t(`sandbox.sandboxRecovery.rollBackOnBody`)"
+            :confirm-label="t(`capabilities.hostRecreate.rollBackVerb`)"
+            confirm-icon="undo"
+            @cancel="confirmingRollback = false"
+            @confirm="pressOnMachine(`rollback`)"
+        />
     </div>
 </template>

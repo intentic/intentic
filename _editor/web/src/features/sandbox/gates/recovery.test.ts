@@ -1,12 +1,9 @@
 // When the recovery panel shows, and what it prints: the ways back for a sandbox that didn't come back, which must work
 // with that sandbox's daemon down. It shows when the diagnosis found a way back, never on a timer. The commands are
 // pinned in their published spelling, since that is what a reader on another machine pastes.
-import type { Device } from "@intentic/sandbox-contract";
 import { scriptSource } from "../../../app/environments/scriptCommand";
-import { listedDevice } from "../../../testing/listedDevice";
-import { sandboxSummary } from "../../../testing/sandboxSummary";
 import type { DiagnosisNotice } from "../diagnosis/presentation";
-import { recoveryCommands, recoveryDue, type RecoveryInput, RESTART_RECOVERY_AFTER_MS, siblingManagers } from "./recovery";
+import { recoveryCommands, recoveryDue, type RecoveryInput, RESTART_RECOVERY_AFTER_MS } from "./recovery";
 
 // A diagnosis with a way back: the owner's own machine is not connected, and the command is the thing to do.
 const wayBack: DiagnosisNotice = {
@@ -82,30 +79,5 @@ describe(`what it prints besides the one command`, () => {
     it(`falls back to ic's bare verbs when nothing here knows the sandbox's name`, () => {
         expect(recoveryCommands(undefined, `windows`)).toEqual({ rollback: `ic sandbox rollback`, restart: `ic sandbox restart` });
         expect(recoveryCommands(`Not a slug`, `unix`)).toEqual({ rollback: `ic sandbox rollback`, restart: `ic sandbox restart` });
-    });
-});
-
-describe(`another sandbox that can reach the same machine`, () => {
-    const rog = (over: Partial<Device> = {}): Device =>
-        listedDevice({
-            key: `rog`,
-            label: `rog`,
-            hostId: `rog`,
-            online: true,
-            sandboxes: [{ slug: `sandbox-3c469e9d6c58`, container: `intentic-sandbox-sandbox-3c469e9d6c58`, running: false, image: `intentic/sandbox:stable`, parked: true }],
-            ...over,
-        });
-    const lab = sandboxSummary({ id: `lab`, name: `Lab` });
-
-    it(`names the owner's sandbox whose Devices page has a live door onto the machine holding this one`, () => {
-        expect(siblingManagers([{ sandbox: lab, devices: [rog()] }], `sandbox-3c469e9d6c58`)).toEqual([{ sandbox: lab, machineKey: `rog`, machineLabel: `rog` }]);
-    });
-
-    it(`names none that could not press anything there`, () => {
-        // A door that is offline, a machine that doesn't hold this sandbox, a sandbox that is only shared with the owner.
-        expect(siblingManagers([{ sandbox: lab, devices: [rog({ online: false })] }], `sandbox-3c469e9d6c58`)).toEqual([]);
-        expect(siblingManagers([{ sandbox: lab, devices: [rog()] }], `sandbox-other`)).toEqual([]);
-        expect(siblingManagers([{ sandbox: sandboxSummary({ id: `shared`, role: `maintainer` }), devices: [rog()] }], `sandbox-3c469e9d6c58`)).toEqual([]);
-        expect(siblingManagers([{ sandbox: lab, devices: [rog()] }], undefined)).toEqual([]);
     });
 });

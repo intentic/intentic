@@ -198,10 +198,10 @@ const outcomeOf = async (
 };
 
 export async function manageDeviceSandbox(hostId: string, slug: string, op: DeviceSandboxOp, payload: DeviceSandboxPayload = {}): Promise<string> {
-    const frames = await sandboxRpc.system.manageDeviceSandbox(
-        flowInput(hostId, slug, op, payload),
-        payload.at === undefined ? undefined : { context: { at: payload.at } },
-    );
+    const input = flowInput(hostId, slug, op, payload);
+    const frames = await (payload.at === undefined
+        ? sandboxRpc.system.manageDeviceSandbox(input)
+        : sandboxRpc.system.manageDeviceSandbox(input, { context: { at: payload.at } }));
     return (await outcomeOf(frames, payload.onLine, payload.severing === true)) ?? severedOutcome(op, slug);
 }
 

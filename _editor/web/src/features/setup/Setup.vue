@@ -44,6 +44,7 @@ import SetupCompose from "./SetupCompose.vue";
 import SetupAccount from "./SetupAccount.vue";
 import SetupHandoff from "./SetupHandoff.vue";
 import SetupNudge from "./SetupNudge.vue";
+import SetupOnMachine from "./SetupOnMachine.vue";
 import SetupRunDetails from "./SetupRunDetails.vue";
 import SetupRungArt from "./SetupRungArt.vue";
 import SetupSyncOption from "./SetupSyncOption.vue";
@@ -1118,6 +1119,17 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                             >
                                 <template #icon><Icon name="download" /></template>
                             </Button>
+
+                            <!-- A computer of the owner's that is already connected takes a press instead of the command: offered
+                                 where the press does what the command would (the platform's address, no checkout image), and put
+                                 away once a machine has claimed the code, when the page's own handoff says the rest. -->
+                            <SetupOnMachine
+                                v-if="project === undefined && mode === `intentic` && !buildsFromCheckout && created && setup && handoff !== `claimed`"
+                                :sandbox-id="created.id"
+                                :code="setup.code"
+                                :hostname="setup.hostname"
+                                :sync-asked="syncOffered && syncEnabled"
+                            />
 
                             <!-- Phone's real next step, placed above the command it redirects from; a correction below goes unread. -->
                             <SetupHandoff v-if="mobile && created" :sandbox-id="created.id" :email="user?.email ?? ``" @sent="onEmailed" />

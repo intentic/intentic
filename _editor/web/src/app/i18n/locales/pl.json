@@ -5476,7 +5476,13 @@
             "confirmReconnect": "Tworzy jego kontener na {host} od nowa z jego konfiguracji. Logowania, pliki, historia i Docker zostają.",
             "sandboxReplacedPageReconnects": "Jeśli został wymieniony, ta strona połączy się sama, gdy wróci.",
             "missingEnv": "Brakuje w jego kontenerze:",
-            "details": "Szczegóły"
+            "details": "Szczegóły",
+            "pickCopyToRemove": "Obie kopie są na twoich komputerach. Usuń tę, której nie używasz:",
+            "removeCopyOn": "Usuń kopię na {machine}",
+            "removingCopyOn": "Usuwam kopię na {machine}",
+            "couldntRemoveCopy": "Nie udało się usunąć kopii na {machine}.",
+            "removeCopyHeader": "Usunąć kopię na {machine}?",
+            "removeCopyBody": "Jej kontener na {machine} się zatrzyma, a piaskownicę zachowa druga kopia. Jej pliki i historia zostają na {machine} przez tydzień; ic sandbox restore je tam przywróci."
         },
         "controlTokensSection": {
             "expired": "wygasł",
@@ -6882,8 +6888,18 @@
             "gateHeading": "Uruchom go ponownie",
             "rollBackCommand": "Wróć do wersji sprzed ostatniej aktualizacji",
             "restartCommand": "Zrestartuj go",
-            "siblingReaches": "{name} też ma dostęp do {machine}:",
-            "openItsDevices": "zarządzaj tym sandboxem z jego strony Urządzenia"
+            "openItsDevices": "zarządzaj tym sandboxem z jego strony Urządzenia",
+            "restartOn": "Uruchom ją ponownie na {machine}",
+            "rollBackOn": "Cofnij na {machine}",
+            "throughSibling": "Przez {name}, która sięga do {machine}:",
+            "lookingForMachine": "Szukam innej twojej piaskownicy, która sięga do jej komputera…",
+            "restartingOn": "Uruchamiam ją ponownie na {machine}",
+            "rollingBackOn": "Cofam ją na {machine}",
+            "couldntOn": "Nie udało się na {machine}.",
+            "picksUpByItself": "Ta strona połączy się z nią sama, gdy tylko odpowie.",
+            "startingOn": "Uruchamiam na {machine}…",
+            "rollBackOnHeader": "Cofnąć na {machine}?",
+            "rollBackOnBody": "Wraca do wersji sprzed ostatniej aktualizacji. Jej pliki i historia zostają."
         },
         "sandboxPersonas": {
             "accountsSpeaksThroughStay": "Konta, przez które mówi, pozostają podłączone i zalogowane. Każda automatyzacja przypięta do tej persony przestaje publikować, dopóki nie dasz jej innej.",
@@ -7026,7 +7042,8 @@
             "title": "Ten sandbox wymaga aktualizacji",
             "titleNamed": "{name} wymaga aktualizacji",
             "olderThanApp": "Działa w wersji {version}, a ta aplikacja obsługuje sandboxy od wersji {oldest}. Zaktualizuj go, żeby otworzyć go tutaj. Twoje pliki i rozmowy zostaną zachowane.",
-            "manual": "Instalowałeś go sam? Uruchom to na maszynie, na której działa:"
+            "manual": "Instalowałeś go sam? Uruchom to na maszynie, na której działa:",
+            "byHand": "Uruchom to ręcznie"
         },
         "sandboxUnauthorized": {
             "noAccessTo": "Brak dostępu do „{name}”",
@@ -9404,6 +9421,14 @@
             "stillNothing": "Wciąż nic.",
             "toPastedIntoTerminal": "To trzeba wkleić w terminalu na maszynie, która będzie uruchamiać Twój sandbox.",
             "waitingOnInstaller": "Czekamy na instalator."
+        },
+        "setupOnMachine": {
+            "alreadyConnected": "Albo skonfiguruj ją jednym kliknięciem na swoim już podłączonym komputerze:",
+            "setUpOn": "Skonfiguruj na {machine}",
+            "settingUpOn": "Konfiguruję ją na {machine}",
+            "couldntOn": "Nie udało się jej skonfigurować na {machine}.",
+            "startingOn": "Uruchamiam na {machine}…",
+            "syncAfter": "Ta droga nie włącza synchronizacji plików: włącz ją na stronie Urządzeń, gdy piaskownica już działa."
         },
         "setupRunDetails": {
             "dials": "Pokrętła",

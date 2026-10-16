@@ -4,6 +4,7 @@ import { useT } from "@intentic/ui/i18n";
 import { RouterLink } from "vue-router";
 import RunCommand from "../../../../components/RunCommand.vue";
 import { useServingSlug } from "../../environment/servingSlug";
+import { useHostRunning } from "../../devices/useDevices";
 import { updateCommand } from "../../gates/updateCommand";
 
 // A SANDBOX TOO OLD FOR A VIEW: one calm note wherever a section is drawn from fields its daemon does not send yet (the
@@ -12,6 +13,7 @@ import { updateCommand } from "../../gates/updateCommand";
 // whose Update card is the one press for a hosted sandbox or one on a connected machine, or, for one installed by hand,
 // the `update/<slug>` one-liner on the device that runs it (a desktop install reinstalls). The slug is named because a
 // device running several sandboxes refuses the bare verb; `ic sandbox update` is offered only when this page cannot know it.
+// The one-liner is left out when this sandbox reaches the device it runs on: the link is then to a press, not a recipe.
 
 const t = useT();
 
@@ -22,6 +24,7 @@ defineProps<{
 
 const slug = useServingSlug();
 const command = (os: CommandOs): string => updateCommand(slug.value, os);
+const reachable = useHostRunning(() => slug.value);
 </script>
 
 <template>
@@ -32,8 +35,8 @@ const command = (os: CommandOs): string => updateCommand(slug.value, os);
             <RouterLink to="/sandbox/overview" data-update class="font-medium text-link hover:underline">{{
                 t(`sandbox.sandboxOutdatedNotice.update`)
             }}</RouterLink>
-            <span class="text-subtle">{{ t(`sandbox.sandboxOutdatedNotice.manual`) }}</span>
+            <span v-if="!reachable" class="text-subtle">{{ t(`sandbox.sandboxOutdatedNotice.manual`) }}</span>
         </span>
-        <RunCommand class="mt-1.5" :command="command" />
+        <RunCommand v-if="!reachable" class="mt-1.5" :command="command" />
     </Notice>
 </template>

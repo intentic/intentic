@@ -8,6 +8,9 @@ import { createMemoryHistory, createRouter } from "vue-router";
 
 const slug = ref<string | undefined>(`sandbox-3c469e9d6c58`);
 jest.mock(`../../environment/servingSlug`, () => ({ useServingSlug: () => slug }));
+// The connected machine running it, when this sandbox reaches one; none unless a case says so.
+const runsOn = ref<string | undefined>(undefined);
+jest.mock(`../../devices/useDevices`, () => ({ useHostRunning: () => runsOn }));
 
 const { default: SandboxOutdatedNotice } = await import("./SandboxOutdatedNotice.vue");
 const { scriptSource } = await import("../../../../app/environments/scriptCommand");
@@ -41,6 +44,7 @@ const mount = async (): Promise<HTMLElement> => {
 
 afterEach(() => {
     slug.value = `sandbox-3c469e9d6c58`;
+    runsOn.value = undefined;
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
@@ -59,4 +63,13 @@ it(`prints the bare verb only when the sandbox's name is unknown here`, async ()
     slug.value = undefined;
     const el = await mount();
     expect(el.querySelector(`pre`)?.textContent).toBe(`ic sandbox update`);
+});
+
+// The link leads to a press there: printing the recipe beside it would ask for the one thing a button already does.
+it(`leaves the command out when this sandbox reaches the machine it runs on`, async () => {
+    runsOn.value = `rog`;
+    const el = await mount();
+    expect(el.querySelector(`[data-update]`)?.getAttribute(`href`)).toBe(`/sandbox/overview`);
+    expect(el.querySelector(`pre`)).toBeNull();
+    expect(el.textContent).not.toContain(`Installed it yourself?`);
 });
