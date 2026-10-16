@@ -5,6 +5,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { doorRule } from "../../checks/doors.rules.mjs";
 import { CHECKS } from "../../checks/manifest.mjs";
 import { repoRoot } from "../../constants/src/node.mjs";
 import { adoptedOf, allowanceOf, tightenedOf } from "../../checks/lib/ratchet.mjs";
@@ -67,7 +68,10 @@ test("the daemon's indexes are regenerated only for a daemon source, and count a
 
 test("every check that keeps a baseline says so in the manifest, so the fixers before a land can tighten it", () => {
     const checks = join(repoRoot(import.meta.url), "_tools/checks");
-    const keeping = CHECKS.filter((check) => /\bratchet\(/.test(readFileSync(join(checks, check.file), "utf8"))).map(({ id }) => id);
+    // A check keeps one by calling ratchet() itself, or by running a door rule that is ratcheted (lib/doors.mjs).
+    const keeps = (source) =>
+        /\bratchet\(/.test(source) || [...source.matchAll(/runDoorRule\(doorRule\(`([^`]+)`\)\)/g)].some(([, id]) => doorRule(id).ratchet === true);
+    const keeping = CHECKS.filter((check) => keeps(readFileSync(join(checks, check.file), "utf8"))).map(({ id }) => id);
     assert.deepEqual(CHECKS.filter((check) => check.ratchet === true).map(({ id }) => id), keeping);
 });
 
