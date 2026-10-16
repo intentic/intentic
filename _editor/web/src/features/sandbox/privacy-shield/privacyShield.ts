@@ -20,6 +20,19 @@ import {
 // The longest value the contract takes on the allow list; a longer one would be refused by the daemon as a whole save.
 export const ALLOW_VALUE_MAX = 200;
 
+// How many values a list on this page may hold, and how long one may be: the contract's own limits for it, since the
+// daemon refuses a whole save that breaks one. The allow list's by default; the owner's name lists and rules pass theirs.
+export interface ValueLimits {
+    readonly max: number;
+    readonly length: number;
+}
+export const ALLOW_LIMITS: ValueLimits = { max: PRIVACY_ALLOW_MAX, length: ALLOW_VALUE_MAX };
+
+// How typed or pasted text is cut into values: one per line, since a value may hold spaces (a company, a phrase), or one
+// per word, for a list of single words (names).
+export type ValueSplit = `lines` | `words`;
+const SPLITS = { lines: /\r?\n/u, words: /[\s,;]+/u } as const satisfies Record<ValueSplit, RegExp>;
+
 // A list with one value present or absent, keeping every other member where it was. A trusted id the provider list
 // no longer names (an endpoint that was removed) stays put rather than being dropped by a toggle of its neighbour.
 const withMember = <T extends string>(list: readonly T[], value: T, present: boolean): T[] => {
@@ -48,10 +61,10 @@ export const allowKey = (value: string): string => value.normalize(`NFC`).toLowe
 
 // Values from typed or pasted text, one per line: trimmed, blanks dropped, and a value the shield reads as one already
 // given kept once, as first written.
-export const allowValuesFrom = (text: string): string[] => {
+export const allowValuesFrom = (text: string, split: ValueSplit = `lines`): string[] => {
     const seen = new Set<string>();
     const values: string[] = [];
-    for (const line of text.split(/\r?\n/)) {
+    for (const line of text.split(SPLITS[split])) {
         const value = line.trim();
         const key = allowKey(value);
         if (key !== `` && !seen.has(key)) {
@@ -65,11 +78,11 @@ export const allowValuesFrom = (text: string): string[] => {
 // Why a list cannot be saved, said before the daemon refuses the whole policy for it.
 export type AllowListProblem = { readonly kind: `tooLong`; readonly value: string } | { readonly kind: `tooMany`; readonly count: number };
 
-export const allowListProblem = (values: readonly string[]): AllowListProblem | undefined => {
-    if (values.length > PRIVACY_ALLOW_MAX) {
+export const allowListProblem = (values: readonly string[], limits: ValueLimits = ALLOW_LIMITS): AllowListProblem | undefined => {
+    if (values.length > limits.max) {
         return { kind: `tooMany`, count: values.length };
     }
-    const tooLong = values.find((value) => value.length > ALLOW_VALUE_MAX);
+    const tooLong = values.find((value) => value.length > limits.length);
     return tooLong === undefined ? undefined : { kind: `tooLong`, value: tooLong };
 };
 
@@ -79,13 +92,18 @@ export type AllowAddition =
     | { readonly kind: `added`; readonly allow: string[]; readonly added: string[]; readonly already: string[] }
     | { readonly kind: `refused`; readonly problem: AllowListProblem };
 
-export const allowAdding = (allow: readonly string[], text: string): AllowAddition => {
+export const allowAdding = (
+    allow: readonly string[],
+    text: string,
+    limits: ValueLimits = ALLOW_LIMITS,
+    split: ValueSplit = `lines`,
+): AllowAddition => {
     const held = new Set(allow.map(allowKey));
-    const values = allowValuesFrom(text);
+    const values = allowValuesFrom(text, split);
     const added = values.filter((value) => !held.has(allowKey(value)));
     const already = values.filter((value) => held.has(allowKey(value)));
     const next = [...allow, ...added];
-    const problem = added.length === 0 ? undefined : allowListProblem(next);
+    const problem = added.length === 0 ? undefined : allowListProblem(next, limits);
     return problem === undefined ? { kind: `added`, allow: next, added, already } : { kind: `refused`, problem };
 };
 
@@ -93,9 +111,9 @@ export const allowAdding = (allow: readonly string[], text: string): AllowAdditi
 // value the list already holds, the two become one.
 export type AllowEdit = { readonly kind: `edited`; readonly allow: string[] } | { readonly kind: `refused`; readonly problem: AllowListProblem };
 
-export const allowEdited = (allow: readonly string[], from: string, to: string): AllowEdit => {
+export const allowEdited = (allow: readonly string[], from: string, to: string, limits: ValueLimits = ALLOW_LIMITS): AllowEdit => {
     const value = to.trim();
-    if (value.length > ALLOW_VALUE_MAX) {
+    if (value.length > limits.length) {
         return { kind: `refused`, problem: { kind: `tooLong`, value } };
     }
     const key = allowKey(value);

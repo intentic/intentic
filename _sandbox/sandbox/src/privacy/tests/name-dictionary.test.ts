@@ -76,3 +76,40 @@ describe("a query", () => {
         expect(nameDictionary("a b c d e f").lookup).toBeUndefined();
     });
 });
+
+describe("as the owner set it", () => {
+    const own = {
+        off: ["first-names-en"],
+        lists: [
+            {
+                id: "ua",
+                title: "Ukrainian names",
+                kind: "first-name" as const,
+                matching: "as-written" as const,
+                words: ["Qwertyna", "qwertyna", "Zqxa"],
+                on: true,
+            },
+        ],
+    };
+
+    test("a list switched off says so and drops out of the totals; an own list is listed with its title", () => {
+        const plain = nameDictionary();
+        const set = nameDictionary(undefined, own);
+        expect(plain.lists.every((list) => list.on)).toBe(true);
+        expect(set.lists.find((list) => list.id === "first-names-en")?.on).toBe(false);
+        expect(set.lists.find((list) => list.id === "ua")).toMatchObject({
+            own: true,
+            title: "Ukrainian names",
+            kind: "first-name",
+            count: 2,
+            on: true,
+        });
+        expect(set.totals.firstNames).toBeLessThan(plain.totals.firstNames + 2);
+    });
+
+    test("an own list's words are browsed with the rest, and a lookup reads the lexicon the shield reads", () => {
+        expect(nameDictionary("qwer", own).matches).toEqual([{ word: "qwertyna", lists: ["ua"] }]);
+        expect(nameDictionary("Qwertyna Nowak").lookup?.found).toBe(false);
+        expect(nameDictionary("Qwertyna Nowak", own).lookup?.found).toBe(true);
+    });
+});

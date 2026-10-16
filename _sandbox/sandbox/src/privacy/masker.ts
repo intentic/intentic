@@ -2,10 +2,14 @@ import { createHash } from "node:crypto";
 import {
     PRIVACY_EXCERPT_REACH,
     type PersonalDataClass,
+    type PrivacyPreviewSpan,
     type PrivacyReplacement,
     type PrivacyShieldPolicy,
 } from "@intentic/sandbox-contract/schemas/privacy";
-import { detectPersonalData, normalizeAllowed, type PersonalDataSpan } from "@intentic/privacy-detect";
+import { normalizeAllowed, type PersonalDataSpan } from "@intentic/privacy-detect";
+import type { Lexicon } from "@intentic/privacy-detect/lexicon";
+import { detectorFor } from "./policy-detector.js";
+import { opt } from "../opt.js";
 import type { PrivacyVault, VaultHit } from "./privacy-vault.js";
 import { LITERAL_PREFIX, TOKEN_LABEL, TOKEN_SOURCE, tokenPattern } from "./tokens.js";
 
@@ -28,9 +32,9 @@ export interface MaskResult {
     readonly found: readonly Replacement[];
 }
 
-// A second source of spans: the local named-entity model.
+// A second source of spans: the local named-entity model, its finds held to the name lists as the owner set them.
 export interface EntityRecognizer {
-    readonly find: (text: string) => Promise<readonly PersonalDataSpan[]>;
+    readonly find: (text: string, lexicon?: Lexicon) => Promise<readonly PersonalDataSpan[]>;
 }
 
 // One value found in a string, where it sits, and the token it was given.
@@ -49,6 +53,9 @@ export interface Masker {
         text: string,
     ) => Promise<{ readonly spans: readonly FoundSpan[]; readonly counts: ClassCounts; readonly found: readonly Replacement[] }>;
     readonly restore: (text: string) => string;
+    // What every source would find in a string and which found it, for the owner trying the shield on a text: nothing
+    // is given a token, nothing is remembered, and the vault is only read.
+    readonly inspect: (text: string) => Promise<PrivacyPreviewSpan[]>;
 }
 
 interface Remembered {
@@ -106,7 +113,17 @@ interface Candidate {
     readonly token?: string;
     // Lower wins a tie: what the vault knows, then the detectors, then the model.
     readonly rank: number;
+    // The owner's rule that found it, when one did: the vault leaves such a value to the rule (privacy-vault.ts).
+    readonly rule?: string;
 }
+
+// Which source a candidate's rank stands for, as a preview names it.
+const sourceOf = (candidate: Candidate): PrivacyPreviewSpan["by"] => {
+    if (candidate.rule !== undefined) {
+        return "rule";
+    }
+    return candidate.rank === 0 ? "learned" : candidate.rank === 1 ? "detector" : "model";
+};
 
 // Leftmost first; at one place the longer span, then the better-ranked source.
 const chooseSpans = (candidates: readonly Candidate[]): Candidate[] => {
@@ -215,30 +232,68 @@ const parseSpans = (text: string): FoundSpan[] => {
 
 export interface MaskerDeps {
     readonly vault: PrivacyVault;
-    readonly policy: Pick<PrivacyShieldPolicy, "classes" | "allow" | "names">;
+    // The owner's lists and rules are optional for a caller with none (restoring reads the vault alone).
+    readonly policy: Pick<PrivacyShieldPolicy, "classes" | "allow" | "names"> & Partial<Pick<PrivacyShieldPolicy, "dictionary" | "rules">>;
     readonly memo: MaskMemo;
     readonly recognizer?: EntityRecognizer | undefined;
+    // Where a rule that cannot run is said.
+    readonly warn?: (message: string) => void;
 }
 
-export const createMasker = ({ vault, policy, memo, recognizer }: MaskerDeps): Masker => {
-    const classes = new Set<PersonalDataClass>(policy.classes);
-    const allow = new Set(policy.allow.map(normalizeAllowed));
-    const policyKey = JSON.stringify([[...classes].toSorted(), [...allow].toSorted(), recognizer === undefined ? "dictionary" : policy.names]);
-    const admitted = (kind: PersonalDataClass, value: string): boolean => classes.has(kind) && !allow.has(normalizeAllowed(value));
-
-    const knownCandidates = (text: string): Candidate[] =>
-        vault
-            .matcher()
-            .find(text)
-            .flatMap(({ start, end, payload }: { start: number; end: number; payload: VaultHit }) => {
-                const value = text.slice(start, end);
-                if (!admitted(payload.class, value)) {
-                    return [];
-                }
-                // A value found again is a value still in use, which is what the vault's retention ages by.
+// What the vault already knows in a stretch of text, admitted by the policy. `noting` marks each as seen today, which is
+// what the vault's retention ages by; a preview only reads.
+const knownIn = (vault: PrivacyVault, admitted: (kind: PersonalDataClass, value: string) => boolean, text: string, noting: boolean): Candidate[] =>
+    vault
+        .matcher()
+        .find(text)
+        .flatMap(({ start, end, payload }: { start: number; end: number; payload: VaultHit }) => {
+            const value = text.slice(start, end);
+            if (!admitted(payload.class, value)) {
+                return [];
+            }
+            if (noting) {
                 vault.saw(payload);
-                return [{ start, end, class: payload.class, value, token: payload.token, rank: 0 }];
-            });
+            }
+            return [{ start, end, class: payload.class, value, token: payload.token, rank: 0 }];
+        });
+
+// Tokens back to the values they stand for, read from the vault alone.
+const restoreFrom = (vault: PrivacyVault, text: string): string =>
+    text.includes("⟦") || text.includes("[[")
+        ? text.replace(tokenPattern(), (whole, label?: string, index?: string, looseLabel?: string, looseIndex?: string) => {
+              // An escaped literal comes back as the literal it was: one prefix off, whatever follows it.
+              if ((label ?? looseLabel ?? "").startsWith(LITERAL_PREFIX)) {
+                  return whole.replace(LITERAL_PREFIX, "");
+              }
+              const resolved =
+                  label !== undefined && index !== undefined
+                      ? vault.resolve(label, index)
+                      : looseLabel !== undefined && looseIndex !== undefined
+                        ? vault.resolve(looseLabel, looseIndex)
+                        : undefined;
+              return resolved ?? whole;
+          })
+        : text;
+
+const tally = (spans: readonly { readonly class: PersonalDataClass }[]) => {
+    const counts: Partial<Record<PersonalDataClass, number>> = {};
+    for (const span of spans) {
+        counts[span.class] = (counts[span.class] ?? 0) + 1;
+    }
+    return counts;
+};
+
+export const createMasker = ({ vault, policy, memo, recognizer, warn }: MaskerDeps): Masker => {
+    const detector = detectorFor(
+        { classes: policy.classes, allow: policy.allow, dictionary: policy.dictionary ?? { off: [], lists: [] }, rules: policy.rules ?? [] },
+        warn,
+    );
+    const { classes, allow } = detector;
+    const policyKey = JSON.stringify([detector.key, recognizer === undefined ? "dictionary" : policy.names]);
+    const admitted = (kind: PersonalDataClass, value: string): boolean => classes.has(kind) && !allow.has(normalizeAllowed(value));
+    // A rule's find is handed out as one, so the vault leaves it to the rule (privacy-vault.ts).
+    const tokenOfSpan = (span: Candidate): string =>
+        span.token ?? vault.tokenFor(span.value, span.class, span.rule === undefined ? undefined : "rule");
 
     // Replaces the chosen spans; tallies what it replaced, and where each token landed in the whole string (`base` is
     // where this stretch starts in it).
@@ -248,23 +303,38 @@ export const createMasker = ({ vault, policy, memo, recognizer }: MaskerDeps): M
         }
         return placeTokens(
             text,
-            spans.map((span) => ({ ...span, token: span.token ?? vault.tokenFor(span.value, span.class) })),
+            spans.map((span) => ({ ...span, token: tokenOfSpan(span) })),
             placed,
             base,
         );
     };
 
     // What every source finds in a stretch of text holding no token, overlaps settled.
-    const spansOf = async (text: string): Promise<Candidate[]> => {
+    const spansOf = async (text: string, noting = true): Promise<Candidate[]> => {
         if (!HAS_WORD.test(text)) {
             return [];
         }
-        const detected: Candidate[] = detectPersonalData(text, { classes, allow }).map((span) => ({ ...span, rank: 1 }));
+        const detected: Candidate[] = detector.detect(text).map((span) => ({ ...span, rank: 1 }));
         const recognized: Candidate[] =
             recognizer === undefined
                 ? []
-                : (await recognizer.find(text)).filter((span) => admitted(span.class, span.value)).map((span) => ({ ...span, rank: 2 }));
-        return chooseSpans([...knownCandidates(text), ...detected, ...recognized]);
+                : (await recognizer.find(text, detector.lexicon))
+                      .filter((span) => admitted(span.class, span.value))
+                      .map((span) => ({ ...span, rank: 2 }));
+        return chooseSpans([...knownIn(vault, admitted, text, noting), ...detected, ...recognized]);
+    };
+
+    // Every find in a string around the tokens already in it, with where its stretch starts in the string.
+    const spansAround = async (text: string, noting: boolean): Promise<{ readonly span: Candidate; readonly offset: number }[]> => {
+        const out: { span: Candidate; offset: number }[] = [];
+        let offset = 0;
+        for (const part of segmentsAroundTokens(text)) {
+            if (!part.token) {
+                out.push(...(await spansOf(part.text, noting)).map((span) => ({ span, offset })));
+            }
+            offset += part.text.length;
+        }
+        return out;
     };
 
     // Only the vault's values can have changed since a remembered masking; looking for those alone is a fraction of the
@@ -272,7 +342,7 @@ export const createMasker = ({ vault, policy, memo, recognizer }: MaskerDeps): M
     const remaskKnown = (text: string, counts: Record<string, number>, placed: Placed[]): string => {
         let out = "";
         for (const part of segmentsAroundTokens(text)) {
-            out += part.token ? part.text : apply(part.text, chooseSpans(knownCandidates(part.text)), counts, placed, out.length);
+            out += part.token ? part.text : apply(part.text, chooseSpans(knownIn(vault, admitted, part.text, true)), counts, placed, out.length);
         }
         return out;
     };
@@ -303,9 +373,8 @@ export const createMasker = ({ vault, policy, memo, recognizer }: MaskerDeps): M
             return { text: masked, counts, found: replacementsIn(masked, placed) };
         },
         find: async (text) => {
-            const counts: Record<string, number> = {};
             if (text.length < 2 || !HAS_WORD.test(text)) {
-                return { spans: [], counts, found: [] };
+                return { spans: [], counts: {}, found: [] };
             }
             await vault.load();
             // Remembered as the masked strings are, under a key of its own: an image's words are re-sent with every
@@ -315,49 +384,32 @@ export const createMasker = ({ vault, policy, memo, recognizer }: MaskerDeps): M
             if (remembered !== undefined && remembered.generation === vault.generation()) {
                 return { spans: parseSpans(remembered.text), counts: {}, found: [] };
             }
-            const spans: FoundSpan[] = [];
-            let offset = 0;
-            for (const part of segmentsAroundTokens(text)) {
-                if (!part.token) {
-                    for (const span of await spansOf(part.text)) {
-                        spans.push({
-                            start: offset + span.start,
-                            end: offset + span.end,
-                            class: span.class,
-                            token: span.token ?? vault.tokenFor(span.value, span.class),
-                        });
-                        // A string seen before counts nothing again, as with `mask`.
-                        if (remembered === undefined) {
-                            counts[span.class] = (counts[span.class] ?? 0) + 1;
-                        }
-                    }
-                }
-                offset += part.text.length;
-            }
+            const spans: FoundSpan[] = (await spansAround(text, true)).map(({ span, offset }) => ({
+                start: offset + span.start,
+                end: offset + span.end,
+                class: span.class,
+                token: tokenOfSpan(span),
+            }));
             memo.set(key, { text: JSON.stringify(spans), generation: vault.generation() });
+            // A string seen before counts nothing again, as with `mask`.
             if (remembered !== undefined) {
-                return { spans, counts, found: [] };
+                return { spans, counts: {}, found: [] };
             }
             // The words as the picture reads once painted over: the same spans, each written as its token.
             const placed: Placed[] = [];
             const masked = placeTokens(text, spans, placed, 0);
-            return { spans, counts, found: replacementsIn(masked, placed) };
+            return { spans, counts: tally(spans), found: replacementsIn(masked, placed) };
         },
-        restore: (text) =>
-            text.includes("⟦") || text.includes("[[")
-                ? text.replace(tokenPattern(), (whole, label?: string, index?: string, looseLabel?: string, looseIndex?: string) => {
-                      // An escaped literal comes back as the literal it was: one prefix off, whatever follows it.
-                      if ((label ?? looseLabel ?? "").startsWith(LITERAL_PREFIX)) {
-                          return whole.replace(LITERAL_PREFIX, "");
-                      }
-                      const resolved =
-                          label !== undefined && index !== undefined
-                              ? vault.resolve(label, index)
-                              : looseLabel !== undefined && looseIndex !== undefined
-                                ? vault.resolve(looseLabel, looseIndex)
-                                : undefined;
-                      return resolved ?? whole;
-                  })
-                : text,
+        restore: (text) => restoreFrom(vault, text),
+        inspect: async (text) => {
+            await vault.load();
+            return (await spansAround(text, false)).map(({ span, offset }) => ({
+                start: offset + span.start,
+                end: offset + span.end,
+                class: span.class,
+                by: sourceOf(span),
+                ...opt("rule", span.rule),
+            }));
+        },
     };
 };

@@ -1,6 +1,6 @@
 import type { PersonalDataClass } from "@intentic/sandbox-contract/schemas/privacy";
 import { findPhones, impersonalAddress } from "./contact.js";
-import { wordInfo } from "./lexicon.js";
+import { builtInLexicon, type Lexicon } from "./lexicon.js";
 
 // Whether a value the detectors found once is personal data wherever it appears, so the vault may match it with none
 // of the context it was found in. A full name found once is caught again alone, which is the point of the vault; but a
@@ -16,8 +16,8 @@ const WORDS = /[\p{L}\p{N}]+/gu;
 // local name model's finds are held to it too: the model reads context, but a single capitalized word is a name to it
 // as often as it is a button, a heading or the start of a sentence, and it takes a product's two-word name
 // ("Poly Haven") for a person.
-export const fullNameAlone = (value: string): boolean => {
-    const infos = (value.match(WORDS) ?? []).map((word) => wordInfo(word));
+export const fullNameAlone = (value: string, lexicon: Lexicon = builtInLexicon()): boolean => {
+    const infos = (value.match(WORDS) ?? []).map((word) => lexicon.info(word));
     return infos.length >= 2 && !infos.some((info) => info.never) && infos.some((info) => !info.ambiguous && !info.ordinary);
 };
 

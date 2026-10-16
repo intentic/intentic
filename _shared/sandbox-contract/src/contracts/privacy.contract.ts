@@ -8,6 +8,8 @@ import {
     PrivacyKnownSourceSchema,
     PrivacyKnownValueSchema,
     PrivacyLedgerEntrySchema,
+    PRIVACY_PREVIEW_MAX,
+    PrivacyPreviewSchema,
     PrivacyRevealSchema,
     PrivacyShieldPolicySchema,
     PrivacyShieldStatusSchema,
@@ -76,11 +78,21 @@ export const privacyContract = {
             path: "/privacy/dictionary",
             summary: "The name lists the shield finds names by",
             description:
-                "Every list the dictionary holds (first names, surnames, words that are names only beside other evidence, titles), how many words each has and where they come from. With a query, what the dictionary makes of it as a name, and for one word the listed words starting with it.",
+                "Every list the dictionary holds (first names, surnames, words that are names only beside other evidence, titles), the owner's own lists among them, whether each is switched on, how many words each has and where they come from. With a query, what the dictionary as the owner set it makes of it as a name, and for one word the listed words starting with it.",
         })
         .meta({ agent: true })
         .input(z.object({ query: z.string().max(100).optional().describe("A word, the start of one, or a full name.") }))
         .output(PrivacyDictionarySchema),
+    preview: procedure
+        .route({
+            method: "POST",
+            path: "/privacy/preview",
+            summary: "Try the shield on a text",
+            description:
+                "What the shield would mask in the text with the policy as saved (every detector, the name lists, the owner's own rules, the values the vault knows) and what found each. Nothing is given a token or kept, whatever the switch says.",
+        })
+        .input(z.object({ text: z.string().max(PRIVACY_PREVIEW_MAX) }))
+        .output(PrivacyPreviewSchema),
     sources: procedure
         .route({
             method: "GET",

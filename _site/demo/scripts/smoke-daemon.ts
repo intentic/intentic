@@ -296,9 +296,7 @@ const samplesOf = (
             repoChecks: undefined,
             adoptRepoChecks: { repo: `web`, on: true },
         },
-        safety: {
-            policy: undefined,
-        },
+        safety: { policy: undefined },
         compliance: {
             report: undefined,
             preset: undefined,
@@ -312,6 +310,7 @@ const samplesOf = (
             reveal: { tokens: [] },
             image: { id: `smoke-image-0000000` },
             dictionary: { query: `kow` },
+            preview: { text: `EMP-123456` },
             sources: undefined,
             forget: { source: `clients.csv (name)` },
         },

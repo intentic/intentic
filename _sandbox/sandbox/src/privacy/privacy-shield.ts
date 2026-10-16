@@ -6,14 +6,15 @@ import {
     type PrivacyKnownSource,
     type PrivacyKnownValue,
     type PrivacyLedgerAction,
+    type PrivacyPreview,
     type PrivacyShieldPolicy,
     type PrivacyShieldStatus,
 } from "@intentic/sandbox-contract/schemas/privacy";
-import { detectPersonalData, normalizeAllowed } from "@intentic/privacy-detect";
 import { type ClassCounts, createMasker, createMaskMemo, type EntityRecognizer, type Masker, type Replacement } from "./masker.js";
 import type { PrivacyImageArchive } from "./privacy-images.js";
 import type { PrivacyLedger } from "./privacy-ledger.js";
 import type { PrivacyPolicyStore } from "./privacy-policy.js";
+import { detectorFor } from "./policy-detector.js";
 import { gatewayRuntime, isTrustedProvider, privacyProviders, shieldableRuntime } from "./privacy-trust.js";
 import type { PrivacyVault } from "./privacy-vault.js";
 import type { LocalReaders } from "./readers.js";
@@ -109,6 +110,9 @@ export interface PrivacyShield {
     readonly sources: () => Promise<PrivacyKnownSource[]>;
     // The value behind each token the vault gave out, for the owner checking what was masked; others are left out.
     readonly reveal: (tokens: readonly string[]) => Promise<Record<string, string>>;
+    // What the policy as saved would find in a text, and what found each, whatever the switch says: for the owner
+    // trying their lists and rules. Gives no token and keeps nothing.
+    readonly preview: (text: string) => Promise<PrivacyPreview>;
     readonly vault: PrivacyVault;
     readonly ledger: PrivacyLedger;
     // The images it painted over, each beside the picture it was, for the owner's peek (privacy.image).
@@ -132,6 +136,8 @@ export interface PrivacyShieldDeps {
     readonly recognizer: () => Promise<EntityRecognizer | undefined>;
     // Whether that model is installed, for the status.
     readonly recognizerInstalled: () => Promise<boolean>;
+    // Where a rule of the owner's that cannot run is said.
+    readonly warn?: (message: string) => void;
 }
 
 export const GATEWAY_PATH = "/privacy/gateway";
@@ -183,35 +189,42 @@ export const SEALED_PROTOCOL = "sealed";
 
 const unchanged = (text: string): string => text;
 
+// What a place that keeps no token shows in place of each finding: its kind, the longest of overlapping ones winning.
+const labelledSpans = async (
+    deps: Pick<PrivacyShieldDeps, "vault" | "warn">,
+    text: string,
+    policy: PrivacyShieldPolicy,
+): Promise<{ start: number; end: number; label: string }[]> => {
+    const spans = detectorFor(policy, deps.warn).detect(text);
+    await deps.vault.load();
+    const known = deps.vault.matcher().find(text);
+    const all = [
+        ...known.map((hit) => ({ start: hit.start, end: hit.end, label: TOKEN_LABEL[hit.payload.class] })),
+        ...spans.map((span) => ({ start: span.start, end: span.end, label: TOKEN_LABEL[span.class] })),
+    ].toSorted((left, right) => left.start - right.start || right.end - left.end);
+    let last = 0;
+    return all.filter((span) => {
+        if (span.start < last) {
+            return false;
+        }
+        last = span.end;
+        return true;
+    });
+};
+
 export const createPrivacyShield = (deps: PrivacyShieldDeps): PrivacyShield => {
     const memo = createMaskMemo();
     const readings = createReadingMemo();
     const trusted = async (policy: PrivacyShieldPolicy, provider: string, conversationId?: string): Promise<boolean> =>
         isTrustedProvider(policy, provider, await deps.capabilities(), conversationId);
-    // What a place that keeps no token shows in place of each finding: its kind, the longest of overlapping ones winning.
-    const displaySpans = async (text: string, policy: PrivacyShieldPolicy): Promise<{ start: number; end: number; label: string }[]> => {
-        const spans = detectPersonalData(text, { classes: new Set(policy.classes), allow: new Set(policy.allow.map(normalizeAllowed)) });
-        await deps.vault.load();
-        const known = deps.vault.matcher().find(text);
-        const all = [
-            ...known.map((hit) => ({ start: hit.start, end: hit.end, label: TOKEN_LABEL[hit.payload.class] })),
-            ...spans.map((span) => ({ start: span.start, end: span.end, label: TOKEN_LABEL[span.class] })),
-        ].toSorted((left, right) => left.start - right.start || right.end - left.end);
-        let last = 0;
-        return all.filter((span) => {
-            if (span.start < last) {
-                return false;
-            }
-            last = span.end;
-            return true;
-        });
-    };
+    const displaySpans = (text: string, policy: PrivacyShieldPolicy) => labelledSpans(deps, text, policy);
     const masker = async (policy: PrivacyShieldPolicy): Promise<Masker> =>
         createMasker({
             vault: deps.vault,
             policy,
             memo,
             recognizer: policy.names === "model" ? await deps.recognizer() : undefined,
+            ...opt("warn", deps.warn),
         });
     const record = (fields: {
         readonly provider: string;
@@ -479,6 +492,7 @@ export const createPrivacyShield = (deps: PrivacyShieldDeps): PrivacyShield => {
             }
             return values;
         },
+        preview: async (text) => ({ spans: await (await masker(await deps.policyStore.get())).inspect(text) }),
         vault: deps.vault,
         ledger: deps.ledger,
         images: deps.images,

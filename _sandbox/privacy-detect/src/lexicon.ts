@@ -1,23 +1,8 @@
-import { AMBIGUOUS_EN, AMBIGUOUS_PL } from "./data/ambiguous.js";
-import { COMMON_WORDS } from "./data/common-words.js";
-import { FIRST_NAMES_PL, FIRST_NAMES_PL_RARE } from "./data/first-names-pl.js";
-import { FIRST_NAMES_EN, SURNAMES_EN } from "./data/names-en.js";
+import type { PrivacyNameListKind, PrivacyNameMatching } from "@intentic/sandbox-contract/schemas/privacy";
 import { ORDINARY_WORDS_EN } from "./data/ordinary-words.js";
-import { SURNAMES_PL } from "./data/surnames-pl.js";
-import {
-    DIMINUTIVES_PL,
-    NEVER_NAMES,
-    NICKNAMES_EN,
-    NOT_SURNAMES,
-    PLACE_WORDS,
-    ROLES_PL,
-    THING_NOUNS,
-    TITLE_ABBREVIATIONS_EN,
-    TITLE_ABBREVIATIONS_PL,
-    TITLES_EN,
-    TITLES_PL,
-} from "./data/vocabulary.js";
+import { NOT_SURNAMES, PLACE_WORDS, ROLES_PL } from "./data/vocabulary.js";
 import { lemmaCandidates } from "./inflection.js";
+import { type LexiconSlot, NAME_LISTS } from "./name-lists.js";
 
 // What the name lists say about one word, whatever its case.
 export interface WordInfo {
@@ -43,47 +28,88 @@ export interface WordInfo {
     readonly thing: boolean;
 }
 
-interface Lexicon {
-    readonly declinedFirst: ReadonlySet<string>;
-    readonly plainFirst: ReadonlySet<string>;
-    readonly declinedSurnames: ReadonlySet<string>;
-    readonly plainSurnames: ReadonlySet<string>;
-    readonly ambiguous: ReadonlySet<string>;
-    readonly ordinary: ReadonlySet<string>;
-    readonly never: ReadonlySet<string>;
-    readonly things: ReadonlySet<string>;
-    readonly notSurnames: ReadonlySet<string>;
-    readonly titles: ReadonlySet<string>;
-    readonly abbreviations: ReadonlySet<string>;
-    readonly titlesEn: ReadonlySet<string>;
-    readonly abbreviationsEn: ReadonlySet<string>;
-    readonly roles: ReadonlySet<string>;
-    readonly places: ReadonlySet<string>;
+// An owner's own list as the lexicon reads it (policy.dictionary.lists).
+export interface OwnWords {
+    readonly kind: PrivacyNameListKind;
+    readonly matching: PrivacyNameMatching;
+    readonly words: readonly string[];
+}
+
+// What a lexicon is built from: the built-in lists less those switched off, and the owner's own.
+export interface LexiconConfig {
+    readonly off?: Iterable<string>;
+    readonly own?: readonly OwnWords[];
+}
+
+// What the lists say about a word, and about the capitalized word after it, under one configuration. Each holds its own
+// cache, so two policies never read each other's answers.
+export interface Lexicon {
+    readonly info: (word: string) => WordInfo;
+    readonly announcer: (word: string, dotted: boolean) => Announcer | undefined;
 }
 
 const words = (...lists: readonly string[]): Set<string> => new Set(lists.flatMap((list) => list.split(/\s+/)).filter((word) => word !== ""));
 
-// Built on first use: some 28,000 entries, a few milliseconds, not worth paying for in a process that never masks.
-let built: Lexicon | undefined;
-const lexicon = (): Lexicon => {
-    built ??= {
-        declinedFirst: words(FIRST_NAMES_PL, DIMINUTIVES_PL),
-        plainFirst: words(FIRST_NAMES_PL_RARE, FIRST_NAMES_EN, NICKNAMES_EN),
-        declinedSurnames: words(SURNAMES_PL),
-        plainSurnames: words(SURNAMES_EN),
-        ambiguous: words(AMBIGUOUS_EN, AMBIGUOUS_PL, COMMON_WORDS),
+// Where an own list's words go. A title written with a dot is an abbreviation, which only counts with its dot.
+const ownSlot = (kind: PrivacyNameListKind, matching: PrivacyNameMatching, word: string): LexiconSlot => {
+    switch (kind) {
+        case "first-name":
+            return matching === "inflected" ? "declinedFirst" : "plainFirst";
+        case "surname":
+            return matching === "inflected" ? "declinedSurnames" : "plainSurnames";
+        case "ambiguous":
+            return "ambiguous";
+        case "title":
+            return word.endsWith(".") ? "abbreviations" : "titles";
+        case "never":
+            return "never";
+    }
+};
+
+const buildSets = ({ off, own = [] }: LexiconConfig) => {
+    const skipped = new Set(off);
+    const texts = new Map<LexiconSlot, string[]>();
+    const add = (slot: LexiconSlot, text: string): void => {
+        const held = texts.get(slot);
+        if (held === undefined) {
+            texts.set(slot, [text]);
+        } else {
+            held.push(text);
+        }
+    };
+    for (const list of NAME_LISTS) {
+        if (!skipped.has(list.id)) {
+            for (const [slot, text] of list.parts) {
+                add(slot, text);
+            }
+        }
+    }
+    // Lowercase, as the lexicon looks words up; one word each, whatever was pasted.
+    for (const list of own) {
+        for (const word of list.words.flatMap((each) => each.toLowerCase().split(/\s+/u))) {
+            if (word !== "") {
+                add(ownSlot(list.kind, list.matching, word), word);
+            }
+        }
+    }
+    const slot = (name: LexiconSlot): Set<string> => words(...(texts.get(name) ?? []));
+    return {
+        declinedFirst: slot("declinedFirst"),
+        plainFirst: slot("plainFirst"),
+        declinedSurnames: slot("declinedSurnames"),
+        plainSurnames: slot("plainSurnames"),
+        ambiguous: slot("ambiguous"),
+        never: slot("never"),
+        things: slot("things"),
+        titles: slot("titles"),
+        abbreviations: slot("abbreviations"),
+        titlesEn: slot("titlesEn"),
+        abbreviationsEn: slot("abbreviationsEn"),
         ordinary: words(ORDINARY_WORDS_EN),
-        never: words(NEVER_NAMES),
-        things: words(THING_NOUNS),
         notSurnames: words(NOT_SURNAMES),
-        titles: words(TITLES_PL),
-        abbreviations: words(TITLE_ABBREVIATIONS_PL),
-        titlesEn: words(TITLES_EN),
-        abbreviationsEn: words(TITLE_ABBREVIATIONS_EN),
         roles: words(ROLES_PL),
         places: words(PLACE_WORDS),
     };
-    return built;
 };
 
 const STRONG_SUFFIX = /(?:[sc]ki|dzki|[sc]ka|dzka|wicz|czyk)$/u;
@@ -91,15 +117,15 @@ const WEAK_SUFFIX = /[aeiyu]k$/u;
 // The forms those surnames take, read off the word as written rather than off guessed nominatives.
 const STRONG_FORM = /(?:[sc]|dz)k(?:i|iego|iemu|im|ich|imi|a|iej|ą)$|(?:[sc]|dz)cy$|wicz(?:a|owi|em|u|owie|ów)?$|czyk(?:a|owi|iem|u|owie|ów)?$/u;
 
+type Sets = ReturnType<typeof buildSets>;
+
 // Words recur (a name down a column, a heading on every page), so each is analysed once. Cleared rather than evicted
 // one by one when full: simpler, and a refill costs a fraction of a millisecond per thousand words.
 const CACHE_LIMIT = 50_000;
-const cache = new Map<string, WordInfo>();
 
 const capitalize = (word: string): string => (word[0] ?? "").toUpperCase() + word.slice(1);
 
-const analyse = (lower: string): WordInfo => {
-    const sets = lexicon();
+const analyse = (sets: Sets, lower: string): WordInfo => {
     // First names are matched in the singular only: "Piotrkowie" is the town, not a family of Piotreks.
     const singular = lemmaCandidates(lower, false);
     const all = lemmaCandidates(lower, true);
@@ -127,19 +153,6 @@ const analyse = (lower: string): WordInfo => {
     };
 };
 
-export const wordInfo = (word: string): WordInfo => {
-    const lower = word.toLowerCase();
-    let info = cache.get(lower);
-    if (info === undefined) {
-        if (cache.size >= CACHE_LIMIT) {
-            cache.clear();
-        }
-        info = analyse(lower);
-        cache.set(lower, info);
-    }
-    return info;
-};
-
 // What a word says about the capitalized word after it: an honorific (any word after it is a person), a title that is
 // also a word (Miss, Lady, Sir: a person if the lists know the word, "Miss Italia" is a pageant), a role (a person if
 // the word is a surname: "prezes Kowalski"), or a place word (not a person: "ulica Grodzka"). Polish ones in any case
@@ -147,8 +160,7 @@ export const wordInfo = (word: string): WordInfo => {
 // sentence, so only abbreviations may carry one.
 export type Announcer = "honorific" | "title" | "role" | "place";
 
-export const announcerOf = (word: string, dotted: boolean): Announcer | undefined => {
-    const sets = lexicon();
+const announce = (sets: Sets, word: string, dotted: boolean): Announcer | undefined => {
     const lower = word.toLowerCase();
     if (word.length > 1 && word === word.toUpperCase()) {
         return undefined;
@@ -167,3 +179,40 @@ export const announcerOf = (word: string, dotted: boolean): Announcer | undefine
     }
     return sets.roles.has(lower) ? "role" : sets.places.has(lower) ? "place" : undefined;
 };
+
+// Built on first use: some 28,000 entries, a few milliseconds, not worth paying for in a process that never masks.
+const lazyLexicon = (config: LexiconConfig): Lexicon => {
+    let sets: Sets | undefined;
+    const cache = new Map<string, WordInfo>();
+    const built = (): Sets => (sets ??= buildSets(config));
+    return {
+        info: (word) => {
+            const lower = word.toLowerCase();
+            let info = cache.get(lower);
+            if (info === undefined) {
+                if (cache.size >= CACHE_LIMIT) {
+                    cache.clear();
+                }
+                info = analyse(built(), lower);
+                cache.set(lower, info);
+            }
+            return info;
+        },
+        announcer: (word, dotted) => announce(built(), word, dotted),
+    };
+};
+
+// The lists as they ship, every one of them on.
+const BUILT_IN = lazyLexicon({});
+export const builtInLexicon = (): Lexicon => BUILT_IN;
+
+// A lexicon for one configuration; the built-in one when nothing is switched off and nothing added.
+export const createLexicon = (config: LexiconConfig = {}): Lexicon => {
+    const off = [...(config.off ?? [])];
+    const own = (config.own ?? []).filter((list) => list.words.length > 0);
+    return off.length === 0 && own.length === 0 ? BUILT_IN : lazyLexicon({ off, own });
+};
+
+export const wordInfo = (word: string, lexicon: Lexicon = BUILT_IN): WordInfo => lexicon.info(word);
+
+export const announcerOf = (word: string, dotted: boolean, lexicon: Lexicon = BUILT_IN): Announcer | undefined => lexicon.announcer(word, dotted);

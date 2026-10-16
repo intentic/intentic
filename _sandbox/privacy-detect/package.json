@@ -55,6 +55,17 @@
                 "default": "./dist/lexicon.js"
             }
         },
+        "./name-lists": {
+            "types": "./dist/name-lists.d.ts",
+            "import": {
+                "@intentic/src": "./src/name-lists.ts",
+                "default": "./dist/name-lists.js"
+            },
+            "require": {
+                "@intentic/src": "./src/name-lists.ts",
+                "default": "./dist/name-lists.js"
+            }
+        },
         "./data/*": {
             "types": "./dist/data/*.d.ts",
             "import": {

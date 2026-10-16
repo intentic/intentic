@@ -1,4 +1,4 @@
-import { wordInfo } from "./lexicon.js";
+import { builtInLexicon, type Lexicon } from "./lexicon.js";
 import { besideNumber, codeAdjacent, type Line, lineCursor } from "./name-context.js";
 import { isWordChar } from "./text.js";
 
@@ -53,8 +53,8 @@ export const joinOf = (text: string, a: Token, b: Token): Join | undefined => {
     return SPACES.test(gap) ? "space" : CELL.test(gap) ? "cell" : undefined;
 };
 
-const tokenOf = (start: number, end: number, parts: readonly string[], line: Line): Token => {
-    const infos = parts.map((part) => wordInfo(part));
+const tokenOf = (start: number, end: number, parts: readonly string[], line: Line, lexicon: Lexicon): Token => {
+    const infos = parts.map((part) => lexicon.info(part));
     const first = infos.every((info) => info.first);
     const ambiguous = parts.length === 1 && infos.some((info) => info.ambiguous);
     const never = infos.some((info) => info.never);
@@ -110,7 +110,7 @@ const insideUrls = (text: string): ((index: number) => boolean) => {
 
 // Every capitalized word that could be part of a name, in order. A word glued to code, inside a URL, in mixed case
 // (an identifier) or in capitals outside a row of upper-case data is left out.
-export const tokenize = (text: string): Token[] => {
+export const tokenize = (text: string, lexicon: Lexicon = builtInLexicon()): Token[] => {
     const tokens: Token[] = [];
     const lineOf = lineCursor(text);
     const inUrl = insideUrls(text);
@@ -129,7 +129,7 @@ export const tokenize = (text: string): Token[] => {
         const line = lineOf(start);
         const cased = parts.every((part) => isCapitalized(part)) || (line.upperData && parts.every((part) => isUpper(part)));
         if (cased && !(parts.length === 1 && besideNumber(text, start, end, match[0].toLowerCase()))) {
-            tokens.push(tokenOf(start, end, parts, line));
+            tokens.push(tokenOf(start, end, parts, line, lexicon));
         }
     }
     return tokens;

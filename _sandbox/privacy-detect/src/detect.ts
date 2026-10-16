@@ -2,6 +2,7 @@ import type { PersonalDataClass } from "@intentic/sandbox-contract/schemas/priva
 import { findAddresses } from "./address.js";
 import { findEmails, findPhones } from "./contact.js";
 import { findBankAccounts, findIdentityDocuments, findNip, findPaymentCards, findPesel } from "./identifiers.js";
+import type { Lexicon } from "./lexicon.js";
 import { findNames } from "./names.js";
 import { type PersonalDataSpan, resolveSpans } from "./spans.js";
 import type { Emit } from "./text.js";
@@ -17,12 +18,14 @@ export interface DetectOptions {
     readonly classes: ReadonlySet<PersonalDataClass>;
     // Values never reported, already normalized with normalizeAllowed.
     readonly allow?: ReadonlySet<string>;
+    // The name lists as the owner set them (createLexicon); the built-in ones when absent.
+    readonly lexicon?: Lexicon;
 }
 
 // How allowlist entries and found values are compared: case, Unicode composition and spacing do not matter.
 export const normalizeAllowed = (value: string): string => value.normalize("NFC").toLowerCase().replace(/\s+/g, " ").trim();
 
-const DETECTORS: ReadonlyArray<readonly [PersonalDataClass, (text: string, emit: Emit) => void]> = [
+const DETECTORS: ReadonlyArray<readonly [PersonalDataClass, (text: string, emit: Emit, lexicon?: Lexicon) => void]> = [
     ["national-id", findPesel],
     ["tax-id", findNip],
     ["identity-document", findIdentityDocuments],
@@ -50,7 +53,7 @@ export const detectPersonalData = (text: string, options: DetectOptions): Person
     };
     for (const [kind, detect] of DETECTORS) {
         if (options.classes.has(kind)) {
-            detect(text, emit);
+            detect(text, emit, options.lexicon);
         }
     }
     return resolveSpans(found);

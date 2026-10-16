@@ -43,6 +43,13 @@ const status = async () => {
     const trusted = shield.providers.filter((provider) => provider.local || shield.policy.trusted.includes(provider.id));
     process.stdout.write(`Trusted: ${trusted.length === 0 ? "none" : trusted.map((provider) => `${provider.label}${provider.local ? " (local)" : ""}`).join(", ")}\n`);
     process.stdout.write(`Looks for: ${shield.policy.classes.join(", ")}\n`);
+    // The owner's own lists and rules, counted: what they hold is the owner's to read on the privacy page.
+    const ownLists = (shield.policy.dictionary?.lists ?? []).filter((list) => list.on).length;
+    const ownRules = (shield.policy.rules ?? []).filter((rule) => rule.on).length;
+    const listsOff = (shield.policy.dictionary?.off ?? []).length;
+    if (ownLists + ownRules + listsOff > 0) {
+        process.stdout.write(`The owner's own: ${ownRules} rule(s) and ${ownLists} name list(s) on; ${listsOff} built-in name list(s) switched off\n`);
+    }
     process.stdout.write(`Learned values: ${shield.known}; tokens given out: ${shield.tokens}\n`);
     process.stdout.write(`Images to untrusted providers: ${shield.policy.images}${shield.readers.ocr ? "" : " (no local text reader installed)"}\n`);
     if (shield.policy.mode === "on") {

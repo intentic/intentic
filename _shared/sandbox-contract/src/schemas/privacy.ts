@@ -44,6 +44,183 @@ export const PRIVACY_TRUSTED_MAX = 200;
 export const PRIVACY_ALLOW_MAX = 1000;
 export const PRIVACY_CONVERSATIONS_MAX = 200;
 
+// The owner's own additions to what the shield finds. The policy travels whole on every write, so each is kept to what a
+// person types or pastes; a dataset of thousands of values is taught to the vault instead (privacy learn).
+export const PRIVACY_OWN_LISTS_MAX = 20;
+export const PRIVACY_OWN_LIST_WORDS_MAX = 2000;
+export const PRIVACY_WORD_MAX = 60;
+export const PRIVACY_RULES_MAX = 50;
+export const PRIVACY_RULE_TERMS_MAX = 1000;
+export const PRIVACY_TERM_MAX = 200;
+export const PRIVACY_PATTERN_MAX = 500;
+export const PRIVACY_TITLE_MAX = 80;
+
+// What a word on a name list says about a name: a first name or a surname (a name when the two stand together), a word
+// that is a name only beside other evidence, a title after which a capitalized word is a person, or never part of one.
+export const PrivacyNameListKindSchema = z.enum(["first-name", "surname", "ambiguous", "title", "never"]);
+export type PrivacyNameListKind = z.infer<typeof PrivacyNameListKindSchema>;
+
+// inflected: every Polish grammatical form of a listed word ("Kasia", "Kasi", "Kasię"); as-written: only as listed.
+export const PrivacyNameMatchingSchema = z.enum(["inflected", "as-written"]);
+export type PrivacyNameMatching = z.infer<typeof PrivacyNameMatchingSchema>;
+
+// Ids the editor mints for the owner's lists and rules: stable across renames, so a write never confuses two of them.
+const OwnIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,39}$/u);
+
+export const PrivacyOwnNameListSchema = z.object({
+    id: OwnIdSchema,
+    title: z.string().min(1).max(PRIVACY_TITLE_MAX),
+    kind: PrivacyNameListKindSchema,
+    matching: PrivacyNameMatchingSchema.default("as-written"),
+    words: z
+        .array(z.string().min(1).max(PRIVACY_WORD_MAX))
+        .max(PRIVACY_OWN_LIST_WORDS_MAX)
+        .default([])
+        .describe("One word each, in any case: the list is read as the built-in lists are."),
+    on: z.boolean().default(true),
+});
+export type PrivacyOwnNameList = z.infer<typeof PrivacyOwnNameListSchema>;
+
+export const PrivacyDictionaryPolicySchema = z.object({
+    off: z.array(z.string().min(1).max(64)).max(64).default([]).describe("Built-in name lists switched off, by id (privacy.dictionary names them)."),
+    lists: z
+        .array(PrivacyOwnNameListSchema)
+        .max(PRIVACY_OWN_LISTS_MAX)
+        .default([])
+        .describe("The owner's own name lists, read beside the built-in ones."),
+});
+export type PrivacyDictionaryPolicy = z.infer<typeof PrivacyDictionaryPolicySchema>;
+
+// One of the owner's own rules: what it matches is masked wherever it stands, with no context asked for, as the kind it
+// names. terms: each word or phrase as a whole word, in any case unless matchCase. pattern: a regular expression (with the
+// `u` flag, `i` unless matchCase); a group named `value` masks only that part of a match.
+export const PrivacyRuleMatchSchema = z.enum(["terms", "pattern"]);
+export type PrivacyRuleMatch = z.infer<typeof PrivacyRuleMatchSchema>;
+
+export const PrivacyRuleSchema = z.object({
+    id: OwnIdSchema,
+    title: z.string().min(1).max(PRIVACY_TITLE_MAX),
+    on: z.boolean().default(true),
+    class: PersonalDataClassSchema.describe("The kind what it matches is masked as; switching that kind off stops the rule too."),
+    match: PrivacyRuleMatchSchema,
+    terms: z.array(z.string().min(1).max(PRIVACY_TERM_MAX)).max(PRIVACY_RULE_TERMS_MAX).default([]),
+    // Only its size is held here: whether a pattern is safe to run is judged when it is saved (patternProblem), so a
+    // stored one never turns unreadable because a later build judges more strictly.
+    pattern: z.string().max(PRIVACY_PATTERN_MAX).default(""),
+    matchCase: z.boolean().default(false),
+});
+export type PrivacyRule = z.infer<typeof PrivacyRuleSchema>;
+
+// Why a pattern cannot be saved. Owner-written patterns run on every string bound for an untrusted provider, in the
+// daemon's one thread, so beside not compiling: one that matches empty text masks nothing and only costs, and a repeat
+// inside a repeat (`(a+)+`, `(\w+\s?)*`) can take minutes on one line that almost matches.
+export type PrivacyPatternProblem = "invalid" | "tooLong" | "empty" | "nested";
+
+// The length of a quantifier at `at`, and whether it repeats a variable number of times (`*`, `+`, `{2,}`, `{2,5}`); `?`
+// and `{3}` do not. A lazy `?` after it is part of it.
+const quantifierAt = (source: string, at: number): { readonly length: number; readonly varies: boolean } | undefined => {
+    const char = source[at];
+    let length: number;
+    let varies: boolean;
+    if (char === "*" || char === "+" || char === "?") {
+        length = 1;
+        varies = char !== "?";
+    } else if (char === "{") {
+        const braces = /^\{(\d+)(?:(,)(\d*))?\}/u.exec(source.slice(at));
+        if (braces === null) {
+            return undefined;
+        }
+        const [whole, min = "0", comma, max] = braces;
+        length = whole.length;
+        varies = comma !== undefined && (max === undefined || max === "" || Number(max) > Number(min));
+    } else {
+        return undefined;
+    }
+    return { length: source[at + length] === "?" ? length + 1 : length, varies };
+};
+
+// One step of the walk below: where the next one starts, and what this one was.
+interface PatternStep {
+    readonly next: number;
+    readonly kind: "open" | "close" | "repeat" | "other";
+}
+
+// Past a character class, escapes inside it included.
+const classEnd = (source: string, at: number): number => {
+    let end = at + 1;
+    while (end < source.length && source[end] !== "]") {
+        end += source[end] === "\\" ? 2 : 1;
+    }
+    return end + 1;
+};
+
+// Past a group's opening and its own prefix (`?:`, `?=`, `?<name>`), which is no quantifier.
+const groupStart = (source: string, at: number): number => {
+    if (source[at + 1] !== "?") {
+        return at + 1;
+    }
+    const name = /^\?<(?![=!])[^>]*>/u.exec(source.slice(at + 1));
+    return at + 1 + (name === null ? 2 : name[0].length);
+};
+
+const stepAt = (source: string, at: number): PatternStep => {
+    const char = source[at];
+    if (char === "\\") {
+        return { next: at + 2, kind: "other" };
+    }
+    if (char === "[") {
+        return { next: classEnd(source, at), kind: "other" };
+    }
+    if (char === "(") {
+        return { next: groupStart(source, at), kind: "open" };
+    }
+    if (char === ")") {
+        return { next: at + 1, kind: "close" };
+    }
+    const quantifier = quantifierAt(source, at);
+    return quantifier === undefined
+        ? { next: at + 1, kind: "other" }
+        : { next: at + quantifier.length, kind: quantifier.varies ? "repeat" : "other" };
+};
+
+// Whether a group that repeats a variable number of times holds such a repeat itself: a star height above one.
+const nestedRepeat = (source: string): boolean => {
+    // Per open group, whether something inside it repeats.
+    const open: boolean[] = [];
+    // Whether the step before was the close of a group that held a repeat.
+    let closedRepeating = false;
+    for (let at = 0; at < source.length;) {
+        const step = stepAt(source, at);
+        at = step.next;
+        if (step.kind === "open") {
+            open.push(false);
+        } else if (step.kind === "repeat") {
+            if (closedRepeating) {
+                return true;
+            }
+            open.fill(true);
+        }
+        closedRepeating = step.kind === "close" && (open.pop() ?? false);
+    }
+    return false;
+};
+
+export const patternProblem = (source: string): PrivacyPatternProblem | undefined => {
+    if (source.length > PRIVACY_PATTERN_MAX) {
+        return "tooLong";
+    }
+    let compiled: RegExp;
+    try {
+        compiled = new RegExp(source, "u");
+    } catch {
+        return "invalid";
+    }
+    if (source.trim() === "" || compiled.test("")) {
+        return "empty";
+    }
+    return nestedRepeat(source) ? "nested" : undefined;
+};
+
 // One conversation the owner let an untrusted provider read as it is, granted from that conversation's own composer:
 // narrower than the trusted list, and the way on for a provider whose runtime the gateway cannot sit in front of
 // (Cursor's own wire, an ACP agent, Pi), which the shield otherwise refuses outright.
@@ -78,6 +255,14 @@ export const PrivacyShieldPolicySchema = z.object({
         .max(PRIVACY_CONVERSATIONS_MAX)
         .default([])
         .describe("Providers that may read one conversation's personal data as it is, each granted from that conversation; oldest first."),
+    dictionary: PrivacyDictionaryPolicySchema.default({ off: [], lists: [] }).describe(
+        "The name dictionary as the owner adjusted it: built-in lists switched off, and lists of their own.",
+    ),
+    rules: z
+        .array(PrivacyRuleSchema)
+        .max(PRIVACY_RULES_MAX)
+        .default([])
+        .describe("The owner's own rules: words, phrases and patterns masked wherever they stand."),
 });
 export type PrivacyShieldPolicy = z.infer<typeof PrivacyShieldPolicySchema>;
 
@@ -204,18 +389,21 @@ export const PrivacyKnownSourceSchema = z.object({
 export type PrivacyKnownSource = z.infer<typeof PrivacyKnownSourceSchema>;
 
 // The name lists the shield finds names by when no model is asked for (and alongside one when it is): what each list
-// holds, how many, and where it came from.
+// holds, how many, and where it came from; the owner's own lists among them.
 export const PrivacyNameListSchema = z.object({
     id: z.string().describe("Stable id of the list."),
-    kind: z.enum(["first-name", "surname", "ambiguous", "title", "never"]).describe("What a word on it says about a name."),
+    kind: PrivacyNameListKindSchema.describe("What a word on it says about a name."),
     languages: z.array(z.enum(["pl", "en", "multi"])).describe("The languages its words come from; multi: many languages at once."),
     count: z.number().int().describe("How many words it holds."),
-    matching: z
-        .enum(["inflected", "as-written"])
-        .describe("inflected: matched in every grammatical form of a listed word; as-written: matched only exactly as listed."),
+    matching: PrivacyNameMatchingSchema.describe(
+        "inflected: matched in every grammatical form of a listed word; as-written: matched only exactly as listed.",
+    ),
     source: z.string().describe("Where the words come from: the register or dataset, or that they were written by hand."),
     url: z.string().optional().describe("The source's page, where it has one."),
     license: z.string().optional(),
+    on: z.boolean().describe("Read by the shield; the owner can switch any list off."),
+    own: z.boolean().optional().describe("One of the owner's own lists (policy.dictionary.lists), titled by them."),
+    title: z.string().optional().describe("An own list's title."),
 });
 export type PrivacyNameList = z.infer<typeof PrivacyNameListSchema>;
 
@@ -255,3 +443,23 @@ export const PrivacyDictionarySchema = z.object({
     lookup: PrivacyNameLookupSchema.optional(),
 });
 export type PrivacyDictionary = z.infer<typeof PrivacyDictionarySchema>;
+
+// What the shield would mask in a text the owner tries it on, with the policy as saved: where each find sits, its kind,
+// and what found it. Nothing is given a token and nothing is kept, so trying a value teaches the vault nothing.
+export const PRIVACY_PREVIEW_MAX = 4000;
+
+export const PrivacyPreviewSpanSchema = z.object({
+    start: z.number().int(),
+    end: z.number().int().describe("Exclusive."),
+    class: PersonalDataClassSchema,
+    by: z
+        .enum(["detector", "rule", "learned", "model"])
+        .describe(
+            "detector: the built-in detectors and name lists, the owner's lists included; rule: one of the owner's rules; learned: a value the vault knows; model: the local name model.",
+        ),
+    rule: z.string().optional().describe("The id of the owner's rule that found it."),
+});
+export type PrivacyPreviewSpan = z.infer<typeof PrivacyPreviewSpanSchema>;
+
+export const PrivacyPreviewSchema = z.object({ spans: z.array(PrivacyPreviewSpanSchema) });
+export type PrivacyPreview = z.infer<typeof PrivacyPreviewSchema>;

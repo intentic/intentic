@@ -49,6 +49,7 @@ export const createPrivacySlice = ({ authRoot, workspaceRoot, capabilities, loop
             // Loaded once, on the first request that asks for it: a sandbox that never does pays nothing.
             recognizer: () => (recognizer ??= loadRecognizer(undefined, warn)),
             recognizerInstalled: async () => nerInstalled(),
+            warn: (message) => warn(message, undefined),
         }),
     };
 };

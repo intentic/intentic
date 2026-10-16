@@ -28,7 +28,9 @@ import { computed, ref } from "vue";
 import { ledgerTime, withClass } from "./privacyShield";
 import PrivacyNameDictionary from "./PrivacyNameDictionary.vue";
 import PrivacyNeverMasked from "./PrivacyNeverMasked.vue";
+import PrivacyRules from "./PrivacyRules.vue";
 import PrivacyTrustedProviders from "./PrivacyTrustedProviders.vue";
+import PrivacyTryShield from "./PrivacyTryShield.vue";
 import { shieldRefusal, usePrivacyShield, usePrivacySources } from "../../../models/sandbox/usePrivacyShield";
 
 // The privacy shield: whether personal data is kept from model providers the owner does not trust, and what the
@@ -239,14 +241,20 @@ const LEARN_COMMAND = `privacy learn <file> --column …`;
                         </template>
                     </Row>
 
-                    <!-- The lists both ways of finding names read, the model's way included: what they hold, and a word checked. -->
-                    <PrivacyNameDictionary />
+                    <!-- The lists both ways of finding names read, the model's way included: what they hold, which are on, the
+                         owner's own, and a word checked. -->
+                    <PrivacyNameDictionary :policy="policy" :ready="ready" @write="(change) => write(`shield`, change)" />
+
+                    <PrivacyRules :policy="policy" :ready="ready" :kinds="KINDS" @write="(change) => write(`shield`, change)" />
 
                     <PrivacyNeverMasked
                         :allow="policy?.allow"
                         :ready="ready"
                         @write="(change) => write(`shield`, (current) => ({ ...current, allow: change(current.allow) }))"
                     />
+
+                    <!-- Everything above, tried on a text: what would be masked and what found it. -->
+                    <PrivacyTryShield :policy="policy" />
                 </template>
 
                 <RowNote v-if="saveNotice !== undefined && writtenFrom === `shield`" variant="block"><Notice :of="saveNotice" /></RowNote>

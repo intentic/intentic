@@ -3,6 +3,7 @@ import type {
     PrivacyImagePair,
     PrivacyKnownSource,
     PrivacyLedgerEntry,
+    PrivacyPreviewSpan,
     PrivacyShieldPolicy,
     PrivacyShieldStatus,
 } from "@intentic/sandbox-contract/schemas/privacy";
@@ -14,7 +15,7 @@ import { rpcQuery } from "../../client/sandbox/rpcQuery";
 import { SandboxHttpError } from "../../client/sandbox/sandboxHttpError";
 import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
-import { rpcKey } from "../../lib/queryKeys";
+import { rpcKey, rpcPrefix } from "../../lib/queryKeys";
 import { queryClient } from "../../lib/queryPersistence";
 import { optimisticUpdate, restoreChanged } from "../../lib/optimistic";
 
@@ -48,6 +49,13 @@ export function usePrivacyShield() {
                     () => sandboxRpc.privacy.setPolicy(policy),
                     { settle: true, undo: (current, before) => ({ ...current, policy: restoreChanged(policy)(current.policy, before.policy) }), client: queryClient },
                 ),
+            // The dictionary and a tried text are read under the policy as saved, so a change moves both.
+            onSettled: async () => {
+                await Promise.all([
+                    queryClient.invalidateQueries({ queryKey: rpcPrefix(`privacy.dictionary`) }),
+                    queryClient.invalidateQueries({ queryKey: rpcPrefix(`privacy.preview`) }),
+                ]);
+            },
         },
         // Named rather than injected, as useSandboxQuery does: a write can start from a plain handler.
         queryClient,
@@ -171,6 +179,32 @@ export function usePrivacyDictionary(query: Ref<string>, debounceMs = DICTIONARY
         answered: settled,
         isLoading: read.isLoading,
         isFetching: read.isFetching,
+        error,
+    };
+}
+
+// How long typing must pause before a tried text is sent.
+const PREVIEW_DEBOUNCE_MS = 300;
+
+// What the shield as saved would mask in a text the owner tries it on, with the text the answer is about: the spans are
+// offsets into that text, which trails what is typed. The previous answer stays while the next is fetched. Memory only,
+// since the sample may be somebody's real data, and never retried.
+export function usePrivacyPreview(text: Ref<string>, debounceMs = PREVIEW_DEBOUNCE_MS) {
+    const settled = useSettled(text, debounceMs);
+    const read = rpcQuery(`privacy.preview`, () => ({ text: settled.value }), { unpersisted: true });
+    const { query, error } = useSandboxQuery({
+        queryKey: read.queryKey,
+        queryFn: async (): Promise<{ readonly text: string; readonly spans: readonly PrivacyPreviewSpan[] }> => {
+            const asked = settled.value;
+            return { text: asked, spans: (await read.queryFn()).spans };
+        },
+        enabled: computed(() => settled.value.trim() !== ``),
+        placeholderData: keepPreviousData,
+        retry: false,
+    });
+    return {
+        preview: computed(() => (settled.value.trim() === `` ? undefined : query.data.value)),
+        isFetching: query.isFetching,
         error,
     };
 }

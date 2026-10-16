@@ -1,5 +1,5 @@
 import { impersonalAddress } from "./contact.js";
-import { type Announcer, announcerOf } from "./lexicon.js";
+import { type Announcer, builtInLexicon, type Lexicon } from "./lexicon.js";
 import { isDigit, isLetter, isWordChar } from "./text.js";
 
 // What the text around a capitalized word says about it: whether it is code, whether a title or a field name
@@ -113,7 +113,7 @@ export const besideNumber = (text: string, start: number, end: number, lower: st
 };
 
 // The word before, read backwards over spaces and an optional dot: "Pan Kowalski", "dr hab. Nowak", "Mr. Smith".
-export const announcedBy = (text: string, start: number): Announcer | undefined => {
+export const announcedBy = (text: string, start: number, lexicon: Lexicon = builtInLexicon()): Announcer | undefined => {
     let index = start - 1;
     let spaces = 0;
     while (index >= 0 && text[index] === " " && spaces < 3) {
@@ -131,7 +131,7 @@ export const announcedBy = (text: string, start: number): Announcer | undefined 
         index -= 1;
     }
     // The last part of a compound announces nothing: "Notre-Dame Cathedral".
-    return end - index > 1 && !isWordChar(text[index]) && text[index] !== "-" ? announcerOf(text.slice(index + 1, end), dotted) : undefined;
+    return end - index > 1 && !isWordChar(text[index]) && text[index] !== "-" ? lexicon.announcer(text.slice(index + 1, end), dotted) : undefined;
 };
 
 // A field or header that says the value after it is a person. A field for one part of a name (firstName, lastName,

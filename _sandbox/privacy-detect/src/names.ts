@@ -1,3 +1,4 @@
+import { builtInLexicon, type Lexicon } from "./lexicon.js";
 import { addressAfter, announcedBy, fieldBefore, openedByQuote } from "./name-context.js";
 import { type Join, joinOf, type Token, tokenize } from "./name-tokens.js";
 import type { Emit } from "./text.js";
@@ -15,6 +16,7 @@ interface Run {
     // joins[i] joins tokens[i] and tokens[i + 1].
     readonly joins: readonly Join[];
     readonly emit: Emit;
+    readonly lexicon: Lexicon;
 }
 
 // A rule reads the run at a token and either reports a name and says where to go on, or passes.
@@ -53,7 +55,7 @@ const namePart = (token: Token): boolean => !token.never && (token.first || toke
 // not "kolega Marek" or "klienta Google". A street or a town is named after people and with surname-like adjectives
 // ("przy ulicy Grodzkiej"), so after a place word the whole name is the place's.
 const announced: Rule = (run, at, token) => {
-    const announcer = token.never ? undefined : announcedBy(run.text, token.start);
+    const announcer = token.never ? undefined : announcedBy(run.text, token.start, run.lexicon);
     if (announcer === undefined) {
         return undefined;
     }
@@ -162,8 +164,8 @@ const readRun = (run: Run): void => {
     }
 };
 
-export const findNames = (text: string, emit: Emit): void => {
-    const tokens = tokenize(text);
+export const findNames = (text: string, emit: Emit, lexicon: Lexicon = builtInLexicon()): void => {
+    const tokens = tokenize(text, lexicon);
     let from = 0;
     while (from < tokens.length) {
         const joins: Join[] = [];
@@ -177,7 +179,7 @@ export const findNames = (text: string, emit: Emit): void => {
             to += 1;
         }
         const runTokens = tokens.slice(from, to + 1);
-        readRun({ text, tokens: runTokens, joins, emit });
+        readRun({ text, tokens: runTokens, joins, emit, lexicon });
         from = to + 1;
     }
 };

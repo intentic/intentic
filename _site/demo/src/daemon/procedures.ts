@@ -392,6 +392,7 @@ export const procedures = {
         reveal: () => ({}),
         image: () => refuse(`This is the demo workspace: its privacy shield has painted over no image.`),
         dictionary: ({ query }) => demoNameDictionary(query),
+        preview: () => refuse(`This is the demo workspace: its privacy shield reads no text here, so it has nothing to try.`),
         sources: () => [],
         forget: () => refuse(`This is the demo workspace: nothing has been taught to its privacy shield.`),
     },

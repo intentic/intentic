@@ -9,7 +9,7 @@ import { defineDocument } from "../store/evolution/documents.js";
 import type { JsonFile } from "../store/json-file.js";
 import { openDocument } from "../store/open-document.js";
 import { personalAlone } from "@intentic/privacy-detect/standalone";
-import { createKnownMatcher, type KnownMatcher, type Spelling, spellingKey } from "./known-matcher.js";
+import { createKnownMatcher, type KnownMatcher, type KnownValue, type Spelling, spellingKey } from "./known-matcher.js";
 import { TOKEN_LABEL, tokenKey, tokenOf } from "./tokens.js";
 
 // Which value each token stands for. One vault per workspace, so a value is the same token in every conversation,
@@ -33,6 +33,10 @@ const VaultEntrySchema = z.object({
     // Written by releases before 2026-10-13, whose forget kept the value and only stopped matching it. Such an entry is
     // dropped as the vault loads, and never written again.
     retired: z.boolean().optional(),
+    // Found only by one of the owner's own rules (privacy policy `rules`), which matches it itself while it is on: the
+    // vault resolves its token but does not match it alone, so switching the rule off stops masking it. Found by a
+    // detector too, it loses the mark and is matched as their finds are.
+    rule: z.boolean().optional(),
 });
 type VaultEntry = z.infer<typeof VaultEntrySchema>;
 
@@ -60,8 +64,8 @@ export interface PrivacyVault {
     // vault would hand out indexes the provider already knows as somebody else.
     readonly load: () => Promise<void>;
     // The token for a value, given a new one when it has none. Synchronous, so concurrent requests never race for an
-    // index; held in memory until `commit`.
-    readonly tokenFor: (value: string, kind: PersonalDataClass) => string;
+    // index; held in memory until `commit`. `rule` when one of the owner's rules found it (VaultEntrySchema `rule`).
+    readonly tokenFor: (value: string, kind: PersonalDataClass, found?: "rule") => string;
     // Writes what `tokenFor` added since the last commit. Called before a masked request leaves: a token the provider
     // reads must already be on disk, or a restart would give its index to another value.
     readonly commit: () => Promise<void>;
@@ -158,8 +162,61 @@ const agedEntries = (entries: Iterable<VaultEntry>, cutoff: string): AgedEntries
     return { gone, unstamped };
 };
 
+// Whether `entry` may stand for a key `standing` holds: nobody holds it yet, or it is the same entry.
+const mayStand = (standing: VaultEntry | undefined, entry: VaultEntry): boolean =>
+    standing === undefined || keyOfEntry(standing) === keyOfEntry(entry);
+
+// Whether a find loses an entry its rule mark: it is marked, and something other than a rule found it.
+const unmarkedBy = (entry: VaultEntry, found: "rule" | undefined): boolean => entry.rule === true && found !== "rule";
+
+// The mark a new entry carries for what found it.
+const markOf = (found: "rule" | undefined): Partial<VaultEntry> => (found === "rule" ? { rule: true } : {});
+
+// What the matcher matches, each value in each spelling it is written in. A value the owner taught is matched whatever it
+// is; one the detectors found, only while it would still be personal data standing alone (@intentic/privacy-detect
+// standalone.ts); one only an owner's rule found, never, since the rule matches it itself while it is on.
+const matchedValues = (entries: Iterable<VaultEntry>): KnownValue<VaultHit>[] =>
+    [...entries]
+        .filter((entry) => entry.value.length >= MIN_MATCHED)
+        .filter((entry) => entry.source !== undefined || (entry.rule !== true && personalAlone(entry.value, entry.class)))
+        .flatMap((entry) => {
+            const hit: VaultHit = { class: entry.class, token: tokenOf(TOKEN_LABEL[entry.class], entry.index), key: keyOfEntry(entry) };
+            const spelling = spellingOf(entry.value, entry.class);
+            const escaped = escapedForm(entry.value);
+            return escaped === undefined
+                ? [{ value: entry.value, payload: hit, spelling }]
+                : [
+                      { value: entry.value, payload: hit, spelling },
+                      { value: escaped, payload: hit, spelling },
+                  ];
+        });
+
+// Each source values were taught from, how many, and when last; the newest first.
+const sourcesOf = (entries: Iterable<VaultEntry>): PrivacyKnownSource[] => {
+    const bySource = new Map<string, { count: number; at: string }>();
+    for (const entry of entries) {
+        if (entry.source === undefined) {
+            continue;
+        }
+        const current = bySource.get(entry.source) ?? { count: 0, at: entry.at ?? "" };
+        bySource.set(entry.source, { count: current.count + 1, at: (entry.at ?? "") > current.at ? (entry.at ?? "") : current.at });
+    }
+    return [...bySource].map(([source, { count, at }]) => ({ source, count, at })).toSorted((left, right) => right.at.localeCompare(left.at));
+};
+
 // The vault's whole value, as its document stores it.
 export type VaultValue = z.output<typeof privacyVaultDocument.schema>;
+
+// Each label's next index as a file holds it, raised past every entry's own: a file whose counters lag its entries
+// (hand-edited, or older) must still never repeat an index.
+const nextIndexes = (value: VaultValue): Map<string, number> => {
+    const next = new Map(Object.entries(value.next));
+    for (const entry of value.entries) {
+        const label = TOKEN_LABEL[entry.class];
+        next.set(label, Math.max(next.get(label) ?? 1, entry.index + 1));
+    }
+    return next;
+};
 
 export const filePrivacyVault = (path: string, now: () => Date = () => new Date()): PrivacyVault =>
     createPrivacyVault(
@@ -191,13 +248,12 @@ export const createPrivacyVault = (file: JsonFile<VaultValue>, where: string, no
     // for every spelling of it. Two that a vault written before spellings counted holds apart keep the first.
     const index = (entry: VaultEntry): void => {
         byToken.set(keyOfEntry(entry), entry);
-        const stands = (standing: VaultEntry | undefined): boolean => standing === undefined || keyOfEntry(standing) === keyOfEntry(entry);
         const key = valueKey(entry.value, entry.class);
-        if (stands(byValue.get(key))) {
+        if (mayStand(byValue.get(key), entry)) {
             byValue.set(key, entry);
         }
         const folded = spellingKey(entry.value, "folded");
-        if (spellingOf(entry.value, entry.class) === "folded" && stands(byFolded.get(folded))) {
+        if (spellingOf(entry.value, entry.class) === "folded" && mayStand(byFolded.get(folded), entry)) {
             byFolded.set(folded, entry);
         }
     };
@@ -247,13 +303,10 @@ export const createPrivacyVault = (file: JsonFile<VaultValue>, where: string, no
             if (state.unreadable) {
                 throw new PrivacyVaultUnreadableError(path, state.detail);
             }
-            for (const [label, value] of Object.entries(state.value.next)) {
+            for (const [label, value] of nextIndexes(state.value)) {
                 next.set(label, value);
             }
             for (const entry of state.value.entries) {
-                // A file whose counters lag its entries (hand-edited, or older) must still never repeat an index.
-                const label = TOKEN_LABEL[entry.class];
-                next.set(label, Math.max(next.get(label) ?? 1, entry.index + 1));
                 if (entry.retired === true) {
                     // Forgotten by an older release that kept the value: it leaves the file with the next commit.
                     dirty = true;
@@ -282,15 +335,22 @@ export const createPrivacyVault = (file: JsonFile<VaultValue>, where: string, no
     };
     return {
         load,
-        tokenFor: (value, kind) => {
+        tokenFor: (value, kind, found) => {
             loaded();
             const existing = knownAs(value, kind);
-            if (existing !== undefined) {
-                touch(existing);
-                return tokenOf(TOKEN_LABEL[existing.class], existing.index);
+            if (existing === undefined) {
+                const entry = allocate(value, kind, markOf(found));
+                return tokenOf(TOKEN_LABEL[entry.class], entry.index);
             }
-            const entry = allocate(value, kind);
-            return tokenOf(TOKEN_LABEL[entry.class], entry.index);
+            touch(existing);
+            // Found by something other than a rule, it is matched alone as the detectors' finds are from then on.
+            if (unmarkedBy(existing, found)) {
+                const { rule: _, ...rest } = byToken.get(keyOfEntry(existing)) ?? existing;
+                index(rest);
+                dirty = true;
+                generation += 1;
+            }
+            return tokenOf(TOKEN_LABEL[existing.class], existing.index);
         },
         commit,
         // Only as the vault writes a number: `PERSON_01` is a token nobody gave out, not another spelling of `PERSON_1`.
@@ -301,23 +361,7 @@ export const createPrivacyVault = (file: JsonFile<VaultValue>, where: string, no
             if (built !== undefined && built.generation === generation) {
                 return built.matcher;
             }
-            // A value the owner taught is matched whatever it is; one the detectors found, only while it would still be
-            // personal data standing alone (@intentic/privacy-detect standalone.ts).
-            const values = [...byValue.values()]
-                .filter((entry) => entry.value.length >= MIN_MATCHED)
-                .filter((entry) => entry.source !== undefined || personalAlone(entry.value, entry.class))
-                .flatMap((entry) => {
-                    const hit: VaultHit = { class: entry.class, token: tokenOf(TOKEN_LABEL[entry.class], entry.index), key: keyOfEntry(entry) };
-                    const spelling = spellingOf(entry.value, entry.class);
-                    const escaped = escapedForm(entry.value);
-                    return escaped === undefined
-                        ? [{ value: entry.value, payload: hit, spelling }]
-                        : [
-                              { value: entry.value, payload: hit, spelling },
-                              { value: escaped, payload: hit, spelling },
-                          ];
-                });
-            built = { generation, matcher: createKnownMatcher(values) };
+            built = { generation, matcher: createKnownMatcher(matchedValues(byValue.values())) };
             return built.matcher;
         },
         learn: async (source, values) => {
@@ -377,15 +421,7 @@ export const createPrivacyVault = (file: JsonFile<VaultValue>, where: string, no
         },
         sources: async () => {
             await load();
-            const bySource = new Map<string, { count: number; at: string }>();
-            for (const entry of byToken.values()) {
-                if (entry.source === undefined) {
-                    continue;
-                }
-                const current = bySource.get(entry.source) ?? { count: 0, at: entry.at ?? "" };
-                bySource.set(entry.source, { count: current.count + 1, at: (entry.at ?? "") > current.at ? (entry.at ?? "") : current.at });
-            }
-            return [...bySource].map(([source, { count, at }]) => ({ source, count, at })).toSorted((left, right) => right.at.localeCompare(left.at));
+            return sourcesOf(byToken.values());
         },
         counts: async () => {
             await load();

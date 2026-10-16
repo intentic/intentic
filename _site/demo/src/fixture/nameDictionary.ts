@@ -13,7 +13,7 @@ import {
 const PESEL_FIRST = { source: `PESEL register: first names borne by living people`, url: `https://dane.gov.pl/pl/dataset/1667`, license: `CC0 1.0` };
 const HAND = { source: `Written by hand alongside the registers` };
 
-const LISTS: readonly (PrivacyNameList & { readonly sample: string })[] = [
+const LISTS: readonly (Omit<PrivacyNameList, `on`> & { readonly sample: string })[] = [
     { id: `first-names-pl`, kind: `first-name`, languages: [`pl`], matching: `inflected`, count: 717, ...PESEL_FIRST, sample: `anna maria katarzyna małgorzata agnieszka jan andrzej piotr krzysztof tomasz paweł michał róża` },
     { id: `first-names-pl-rare`, kind: `first-name`, languages: [`pl`], matching: `as-written`, count: 1_091, ...PESEL_FIRST, sample: `ana vera nika william theo` },
     { id: `diminutives-pl`, kind: `first-name`, languages: [`pl`], matching: `inflected`, count: 85, ...HAND, sample: `ania kasia tomek bartek` },
@@ -58,7 +58,7 @@ const LISTS: readonly (PrivacyNameList & { readonly sample: string })[] = [
     { id: `never-names`, kind: `never`, languages: [`pl`, `en`], matching: `as-written`, count: 318, ...HAND, sample: `the and uniwersytet ulica` },
 ];
 
-const holders = (word: string): PrivacyNameList[] => LISTS.filter((list) => list.sample.split(` `).includes(word));
+const holders = (word: string): (typeof LISTS)[number][] => LISTS.filter((list) => list.sample.split(` `).includes(word));
 
 const SURNAME_FORM = /(?:ski|ska|cki|cka|dzki|dzka|wicz|czyk)$/u;
 
@@ -81,7 +81,8 @@ const asName = (text: string): string =>
 const NAME_LIKE = /^[\p{L}'-]+(?: [\p{L}'-]+){0,4}$/u;
 
 export const demoNameDictionary = (query?: string): PrivacyDictionary => {
-    const lists = LISTS.map(({ sample: _, ...list }) => list);
+    // A fresh sandbox has switched nothing off and added no list of its own.
+    const lists = LISTS.map(({ sample: _, ...list }) => ({ ...list, on: true }));
     const totals = { firstNames: 2_378, surnames: 11_546 };
     const typed = query?.trim().replaceAll(/\s+/gu, ` `) ?? ``;
     if (!NAME_LIKE.test(typed)) {
